@@ -1,51 +1,19 @@
 ---
 title: Guardrails and OpenAPPA Metrics
-description: Track embedded OpenAPPA hook dispatches and latency, or map standalone OpenAPPA daemon metrics.
+description: Monitor OpenAPPA hooks and engine operations through Archestra's standard Prometheus endpoint.
 order: 9
 lastUpdated: 2026-10-31
 ---
 
-Track [Guardrails](/docs/agents/guardrails) hook volume, decision outcomes, and hook dispatch latency from Archestra's Prometheus `/metrics` endpoint, or map OTLP metrics from a standalone OpenAPPA daemon.
+Track [Guardrails](/docs/agents/guardrails) hooks and OpenAPPA engine operations through Archestra's standard Prometheus `/metrics` endpoint.
 
 ## Collection Setup
 
-Choose the setup for the runtime you operate. Embedded hooks and standalone daemon instruments use different export paths; configuring traces alone does not collect either set of metrics.
+Scrape every Archestra web and worker pod using the [standard metrics endpoints and authentication](/docs/admin/observability/metrics#scraping). Hook and engine metrics are included in the same response. No additional exporter, receiver, or data source is required.
 
-### Archestra Embedded Hooks
+If your collector filters metric names, retain `openappa_hook_*`, `appa_*`, and [`agent_runtime_crossing_refusals_total`](/docs/admin/observability/metrics/agent-runtime#agent_runtime_crossing_refusals_total), including histogram `_bucket`, `_sum`, and `_count` series. Preserve the metric labels and pod identity labels.
 
-1. Scrape every web and worker pod using the endpoints and authentication in [Scraping](/docs/admin/observability/metrics#scraping). No additional OTLP metrics exporter is needed for embedded hooks.
-2. If your collector filters metric names, retain `openappa_hook_dispatches_total` and all `openappa_hook_dispatch_duration_seconds` histogram series (`_bucket`, `_sum`, and `_count`). Keep the `hook` and `decision` labels and the existing pod identity labels.
-3. Exercise a Guardrails-enabled request, then query `sum by (hook, decision) (openappa_hook_dispatches_total)` in Prometheus. Check both the pod endpoint and the remote backend if the series is missing; an idle or older application process may not emit it.
-4. Select that Prometheus source as **Metrics** on the Guardrails & OpenAPPA dashboard. Its embedded hook panels use these scraped series.
-
-### Standalone Daemon OTLP Metrics
-
-Only follow these steps if you run the standalone OpenAPPA daemon. Archestra's embedded runtime does not emit the standalone `appa_*` instruments.
-
-1. Enable an OTLP HTTP receiver and a **metrics** pipeline in your OpenTelemetry Collector. You can reuse the receiver serving traces and logs; add the metrics pipeline alongside those existing pipelines. For example, a Collector Contrib configuration can expose Prometheus samples on port 9464:
-
-   ```yaml
-   receivers:
-     otlp:
-       protocols:
-         http:
-           endpoint: 0.0.0.0:4318
-   exporters:
-     prometheus:
-       endpoint: 0.0.0.0:9464
-   service:
-     pipelines:
-       metrics:
-         receivers: [otlp]
-         exporters: [prometheus]
-   ```
-
-   Restrict receiver and exporter access to your telemetry network and configure authentication for your environment. This example shows the metrics branch; preserve any existing traces and logs pipelines.
-
-2. Configure the standalone daemon with `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318` and restart it. Use the collector address reachable from the daemon. Leave `OTEL_SDK_DISABLED` unset or `false`; configure `OTEL_EXPORTER_OTLP_HEADERS` if your receiver requires authentication. The daemon sends metrics to `/v1/metrics` alongside its traces and logs.
-3. Have Prometheus scrape the collector's `:9464/metrics` endpoint. Alternatively, use a `prometheusremotewrite` exporter in the metrics pipeline to send samples directly to your Prometheus-compatible backend with that backend's credentials.
-4. After an export interval, query `appa_runtime_uptime_seconds` in the destination. Exercise a policy decision and check the corresponding counters below. Keep the daemon's service identity stable; do not add session or request IDs as metric labels.
-5. Select the receiving Prometheus source as **OpenAPPA metrics** on the dashboard and expand its standalone daemon row. This may be the same source used for Archestra metrics.
+Exercise a Guardrails-enabled request, then query `sum by (hook, decision) (openappa_hook_dispatches_total)` and `sum by (outcome) (appa_policy_decisions_total)` in Prometheus. Select that Prometheus source as **Metrics** on the Guardrails & OpenAPPA dashboard. Metrics appear when their corresponding operations run; an absent event-driven series is not a successful zero.
 
 ## Embedded Hook Metrics
 
@@ -95,20 +63,20 @@ histogram_quantile(
 )
 ```
 
-## Standalone OpenAPPA Daemon Metrics
+## Engine Metrics
 
-The standalone [OpenAPPA](https://github.com/archestra-ai/OpenAPPA) daemon ships a separate OpenTelemetry metrics exporter that is not wired into Archestra's embedded NAPI runtime. Standalone `appa_*` series do not appear on Archestra's `/metrics` scrape endpoint, and Archestra's built-in OTLP exporter forwards traces and logs (`/v1/traces` and `/v1/logs`), not OTLP metrics.
+These metrics describe policy checks, external calls, remedies, and runtime failures inside Archestra. They use the same endpoint as hook metrics. Durations are in seconds. Counters and histograms are cumulative for each process; scrapes do not reset them.
 
-To collect standalone daemon metrics in Prometheus, point the standalone daemon at an OpenTelemetry Collector metrics pipeline (`otlp` receiver to a `prometheus` or `prometheusremotewrite` exporter). Standard Prometheus translation maps the dotted OTLP instrument names below to `appa_*` series:
+| Metric | Type | Labels | Measures |
+| --- | --- | --- | --- |
+| <span id="appa_policy_decisions_total"></span>`appa_policy_decisions_total` | Counter | `outcome` (`allowed`, `denied`) | Completed tool-proposal policy decisions |
+| <span id="appa_policy_check_duration_seconds"></span>`appa_policy_check_duration_seconds` | Histogram | `outcome` (`allowed`, `denied`, `error`) | Policy-check duration, including failed evaluations |
+| <span id="appa_external_calls_total"></span>`appa_external_calls_total` | Counter | `role`, `outcome` (`answered`, `no_answer`) | External helper, annotator, or authority calls |
+| <span id="appa_external_call_duration_seconds"></span>`appa_external_call_duration_seconds` | Histogram | `role`, `outcome` (`answered`, `no_answer`) | External-call duration |
+| <span id="appa_remedy_attempts_total"></span>`appa_remedy_attempts_total` | Counter | `outcome` (`executed`, `declined`, `no_answer`, `refused`) | Remedy attempts |
+| <span id="appa_remedy_duration_seconds"></span>`appa_remedy_duration_seconds` | Histogram | `outcome` (`executed`, `declined`, `no_answer`, `refused`) | Remedy duration |
+| <span id="appa_runtime_failures_total"></span>`appa_runtime_failures_total` | Counter | `component`, `error_type` | Runtime failures classified by bounded component and error type |
 
-| Metric | OTLP Instrument | Type | Labels | Measures |
-| --- | --- | --- | --- | --- |
-| <span id="appa_policy_decisions_total"></span>`appa_policy_decisions_total` | `appa.policy.decisions` | Counter | `outcome` (`allowed`, `denied`) | Policy decisions recorded by the standalone daemon |
-| <span id="appa_policy_check_duration_seconds"></span>`appa_policy_check_duration_seconds` | `appa.policy.check.duration` | Histogram | `outcome` (`allowed`, `denied`, `error`) | Standalone policy check duration, including failed evaluations |
-| <span id="appa_external_calls_total"></span>`appa_external_calls_total` | `appa.external.calls` | Counter | `role`, `outcome` (`answered`, `no_answer`) | External helper, annotator, or authority calls by role and outcome |
-| <span id="appa_external_call_duration_seconds"></span>`appa_external_call_duration_seconds` | `appa.external.call.duration` | Histogram | `role`, `outcome` (`answered`, `no_answer`) | Duration of external helper, annotator, or authority calls |
-| <span id="appa_remedy_attempts_total"></span>`appa_remedy_attempts_total` | `appa.remedy.attempts` | Counter | `outcome` (`executed`, `declined`, `no_answer`, `refused`) | Remedy attempts by outcome |
-| <span id="appa_remedy_duration_seconds"></span>`appa_remedy_duration_seconds` | `appa.remedy.duration` | Histogram | `outcome` (`executed`, `declined`, `no_answer`, `refused`) | Duration of remedy attempts |
-| <span id="appa_runtime_failures_total"></span>`appa_runtime_failures_total` | `appa.runtime.failures` | Counter | `component`, `error_type` | Standalone runtime failures by component and error type |
-| <span id="appa_yell_reports_total"></span>`appa_yell_reports_total` | `appa.yell.reports` | Counter | `source` | Diagnostic yell reports received by source |
-| <span id="appa_runtime_uptime_seconds"></span>`appa_runtime_uptime_seconds` | `appa.runtime.uptime` | Gauge | | Standalone daemon uptime in seconds |
+A host hook acknowledgment is distinct from a tool-proposal policy decision. One hook dispatch can include multiple engine operations. Compare these counters by their documented operation rather than treating them as interchangeable request counts.
+
+Only operational labels are exported. Organization, user, session, tool, policy, and request content are excluded. If engine collection fails, Archestra continues serving its other process metrics.

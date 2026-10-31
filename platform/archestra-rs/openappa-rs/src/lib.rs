@@ -11,6 +11,7 @@ mod declarations;
 mod deployments;
 mod labels;
 mod lease;
+mod metrics;
 #[allow(dead_code)]
 mod peer;
 mod policy;
@@ -937,6 +938,7 @@ pub async fn initialize_openappa(
                 "OpenAPPA needs at least one PostgreSQL connection",
             )
         })?;
+    metrics::initialize();
     let mut slot = state_mutex().lock().await;
     if slot.is_some() {
         return Ok(());
@@ -5878,4 +5880,10 @@ mod failure_tests {
         let failed = napi::Error::from(SqlError::Postgres(PostgresError("db error".into())));
         assert_eq!(code(&failed), json!("storage"));
     }
+}
+
+/// Cumulative embedded engine samples for the host's existing Prometheus endpoint.
+#[napi(js_name = "collectOpenappaMetrics")]
+pub fn collect_openappa_metrics() -> napi::Result<String> {
+    metrics::collect().map_err(|_| napi::Error::from_reason("OpenAPPA metric collection failed"))
 }

@@ -12,7 +12,7 @@ HEADERS = {
     "archestra-genai-observability": "Request outcomes and upstream performance. Model and agent filters apply to upstream panels.",
     "archestra-costs-and-limits": "Estimated inference spend and limit enforcement. Cost filters do not apply to limit panels.",
     "archestra-agent-runtime": "Task health, provisioning, and optional Kubernetes resources.",
-    "archestra-guardrails": "Hook decisions and latency.",
+    "archestra-guardrails": "Hook decisions, policy checks, external calls, and remedies.",
     "archestra-mcp-monitoring": "Tool calls, latency, and server state. Tool-call filters do not apply to server state.",
     "archestra-application-metrics": "API traffic, process health, background tasks, and database pools.",
     "archestra-rag-knowledge-base": "Document syncs, embeddings, and search. Optional diagnostics appear when those features run.",
@@ -364,11 +364,6 @@ def add_header(d):
     data = base64.b64encode(asset.read_bytes()).decode()
     title = escape(d["title"].removeprefix("Archestra / "))
     copy = escape(HEADERS[d["uid"]])
-    if appa:
-        copy += (
-            ' <a href="https://archestra.ai/docs/admin/observability/metrics/openappa#collection-setup" '
-            'target="_blank" rel="noopener noreferrer">Set up hook and standalone metrics</a>.'
-        )
     mark = "OpenAPPA" if appa else "Archestra"
     header = {
         "id": 90001,

@@ -21,7 +21,6 @@ Options:
   --traces-datasource <uid>       Tempo data-source UID (session investigation)
   --logs-datasource <uid>         Loki data-source UID (session logs)
   --kubernetes-datasource <uid>   Kubernetes Prometheus UID (defaults to metrics UID)
-  --openappa-datasource <uid>     Standalone OpenAPPA Prometheus UID (defaults to metrics UID)
   --postgres-provider <provider>  PostgreSQL metrics provider for the Application Metrics dashboard.
                                   Determines which metric names are used in the PostgreSQL panels.
                                   Options:
@@ -55,7 +54,7 @@ Dashboards installed:
   - LLM Proxy             Logical outcomes, inference latency, streaming and tokens
   - Costs & Limits         Estimated spend, cache use and observed limit enforcement
   - Agent Runtime          Fleet lifecycle, work health and optional Kubernetes resources
-  - Guardrails & OpenAPPA   Embedded hook dispatches and optional standalone telemetry
+  - Guardrails & OpenAPPA   Embedded hook and engine metrics
   - MCP Monitoring         MCP tool call metrics, error rates and duration
   - Session Investigation  Session-level audit trail with LLM/MCP/log drill-down
   - Platform Health        HTTP traffic, Node.js runtime, task queue, PostgreSQL
@@ -71,7 +70,6 @@ METRICS_DS=""
 TRACES_DS=""
 LOGS_DS=""
 KUBERNETES_DS=""
-OPENAPPA_DS=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -79,14 +77,13 @@ while [[ $# -gt 0 ]]; do
       usage
       exit 0
       ;;
-    --metrics-datasource|--traces-datasource|--logs-datasource|--kubernetes-datasource|--openappa-datasource)
+    --metrics-datasource|--traces-datasource|--logs-datasource|--kubernetes-datasource)
       if [[ $# -lt 2 || -z "$2" ]]; then echo "Error: $1 requires a data-source UID" >&2; exit 1; fi
       case "$1" in
         --metrics-datasource) METRICS_DS="$2" ;;
         --traces-datasource) TRACES_DS="$2" ;;
         --logs-datasource) LOGS_DS="$2" ;;
         --kubernetes-datasource) KUBERNETES_DS="$2" ;;
-        --openappa-datasource) OPENAPPA_DS="$2" ;;
       esac
       shift 2
       ;;
@@ -170,7 +167,7 @@ chmod 600 "$auth_config"
 trap 'rm -f "$auth_config"' EXIT
 printf 'header = "%s"\n' "$AUTH" > "$auth_config"
 unset AUTH
-export METRICS_DS TRACES_DS LOGS_DS KUBERNETES_DS OPENAPPA_DS
+export METRICS_DS TRACES_DS LOGS_DS KUBERNETES_DS
 
 # ──────────────────────────────────────────────
 # Create or find the "Archestra" folder
@@ -257,7 +254,6 @@ bindings = {
     'traces_datasource': os.environ.get('TRACES_DS'),
     'logs_datasource': os.environ.get('LOGS_DS'),
     'kubernetes_datasource': os.environ.get('KUBERNETES_DS') or os.environ.get('METRICS_DS'),
-    'openappa_datasource': os.environ.get('OPENAPPA_DS') or os.environ.get('METRICS_DS'),
 }
 for variable in d.get('templating', {}).get('list', []):
     uid = bindings.get(variable.get('name'))

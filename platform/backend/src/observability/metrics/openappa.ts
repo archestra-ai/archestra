@@ -75,3 +75,21 @@ export async function observeOpenappaDispatch<T extends { decision: string }>(
     }
   }
 }
+
+let engineCollector: (() => string) | undefined;
+
+/** Attach only after the native runtime initializes; scraping never starts it. */
+export function setOpenappaEngineMetricsCollector(
+  collector: (() => string) | undefined,
+): void {
+  engineCollector = collector;
+}
+
+export function collectOpenappaEngineMetrics(): string {
+  try {
+    return engineCollector?.() ?? "";
+  } catch {
+    // A failed native collection must not hide the rest of the process metrics.
+    return "";
+  }
+}

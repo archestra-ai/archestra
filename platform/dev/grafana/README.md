@@ -16,4 +16,4 @@ Edit `generate-dashboards.py` for LLM Proxy, Costs & Limits, Agent Runtime, Guar
 
 Shared headers, supported filter dimensions, and MCP state presentation live in `dashboard_ux.py`. Add panel explanations to `panel-descriptions.json` or the generator; generation fails if a data panel has none. Header images from `assets/` are embedded so imports do not depend on an external image host.
 
-The Kubernetes row requires kube-state-metrics and cAdvisor; standalone OpenAPPA requires its own OTLP metrics pipeline. Their sources and filters are independent of Archestra's metrics source. Missing exporters must not appear as healthy zero values.
+The Kubernetes row requires kube-state-metrics and cAdvisor and can use an independent source. OpenAPPA hook and engine metrics use the standard Archestra metrics source. Missing exporters must not appear as healthy zero values.

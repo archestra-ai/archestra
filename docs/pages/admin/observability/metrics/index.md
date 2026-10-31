@@ -7,7 +7,7 @@ lastUpdated: 2026-10-30
 
 Scrape Archestra's Prometheus metrics to track model spend, tool calls, guardrails, agent runs, and platform health. Choose a reference below to look up metric names, labels, and aggregation behavior.
 
-For Guardrails, follow [OpenAPPA collection setup](/docs/admin/observability/metrics/openappa#collection-setup): embedded hooks use the scrape endpoints below; standalone daemon metrics require an OTLP metrics branch in your collector. Configuring Archestra's trace and log exporter alone does not collect metrics.
+[Guardrails and OpenAPPA metrics](/docs/admin/observability/metrics/openappa) use the same scrape endpoints and authentication as all other Archestra metrics.
 
 ## Scraping
 

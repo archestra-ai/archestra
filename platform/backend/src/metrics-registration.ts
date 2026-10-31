@@ -1,6 +1,7 @@
 import metricsPlugin from "fastify-metrics";
 import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { collectOpenappaEngineMetrics } from "@/observability/metrics/openappa";
 import { HEALTH_PATH, READY_PATH } from "@/routes/route-paths";
 
 const { observability } = config;
@@ -32,6 +33,20 @@ export const registerStandaloneMetricsEndpoint = async (params: {
 }): Promise<void> => {
   const { fastify, enableDefaultMetrics } = params;
   addMetricsAuthenticationHook(fastify);
+  fastify.addHook("onSend", async (request, reply, payload) => {
+    if (
+      request.url.split("?", 1)[0] !== observability.metrics.endpoint ||
+      reply.statusCode !== 200 ||
+      typeof payload !== "string"
+    ) {
+      return payload;
+    }
+    const engine = collectOpenappaEngineMetrics();
+    if (!engine) return payload;
+    // Preserve the OpenMetrics end marker if the registry enables that format.
+    const hasEndMarker = /# EOF\s*$/.test(payload);
+    return `${payload.replace(/# EOF\s*$/, "").trimEnd()}\n${engine.trimEnd()}\n${hasEndMarker ? "# EOF\n" : ""}`;
+  });
 
   await fastify.register(metricsPlugin, {
     endpoint: observability.metrics.endpoint,

@@ -83,3 +83,14 @@ test("disabled or failing telemetry cannot alter enforcement", async () => {
     result,
   );
 });
+
+test("native collection failure leaves the existing metrics available", async () => {
+  const { collectOpenappaEngineMetrics, setOpenappaEngineMetricsCollector } =
+    await import("./openappa");
+  setOpenappaEngineMetricsCollector(() => {
+    throw new Error("native unavailable");
+  });
+  expect(collectOpenappaEngineMetrics()).toBe("");
+  setOpenappaEngineMetricsCollector(undefined);
+  expect(collectOpenappaEngineMetrics()).toBe("");
+});

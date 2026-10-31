@@ -81,12 +81,11 @@
   "Decisions / second": "Embedded hook dispatches per second by hook and returned decision. Lifecycle acknowledgments such as ack or context are not policy allows.",
   "Duration by hook (P95)": "95th-percentile embedded dispatch wall time by hook. Consults, storage, and internal retries are included; this is not the duration of one policy rule.",
   "Structured denials and refusals": "Embedded dispatches returning deny_call, block, or refuse per second. These are structured outcomes rather than dispatch errors or unique denied user requests.",
-  "Tool proposal decisions": "Standalone OpenAPPA tool-proposal decisions per second by outcome. Requires the standalone daemon's OTLP metrics pipeline; Archestra's embedded scrape does not publish this family.",
-  "Policy check duration (P95)": "95th-percentile policy-check duration from the standalone OpenAPPA daemon. Requires its separate OTLP metrics pipeline.",
-  "External consult outcomes": "Standalone helper, annotator, or authority consults per second by role and outcome. These metrics do not come from Archestra's embedded host scrape.",
-  "Remedy attempts": "Standalone OpenAPPA remedy attempts per second by outcome. Requires standalone daemon telemetry.",
-  "Runtime failures by component": "Standalone OpenAPPA runtime failures per second by component and bounded error type. Requires its separate OTLP metrics pipeline.",
-  "Standalone runtime uptime": "Elapsed uptime in seconds for each standalone OpenAPPA daemon instance. A drop indicates a restart; this is separate from Archestra process uptime.",
+  "Tool proposal decisions": "Embedded OpenAPPA tool-proposal decisions per second by outcome. A policy decision is distinct from a host hook acknowledgment.",
+  "Policy check duration (P95)": "95th-percentile embedded OpenAPPA policy-check duration, including failed evaluations. Collected from the same Archestra scrape as hook metrics.",
+  "External consult outcomes": "Embedded helper, annotator, or authority consults per second by role and outcome.",
+  "Remedy attempts": "Embedded OpenAPPA remedy attempts per second by outcome.",
+  "Runtime failures by component": "Embedded OpenAPPA runtime failures per second by component and bounded error type.",
   "Requests / second": "Logical inference requests completed per second, including successful and non-success outcomes. Provider and logical-request filters apply; upstream model and agent filters do not.",
   "P95 full request duration": "95th-percentile logical inference request duration, from handler entry through preflight, retries, and complete streaming. Model and agent filters do not apply.",
   "Requests in selected period": "Logical inference requests completed during the selected period, including errors, denials, and cancellations. This excludes failures before requests reach the inference handler.",
@@ -98,5 +97,7 @@
   "Tokens / second": "Uncached input and output tokens consumed per second. Prompt-cache reads and writes are recorded separately.",
   "Cached tokens / second": "Prompt-cache tokens read or written per second. Cache support and reporting vary by provider.",
   "Upstream calls by model": "Upstream duration observations per second by model. Retries can add observations, so this is not a unique logical request count.",
-  "Upstream calls by agent": "Configured agents with the highest upstream call rate after filters. Retries can add observations; only the top ten are shown."
+  "Upstream calls by agent": "Configured agents with the highest upstream call rate after filters. Retries can add observations; only the top ten are shown.",
+  "External consult duration (P95)": "95th-percentile embedded external consult duration by role, in seconds.",
+  "Remedy duration (P95)": "95th-percentile embedded remedy duration by outcome, in seconds."
 }

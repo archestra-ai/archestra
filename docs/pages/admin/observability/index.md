@@ -22,10 +22,6 @@ Monitor your instance in your existing stack. For individual requests and conver
 
 <span id="scraping-prometheus-metrics"></span>
 
-## Collect Guardrails Metrics
-
-Include [OpenAPPA collection setup](/docs/admin/observability/metrics/openappa#collection-setup) when connecting your monitoring stack. Embedded hooks are collected with the normal Archestra Prometheus scrape. If you operate a standalone OpenAPPA daemon, also enable an OTLP **metrics** branch in your collector and configure the daemon's exporter; the receiver can be shared with traces and logs.
-
 ## Grafana Dashboards
 
 <span id="grafana-dashboards"></span>
@@ -37,7 +33,7 @@ Archestra publishes eight prebuilt Grafana dashboards. Core operational dashboar
 | LLM Proxy (`archestra-genai-observability`) | Proxy and model router outcomes, upstream and streaming latency, token rates, and prompt-cache usage | Prometheus (optional Tempo for exemplars) |
 | Costs & Limits | Metered and subscription spend, prompt-cache savings, limit rule evaluations, storage errors, and recent exhausted allowances | Prometheus |
 | Agent Runtime | Fleet-wide run lifecycle, provisioning latency, steering, completion delivery, boundary refusals, task health, and optional Kubernetes pod resources | Prometheus (optional Kubernetes Prometheus with cAdvisor and `kube-state-metrics`) |
-| Guardrails / OpenAPPA | Embedded OpenAPPA hook dispatches and latency by hook and decision, runtime boundary refusals and optional standalone daemon metrics | Prometheus (optional OTLP metrics pipeline for standalone `appa_*` series) |
+| Guardrails / OpenAPPA | Embedded OpenAPPA hook dispatches and latency by hook and decision, runtime boundary refusals and engine operations | Prometheus |
 | MCP Monitoring (`archestra-mcp-monitoring`) | MCP Gateway tool call rates, error counts, execution duration, payload sizes, and self-hosted server deployment status | Prometheus (optional Tempo for exemplars) |
 | Knowledge Base Operations (`archestra-rag-knowledge-base`) | Connector syncs, document ingestion, OCR, embedding batches, search latency, quote verification, and permission sync gaps | Prometheus |
 | Platform Health (`archestra-application-metrics`) | HTTP throughput, Node.js memory and event loop lag, database connection pool, background task queue, and PostgreSQL health | Prometheus |
@@ -62,7 +58,7 @@ GRAFANA_URL=https://grafana.example.com GRAFANA_TOKEN=glsa_xxx \
   --traces-datasource tempo --logs-datasource loki
 ```
 
-`--kubernetes-datasource` and `--openappa-datasource` select separate Prometheus sources for optional rows; both default to the metrics UID when supplied. You can also select sources from each dashboard's filters.
+`--kubernetes-datasource` selects a separate Prometheus source for optional Kubernetes rows and defaults to the metrics UID.
 
 ### Data Sources and Metric Semantics
 
@@ -74,7 +70,7 @@ Each dashboard scopes its optional data sources and aggregates multi-replica met
 - **Optional Kubernetes row on Agent Runtime:** The Kubernetes resource panels require **cAdvisor** and **kube-state-metrics**. Scrape kubelet `/metrics/cadvisor` and the kube-state-metrics endpoint into that source, preserving `cluster`, `namespace`, `pod`, and `container` labels. Verify `kube_pod_status_phase` and `container_memory_working_set_bytes` return runtime pod series before expanding the row. The panels use an independent Kubernetes Prometheus data source variable and **Cluster**, **Namespace**, and **Runtime pod name regex** filters so you can target your runtime pods without editing queries.
 - **Historical limit detail vs. live headroom:** On **Costs & Limits**, [`llm_limit_last_exceeded_timestamp_seconds`](/docs/admin/observability/metrics/limits#llm_limit_last_exceeded_timestamp_seconds), [`llm_limit_last_exceeded_threshold`](/docs/admin/observability/metrics/limits#llm_limit_last_exceeded_threshold), and [`llm_limit_last_exceeded_usage`](/docs/admin/observability/metrics/limits#llm_limit_last_exceeded_usage) report process-local observations from the last 24 hours at the time a check was exhausted, not live budget headroom.
 - **Replica-wide health gauges:** Fleet health reported identically by every replica (such as [`agent_runtime_health_tasks`](/docs/admin/observability/metrics/agent-runtime#agent_runtime_health_tasks), [`agent_runtime_health_age_seconds`](/docs/admin/observability/metrics/agent-runtime#agent_runtime_health_age_seconds)) aggregate with `max` across replicas, never `sum`.
-- **Guardrails and OpenAPPA metrics:** Embedded hook metrics ([`openappa_hook_dispatches_total`](/docs/admin/observability/metrics/openappa#openappa_hook_dispatches_total) and [`openappa_hook_dispatch_duration_seconds`](/docs/admin/observability/metrics/openappa#openappa_hook_dispatch_duration_seconds)) come from Archestra's `/metrics` scrape. Standalone OpenAPPA daemon panels use the collector's OTLP metrics branch; see [collection setup](/docs/admin/observability/metrics/openappa#collection-setup).
+- **Guardrails and OpenAPPA metrics:** Hook dispatches and engine operations come from the same Archestra `/metrics` endpoint and use the dashboard's **Metrics** and **Scrape job** selections. See the [metric reference](/docs/admin/observability/metrics/openappa) for their distinct counting boundaries.
 
 ## Real User Monitoring (RUM)
 

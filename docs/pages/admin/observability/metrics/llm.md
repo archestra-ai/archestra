@@ -63,7 +63,7 @@ The metric covers inference requests handled by the shared proxy and model route
 
 If a streaming request fails after HTTP `200` headers are sent, `status_code` stays `200` while `outcome` and `error_origin` record the midstream failure. To keep cardinality bounded, this histogram carries only the six labels above and omits model, agent, user, team, and key dimensions. For per-request attribution, use the metadata-only `archestra.llm_proxy.request` OpenTelemetry log event in [Proxy Request Log Events](/docs/admin/observability/tracing#proxy-request-log-events); existing token, cache, and cost metrics above, [costs and limits](/docs/llm-proxy/costs-and-limits), and [LLM spans](/docs/admin/observability/tracing#llm-spans) keep their existing dimensions.
 
-Archestra's OTLP pipeline exports traces and logs (`/v1/traces` and `/v1/logs`), not native OTLP metrics. Configure your OpenTelemetry collector or Prometheus server to scrape `/metrics` to ingest this histogram, and query `llm_proxy_request_duration_seconds_count` for throttle and error rates:
+Scrape Archestra's standard `/metrics` endpoint to collect this histogram, and query `llm_proxy_request_duration_seconds_count` for throttle and error rates:
 
 ```promql
 # Upstream provider rate limits (requests/sec by provider)

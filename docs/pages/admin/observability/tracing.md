@@ -26,7 +26,7 @@ Archestra appends `/v1/traces` and `/v1/logs` to the base URL.
 
 ### Collect Metrics Alongside Traces
 
-As part of setup, configure [Prometheus scraping](/docs/admin/observability/metrics#scraping) for application metrics, including embedded Guardrails hooks. The endpoint above exports traces and logs only. If you also run a standalone OpenAPPA daemon, add a metrics branch to your collector's OTLP receiver and configure the daemon separately; follow [OpenAPPA collection setup](/docs/admin/observability/metrics/openappa#collection-setup).
+Configure [Prometheus scraping](/docs/admin/observability/metrics#scraping) alongside traces. It includes [Guardrails and OpenAPPA hook and engine metrics](/docs/admin/observability/metrics/openappa) without additional setup.
 
 ### Logs
 

@@ -719,23 +719,7 @@ def runtime():
 
 
 def guardrails():
-    ods = {"type": "prometheus", "uid": "${openappa_datasource}"}
-    b = Board(
-        "guardrails",
-        "Embedded hook decisions and optional standalone OpenAPPA engine telemetry.",
-        [
-            datasource("openappa_datasource", label="Standalone OpenAPPA metrics"),
-            queryvar(
-                "openappa_job",
-                "label_values(appa_policy_decisions_total, job)",
-                "Standalone job",
-                ods,
-            ),
-        ],
-    )
-    b.note(
-        "Embedded counters measure one logical host hook dispatch, including policy-move retries, policy resolution inside dispatch, storage and consult waits. Decisions such as ack/context are lifecycle acknowledgments, not policy allows. Errors are distinct from structured denials/refusals. No tool arguments, names, session IDs or raw errors are metric labels. Standalone APPA below uses a separate OTLP metrics pipeline; those series do not come from Archestra’s scrape endpoint."
-    )
+    b = Board("guardrails", "OpenAPPA hook and engine metrics from Archestra's Prometheus endpoint.")
     b.row("Embedded OpenAPPA hooks")
     b.panel(
         "Dispatches in selected period",
@@ -789,8 +773,8 @@ def guardrails():
         "ops",
         legend="{{reason}}",
     )
-    b.row("Standalone OpenAPPA (optional OTLP metrics)")
-    sj = 'job=~"$openappa_job"'
+    b.row("OpenAPPA engine")
+    sj = J
     for expr, title, unit, legend in [
         (
             f"sum by(outcome) (rate(appa_policy_decisions_total{{{sj}}}[{R}]))",
@@ -823,13 +807,19 @@ def guardrails():
             "{{component}} / {{error_type}}",
         ),
         (
-            f"max by(job,instance) (appa_runtime_uptime_seconds{{{sj}}})",
-            "Standalone runtime uptime",
+            f"histogram_quantile(0.95, sum by(le,role) (rate(appa_external_call_duration_seconds_bucket{{{sj}}}[{R}])))",
+            "External consult duration (P95)",
             "s",
-            "{{job}} / {{instance}}",
+            "{{role}}",
+        ),
+        (
+            f"histogram_quantile(0.95, sum by(le,outcome) (rate(appa_remedy_duration_seconds_bucket{{{sj}}}[{R}])))",
+            "Remedy duration (P95)",
+            "s",
+            "{{outcome}}",
         ),
     ]:
-        b.panel(title, expr, unit, legend=legend, ds=ods)
+        b.panel(title, expr, unit, legend=legend)
     b.save()
 
 

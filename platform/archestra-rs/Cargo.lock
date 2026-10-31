@@ -2228,6 +2228,8 @@ dependencies = [
  "napi-build",
  "napi-derive",
  "openssl",
+ "opentelemetry",
+ "opentelemetry_sdk",
  "postgres",
  "proptest",
  "serde",

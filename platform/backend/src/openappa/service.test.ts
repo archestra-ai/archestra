@@ -95,6 +95,7 @@ function expectNativeRemedy(
 
 const native = vi.hoisted(() => ({
   initializeOpenappa: vi.fn(),
+  collectOpenappaMetrics: vi.fn(() => ""),
   dispatchHook: vi.fn(),
   executeRemedyByOffer: vi.fn(),
   loadChildReturns: vi.fn(),

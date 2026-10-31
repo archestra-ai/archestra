@@ -27,7 +27,10 @@ import logger from "@/logging";
 import MemberModel from "@/models/member";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaYellModel from "@/models/openappa-yell";
-import { observeOpenappaDispatch } from "@/observability/metrics/openappa";
+import {
+  observeOpenappaDispatch,
+  setOpenappaEngineMetricsCollector,
+} from "@/observability/metrics/openappa";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { normalizeToolArgumentsForPolicy } from "@/openappa/command-normalization";
 import { compositionView } from "@/openappa/composition-view";
@@ -548,6 +551,7 @@ async function binding() {
           }
         : undefined,
     );
+    setOpenappaEngineMetricsCollector(module.collectOpenappaMetrics);
     return module;
   })().catch((error) => {
     native = undefined;

@@ -20,6 +20,7 @@ export const actions = [
   "full-view",
   "admin",
   "configure-runtime",
+  "share-across-teams",
 ] as const;
 
 export const resources = [
@@ -141,7 +142,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   serviceAccount: "Service accounts and tokens for programmatic access",
   auditLog: "Audit events, with separate own and organization-wide visibility",
   accessPolicies:
-    "View and edit organization-wide access policies for every resource type",
+    "Organization-wide access policies and cross-team resource sharing",
   organizationSettings:
     "Organization-wide settings: appearance, authentication, agents and security, LLM, MCP, skills, knowledge, OpenAPPA enforcement, messaging channels, site notifications, and the secrets backend",
   knowledgeSource:

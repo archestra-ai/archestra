@@ -876,7 +876,8 @@ export class ResourcePermissions {
    * Refuse a grant to someone the caller may not add. Without the authority
    * to make an object org-wide ({@link canShareOrganizationWide}), a manager
    * of this one object cannot add everyone or a role, and shares it only with
-   * teams they are in. A service account takes the right to see service
+   * teams they are in, unless they hold `accessPolicies:share-across-teams`.
+   * A service account takes the right to see service
    * accounts. Keeping, lowering, or removing a grant is always allowed, so a
    * manager can still narrow who reaches the object, and a chat or agent run
    * is its owner's to share.
@@ -913,11 +914,12 @@ export class ResourcePermissions {
           added.some(
             (subject) =>
               subject.type === "team" && !ownTeams.has(subjectKey(subject)),
-          )
+          ) &&
+          !(await ResourcePermissions.canShareAcrossTeams(params))
         )
           throw new ApiError(
             403,
-            `Only someone with Full access to every ${scopedResourceNouns[params.resource]} can share it with a team they are not in.`,
+            "Sharing with a team you are not in requires Share across teams or Full access to every resource of this kind.",
           );
       }
     }
@@ -929,6 +931,15 @@ export class ResourcePermissions {
         403,
         "Sharing with a service account needs permission to see service accounts.",
       );
+  }
+
+  /** Widens team recipients only; object authority and delegation still apply. */
+  private static async canShareAcrossTeams(params: {
+    organizationId: string;
+    userId: string;
+  }): Promise<boolean> {
+    const permissions = await getPermissionsForUserContext(params);
+    return permissions.accessPolicies?.includes("share-across-teams") ?? false;
   }
 
   private static async maySeeServiceAccounts(params: {
@@ -1099,7 +1110,8 @@ export class ResourcePermissions {
   }
 
   /**
-   * For a manager of one object: drop the teams they are not in, and the
+   * For a manager of one object: limit teams unless cross-team sharing is
+   * permitted, and drop the
    * people whose role already holds every action on every such object.
    */
   private static async withoutOthersCircles<
@@ -1115,12 +1127,13 @@ export class ResourcePermissions {
     const userIds = params.found
       .filter((recipient) => recipient.subject.type === "user")
       .map((recipient) => recipient.subject.id);
-    const [coveredRoles, members] = await Promise.all([
+    const [coveredRoles, members, crossTeam] = await Promise.all([
       ResourcePermissions.rolesWithEveryAction(params),
       MemberModel.findByUserIdsInOrganization({
         organizationId: params.organizationId,
         userIds,
       }),
+      ResourcePermissions.canShareAcrossTeams(params),
     ]);
     const ownTeams = new Set(params.subjects.map(subjectKey));
     const covered = new Set(
@@ -1130,7 +1143,7 @@ export class ResourcePermissions {
     );
     return params.found.filter(({ subject }) =>
       subject.type === "team"
-        ? ownTeams.has(subjectKey(subject))
+        ? crossTeam || ownTeams.has(subjectKey(subject))
         : subject.type !== "user" || !covered.has(subject.id),
     );
   }

@@ -228,11 +228,13 @@ export class XaiSubscriptionTokenManager {
     // transaction: the retry wrapper classifies network errors by shape, not
     // by source, and would hold the lock through its whole backoff. A
     // write-back that fails in an external secrets backend (the transaction is
-    // still usable) gets its own short retry under the lock instead, so a blip
-    // there does not release the lock with the successor held only here. A
-    // failure raised by the database itself has broken the transaction; that
-    // one is left to the lock helper's whole-callback retry, which the pending
-    // rotation makes safe.
+    // still usable) is repeated a few times under the lock first, so a blip
+    // there does not release the lock with the successor held only here.
+    // Any write-back failure that is not repeated, or still fails after those
+    // attempts, a statement the database rejected included, is carried out as
+    // `persistFailure`; the transaction then ends without the write. Only a
+    // lost connection reaches the lock helper's whole-callback retry, through
+    // the failed commit, and the pending rotation makes that re-run safe.
     let issuerFailure:
       | { error: unknown; rejected: XaiSubscriptionCredential | undefined }
       | undefined;
@@ -335,6 +337,8 @@ export class XaiSubscriptionTokenManager {
                 await sleep(WRITE_BACK_RETRY_DELAY_MS);
                 continue;
               }
+              // Whatever threw, from the secrets backend or the database, stays
+              // here: the caller gets a 502 and the rotation stays pending.
               persistFailure = { cause: error };
               return undefined;
             }
@@ -804,7 +808,8 @@ const WRITE_BACK_RETRY_DELAY_MS = 250;
  * Whether a failed write-back is worth repeating on the same transaction: a
  * transient failure wrapped by an external secrets backend (Vault), whose
  * database side has not run yet. A failure raised by the database itself has
- * broken the transaction, so repeating the statement on it cannot succeed.
+ * broken the transaction, so repeating the statement on it cannot succeed;
+ * the caller carries that one out of the callback on its first attempt.
  */
 function retryableWriteBackFailure(error: unknown): boolean {
   return (

@@ -6,9 +6,9 @@ export const AGENT_RUNTIME_CREDENTIALS_FILE = `${AGENT_RUNTIME_CREDENTIALS_DIR}/
 export const AGENT_RUNTIME_CREDENTIALS_SECRET_KEY =
   "ARCHESTRA_AGENT_RUNTIME_RENEWABLE_CREDENTIALS";
 export const AGENT_RUNTIME_STEER_FIFO = `${AGENT_RUNTIME_DIR}/steer`;
-/** The tier (S, M or L) the Pod runs at; unset for an Agent with explicit resources. */
+/** The tier (S, M or L) the Pod runs at. */
 export const AGENT_RUNTIME_TIER_ENV = "ARCHESTRA_AGENT_RUNTIME_TIER";
-/** The largest tier a run of this Agent may ask for; unset with explicit resources. */
+/** The largest tier a run of this Agent may ask for. */
 export const AGENT_RUNTIME_MAX_TIER_ENV = "ARCHESTRA_AGENT_RUNTIME_MAX_TIER";
 /** The Pod's CPU request and memory limit, so tools and models can size their work. */
 export const AGENT_RUNTIME_CPU_REQUEST_ENV =

@@ -45,25 +45,19 @@ export function tierResources(
   };
 }
 
-type SizedRuntime = Pick<AgentRuntime, "resources" | "tier" | "maxTier">;
+type SizedRuntime = Pick<AgentRuntime, "tier" | "maxTier">;
 
-/** The tier an Agent's runs get, or null when it sizes them with explicit resources. */
-export function agentRuntimeTier(
-  runtime: SizedRuntime,
-): AgentRuntimeTier | null {
-  if (runtime.resources) return null;
+/** The tier an Agent's runs get by default. */
+export function agentRuntimeTier(runtime: SizedRuntime): AgentRuntimeTier {
   return runtime.tier ?? DEFAULT_AGENT_RUNTIME_TIER;
 }
 
 /**
  * The largest tier a caller may ask for: the Agent's `maxTier`, never below
- * its own tier. Null when the Agent sizes its runs with explicit resources.
+ * its own tier.
  */
-export function agentRuntimeMaxTier(
-  runtime: SizedRuntime,
-): AgentRuntimeTier | null {
+export function agentRuntimeMaxTier(runtime: SizedRuntime): AgentRuntimeTier {
   const tier = agentRuntimeTier(runtime);
-  if (tier === null) return null;
   const max = runtime.maxTier ?? tier;
   return tierRank(max) > tierRank(tier) ? max : tier;
 }
@@ -72,16 +66,12 @@ function tierRank(tier: AgentRuntimeTier): number {
   return AGENT_RUNTIME_TIER_ORDER.indexOf(tier);
 }
 
-/** Resources a run gets: the Agent's explicit ones, else its tier's. */
+/** The resources a run gets: its tier's size in the organization. */
 export function resolveRunResources(
-  runtime: SizedRuntime,
   tier: AgentRuntimeTier | null,
   tiers: AgentRuntimeTierSizes,
 ): AgentRuntimeResources {
-  return (
-    runtime.resources ??
-    tierResources(tiers[tier ?? DEFAULT_AGENT_RUNTIME_TIER])
-  );
+  return tierResources(tiers[tier ?? DEFAULT_AGENT_RUNTIME_TIER]);
 }
 
 /**
@@ -105,10 +95,10 @@ export function warmTierCandidates(
  */
 export function warmPoolReplicas(
   tiers: AgentRuntimeTierSizes,
-  tier: AgentRuntimeTier | null,
+  tier: AgentRuntimeTier,
 ): number {
   const deployment = config.agentRuntime.warmPoolSize;
-  if (deployment === 0 || tier === null) return deployment;
+  if (deployment === 0) return deployment;
   return tiers[tier].warmPoolSize ?? deployment;
 }
 
@@ -120,12 +110,7 @@ export function warmPoolReplicas(
 export function resolveAgentRunLimits(params: {
   runtime: Pick<
     AgentRuntime,
-    | "resources"
-    | "tier"
-    | "maxTier"
-    | "idleTimeoutMinutes"
-    | "ttlHours"
-    | "maxCostUsd"
+    "tier" | "maxTier" | "idleTimeoutMinutes" | "ttlHours" | "maxCostUsd"
   >;
   requested?: AgentRunLimitsRequest | null;
 }): AgentRunLimits {
@@ -138,18 +123,14 @@ export function resolveAgentRunLimits(params: {
   const maxDurationHours =
     runtime.ttlHours ?? config.agentRuntime.defaultTtlHours;
   const maxCostUsd = runtime.maxCostUsd ?? null;
-  if (requested.tier !== undefined) {
-    if (agentTier === null)
-      throw new ApiError(
-        400,
-        "This Agent sizes its runs with explicit resources, so a run cannot choose a tier",
-      );
-    if (maxTier !== null && tierRank(requested.tier) > tierRank(maxTier))
-      throw new ApiError(
-        400,
-        `Tier ${requested.tier} is above this Agent's largest tier ${maxTier}`,
-      );
-  }
+  if (
+    requested.tier !== undefined &&
+    tierRank(requested.tier) > tierRank(maxTier)
+  )
+    throw new ApiError(
+      400,
+      `Tier ${requested.tier} is above this Agent's largest tier ${maxTier}`,
+    );
   if (
     requested.idleTimeoutMinutes !== undefined &&
     requested.idleTimeoutMinutes > idleTimeoutMinutes

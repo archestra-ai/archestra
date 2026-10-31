@@ -123,7 +123,6 @@ describe("run tools", () => {
         backend: "kubernetes",
         steerMode: "pipe",
         privileged: false,
-        resources: null,
         environment: null,
         credentials: [
           {
@@ -310,7 +309,6 @@ describe("run tools", () => {
         backend: "kubernetes",
         steerMode: "pipe",
         privileged: false,
-        resources: null,
         tier: "M",
         environment: null,
         credentials: [],
@@ -354,7 +352,6 @@ describe("run tools", () => {
         backend: "kubernetes",
         steerMode: "pipe",
         privileged: false,
-        resources: null,
         tier: "M",
         maxTier: "L",
         environment: null,

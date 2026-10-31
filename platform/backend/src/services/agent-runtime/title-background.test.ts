@@ -64,7 +64,6 @@ test("background drain waits for a failed launch's title request, logged in the 
     backend: "kubernetes",
     steerMode: "pipe",
     privileged: false,
-    resources: null,
     environment: null,
     credentials: null,
     ttlHours: null,

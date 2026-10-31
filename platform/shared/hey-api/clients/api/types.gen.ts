@@ -16967,12 +16967,6 @@ export type GetAgentCatalogResponses = {
                     backend: 'kubernetes';
                     steerMode: 'pipe' | 'tmux_keys';
                     privileged: boolean;
-                    resources: {
-                        cpuRequest?: string;
-                        memoryRequest?: string;
-                        cpuLimit?: string;
-                        memoryLimit?: string;
-                    } | null;
                     tier?: 'S' | 'M' | 'L';
                     maxTier?: 'S' | 'M' | 'L';
                     ports?: Array<number>;
@@ -17356,12 +17350,6 @@ export type GetAgentsResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                resources: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
                 tier?: 'S' | 'M' | 'L';
                 maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
@@ -17512,12 +17500,6 @@ export type CreateAgentData = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
             tier?: 'S' | 'M' | 'L';
             maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
@@ -17780,12 +17762,6 @@ export type CreateAgentResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
             tier?: 'S' | 'M' | 'L';
             maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
@@ -18176,12 +18152,6 @@ export type GetChatAgentRosterResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
             tier?: 'S' | 'M' | 'L';
             maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
@@ -18325,12 +18295,6 @@ export type GetChatAgentRosterPageResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                resources: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
                 tier?: 'S' | 'M' | 'L';
                 maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
@@ -18495,12 +18459,6 @@ export type GetAgentOptionsResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                resources: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
                 tier?: 'S' | 'M' | 'L';
                 maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
@@ -18683,12 +18641,6 @@ export type GetAgentOptionsPageResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                resources: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
                 tier?: 'S' | 'M' | 'L';
                 maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
@@ -19062,12 +19014,6 @@ export type GetDefaultMcpGatewayResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
             tier?: 'S' | 'M' | 'L';
             maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
@@ -19370,12 +19316,6 @@ export type ImportAgentResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                resources: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
                 tier?: 'S' | 'M' | 'L';
                 maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
@@ -19687,12 +19627,6 @@ export type GetAgentResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
             tier?: 'S' | 'M' | 'L';
             maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
@@ -19825,12 +19759,6 @@ export type UpdateAgentData = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
             tier?: 'S' | 'M' | 'L';
             maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
@@ -20002,12 +19930,6 @@ export type UpdateAgentResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
             tier?: 'S' | 'M' | 'L';
             maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
@@ -20585,12 +20507,6 @@ export type RestoreAgentVersionResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
             tier?: 'S' | 'M' | 'L';
             maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
@@ -20831,12 +20747,6 @@ export type CloneAgentResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
             tier?: 'S' | 'M' | 'L';
             maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
@@ -23316,12 +23226,6 @@ export type RestoreAgentResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
             tier?: 'S' | 'M' | 'L';
             maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
@@ -26253,12 +26157,6 @@ export type GetRuntimeTemplateSettingsResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: false;
-                resources: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
                 tier?: 'S' | 'M' | 'L';
                 maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
@@ -26340,12 +26238,6 @@ export type SaveRuntimeTemplateSettingsData = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: false;
-                resources: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
                 tier?: 'S' | 'M' | 'L';
                 maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
@@ -26499,12 +26391,6 @@ export type SaveRuntimeTemplateSettingsResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: false;
-                resources: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
                 tier?: 'S' | 'M' | 'L';
                 maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
@@ -26664,12 +26550,6 @@ export type GetAgentRuntimeTemplateResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: false;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
             tier?: 'S' | 'M' | 'L';
             maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
@@ -42152,12 +42032,6 @@ export type GetNewChatBootstrapResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                resources: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
                 tier?: 'S' | 'M' | 'L';
                 maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
@@ -42339,12 +42213,6 @@ export type GetNewChatBootstrapResponses = {
                     backend: 'kubernetes';
                     steerMode: 'pipe' | 'tmux_keys';
                     privileged: boolean;
-                    resources: {
-                        cpuRequest?: string;
-                        memoryRequest?: string;
-                        cpuLimit?: string;
-                        memoryLimit?: string;
-                    } | null;
                     tier?: 'S' | 'M' | 'L';
                     maxTier?: 'S' | 'M' | 'L';
                     ports?: Array<number>;
@@ -42737,12 +42605,6 @@ export type GetConversationBootstrapResponses = {
                     backend: 'kubernetes';
                     steerMode: 'pipe' | 'tmux_keys';
                     privileged: boolean;
-                    resources: {
-                        cpuRequest?: string;
-                        memoryRequest?: string;
-                        cpuLimit?: string;
-                        memoryLimit?: string;
-                    } | null;
                     tier?: 'S' | 'M' | 'L';
                     maxTier?: 'S' | 'M' | 'L';
                     ports?: Array<number>;
@@ -42924,12 +42786,6 @@ export type GetConversationBootstrapResponses = {
                         backend: 'kubernetes';
                         steerMode: 'pipe' | 'tmux_keys';
                         privileged: boolean;
-                        resources: {
-                            cpuRequest?: string;
-                            memoryRequest?: string;
-                            cpuLimit?: string;
-                            memoryLimit?: string;
-                        } | null;
                         tier?: 'S' | 'M' | 'L';
                         maxTier?: 'S' | 'M' | 'L';
                         ports?: Array<number>;

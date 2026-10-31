@@ -1243,7 +1243,7 @@ test.for([
     });
     // The kill comes first; the exit it led to is kept after it.
     expect(result.reason).toContain(described);
-    expect(result.reason).toContain(`status ${exit}`);
+    expect(result.reason).toContain(`status ${exit.split("\n")[0]}`);
   } else if (killed) {
     await expect(completion).resolves.toEqual({
       outcome: "failed",

@@ -356,7 +356,7 @@ describe("run tools", () => {
     );
     expect(scaleupFromSResult.isError).toBe(true);
     expect((scaleupFromSResult.content[0] as { text: string }).text).toContain(
-      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit)). This call is not retriable; calling it again will fail.",
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
     );
 
     // Resolving caller tier through runId and persisted runtimeLimits:
@@ -405,7 +405,7 @@ describe("run tools", () => {
     expect(
       (scaleupViaDbLookupResult.content[0] as { text: string }).text,
     ).toContain(
-      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit)). This call is not retriable; calling it again will fail.",
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
     );
 
     const scaleupTarget = await makeAgent({

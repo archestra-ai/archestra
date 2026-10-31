@@ -541,23 +541,6 @@ export function servedLaunchSpec<
         ? { [AGENT_RUNTIME_MEMORY_LIMIT_ENV]: served.resources.memoryLimit }
         : {}),
     },
-    ...(spec.secretEnv
-      ? {
-          secretEnv: {
-            ...spec.secretEnv,
-            ...(prompt && tiersEnv
-              ? {
-                  ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:
-                    retargetScaleupDisabledPrompt(
-                      prompt,
-                      tiersEnv,
-                      served.tier,
-                    ),
-                }
-              : {}),
-          },
-        }
-      : {}),
   };
 }
 

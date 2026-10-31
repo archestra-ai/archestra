@@ -336,6 +336,7 @@ export function retargetScaleupDisabledPrompt(
       cpu_limit?: number | null;
       memory_gib: number;
       memory_limit_gib: number;
+      workspace_gib?: number | null;
     } =>
       Boolean(
         item &&
@@ -354,10 +355,11 @@ export function retargetScaleupDisabledPrompt(
     memoryLimitMiB: Math.round(entry.memory_limit_gib * 1024),
     warmSpares: 0,
     pooled: false,
+    workspaceGiB: entry.workspace_gib ?? null,
   };
   const replacement =
     `Scaling up this agent runtime instance is disabled: the runtime tier is fixed to ` +
-    `${targetSize.name} (${describeAgentRuntimeTier(targetSize)}). ` +
+    `${targetSize.name} (${describeTier(targetSize)}). ` +
     `You cannot scale up this instance; do not attempt to start a run at a larger tier.`;
   return prompt.replace(SCALEUP_DISABLED_PATTERN, () => replacement);
 }

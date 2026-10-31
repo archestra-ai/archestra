@@ -451,22 +451,33 @@ test("servedLaunchSpec retargets the fixed-tier system instruction in secretEnv 
   const fixedMSpec = {
     tier: "S",
     resources: sizes.S,
+    workspaceStorageSize: "20Gi",
     warmTiers: [
-      { tier: "S", resources: sizes.S },
-      { tier: "M", resources: sizes.M },
+      {
+        tier: "S",
+        resources: sizes.S,
+        workspaceStorageSize: "20Gi",
+        workspaceGiB: 20,
+      },
+      {
+        tier: "M",
+        resources: sizes.M,
+        workspaceStorageSize: "20Gi",
+        workspaceGiB: 20,
+      },
     ],
     env: {
       ARCHESTRA_AGENT_RUNTIME_TIER: "S",
       ARCHESTRA_AGENT_RUNTIME_MAX_TIER: "M",
       ARCHESTRA_AGENT_RUNTIME_TIERS:
-        '[{"name":"S","cpu":2,"cpu_limit":2,"memory_gib":4,"memory_limit_gib":8,"current":true},{"name":"M","cpu":4,"cpu_limit":4,"memory_gib":8,"memory_limit_gib":16}]',
+        '[{"name":"S","cpu":2,"cpu_limit":2,"memory_gib":4,"memory_limit_gib":8,"workspace_gib":20,"current":true},{"name":"M","cpu":4,"cpu_limit":4,"memory_gib":8,"memory_limit_gib":16,"workspace_gib":20}]',
       ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "2",
       ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "8Gi",
     },
     secretEnv: {
       ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:
         "Initial agent instruction.\n\n" +
-        "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to S (2 CPU (2 limit), 4 GiB (8 GiB limit)). You cannot scale up this instance; do not attempt to start a run at a larger tier.",
+        "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to S (2 CPU (2 limit), 4 GiB (8 GiB limit), 20 GiB workspace). You cannot scale up this instance; do not attempt to start a run at a larger tier.",
     },
   };
 
@@ -474,7 +485,7 @@ test("servedLaunchSpec retargets the fixed-tier system instruction in secretEnv 
   expect(served.tier).toBe("M");
   expect(served.secretEnv?.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toBe(
     "Initial agent instruction.\n\n" +
-      "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to M (4 CPU (4 limit), 8 GiB (16 GiB limit)). You cannot scale up this instance; do not attempt to start a run at a larger tier.",
+      "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to M (4 CPU (4 limit), 8 GiB (16 GiB limit), 20 GiB workspace). You cannot scale up this instance; do not attempt to start a run at a larger tier.",
   );
 });
 

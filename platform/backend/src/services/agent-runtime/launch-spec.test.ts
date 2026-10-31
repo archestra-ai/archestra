@@ -407,7 +407,7 @@ describe("buildAgentRunLaunchSpec", () => {
     expect(
       sRunSpec.spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT,
     ).toContain(
-      "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit)). You cannot scale up this instance; do not attempt to start a run at a larger tier.",
+      "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). You cannot scale up this instance; do not attempt to start a run at a larger tier.",
     );
 
     expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(

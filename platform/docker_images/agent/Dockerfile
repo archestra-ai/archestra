@@ -21,13 +21,18 @@ RUN apt-get update -qq \
 FROM node:24-bookworm-slim AS agent-base
 ARG TARGETARCH
 
-# CVE-2026-84782: require the fixed OpenSSL packages and refresh cached apt layers.
+# Require fixed OpenSSL and Cyrus SASL packages and refresh cached apt layers.
+# CVE-2026-84782 (OpenSSL), CVE-2026-107161 (Cyrus SASL).
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends \
-      build-essential ca-certificates curl ffmpeg fonts-dejavu-core git jq less libssl-dev libssl3 \
+      build-essential ca-certificates curl ffmpeg fonts-dejavu-core git jq less \
+      libsasl2-2 libsasl2-modules-db libssl-dev libssl3 \
       openssh-client openssl pkg-config procps python3 python3-venv ripgrep tmux \
  && for package in openssl libssl3 libssl-dev; do \
       dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '3.0.22-1~deb12u2' || exit 1; \
+    done \
+ && for package in libsasl2-2 libsasl2-modules-db; do \
+      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '2.1.28+dfsg-10+deb12u1' || exit 1; \
     done \
  && rm -rf /var/lib/apt/lists/*
 

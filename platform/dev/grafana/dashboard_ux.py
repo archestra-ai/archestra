@@ -256,6 +256,10 @@ def add_inference_filters(d):
 
 
 def refine_mcp(d):
+    for panel in d["panels"]:
+        if panel.get("id") in range(2, 8):
+            panel["gridPos"]["x"] = ((panel["id"] - 2) % 3) * 8
+            panel["gridPos"]["w"] = 8
     d["templating"]["list"] = [
         v
         for v in d["templating"]["list"]

@@ -59,9 +59,7 @@ Keep at least one recipient with **Manage access**, either through **Full access
 
 ### Share Across Teams
 
-Give a custom role [`accessPolicies:share-across-teams`](/docs/reference/permissions#accessPolicies:share-across-teams) to let its holders share an app, agent, or other resource with teams they do not belong to. They still need **Manage access** on the item and can grant only actions they hold. The recipient picker includes teams in the same organization; select a team, choose its level, and save.
-
-This permission does not allow sharing with everyone or a role. Member and Editor do not receive it by default. Removing it preserves saved team grants; managers can still keep, lower, or remove those grants.
+Owners and anyone with **Manage access** on an item can share it with any team in the same organization, including teams they do not belong to. Under **Who can use it**, select **Add access**, choose a team and its access level, then save. No additional role permission is required.
 
 ### Actions And Scopes
 

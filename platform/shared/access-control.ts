@@ -68,7 +68,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   oauthClient: ["read", "create"],
   serviceAccount: ["read", "create"],
   auditLog: ["read", "admin"],
-  accessPolicies: ["read", "update", "share-across-teams"],
+  accessPolicies: ["read", "update"],
   member: ["read", "create", "update", "delete", "impersonate"],
   // Never granted directly: Better Auth checks it when inviting or
   // cancelling, and `withDerivedPermissions` fills it in from member:create.
@@ -434,8 +434,6 @@ export const permissionDescriptions: Record<string, string> = {
   "log:admin":
     "View every LLM, MCP, and Guardrails consult log in your organization (also requires Read)",
   "accessPolicies:read": "View access policies for all resource types",
-  "accessPolicies:share-across-teams":
-    "Share resources you manage with teams you do not belong to in your organization",
   "accessPolicies:update":
     "Edit access policies and grant access across all resource types",
   "organizationSettings:read":

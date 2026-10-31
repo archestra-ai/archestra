@@ -2,7 +2,7 @@
 title: "Permissions"
 description: "What each built-in role can do, and every permission a custom role can hold"
 order: 2
-lastUpdated: 2026-10-30
+lastUpdated: 2026-10-31
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -96,7 +96,6 @@ A [custom role](/docs/admin/access-control#custom-roles) can hold any of these p
 | <span id="ac:delete"></span>`ac:delete` | Delete custom roles |
 | <span id="accessPolicies:read"></span>`accessPolicies:read` | View access policies for all resource types |
 | <span id="accessPolicies:update"></span>`accessPolicies:update` | Edit access policies and grant access across all resource types |
-| <span id="accessPolicies:share-across-teams"></span>`accessPolicies:share-across-teams` | Share resources you manage with teams you do not belong to in your organization |
 | <span id="agent:read"></span>`agent:read` | Open Agents, and use the code sandboxes and files of agents you can use |
 | <span id="agent:create"></span>`agent:create` | Create new agents |
 | <span id="agent:delete"></span>`agent:delete` | Open the trash of deleted agents |

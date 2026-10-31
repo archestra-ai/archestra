@@ -20,7 +20,6 @@ export const actions = [
   "full-view",
   "admin",
   "configure-runtime",
-  "share-across-teams",
 ] as const;
 
 export const resources = [

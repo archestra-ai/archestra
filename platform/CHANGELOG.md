@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.4.15](https://github.com/archestra-ai/archestra/compare/platform-v1.4.14...platform-v1.4.15) (2026-10-31)
+
+
+### Bug Fixes
+
+* **agent-runtime:** key a run's LLM trace and title by the session its runtime sends [1.4] ([#9966](https://github.com/archestra-ai/archestra/issues/9966)) ([fa05034](https://github.com/archestra-ai/archestra/commit/fa05034fd45aececc5cd494872abc6137ffa35c6))
+* **agent-runtime:** report in-pod memory kills and size test runs for the container [1.4] ([#9975](https://github.com/archestra-ai/archestra/issues/9975)) ([895b552](https://github.com/archestra-ai/archestra/commit/895b552fd25de55d43f97a9618b56e6aeded506b))
+* **agents:** keep the agent's model on a runtime-only update (backport release/1.4) ([#9965](https://github.com/archestra-ai/archestra/issues/9965)) ([96221e3](https://github.com/archestra-ai/archestra/commit/96221e31a0148b805eb8cc1a35171235a8e59d96))
+* **connect:** close Claude Desktop on Windows for the setup restart [1.4] ([#9974](https://github.com/archestra-ai/archestra/issues/9974)) ([c4a5d07](https://github.com/archestra-ai/archestra/commit/c4a5d077a945495cb9aa942d2c768fcdea04967d))
+
 ## [1.4.14](https://github.com/archestra-ai/archestra/compare/platform-v1.4.13...platform-v1.4.14) (2026-10-31)
 
 

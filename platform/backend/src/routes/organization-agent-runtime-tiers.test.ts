@@ -58,7 +58,7 @@ describe("Agent Runtime tiers: GET /api/organization/agent-runtime-tiers and PAT
     name: string,
     cpuRequest: number,
     extra: Record<string, unknown> = {},
-  ) => ({ name, cpuRequest, cpuLimit: null, warmSpares: 0, ...extra });
+  ) => ({ name, cpuRequest, cpuLimit: null, pooled: false, ...extra });
   const runtimeAt = (tier: string, maxTier: string) => ({
     image: "example.com/agent:1",
     command: null,
@@ -85,25 +85,26 @@ describe("Agent Runtime tiers: GET /api/organization/agent-runtime-tiers and PAT
           memoryRequestMiB: 4096,
           memoryLimitMiB: 8192,
         },
-        { name: "M", cpuRequest: 4 },
-        { name: "L", cpuRequest: 8, warmSpares: 0 },
+        { name: "M", cpuRequest: 4, pooled: true },
+        { name: "L", cpuRequest: 8, warmSpares: 0, pooled: false },
       ],
     });
 
     const response = await patch({
       agentRuntimeTiers: {
         tiers: [
-          tier("Large", 6, { cpuLimit: 8, warmSpares: 1 }),
+          tier("Large", 6, { cpuLimit: 8, pooled: true }),
           tier("Small", 1),
-          tier("XL", 8, { warmSpares: 0 }),
+          tier("XL", 8),
         ],
         defaultTier: "Small",
       },
     });
     expect(response.statusCode, response.body).toBe(200);
+    // Stored as spare counts: a pooled tier follows the deployment's count.
     expect(response.json().agentRuntimeTiers).toEqual({
       tiers: [
-        { name: "Large", cpuRequest: 6, cpuLimit: 8, warmSpares: 1 },
+        { name: "Large", cpuRequest: 6, cpuLimit: 8, warmSpares: null },
         { name: "Small", cpuRequest: 1, cpuLimit: null, warmSpares: 0 },
         { name: "XL", cpuRequest: 8, cpuLimit: null, warmSpares: 0 },
       ],
@@ -113,11 +114,13 @@ describe("Agent Runtime tiers: GET /api/organization/agent-runtime-tiers and PAT
     expect(resolved.tiers.map((entry: { name: string }) => entry.name)).toEqual(
       ["Small", "Large", "XL"],
     );
+    // Pooled follows the deployment's count, none in tests; the choice stays.
     expect(resolved.tiers[1]).toEqual({
       name: "Large",
       cpuRequest: 6,
       cpuLimit: 8,
-      warmSpares: 1,
+      warmSpares: 0,
+      pooled: true,
       memoryRequestMiB: 12288,
       memoryLimitMiB: 16384,
     });
@@ -153,7 +156,7 @@ describe("Agent Runtime tiers: GET /api/organization/agent-runtime-tiers and PAT
     expect(await refused([tier("S", 1)], "M")).toContain(
       "The default tier M is not in the list",
     );
-    expect(await refused([tier("S", 2, { warmSpares: 11 })])).toBeTruthy();
+    expect(await refused([tier("S", 2, { pooled: "yes" })])).toBeTruthy();
     expect(
       (await OrganizationModel.getById(organizationId))?.agentRuntimeTiers,
     ).toBeNull();

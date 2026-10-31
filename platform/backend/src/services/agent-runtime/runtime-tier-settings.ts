@@ -1,8 +1,10 @@
 import {
   type AgentRuntimeTierSettingsInput,
+  agentRuntimeTierDefinitionFromInput,
   agentRuntimeTierProblems,
   findAgentRuntimeTier,
   resolveAgentRuntimeTiers,
+  type StoredAgentRuntimeTierSettings,
   sameAgentRuntimeTierName,
 } from "@archestra/shared";
 import type { Transaction } from "@/database";
@@ -27,13 +29,14 @@ export async function prepareAgentRuntimeTierChange(params: {
   organizationId: string;
   input: AgentRuntimeTierSettingsInput | null;
 }): Promise<{
-  settings: AgentRuntimeTierSettingsInput | null;
+  /** What the organization stores: null for a reset to the defaults. */
+  settings: StoredAgentRuntimeTierSettings | null;
   write: (tx: Transaction) => Promise<void>;
 }> {
   const { organizationId, input } = params;
   const next = input ?? defaultTierInput();
-  const settings: AgentRuntimeTierSettingsInput = {
-    tiers: next.tiers.map(({ previousName: _previousName, ...tier }) => tier),
+  const settings = {
+    tiers: next.tiers.map(agentRuntimeTierDefinitionFromInput),
     defaultTier: next.defaultTier,
   };
   const problems = agentRuntimeTierProblems(settings);
@@ -99,11 +102,11 @@ export async function prepareAgentRuntimeTierChange(params: {
 function defaultTierInput(): AgentRuntimeTierSettingsInput {
   const defaults = resolveAgentRuntimeTiers(null, agentRuntimeTierDefaults());
   return {
-    tiers: defaults.tiers.map(({ name, cpuRequest, cpuLimit, warmSpares }) => ({
+    tiers: defaults.tiers.map(({ name, cpuRequest, cpuLimit, pooled }) => ({
       name,
       cpuRequest,
       cpuLimit,
-      warmSpares,
+      pooled,
     })),
     defaultTier: defaults.defaultTier,
   };

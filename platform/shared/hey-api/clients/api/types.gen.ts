@@ -123022,6 +123022,10 @@ export type GetAgentRuntimeTiersResponses = {
             cpuRequest: number;
             cpuLimit: number | null;
             warmSpares: number;
+            /**
+             * Whether the tier keeps spare containers ready for its runs
+             */
+            pooled: boolean;
             memoryRequestMiB: number;
             memoryLimitMiB: number;
         }>;
@@ -123038,7 +123042,7 @@ export type UpdateAgentSettingsData = {
                 name: string;
                 cpuRequest: number;
                 cpuLimit: number | null;
-                warmSpares: number;
+                pooled: boolean;
                 previousName?: string;
             }>;
             defaultTier: string;

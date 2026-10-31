@@ -48,7 +48,6 @@ import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
-  useAgentRuntimeTiers,
   useIsGlobalAdmin,
   useOrganization,
   useUpdateAgentSettings,
@@ -56,12 +55,6 @@ import {
 } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
 import { RuntimeTiersBlock } from "./_parts/runtime-tiers-block";
-import {
-  type RuntimeTierDraft,
-  runtimeTierDraft,
-  runtimeTierDraftChanged,
-  validateRuntimeTierDraft,
-} from "./_parts/runtime-tiers-draft";
 import {
   type AgentSettingsState,
   buildSavePayload,
@@ -99,24 +92,8 @@ export default function AgentSettingsPage() {
     defaultAgentId: "",
   });
   const savedFileUploadsRef = useRef(true);
-  const [runtimeTiers, setRuntimeTiers] = useState<RuntimeTierDraft>(() =>
-    runtimeTierDraft(undefined),
-  );
-  const savedRuntimeTiersRef = useRef<RuntimeTierDraft>(
-    runtimeTierDraft(undefined),
-  );
   const runtimeBackend = useFeature("agentRuntimeBackend");
   const runtimeEnabled = useFeature("agentRuntime");
-  // The tiers in effect, smallest first; a save refetches them.
-  const { data: resolvedRuntimeTiers } = useAgentRuntimeTiers(
-    runtimeBackend != null,
-  );
-  useEffect(() => {
-    if (!resolvedRuntimeTiers) return;
-    const saved = runtimeTierDraft(resolvedRuntimeTiers);
-    setRuntimeTiers(saved);
-    savedRuntimeTiersRef.current = saved;
-  }, [resolvedRuntimeTiers]);
 
   const {
     data: allModels,
@@ -178,11 +155,6 @@ export default function AgentSettingsPage() {
   };
 
   const changes = detectChanges(localState, savedStateRef.current);
-  const runtimeTiersChanged = runtimeTierDraftChanged(
-    runtimeTiers,
-    savedRuntimeTiersRef.current,
-  );
-  const runtimeTierCheck = validateRuntimeTierDraft(runtimeTiers);
   const securityHasChanges =
     fileUploads !== savedFileUploadsRef.current ||
     playwrightEnabled !== savedPlaywrightRef.current;
@@ -190,20 +162,12 @@ export default function AgentSettingsPage() {
   const handleSave = async () => {
     if (!apiKeys) return;
 
-    if (changes.hasChanges || runtimeTiersChanged) {
-      if (runtimeTiersChanged && !runtimeTierCheck.ok) return;
-      const payload = {
-        ...(changes.hasChanges
-          ? buildSavePayload(localState, savedStateRef.current)
-          : {}),
-        ...(runtimeTiersChanged && runtimeTierCheck.ok
-          ? { agentRuntimeTiers: runtimeTierCheck.settings }
-          : {}),
-      };
-      const saved = await updateAgentMutation.mutateAsync(payload);
+    if (changes.hasChanges) {
+      const saved = await updateAgentMutation.mutateAsync(
+        buildSavePayload(localState, savedStateRef.current),
+      );
       if (!saved) return;
       savedStateRef.current = { ...localState };
-      savedRuntimeTiersRef.current = runtimeTiers;
     }
 
     if (securityHasChanges) {
@@ -228,7 +192,6 @@ export default function AgentSettingsPage() {
     setDefaultAgentId(saved.defaultAgentId);
     setFileUploads(savedFileUploadsRef.current);
     setPlaywrightEnabled(savedPlaywrightRef.current);
-    setRuntimeTiers(savedRuntimeTiersRef.current);
   };
 
   const modelItems = useMemo(() => {
@@ -475,13 +438,8 @@ export default function AgentSettingsPage() {
       </section>
 
       <SettingsSaveBar
-        hasChanges={
-          changes.hasChanges || securityHasChanges || runtimeTiersChanged
-        }
-        disabledSave={
-          (selectedApiKeyId !== "" && defaultModel === "") ||
-          (runtimeTiersChanged && !runtimeTierCheck.ok)
-        }
+        hasChanges={changes.hasChanges || securityHasChanges}
+        disabledSave={selectedApiKeyId !== "" && defaultModel === ""}
         isSaving={isSaving}
         permissions={{ organizationSettings: ["update"] }}
         onSave={handleSave}
@@ -523,9 +481,6 @@ export default function AgentSettingsPage() {
           {runtimeBackend && <RuntimeBackendSection />}
           {runtimeBackend && (
             <RuntimeTiersBlock
-              value={runtimeTiers}
-              onChange={setRuntimeTiers}
-              problems={runtimeTierCheck.ok ? [] : runtimeTierCheck.problems}
               canEdit={isGlobalAdmin && runtimeEnabled === true}
             />
           )}

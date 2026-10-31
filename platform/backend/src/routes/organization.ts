@@ -9,6 +9,7 @@ import {
   providerHasEndpointLocalModels,
   providerRequiresPerUserCredential,
   RouteId,
+  type StoredAgentRuntimeTierSettings,
 } from "@archestra/shared";
 import {
   INSTALLER_CLIENT_KEY_PROVIDERS,
@@ -365,6 +366,9 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // its transaction: renamed tiers are followed by the agents that name
       // them, and a tier still in use cannot go.
       let writeTierChanges: ((tx: Transaction) => Promise<void>) | null = null;
+      // What the organization stores for its tiers differs from the request
+      // (a pooled flag becomes a spare count), so it travels apart from body.
+      let storedTiers: StoredAgentRuntimeTierSettings | null | undefined;
       if (body.agentRuntimeTiers !== undefined) {
         // Tier sizes reserve cluster capacity, so like the built-in browser
         // they need a built-in administrator role.
@@ -380,9 +384,14 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
           input: body.agentRuntimeTiers,
         });
-        body.agentRuntimeTiers = prepared.settings;
+        storedTiers = prepared.settings;
         writeTierChanges = prepared.write;
       }
+      const { agentRuntimeTiers: _requestedTiers, ...rest } = body;
+      const data =
+        storedTiers === undefined
+          ? rest
+          : { ...rest, agentRuntimeTiers: storedTiers };
       // The default model and its API key are a pair: persist both or neither.
       const currentOrg =
         body.defaultModelId !== undefined ||
@@ -468,7 +477,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await writeTierChanges?.(tx);
         return OrganizationModel.patchInTransaction({
           id: organizationId,
-          data: body,
+          data,
           tx,
         });
       };
@@ -485,7 +494,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ? await withDbTransaction(write).finally(() =>
                 OrganizationModel.invalidateSettingsCaches(organizationId),
               )
-            : await OrganizationModel.patch(organizationId, body);
+            : await OrganizationModel.patch(organizationId, data);
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");

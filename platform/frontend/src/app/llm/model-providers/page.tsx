@@ -5,6 +5,7 @@ import {
   E2eTestId,
   formatSecretStorageType,
   isProviderApiKeyOptional,
+  isSupportedProvider,
   SUBSCRIPTION_CREDENTIALS,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -19,6 +20,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
@@ -130,6 +132,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
 };
 
 export default function ApiKeysPage() {
+  const router = useRouter();
   const docsUrl = getFrontendDocsUrl("llm-proxy/providers");
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const search = searchParams.get("search") || "";
@@ -140,10 +143,13 @@ export default function ApiKeysPage() {
     useHasPermissions({ llmProviderApiKey: ["read"] });
   const apiKeyQueriesEnabled =
     !permissionsPending && canReadLlmProviderApiKeys === true;
-  const { data: allApiKeys = [], isPending: allApiKeysPending } =
-    useLlmProviderApiKeys({
-      enabled: apiKeyQueriesEnabled,
-    });
+  const {
+    data: allApiKeys = [],
+    isPending: allApiKeysPending,
+    isError: allApiKeysError,
+  } = useLlmProviderApiKeys({
+    enabled: apiKeyQueriesEnabled,
+  });
   const { hasActiveScopeFilters, access, sharedWith, owner } =
     useScopeFilterParams();
   const hasActiveFilters = Boolean(
@@ -193,6 +199,12 @@ export default function ApiKeysPage() {
 
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const createProvider = searchParams.get("create");
+  const linkedCreate =
+    isSupportedProvider(createProvider) &&
+    !providerCatalog.isHidden(createProvider)
+      ? { provider: createProvider, initialGrants: [] }
+      : undefined;
   const [subscriptionToConnect, setSubscriptionToConnect] =
     useState<SubscriptionOffer | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -440,6 +452,59 @@ export default function ApiKeysPage() {
     subscriptionToConnect,
     updateQueryParams,
   ]);
+
+  // Recovery links stay URL-driven, so Back closes the dialog and Forward
+  // restores it. Dismiss with replace to keep a closed dialog out of history.
+  const reconnectKind = searchParams.get("reconnect");
+  const [dismissedReconnect, setDismissedReconnect] = useState<string | null>(
+    null,
+  );
+  useEffect(() => {
+    if (!reconnectKind) setDismissedReconnect(null);
+  }, [reconnectKind]);
+  const linkedReconnect = useMemo(() => {
+    if (
+      !reconnectKind ||
+      !currentUserId ||
+      reconnectKind === dismissedReconnect ||
+      permissionsPending ||
+      (apiKeyQueriesEnabled && (allApiKeysPending || allApiKeysError))
+    )
+      return null;
+    return (
+      buildSubscriptionOffers(
+        allApiKeys.filter((key) => key.userId === currentUserId),
+      ).find(
+        ({ kind, provider }) =>
+          kind === reconnectKind && !providerCatalog.isHidden(provider),
+      ) ?? null
+    );
+  }, [
+    reconnectKind,
+    dismissedReconnect,
+    permissionsPending,
+    apiKeyQueriesEnabled,
+    allApiKeysPending,
+    allApiKeysError,
+    allApiKeys,
+    currentUserId,
+    providerCatalog,
+  ]);
+  const activeSubscription = linkedReconnect ?? subscriptionToConnect;
+  const clearSetupParams = (names: string[]) => {
+    const params = new URLSearchParams(searchParams.toString());
+    for (const name of names) params.delete(name);
+    router.replace(`/llm/model-providers${params.size ? `?${params}` : ""}`, {
+      scroll: false,
+    });
+  };
+  const closeSubscription = () => {
+    setSubscriptionToConnect(null);
+    if (reconnectKind) {
+      setDismissedReconnect(reconnectKind);
+      clearSetupParams(["reconnect"]);
+    }
+  };
 
   /** Keys the cards already stand for, so the table never repeats them. */
   const connectedSubscriptionIds = useMemo(
@@ -827,30 +892,35 @@ export default function ApiKeysPage() {
 
         {/* Create Dialog */}
         <CreateLlmProviderApiKeyDialog
-          open={isCreateDialogOpen}
-          onOpenChange={setIsCreateDialogOpen}
+          open={isCreateDialogOpen || linkedCreate !== undefined}
+          onOpenChange={(open) => {
+            setIsCreateDialogOpen(open);
+            if (!open) clearSetupParams(["create"]);
+          }}
+          defaultValues={linkedCreate}
           title="Add API Key"
           description="Add a new LLM provider API key for use in Chat and LLM Proxy"
         />
-        {subscriptionToConnect && (
+        {activeSubscription && (
           <CreateLlmProviderApiKeyDialog
+            key={activeSubscription.kind}
             open
             onOpenChange={(open) => {
-              if (!open) setSubscriptionToConnect(null);
+              if (!open) closeSubscription();
             }}
             title={
-              subscriptionToConnect.credential
-                ? `Reconnect ${subscriptionToConnect.name}`
-                : SUBSCRIPTION_CREDENTIALS[subscriptionToConnect.kind].connect
+              activeSubscription.credential
+                ? `Reconnect ${activeSubscription.name}`
+                : SUBSCRIPTION_CREDENTIALS[activeSubscription.kind].connect
                     .signInTitle
             }
             description={
-              SUBSCRIPTION_CREDENTIALS[subscriptionToConnect.kind].connect
+              SUBSCRIPTION_CREDENTIALS[activeSubscription.kind].connect
                 .signInDescription
             }
-            reconnectKeyId={subscriptionToConnect.credential?.id}
-            defaultValues={subscriptionToConnect.defaultValues}
-            allowedProviders={[subscriptionToConnect.provider]}
+            reconnectKeyId={activeSubscription.credential?.id}
+            defaultValues={activeSubscription.defaultValues}
+            allowedProviders={[activeSubscription.provider]}
             credentialMode="subscription"
           />
         )}

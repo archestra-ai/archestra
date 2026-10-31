@@ -1,6 +1,16 @@
 "use client";
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  SUBSCRIPTION_CREDENTIAL_KINDS,
+  SUBSCRIPTION_CREDENTIALS,
+} from "@archestra/shared";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockUseLlmProviderApiKeys = vi.fn();
@@ -92,6 +102,8 @@ vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
     description?: string;
     defaultValues?: unknown;
     allowedProviders?: unknown;
+    reconnectKeyId?: string;
+    onOpenChange: (open: boolean) => void;
   }) =>
     props.open ? (
       <div data-testid="create-dialog">
@@ -99,6 +111,10 @@ vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
         {props.description}
         {JSON.stringify(props.defaultValues)}
         {JSON.stringify(props.allowedProviders)}
+        <span>{props.reconnectKeyId}</span>
+        <button type="button" onClick={() => props.onOpenChange(false)}>
+          Cancel
+        </button>
       </div>
     ) : null,
 }));
@@ -301,7 +317,7 @@ vi.mock("@/components/ui/select", () => ({
 vi.mock("@/lib/entity-labels.query");
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useOrganization } from "@/lib/organization.query";
 import ApiKeysPage from "./page";
@@ -309,6 +325,9 @@ import ApiKeysPage from "./page";
 describe("ApiKeysPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "viewer" } },
+    } as ReturnType<typeof useSession>);
     useDataTableQueryParamsMock.mockReturnValue({
       searchParams: new URLSearchParams(),
       updateQueryParams: updateQueryParamsMock,
@@ -361,6 +380,116 @@ describe("ApiKeysPage", () => {
     expect(await screen.findByTestId("create-dialog")).toHaveTextContent(
       "Sign in with ChatGPT",
     );
+  });
+
+  it.each(
+    SUBSCRIPTION_CREDENTIAL_KINDS,
+  )("opens the %s recovery flow for the current user only", async (kind) => {
+    const { provider, displayName } = SUBSCRIPTION_CREDENTIALS[kind];
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "viewer" } },
+    } as ReturnType<typeof useSession>);
+    mockUseLlmProviderApiKeys.mockReturnValue({
+      data: [
+        {
+          id: "other-key",
+          provider,
+          scope: "personal",
+          userId: "other",
+          subscriptionKind: kind,
+        },
+        {
+          id: "own-key",
+          provider,
+          scope: "personal",
+          userId: "viewer",
+          subscriptionKind: kind,
+        },
+      ],
+      isPending: false,
+    });
+    useDataTableQueryParamsMock.mockReturnValue({
+      searchParams: new URLSearchParams(`reconnect=${kind}&search=kept`),
+      updateQueryParams: updateQueryParamsMock,
+    });
+    const { rerender } = render(<ApiKeysPage />);
+    expect(await screen.findByTestId("create-dialog")).toHaveTextContent(
+      `Reconnect ${displayName}`,
+    );
+    expect(screen.getByTestId("create-dialog")).toHaveTextContent("own-key");
+    expect(screen.getByTestId("create-dialog")).not.toHaveTextContent(
+      "other-key",
+    );
+    fireEvent.click(
+      within(screen.getByTestId("create-dialog")).getByRole("button", {
+        name: "Cancel",
+      }),
+    );
+    expect(screen.queryByTestId("create-dialog")).not.toBeInTheDocument();
+    expect(vi.mocked(useRouter)().replace).toHaveBeenCalledWith(
+      "/llm/model-providers?search=kept",
+      { scroll: false },
+    );
+    rerender(<ApiKeysPage />);
+    expect(screen.queryByTestId("create-dialog")).not.toBeInTheDocument();
+  });
+
+  it("ignores unknown recovery kinds and opens self-service sign-in without key-read permission", async () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+      isPending: false,
+    } as ReturnType<typeof useHasPermissions>);
+    useDataTableQueryParamsMock.mockReturnValue({
+      searchParams: new URLSearchParams("reconnect=unknown"),
+      updateQueryParams: updateQueryParamsMock,
+    });
+    const { rerender } = render(<ApiKeysPage />);
+    expect(screen.queryByTestId("create-dialog")).not.toBeInTheDocument();
+    useDataTableQueryParamsMock.mockReturnValue({
+      searchParams: new URLSearchParams("reconnect=chatgpt"),
+      updateQueryParams: updateQueryParamsMock,
+    });
+    rerender(<ApiKeysPage />);
+    expect(await screen.findByTestId("create-dialog")).toHaveTextContent(
+      "Sign in with ChatGPT",
+    );
+    useDataTableQueryParamsMock.mockReturnValue({
+      searchParams: new URLSearchParams(),
+      updateQueryParams: updateQueryParamsMock,
+    });
+    rerender(<ApiKeysPage />);
+    expect(screen.queryByTestId("create-dialog")).not.toBeInTheDocument();
+    useDataTableQueryParamsMock.mockReturnValue({
+      searchParams: new URLSearchParams("reconnect=chatgpt"),
+      updateQueryParams: updateQueryParamsMock,
+    });
+    rerender(<ApiKeysPage />);
+    expect(await screen.findByTestId("create-dialog")).toHaveTextContent(
+      "Sign in with ChatGPT",
+    );
+  });
+
+  it.each([
+    "create=xai",
+    "reconnect=x-premium",
+  ])("does not open a hidden provider from %s", (query) => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: { modelProviderOverrides: { xai: { hidden: true } } },
+    } as unknown as ReturnType<typeof useOrganization>);
+    useDataTableQueryParamsMock.mockReturnValue({
+      searchParams: new URLSearchParams(query),
+      updateQueryParams: updateQueryParamsMock,
+    });
+    render(<ApiKeysPage />);
+    expect(screen.queryByTestId("create-dialog")).not.toBeInTheDocument();
   });
 
   it("still offers subscriptions to a member who cannot read keys", () => {

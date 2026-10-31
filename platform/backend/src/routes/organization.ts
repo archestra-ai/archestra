@@ -374,14 +374,14 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Only administrators can change the Agent Runtime tiers",
           );
         }
-        if (body.agentRuntimeTiers !== null) {
-          const prepared = await prepareAgentRuntimeTierChange({
-            organizationId,
-            input: body.agentRuntimeTiers,
-          });
-          body.agentRuntimeTiers = prepared.settings;
-          writeTierChanges = prepared.write;
-        }
+        // A reset (null) restores the defaults under the same check: a
+        // custom tier still in use cannot vanish from under its agents.
+        const prepared = await prepareAgentRuntimeTierChange({
+          organizationId,
+          input: body.agentRuntimeTiers,
+        });
+        body.agentRuntimeTiers = prepared.settings;
+        writeTierChanges = prepared.write;
       }
       // The default model and its API key are a pair: persist both or neither.
       const currentOrg =

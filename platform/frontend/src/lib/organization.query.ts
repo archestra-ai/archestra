@@ -449,9 +449,6 @@ export function useUpdateAppearanceSettings(
     onSuccess: (updatedOrganization, variables) => {
       if (!updatedOrganization) return;
       queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
-      queryClient.invalidateQueries({
-        queryKey: organizationKeys.agentRuntimeTiers(),
-      });
       queryClient.setQueryData(appearanceKeys.public(), {
         theme: updatedOrganization.theme,
         customFont: updatedOrganization.customFont,
@@ -620,6 +617,11 @@ export function useUpdateAgentSettings(
       queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
       queryClient.invalidateQueries({
         queryKey: organizationKeys.defaultModel(),
+      });
+      // The tiers in effect are their own query: a save that renames, adds or
+      // removes tiers refetches them, and the form rebuilds from the saved list.
+      queryClient.invalidateQueries({
+        queryKey: organizationKeys.agentRuntimeTiers(),
       });
       toast.success(onSuccessMessage);
     },

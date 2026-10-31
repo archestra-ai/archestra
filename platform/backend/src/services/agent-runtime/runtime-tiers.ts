@@ -8,6 +8,7 @@ import {
   nextLargerAgentRuntimeTier,
   type ResolvedAgentRuntimeTiers,
   resolveAgentRuntimeTiers,
+  sameAgentRuntimeTierName,
   sortAgentRuntimeTiers,
 } from "@archestra/shared";
 import config from "@/config";
@@ -175,6 +176,33 @@ export function runtimeTiersEnv(
 
 function gib(mib: number): number {
   return Math.round((mib / 1024) * 100) / 100;
+}
+
+/**
+ * The same list with `current` on `tier` alone: a run served from a larger
+ * tier's warm pool runs at that size, and its list must say so.
+ */
+export function retargetRuntimeTiersEnv(value: string, tier: string): string {
+  let entries: unknown;
+  try {
+    entries = JSON.parse(value);
+  } catch {
+    return value;
+  }
+  if (!Array.isArray(entries)) return value;
+  return JSON.stringify(
+    entries.map((entry: unknown) => {
+      if (!entry || typeof entry !== "object") return entry;
+      const { current: _current, ...rest } = entry as {
+        current?: boolean;
+        name?: unknown;
+      };
+      return typeof rest.name === "string" &&
+        sameAgentRuntimeTierName(rest.name, tier)
+        ? { ...rest, current: true }
+        : rest;
+    }),
+  );
 }
 
 function allowedTiersSentence(

@@ -4080,24 +4080,39 @@ class AgentModel {
     return row?.count ?? 0;
   }
 
-  /** Follow a tier rename on every agent of the organization that names it. */
-  static async renameRuntimeTier(params: {
+  /**
+   * Follow tier renames on every agent of the organization that names one of
+   * them. The whole mapping applies to each stored name once, so a save that
+   * renames S to M and M to Medium leaves the former S agents on M.
+   */
+  static async renameRuntimeTiers(params: {
     organizationId: string;
-    from: string;
-    to: string;
+    renames: readonly { from: string; to: string }[];
     tx?: Transaction;
   }): Promise<void> {
+    if (params.renames.length === 0) return;
     const table = schema.agentsTable;
+    const from = params.renames.map((rename) => rename.from.toLowerCase());
     for (const field of ["tier", "maxTier"] as const) {
+      const stored = sql`lower(${table.runtime}->>${field})`;
+      const mapped = sql.join(
+        params.renames.map(
+          (rename) => sql`when ${rename.from.toLowerCase()} then ${rename.to}`,
+        ),
+        sql` `,
+      );
       await (params.tx ?? db)
         .update(table)
         .set({
-          runtime: sql`jsonb_set(${table.runtime}, ${sql.raw(`'{${field}}'`)}, to_jsonb(${params.to}::text))`,
+          runtime: sql`jsonb_set(${table.runtime}, ${sql.raw(`'{${field}}'`)}, to_jsonb(coalesce((case ${stored} ${mapped} end), ${table.runtime}->>${field})::text))`,
         })
         .where(
           and(
             eq(table.organizationId, params.organizationId),
-            sql`lower(${table.runtime}->>${field}) = lower(${params.from})`,
+            sql`${stored} in (${sql.join(
+              from.map((name) => sql`${name}`),
+              sql`, `,
+            )})`,
           ),
         );
     }

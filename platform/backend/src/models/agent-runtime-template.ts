@@ -173,13 +173,16 @@ class AgentRuntimeTemplateModel {
     ).length;
   }
 
-  /** Follow a tier rename on every template that names it. */
-  static async renameRuntimeTier(params: {
+  /**
+   * Follow tier renames on every template that names one of them. Each stored
+   * name is mapped once, whatever order the renames come in.
+   */
+  static async renameRuntimeTiers(params: {
     organizationId: string;
-    from: string;
-    to: string;
+    renames: readonly { from: string; to: string }[];
     tx: Transaction;
   }): Promise<void> {
+    if (params.renames.length === 0) return;
     const settings = await AgentRuntimeTemplateModel.readStoredSettings(
       params.organizationId,
       params.tx,
@@ -189,8 +192,13 @@ class AgentRuntimeTemplateModel {
       const runtime = { ...template.runtime };
       for (const field of ["tier", "maxTier"] as const) {
         const name = runtime[field];
-        if (name && sameAgentRuntimeTierName(name, params.from)) {
-          runtime[field] = params.to;
+        const rename = name
+          ? params.renames.find(({ from }) =>
+              sameAgentRuntimeTierName(name, from),
+            )
+          : undefined;
+        if (rename) {
+          runtime[field] = rename.to;
           changed = true;
         }
       }

@@ -1,10 +1,13 @@
+import { randomUUID } from "node:crypto";
 import { vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import AgentModel from "@/models/agent";
+import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import OrganizationModel from "@/models/organization";
 import { organizationAgentRuntimeTiers } from "@/services/agent-runtime/runtime-tiers";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { registerRoutePermissions } from "@/test/route-permissions";
 import type { User } from "@/types";
 
 vi.mock("@/auth");
@@ -26,6 +29,9 @@ describe("Agent Runtime tiers: GET /api/organization/agent-runtime-tiers and PAT
     app.addHook("onRequest", async (request) => {
       Object.assign(request, { user, organizationId });
     });
+    // The real authorization step: an endpoint missing from the permission
+    // map is refused for everyone, administrators included.
+    registerRoutePermissions(app);
     const { default: organizationRoutes } = await import("./organization");
     await app.register(organizationRoutes);
   });
@@ -53,6 +59,21 @@ describe("Agent Runtime tiers: GET /api/organization/agent-runtime-tiers and PAT
     cpuRequest: number,
     extra: Record<string, unknown> = {},
   ) => ({ name, cpuRequest, cpuLimit: null, warmSpares: 0, ...extra });
+  const runtimeAt = (tier: string, maxTier: string) => ({
+    image: "example.com/agent:1",
+    command: null,
+    inferenceProtocol: "openai_responses" as const,
+    backend: "kubernetes" as const,
+    steerMode: "pipe" as const,
+    privileged: false as const,
+    tier,
+    maxTier,
+    environment: null,
+    credentials: null,
+    ttlHours: null,
+    maxCostUsd: null,
+    idleTimeoutMinutes: null,
+  });
 
   test("an organization starts with S, M and L; an administrator saves a list of its own, smallest first, and runs then get those sizes", async () => {
     expect(await read()).toMatchObject({
@@ -202,6 +223,95 @@ describe("Agent Runtime tiers: GET /api/organization/agent-runtime-tiers and PAT
         })
       ).statusCode,
     ).toBe(200);
+  });
+
+  test("renames map each stored name once: S becomes M and M becomes Medium in one save, on agents and templates", async ({
+    makeAgent,
+  }) => {
+    const small = await makeAgent({
+      organizationId,
+      authorId: user.id,
+      agentType: "agent",
+      runtime: runtimeAt("S", "M"),
+    });
+    const medium = await makeAgent({
+      organizationId,
+      authorId: user.id,
+      agentType: "agent",
+      runtime: runtimeAt("M", "L"),
+    });
+    await AgentRuntimeTemplateModel.saveSettings({
+      organizationId,
+      settings: {
+        revision: 0,
+        templates: [
+          {
+            id: randomUUID(),
+            name: "Small worker",
+            description: "",
+            icon: null,
+            hidden: false,
+            position: 0,
+            runtime: runtimeAt("S", "M"),
+          },
+        ],
+      },
+      popularAgentOverrides: null,
+    });
+
+    const response = await patch({
+      agentRuntimeTiers: {
+        tiers: [
+          tier("M", 2, { previousName: "S" }),
+          tier("Medium", 4, { previousName: "M" }),
+          tier("L", 8),
+        ],
+        defaultTier: "Medium",
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    // The former S agent is on the 2-CPU tier now called M, not on Medium.
+    expect((await AgentModel.findById(small.id))?.runtime).toMatchObject({
+      tier: "M",
+      maxTier: "Medium",
+    });
+    expect((await AgentModel.findById(medium.id))?.runtime).toMatchObject({
+      tier: "Medium",
+      maxTier: "L",
+    });
+    expect(
+      (await AgentRuntimeTemplateModel.getSettings(organizationId)).templates[0]
+        ?.runtime,
+    ).toMatchObject({ tier: "M", maxTier: "Medium" });
+  });
+
+  test("a reset to the default tiers is refused while an agent names a custom tier", async ({
+    makeAgent,
+  }) => {
+    expect(
+      (
+        await patch({
+          agentRuntimeTiers: {
+            tiers: [tier("Small", 1), tier("Large", 6)],
+            defaultTier: "Small",
+          },
+        })
+      ).statusCode,
+    ).toBe(200);
+    await makeAgent({
+      organizationId,
+      authorId: user.id,
+      agentType: "agent",
+      runtime: runtimeAt("Small", "Large"),
+    });
+    const reset = await patch({ agentRuntimeTiers: null });
+    expect(reset.statusCode).toBe(400);
+    expect(reset.json().error.message).toBe(
+      "Tier Small is the default or scaleup tier of 1 agent; move them to another tier first",
+    );
+    expect(
+      (await read()).tiers.map((entry: { name: string }) => entry.name),
+    ).toEqual(["Small", "Large"]);
   });
 
   test("members who may update other agent settings cannot change the tiers", async ({

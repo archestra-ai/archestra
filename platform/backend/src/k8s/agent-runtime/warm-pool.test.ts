@@ -325,7 +325,7 @@ test("keeps tier L spares apart: none by default, and no pool slot taken from th
   });
 });
 
-test("a run served from a larger pool is told the size of the pod it got", () => {
+test("a run served from a larger pool is told the size of the pod it got, and its tiers list marks that tier current", () => {
   const sizes = {
     S: { cpuRequest: "2", memoryRequest: "4Gi", memoryLimit: "8Gi" },
     M: { cpuRequest: "4", memoryRequest: "8Gi", memoryLimit: "16Gi" },
@@ -341,6 +341,8 @@ test("a run served from a larger pool is told the size of the pod it got", () =>
     env: {
       ARCHESTRA_AGENT_RUNTIME_TIER: "S",
       ARCHESTRA_AGENT_RUNTIME_MAX_TIER: "L",
+      ARCHESTRA_AGENT_RUNTIME_TIERS:
+        '[{"name":"S","cpu":2,"current":true},{"name":"M","cpu":4}]',
       ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "2",
       ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "8Gi",
       OTHER: "kept",
@@ -352,6 +354,8 @@ test("a run served from a larger pool is told the size of the pod it got", () =>
   expect(served.env).toEqual({
     ARCHESTRA_AGENT_RUNTIME_TIER: "M",
     ARCHESTRA_AGENT_RUNTIME_MAX_TIER: "L",
+    ARCHESTRA_AGENT_RUNTIME_TIERS:
+      '[{"name":"S","cpu":2},{"name":"M","cpu":4,"current":true}]',
     ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "4",
     ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "16Gi",
     OTHER: "kept",

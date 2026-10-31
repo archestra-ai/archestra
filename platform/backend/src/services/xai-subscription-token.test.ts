@@ -1,4 +1,5 @@
 import { ArchestraInternalErrorCode } from "@archestra/shared";
+import { sql } from "drizzle-orm";
 import { assert, vi } from "vitest";
 import config from "@/config";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
@@ -861,6 +862,46 @@ describe("shared refresh guards", () => {
         expect(issuer.calls).toEqual(["rt_0"]);
       } finally {
         writes.mockRestore();
+      }
+    },
+  );
+
+  tokenTest(
+    "carries a statement the database rejected out of the lock without a second redemption",
+    async ({ subscriptionKey }) => {
+      const issuer = stubSingleUseIssuer();
+      const manager = new XaiSubscriptionTokenManager();
+      const params = {
+        credential: subscriptionKey.credential,
+        providerApiKeyId: subscriptionKey.id,
+      };
+      // The error comes from the database, on the lock's own transaction, so
+      // that transaction is aborted: nothing may repeat the statement on it,
+      // and the lock helper must not run the callback again either.
+      const updates = vi
+        .spyOn(SecretModel, "update")
+        .mockImplementationOnce(async (_id, _input, tx) => {
+          assert(tx, "the write-back runs on the lock transaction");
+          await tx.execute(sql`select 1 / 0`);
+          return null;
+        });
+      try {
+        await expect(manager.getAccessToken(params)).rejects.toMatchObject({
+          statusCode: 502,
+        });
+        expect(updates).toHaveBeenCalledTimes(1);
+        expect(issuer.calls).toEqual(["rt_0"]);
+        expect(await readCredential(subscriptionKey.secretId)).toEqual(
+          subscriptionKey.credential,
+        );
+        // The rotation stayed pending; the next refresh persists it.
+        expect(await manager.getAccessToken(params)).toBe("at_1");
+        expect(issuer.calls).toEqual(["rt_0"]);
+        expect(await readCredential(subscriptionKey.secretId)).toMatchObject({
+          refreshToken: "rt_1",
+        });
+      } finally {
+        updates.mockRestore();
       }
     },
   );

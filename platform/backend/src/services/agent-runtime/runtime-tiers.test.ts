@@ -1,4 +1,7 @@
-import { resolveAgentRuntimeTiers } from "@archestra/shared";
+import {
+  type AgentRuntimeTierSize,
+  resolveAgentRuntimeTiers,
+} from "@archestra/shared";
 import { afterEach, describe, expect, test } from "vitest";
 import config from "@/config";
 import {
@@ -234,6 +237,29 @@ describe("runtime tiers", () => {
     expect(
       retargetScaleupDisabledPrompt("Standard prompt", tiersEnv, "M"),
     ).toBe("Standard prompt");
+    // Does not interpret special replacement tokens like $& or $` in custom tier names
+    const tokenTiers: AgentRuntimeTierSize[] = [
+      {
+        name: "M $&",
+        cpuRequest: 4,
+        cpuLimit: null,
+        memoryRequestMiB: 8192,
+        memoryLimitMiB: 16384,
+        warmSpares: 0,
+        pooled: false,
+      },
+    ];
+    const tokenTiersEnv = runtimeTiersEnv(tokenTiers, "M $&");
+    const tokenRetargeted = retargetScaleupDisabledPrompt(
+      originalPrompt,
+      tokenTiersEnv,
+      "M $&",
+    );
+    expect(tokenRetargeted).toBe(
+      "System prompt header.\n\n" +
+        "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to M $& (4 CPU, 8 GiB (16 GiB limit)). You cannot scale up this instance; do not attempt to start a run at a larger tier.\n\n" +
+        "System prompt footer.",
+    );
   });
 
   test("a run may ask by size: the smallest allowed tier with that much CPU and memory", () => {

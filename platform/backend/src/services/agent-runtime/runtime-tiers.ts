@@ -359,7 +359,7 @@ export function retargetScaleupDisabledPrompt(
     `Scaling up this agent runtime instance is disabled: the runtime tier is fixed to ` +
     `${targetSize.name} (${describeAgentRuntimeTier(targetSize)}). ` +
     `You cannot scale up this instance; do not attempt to start a run at a larger tier.`;
-  return prompt.replace(SCALEUP_DISABLED_PATTERN, replacement);
+  return prompt.replace(SCALEUP_DISABLED_PATTERN, () => replacement);
 }
 
 function allowedTiersSentence(

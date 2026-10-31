@@ -60,12 +60,6 @@ export const AgentConfigSnapshotSchema = z.object({
   builtInAgentConfig: z.unknown(),
   /** Resolved model identity (modelId FK + human-readable externalId). */
   model: ModelIdentitySchema.nullable(),
-  /**
-   * Optional `fast` / `smart` trio tiers on `llmApiKey`. Snapshots taken
-   * before tiers existed carry neither, and that agent had no tiers set.
-   */
-  fastModel: ModelIdentitySchema.nullable().default(null),
-  smartModel: ModelIdentitySchema.nullable().default(null),
   /** Redacted key identity — never key material (secret ids are excluded). */
   llmApiKey: z
     .object({ id: z.string(), name: z.string(), provider: z.string() })

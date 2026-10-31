@@ -1,4 +1,8 @@
 export const RouteId = {
+  ListAgentRuntimeTemplates: "listAgentRuntimeTemplates",
+  GetAgentRuntimeTemplate: "getAgentRuntimeTemplate",
+  GetRuntimeTemplateSettings: "getRuntimeTemplateSettings",
+  SaveRuntimeTemplateSettings: "saveRuntimeTemplateSettings",
   AzureAudioSpeechWithDefaultAgent: "azureAudioSpeechWithDefaultAgent",
   AzureAudioSpeechWithAgent: "azureAudioSpeechWithAgent",
   AzureAudioTranscriptionsWithDefaultAgent:
@@ -281,6 +285,10 @@ export const RouteId = {
   OpenAiResponsesCompactWithAgent: "openAiResponsesCompactWithAgent",
   OpenAiEmbeddingsWithDefaultAgent: "openAiEmbeddingsWithDefaultAgent",
   OpenAiEmbeddingsWithAgent: "openAiEmbeddingsWithAgent",
+  OpenAiImagesWithDefaultAgent: "openAiImagesWithDefaultAgent",
+  OpenAiImagesWithAgent: "openAiImagesWithAgent",
+  OpenAiImageEditsWithDefaultAgent: "openAiImageEditsWithDefaultAgent",
+  OpenAiImageEditsWithAgent: "openAiImageEditsWithAgent",
   OpenAiListModelsWithDefaultAgent: "openAiListModelsWithDefaultAgent",
   OpenAiListModelsWithAgent: "openAiListModelsWithAgent",
 
@@ -296,6 +304,22 @@ export const RouteId = {
   ModelRouterEmbeddingsWithDefaultAgent:
     "modelRouterEmbeddingsWithDefaultAgent",
   ModelRouterEmbeddingsWithAgent: "modelRouterEmbeddingsWithAgent",
+  ModelRouterImagesWithDefaultAgent: "modelRouterImagesWithDefaultAgent",
+  ModelRouterImagesWithAgent: "modelRouterImagesWithAgent",
+  ModelRouterImageEditsWithDefaultAgent:
+    "modelRouterImageEditsWithDefaultAgent",
+  ModelRouterImageEditsWithAgent: "modelRouterImageEditsWithAgent",
+  ModelRouterAudioSpeechWithDefaultAgent:
+    "modelRouterAudioSpeechWithDefaultAgent",
+  ModelRouterAudioSpeechWithAgent: "modelRouterAudioSpeechWithAgent",
+  ModelRouterAudioTranscriptionsWithDefaultAgent:
+    "modelRouterAudioTranscriptionsWithDefaultAgent",
+  ModelRouterAudioTranscriptionsWithAgent:
+    "modelRouterAudioTranscriptionsWithAgent",
+  ModelRouterAudioTranslationsWithDefaultAgent:
+    "modelRouterAudioTranslationsWithDefaultAgent",
+  ModelRouterAudioTranslationsWithAgent:
+    "modelRouterAudioTranslationsWithAgent",
 
   // Proxy Routes - Gemini
   GeminiEmbeddingsWithDefaultAgent: "geminiEmbeddingsWithDefaultAgent",
@@ -684,6 +708,7 @@ export const RouteId = {
 
   // Organization Routes
   GetOrganization: "getOrganization",
+  GetOrganizationDefaultModel: "getOrganizationDefaultModel",
   GetOnboardingStatus: "getOnboardingStatus",
   GetMemberSignupStatus: "getMemberSignupStatus",
   GetOrganizationMemberOptions: "getOrganizationMemberOptions",

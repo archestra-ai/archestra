@@ -2,7 +2,7 @@
 title: Logs and Auditing
 description: Investigate model requests, tool calls, and admin changes
 order: 7
-lastUpdated: 2026-10-22
+lastUpdated: 2026-10-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -32,6 +32,14 @@ Keep the cost and audit trail without storing what people sent. Set [`ARCHESTRA_
 - Rows already stored keep their content.
 - Traces leave the content out too, even when content capture is on.
 - Chat history is not affected.
+
+## Keep Media in the Logs
+
+By default, logs keep the conversation text but not the images, audio, and files in it. Each row shows **Not kept: media logging is off** where media was. To let Logs show and play media, go to **Settings → LLM**, turn on **Keep media in logs**, and click **Save**.
+
+- The setting covers model requests and responses and MCP tool calls, from Chat, agents, and connected clients.
+- Changing it needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) and applies to new rows only.
+- Traces never carry media, whatever the setting.
 
 ## Who Can Read Them
 

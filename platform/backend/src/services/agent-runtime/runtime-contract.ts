@@ -6,6 +6,15 @@ export const AGENT_RUNTIME_CREDENTIALS_FILE = `${AGENT_RUNTIME_CREDENTIALS_DIR}/
 export const AGENT_RUNTIME_CREDENTIALS_SECRET_KEY =
   "ARCHESTRA_AGENT_RUNTIME_RENEWABLE_CREDENTIALS";
 export const AGENT_RUNTIME_STEER_FIFO = `${AGENT_RUNTIME_DIR}/steer`;
+/** The tier (S, M or L) the Pod runs at; unset for an Agent with explicit resources. */
+export const AGENT_RUNTIME_TIER_ENV = "ARCHESTRA_AGENT_RUNTIME_TIER";
+/** The largest tier a run of this Agent may ask for; unset with explicit resources. */
+export const AGENT_RUNTIME_MAX_TIER_ENV = "ARCHESTRA_AGENT_RUNTIME_MAX_TIER";
+/** The Pod's CPU request and memory limit, so tools and models can size their work. */
+export const AGENT_RUNTIME_CPU_REQUEST_ENV =
+  "ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST";
+export const AGENT_RUNTIME_MEMORY_LIMIT_ENV =
+  "ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT";
 /** Stable command that joins the interactive session from any exec client. */
 export const AGENT_RUNTIME_ATTACH_SCRIPT = `${AGENT_RUNTIME_DIR}/attach`;
 /** Startup hook used by interactive shells opened directly in an Agent Runtime pod. */
@@ -52,4 +61,22 @@ export function constructStableRunName(
       .slice(0, 40)
       .replace(/[^a-z0-9]+$/, "") || "session";
   return `agent-run-${slug}-${id.slice(0, 8)}`;
+}
+
+/**
+ * The key a run's LLM traffic is logged under (`interactions.session_id`):
+ * its frozen run name.
+ *
+ * pod-run hands the name to the image as `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID`,
+ * and the run headers an image sends on every model and gateway request
+ * carry it as `X-Archestra-Session-Id` and `X-Appa-Session-ID`. The proxy keys
+ * interactions by the first, or by the second when a client sends only that
+ * one, and refuses a run-bound request whose OpenAPPA session names another
+ * workspace. The platform's own requests for a run (its title) and every
+ * link to `/llm/logs/:id` therefore use this key. It is not the task id,
+ * which a continued session renews each turn, and not the workspace row's
+ * UUID.
+ */
+export function agentRunLlmSessionId(run: { workloadName: string }): string {
+  return run.workloadName;
 }

@@ -5,17 +5,12 @@ import {
   getDocsUrl,
   MESSAGING_CHANNEL_LABELS,
   type MessagingChannelId,
-  PopularAgentIdSchema,
   providerSupportsChat,
 } from "@archestra/shared";
 import { AlertTriangle, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { siKubernetes } from "simple-icons";
-import {
-  AGENT_CATALOG_TEMPLATE_NAMES,
-  CatalogAgentIcon,
-} from "@/components/agent-pages/agent-catalog";
 import { AgentRuntimeUnavailableNotice } from "@/components/agent-runtime-unavailable-notice";
 import { AgentSelector } from "@/components/agent-selector";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
@@ -31,6 +26,7 @@ import {
 import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { IntegrationAvailabilitySection } from "@/components/settings/integration-availability-section";
+import { RuntimeTemplateSection } from "@/components/settings/runtime-template-section";
 import {
   SettingsBlock,
   SettingsSaveBar,
@@ -58,6 +54,13 @@ import {
   useUpdateSecuritySettings,
 } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
+import { RuntimeTiersBlock } from "./_parts/runtime-tiers-block";
+import {
+  type RuntimeTierDraft,
+  runtimeTierDraft,
+  runtimeTierDraftChanged,
+  validateRuntimeTierDraft,
+} from "./_parts/runtime-tiers-draft";
 import {
   type AgentSettingsState,
   buildSavePayload,
@@ -95,6 +98,10 @@ export default function AgentSettingsPage() {
     defaultAgentId: "",
   });
   const savedFileUploadsRef = useRef(true);
+  const [runtimeTiers, setRuntimeTiers] = useState<RuntimeTierDraft>(() =>
+    runtimeTierDraft(null),
+  );
+  const savedRuntimeTiersRef = useRef<RuntimeTierDraft>(runtimeTierDraft(null));
   const runtimeBackend = useFeature("agentRuntimeBackend");
   const runtimeEnabled = useFeature("agentRuntime");
 
@@ -138,6 +145,9 @@ export default function AgentSettingsPage() {
     setPlaywrightEnabled(organization.playwrightMcpEnabled);
     savedPlaywrightRef.current = organization.playwrightMcpEnabled;
     setFileUploads(savedFileUploads);
+    const savedRuntimeTiers = runtimeTierDraft(organization.agentRuntimeTiers);
+    setRuntimeTiers(savedRuntimeTiers);
+    savedRuntimeTiersRef.current = savedRuntimeTiers;
     savedStateRef.current = state;
     savedFileUploadsRef.current = savedFileUploads;
     initializedRef.current = true;
@@ -158,6 +168,11 @@ export default function AgentSettingsPage() {
   };
 
   const changes = detectChanges(localState, savedStateRef.current);
+  const runtimeTiersChanged = runtimeTierDraftChanged(
+    runtimeTiers,
+    savedRuntimeTiersRef.current,
+  );
+  const runtimeTierCheck = validateRuntimeTierDraft(runtimeTiers);
   const securityHasChanges =
     fileUploads !== savedFileUploadsRef.current ||
     playwrightEnabled !== savedPlaywrightRef.current;
@@ -165,10 +180,20 @@ export default function AgentSettingsPage() {
   const handleSave = async () => {
     if (!apiKeys) return;
 
-    if (changes.hasChanges) {
-      const payload = buildSavePayload(localState, savedStateRef.current);
-      await updateAgentMutation.mutateAsync(payload);
+    if (changes.hasChanges || runtimeTiersChanged) {
+      if (runtimeTiersChanged && !runtimeTierCheck.ok) return;
+      const payload = {
+        ...(changes.hasChanges
+          ? buildSavePayload(localState, savedStateRef.current)
+          : {}),
+        ...(runtimeTiersChanged && runtimeTierCheck.ok
+          ? { agentRuntimeTiers: runtimeTierCheck.settings }
+          : {}),
+      };
+      const saved = await updateAgentMutation.mutateAsync(payload);
+      if (!saved) return;
       savedStateRef.current = { ...localState };
+      savedRuntimeTiersRef.current = runtimeTiers;
     }
 
     if (securityHasChanges) {
@@ -193,6 +218,7 @@ export default function AgentSettingsPage() {
     setDefaultAgentId(saved.defaultAgentId);
     setFileUploads(savedFileUploadsRef.current);
     setPlaywrightEnabled(savedPlaywrightRef.current);
+    setRuntimeTiers(savedRuntimeTiersRef.current);
   };
 
   const modelItems = useMemo(() => {
@@ -276,7 +302,6 @@ export default function AgentSettingsPage() {
                     onSelectKey={(value) => {
                       setSelectedApiKeyId(value);
                       setDefaultModel("");
-                      setTiers(EMPTY_MODEL_TIERS);
                       setApiKeySelectorOpen(false);
                     }}
                     triggerVariant="select"
@@ -306,8 +331,6 @@ export default function AgentSettingsPage() {
                   />
                   {selectedApiKey && defaultModel && (
                     <ModelTierPickers
-                      apiKeyId={selectedApiKey.id}
-                      provider={selectedApiKey.provider}
                       value={tiers}
                       onChange={setTiers}
                       disabled={isSaving || !hasPermission}
@@ -442,8 +465,13 @@ export default function AgentSettingsPage() {
       </section>
 
       <SettingsSaveBar
-        hasChanges={changes.hasChanges || securityHasChanges}
-        disabledSave={selectedApiKeyId !== "" && defaultModel === ""}
+        hasChanges={
+          changes.hasChanges || securityHasChanges || runtimeTiersChanged
+        }
+        disabledSave={
+          (selectedApiKeyId !== "" && defaultModel === "") ||
+          (runtimeTiersChanged && !runtimeTierCheck.ok)
+        }
         isSaving={isSaving}
         permissions={{ organizationSettings: ["update"] }}
         onSave={handleSave}
@@ -481,27 +509,16 @@ export default function AgentSettingsPage() {
         <div
           className={cn("space-y-6", runtimeEnabled !== true && "opacity-50")}
         >
-          <IntegrationAvailabilitySection
-            disabled={runtimeEnabled !== true}
-            id="popular-agents"
-            catalogKey="popularAgentOverrides"
-            catalog={PopularAgentIdSchema.options}
-            title="Agent Runtimes"
-            description="Choose which Agent Runtimes are available when creating a new agent, and in what order."
-            options={PopularAgentIdSchema.options.map((id) => ({
-              value: id,
-              label: AGENT_CATALOG_TEMPLATE_NAMES[id],
-              icon: (
-                <span className="flex size-3.5 shrink-0 items-center justify-center">
-                  <CatalogAgentIcon id={id} size={14} />
-                </span>
-              ),
-            }))}
-            placeholder="Select Agent Runtimes…"
-            emptyMessage="No agents found."
-            savedMessage="Agent Runtimes updated"
-          />
+          <RuntimeTemplateSection disabled={runtimeEnabled !== true} />
           {runtimeBackend && <RuntimeBackendSection />}
+          {runtimeBackend && (
+            <RuntimeTiersBlock
+              value={runtimeTiers}
+              onChange={setRuntimeTiers}
+              problems={runtimeTierCheck.ok ? [] : runtimeTierCheck.problems}
+              canEdit={isGlobalAdmin && runtimeEnabled === true}
+            />
+          )}
         </div>
       </section>
     </SettingsSectionStack>

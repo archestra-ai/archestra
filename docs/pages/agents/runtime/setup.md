@@ -72,6 +72,8 @@ After installing the controller extensions above, set [`ARCHESTRA_AGENT_RUNTIME_
 
 Pools go to the Agents with the most recent runs. Agents with no run in the last 7 days get no spare, so idle Agents don't hold cluster capacity.
 
+Each runtime tier can keep its own number of spares, set under **Settings > Agents > Runtime tiers**. By default `S` and `M` follow [`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE) and `L` keeps none, because its runs are rare and an idle spare holds its full size; a tier with no spares takes no pool slot. When a run's tier has no ready spare, a ready spare of the next larger tier, up to the agent's largest tier, serves it.
+
 Assigned containers never return to the pool. Without a spare, a run starts a new container. Setting the size to `0` removes unused spares and preserves assigned runs.
 
 Archestra maintains the configured pool replica count. An HPA targeting these pools would compete with Archestra; use [node autoscaling](/docs/admin/deployment/production#agent-runtime) to grow cluster capacity as runtime demand increases.

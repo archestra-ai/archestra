@@ -54,6 +54,7 @@ import {
   namespaceOf,
   namespacesByCallId,
   prependPrefixToResponse,
+  RESPONSES_STREAM_END,
   rewriteResponsesOutput,
   toSse,
 } from "./responses-tool-call-rewrite";
@@ -869,7 +870,7 @@ class AzureResponsesStreamAdapter
   }
 
   formatEndSSE(): string {
-    return "data: [DONE]\n\n";
+    return RESPONSES_STREAM_END;
   }
 
   toProviderResponse(): AzureResponsesResponse {

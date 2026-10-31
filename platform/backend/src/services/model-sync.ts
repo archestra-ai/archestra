@@ -173,6 +173,20 @@ class ModelSyncService {
         : await ModelModel.bulkUpsert(modelsToUpsert, {
             fromProviderCatalog: true,
           });
+      // A normal sync keeps the modalities and tool support a row already has.
+      // For a model the fetcher classified from its id those are rewritten, so
+      // an older build's classification (a realtime model stored as a chat
+      // model) does not survive the upgrade. Only those: an administrator's
+      // custom prices and limits stay until a full refresh resets them.
+      const authoritativeIds = new Set(
+        providerModels
+          .filter((model) => model.capabilities?.authoritative)
+          .map((model) => model.id),
+      );
+      if (!forceRefresh && authoritativeIds.size > 0)
+        await ModelModel.applyAuthoritativeCapabilities(
+          modelsToUpsert.filter((model) => authoritativeIds.has(model.modelId)),
+        );
 
       logger.info(
         { provider, apiKeyId, upsertedCount: upsertedModels.length },
@@ -193,6 +207,12 @@ class ModelSyncService {
       );
       const pricingByModelId = new Map(
         providerModels.map((m) => [m.id, m.providerPricing]),
+      );
+      const outputLengthByModelId = new Map(
+        providerModels.map((model) => [
+          model.id,
+          model.capabilities?.outputLength,
+        ]),
       );
       const azureByModelId = new Map(
         providerModels.map((m) => [m.id, m.azureCapabilities]),
@@ -216,6 +236,7 @@ class ModelSyncService {
                 }
               : null,
           providerPricing: pricingByModelId.get(m.modelId) ?? null,
+          outputLength: outputLengthByModelId.get(m.modelId) ?? null,
           id: m.id,
           modelId: m.modelId,
           recommendedForAgents: verdictByProviderModelId.get(m.modelId) ?? null,
@@ -764,7 +785,7 @@ function inferEmbeddingDimensions(
   const id = modelId.toLowerCase();
   if (
     (provider === "openai" || provider === "azure") &&
-    id === "text-embedding-3-small"
+    (id === "text-embedding-3-small" || id === "text-embedding-ada-002")
   ) {
     return 1536;
   }

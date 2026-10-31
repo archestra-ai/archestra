@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+/** Partial-image streaming is not proxied; the client is told how to proceed. */
+const IMAGE_STREAM_UNSUPPORTED =
+  "Image streaming is not supported. Omit stream or set it to false.";
+
 // Family-specific limits are checked using provider evidence, not an Azure alias.
 const imageSize = z.string().regex(/^(auto|[1-9]\d{0,4}x[1-9]\d{0,4})$/);
 const imageQuality = z.enum([
@@ -31,7 +35,7 @@ export const ImageGenerationRequestSchema = z.strictObject({
   output_compression: z.number().int().min(0).max(100).nullish(),
   moderation: z.enum(["auto", "low"]).nullish(),
   style: z.enum(["vivid", "natural"]).nullish(),
-  stream: z.literal(false).nullish(),
+  stream: z.literal(false, { error: IMAGE_STREAM_UNSUPPORTED }).nullish(),
 });
 
 /** Scalar multipart fields. Images and masks are validated by the handler. */
@@ -44,6 +48,6 @@ export const ImageEditFieldsSchema = z.strictObject({
   input_fidelity: z.enum(["high", "low"]).nullish(),
   stream: z.preprocess(
     (value) => (value === "false" ? false : value),
-    z.literal(false).nullish(),
+    z.literal(false, { error: IMAGE_STREAM_UNSUPPORTED }).nullish(),
   ),
 });

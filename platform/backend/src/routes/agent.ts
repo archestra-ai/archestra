@@ -131,7 +131,6 @@ import {
   RestoreAgentVersionBodySchema,
   SelectPublicAgentVersionSchema,
 } from "@/types/agent-version";
-import { assertModelTrioTiers } from "@/utils/llm-resolution";
 import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
 
 const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -847,11 +846,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "An agent's model and API key must be set together",
         );
       }
-      await assertModelTrioTiers({
-        apiKeyId: body.llmApiKeyId ?? null,
-        fastModelId: body.fastModelId ?? null,
-        smartModelId: body.smartModelId ?? null,
-      });
       await assertAgentRuntimeModelCompatibility({
         runtime: body.runtime,
         agent: {
@@ -860,6 +854,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         organizationId,
         userId: user.id,
+        selectsModel: true,
       });
 
       const environmentId = await resolveNewAgentEnvironmentId({
@@ -2276,12 +2271,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ...(body.modelPoolId !== undefined && {
             modelPoolId: body.modelPoolId,
           }),
-          ...(body.fastModelId !== undefined && {
-            fastModelId: body.fastModelId,
-          }),
-          ...(body.smartModelId !== undefined && {
-            smartModelId: body.smartModelId,
-          }),
         };
       } else {
         // `builtInAgentConfig` is server-owned and a trust attribute (drives
@@ -2316,27 +2305,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       if (
-        body.llmApiKeyId !== undefined ||
-        body.fastModelId !== undefined ||
-        body.smartModelId !== undefined
-      ) {
-        await assertModelTrioTiers({
-          apiKeyId:
-            body.llmApiKeyId !== undefined
-              ? body.llmApiKeyId
-              : existingAgent.llmApiKeyId,
-          fastModelId:
-            body.fastModelId !== undefined
-              ? body.fastModelId
-              : existingAgent.fastModelId,
-          smartModelId:
-            body.smartModelId !== undefined
-              ? body.smartModelId
-              : existingAgent.smartModelId,
-        });
-      }
-
-      if (
         body.runtime !== undefined ||
         body.modelId !== undefined ||
         body.llmApiKeyId !== undefined
@@ -2354,6 +2322,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
           organizationId,
           userId: user.id,
+          // A body that names neither keeps the agent's pair: an image or
+          // limits change does not choose a model.
+          selectsModel:
+            body.modelId !== undefined || body.llmApiKeyId !== undefined,
         });
       }
 

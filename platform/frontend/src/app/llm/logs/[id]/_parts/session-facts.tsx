@@ -9,6 +9,7 @@ import {
   formatCompactNumber,
   formatUsageCost,
   type LogSession,
+  passThroughProvider,
   shortModelName,
   sourceLabel,
   uniqueSources,
@@ -293,7 +294,10 @@ export function SessionFacts({
         className="col-span-2 lg:flex-[2_1_240px]"
       >
         {modelEntries.length === 0 ? (
-          <FactValue muted>—</FactValue>
+          <ModelLessFact
+            provider={passThroughProvider(fallbackType)}
+            providerLabel={providerLabel}
+          />
         ) : (
           <ModelsFact models={modelEntries} />
         )}
@@ -305,6 +309,23 @@ export function SessionFacts({
 // ============================================================================
 // Internal helpers
 // ============================================================================
+
+/** A session whose requests named no model; a pass-through one says where it went. */
+function ModelLessFact({
+  provider,
+  providerLabel,
+}: {
+  provider: SupportedProvider | null;
+  providerLabel: (provider: SupportedProvider) => string;
+}) {
+  if (!provider) return <FactValue muted>—</FactValue>;
+  return (
+    <>
+      <FactValue muted>No model</FactValue>
+      <FactSub>{providerLabel(provider)} · pass-through</FactSub>
+    </>
+  );
+}
 
 type ModelEntry = {
   id: string;

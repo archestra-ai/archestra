@@ -115,6 +115,7 @@ import {
   agentWarmPoolManager,
   readWorkspaceSandbox,
   SANDBOX_CLAIM_API,
+  servedLaunchSpec,
 } from "./warm-pool";
 
 /** `K8sClients` is internal to the shared module, so it is derived here. */
@@ -232,12 +233,16 @@ class AgentRuntimeManager {
       }),
     );
 
-    if (
-      await agentWarmPoolManager.claim({
-        api: clients.customObjectsApi,
-        spec: withOwner,
-      })
-    ) {
+    const claimed = await agentWarmPoolManager.claim({
+      api: clients.customObjectsApi,
+      spec: withOwner,
+    });
+    if (claimed) {
+      if (claimed.tier !== withOwner.tier)
+        await AgentRunModel.updateRuntimeLimitsTier({
+          taskId: spec.taskId,
+          tier: claimed.tier,
+        });
       const deadline =
         Date.now() + config.agentRuntime.podStartTimeoutSeconds * 1000;
       let pollDelayMs = 250;
@@ -257,7 +262,12 @@ class AgentRuntimeManager {
       }
       const session = await AgentRunModel.findByTaskId(spec.taskId);
       if (!session) throw new Error("This run no longer exists");
-      await this.continueRun({ session, spec, initial: true });
+      // A larger pool may have served it: tell the run the size it has.
+      await this.continueRun({
+        session,
+        spec: servedLaunchSpec(spec, claimed.tier),
+        initial: true,
+      });
       return;
     }
 

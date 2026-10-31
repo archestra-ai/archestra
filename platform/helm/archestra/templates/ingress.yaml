@@ -39,17 +39,21 @@ spec:
             response, plus tool calls and their once-a-second poll. Sending that
             through the frontend port puts it on the single-threaded Node
             process that also answers the dashboard's API calls, so the UI slows
-            down while an agent is working. Everything else, /api/auth included,
-            stays on the frontend: that one IS a real app route.
+            down while an agent is working. Other routes, /api/auth included,
+            stay on the frontend: that one IS a real app route.
           */}}
           {{- $frontendPaths := list }}
           {{- $ownsBackendApis := false }}
+          {{- $ownsOpenApi := false }}
           {{- range .paths }}
             {{- if eq (int .port) 3000 }}
               {{- $frontendPaths = append $frontendPaths .path }}
             {{- end }}
             {{- if or (hasPrefix "/v1" .path) (hasPrefix "/v2" .path) }}
               {{- $ownsBackendApis = true }}
+            {{- end }}
+            {{- if eq .path "/openapi.json" }}
+              {{- $ownsOpenApi = true }}
             {{- end }}
           {{- end }}
           {{- if and $.Values.archestra.ingress.routeBackendApisDirectly (gt (len $frontendPaths) 0) (not $ownsBackendApis) }}
@@ -75,6 +79,15 @@ spec:
                 name: {{ include "archestra-platform.fullname" $ }}
                 port:
                   number: {{ .port }}
+          {{- end }}
+          {{- if and $.Values.archestra.ingress.routeBackendApisDirectly (gt (len $frontendPaths) 0) (not $ownsOpenApi) }}
+          - path: /openapi.json
+            pathType: Exact
+            backend:
+              service:
+                name: {{ include "archestra-platform.fullname" $ }}
+                port:
+                  number: 9000
           {{- end }}
     {{- end }}
   {{- end }}

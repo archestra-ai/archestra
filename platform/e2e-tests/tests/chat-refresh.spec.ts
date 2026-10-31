@@ -44,15 +44,22 @@ test.describe("New chat refresh", () => {
     await goToChat(page);
     await expectChatReady(page);
 
-    // Exercise a genuinely missing roster, not one restored from the refresh
-    // snapshot. A cached roster can already resolve the selected agent.
-    await page.evaluate(() => sessionStorage.clear());
+    // Exercise the server-selected starting agent with no refresh snapshot or
+    // remembered browser selection. A saved agent outside the server roster
+    // correctly needs a reference lookup, which is a different startup path.
+    await page.evaluate(() => {
+      sessionStorage.clear();
+      localStorage.removeItem("selected-chat-agent");
+    });
 
     // Held open for the rest of the test. A handler that never settles the
     // route is the point: if any of these is back in front of the first paint,
     // the reload below never gets past its loading state.
+    const heldRequests: string[] = [];
     for (const pattern of FIRST_PAINT_ROUTES) {
-      await page.route(pattern, () => {});
+      await page.route(pattern, (route) => {
+        heldRequests.push(route.request().url());
+      });
     }
 
     await page.reload({ waitUntil: "commit" });
@@ -75,5 +82,6 @@ test.describe("New chat refresh", () => {
     // organization that has agents must never be told it has none while its
     // roster is still in flight.
     await expect(page.getByText("No agents yet")).toHaveCount(0);
+    expect(heldRequests).toEqual([]);
   });
 });

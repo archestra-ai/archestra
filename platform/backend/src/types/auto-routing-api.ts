@@ -40,6 +40,8 @@ export const AutoRoutingSettingsResponseSchema = z.object({
     normal: AutoRoutingTierModelSchema.nullable(),
     smart: AutoRoutingTierModelSchema.nullable(),
   }),
+  /** Agents on the organization default, which routing applies to. */
+  routedAgentCount: z.number().int().nonnegative(),
   generation: z.number().int(),
   plannedGeneration: z.number().int(),
   status: z.object({
@@ -93,9 +95,6 @@ export type AutoRoutingSettingsChangeResponse = z.infer<
 export const UpdateAutoRoutingSettingsBodySchema = z.strictObject({
   enabled: z.boolean().optional(),
   budgetUsdPerDay: BudgetUsdPerDaySchema.optional(),
-  fastModelId: z.string().uuid().optional(),
-  normalModelId: z.string().uuid().optional(),
-  smartModelId: z.string().uuid().optional(),
 });
 export type UpdateAutoRoutingSettingsBody = z.infer<
   typeof UpdateAutoRoutingSettingsBodySchema

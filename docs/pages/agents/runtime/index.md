@@ -110,7 +110,10 @@ Set these under **Limits** on the agent's **Agent Runtime** tab. A field you lea
 | **Idle timeout** | Stops the run when it finishes a task and no follow-up arrives in this time. |
 | **Maximum duration** | Ends the run after this time, even mid-task, and deletes its files. Follow-ups do not extend it. |
 | **Metered LLM budget** | Blocks metered model calls once the run spends this amount. Subscription usage does not count. |
-| **CPU and memory** | Sets the container's size. |
+| **Size** | The tier of the run's container: **S**, **M** (the default) or **L**. Administrators set each tier's CPU and memory under **Settings > Agents > Runtime tiers**; by default S is 2 CPU and 4 GiB, M 4 CPU and 8 GiB, and L 8 CPU and 16 GiB, each with a memory limit twice its request. Custom CPU and memory values replace the tier. |
+| **Largest size** | The largest tier a run of this agent may ask for. A run whose work needs more CPU or memory starts a run of the same agent at a larger size and hands its work over. Empty means the same as **Size**. |
+
+A caller that starts a run can ask for any size up to the agent's largest size, and for less than the agent allows otherwise: a shorter idle timeout, a shorter maximum duration or a lower budget. The [`start_agent_run`](/docs/reference/archestra-mcp-server#start_agent_run) tool and the [`POST /api/agents/{id}/runs`](/docs/reference/api#/Agents/startAgentRun) endpoint take these as `limits`; a value above the agent's is refused with the maximum named. The run shows what it got. When the warm pool for a run's size has no ready container and the next larger size within the agent's has one, that container serves the run, which then runs one size up. A run never starts at a smaller size than it asked for.
 
 <span id="environments-and-network-egress"></span>
 

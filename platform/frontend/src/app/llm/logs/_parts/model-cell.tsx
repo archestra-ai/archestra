@@ -11,6 +11,7 @@ import {
   describeModelOrigin,
   isFreeTierModel,
   type LogSession,
+  passThroughProvider,
   shortModelName,
 } from "./logs-table-format";
 import { MakerDisc } from "./maker-disc";
@@ -36,7 +37,30 @@ export function ModelCell({
 }) {
   const entries = modelEntries(session, providerLabel);
   if (entries.length === 0) {
-    return <span className="text-xs text-muted-foreground">—</span>;
+    const passThrough = passThroughProvider(session.lastInteractionType);
+    if (!passThrough) {
+      return <span className="text-xs text-muted-foreground">—</span>;
+    }
+    // A pass-through call such as a file listing names no model: say so,
+    // and where it went.
+    return (
+      <span className="flex min-w-0 items-center gap-2">
+        <span aria-hidden="true" className="shrink-0">
+          <MakerDisc
+            provider={passThrough}
+            vendor={providerLabel(passThrough)}
+          />
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-sm leading-5 text-muted-foreground">
+            No model
+          </span>
+          <span className="block h-4 truncate text-xs leading-4 text-muted-foreground">
+            {providerLabel(passThrough)} · pass-through
+          </span>
+        </span>
+      </span>
+    );
   }
   const [first, ...rest] = entries;
   const logos = makerLogos(entries);

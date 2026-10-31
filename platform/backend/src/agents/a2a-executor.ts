@@ -48,7 +48,11 @@ import {
 } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
 import logger from "@/logging";
-import { AgentModel, ModelModel } from "@/models";
+import {
+  AgentModel,
+  LlmProviderApiKeyModelLinkModel,
+  ModelModel,
+} from "@/models";
 import type { SubagentBinding } from "@/openappa/subagent-binding";
 import {
   formatUnavailableToolErrorDetails,
@@ -71,7 +75,6 @@ import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availabi
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import type { ChatMessage } from "@/types";
 import {
-  type ModelTrioTiers,
   resolveForkParentSelection,
   resolveSubagentTierSelection,
 } from "@/utils/llm-resolution";
@@ -373,6 +376,11 @@ export async function executeA2AMessage(
   const llmApiKeyId = resolvedApiKeyId ?? agent.llmApiKeyId;
   // An agent set to a pool runs on it; a fork runs on its parent's model.
   const modelPoolId = params.selfFork ? null : agent.modelPoolId;
+  // A fork that asked for fast or smart runs on it, never auto routed; one on
+  // normal follows its parent's routing.
+  const autoRoutable =
+    !modelPoolId &&
+    !(params.selfFork && (params.tier === "fast" || params.tier === "smart"));
 
   // Track subagent run so the browser preview can skip screenshots
   // while subagents are active (prevents flickering from tab switching).
@@ -460,6 +468,7 @@ export async function executeA2AMessage(
       externalAgentId: delegationChain,
       agentLlmApiKeyId: llmApiKeyId,
       modelPoolId,
+      autoRoutable,
       appaSubagentToken: params.appaSubagent?.token,
     });
     const authorizeModel = (model: typeof providerModel) =>
@@ -544,9 +553,10 @@ export async function executeA2AMessage(
     const maxOutputTokens = resolveAgentMaxOutputTokens({
       // Resolved, so an admin-set max-output override on a model whose provider
       // reports no limit is what the turn asks for.
-      outputLength: modelRow
-        ? ModelModel.resolveEffectiveOutputLength(modelRow)
-        : null,
+      outputLength: await LlmProviderApiKeyModelLinkModel.resolveOutputLength(
+        modelRow,
+        chatApiKeyId,
+      ),
       ceiling: config.chat.maxOutputTokensCeiling,
       rateMeteredCeiling: config.chat.rateMeteredMaxOutputTokensCeiling,
       provider,
@@ -645,6 +655,7 @@ export async function executeA2AMessage(
                 externalAgentId: delegationChain,
                 agentLlmApiKeyId: llmApiKeyId,
                 modelPoolId,
+                autoRoutable,
                 appaSubagentToken: params.appaSubagent?.token,
               })
             ).model,
@@ -1311,7 +1322,7 @@ async function resolveRunLlmSelection(params: {
   agent: {
     llmApiKeyId: string | null;
     modelId: string | null;
-  } & ModelTrioTiers;
+  };
   organizationId: string;
   userId: string;
   parentLlm?: ModelSelection;
@@ -1328,8 +1339,8 @@ async function resolveRunLlmSelection(params: {
     ? resolveSubagentTierSelection({
         tier: params.tier,
         parent: base,
-        agentTrio: params.agent,
         organizationId: params.organizationId,
+        userId: params.userId,
       })
     : base;
 }

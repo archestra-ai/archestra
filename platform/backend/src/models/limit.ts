@@ -1671,6 +1671,11 @@ export class LimitValidationService {
     deferModelScopedLimits?: boolean;
     /** Refuse applicable budgets when this media model cannot be priced. */
     unpricedMediaModel?: string;
+    /**
+     * The operation names no model and reports no cost to settle, so every
+     * hard budget applies to it, whatever models the budget lists.
+     */
+    unmeteredOperation?: boolean;
     agentId: string;
     userId?: string;
     virtualKeyId?: string;
@@ -1873,9 +1878,11 @@ export class LimitValidationService {
       prefetch.model = params.model;
       prefetch.deferModelScopedLimits = params.deferModelScopedLimits;
 
-      if (params.unpricedMediaModel) {
+      if (params.unpricedMediaModel || params.unmeteredOperation) {
         const applies = (models?: string[] | null) =>
-          !models?.length || models.includes(params.unpricedMediaModel ?? "");
+          params.unmeteredOperation ||
+          !models?.length ||
+          models.includes(params.unpricedMediaModel ?? "");
         const limits = [...prefetch.limitsByEntity.values()].flat();
         let budgeted = limits.some(
           (limit) => limit.behavior !== "soft" && applies(limit.model),
@@ -1894,7 +1901,9 @@ export class LimitValidationService {
         if (budgeted)
           throw new ApiError(
             422,
-            "This media operation cannot satisfy the configured budget because authoritative cost is unavailable",
+            params.unmeteredOperation
+              ? "This pass-through operation reports no cost the gateway can count, so it cannot run while a budget applies."
+              : "This media operation cannot satisfy the configured budget because authoritative cost is unavailable",
           );
       }
 

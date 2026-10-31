@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { OpenAi } from "@/types";
-import { openaiAdapterFactory } from "./openai";
+import { openaiAdapterFactory, withReplyAudioWithinLimit } from "./openai";
 
 function createMockResponse(
   message: OpenAi.Types.ChatCompletionsResponse["choices"][0]["message"],
@@ -293,6 +293,40 @@ describe("OpenAIResponseAdapter", () => {
   });
 
   describe("getUsage", () => {
+    test("prices an audio chat response's audio tokens at the audio tariff", () => {
+      // gpt-audio: 20 text + 100 audio tokens in, 10 text + 250 audio out.
+      const response = {
+        ...createMockResponse(
+          { role: "assistant", content: "Hello" },
+          {
+            prompt_tokens: 120,
+            completion_tokens: 260,
+            prompt_tokens_details: { audio_tokens: 100, text_tokens: 20 },
+            completion_tokens_details: { audio_tokens: 250, text_tokens: 10 },
+          },
+        ),
+        model: "gpt-audio-2025-08-28",
+      };
+      const usage = openaiAdapterFactory
+        .createResponseAdapter(response)
+        .getUsage();
+      expect(usage).toMatchObject({
+        inputTokens: 120,
+        outputTokens: 260,
+        providerReportedCost: 0.01935,
+        mediaTariff: true,
+      });
+      // A text-only turn on the same model keeps the per-token chat price.
+      const textOnly = openaiAdapterFactory
+        .createResponseAdapter({
+          ...createMockResponse({ role: "assistant", content: "Hello" }),
+          model: "gpt-audio-2025-08-28",
+        })
+        .getUsage();
+      expect(textOnly.providerReportedCost).toBeUndefined();
+      expect(textOnly.mediaTariff).toBeUndefined();
+    });
+
     test("extracts usage tokens from response", () => {
       const response = createMockResponse(
         { role: "assistant", content: "Test" },
@@ -884,6 +918,115 @@ describe("OpenAIStreamAdapter", () => {
     return (JSON.parse(firstData) as { usage?: unknown }).usage;
   }
 
+  // gpt-audio streams its reply in `delta.audio`: audio and transcript pieces
+  // with no text content. Only the first chunk (which carries `role`) reached
+  // the client, so it played a tenth of a second and never saw the words, and
+  // the recorded turn had no reply at all.
+  test("relays a spoken reply, records its transcript, and keeps the usage details", () => {
+    const adapter = openaiAdapterFactory.createStreamAdapter({
+      model: "gpt-audio",
+      messages: [{ role: "user", content: "Say hello." }],
+      stream: true,
+      stream_options: { include_usage: true },
+    } as OpenAi.Types.ChatCompletionsRequest);
+    const chunk = (delta: object, extra: object = {}) =>
+      ({
+        id: "chatcmpl-a",
+        object: "chat.completion.chunk",
+        created: 0,
+        model: "gpt-audio",
+        choices: [{ index: 0, delta, finish_reason: null }],
+        ...extra,
+      }) as unknown as Chunk;
+
+    const relayed = [
+      adapter.processChunk(
+        chunk({
+          role: "assistant",
+          content: null,
+          audio: { id: "audio_1", data: "AAAA", expires_at: 99 },
+        }),
+      ),
+      adapter.processChunk(chunk({ audio: { transcript: "Hello " } })),
+      adapter.processChunk(chunk({ audio: { data: "BBBB" } })),
+      adapter.processChunk(chunk({ audio: { transcript: "there." } })),
+    ];
+    for (const result of relayed) {
+      expect(result.sseData).toMatch(/^data: /);
+      expect(result.isResponsePreamble ?? false).toBe(false);
+    }
+    expect(relayed[2].sseData).toContain('"data":"BBBB"');
+
+    adapter.processChunk({
+      ...chunk({}),
+      choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+    } as Chunk);
+    adapter.processChunk({
+      ...chunk({}),
+      choices: [],
+      usage: {
+        prompt_tokens: 19,
+        completion_tokens: 72,
+        total_tokens: 91,
+        prompt_tokens_details: { cached_tokens: 0, audio_tokens: 0 },
+        completion_tokens_details: { audio_tokens: 56, text_tokens: 16 },
+      },
+    } as unknown as Chunk);
+
+    const response = adapter.toProviderResponse();
+    expect(response.choices[0].message).toMatchObject({
+      content: null,
+      audio: { id: "audio_1", transcript: "Hello there.", expires_at: 99 },
+    });
+    // Plugins see the turn without the audio; the log row keeps it to play.
+    expect(JSON.stringify(response)).not.toContain("AAAA");
+    expect(adapter.toLoggedResponse?.().choices[0].message).toMatchObject({
+      audio: { id: "audio_1", transcript: "Hello there.", data: "AAAABBBB" },
+    });
+
+    const endSse = adapter.formatEndSSE();
+    const end =
+      typeof endSse === "string" ? endSse : new TextDecoder().decode(endSse);
+    const usage = JSON.parse(end.split("\n\n")[1].replace(/^data: /, "")) as {
+      usage: unknown;
+    };
+    expect(usage.usage).toMatchObject({
+      prompt_tokens: 19,
+      completion_tokens: 72,
+      completion_tokens_details: { audio_tokens: 56, text_tokens: 16 },
+    });
+  });
+
+  test("a logged spoken reply keeps its audio up to the clip limit", () => {
+    const reply = (data: string) => ({
+      id: "chatcmpl-b",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: null,
+            audio: { id: "audio_2", data, transcript: "Hi.", expires_at: 1 },
+          },
+        },
+      ],
+    });
+    // A short clip is kept as it came, so the Logs page can play it.
+    const short = reply("UklGRiQAAABXQVZF");
+    expect(withReplyAudioWithinLimit(short)).toBe(short);
+    // Past 2 MB the audio is dropped and marked, the transcript kept.
+    const long = reply("A".repeat(2_800_008));
+    expect(withReplyAudioWithinLimit(long).choices[0].message.audio).toEqual({
+      id: "audio_2",
+      transcript: "Hi.",
+      expires_at: 1,
+      data_omitted: "too_large",
+    });
+    expect(long.choices[0].message.audio.data).toHaveLength(2_800_008);
+    const text = { choices: [{ message: { content: "Hello" } }] };
+    expect(withReplyAudioWithinLimit(text)).toBe(text);
+  });
+
   // The refusal is emitted as a further delta, which clients concatenate onto
   // the content they have accumulated — so the client holds the model's text
   // AND the refusal. Reporting the refusal alone dropped the model's own answer
@@ -1032,6 +1175,45 @@ describe("OpenAIStreamAdapter", () => {
     });
   });
 
+  test("sends usage on its own trailing chunk with empty choices when the client set include_usage, as OpenAI does", () => {
+    const adapter = openaiAdapterFactory.createStreamAdapter({
+      model: "gpt-x",
+      messages: [{ role: "user", content: "hi" }],
+      stream: true,
+      stream_options: { include_usage: true },
+    } as Parameters<typeof openaiAdapterFactory.createStreamAdapter>[0]);
+    adapter.processChunk({
+      id: "chatcmpl-6",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "gpt-x",
+      choices: [{ index: 0, delta: { content: "hi" }, finish_reason: "stop" }],
+    } as Chunk);
+    adapter.processChunk({
+      id: "chatcmpl-6",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "gpt-x",
+      choices: [],
+      usage: { prompt_tokens: 100, completion_tokens: 42, total_tokens: 142 },
+    } as Chunk);
+
+    const frames = String(adapter.formatEndSSE()).split("\n\n").filter(Boolean);
+    expect(frames).toHaveLength(3);
+    expect(frames[2]).toBe("data: [DONE]");
+    const [finish, usage] = frames
+      .slice(0, 2)
+      .map((frame) => JSON.parse(frame.replace(/^data: /, "")));
+    expect(finish.choices[0].finish_reason).toBe("stop");
+    expect(finish.usage).toBeUndefined();
+    expect(usage).toMatchObject({
+      id: "chatcmpl-6",
+      object: "chat.completion.chunk",
+      choices: [],
+      usage: { prompt_tokens: 100, completion_tokens: 42, total_tokens: 142 },
+    });
+  });
+
   test("toProviderResponse reports gross prompt_tokens with cache detail (non-streaming path)", () => {
     const adapter = openaiAdapterFactory.createStreamAdapter();
     adapter.processChunk({
@@ -1163,6 +1345,43 @@ describe("OpenAIStreamAdapter", () => {
     ).toBe("thinking");
     expect(deltaOf(adapter.getRawToolCallEvents()[0])).toEqual({
       tool_calls: expect.any(Array),
+    });
+  });
+
+  test("relays spoken audio without the tool call it carries, which waits for policy evaluation", () => {
+    const adapter = openaiAdapterFactory.createStreamAdapter();
+    const result = adapter.processChunk({
+      id: "chatcmpl-audio-tool",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "gpt-audio",
+      choices: [
+        {
+          index: 0,
+          delta: {
+            audio: { id: "audio_1", data: "AAAA", transcript: "Checking." },
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_1",
+                type: "function",
+                function: { name: "blocked_tool", arguments: '{"x":1}' },
+              },
+            ],
+          },
+          finish_reason: null,
+        },
+      ],
+    } as unknown as Chunk);
+
+    expect(result.sseData).not.toContain("blocked_tool");
+    expect(deltaOf(result.sseData)).toEqual({
+      audio: { id: "audio_1", data: "AAAA", transcript: "Checking." },
+    });
+    expect(result.isToolCallChunk).toBe(true);
+    // Only the call is held, so releasing it does not replay the audio.
+    expect(deltaOf(adapter.getRawToolCallEvents()[0])).toEqual({
+      tool_calls: [expect.objectContaining({ id: "call_1" })],
     });
   });
 

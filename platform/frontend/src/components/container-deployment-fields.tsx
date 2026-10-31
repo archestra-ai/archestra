@@ -104,6 +104,7 @@ function ContainerImageField({
         {optional && <span> (optional)</span>}
         {labelAddon}
       </Label>
+      <FieldDescription description={description} />
       <Input
         id={id}
         value={value}
@@ -112,7 +113,7 @@ function ContainerImageField({
         className="font-mono"
         autoComplete={autoComplete}
       />
-      <FieldDescription description={description} error={error} />
+      <FieldDescription error={error} />
     </div>
   );
 }
@@ -130,6 +131,7 @@ function ContainerCommandField({
   return (
     <div className="space-y-2">
       <Label htmlFor={id}>Command{labelAddon}</Label>
+      <FieldDescription description={description} />
       <Input
         id={id}
         value={value}
@@ -138,7 +140,7 @@ function ContainerCommandField({
         className="font-mono"
         autoComplete={autoComplete}
       />
-      <FieldDescription description={description} error={error} />
+      <FieldDescription error={error} />
     </div>
   );
 }

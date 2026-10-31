@@ -20,11 +20,13 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import { PreparedQuery } from "@/database/prepared-query";
 import { createPaginatedResult } from "@/database/utils/pagination";
+import { agentRunLlmSessionId } from "@/services/agent-runtime/runtime-contract";
 import type {
   AgentRunFailure,
   AgentRunListItem,
   AgentRunRecord,
   AgentRunSession,
+  AgentRuntimeTier,
   InsertAgentRunRecord,
 } from "@/types";
 import { A2A_TERMINAL_TASK_STATES, type A2ATaskState } from "@/types/a2a-task";
@@ -768,6 +770,19 @@ class AgentRunModel {
     return await AgentRunModel.addRunPrompts(rows);
   }
 
+  /** A warm Sandbox from a neighbouring pool changes the tier a run runs at. */
+  static async updateRuntimeLimitsTier(params: {
+    taskId: string;
+    tier: AgentRuntimeTier | null;
+  }): Promise<void> {
+    const current = await AgentRunModel.findByTaskId(params.taskId);
+    if (!current?.runtimeLimits) return;
+    await db
+      .update(schema.agentRunsTable)
+      .set({ runtimeLimits: { ...current.runtimeLimits, tier: params.tier } })
+      .where(eq(schema.agentRunsTable.taskId, params.taskId));
+  }
+
   static async updateTitleIfCurrent(params: {
     taskId: string;
     expectedTitle: string;
@@ -1005,6 +1020,7 @@ class AgentRunModel {
     );
     return rows.map((row) => ({
       ...row,
+      llmSessionId: agentRunLlmSessionId(row),
       prompt: extractPrompt(prompts.get(row.taskId) ?? []),
     }));
   }

@@ -549,16 +549,26 @@ class AgentModel {
    * once per request scope. Outside a memoizing request this is a fresh read,
    * so a changed setting applies to the next call.
    */
-  private static findToolAccessFields(
-    id: string,
-  ): Promise<{ environmentId: string | null; accessAllTools: boolean } | null> {
+  private static findToolAccessFields(id: string): Promise<{
+    environmentId: string | null;
+    accessAllTools: boolean;
+    keepMediaInLogs: boolean | null;
+  } | null> {
     return readConfig(`agent-tool-access\0${id}`, async () => {
+      // The organization's media setting rides along so each log write learns
+      // it from the read it already makes; an organization change drops the
+      // cached entry like an agent change does.
       const [result] = await db
         .select({
           environmentId: schema.agentsTable.environmentId,
           accessAllTools: schema.agentsTable.accessAllTools,
+          keepMediaInLogs: schema.organizationsTable.keepMediaInLogs,
         })
         .from(schema.agentsTable)
+        .leftJoin(
+          schema.organizationsTable,
+          eq(schema.organizationsTable.id, schema.agentsTable.organizationId),
+        )
         .where(
           and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)),
         )
@@ -1406,6 +1416,7 @@ class AgentModel {
         defaultNamespace: schema.organizationsTable.defaultEnvironmentNamespace,
         environmentPolicy: schema.environmentsTable.networkPolicy,
         defaultPolicy: schema.organizationsTable.defaultNetworkPolicy,
+        agentRuntimeTiers: schema.organizationsTable.agentRuntimeTiers,
       })
       .from(schema.agentsTable)
       .innerJoin(recentRuns, eq(recentRuns.agentId, schema.agentsTable.id))
@@ -1456,6 +1467,27 @@ class AgentModel {
           notDeleted(schema.agentsTable),
         ),
       );
+  }
+
+  /** Agents auto routing applies to: no model, key, pool or runtime of their own. */
+  static async countFollowingOrganizationRouting(
+    organizationId: string,
+  ): Promise<number> {
+    const [row] = await db
+      .select({ total: count() })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          eq(schema.agentsTable.agentType, "agent"),
+          isNull(schema.agentsTable.llmApiKeyId),
+          isNull(schema.agentsTable.modelId),
+          isNull(schema.agentsTable.modelPoolId),
+          isNull(schema.agentsTable.runtime),
+          notDeleted(schema.agentsTable),
+        ),
+      );
+    return row?.total ?? 0;
   }
 
   static async findRuntimeTargets(organizationId: string) {
@@ -2971,6 +3003,21 @@ class AgentModel {
   }
 
   /**
+   * What a log row written for this agent needs: its environment, and whether
+   * its organization keeps media in logs (null when the agent is not found).
+   */
+  static async findLogSettings(id: string): Promise<{
+    environmentId: string | null;
+    keepMediaInLogs: boolean | null;
+  }> {
+    const fields = await AgentModel.findToolAccessFields(id);
+    return {
+      environmentId: fields?.environmentId ?? null,
+      keepMediaInLogs: fields?.keepMediaInLogs ?? null,
+    };
+  }
+
+  /**
    * The two fields that decide whether a caller missing an MCP connection is
    * warned, blocked, or left alone. Kept narrow so the chat turn's pre-flight
    * check costs one indexed row read.
@@ -3358,13 +3405,7 @@ class AgentModel {
     tx?: Transaction,
   ): Promise<Pick<
     Agent,
-    | "id"
-    | "name"
-    | "agentType"
-    | "llmApiKeyId"
-    | "modelId"
-    | "fastModelId"
-    | "smartModelId"
+    "id" | "name" | "agentType" | "llmApiKeyId" | "modelId"
   > | null> {
     const [targetAgent] = await (tx ?? db)
       .select({
@@ -3373,8 +3414,6 @@ class AgentModel {
         agentType: schema.agentsTable.agentType,
         llmApiKeyId: schema.agentsTable.llmApiKeyId,
         modelId: schema.agentsTable.modelId,
-        fastModelId: schema.agentsTable.fastModelId,
-        smartModelId: schema.agentsTable.smartModelId,
       })
       .from(schema.agentsTable)
       .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
@@ -5488,6 +5527,8 @@ class AgentModel {
             steerMode: row.runtime.steerMode,
             privileged: row.runtime.privileged,
             resources: row.runtime.resources,
+            tier: row.runtime.tier ?? null,
+            maxTier: row.runtime.maxTier ?? null,
             environmentKeys: (row.runtime.environment ?? [])
               .map((entry) => entry.key)
               .sort(),

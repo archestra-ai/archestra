@@ -43,7 +43,12 @@ import logger from "@/logging";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import { withSubscriptionCredentialLock } from "@/models/subscription-credential-lock";
 import { secretManager } from "@/secrets-manager";
-import { ApiError, type SecretReadOptions, type SelectSecret } from "@/types";
+import {
+  ApiError,
+  SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
+  type SecretReadOptions,
+  type SelectSecret,
+} from "@/types";
 import { decodeJwtClaims } from "./openai-codex-credentials";
 import { recordSubscriptionAuthenticationFailure } from "./subscription-authentication-status";
 import {
@@ -221,10 +226,13 @@ export class XaiSubscriptionTokenManager {
     // this call (a retry does not present the token again), and neither an
     // issuer failure nor a write-back failure is thrown through the
     // transaction: the retry wrapper classifies network errors by shape, not
-    // by source, and would hold the lock through its whole backoff. The
-    // write-back gets its own short retry under the lock instead, so a blip in
-    // the secrets backend does not release the lock with the successor held
-    // only here.
+    // by source, and would hold the lock through its whole backoff. A
+    // write-back that fails in an external secrets backend (the transaction is
+    // still usable) gets its own short retry under the lock instead, so a blip
+    // there does not release the lock with the successor held only here. A
+    // failure raised by the database itself has broken the transaction; that
+    // one is left to the lock helper's whole-callback retry, which the pending
+    // rotation makes safe.
     let issuerFailure:
       | { error: unknown; rejected: XaiSubscriptionCredential | undefined }
       | undefined;
@@ -308,7 +316,10 @@ export class XaiSubscriptionTokenManager {
             );
             break;
           } catch (error) {
-            if (attempt < WRITE_BACK_ATTEMPTS && isTransientDbError(error)) {
+            if (
+              attempt < WRITE_BACK_ATTEMPTS &&
+              retryableWriteBackFailure(error)
+            ) {
               await sleep(WRITE_BACK_RETRY_DELAY_MS);
               continue;
             }
@@ -769,12 +780,26 @@ const VALIDATION_ROTATION_TTL_MS = 15 * 60 * 1000;
  */
 const PENDING_ROTATION_TTL_MS = 60 * 60 * 1000;
 /**
- * Attempts for the write-back under the lock when the secrets backend fails
- * with a network-shaped error, and the pause between them. Short on purpose:
- * the lock and a pooled connection are held throughout.
+ * Attempts for the write-back under the lock when an external secrets backend
+ * fails with a network-shaped error, and the pause between them. Short on
+ * purpose: the lock and a pooled connection are held throughout.
  */
 const WRITE_BACK_ATTEMPTS = 3;
 const WRITE_BACK_RETRY_DELAY_MS = 250;
+
+/**
+ * Whether a failed write-back is worth repeating on the same transaction: a
+ * transient failure wrapped by an external secrets backend (Vault), whose
+ * database side has not run yet. A failure raised by the database itself has
+ * broken the transaction, so repeating the statement on it cannot succeed.
+ */
+function retryableWriteBackFailure(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.internalCode === SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE &&
+    isTransientDbError(error)
+  );
+}
 
 /** @public — exported for unit tests; the per-token refresh headroom. */
 export function refreshBufferFor(lifetimeMs: number): number {

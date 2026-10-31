@@ -12,6 +12,7 @@ import {
   xaiSubscriptionTokenManager,
 } from "@/services/xai-subscription-token";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { ApiError, SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE } from "@/types";
 import { withLatestRotatedRefreshToken } from "./subscription-credential-rotation";
 import {
   decodeXaiSubscriptionCredential,
@@ -780,8 +781,12 @@ describe("shared refresh guards", () => {
     },
   );
 
-  /** Makes the next `count` secret writes fail with a network-shaped error. */
-  function failWrites(count: number) {
+  /**
+   * Makes the next `count` secret writes fail: as an external secrets backend
+   * does (a wrapped network error, the transaction untouched), or as the
+   * database itself does (a bare connection error).
+   */
+  function failWrites(count: number, as: "backend" | "database" = "backend") {
     let remaining = count;
     const real = secretManager().updateSecret.bind(secretManager());
     return vi
@@ -789,16 +794,27 @@ describe("shared refresh guards", () => {
       .mockImplementation(async (...args) => {
         if (remaining > 0) {
           remaining -= 1;
-          throw Object.assign(new Error("Connection terminated unexpectedly"), {
-            code: "ECONNRESET",
-          });
+          const connectionLoss = Object.assign(
+            new Error("Connection terminated unexpectedly"),
+            { code: "ECONNRESET" },
+          );
+          if (as === "database") {
+            throw connectionLoss;
+          }
+          const outage = new ApiError(
+            503,
+            "An error occurred while accessing secrets.",
+            SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
+          );
+          outage.cause = connectionLoss;
+          throw outage;
         }
         return real(...args);
       });
   }
 
   tokenTest(
-    "retries a failed write-back under the lock, so another replica adopts the rotation",
+    "retries a write-back the secrets backend failed under the lock, so another replica adopts the rotation",
     async ({ subscriptionKey }) => {
       const issuer = stubSingleUseIssuer();
       const writes = failWrites(1);
@@ -815,6 +831,33 @@ describe("shared refresh guards", () => {
         expect(
           await new XaiSubscriptionTokenManager().getAccessToken(params),
         ).toBe("at_1");
+        expect(issuer.calls).toEqual(["rt_0"]);
+      } finally {
+        writes.mockRestore();
+      }
+    },
+  );
+
+  tokenTest(
+    "does not repeat a write-back the database itself failed on the same transaction",
+    async ({ subscriptionKey }) => {
+      const issuer = stubSingleUseIssuer();
+      const writes = failWrites(1, "database");
+      const manager = new XaiSubscriptionTokenManager();
+      const params = {
+        credential: subscriptionKey.credential,
+        providerApiKeyId: subscriptionKey.id,
+      };
+      try {
+        // One attempt only: a broken transaction cannot take a second one.
+        await expect(manager.getAccessToken(params)).rejects.toMatchObject({
+          statusCode: 502,
+        });
+        expect(writes).toHaveBeenCalledTimes(1);
+        expect(issuer.calls).toEqual(["rt_0"]);
+        // The rotation is pending; the next refresh persists it.
+        expect(await manager.getAccessToken(params)).toBe("at_1");
+        expect(writes).toHaveBeenCalledTimes(2);
         expect(issuer.calls).toEqual(["rt_0"]);
       } finally {
         writes.mockRestore();

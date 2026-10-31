@@ -34,7 +34,7 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from "ai";
-import { and, desc, eq, gt, isNull } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -394,58 +394,6 @@ async function findActiveConversationRuntimeTaskId(params: {
     return (
       contextTask.activeTaskId ?? contextTask.taskId ?? contextTask.lastTaskId
     );
-  }
-
-  // 2. Check for an active workspace owned by this user for this agent
-  const [workspaceRow] = await db
-    .select({
-      activeTaskId: schema.agentWorkspacesTable.activeTaskId,
-      lastTaskId: schema.agentWorkspacesTable.lastTaskId,
-    })
-    .from(schema.agentWorkspacesTable)
-    .where(
-      and(
-        eq(schema.agentWorkspacesTable.agentId, agentId),
-        eq(schema.agentWorkspacesTable.organizationId, organizationId),
-        eq(schema.agentWorkspacesTable.actorKind, "user"),
-        eq(schema.agentWorkspacesTable.actorId, userId),
-        eq(schema.agentWorkspacesTable.state, "active"),
-        gt(schema.agentWorkspacesTable.expiresAt, new Date()),
-      ),
-    )
-    .orderBy(desc(schema.agentWorkspacesTable.lastActivityAt))
-    .limit(1);
-
-  if (workspaceRow?.activeTaskId) {
-    return workspaceRow.activeTaskId;
-  }
-  if (workspaceRow?.lastTaskId) {
-    return workspaceRow.lastTaskId;
-  }
-
-  // 3. Check for any active run (endedAt is null) for this agent and user
-  const [activeRun] = await db
-    .select({
-      taskId: schema.agentRunsTable.taskId,
-    })
-    .from(schema.agentRunsTable)
-    .where(
-      and(
-        eq(schema.agentRunsTable.agentId, agentId),
-        eq(schema.agentRunsTable.organizationId, organizationId),
-        eq(schema.agentRunsTable.actorKind, "user"),
-        eq(schema.agentRunsTable.actorId, userId),
-        isNull(schema.agentRunsTable.endedAt),
-      ),
-    )
-    .orderBy(
-      desc(schema.agentRunsTable.startedAt),
-      desc(schema.agentRunsTable.id),
-    )
-    .limit(1);
-
-  if (activeRun) {
-    return activeRun.taskId;
   }
 
   return undefined;

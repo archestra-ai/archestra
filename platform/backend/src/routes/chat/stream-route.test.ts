@@ -3917,4 +3917,180 @@ describe("POST /api/chat handler composition", () => {
       "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
     );
   });
+
+  test("web chat turn without X-Archestra-Run-Id leaves runId unset and keeps agent default ceiling when another active run exists", async ({
+    makeAgent,
+    makeConversation,
+    seedAndAssignArchestraTools,
+  }) => {
+    const fixedAgent = await makeAgent({
+      organizationId,
+      name: "Fixed Tier Agent Distinct Run",
+      agentType: "agent",
+      runtime: {
+        image: "example.com/coding-agent:latest",
+        command: null,
+        inferenceProtocol: "openai_responses",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        tier: "M",
+        maxTier: "M",
+        environment: null,
+        credentials: [],
+        ttlHours: 12,
+        maxCostUsd: null,
+        idleTimeoutMinutes: null,
+      },
+    });
+    await seedAndAssignArchestraTools(fixedAgent.id);
+
+    const webConversation = await makeConversation(fixedAgent.id, {
+      userId: user.id,
+      organizationId,
+    });
+
+    // Create another active run of the same user and agent with a distinct A2A context ID:
+    const otherContext = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: user.id,
+    });
+    expect(otherContext.id).not.toBe(webConversation.id);
+
+    const otherTask = await A2ATaskModel.create({
+      contextId: otherContext.id,
+      agentId: fixedAgent.id,
+      state: "TASK_STATE_WORKING",
+    });
+
+    const otherWorkload = `agent-run-${otherTask.id}`;
+    await AgentRunModel.create({
+      organizationId,
+      taskId: otherTask.id,
+      agentId: fixedAgent.id,
+      actorKind: "user",
+      actorId: user.id,
+      actorUserId: user.id,
+      workloadName: otherWorkload,
+      backend: "kubernetes",
+      runtimeScope: "default",
+      virtualApiKeyId: null,
+      runtimeLimits: {
+        tier: "S",
+        idleTimeoutMinutes: 60,
+        maxDurationHours: 1,
+        maxCostUsd: null,
+      },
+    });
+
+    await AgentWorkspaceModel.create({
+      id: otherTask.id,
+      organizationId,
+      agentId: fixedAgent.id,
+      actorKind: "user",
+      actorId: user.id,
+      backend: "kubernetes",
+      runtimeScope: "default",
+      workloadName: otherWorkload,
+      state: "active",
+      activeTaskId: otherTask.id,
+      lastTaskId: otherTask.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+
+    mockGetChatMcpTools.mockImplementationOnce(async (params) => {
+      // The web chat conversation does not own otherTask, so runId must be undefined
+      expect(params.runId).toBeUndefined();
+      return {
+        [archestraMcpBranding.getToolName(TOOL_START_AGENT_RUN_SHORT_NAME)]:
+          buildMcpGatewayTool({
+            mcpTool: {
+              name: TOOL_START_AGENT_RUN_FULL_NAME,
+              inputSchema: { type: "object" },
+            },
+            ctx: {
+              agentId: fixedAgent.id,
+              agentName: fixedAgent.name,
+              userId: user.id,
+              organizationId,
+              runId: params.runId,
+              modelAcceptsImageToolResults: false,
+              mcpGwToken: {
+                tokenValue: null,
+                tokenId: user.id,
+                teamId: null,
+                isOrganizationToken: false,
+                isUserToken: true,
+              },
+              repeatTracker: params.repeatTracker,
+            },
+          }),
+      };
+    });
+
+    let capturedTools:
+      | Record<string, { execute?: (...args: unknown[]) => Promise<unknown> }>
+      | undefined;
+    mockStreamText.mockImplementationOnce(
+      (config: {
+        tools?: Record<
+          string,
+          { execute?: (...args: unknown[]) => Promise<unknown> }
+        >;
+      }) => {
+        capturedTools = config.tools;
+        return fakeStreamResult(RENDERABLE_STREAM_EVENTS);
+      },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      // Explicitly NO X-Archestra-Run-Id header
+      payload: {
+        id: webConversation.id,
+        messages: [
+          {
+            id: "msg-2",
+            role: "user",
+            parts: [{ type: "text", text: "start run" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockGetChatMcpTools).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: webConversation.id,
+        runId: undefined,
+      }),
+    );
+
+    const startTool =
+      capturedTools?.[
+        archestraMcpBranding.getToolName(TOOL_START_AGENT_RUN_SHORT_NAME)
+      ];
+    expect(startTool?.execute).toBeDefined();
+
+    // Requesting L (above M) gets refused at M (the agent default ceiling), not S:
+    const scaleupAboveCeilingResult = await startTool?.execute?.(
+      {
+        agent_id: fixedAgent.id,
+        message: "Attempt scale up from M to L",
+        limits: { tier: "L" },
+      },
+      { toolCallId: "call-fixed-2", messages: [] },
+    );
+    const scaleupAboveCeilingOutput =
+      typeof scaleupAboveCeilingResult === "string"
+        ? scaleupAboveCeilingResult
+        : ((scaleupAboveCeilingResult as { content?: string })?.content ?? "");
+    expect(scaleupAboveCeilingOutput).toContain(
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to M (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
+    );
+    expect(scaleupAboveCeilingOutput).not.toContain("fixed to S");
+  });
 });

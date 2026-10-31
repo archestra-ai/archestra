@@ -93,7 +93,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
+import { DEFAULT_AGENT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import { getA2aRemoteAgentDeleteDescription } from "@/lib/a2a-remote-agent-delete";
 import { a2aRemoteAgentDetailHref } from "@/lib/a2a-remote-agent-route";
 import {
@@ -264,7 +264,7 @@ function Agents() {
       : undefined;
 
   // Default sorting
-  const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
+  const sortBy = sortByFromUrl || DEFAULT_AGENT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
   const isDeletedView = statusFromUrl === "deleted";
 

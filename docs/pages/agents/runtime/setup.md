@@ -72,15 +72,7 @@ Memory scales automatically with CPU at 2 GiB per requested CPU. The memory limi
 
 Agents do not configure CPU or memory directly. Each agent selects a [**Default tier**](/docs/agents/runtime#limits) for standard runs and an optional **Scaleup tier** for larger workloads. When a task needs more compute, a run can request any tier up to that scaleup tier.
 
-Click **Create tier** or click **Edit** on a tier to configure its parameters:
-
-- **Name**: A unique name up to 32 characters. Renaming a tier updates all agents using it.
-- **CPU request**: The requested CPU, from 0.1 to 8 CPUs. Determines base CPU and memory.
-- **CPU limit**: An optional ceiling up to 16 CPUs, equal to or above the CPU request.
-- **Pooled**: Keeps pre-warmed spare containers ready so runs launch instantly (see [Warm Pools](#warm-pools)).
-- **Default tier**: Sets this tier as the fallback for agents that do not specify one.
-
-To delete a tier, remove it from all agents and templates first. Archestra prevents deleting the default tier or the last remaining tier.
+A pooled tier keeps spare containers ready so runs start at once (see [Warm Pools](#warm-pools)). Spares hold cluster CPU and memory while they wait. A tier that is not pooled starts a fresh container for each run instead.
 
 ## Warm Pools
 

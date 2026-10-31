@@ -41,6 +41,7 @@ import {
   agentRuntimeTurnFailure,
 } from "@/services/agent-runtime/failure-reason";
 import {
+  type AgentRunFailureCode,
   agentRunFailure,
   tagAgentRunFailure,
 } from "@/services/agent-runtime/run-failure";
@@ -2199,7 +2200,7 @@ const MEMORY_EVENTS_BASELINE_ATTEMPTS = 3;
  * its own. An image's envelope code (a provider error it reported itself)
  * keeps its classification.
  */
-const MEMORY_KILL_EXPLAINS = new Set<string>([
+const MEMORY_KILL_EXPLAINS: ReadonlySet<string> = new Set<AgentRunFailureCode>([
   "turn.exit_status",
   "turn.process_exited",
   "turn.recording_failed",

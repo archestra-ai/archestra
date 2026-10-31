@@ -1097,6 +1097,11 @@ const RATE_LIMIT_ENVELOPE = JSON.stringify({
   code: "claude_rate_limit",
   message: "Claude Code reached a rate limit.",
 });
+const PANE_EXITED_ENVELOPE = JSON.stringify({
+  version: 1,
+  code: "runtime.pane_exited",
+  message: "The agent process exited before it reported a result.",
+});
 
 test.for([
   { name: "a memory kill inside the running pod", killed: true, exit: null },
@@ -1114,6 +1119,11 @@ test.for([
     name: "a turn whose image reported its own failure after a memory kill",
     killed: true,
     exit: `7\n${RATE_LIMIT_ENVELOPE}`,
+  },
+  {
+    name: "a pane that exited after a memory kill",
+    killed: true,
+    exit: `75\n${PANE_EXITED_ENVELOPE}`,
   },
   {
     name: "a workspace that finished while the pod runs, after a memory kill",

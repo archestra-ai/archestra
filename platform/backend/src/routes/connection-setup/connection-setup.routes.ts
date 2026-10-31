@@ -416,7 +416,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Health of the remotes a connected client is wired to, one request for all of them. " +
           "Public: used by the Claude Code startup guard before every launch, from machines with no session. " +
-          "Reports only ok/down per requested remote.",
+          "Reports only ok/down per requested remote, the launch check's format version, and the gateway's tool prefix.",
         tags: ["Connection Setups"],
         querystring: ConnectionHealthQuerySchema,
         response: constructResponseSchema(ConnectionHealthResponseSchema),

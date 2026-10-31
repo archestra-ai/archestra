@@ -1196,18 +1196,24 @@ const SETTINGS_REL = ".claude/settings.json";
 const LEDGER_REL = ".archestra/claude-appa-permissions.json";
 const BACKUP_REL = ".claude/settings.json.archestra-backup";
 
+type ClaudeGuards = { ask: string[]; deny: string[] };
+
+const DEFAULT_GUARDS: ClaudeGuards = {
+  ask: ["Bash(rm *)"],
+  deny: ["WebFetch", OWNED_ALLOW[0]],
+};
+/** Ask and deny rules that name none of the owned rules. */
+const UNGUARDED: ClaudeGuards = { ask: ["Bash(rm *)"], deny: ["WebFetch"] };
+
 function claudeSettings(
   allow: string[] = [...OWNED_ALLOW, ...USER_ALLOW, ...OTHER_ALLOW],
+  guards: ClaudeGuards = DEFAULT_GUARDS,
 ): string {
   return JSON.stringify({
     enableAllProjectMcpServers: false,
     numRetries: 1,
     env: { USER_OWNED_KEY: "keep-me" },
-    permissions: {
-      allow,
-      ask: ["Bash(rm *)"],
-      deny: ["WebFetch", OWNED_ALLOW[0]],
-    },
+    permissions: { allow, ask: guards.ask, deny: guards.deny },
     model: "claude-sonnet",
   });
 }
@@ -1267,6 +1273,7 @@ const INVALID_CLAUDE_PERMISSION_FILES = [
 function expectOwnedRulesRemoved(
   raw: string,
   allow: string[] = [...USER_ALLOW, ...OTHER_ALLOW],
+  guards: ClaudeGuards = DEFAULT_GUARDS,
 ): void {
   const settings = JSON.parse(raw) as {
     enableAllProjectMcpServers: boolean;
@@ -1277,8 +1284,8 @@ function expectOwnedRulesRemoved(
   };
   expect(settings.permissions.allow).toEqual(allow);
   expect(Array.isArray(settings.permissions.allow)).toBe(true);
-  expect(settings.permissions.ask).toEqual(["Bash(rm *)"]);
-  expect(settings.permissions.deny).toEqual(["WebFetch", OWNED_ALLOW[0]]);
+  expect(settings.permissions.ask).toEqual(guards.ask);
+  expect(settings.permissions.deny).toEqual(guards.deny);
   expect(Array.isArray(settings.permissions.deny)).toBe(true);
   expect(settings.env).toEqual({ USER_OWNED_KEY: "keep-me" });
   expect(settings.enableAllProjectMcpServers).toBe(false);
@@ -1540,16 +1547,19 @@ describe("Claude APPA permission prefix sync at launch", () => {
       client: CLAUDE_CODE_GUARD_CLIENT,
       functions: ["sync_tool_prefix"],
       invoke: syncInvoke('{"guardVersion":10,"mcpToolPrefix":"acme__"}'),
-      files: { [SETTINGS_REL]: claudeSettings(), [LEDGER_REL]: claudeLedger() },
+      files: {
+        [SETTINGS_REL]: claudeSettings(undefined, UNGUARDED),
+        [LEDGER_REL]: claudeLedger(),
+      },
       readFiles: [SETTINGS_REL, LEDGER_REL],
     });
 
     expect(code).toBe(0);
-    expectOwnedRulesRemoved(files[SETTINGS_REL] ?? "", [
-      ...BRANDED_ALLOW,
-      ...USER_ALLOW,
-      ...OTHER_ALLOW,
-    ]);
+    expectOwnedRulesRemoved(
+      files[SETTINGS_REL] ?? "",
+      [...BRANDED_ALLOW, ...USER_ALLOW, ...OTHER_ALLOW],
+      UNGUARDED,
+    );
     expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
       prod_gateway: BRANDED_ALLOW,
       other_gateway: OTHER_ALLOW,
@@ -1564,7 +1574,10 @@ describe("Claude APPA permission prefix sync at launch", () => {
       functions: ["sync_tool_prefix"],
       invoke: syncInvoke('{"mcpToolPrefix":"acme__"}'),
       files: {
-        [SETTINGS_REL]: claudeSettings([userBranded, ...OWNED_ALLOW]),
+        [SETTINGS_REL]: claudeSettings(
+          [userBranded, ...OWNED_ALLOW],
+          UNGUARDED,
+        ),
         [LEDGER_REL]: claudeLedger({ prod_gateway: OWNED_ALLOW }),
       },
       readFiles: [SETTINGS_REL, LEDGER_REL],
@@ -1603,6 +1616,101 @@ describe("Claude APPA permission prefix sync at launch", () => {
     expect(code).toBe(0);
     expect(files[SETTINGS_REL]).toBe(settings);
     expect(files[LEDGER_REL]).toBe(ledger);
+  });
+
+  test.each([
+    "ask",
+    "deny",
+  ] as const)("keeps an owned rule the user's %s rule names under its old name", async (kind) => {
+    const guards = { ...UNGUARDED, [kind]: [OWNED_ALLOW[1]] };
+    const { files } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["sync_tool_prefix"],
+      invoke: syncInvoke('{"mcpToolPrefix":"acme__"}'),
+      files: {
+        [SETTINGS_REL]: claudeSettings(OWNED_ALLOW, guards),
+        [LEDGER_REL]: claudeLedger({ prod_gateway: OWNED_ALLOW }),
+      },
+      readFiles: [SETTINGS_REL, LEDGER_REL],
+    });
+
+    // Moved, the allow rule would let through the calls the user's rule no longer matches.
+    const kept = [BRANDED_ALLOW[0], OWNED_ALLOW[1], ...BRANDED_ALLOW.slice(2)];
+    expectOwnedRulesRemoved(files[SETTINGS_REL] ?? "", kept, guards);
+    expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({ prod_gateway: kept });
+  });
+
+  test("an interrupted move owns each rule once", async () => {
+    // The first ledger write landed and the settings write did not.
+    const { files } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["sync_tool_prefix"],
+      invoke: syncInvoke('{"mcpToolPrefix":"acme__"}'),
+      files: {
+        [SETTINGS_REL]: claudeSettings(OWNED_ALLOW, UNGUARDED),
+        [LEDGER_REL]: claudeLedger({
+          prod_gateway: [...OWNED_ALLOW, ...BRANDED_ALLOW],
+        }),
+      },
+      readFiles: [SETTINGS_REL, LEDGER_REL],
+    });
+
+    expectOwnedRulesRemoved(
+      files[SETTINGS_REL] ?? "",
+      BRANDED_ALLOW,
+      UNGUARDED,
+    );
+    expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
+      prod_gateway: BRANDED_ALLOW,
+    });
+  });
+
+  test.each([
+    {
+      name: "every owned rule uses the reported prefix",
+      owned: BRANDED_ALLOW,
+      started: false,
+    },
+    {
+      name: "an owned rule uses another prefix",
+      owned: OWNED_ALLOW,
+      started: true,
+    },
+  ])("starts python only when a rule moves: $name", async ({
+    owned,
+    started,
+  }) => {
+    const bin = await mkdtemp(path.join(tmpdir(), "archestra-fake-python-"));
+    try {
+      const marker = path.join(bin, "started");
+      await writeFile(
+        path.join(bin, "python3"),
+        `#!/bin/sh\nprintf started > ${JSON.stringify(marker)}\n`,
+        "utf8",
+      );
+      await chmod(path.join(bin, "python3"), 0o755);
+      await runGuardSnippet({
+        client: CLAUDE_CODE_GUARD_CLIENT,
+        functions: ["sync_tool_prefix"],
+        invoke: syncInvoke('{"mcpToolPrefix":"acme__"}'),
+        env: { PATH: `${bin}:${process.env.PATH ?? ""}` },
+        files: {
+          [SETTINGS_REL]: claudeSettings([...owned, ...OTHER_ALLOW], UNGUARDED),
+          // Another gateway's rules under the old prefix start nothing.
+          [LEDGER_REL]: claudeLedger({
+            prod_gateway: owned,
+            other_gateway: OTHER_ALLOW,
+          }),
+        },
+      });
+      const ran = await readFile(marker, "utf8").then(
+        () => true,
+        () => false,
+      );
+      expect(ran).toBe(started);
+    } finally {
+      await rm(bin, { recursive: true, force: true });
+    }
   });
 
   test("writes nothing while the instance is unreachable", async () => {
@@ -1795,18 +1903,18 @@ describe.skipIf(!powershellBin)(
     test("moves owned rules to the reported prefix and keeps every other rule", async () => {
       const files = await runWindowsPrefixSync({
         files: {
-          [SETTINGS_REL]: claudeSettings(),
+          [SETTINGS_REL]: claudeSettings(undefined, UNGUARDED),
           [LEDGER_REL]: claudeLedger(),
         },
         readFiles: [SETTINGS_REL, LEDGER_REL],
         toolPrefix: "acme__",
       });
 
-      expectOwnedRulesRemoved(files[SETTINGS_REL] ?? "", [
-        ...BRANDED_ALLOW,
-        ...USER_ALLOW,
-        ...OTHER_ALLOW,
-      ]);
+      expectOwnedRulesRemoved(
+        files[SETTINGS_REL] ?? "",
+        [...BRANDED_ALLOW, ...USER_ALLOW, ...OTHER_ALLOW],
+        UNGUARDED,
+      );
       expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
         prod_gateway: BRANDED_ALLOW,
         other_gateway: OTHER_ALLOW,
@@ -1817,7 +1925,7 @@ describe.skipIf(!powershellBin)(
     test("a single moved rule stays a JSON array", async () => {
       const files = await runWindowsPrefixSync({
         files: {
-          [SETTINGS_REL]: claudeSettings([OWNED_ALLOW[0]]),
+          [SETTINGS_REL]: claudeSettings([OWNED_ALLOW[0]], UNGUARDED),
           [LEDGER_REL]: claudeLedger({ prod_gateway: [OWNED_ALLOW[0]] }),
         },
         readFiles: [SETTINGS_REL, LEDGER_REL],
@@ -1829,6 +1937,53 @@ describe.skipIf(!powershellBin)(
       ]);
       expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
         prod_gateway: [BRANDED_ALLOW[0]],
+      });
+    });
+
+    test.each([
+      "ask",
+      "deny",
+    ] as const)("keeps an owned rule the user's %s rule names under its old name", async (kind) => {
+      const guards = { ...UNGUARDED, [kind]: [OWNED_ALLOW[1]] };
+      const files = await runWindowsPrefixSync({
+        files: {
+          [SETTINGS_REL]: claudeSettings(OWNED_ALLOW, guards),
+          [LEDGER_REL]: claudeLedger({ prod_gateway: OWNED_ALLOW }),
+        },
+        readFiles: [SETTINGS_REL, LEDGER_REL],
+        toolPrefix: "acme__",
+      });
+
+      const kept = [
+        BRANDED_ALLOW[0],
+        OWNED_ALLOW[1],
+        ...BRANDED_ALLOW.slice(2),
+      ];
+      expectOwnedRulesRemoved(files[SETTINGS_REL] ?? "", kept, guards);
+      expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
+        prod_gateway: kept,
+      });
+    });
+
+    test("an interrupted move owns each rule once", async () => {
+      const files = await runWindowsPrefixSync({
+        files: {
+          [SETTINGS_REL]: claudeSettings(OWNED_ALLOW, UNGUARDED),
+          [LEDGER_REL]: claudeLedger({
+            prod_gateway: [...OWNED_ALLOW, ...BRANDED_ALLOW],
+          }),
+        },
+        readFiles: [SETTINGS_REL, LEDGER_REL],
+        toolPrefix: "acme__",
+      });
+
+      expectOwnedRulesRemoved(
+        files[SETTINGS_REL] ?? "",
+        BRANDED_ALLOW,
+        UNGUARDED,
+      );
+      expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
+        prod_gateway: BRANDED_ALLOW,
       });
     });
 

@@ -147,7 +147,8 @@ except Exception:
  * prefix change (white-labeling on or off) does not leave them matching no
  * tool. Only rules the ledger owns move, each to the same tool under the new
  * prefix; a ledger rule the user already removed from settings is dropped, not
- * added back. A new-prefix rule the user already has stays theirs. Writes
+ * added back. A new-prefix rule the user already has stays theirs, and a rule
+ * the user asks about or denies under its old name is not moved. Writes
  * nothing when no owned rule is stale. Reads `ARCH_TOOL_SERVER` and
  * `ARCH_TOOL_PREFIX`, and checks both before use.
  */
@@ -190,6 +191,18 @@ def main():
     allow = string_list(permissions.get("allow"))
     if allow is None:
         return
+    # A rule the user asks about or denies under its old name stays there: moved, it would allow
+    # the call that rule no longer matches.
+    for key in ("ask", "deny"):
+        if permissions.get(key) is None:
+            continue
+        guarded = string_list(permissions.get(key))
+        if guarded is None:
+            return
+        for rule in guarded:
+            moves.pop(rule, None)
+    if not moves:
+        return
     kept, added = [], set()
     for rule in allow:
         target = moves.get(rule)
@@ -198,7 +211,7 @@ def main():
         elif target not in allow and target not in added:
             kept.append(target)
             added.add(target)
-    new_owned = [moves.get(rule, rule) for rule in owned if rule not in moves or moves[rule] in added]
+    new_owned = list(dict.fromkeys(moves.get(rule, rule) for rule in owned if rule not in moves or moves[rule] in added))
     # Own old and new rules until settings change, so an interrupted write stays recoverable.
     ledger[server] = list(dict.fromkeys(owned + new_owned))
     write_json(ledger_path, ledger)
@@ -363,6 +376,15 @@ ${CLAUDE_JSON_HELPERS_PS}
 }`;
 
 /**
+ * Shell `case` patterns for the ledger's quoted rules that already use the
+ * reported prefix, one per owned tool name. Quoted, so the server and prefix
+ * match literally.
+ */
+const CURRENT_PREFIX_RULE_PATTERNS = CLAUDE_APPA_PERMISSION_TOOL_NAMES.map(
+  (name) => `"\\"mcp__\${arch_tool_server}__\${arch_tool_prefix}${name}\\""`,
+).join("|");
+
+/**
  * PowerShell 5.1 twin of {@link CLAUDE_APPA_PERMISSION_PREFIX_SYNC_PY}. Reads
  * `$McpServerName` and the reported `$archToolPrefix`.
  */
@@ -411,6 +433,16 @@ ${CLAUDE_JSON_HELPERS_PS}
     $allowParsed = ConvertTo-ArchClaudeStringArray $permissions[$allowKey]
     if (-not $allowParsed.Ok) { return }
     $allow = $allowParsed.Items
+    # A rule the user asks about or denies under its old name stays there: moved, it would allow
+    # the call that rule no longer matches.
+    foreach ($guardName in @('ask', 'deny')) {
+      $guardKey = Find-ArchClaudeKey $permissions $guardName
+      if ($null -eq $guardKey -or $null -eq $permissions[$guardKey]) { continue }
+      $guardParsed = ConvertTo-ArchClaudeStringArray $permissions[$guardKey]
+      if (-not $guardParsed.Ok) { return }
+      foreach ($guarded in $guardParsed.Items) { [void]$moves.Remove($guarded) }
+    }
+    if ($moves.Count -eq 0) { return }
     $kept = New-Object System.Collections.Generic.List[string]
     $added = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
     foreach ($rule in $allow) {
@@ -420,8 +452,10 @@ ${CLAUDE_JSON_HELPERS_PS}
     }
     $newOwned = New-Object System.Collections.Generic.List[string]
     foreach ($rule in $ownedParsed.Items) {
-      if (-not $moves.ContainsKey($rule)) { [void]$newOwned.Add($rule) }
-      elseif ($added.Contains($moves[$rule])) { [void]$newOwned.Add($moves[$rule]) }
+      $owns = $null
+      if (-not $moves.ContainsKey($rule)) { $owns = $rule }
+      elseif ($added.Contains($moves[$rule])) { $owns = $moves[$rule] }
+      if ($null -ne $owns -and -not $newOwned.Contains($owns)) { [void]$newOwned.Add($owns) }
     }
     # Own old and new rules until settings change, so an interrupted write stays recoverable.
     $both = New-Object System.Collections.Generic.List[string]
@@ -472,7 +506,17 @@ export const CLAUDE_CODE_GUARD_CLIENT: StartupGuardClient = {
         export MCP_SERVER_NAME
         command python3 -c ${sh(CLAUDE_APPA_PERMISSION_CLEANUP_PY)} >/dev/null 2>&1 || true
       fi`,
-  toolPrefixSync: `  [ -f "\${CLAUDE_CONFIG_DIR:-$HOME}/.archestra/claude-appa-permissions.json" ] || return 0
+  toolPrefixSync: `  arch_ledger="\${CLAUDE_CONFIG_DIR:-$HOME}/.archestra/claude-appa-permissions.json"
+  [ -f "$arch_ledger" ] || return 0
+  # Python starts only when an owned rule names this gateway under another prefix.
+  arch_stale=0
+  for arch_rule in $(grep -oE '"mcp__[A-Za-z0-9_.-]+__[A-Za-z0-9_]+"' "$arch_ledger" 2>/dev/null); do
+    case "$arch_rule" in
+      ${CURRENT_PREFIX_RULE_PATTERNS}) ;;
+      "\\"mcp__\${arch_tool_server}__"*) arch_stale=1 ;;
+    esac
+  done
+  [ "$arch_stale" = 1 ] || return 0
   if command -v python3 >/dev/null 2>&1; then
     ARCH_TOOL_SERVER="$arch_tool_server" ARCH_TOOL_PREFIX="$arch_tool_prefix" command python3 -c ${sh(CLAUDE_APPA_PERMISSION_PREFIX_SYNC_PY)} >/dev/null 2>&1 || true
   fi`,

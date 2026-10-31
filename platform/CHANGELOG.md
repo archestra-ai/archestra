@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.4.14](https://github.com/archestra-ai/archestra/compare/platform-v1.4.13...platform-v1.4.14) (2026-10-31)
+
+
+### Bug Fixes
+
+* **agents:** default agents and gateways to recently used [1.4] ([#9957](https://github.com/archestra-ai/archestra/issues/9957)) ([fbe9812](https://github.com/archestra-ai/archestra/commit/fbe9812d67cb76c08be8956509e4674b2d918482))
+* **chat:** discover gateway output limits and avoid futile retries [1.4] ([#9944](https://github.com/archestra-ai/archestra/issues/9944)) ([366f4b8](https://github.com/archestra-ai/archestra/commit/366f4b8f848db6628691e7d757dd826374ddc0e1))
+* **chat:** keep long buffered streams from hitting React's update depth limit [1.4] ([#9945](https://github.com/archestra-ai/archestra/issues/9945)) ([3c59795](https://github.com/archestra-ai/archestra/commit/3c5979535fb42cd7349ccc1acb65d4a4d629ff54))
+* **chatops:** deep-link provider authentication recovery [1.4] ([#9954](https://github.com/archestra-ai/archestra/issues/9954)) ([4ad35f7](https://github.com/archestra-ai/archestra/commit/4ad35f7007fbfbe45928cb86257278bc788d92f4))
+
 ## [1.4.13](https://github.com/archestra-ai/archestra/compare/platform-v1.4.12...platform-v1.4.13) (2026-10-30)
 
 

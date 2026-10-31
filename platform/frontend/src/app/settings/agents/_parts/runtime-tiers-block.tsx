@@ -14,6 +14,7 @@ import {
   useAgentRuntimeTiers,
   useSaveAgentRuntimeTiers,
 } from "@/lib/organization.query";
+import { PooledHint } from "./pooled-hint";
 import { RuntimeTierDialog } from "./runtime-tier-dialog";
 import {
   type RuntimeTierSize,
@@ -92,8 +93,8 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
     {
       id: "pools",
       accessorKey: "pooled",
-      header: "Pools",
-      size: 76,
+      header: PoolsHeader,
+      size: 92,
       cell: ({ row }) =>
         row.original.pooled ? (
           "Pooled"
@@ -255,5 +256,19 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
         pendingLabel="Deleting…"
       />
     </SettingsBlock>
+  );
+}
+
+/**
+ * The Pools column header with its hint. A named component, not an arrow in
+ * the column list: the list is rebuilt on every render, and a new function
+ * each time would remount the header and close an open hint.
+ */
+function PoolsHeader() {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      Pools
+      <PooledHint />
+    </span>
   );
 }

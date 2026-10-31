@@ -1190,9 +1190,11 @@ function Band({
 
 function StepHeading({ step }: { step: string }) {
   return (
+    // Times the fade-in alone: a transition duration would also apply to
+    // visibility, so a heading OneOf hides would stay painted over the next.
     <h2
       key={step}
-      className="inline-flex items-center gap-2.5 text-sm font-semibold tracking-tight motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300"
+      className="inline-flex items-center gap-2.5 text-sm font-semibold tracking-tight motion-safe:animate-in motion-safe:fade-in motion-safe:animation-duration-300"
     >
       <span
         aria-hidden

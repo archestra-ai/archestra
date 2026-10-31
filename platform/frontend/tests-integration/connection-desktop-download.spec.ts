@@ -185,3 +185,39 @@ test("a failed preparation offers one-click retry and disables repeated retry cl
     }),
   ).toBeVisible();
 });
+
+test("switching between installer and terminal setup swaps the heading at once", async ({
+  page,
+}) => {
+  await page.goto("/connection?clientId=claude-desktop");
+  const band = page.getByRole("region", { name: "Connect" });
+  await expect(
+    band.getByRole("heading", {
+      name: "Download the installer for Claude Desktop",
+    }),
+  ).toBeVisible();
+  for (const [link, heading] of [
+    [
+      "Desktop in third-party mode? Use terminal setup",
+      "Run the command in your terminal",
+    ],
+    [
+      "Desktop in standard mode? Download the installer",
+      "Download the installer for Claude Desktop",
+    ],
+  ]) {
+    // Clicks and looks two frames later, well before a lingering heading
+    // would go: the old heading must not stay painted over the new one.
+    const painted = await band
+      .getByRole("button", { name: link })
+      .evaluate(async (button) => {
+        (button as HTMLElement).click();
+        for (let frame = 0; frame < 2; frame++)
+          await new Promise(requestAnimationFrame);
+        return [...(button.closest("section")?.querySelectorAll("h2") ?? [])]
+          .filter((h2) => getComputedStyle(h2).visibility === "visible")
+          .map((h2) => h2.textContent);
+      });
+    expect(painted).toEqual([heading]);
+  }
+});

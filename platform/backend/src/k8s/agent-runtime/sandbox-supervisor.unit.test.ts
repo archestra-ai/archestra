@@ -94,6 +94,7 @@ status=0
 wait "$supervisor" || status=$?
 test "$status" = ${AGENT_RUNTIME_WORKSPACE_FULL_EXIT_CODE}
 test ! -e /var/run/archestra/fill
+test -s /run/claim/home/fill
 echo VERIFIED
 `,
         { volumeKiB: 2048, subPaths: true },
@@ -498,6 +499,8 @@ function runInContainer(
   assertions: string,
   options: { volumeKiB?: number; inodes?: number; subPaths?: boolean } = {},
 ) {
+  if (options.subPaths && !NAMESPACE)
+    throw new Error("subPaths needs the namespace harness");
   const volume = options.volumeKiB;
   const inodes = options.inodes ? `,nr_inodes=${options.inodes}` : "";
   const claim = `-o size=${volume ?? 262144}k${inodes} tmpfs`;

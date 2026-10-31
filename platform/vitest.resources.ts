@@ -70,32 +70,33 @@ export function detectResourceEnvelope(
 }
 
 /**
- * The frontend suite's forks: half the CPUs, and no more than the memory
- * holds at about 2 GiB a JSDOM worker. On a machine the heap ceiling stays at
- * 8 GiB, which the JSDOM-heavy tests needed on Node 24; in a container the
- * kernel enforces the limit first, so the ceiling is each worker's share of
- * the budget.
+ * The frontend suite's forks. On a machine: half the CPUs and the 8 GiB heap
+ * ceiling the JSDOM-heavy tests needed on Node 24, as before. In a container
+ * the kernel enforces the memory limit first, so the forks are also no more
+ * than the memory holds at about 2 GiB a JSDOM worker, and the heap ceiling
+ * is each worker's share of the budget.
  */
 export function frontendVitestResourceLimits(envelope: ResourceEnvelope): {
   maxWorkers: number;
   maxOldSpaceMb: number;
 } {
-  const budgetBytes = envelope.totalMemoryBytes * FRONTEND_MEMORY_FRACTION;
   const cpuWorkers = Math.max(1, Math.floor(envelope.availableParallelism / 2));
+  if (!envelope.constrained) {
+    return { maxWorkers: cpuWorkers, maxOldSpaceMb: FRONTEND_MAX_OLD_SPACE_MB };
+  }
+  const budgetBytes = envelope.totalMemoryBytes * FRONTEND_MEMORY_FRACTION;
   const memoryWorkers = Math.max(
     1,
     Math.floor(budgetBytes / FRONTEND_WORKER_RSS_BYTES),
   );
   const maxWorkers = Math.min(cpuWorkers, memoryWorkers);
-  const maxOldSpaceMb = envelope.constrained
-    ? Math.max(
-        FRONTEND_MIN_OLD_SPACE_MB,
-        Math.min(
-          FRONTEND_MAX_OLD_SPACE_MB,
-          Math.floor(budgetBytes / maxWorkers / BYTES_PER_MIB),
-        ),
-      )
-    : FRONTEND_MAX_OLD_SPACE_MB;
+  const maxOldSpaceMb = Math.max(
+    FRONTEND_MIN_OLD_SPACE_MB,
+    Math.min(
+      FRONTEND_MAX_OLD_SPACE_MB,
+      Math.floor(budgetBytes / maxWorkers / BYTES_PER_MIB),
+    ),
+  );
   return { maxWorkers, maxOldSpaceMb };
 }
 

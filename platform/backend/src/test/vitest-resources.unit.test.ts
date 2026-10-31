@@ -161,7 +161,7 @@ describe("sizing inside an Agent Runtime pod", () => {
       constrainedMemoryBytes: 0,
     });
     expect(frontendVitestResourceLimits(workstation)).toEqual({
-      maxWorkers: 15,
+      maxWorkers: 16,
       maxOldSpaceMb: 8192,
     });
   });

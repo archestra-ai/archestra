@@ -1083,6 +1083,12 @@ const PANE_EXITED_ENVELOPE = JSON.stringify({
 test.for([
   { name: "a memory kill inside the running pod", killed: true, exit: null },
   {
+    name: "the node's OOM killer inside the running pod",
+    killed: true,
+    exit: null,
+    nodeOom: true,
+  },
+  {
     name: "a failed command without a memory kill",
     killed: false,
     exit: null,
@@ -1120,6 +1126,7 @@ test.for([
   finished = false,
   counters = true,
   polls = 2,
+  nodeOom = false,
 }, { run }) => {
   const GIB = 1024 ** 3;
   let turnReads = 0;
@@ -1151,7 +1158,7 @@ test.for([
       const kills = memoryReads++ === 0 || !killed ? 0 : 1;
       if (counters) {
         args[4]?.write(
-          `low 0\nhigh 0\nmax 1203\noom ${kills}\noom_kill ${kills}\noom_group_kill 0\npeak ${kills ? 8 * GIB : 2 * GIB}\nlimit ${8 * GIB}\n`,
+          `low 0\nhigh 0\nmax 1203\noom ${nodeOom ? 0 : kills}\noom_kill ${kills}\noom_group_kill 0\npeak ${kills ? 8 * GIB : 2 * GIB}\nlimit ${8 * GIB}\n`,
         );
       }
       args[8]?.({ status: "Success" });
@@ -1209,6 +1216,13 @@ test.for([
     if (exit.includes("claude_rate_limit")) {
       expect(result.reason).toContain("Claude Code reached a rate limit.");
     }
+  } else if (killed && nodeOom) {
+    // The cgroup never hit its own limit: the node ran out of memory.
+    await expect(completion).resolves.toEqual({
+      outcome: "failed",
+      reason:
+        "The kernel killed the run's processes because the node ran out of memory; the agent-runtime container stayed under its 8 GiB limit (peak usage 8 GiB). Start the run again.",
+    });
   } else if (killed) {
     await expect(completion).resolves.toEqual({
       outcome: "failed",

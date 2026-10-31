@@ -10,12 +10,11 @@ import { vitestLogPolicy } from "../vitest.shared";
 
 const isCI = process.env.CI === "true";
 const testFiles = partitionTestFiles();
-// Half the cores locally, and no more forks than the memory holds at about
-// 2 GiB each (a 62 GB workstation gets 15 of 32 cores instead of 16). CI runs
-// on a dedicated high-RAM runner where the uncapped default is fine, so there
-// it keeps the 8 GiB heap ceiling and Vitest's own worker count; a container
-// with a memory limit is sized for the container either way. Override on a
-// big local machine with `--maxWorkers=<n|%>`.
+// Half the cores locally, as before. CI runs on a dedicated high-RAM runner
+// where the uncapped default is fine, so there it keeps the 8 GiB heap
+// ceiling and Vitest's own worker count; a container with a memory limit is
+// sized for the container either way. Override on a big local machine with
+// `--maxWorkers=<n|%>`.
 const envelope = detectResourceEnvelope();
 const { maxWorkers, maxOldSpaceMb } =
   isCI && !envelope.constrained

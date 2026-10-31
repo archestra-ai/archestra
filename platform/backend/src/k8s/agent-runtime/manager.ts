@@ -80,6 +80,7 @@ import {
 import {
   describeMemoryKill,
   type MemoryEvents,
+  type MemoryKill,
   memoryKillBetween,
   parseMemoryEvents,
   READ_MEMORY_EVENTS_COMMAND,
@@ -1899,7 +1900,7 @@ done`
     session: AgentRunRecord,
     podName: string,
     before: MemoryEvents | null,
-  ): Promise<MemoryEvents | null> {
+  ): Promise<MemoryKill | null> {
     if (!before) return null;
     return memoryKillBetween(
       before,

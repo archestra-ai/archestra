@@ -1,6 +1,7 @@
 import {
   AGENT_RUNTIME_TIER_MAX_CPU_LIMIT,
   AGENT_RUNTIME_TIER_MAX_CPU_REQUEST,
+  AGENT_RUNTIME_TIER_MAX_WORKSPACE_GIB,
   AGENT_RUNTIME_TIER_NAME_MAX_LENGTH,
   type AgentRuntimeTierDefinitionInput,
   type AgentRuntimeTierSettingsInput,
@@ -17,11 +18,15 @@ export interface RuntimeTierSize {
   pooled: boolean;
   memoryRequestMiB: number;
   memoryLimitMiB: number;
+  /** The run's workspace volume in GiB; null follows the deployment's default. */
+  workspaceGiB: number | null;
 }
 
 export interface RuntimeTiersInEffect {
   tiers: RuntimeTierSize[];
   defaultTier: string;
+  /** The deployment's workspace volume size in GiB, for tiers that set none. */
+  defaultWorkspaceGiB: number;
 }
 
 /** The dialog's fields as typed. */
@@ -29,11 +34,17 @@ export interface RuntimeTierFormValues {
   name: string;
   cpuRequest: string;
   cpuLimit: string;
+  /** Blank keeps the deployment's default. */
+  workspaceGiB: string;
   pooled: boolean;
   isDefault: boolean;
 }
 
-export type RuntimeTierFormField = "name" | "cpuRequest" | "cpuLimit";
+export type RuntimeTierFormField =
+  | "name"
+  | "cpuRequest"
+  | "cpuLimit"
+  | "workspaceGiB";
 export type RuntimeTierFormErrors = Partial<
   Record<RuntimeTierFormField, string>
 >;
@@ -56,10 +67,19 @@ export function runtimeTierFormValues(
         name: tier.name,
         cpuRequest: String(tier.cpuRequest),
         cpuLimit: tier.cpuLimit === null ? "" : String(tier.cpuLimit),
+        workspaceGiB:
+          tier.workspaceGiB === null ? "" : String(tier.workspaceGiB),
         pooled: tier.pooled,
         isDefault,
       }
-    : { name: "", cpuRequest: "", cpuLimit: "", pooled: true, isDefault };
+    : {
+        name: "",
+        cpuRequest: "",
+        cpuLimit: "",
+        workspaceGiB: "",
+        pooled: true,
+        isDefault,
+      };
 }
 
 /** A number typed into a field, or null when the text is not one. */
@@ -85,7 +105,8 @@ export function runtimeTierFormMemory(
 
 /**
  * What the form would save, or what stops it, field by field: a missing or
- * taken name, a CPU amount outside its range or below the request.
+ * taken name, a CPU amount outside its range or below the request, a
+ * workspace size that is not whole GiB in range.
  */
 export function validateRuntimeTierForm(
   values: RuntimeTierFormValues,
@@ -127,11 +148,23 @@ export function validateRuntimeTierForm(
       errors.cpuLimit = "The CPU limit is below the CPU request";
   }
 
+  const workspaceGiB = values.workspaceGiB.trim()
+    ? parseNumberField(values.workspaceGiB)
+    : null;
+  if (
+    values.workspaceGiB.trim() &&
+    (workspaceGiB === null ||
+      !Number.isInteger(workspaceGiB) ||
+      workspaceGiB < 1 ||
+      workspaceGiB > AGENT_RUNTIME_TIER_MAX_WORKSPACE_GIB)
+  )
+    errors.workspaceGiB = `Enter a whole number from 1 to ${AGENT_RUNTIME_TIER_MAX_WORKSPACE_GIB}, or leave it blank for the default`;
+
   if (Object.keys(errors).length > 0 || cpuRequest === null)
     return { errors, tier: null };
   return {
     errors,
-    tier: { name, cpuRequest, cpuLimit, pooled: values.pooled },
+    tier: { name, cpuRequest, cpuLimit, pooled: values.pooled, workspaceGiB },
   };
 }
 
@@ -160,11 +193,13 @@ export function runtimeTierSettingsAfter(
       cpuRequest,
       cpuLimit,
       pooled,
+      workspaceGiB,
     }): AgentRuntimeTierDefinitionInput => ({
       name,
       cpuRequest,
       cpuLimit,
       pooled,
+      workspaceGiB,
     }),
   );
   switch (change.kind) {

@@ -123028,8 +123028,16 @@ export type GetAgentRuntimeTiersResponses = {
             pooled: boolean;
             memoryRequestMiB: number;
             memoryLimitMiB: number;
+            /**
+             * Size of a run's workspace volume in GiB; null means the deployment's default
+             */
+            workspaceGiB: number | null;
         }>;
         defaultTier: string;
+        /**
+         * The deployment's workspace volume size in GiB, which a tier that sets none gives its runs
+         */
+        defaultWorkspaceGiB: number;
     };
 };
 
@@ -123043,6 +123051,7 @@ export type UpdateAgentSettingsData = {
                 cpuRequest: number;
                 cpuLimit: number | null;
                 pooled: boolean;
+                workspaceGiB?: number | null;
                 previousName?: string;
             }>;
             defaultTier: string;

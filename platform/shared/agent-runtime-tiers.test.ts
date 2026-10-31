@@ -26,6 +26,7 @@ describe("resolveAgentRuntimeTiers", () => {
         pooled: true,
         memoryRequestMiB: 4096,
         memoryLimitMiB: 8192,
+        workspaceGiB: null,
       },
       {
         name: "M",
@@ -35,6 +36,7 @@ describe("resolveAgentRuntimeTiers", () => {
         pooled: true,
         memoryRequestMiB: 8192,
         memoryLimitMiB: 16384,
+        workspaceGiB: null,
       },
       {
         name: "L",
@@ -44,6 +46,7 @@ describe("resolveAgentRuntimeTiers", () => {
         pooled: false,
         memoryRequestMiB: 16384,
         memoryLimitMiB: 32768,
+        workspaceGiB: null,
       },
     ]);
     // The defaults themselves are never mutated.
@@ -54,7 +57,13 @@ describe("resolveAgentRuntimeTiers", () => {
     const resolved = resolveAgentRuntimeTiers(
       {
         tiers: [
-          { name: "Large", cpuRequest: 6, cpuLimit: 8, warmSpares: 0 },
+          {
+            name: "Large",
+            cpuRequest: 6,
+            cpuLimit: 8,
+            warmSpares: 0,
+            workspaceGiB: 60,
+          },
           { name: "Small", cpuRequest: 1, cpuLimit: null, warmSpares: 2 },
         ],
         defaultTier: "small",
@@ -67,7 +76,10 @@ describe("resolveAgentRuntimeTiers", () => {
       cpuLimit: 8,
       memoryRequestMiB: 12288,
       memoryLimitMiB: 16384,
+      workspaceGiB: 60,
     });
+    // A tier that sets no size follows the deployment's default.
+    expect(resolved.tiers[0].workspaceGiB).toBeNull();
   });
 
   test("reads the first saved shape: S, M and L with quantities, memory now following the CPU", () => {
@@ -92,6 +104,7 @@ describe("resolveAgentRuntimeTiers", () => {
         pooled: true,
         memoryRequestMiB: 1024,
         memoryLimitMiB: 2048,
+        workspaceGiB: null,
       },
       {
         name: "M",
@@ -101,6 +114,7 @@ describe("resolveAgentRuntimeTiers", () => {
         pooled: true,
         memoryRequestMiB: 8192,
         memoryLimitMiB: 16384,
+        workspaceGiB: null,
       },
       {
         name: "L",
@@ -110,6 +124,7 @@ describe("resolveAgentRuntimeTiers", () => {
         pooled: true,
         memoryRequestMiB: 12288,
         memoryLimitMiB: 24576,
+        workspaceGiB: null,
       },
     ]);
     expect(resolved.defaultTier).toBe("M");
@@ -119,7 +134,13 @@ describe("resolveAgentRuntimeTiers", () => {
     const resolved = resolveAgentRuntimeTiers(
       {
         tiers: [
-          { name: "Odd", cpuRequest: 2, cpuLimit: 1, warmSpares: 99 },
+          {
+            name: "Odd",
+            cpuRequest: 2,
+            cpuLimit: 1,
+            warmSpares: 99,
+            workspaceGiB: 1.5,
+          },
           { name: "", cpuRequest: 3 },
         ],
         defaultTier: "gone",
@@ -135,6 +156,7 @@ describe("resolveAgentRuntimeTiers", () => {
         pooled: true,
         memoryRequestMiB: 4096,
         memoryLimitMiB: 8192,
+        workspaceGiB: null,
       },
     ]);
     expect(resolved.defaultTier).toBe("Odd");
@@ -192,6 +214,9 @@ describe("sizes and order", () => {
     expect(describeAgentRuntimeTier(tiers[1])).toBe(
       "2 CPU (3 limit), 4 GiB (6 GiB limit)",
     );
+    expect(describeAgentRuntimeTier({ ...tiers[1], workspaceGiB: 60 })).toBe(
+      "2 CPU (3 limit), 4 GiB (6 GiB limit), 60 GiB workspace",
+    );
   });
 
   test("parses CPU quantities", () => {
@@ -213,11 +238,19 @@ describe("AgentRuntimeTierSettingsSchema", () => {
             cpuLimit: null,
             pooled: false,
             previousName: "Small",
+            workspaceGiB: 60,
           },
         ],
         defaultTier: "S",
       }).success,
     ).toBe(true);
+    // Left out, the workspace size reads as the deployment's default.
+    expect(
+      AgentRuntimeTierSettingsSchema.parse({
+        tiers: [{ name: "S", cpuRequest: 1, cpuLimit: null, pooled: false }],
+        defaultTier: "S",
+      }).tiers[0].workspaceGiB,
+    ).toBeNull();
     for (const tiers of [
       [{ name: "S", cpuRequest: 9, cpuLimit: null, pooled: false }],
       [{ name: "S", cpuRequest: 2, cpuLimit: 17, pooled: false }],
@@ -225,6 +258,33 @@ describe("AgentRuntimeTierSettingsSchema", () => {
       [{ name: "S", cpuRequest: 2.0001, cpuLimit: null, pooled: false }],
       [{ name: "", cpuRequest: 2, cpuLimit: null, pooled: false }],
       [{ name: "S", cpuRequest: 2, cpuLimit: null, pooled: false, gpu: 1 }],
+      [
+        {
+          name: "S",
+          cpuRequest: 2,
+          cpuLimit: null,
+          pooled: false,
+          workspaceGiB: 0,
+        },
+      ],
+      [
+        {
+          name: "S",
+          cpuRequest: 2,
+          cpuLimit: null,
+          pooled: false,
+          workspaceGiB: 1.5,
+        },
+      ],
+      [
+        {
+          name: "S",
+          cpuRequest: 2,
+          cpuLimit: null,
+          pooled: false,
+          workspaceGiB: 1025,
+        },
+      ],
       [],
     ])
       expect(
@@ -246,6 +306,7 @@ describe("agentRuntimeTierProblems", () => {
           { name: "S", cpuRequest: 2, cpuLimit: 1 },
           { name: "s", cpuRequest: 9, cpuLimit: null },
           { name: " ", cpuRequest: 1, cpuLimit: 20 },
+          { name: "W", cpuRequest: 1, cpuLimit: null, workspaceGiB: 2048 },
         ],
         defaultTier: "M",
       }),
@@ -255,6 +316,7 @@ describe("agentRuntimeTierProblems", () => {
       "Tier s: the CPU request is more than 0 and at most 8",
       "Name every tier",
       "A tier without a name: the CPU limit is more than 0 and at most 16",
+      "Tier W: the workspace is a whole number of GiB from 1 to 1024",
       "The default tier M is not in the list",
     ]);
   });

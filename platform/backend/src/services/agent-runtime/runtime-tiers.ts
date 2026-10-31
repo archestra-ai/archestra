@@ -117,6 +117,55 @@ export function resolveRunResources(
 }
 
 /**
+ * The workspace volume a run gets, as a Kubernetes quantity: its tier's size,
+ * else the deployment's `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`.
+ */
+export function resolveRunWorkspaceStorageSize(
+  tier: string | null,
+  tiers: ResolvedAgentRuntimeTiers,
+): string {
+  const gib = tierSize(tiers, tier).workspaceGiB;
+  return gib === null ? config.agentRuntime.workspaceStorageSize : `${gib}Gi`;
+}
+
+/** The same size in GiB, for text and for the Pod's tier list. */
+export function resolveRunWorkspaceGiB(
+  tier: string | null,
+  tiers: ResolvedAgentRuntimeTiers,
+): number {
+  return tierSize(tiers, tier).workspaceGiB ?? defaultWorkspaceGiB();
+}
+
+/** The deployment's workspace volume size in GiB: what a tier that sets none gives its runs. */
+export function defaultWorkspaceGiB(): number {
+  return quantityGiB(config.agentRuntime.workspaceStorageSize);
+}
+
+const QUANTITY_BYTES: Record<string, number> = {
+  "": 1,
+  k: 1000,
+  M: 1000 ** 2,
+  G: 1000 ** 3,
+  T: 1000 ** 4,
+  P: 1000 ** 5,
+  Ki: 1024,
+  Mi: 1024 ** 2,
+  Gi: 1024 ** 3,
+  Ti: 1024 ** 4,
+  Pi: 1024 ** 5,
+};
+
+/** A Kubernetes memory quantity ("20Gi", "500Mi", "1T") in GiB, to two decimals. */
+function quantityGiB(quantity: string): number {
+  const match = /^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|Pi|k|M|G|T|P)?$/.exec(
+    quantity.trim(),
+  );
+  if (!match) return 0;
+  const bytes = Number(match[1]) * (QUANTITY_BYTES[match[2] ?? ""] ?? 0);
+  return Math.round((bytes / 1024 ** 3) * 100) / 100;
+}
+
+/**
  * Tiers whose warm pool may serve a run, in order: the requested tier, then
  * the next larger one while it stays within the Agent's scaleup tier. Never a
  * smaller one: a run sized below what it asked for can run out of memory. A
@@ -151,8 +200,9 @@ export function warmPoolReplicas(
 
 /**
  * What a run's Pod reads in `ARCHESTRA_AGENT_RUNTIME_TIERS`: the tiers the
- * run may move to, smallest first, each with its size, and which one the
- * run has. The agent decides by these numbers, not by the names.
+ * run may move to, smallest first, each with its size (CPU, memory and the
+ * workspace volume in GiB), and which one the run has. The agent decides by
+ * these numbers, not by the names.
  */
 export function runtimeTiersEnv(
   allowed: readonly AgentRuntimeTierSize[],
@@ -165,6 +215,7 @@ export function runtimeTiersEnv(
       cpu_limit: tier.cpuLimit,
       memory_gib: gib(tier.memoryRequestMiB),
       memory_limit_gib: gib(tier.memoryLimitMiB),
+      workspace_gib: tier.workspaceGiB ?? defaultWorkspaceGiB(),
       ...(current !== null &&
       tier.name ===
         tierSize({ tiers: [...allowed], defaultTier: current }, current).name

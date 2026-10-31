@@ -193,6 +193,7 @@ export const agentRuntimeTiersSeed: archestraApiTypes.GetAgentRuntimeTiersRespon
         pooled: true,
         memoryRequestMiB: 4096,
         memoryLimitMiB: 8192,
+        workspaceGiB: null,
       },
       {
         name: "M",
@@ -202,6 +203,7 @@ export const agentRuntimeTiersSeed: archestraApiTypes.GetAgentRuntimeTiersRespon
         pooled: true,
         memoryRequestMiB: 8192,
         memoryLimitMiB: 16384,
+        workspaceGiB: null,
       },
       {
         name: "L",
@@ -211,7 +213,9 @@ export const agentRuntimeTiersSeed: archestraApiTypes.GetAgentRuntimeTiersRespon
         pooled: false,
         memoryRequestMiB: 16384,
         memoryLimitMiB: 32768,
+        workspaceGiB: null,
       },
     ],
     defaultTier: "M",
+    defaultWorkspaceGiB: 20,
   };

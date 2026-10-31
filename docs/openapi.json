@@ -481652,6 +481652,13 @@
                             "type": "integer",
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
+                          },
+                          "workspaceGiB": {
+                            "nullable": true,
+                            "description": "Size of a run's workspace volume in GiB; null means the deployment's default",
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
                           }
                         },
                         "required": [
@@ -481661,18 +481668,24 @@
                           "warmSpares",
                           "pooled",
                           "memoryRequestMiB",
-                          "memoryLimitMiB"
+                          "memoryLimitMiB",
+                          "workspaceGiB"
                         ],
                         "additionalProperties": false
                       }
                     },
                     "defaultTier": {
                       "type": "string"
+                    },
+                    "defaultWorkspaceGiB": {
+                      "type": "number",
+                      "description": "The deployment's workspace volume size in GiB, which a tier that sets none gives its runs"
                     }
                   },
                   "required": [
                     "tiers",
-                    "defaultTier"
+                    "defaultTier",
+                    "defaultWorkspaceGiB"
                   ],
                   "additionalProperties": false
                 }
@@ -481964,6 +481977,13 @@
                             },
                             "pooled": {
                               "type": "boolean"
+                            },
+                            "workspaceGiB": {
+                              "default": null,
+                              "nullable": true,
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 1024
                             },
                             "previousName": {
                               "type": "string",

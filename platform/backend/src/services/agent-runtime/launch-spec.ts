@@ -67,6 +67,8 @@ import {
   agentRuntimeMaxTier,
   organizationAgentRuntimeTiers,
   resolveRunResources,
+  resolveRunWorkspaceGiB,
+  resolveRunWorkspaceStorageSize,
   runtimeTiersEnv,
   tierResources,
   warmTierCandidates,
@@ -448,7 +450,10 @@ export async function buildAgentRunLaunchSpec(params: {
         "decode resources marked base64 with a shell decoder, not a text-file tool. " +
         "Paths advertised as code-sandbox mounts belong to that separate sandbox, " +
         "not this runtime's filesystem.",
-      describeRuntimeWorkspace(params.runtime),
+      describeRuntimeWorkspace(
+        params.runtime,
+        resolveRunWorkspaceGiB(params.limits.tier, tiers),
+      ),
     ]
       .filter(Boolean)
       .join("\n\n"),
@@ -498,7 +503,10 @@ export async function buildAgentRunLaunchSpec(params: {
         ? { renewableCredentials: credentials.renewableCredentials }
         : {}),
       activeDeadlineSeconds: params.limits.maxDurationHours * 60 * 60,
-      workspaceStorageSize: config.agentRuntime.workspaceStorageSize,
+      workspaceStorageSize: resolveRunWorkspaceStorageSize(
+        params.limits.tier,
+        tiers,
+      ),
       workspaceStorageClass: config.agentRuntime.workspaceStorageClass,
       nodeSelector: config.agentRuntime.nodeSelector,
       imagePullSecrets: params.imagePullSecrets ?? [],
@@ -743,11 +751,13 @@ function virtualKeyVisibility(actor: A2AActor): {
  */
 function describeRuntimeWorkspace(
   runtime: Pick<ResolvedAgentRuntime, "ports">,
+  workspaceGiB: number,
 ): string {
   const ports = [...new Set(runtime.ports ?? [])];
   return [
     "Files under /home/node persist across this conversation's turns; " +
-      "other paths reset when the container is replaced.",
+      "other paths reset when the container is replaced. " +
+      `The workspace volume is ${workspaceGiB} GiB in all, including any Docker data.`,
     ports.length > 0 &&
       `The user can forward ${ports.length === 1 ? "port" : "ports"} ` +
         `${ports.join(", ")} from this workspace to a browser; serve anything ` +

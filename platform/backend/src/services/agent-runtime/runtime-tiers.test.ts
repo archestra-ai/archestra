@@ -7,6 +7,7 @@ import {
   agentRuntimeTier,
   resolveAgentRunLimits,
   resolveRunResources,
+  resolveRunWorkspaceStorageSize,
   runtimeTiersEnv,
   warmPoolReplicas,
   warmTierCandidates,
@@ -188,6 +189,44 @@ describe("runtime tiers", () => {
     ]);
   });
 
+  test("a run's workspace volume is its tier's size, else the deployment's", () => {
+    const sized = resolveAgentRuntimeTiers(
+      {
+        tiers: [
+          { name: "Lite", cpuRequest: 2, cpuLimit: null, warmSpares: 0 },
+          {
+            name: "Tilt",
+            cpuRequest: 6,
+            cpuLimit: null,
+            warmSpares: 0,
+            workspaceGiB: 60,
+          },
+        ],
+        defaultTier: "Lite",
+      },
+      { defaultWarmSpares: 2 },
+    );
+    expect(resolveRunWorkspaceStorageSize("Tilt", sized)).toBe("60Gi");
+    expect(resolveRunWorkspaceStorageSize("Lite", sized)).toBe(
+      config.agentRuntime.workspaceStorageSize,
+    );
+    // A tier the organization no longer has reads as the default tier.
+    expect(resolveRunWorkspaceStorageSize("Gone", sized)).toBe(
+      config.agentRuntime.workspaceStorageSize,
+    );
+    expect(
+      JSON.parse(runtimeTiersEnv(sized.tiers, "Tilt")).map(
+        (tier: { name: string; workspace_gib: number }) => [
+          tier.name,
+          tier.workspace_gib,
+        ],
+      ),
+    ).toEqual([
+      ["Lite", 20],
+      ["Tilt", 60],
+    ]);
+  });
+
   test("the Pod reads the tiers it may move to, smallest first, with their sizes", () => {
     const worker = { ...DEFAULTS, tier: "Medium", maxTier: "Large" };
     expect(
@@ -201,6 +240,7 @@ describe("runtime tiers", () => {
         cpu_limit: null,
         memory_gib: 2,
         memory_limit_gib: 4,
+        workspace_gib: 20,
       },
       {
         name: "Medium",
@@ -208,6 +248,7 @@ describe("runtime tiers", () => {
         cpu_limit: null,
         memory_gib: 6,
         memory_limit_gib: 12,
+        workspace_gib: 20,
         current: true,
       },
       {
@@ -216,6 +257,7 @@ describe("runtime tiers", () => {
         cpu_limit: null,
         memory_gib: 12,
         memory_limit_gib: 24,
+        workspace_gib: 20,
       },
     ]);
   });

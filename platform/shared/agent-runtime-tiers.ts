@@ -3,7 +3,9 @@ import { z } from "zod";
 /**
  * Agent Runtime tiers: the container sizes a run can get. An organization's
  * administrators define the list, name each tier and set its CPU; memory
- * follows the CPU. The names are the organization's own: S, M and L are only
+ * follows the CPU. A tier can also size its runs' workspace volume, for the
+ * work that needs more than the deployment's default. The names are the
+ * organization's own: S, M and L are only
  * the defaults a new organization starts with. Agents and callers choose a
  * tier by its size, as `sortAgentRuntimeTiers` orders them, and refer to it
  * by name.
@@ -16,6 +18,8 @@ export const AGENT_RUNTIME_TIER_MAX_CPU_LIMIT = 16;
 /** Most spare containers one tier keeps ready per pool. */
 export const AGENT_RUNTIME_TIER_MAX_WARM_SPARES = 10;
 export const AGENT_RUNTIME_TIER_MAX_COUNT = 12;
+/** Largest workspace volume a tier may give its runs, in GiB. */
+export const AGENT_RUNTIME_TIER_MAX_WORKSPACE_GIB = 1024;
 export const AGENT_RUNTIME_TIER_NAME_MAX_LENGTH = 32;
 /**
  * Memory per CPU of request, in GiB. A tier's memory request is this much per
@@ -39,6 +43,13 @@ export interface AgentRuntimeTierDefinition {
    * settings saved before that choice existed.
    */
   warmSpares: number | null;
+  /**
+   * Size of a run's workspace volume in GiB. The volume holds the home
+   * directory and, for a privileged Agent, its Docker data, so a stack that
+   * runs Kubernetes in Docker needs far more than a lite run. Null follows
+   * the deployment's `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`.
+   */
+  workspaceGiB: number | null;
 }
 
 export interface AgentRuntimeTierSettings {
@@ -69,9 +80,21 @@ export interface ResolvedAgentRuntimeTiers {
  */
 export const DEFAULT_AGENT_RUNTIME_TIERS: AgentRuntimeTierSettings = {
   tiers: [
-    { name: "S", cpuRequest: 2, cpuLimit: null, warmSpares: null },
-    { name: "M", cpuRequest: 4, cpuLimit: null, warmSpares: null },
-    { name: "L", cpuRequest: 8, cpuLimit: null, warmSpares: 0 },
+    {
+      name: "S",
+      cpuRequest: 2,
+      cpuLimit: null,
+      warmSpares: null,
+      workspaceGiB: null,
+    },
+    {
+      name: "M",
+      cpuRequest: 4,
+      cpuLimit: null,
+      warmSpares: null,
+      workspaceGiB: null,
+    },
+    { name: "L", cpuRequest: 8, cpuLimit: null, warmSpares: 0, workspaceGiB: null },
   ],
   defaultTier: "M",
 };
@@ -117,10 +140,15 @@ export function summarizeAgentRuntimeTier(
   return `${tier.cpuRequest} CPU, ${formatMemory(tier.memoryRequestMiB)}`;
 }
 
-/** A tier's size for people: "4 CPU, 8 GiB (16 GiB limit)". */
+/**
+ * A tier's size for people: "4 CPU, 8 GiB (16 GiB limit)", with
+ * ", 60 GiB workspace" when the tier sizes its runs' volume.
+ */
 export function describeAgentRuntimeTier(tier: AgentRuntimeTierSize): string {
   const cpu = `${tier.cpuRequest} CPU${tier.cpuLimit !== null ? ` (${tier.cpuLimit} limit)` : ""}`;
-  return `${cpu}, ${formatMemory(tier.memoryRequestMiB)} (${formatMemory(tier.memoryLimitMiB)} limit)`;
+  const workspace =
+    tier.workspaceGiB === null ? "" : `, ${tier.workspaceGiB} GiB workspace`;
+  return `${cpu}, ${formatMemory(tier.memoryRequestMiB)} (${formatMemory(tier.memoryLimitMiB)} limit)${workspace}`;
 }
 
 /**
@@ -215,6 +243,15 @@ const CpuLimitSchema = z
     (cpus) => Number.isInteger(cpus * CPU_DECIMALS),
     "A CPU amount has at most three decimals",
   );
+/** A workspace volume size: whole GiB, from 1 to the largest a tier may give. */
+const WorkspaceGiBSchema = z
+  .number()
+  .int("A workspace size is a whole number of GiB")
+  .min(1, "The workspace is at least 1 GiB")
+  .max(
+    AGENT_RUNTIME_TIER_MAX_WORKSPACE_GIB,
+    `The workspace is at most ${AGENT_RUNTIME_TIER_MAX_WORKSPACE_GIB} GiB`,
+  );
 /** Spare counts in stored settings, from before the pooled choice existed. */
 const StoredWarmSparesSchema = z
   .number()
@@ -232,6 +269,11 @@ export const AgentRuntimeTierDefinitionSchema = z.strictObject({
    * deployment's `ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE`; the other keeps none.
    */
   pooled: z.boolean(),
+  /**
+   * Size of a run's workspace volume in GiB; null, or left out, follows the
+   * deployment's default.
+   */
+  workspaceGiB: WorkspaceGiBSchema.nullable().default(null),
   /**
    * The tier's name before this save, when the save renames it. Agents that
    * name the old tier follow the rename.
@@ -338,6 +380,9 @@ function readTier(entry: unknown): AgentRuntimeTierDefinition | null {
   const warmSpares = StoredWarmSparesSchema.nullable().safeParse(
     value.warmSpares ?? null,
   );
+  const workspaceGiB = WorkspaceGiBSchema.nullable().safeParse(
+    value.workspaceGiB ?? null,
+  );
   return {
     name: name.data,
     cpuRequest: cpuRequest.data,
@@ -347,6 +392,7 @@ function readTier(entry: unknown): AgentRuntimeTierDefinition | null {
         ? cpuLimit.data
         : null,
     warmSpares: warmSpares.success ? warmSpares.data : null,
+    workspaceGiB: workspaceGiB.success ? workspaceGiB.data : null,
   };
 }
 
@@ -388,6 +434,8 @@ function legacyToSettings(
         : value.warmPoolSize === null
           ? null
           : tier.warmSpares,
+      // The first shape predates per-tier volumes.
+      workspaceGiB: null,
     };
   });
   return { tiers, defaultTier: DEFAULT_AGENT_RUNTIME_TIERS.defaultTier };
@@ -407,12 +455,14 @@ export function parseCpuQuantity(value: unknown): number | null {
 /**
  * Problems that stop a save, in words for the settings form and the API: a
  * missing or repeated name, a CPU request or limit out of range, a limit below
- * its request, spares out of range, or a default tier that is not in the list.
- * The schema catches the type errors; these are the rules between fields.
+ * its request, a workspace size out of range, or a default tier that is not
+ * in the list. The schema catches the type errors; these are the rules
+ * between fields.
  */
 export function agentRuntimeTierProblems(settings: {
   tiers: ReadonlyArray<
-    Pick<AgentRuntimeTierDefinition, "name" | "cpuRequest" | "cpuLimit">
+    Pick<AgentRuntimeTierDefinition, "name" | "cpuRequest" | "cpuLimit"> &
+      Partial<Pick<AgentRuntimeTierDefinition, "workspaceGiB">>
   >;
   defaultTier: string;
 }): string[] {
@@ -456,6 +506,16 @@ export function agentRuntimeTierProblems(settings: {
       else if (tier.cpuLimit < tier.cpuRequest)
         problems.push(`${label}: the CPU limit is below the CPU request`);
     }
+    if (
+      tier.workspaceGiB !== null &&
+      tier.workspaceGiB !== undefined &&
+      (!Number.isInteger(tier.workspaceGiB) ||
+        tier.workspaceGiB < 1 ||
+        tier.workspaceGiB > AGENT_RUNTIME_TIER_MAX_WORKSPACE_GIB)
+    )
+      problems.push(
+        `${label}: the workspace is a whole number of GiB from 1 to ${AGENT_RUNTIME_TIER_MAX_WORKSPACE_GIB}`,
+      );
   }
   if (
     settings.tiers.length > 0 &&
@@ -478,5 +538,6 @@ export function agentRuntimeTierDefinitionFromInput(
     cpuRequest: input.cpuRequest,
     cpuLimit: input.cpuLimit,
     warmSpares: input.pooled ? null : 0,
+    workspaceGiB: input.workspaceGiB,
   };
 }

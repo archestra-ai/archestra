@@ -102,12 +102,15 @@ export async function prepareAgentRuntimeTierChange(params: {
 function defaultTierInput(): AgentRuntimeTierSettingsInput {
   const defaults = resolveAgentRuntimeTiers(null, agentRuntimeTierDefaults());
   return {
-    tiers: defaults.tiers.map(({ name, cpuRequest, cpuLimit, pooled }) => ({
-      name,
-      cpuRequest,
-      cpuLimit,
-      pooled,
-    })),
+    tiers: defaults.tiers.map(
+      ({ name, cpuRequest, cpuLimit, pooled, workspaceGiB }) => ({
+        name,
+        cpuRequest,
+        cpuLimit,
+        pooled,
+        workspaceGiB,
+      }),
+    ),
     defaultTier: defaults.defaultTier,
   };
 }

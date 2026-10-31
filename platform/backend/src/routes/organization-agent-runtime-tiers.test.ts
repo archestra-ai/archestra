@@ -78,6 +78,8 @@ describe("Agent Runtime tiers: GET /api/organization/agent-runtime-tiers and PAT
   test("an organization starts with S, M and L; an administrator saves a list of its own, smallest first, and runs then get those sizes", async () => {
     expect(await read()).toMatchObject({
       defaultTier: "M",
+      // The deployment's volume size, for tiers that set none.
+      defaultWorkspaceGiB: 20,
       tiers: [
         {
           name: "S",
@@ -93,7 +95,7 @@ describe("Agent Runtime tiers: GET /api/organization/agent-runtime-tiers and PAT
     const response = await patch({
       agentRuntimeTiers: {
         tiers: [
-          tier("Large", 6, { cpuLimit: 8, pooled: true }),
+          tier("Large", 6, { cpuLimit: 8, pooled: true, workspaceGiB: 60 }),
           tier("Small", 1),
           tier("XL", 8),
         ],
@@ -104,9 +106,27 @@ describe("Agent Runtime tiers: GET /api/organization/agent-runtime-tiers and PAT
     // Stored as spare counts: a pooled tier follows the deployment's count.
     expect(response.json().agentRuntimeTiers).toEqual({
       tiers: [
-        { name: "Large", cpuRequest: 6, cpuLimit: 8, warmSpares: null },
-        { name: "Small", cpuRequest: 1, cpuLimit: null, warmSpares: 0 },
-        { name: "XL", cpuRequest: 8, cpuLimit: null, warmSpares: 0 },
+        {
+          name: "Large",
+          cpuRequest: 6,
+          cpuLimit: 8,
+          warmSpares: null,
+          workspaceGiB: 60,
+        },
+        {
+          name: "Small",
+          cpuRequest: 1,
+          cpuLimit: null,
+          warmSpares: 0,
+          workspaceGiB: null,
+        },
+        {
+          name: "XL",
+          cpuRequest: 8,
+          cpuLimit: null,
+          warmSpares: 0,
+          workspaceGiB: null,
+        },
       ],
       defaultTier: "Small",
     });
@@ -123,6 +143,7 @@ describe("Agent Runtime tiers: GET /api/organization/agent-runtime-tiers and PAT
       pooled: true,
       memoryRequestMiB: 12288,
       memoryLimitMiB: 16384,
+      workspaceGiB: 60,
     });
     expect(
       (await organizationAgentRuntimeTiers(organizationId)).defaultTier,
@@ -157,6 +178,12 @@ describe("Agent Runtime tiers: GET /api/organization/agent-runtime-tiers and PAT
       "The default tier M is not in the list",
     );
     expect(await refused([tier("S", 2, { pooled: "yes" })])).toBeTruthy();
+    expect(await refused([tier("S", 2, { workspaceGiB: 0 })])).toContain(
+      "The workspace is at least 1 GiB",
+    );
+    expect(await refused([tier("S", 2, { workspaceGiB: 1.5 })])).toContain(
+      "whole number of GiB",
+    );
     expect(
       (await OrganizationModel.getById(organizationId))?.agentRuntimeTiers,
     ).toBeNull();

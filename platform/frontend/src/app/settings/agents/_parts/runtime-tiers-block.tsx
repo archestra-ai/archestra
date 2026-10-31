@@ -36,6 +36,7 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
 
   const tiers = resolved?.tiers ?? [];
   const defaultTier = resolved?.defaultTier;
+  const defaultWorkspaceGiB = resolved?.defaultWorkspaceGiB;
 
   const columns: ColumnDef<RuntimeTierSize>[] = [
     {
@@ -88,6 +89,23 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
           </span>
         </span>
       ),
+    },
+    {
+      id: "workspace",
+      accessorFn: (row) => row.workspaceGiB ?? defaultWorkspaceGiB ?? 0,
+      header: "Workspace",
+      size: 110,
+      cell: ({ row }) =>
+        row.original.workspaceGiB === null ? (
+          <span className="tabular-nums">
+            {defaultWorkspaceGiB} GiB
+            <span className="block text-xs text-muted-foreground">
+              default
+            </span>
+          </span>
+        ) : (
+          <span className="tabular-nums">{row.original.workspaceGiB} GiB</span>
+        ),
     },
     {
       id: "pools",
@@ -212,7 +230,7 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
         isLoading={isPending}
         hidePaginationWhenSinglePage
         emptyMessage="No tiers"
-        columnDropOrder={["memory", "cpuLimit", "pools"]}
+        columnDropOrder={["memory", "workspace", "cpuLimit", "pools"]}
       />
       {resolved && (
         <RuntimeTierDialog

@@ -24,6 +24,7 @@ import {
   agentRuntimeTier,
   agentRuntimeTierDefaults,
   resolveRunResources,
+  resolveRunWorkspaceStorageSize,
   retargetRuntimeTiersEnv,
   warmPoolReplicas,
 } from "@/services/agent-runtime/runtime-tiers";
@@ -192,7 +193,7 @@ class AgentWarmPoolManager {
           resources: resolveRunResources(tier, tiers),
           tier,
           warmTiers: [],
-          workspaceStorageSize: config.agentRuntime.workspaceStorageSize,
+          workspaceStorageSize: resolveRunWorkspaceStorageSize(tier, tiers),
           workspaceStorageClass: config.agentRuntime.workspaceStorageClass,
           nodeSelector: config.agentRuntime.nodeSelector,
           imagePullSecrets: [],

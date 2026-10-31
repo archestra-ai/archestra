@@ -31,6 +31,11 @@ import {
 const POOLED_HINT =
   "Pooled tiers keep spare runtimes ready, so runs start at once. Spares use CPU and memory while they wait. A tier that is not pooled starts a new runtime for each run, which takes longer.";
 
+/** What the workspace size covers, and what a blank field means. */
+function workspaceHint(defaultWorkspaceGiB: number): string {
+  return `Blank: the deployment default, ${defaultWorkspaceGiB} GiB. The volume holds the home directory and, for a privileged agent, its Docker data. A stack that runs Kubernetes in Docker needs about 60 GiB.`;
+}
+
 /**
  * Create a tier or edit one. The whole list is saved with the change in it;
  * a refusal from the server stays in the dialog, next to the fields.
@@ -201,6 +206,36 @@ export function RuntimeTierDialog({
               ? `Memory: ${formatMemory(memory.memoryRequestMiB)}, ${formatMemory(memory.memoryLimitMiB)} limit`
               : "Memory follows the CPU request."}
           </p>
+          <Field
+            id={`${id}-workspace`}
+            label="Workspace (GiB)"
+            error={shown("workspaceGiB")}
+          >
+            <Input
+              id={`${id}-workspace`}
+              type="number"
+              inputMode="numeric"
+              min={1}
+              step={1}
+              placeholder={String(tiers.defaultWorkspaceGiB)}
+              value={values.workspaceGiB}
+              onChange={(event) => update({ workspaceGiB: event.target.value })}
+              onBlur={() => touch("workspaceGiB")}
+              aria-invalid={shown("workspaceGiB") ? true : undefined}
+              aria-describedby={
+                shown("workspaceGiB")
+                  ? `${id}-workspace-error`
+                  : `${id}-workspace-hint`
+              }
+            />
+            <p
+              id={`${id}-workspace-hint`}
+              className="text-sm text-muted-foreground"
+              data-testid="tier-workspace"
+            >
+              {workspaceHint(tiers.defaultWorkspaceGiB)}
+            </p>
+          </Field>
           <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2">
             <span className="flex items-center gap-1.5">
               <Label htmlFor={`${id}-pooled`} className="font-normal">

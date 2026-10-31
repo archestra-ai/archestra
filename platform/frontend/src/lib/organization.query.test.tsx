@@ -446,8 +446,10 @@ describe("useUpdateAgentSettings", () => {
           pooled: true,
           memoryRequestMiB: 8192,
           memoryLimitMiB: 16384,
+          workspaceGiB: null,
         },
       ],
+      defaultWorkspaceGiB: 20,
     });
     const reads: string[] = [];
     server.use(

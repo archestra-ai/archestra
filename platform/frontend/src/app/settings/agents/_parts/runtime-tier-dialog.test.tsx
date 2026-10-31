@@ -29,14 +29,48 @@ describe("RuntimeTierDialog", () => {
     await user.type(within(dialog).getByLabelText("Name"), "XL");
     await user.type(within(dialog).getByLabelText("CPU request"), "8");
     expect(within(dialog).queryByText("Enter a name")).not.toBeInTheDocument();
+    const workspace = within(dialog).getByLabelText("Workspace (GiB)");
+    await user.type(workspace, "1.5");
+    await user.tab();
+    expect(
+      within(dialog).getByText(
+        "Enter a whole number from 1 to 1024, or leave it blank for the default",
+      ),
+    ).toBeVisible();
+    await user.clear(workspace);
+    await user.type(workspace, "60");
     expect(submit).toBeEnabled();
     await user.click(submit);
     expect(onSave).toHaveBeenCalledWith({
       tiers: [
-        { name: "S", cpuRequest: 2, cpuLimit: null, pooled: true },
-        { name: "M", cpuRequest: 4, cpuLimit: null, pooled: true },
-        { name: "L", cpuRequest: 8, cpuLimit: null, pooled: false },
-        { name: "XL", cpuRequest: 8, cpuLimit: null, pooled: true },
+        {
+          name: "S",
+          cpuRequest: 2,
+          cpuLimit: null,
+          pooled: true,
+          workspaceGiB: null,
+        },
+        {
+          name: "M",
+          cpuRequest: 4,
+          cpuLimit: null,
+          pooled: true,
+          workspaceGiB: null,
+        },
+        {
+          name: "L",
+          cpuRequest: 8,
+          cpuLimit: null,
+          pooled: false,
+          workspaceGiB: null,
+        },
+        {
+          name: "XL",
+          cpuRequest: 8,
+          cpuLimit: null,
+          pooled: true,
+          workspaceGiB: 60,
+        },
       ],
       defaultTier: "M",
     });
@@ -65,6 +99,14 @@ describe("RuntimeTierDialog", () => {
     expect(within(dialog).getByLabelText("CPU limit")).toHaveAttribute(
       "placeholder",
       "No limit",
+    );
+    // The workspace field shows the deployment's default and what the volume holds.
+    expect(within(dialog).getByLabelText("Workspace (GiB)")).toHaveAttribute(
+      "placeholder",
+      "20",
+    );
+    expect(within(dialog).getByTestId("tier-workspace")).toHaveTextContent(
+      "Blank: the deployment default, 20 GiB. The volume holds the home directory and, for a privileged agent, its Docker data. A stack that runs Kubernetes in Docker needs about 60 GiB.",
     );
     expect(
       within(dialog).getByRole("switch", { name: "Pooled" }),

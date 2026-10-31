@@ -46,18 +46,13 @@ PATCH = '''    # Archestra image patch: see docker_images/agent/patches/hermes-t
     cfg = _load_cfg()
 '''
 
-# Hermes 0.22.5 split agent construction into agent_factory. Its functions
-# are rebound to the server namespace, which still supplies subprocess/logger.
 # Locate without importing: importing these modules runs startup code.
 server = Path(importlib.util.find_spec("tui_gateway").origin).with_name("server.py")
-agent_factory = server.with_name("agent_factory.py")
 mcp_startup = Path(importlib.util.find_spec("hermes_cli").origin).with_name("mcp_startup.py")
 discovery = Path(importlib.util.find_spec("tools").origin).with_name("mcp_tool_discovery.py")
 server_source = server.read_text()
-factory_source = agent_factory.read_text()
 if (
-    factory_source.count(ANCHOR) != 1
-    or "def _make_agent(" not in factory_source
+    server_source.count(ANCHOR) != 1
     or "\nimport subprocess\n" not in server_source
     or "def join_mcp_discovery(" not in mcp_startup.read_text()
     or "def start_background_mcp_discovery(" not in mcp_startup.read_text()
@@ -65,4 +60,4 @@ if (
     or "def get_mcp_status(" not in discovery.read_text()
 ):
     sys.exit(f"Hermes TUI startup changed; review {Path(__file__).name}")
-agent_factory.write_text(factory_source.replace(ANCHOR, PATCH))
+server.write_text(server_source.replace(ANCHOR, PATCH))

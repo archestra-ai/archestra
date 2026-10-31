@@ -69,7 +69,11 @@ test("an administrator resizes a runtime tier: memory follows the CPU, a problem
   await cpu.fill("6");
   await expect(row).toContainText("12 GiB");
   await expect(row).toContainText("24 GiB limit");
-  await page.getByLabel("Tier L ready spares").fill("1");
+  // L keeps no spares by default; this save gives it one.
+  const spares = page.getByLabel("Tier L ready spares");
+  await expect(spares).toHaveValue("0");
+  await spares.fill("1");
+  await expect(spares).toHaveValue("1");
   const saved = {
     tiers: [
       { name: "S", cpuRequest: 2, cpuLimit: null, warmSpares: 1 },

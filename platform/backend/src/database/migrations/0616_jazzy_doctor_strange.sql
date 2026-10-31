@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "keep_media_in_logs" boolean DEFAULT false NOT NULL;

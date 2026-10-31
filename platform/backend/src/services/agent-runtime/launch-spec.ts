@@ -301,11 +301,7 @@ export async function buildAgentRunLaunchSpec(params: {
     ? ModelModel.resolveEffectiveOutputLength(selectedModel)
     : null;
   const tiers = await organizationAgentRuntimeTiers(params.organizationId);
-  const resources = resolveRunResources(
-    params.runtime,
-    params.limits.tier,
-    tiers,
-  );
+  const resources = resolveRunResources(params.limits.tier, tiers);
   const maxTier = agentRuntimeMaxTier(params.runtime);
   const nonSecretEnv: Record<string, string> = {
     // The Agent Runtime run's own environment goes first: the addresses below must win.

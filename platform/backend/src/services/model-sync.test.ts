@@ -10,6 +10,7 @@ import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model
 import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
 import { modelFetchers } from "@/routes/chat/model-fetchers";
+import { resolveModelRoute } from "@/routes/proxy/model-router-resolver";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import {
@@ -22,7 +23,7 @@ import {
 // Keep the real client and stub HTTP so imports through the runtime launch
 // path cannot capture a different singleton from a partial module mock.
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper, not a React hook
-useMswServer(
+const server = useMswServer(
   http.get("https://models.dev/api.json", () => HttpResponse.json({})),
 );
 beforeEach(() => modelsDevClient.clearFetchCache());
@@ -264,6 +265,124 @@ describe("ModelSyncService", () => {
     expect(linkedModels.every((m) => m.model.provider === "openai")).toBe(true);
   });
 
+  test("keeps OpenAI image and audio models as media models the Model Router can resolve", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+    });
+    server.use(
+      http.get("https://api.openai.com/v1/models", () =>
+        HttpResponse.json({
+          object: "list",
+          data: [
+            "gpt-4o",
+            "gpt-audio",
+            "gpt-4o-mini-audio-preview",
+            "gpt-image-1",
+            "tts-1",
+            "gpt-4o-mini-tts",
+            "whisper-1",
+            "gpt-4o-transcribe",
+            "gpt-transcribe",
+            "gpt-live-transcribe",
+            "gpt-realtime-2.1",
+            "omni-moderation-latest",
+            "gpt-4o-search-preview",
+            "text-embedding-ada-002",
+            "davinci-002",
+          ].map((id) => ({
+            id,
+            object: "model",
+            owned_by: "openai",
+            created: 1,
+          })),
+        }),
+      ),
+    );
+
+    // An older build synced this realtime model as a chat model; a normal
+    // sync keeps stored modalities unless the fetcher's classification wins.
+    await ModelModel.upsert({
+      externalId: "openai/gpt-realtime-2.1",
+      provider: "openai",
+      modelId: "gpt-realtime-2.1",
+      inputModalities: ["text", "audio", "image"],
+      outputModalities: ["text", "audio"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: apiKey.id,
+      provider: "openai",
+      apiKeyValue: "test-key",
+      baseUrl: "https://api.openai.com/v1",
+    });
+
+    const rows = await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([
+      apiKey.id,
+    ]);
+    const byId = new Map(rows.map(({ model }) => [model.modelId, model]));
+    expect([...byId.keys()].sort()).toEqual([
+      "gpt-4o",
+      "gpt-4o-mini-audio-preview",
+      "gpt-4o-mini-tts",
+      "gpt-4o-search-preview",
+      "gpt-4o-transcribe",
+      "gpt-audio",
+      "gpt-image-1",
+      "gpt-live-transcribe",
+      "gpt-realtime-2.1",
+      "gpt-transcribe",
+      "text-embedding-ada-002",
+      "tts-1",
+      "whisper-1",
+    ]);
+    // Realtime models are served over the router's WebSocket endpoint; their
+    // audio-only output keeps them out of chat.
+    expect(byId.get("gpt-realtime-2.1")?.inputModalities).toEqual([
+      "text",
+      "audio",
+    ]);
+    expect(byId.get("gpt-realtime-2.1")?.outputModalities).toEqual(["audio"]);
+    expect(byId.get("gpt-realtime-2.1")?.supportsToolCalling).toBe(false);
+    expect(byId.get("gpt-image-1")?.outputModalities).toEqual(["image"]);
+    // Audio chat models answer chat turns in text or speech; they stay chat models.
+    expect(byId.get("gpt-audio")?.inputModalities).toEqual(["text", "audio"]);
+    expect(byId.get("gpt-audio")?.outputModalities).toEqual(["text", "audio"]);
+    expect(byId.get("gpt-audio")?.supportsToolCalling).toBe(true);
+    expect(byId.get("gpt-4o-mini-tts")?.outputModalities).toEqual(["audio"]);
+    // Transcription ids pass the chat-name filter, so they used to sync as chat.
+    expect(byId.get("gpt-4o-transcribe")?.inputModalities).toEqual(["audio"]);
+    expect(byId.get("gpt-transcribe")?.inputModalities).toEqual(["audio"]);
+    // OpenAI rejects function tools on search models, so chat must send none.
+    expect(byId.get("gpt-4o-search-preview")?.supportsToolCalling).toBe(false);
+    expect(byId.get("text-embedding-ada-002")?.embeddingDimensions).toBe(1536);
+    const chatModels = rows
+      .filter(({ model }) => ModelModel.supportsTextChat(model))
+      .map(({ model }) => model.modelId)
+      .sort();
+    expect(chatModels).toEqual([
+      "gpt-4o",
+      "gpt-4o-mini-audio-preview",
+      "gpt-4o-search-preview",
+      "gpt-audio",
+    ]);
+
+    await expect(
+      resolveModelRoute({
+        requestedModel: "openai:gpt-image-1",
+        capability: "media",
+        allowedApiKeyIds: [apiKey.id],
+      }),
+    ).resolves.toMatchObject({ provider: "openai", modelId: "gpt-image-1" });
+  });
+
   test("reclassifies a proxy-discovered model once the provider's catalog returns it", async ({
     makeOrganization,
     makeSecret,
@@ -380,6 +499,90 @@ describe("ModelSyncService", () => {
     expect(afterForceRefresh?.customPricePerMillionOutput).toBeNull();
     expect(afterForceRefresh?.inputModalities).toBeNull();
     expect(afterForceRefresh?.outputModalities).toBeNull();
+  });
+
+  test("correcting a stale classification keeps admin overrides until a full refresh", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+    });
+    server.use(
+      http.get("https://api.openai.com/v1/models", () =>
+        HttpResponse.json({
+          object: "list",
+          data: [
+            {
+              id: "gpt-realtime-2.1",
+              object: "model",
+              owned_by: "openai",
+              created: 1,
+            },
+          ],
+        }),
+      ),
+    );
+
+    // An older build stored this realtime model as a chat model, and an
+    // administrator then priced it and set its limits.
+    const stale = await ModelModel.upsert({
+      externalId: "openai/gpt-realtime-2.1",
+      provider: "openai",
+      modelId: "gpt-realtime-2.1",
+      inputModalities: ["text", "audio", "image"],
+      outputModalities: ["text", "audio"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+    const overrides = {
+      customPricePerMillionInput: "4.00",
+      customPricePerMillionOutput: "16.00",
+      customPricePerMillionCacheRead: "0.40",
+      customPricePerMillionCacheWrite: "5.00",
+      customContextLength: 32000,
+      customOutputLength: 4096,
+    };
+    await ModelModel.update(stale.id, overrides);
+    const sync = (forceRefresh: boolean) =>
+      modelSyncService.syncModelsForApiKey({
+        apiKeyId: apiKey.id,
+        provider: "openai",
+        apiKeyValue: "test-key",
+        baseUrl: "https://api.openai.com/v1",
+        forceRefresh,
+      });
+    const realtimeClassification = {
+      inputModalities: ["text", "audio"],
+      outputModalities: ["audio"],
+      supportsToolCalling: false,
+    };
+
+    await sync(false);
+    expect(await ModelModel.findById(stale.id)).toMatchObject({
+      ...realtimeClassification,
+      customPricePerMillionInput: "4.00000000",
+      customPricePerMillionOutput: "16.00000000",
+      customPricePerMillionCacheRead: "0.40000000",
+      customPricePerMillionCacheWrite: "5.00000000",
+      customContextLength: 32000,
+      customOutputLength: 4096,
+    });
+
+    // Resetting the row to what the provider says is the full refresh's job.
+    await sync(true);
+    expect(await ModelModel.findById(stale.id)).toMatchObject({
+      ...realtimeClassification,
+      customPricePerMillionInput: null,
+      customPricePerMillionOutput: null,
+      customPricePerMillionCacheRead: null,
+      customPricePerMillionCacheWrite: null,
+      customContextLength: null,
+      customOutputLength: null,
+    });
   });
 
   test("infers Gemini modalities and backfills missing values without overwriting user edits", async ({

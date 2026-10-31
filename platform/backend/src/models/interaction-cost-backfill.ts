@@ -424,14 +424,16 @@ const TIERS: Tier[] = ["base", "long"];
 /**
  * The requests a backfill recomputes:
  * - this model, from this provider (the interaction type's prefix);
- * - not audio or image requests, whose cost is never available;
+ * - not media requests (images, audio): their cost comes from the media
+ *   tariffs, never from this model's per-token prices;
  * - with some recorded usage, since there is nothing to price otherwise.
  */
 function eligible(scope: BackfillScope): SQL {
   return sql`i.model = ${scope.modelId}
     and split_part(i.type, ':', 1) = ${scope.provider}
     and i.type not like '%:audio'
-    and i.type <> 'azure:images'
+    and i.type not like '%:images'
+    and i.response -> '__mediaUsage' is null
     and (coalesce(i.input_tokens, 0) > 0 or coalesce(i.output_tokens, 0) > 0
       or coalesce(i.cache_read_tokens, 0) > 0 or coalesce(i.cache_write_tokens, 0) > 0)`;
 }

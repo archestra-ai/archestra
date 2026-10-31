@@ -183,7 +183,7 @@ class AgentWarmPoolManager {
           namespace,
           image: runtime.image,
           privileged: runtime.privileged,
-          resources: resolveRunResources(runtime, tier, tiers),
+          resources: resolveRunResources(tier, tiers),
           tier,
           warmTiers: [],
           workspaceStorageSize: config.agentRuntime.workspaceStorageSize,

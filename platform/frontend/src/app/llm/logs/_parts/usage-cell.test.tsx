@@ -79,4 +79,25 @@ describe("UsageCell", () => {
       within(await screen.findByRole("tooltip")).getByText("$0.000040"),
     ).toBeInTheDocument();
   });
+
+  it("shows no figure when no request in the session recorded a cost", async () => {
+    const user = userEvent.setup();
+    render(
+      <UsageCell
+        session={{
+          ...session,
+          totalCost: null,
+          totalBilledCost: null,
+          totalSubscriptionCost: null,
+          totalBaselineCost: null,
+        }}
+      />,
+    );
+    expect(screen.getByText("—")).toBeVisible();
+    expect(screen.queryByText("$0")).toBeNull();
+    await user.tab();
+    expect(
+      within(await screen.findByRole("tooltip")).getByText("Not recorded"),
+    ).toBeInTheDocument();
+  });
 });

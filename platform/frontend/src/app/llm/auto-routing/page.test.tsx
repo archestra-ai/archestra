@@ -142,6 +142,7 @@ function catalogModel(
       pricePerMillionCacheRead: null,
       pricePerMillionCacheWrite: null,
       cachePriceSource: "default",
+      mediaPricing: null,
     },
   };
 }

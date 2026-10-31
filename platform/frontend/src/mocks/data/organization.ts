@@ -29,6 +29,7 @@ export function makeOrganization(
     playwrightMcpEnabled: true,
     allowChatFileUploads: true,
     allowUnauthenticatedLlmProxyRequests: false,
+    keepMediaInLogs: false,
     allowToolAutoAssignment: true,
     // Configured, so the knowledge section renders its pages rather than the
     // "Configuration is needed" placeholder every route below /knowledge is

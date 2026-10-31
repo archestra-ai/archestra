@@ -37,6 +37,7 @@ import {
   OAuthClientModel,
   VirtualApiKeyModel,
 } from "@/models";
+import OrganizationModel from "@/models/organization";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
@@ -244,6 +245,97 @@ describe("OpenAI proxy reasoning effort", () => {
       expect(response.statusCode, response.body).toBe(200);
       expect(upstreamBody).toMatchObject({ reasoning_effort: "max" });
       expect(response.json().choices[0].message.content).toBe("Hello");
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+describe("OpenAI proxy spoken replies", () => {
+  const server = useMswServer();
+
+  // A gpt-audio answer has no text content: its words are the transcript
+  // under `audio`, beside the base64 WAV. The client receives both, and the
+  // log row keeps both (the audio up to 2 MB) so the Logs page can play it.
+  test("returns the audio to the client and logs it to play back", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "Spoken Reply Agent" });
+    // Logs keep media only when the organization turns it on.
+    await OrganizationModel.patch(agent.organizationId, {
+      keepMediaInLogs: true,
+    });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const wav = "UklGRiQAAABXQVZF".repeat(64);
+    server.use(
+      http.post("https://api.openai.com/v1/chat/completions", () =>
+        HttpResponse.json({
+          id: "chatcmpl-audio",
+          object: "chat.completion",
+          created: 1700000000,
+          model: "gpt-audio",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: null,
+                refusal: null,
+                audio: {
+                  id: "audio_1",
+                  data: wav,
+                  expires_at: 1700003600,
+                  transcript: "Hello from Archestra.",
+                },
+              },
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+          usage: { prompt_tokens: 16, completion_tokens: 60, total_tokens: 76 },
+        }),
+      ),
+    );
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/chat/completions`,
+        headers: {
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": await makePassthroughCredential({
+            organizationId: agent.organizationId,
+            ownerId: owner.id,
+          }),
+        },
+        payload: {
+          model: "gpt-audio",
+          modalities: ["text", "audio"],
+          audio: { voice: "alloy", format: "wav" },
+          messages: [{ role: "user", content: "Say hello." }],
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().choices[0].message.audio.data).toBe(wav);
+
+      const [row] = await InteractionModel.getAllInteractionsForProfile(
+        agent.id,
+      );
+      const logged = (
+        row.response as { choices: Array<{ message: { audio: unknown } }> }
+      ).choices[0].message.audio;
+      expect(logged).toEqual({
+        id: "audio_1",
+        data: wav,
+        expires_at: 1700003600,
+        transcript: "Hello from Archestra.",
+      });
     } finally {
       await app.close();
     }
@@ -651,6 +743,26 @@ describe("OpenAI cost tracking", () => {
       inputTokens: 2,
       outputTokens: 0,
     });
+
+    // The OpenAI SDK asks for base64 vectors unless the caller picks a format.
+    const base64 = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/embeddings`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-openai-key",
+        "x-archestra-virtual-key": passthroughToken,
+      },
+      payload: {
+        model: "text-embedding-3-small",
+        input: ["first"],
+        encoding_format: "base64",
+      },
+    });
+    expect(base64.statusCode, base64.body).toBe(200);
+    const vector = Buffer.from(base64.json().data[0].embedding, "base64");
+    expect(vector).toHaveLength(12);
+    expect(vector.readFloatLE(0)).toBeCloseTo(0.1);
   });
 
   test("accepts LLM OAuth client credentials on provider-specific proxy routes", async ({
@@ -1250,9 +1362,21 @@ describe("OpenAI Responses proxy", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.body).toContain("data: ");
-    expect(response.body).toContain('"type":"response.output_text.delta"');
-    expect(response.body).toContain("data: [DONE]");
+    // Framed as OpenAI frames it: every event named on an `event:` line that
+    // repeats its type, and no `[DONE]` sentinel after `response.completed`.
+    const types = response.body
+      .split("\n\n")
+      .filter(Boolean)
+      .map((frame) => {
+        const [name, data, ...rest] = frame.split("\n");
+        expect(rest).toEqual([]);
+        const event = JSON.parse(data.slice("data: ".length));
+        expect(name).toBe(`event: ${event.type}`);
+        return event.type;
+      });
+    expect(types).toContain("response.output_text.delta");
+    expect(types.at(-1)).toBe("response.completed");
+    expect(response.body).not.toContain("[DONE]");
   });
 
   test("selects the OpenCode OAuth bridge only with a passthrough key and account ID", async ({

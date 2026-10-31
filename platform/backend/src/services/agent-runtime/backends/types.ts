@@ -38,7 +38,7 @@ export type AgentRunLaunchSpec = {
   command: string[] | null;
   privileged: boolean;
   resources: AgentRuntimeResources | null;
-  /** Tier the run asked for; null when its Agent sizes runs with explicit resources. */
+  /** Tier the run asked for; null only for a run recorded before every run had one. */
   tier: AgentRuntimeTier | null;
   /**
    * Tiers whose warm pool may serve the run, the requested one first, each

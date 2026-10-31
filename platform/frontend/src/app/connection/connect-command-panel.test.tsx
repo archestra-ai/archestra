@@ -828,8 +828,13 @@ describe("ConnectCommandPanel", () => {
         {...renderPanelProps({ ...props, terminal: true })}
       />,
     );
+    // Past the 350 ms pause before a request: the terminal waits for the
+    // setup already on its way instead of asking for another.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 600)));
+    expect(createSetupMock).toHaveBeenCalledTimes(1);
     act(() => arrive());
     await expectShownCommand(COMMAND);
+    expect(createSetupMock).toHaveBeenCalledTimes(1);
     view.rerender(<ConnectCommandPanel {...renderPanelProps(props)} />);
     expect(
       await screen.findByText("Download an installer for this setup"),

@@ -875,10 +875,13 @@ export function ConnectCommandPanel({
       ? seededSetupId
       : null;
 
-  // Every setup made here, by payload, and when each was requested. A setup works
-  // for a fixed time from its creation, so switching back to earlier choices
-  // (another OS, say) reuses its setup until then.
+  // Every setup made here, by payload, and when each was requested. A setup
+  // works for a fixed time from its creation, so switching back to earlier
+  // choices (another OS, say) reuses its setup until then.
   const setupCacheRef = useRef(setupCache ?? newDesktopSetupCache());
+  // Payloads whose setup is still on its way. Switching mode or OS back to one
+  // waits for that setup instead of asking for another.
+  const inFlightRef = useRef(new Set<string>());
 
   const runGeneration = useCallback(
     async (key: string) => {
@@ -888,7 +891,13 @@ export function ConnectCommandPanel({
       setFailure(null);
       refusalRef.current = null;
       const requestedAt = Date.now();
-      const created = await createSetup(body);
+      inFlightRef.current.add(key);
+      let created: CreateConnectionSetupResult | null;
+      try {
+        created = await createSetup(body);
+      } finally {
+        inFlightRef.current.delete(key);
+      }
       if (created) {
         setupCacheRef.current.requestedAt.set(created.id, requestedAt);
         setupCacheRef.current.byKey.set(key, created);
@@ -953,6 +962,8 @@ export function ConnectCommandPanel({
     preparedKeyRef.current = null;
     setResult(null);
     setFailure(null);
+    // This payload's setup is on its way; it shows when it arrives.
+    if (inFlightRef.current.has(inputsKey)) return;
     const timer = setTimeout(
       () => {
         preparationStartedRef.current = true;

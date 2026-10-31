@@ -750,6 +750,9 @@ export const AgentRuntimeTierSizeSchema = z.object({
   cpuRequest: z.number(),
   cpuLimit: z.number().nullable(),
   warmSpares: z.number().int(),
+  pooled: z
+    .boolean()
+    .describe("Whether the tier keeps spare containers ready for its runs"),
   memoryRequestMiB: z.number().int(),
   memoryLimitMiB: z.number().int(),
 });

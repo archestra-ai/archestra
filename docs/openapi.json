@@ -481639,6 +481639,10 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "pooled": {
+                            "type": "boolean",
+                            "description": "Whether the tier keeps spare containers ready for its runs"
+                          },
                           "memoryRequestMiB": {
                             "type": "integer",
                             "minimum": -9007199254740991,
@@ -481655,6 +481659,7 @@
                           "cpuRequest",
                           "cpuLimit",
                           "warmSpares",
+                          "pooled",
                           "memoryRequestMiB",
                           "memoryLimitMiB"
                         ],
@@ -481957,10 +481962,8 @@
                               "exclusiveMinimum": true,
                               "maximum": 16
                             },
-                            "warmSpares": {
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 10
+                            "pooled": {
+                              "type": "boolean"
                             },
                             "previousName": {
                               "type": "string",
@@ -481972,7 +481975,7 @@
                             "name",
                             "cpuRequest",
                             "cpuLimit",
-                            "warmSpares"
+                            "pooled"
                           ],
                           "additionalProperties": false
                         }

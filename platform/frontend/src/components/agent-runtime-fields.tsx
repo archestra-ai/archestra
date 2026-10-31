@@ -2,9 +2,9 @@
 
 import {
   buildCustomAgentRuntime,
-  describeAgentRuntimeTier,
   findAgentRuntimeTier,
   getAgentRuntimeAllowedProtocols,
+  summarizeAgentRuntimeTier,
   TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
 } from "@archestra/shared";
 import Link from "next/link";
@@ -590,7 +590,7 @@ function AgentRuntimeTierFields({ value, onChange }: RuntimeSectionProps) {
   const scaleupTier =
     saved && tiers.indexOf(saved) > defaultRank ? saved.name : defaultTier;
   const label = (tier: (typeof tiers)[number]) =>
-    `${tier.name}: ${describeAgentRuntimeTier(tier)}`;
+    `${tier.name}: ${summarizeAgentRuntimeTier(tier)}`;
   return (
     <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
       <div className="space-y-2">

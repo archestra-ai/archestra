@@ -33,9 +33,10 @@ export interface AgentRuntimeTierDefinition {
   cpuLimit: number | null;
   /**
    * Spare containers of this tier kept running and empty per warm pool, so a
-   * run starts on one in seconds. Null, only in the code defaults and in
-   * settings saved before the field existed, follows the deployment's
-   * `ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE`.
+   * run starts on one in seconds. Null follows the deployment's
+   * `ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE`; 0 keeps none. Administrators
+   * choose between the two ("pooled" or not); other counts come from
+   * settings saved before that choice existed.
    */
   warmSpares: number | null;
 }
@@ -49,6 +50,8 @@ export interface AgentRuntimeTierSettings {
 /** A tier with the memory its CPU gives it. Spares are resolved to a number. */
 export interface AgentRuntimeTierSize extends AgentRuntimeTierDefinition {
   warmSpares: number;
+  /** Whether the tier keeps spares at all: what an administrator chose. */
+  pooled: boolean;
   memoryRequestMiB: number;
   memoryLimitMiB: number;
 }
@@ -107,6 +110,13 @@ export function formatMemory(mib: number): string {
   return `${mib} MiB`;
 }
 
+/** A tier's size in a few words: "4 CPU, 8 GiB". */
+export function summarizeAgentRuntimeTier(
+  tier: Pick<AgentRuntimeTierSize, "cpuRequest" | "memoryRequestMiB">,
+): string {
+  return `${tier.cpuRequest} CPU, ${formatMemory(tier.memoryRequestMiB)}`;
+}
+
 /** A tier's size for people: "4 CPU, 8 GiB (16 GiB limit)". */
 export function describeAgentRuntimeTier(tier: AgentRuntimeTierSize): string {
   const cpu = `${tier.cpuRequest} CPU${tier.cpuLimit !== null ? ` (${tier.cpuLimit} limit)` : ""}`;
@@ -135,7 +145,7 @@ export function sameAgentRuntimeTierName(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
-export function findAgentRuntimeTier<T extends AgentRuntimeTierDefinition>(
+export function findAgentRuntimeTier<T extends { name: string }>(
   tiers: readonly T[],
   name: string | null | undefined,
 ): T | undefined {
@@ -205,7 +215,8 @@ const CpuLimitSchema = z
     (cpus) => Number.isInteger(cpus * CPU_DECIMALS),
     "A CPU amount has at most three decimals",
   );
-const WarmSparesSchema = z
+/** Spare counts in stored settings, from before the pooled choice existed. */
+const StoredWarmSparesSchema = z
   .number()
   .int()
   .min(0)
@@ -216,7 +227,11 @@ export const AgentRuntimeTierDefinitionSchema = z.strictObject({
   name: TierNameSchema,
   cpuRequest: CpuRequestSchema,
   cpuLimit: CpuLimitSchema.nullable(),
-  warmSpares: WarmSparesSchema,
+  /**
+   * Whether the tier keeps spare containers ready. A pooled tier keeps the
+   * deployment's `ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE`; the other keeps none.
+   */
+  pooled: z.boolean(),
   /**
    * The tier's name before this save, when the save renames it. Agents that
    * name the old tier follow the rename.
@@ -277,6 +292,7 @@ export function resolveAgentRuntimeTiers(
     settings.tiers.map((tier) => ({
       ...tier,
       warmSpares: tier.warmSpares ?? defaults.defaultWarmSpares,
+      pooled: tier.warmSpares === null || tier.warmSpares > 0,
       ...agentRuntimeTierMemory(tier.cpuRequest, tier.cpuLimit),
     })),
   );
@@ -319,7 +335,7 @@ function readTier(entry: unknown): AgentRuntimeTierDefinition | null {
   const cpuRequest = CpuRequestSchema.safeParse(value.cpuRequest);
   if (!name.success || !cpuRequest.success) return null;
   const cpuLimit = CpuLimitSchema.nullable().safeParse(value.cpuLimit ?? null);
-  const warmSpares = WarmSparesSchema.nullable().safeParse(
+  const warmSpares = StoredWarmSparesSchema.nullable().safeParse(
     value.warmSpares ?? null,
   );
   return {
@@ -349,7 +365,7 @@ function legacyToSettings(
     const cpuRequest = parseCpuQuantity(value.cpuRequest);
     const cpuLimit =
       value.cpuLimit === null ? null : parseCpuQuantity(value.cpuLimit);
-    const warmSpares = WarmSparesSchema.safeParse(value.warmPoolSize);
+    const warmSpares = StoredWarmSparesSchema.safeParse(value.warmPoolSize);
     const request =
       cpuRequest !== null &&
       cpuRequest > 0 &&
@@ -394,9 +410,12 @@ export function parseCpuQuantity(value: unknown): number | null {
  * its request, spares out of range, or a default tier that is not in the list.
  * The schema catches the type errors; these are the rules between fields.
  */
-export function agentRuntimeTierProblems(
-  settings: AgentRuntimeTierSettings,
-): string[] {
+export function agentRuntimeTierProblems(settings: {
+  tiers: ReadonlyArray<
+    Pick<AgentRuntimeTierDefinition, "name" | "cpuRequest" | "cpuLimit">
+  >;
+  defaultTier: string;
+}): string[] {
   const problems: string[] = [];
   if (settings.tiers.length === 0) problems.push("Keep at least one tier");
   if (settings.tiers.length > AGENT_RUNTIME_TIER_MAX_COUNT)
@@ -437,15 +456,6 @@ export function agentRuntimeTierProblems(
       else if (tier.cpuLimit < tier.cpuRequest)
         problems.push(`${label}: the CPU limit is below the CPU request`);
     }
-    if (
-      tier.warmSpares !== null &&
-      (!Number.isInteger(tier.warmSpares) ||
-        tier.warmSpares < 0 ||
-        tier.warmSpares > AGENT_RUNTIME_TIER_MAX_WARM_SPARES)
-    )
-      problems.push(
-        `${label}: spares are a whole number from 0 to ${AGENT_RUNTIME_TIER_MAX_WARM_SPARES}`,
-      );
   }
   if (
     settings.tiers.length > 0 &&
@@ -457,4 +467,16 @@ export function agentRuntimeTierProblems(
         : "Choose a default tier",
     );
   return problems;
+}
+
+/** What the organization stores for a tier an administrator saved. */
+export function agentRuntimeTierDefinitionFromInput(
+  input: AgentRuntimeTierDefinitionInput,
+): AgentRuntimeTierDefinition {
+  return {
+    name: input.name,
+    cpuRequest: input.cpuRequest,
+    cpuLimit: input.cpuLimit,
+    warmSpares: input.pooled ? null : 0,
+  };
 }

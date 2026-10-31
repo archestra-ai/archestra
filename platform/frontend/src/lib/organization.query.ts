@@ -629,6 +629,37 @@ export function useUpdateAgentSettings(
 }
 
 /**
+ * Save the organization's runtime tiers: the whole list with its default.
+ * A refusal (a tier still in use, a taken name) rejects with the server's
+ * reason and no toast, so the dialog that asked shows it next to the fields.
+ */
+export function useSaveAgentRuntimeTiers() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      agentRuntimeTiers: archestraApiTypes.UpdateAgentSettingsData["body"]["agentRuntimeTiers"],
+    ) => {
+      const { data, error } = await archestraApiSdk.updateAgentSettings({
+        body: { agentRuntimeTiers },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (updatedOrganization) {
+        queryClient.setQueryData(
+          organizationKeys.details(),
+          updatedOrganization,
+        );
+      }
+      queryClient.invalidateQueries({
+        queryKey: organizationKeys.agentRuntimeTiers(),
+      });
+    },
+  });
+}
+
+/**
  * Update /connection admin settings (default gateway/proxy, hidden client/provider lists)
  */
 export function useUpdateConnectionSettings(

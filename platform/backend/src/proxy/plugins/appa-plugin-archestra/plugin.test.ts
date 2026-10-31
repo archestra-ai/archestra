@@ -4387,10 +4387,12 @@ describe("asking through the client's own question tool", () => {
     const processResults = vi
       .spyOn(appaService, "processProxyResults")
       .mockResolvedValue({ toolResultUpdates: {} });
+    vi.useFakeTimers({ toFake: ["Date"] });
 
     try {
       await plugin.onSessionInit(context);
       const issued = await askCard();
+      vi.setSystemTime(Date.now() + 1);
       const outcome = await plugin.onToolResults({
         ...context,
         toolResults: [
@@ -4412,6 +4414,13 @@ describe("asking through the client's own question tool", () => {
       expect(
         await cacheManager.get(hitlReviewContinuationKey(trusted.session, "")),
       ).toBeUndefined();
+      // The repeated review says why the answer ruled nothing.
+      await expect(
+        stageInspectableReview(trusted.session, offerId),
+      ).resolves.toEqual({
+        status: "staged",
+        lastAnswer: { reason: "unidentifiable_answer" },
+      });
       // The identified answer's one-use claim is intact: it still rules.
       const approved = await answer(
         issued.answerId,
@@ -4423,6 +4432,7 @@ describe("asking through the client's own question tool", () => {
         consumeHitlRuling({ session: trusted.session, offerId }),
       ).resolves.toBe("approve");
     } finally {
+      vi.useRealTimers();
       processResults.mockRestore();
       await plugin.onCleanup(context);
     }

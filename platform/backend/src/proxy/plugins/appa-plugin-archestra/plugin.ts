@@ -71,6 +71,7 @@ import {
   peekHitlDecision,
   recordHitlAnswerNotRecorded,
   recordHitlRuling,
+  recordHitlUnidentifiableAnswers,
   renewHitlReview,
   resolveHitlInspectableAnswer,
   sealHitlClosure,
@@ -5481,13 +5482,18 @@ async function claimNativeQuestionResults(params: {
   binding: AppaPluginBinding;
   results: ReadonlyArray<{ id: string; name: string; namespace?: string }>;
 }): Promise<Map<object, NativeQuestionClaim>> {
+  let unidentifiable = 0;
   const candidates = params.results.flatMap((result) => {
-    // An answer without its own string id names no issued question: it is
-    // dropped before any claim key is built or looked up, never conflated
-    // with other unidentifiable answers under a placeholder id.
-    if (typeof result.id !== "string" || result.id.length === 0) return [];
     const name = nativeQuestionName(params.binding, result.name);
     if (!name || !releasesUserQuestion(params.binding, result)) return [];
+    // An answer without its own string id names no issued question: it is
+    // dropped before any claim key is built or looked up, never conflated
+    // with other unidentifiable answers under a placeholder id. Only the
+    // session notes that one arrived.
+    if (typeof result.id !== "string" || result.id.length === 0) {
+      unidentifiable += 1;
+      return [];
+    }
     const scope = { session: params.binding.session, id: result.id };
     const legacyKey = legacyNativeQuestionCacheKey(scope);
     return [
@@ -5501,6 +5507,11 @@ async function claimNativeQuestionResults(params: {
       },
     ];
   });
+  if (unidentifiable > 0)
+    await recordHitlUnidentifiableAnswers({
+      session: params.binding.session,
+      count: unidentifiable,
+    });
   const verified = new Map<object, NativeQuestionClaim>();
   if (candidates.length === 0) return verified;
   const claimed = new Map(
@@ -5594,11 +5605,11 @@ async function recordNativeHitlRulings(params: {
         case "continued":
           continued.push(outcome.continuation);
           if (outcome.continuation.selection === "stale")
-            await noteAnswerNotRecorded(
-              params.binding,
-              claim.offerIds,
-              "stale_card",
-            );
+            await noteAnswerNotRecorded({
+              binding: params.binding,
+              offerIds: claim.offerIds,
+              reason: "stale_card",
+            });
           break;
       }
       continue;
@@ -5635,11 +5646,11 @@ async function recordNativeHitlRulings(params: {
           "OpenAPPA native approval answer arrived after its review expired",
         );
         expiredOfferIds.push(offerId);
-        await noteAnswerNotRecorded(
-          params.binding,
-          [offerId],
-          "review_expired",
-        );
+        await noteAnswerNotRecorded({
+          binding: params.binding,
+          offerIds: [offerId],
+          reason: "review_expired",
+        });
       }
       continue;
     }
@@ -5735,23 +5746,27 @@ async function recordNativeHitlRulings(params: {
           ...(review?.arguments ? { reviewedArguments: review.arguments } : {}),
         });
       } else {
-        await noteAnswerNotRecorded(params.binding, [offerId], "record_failed");
+        await noteAnswerNotRecorded({
+          binding: params.binding,
+          offerIds: [offerId],
+          reason: "record_failed",
+        });
       }
     }
   }
   return { rulings: recorded, unreadOfferIds, continued, expiredOfferIds };
 }
 
-async function noteAnswerNotRecorded(
-  binding: AppaPluginBinding,
-  offerIds: readonly string[],
-  reason: HitlAnswerNotRecordedReason,
-): Promise<void> {
-  for (const offerId of offerIds)
+async function noteAnswerNotRecorded(params: {
+  binding: AppaPluginBinding;
+  offerIds: readonly string[];
+  reason: HitlAnswerNotRecordedReason;
+}): Promise<void> {
+  for (const offerId of params.offerIds)
     await recordHitlAnswerNotRecorded({
-      session: binding.session,
+      session: params.binding.session,
       offerId,
-      reason,
+      reason: params.reason,
     });
 }
 

@@ -41,6 +41,7 @@ import {
   agentRuntimeTurnFailure,
 } from "@/services/agent-runtime/failure-reason";
 import {
+  type AgentRunFailureCode,
   agentRunFailure,
   tagAgentRunFailure,
 } from "@/services/agent-runtime/run-failure";
@@ -67,6 +68,7 @@ import {
 import { RenewableCredentialBundleSchema } from "@/types/renewable-credential";
 import { buildAtomicFileWriteCommand } from "./atomic-file-write";
 import {
+  AgentRuntimeCommandFailedError,
   AgentRuntimeCommandTransportError,
   execAgentRuntimeCommand,
   streamAgentRuntimeCommand,
@@ -84,6 +86,13 @@ import {
   buildAgentRuntimeTurnScript,
   type KubernetesAgentRunLaunchSpec,
 } from "./manifests";
+import {
+  describeMemoryKill,
+  type MemoryEvents,
+  memoryKillBetween,
+  parseMemoryEvents,
+  READ_MEMORY_EVENTS_COMMAND,
+} from "./memory-kill";
 import {
   AGENT_RUNTIME_LEASE_SCOPE,
   AGENT_RUNTIME_TASK_LABEL,
@@ -1229,6 +1238,16 @@ class AgentRuntimeManager {
     const interval = params.pollIntervalMs ?? AGENT_RUNTIME_COMPLETION_POLL_MS;
 
     let retryDelayMs = interval;
+    // The container last seen running and its memory kills then. The kernel
+    // kills the run's processes for memory while the pod stays Running, so a
+    // command that fails in it, a turn that ends non-zero and a workspace that
+    // finishes without a result are checked against a later reading.
+    let running: {
+      podName: string;
+      container: string;
+      baselineReads: number;
+    } | null = null;
+    let memoryEventsAtStart: MemoryEvents | null = null;
     while (!params.abortSignal?.aborted) {
       try {
         const sandbox = await readWorkspaceSandbox({
@@ -1253,6 +1272,29 @@ class AgentRuntimeManager {
         const pod = await this.findPod(params.session);
         if (params.abortSignal?.aborted) break;
         if (pod?.status?.phase === "Running" && pod.metadata?.name) {
+          const container = agentRuntimeContainerKey(pod);
+          if (running === null || running.container !== container) {
+            running = {
+              podName: pod.metadata.name,
+              container,
+              baselineReads: 0,
+            };
+            memoryEventsAtStart = null;
+          }
+          // A reading that failed leaves nothing to compare with, so it is
+          // tried again, a few times: a container without the counters (no
+          // cgroup v2) never answers, and stops being asked.
+          if (
+            memoryEventsAtStart === null &&
+            running.baselineReads < MEMORY_EVENTS_BASELINE_ATTEMPTS
+          ) {
+            running.baselineReads++;
+            memoryEventsAtStart = await this.readMemoryEvents(
+              params.session,
+              pod.metadata.name,
+            );
+            if (params.abortSignal?.aborted) break;
+          }
           const result = await this.execInPod({
             session: params.session,
             podName: pod.metadata.name,
@@ -1266,12 +1308,41 @@ class AgentRuntimeManager {
           });
           if (params.abortSignal?.aborted) break;
           if (result.trim()) {
-            return result.trim().split("\n")[0] === "0"
-              ? { outcome: "succeeded" }
+            if (result.trim().split("\n")[0] === "0") {
+              return { outcome: "succeeded" };
+            }
+            const turnFailure = agentRuntimeTurnFailure(result);
+            const turnReason = agentRuntimeFailureReason(result);
+            const killed = await this.memoryKillSince(
+              params.session,
+              pod.metadata.name,
+              memoryEventsAtStart,
+            );
+            if (params.abortSignal?.aborted) break;
+            if (!killed) {
+              return {
+                outcome: "failed",
+                reason: turnReason,
+                failure: turnFailure,
+              };
+            }
+            // A memory kill explains a process that died without a word; an
+            // image's own diagnosis (a provider error it reported itself)
+            // stands, with the kill noted after it.
+            const killNote = describeMemoryKill(
+              killed,
+              AGENT_RUNTIME_CONTAINER_NAME,
+            );
+            return MEMORY_KILL_EXPLAINS.has(turnFailure.code)
+              ? {
+                  outcome: "failed",
+                  reason: `${killNote}\n${turnReason}`,
+                  failure: agentRunFailure("pod.oom_killed"),
+                }
               : {
                   outcome: "failed",
-                  reason: agentRuntimeFailureReason(result),
-                  failure: agentRuntimeTurnFailure(result),
+                  reason: `${turnReason}\n${killNote}`,
+                  failure: turnFailure,
                 };
           }
         }
@@ -1288,13 +1359,33 @@ class AgentRuntimeManager {
           condition,
         );
         if (finished || expired || podFailure) {
+          const reason =
+            podFailure ??
+            condition?.message ??
+            condition?.reason ??
+            "The Agent Runtime run exited without completing";
+          // A workspace that finished or expired while its pod still runs: a
+          // supervisor whose tmux server the kernel killed never publishes a
+          // result, and the kill is what ended the turn.
+          const killed =
+            pod?.status?.phase === "Running" && pod.metadata?.name
+              ? await this.memoryKillSince(
+                  params.session,
+                  pod.metadata.name,
+                  memoryEventsAtStart,
+                )
+              : null;
+          if (params.abortSignal?.aborted) break;
+          if (killed) {
+            return {
+              outcome: "failed",
+              reason: `${describeMemoryKill(killed, AGENT_RUNTIME_CONTAINER_NAME)}\n${reason}`,
+              failure: agentRunFailure("pod.oom_killed"),
+            };
+          }
           return {
             outcome: "failed",
-            reason:
-              podFailure ??
-              condition?.message ??
-              condition?.reason ??
-              "The Agent Runtime run exited without completing",
+            reason,
             failure: agentRunFailure(
               podFailure && pod
                 ? classifyAgentRuntimePodFailure(pod)
@@ -1307,6 +1398,21 @@ class AgentRuntimeManager {
         retryDelayMs = interval;
       } catch (error) {
         if (params.abortSignal?.aborted) break;
+        if (running && error instanceof AgentRuntimeCommandFailedError) {
+          const killed = await this.memoryKillSince(
+            params.session,
+            running.podName,
+            memoryEventsAtStart,
+          );
+          if (params.abortSignal?.aborted) break;
+          if (killed) {
+            return {
+              outcome: "failed",
+              reason: describeMemoryKill(killed, AGENT_RUNTIME_CONTAINER_NAME),
+              failure: agentRunFailure("pod.oom_killed"),
+            };
+          }
+        }
         if (!isTransientObservationError(error)) throw error;
         // A failed read says nothing about the worker's outcome. Keep ownership
         // and heartbeats alive until we can observe it again or are canceled.
@@ -1858,6 +1964,41 @@ done`
     });
   }
 
+  /**
+   * The memory kill since the turn's first reading, from a fresh one; null
+   * without a first reading, without a kill, or when the pod cannot say.
+   */
+  private async memoryKillSince(
+    session: AgentRunRecord,
+    podName: string,
+    before: MemoryEvents | null,
+  ): Promise<MemoryEvents | null> {
+    if (!before) return null;
+    return memoryKillBetween(
+      before,
+      await this.readMemoryEvents(session, podName),
+    );
+  }
+
+  /** The container cgroup's memory counters, or null when the pod cannot say. */
+  private async readMemoryEvents(
+    session: AgentRunRecord,
+    podName: string,
+  ): Promise<MemoryEvents | null> {
+    try {
+      return parseMemoryEvents(
+        await this.execInPod({
+          session,
+          podName,
+          command: READ_MEMORY_EVENTS_COMMAND,
+          timeoutMs: MEMORY_EVENTS_READ_TIMEOUT_MS,
+        }),
+      );
+    } catch {
+      return null;
+    }
+  }
+
   private async execInPod(params: {
     session: AgentRunRecord;
     podName: string;
@@ -1994,6 +2135,17 @@ export default new AgentRuntimeManager();
 
 // ===================== helpers =====================
 
+/**
+ * The pod and its agent-runtime container: a restarted container is a new
+ * cgroup with fresh memory counters, so the first reading is taken again.
+ */
+function agentRuntimeContainerKey(pod: k8s.V1Pod): string {
+  const status = pod.status?.containerStatuses?.find(
+    (candidate) => candidate.name === AGENT_RUNTIME_CONTAINER_NAME,
+  );
+  return `${pod.metadata?.name ?? ""}/${status?.containerID ?? ""}`;
+}
+
 /** Only used for read-only completion observations, never workload mutations. */
 function isTransientObservationError(error: unknown): boolean {
   if (isTransientK8sApiError(error)) return true;
@@ -2039,6 +2191,20 @@ function pendingTurnSecretName(
  * task does not sit idle before the lifecycle settles it.
  */
 const AGENT_RUNTIME_COMPLETION_POLL_MS = 5_000;
+/** Reading the cgroup's memory counters is a short exec; a pod under memory pressure may be slow to answer. */
+const MEMORY_EVENTS_READ_TIMEOUT_MS = 15_000;
+/** How often the first reading is tried before a container is taken to have no counters. */
+const MEMORY_EVENTS_BASELINE_ATTEMPTS = 3;
+/**
+ * Turn failures a memory kill explains: the process died without a word of
+ * its own. An image's envelope code (a provider error it reported itself)
+ * keeps its classification.
+ */
+const MEMORY_KILL_EXPLAINS: ReadonlySet<string> = new Set<AgentRunFailureCode>([
+  "turn.exit_status",
+  "turn.process_exited",
+  "turn.recording_failed",
+]);
 const AGENT_RUNTIME_INPUT_STAGING_POLL_MS = 500;
 const AGENT_RUNTIME_POD_REMOVAL_TIMEOUT_MS = 5 * 60_000;
 const AGENT_RUNTIME_ATTACH_TIMEOUT_MS = 60_000;

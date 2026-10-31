@@ -101,6 +101,7 @@ import kimiCodeProxyRoutes from "./routes/kimi-code";
 import openAiProxyRoutes from "./routes/openai";
 
 const native = vi.hoisted(() => ({
+  collectOpenappaMetrics: vi.fn(() => ""),
   initializeOpenappa: vi.fn(),
   dispatchHook: vi.fn(),
   loadChildReturns: vi.fn(

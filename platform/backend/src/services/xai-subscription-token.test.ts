@@ -780,37 +780,73 @@ describe("shared refresh guards", () => {
     },
   );
 
-  tokenTest(
-    "persists a rotation whose write-back failed on the next refresh, without redeeming again",
-    async ({ subscriptionKey }) => {
-      const issuer = stubSingleUseIssuer();
-      const writes = vi
-        .spyOn(secretManager(), "updateSecret")
-        .mockImplementationOnce(async () => {
-          // The secrets backend fails after xAI answered. The error looks like
-          // a network outage, the kind the transaction wrapper would retry.
+  /** Makes the next `count` secret writes fail with a network-shaped error. */
+  function failWrites(count: number) {
+    let remaining = count;
+    const real = secretManager().updateSecret.bind(secretManager());
+    return vi
+      .spyOn(secretManager(), "updateSecret")
+      .mockImplementation(async (...args) => {
+        if (remaining > 0) {
+          remaining -= 1;
           throw Object.assign(new Error("Connection terminated unexpectedly"), {
             code: "ECONNRESET",
           });
-        });
+        }
+        return real(...args);
+      });
+  }
+
+  tokenTest(
+    "retries a failed write-back under the lock, so another replica adopts the rotation",
+    async ({ subscriptionKey }) => {
+      const issuer = stubSingleUseIssuer();
+      const writes = failWrites(1);
+      const params = {
+        credential: subscriptionKey.credential,
+        providerApiKeyId: subscriptionKey.id,
+      };
+      try {
+        expect(
+          await new XaiSubscriptionTokenManager().getAccessToken(params),
+        ).toBe("at_1");
+        expect(writes).toHaveBeenCalledTimes(2);
+        // Replica B finds the rotation stored and never touches the issuer.
+        expect(
+          await new XaiSubscriptionTokenManager().getAccessToken(params),
+        ).toBe("at_1");
+        expect(issuer.calls).toEqual(["rt_0"]);
+      } finally {
+        writes.mockRestore();
+      }
+    },
+  );
+
+  tokenTest(
+    "persists a rotation whose write-back kept failing on the next refresh, without redeeming again",
+    async ({ subscriptionKey }) => {
+      const issuer = stubSingleUseIssuer();
+      // Every attempt under the lock fails: the lock is released, the caller
+      // sees the failure, and the rotation stays pending in this process.
+      const writes = failWrites(3);
       const manager = new XaiSubscriptionTokenManager();
       const params = {
         credential: subscriptionKey.credential,
         providerApiKeyId: subscriptionKey.id,
       };
       try {
-        // Not retried under the lock: the caller sees the failure at once...
         await expect(manager.getAccessToken(params)).rejects.toMatchObject({
           statusCode: 502,
         });
         expect(issuer.calls).toEqual(["rt_0"]);
+        expect(writes).toHaveBeenCalledTimes(3);
         expect(await readCredential(subscriptionKey.secretId)).toEqual(
           subscriptionKey.credential,
         );
-        // ...and the next refresh writes the successor it already holds.
+        // The next refresh writes the successor it already holds.
         expect(await manager.getAccessToken(params)).toBe("at_1");
         expect(issuer.calls).toEqual(["rt_0"]);
-        expect(writes).toHaveBeenCalledTimes(2);
+        expect(writes).toHaveBeenCalledTimes(4);
         expect(await readCredential(subscriptionKey.secretId)).toMatchObject({
           refreshToken: "rt_1",
           accessToken: "at_1",
@@ -822,16 +858,76 @@ describe("shared refresh guards", () => {
   );
 
   tokenTest(
+    "another replica refreshing first after a lost write-back presents the spent token and flags the key",
+    async ({ subscriptionKey }) => {
+      const issuer = stubSingleUseIssuer();
+      const writes = failWrites(3);
+      const params = {
+        credential: subscriptionKey.credential,
+        providerApiKeyId: subscriptionKey.id,
+      };
+      try {
+        await expect(
+          new XaiSubscriptionTokenManager().getAccessToken(params),
+        ).rejects.toMatchObject({ statusCode: 502 });
+      } finally {
+        writes.mockRestore();
+      }
+      // The accepted residual: the successor lives only in replica A, so
+      // replica B redeems the stored (spent) token and the family is revoked.
+      await expect(
+        new XaiSubscriptionTokenManager().getAccessToken(params),
+      ).rejects.toMatchObject({
+        statusCode: 401,
+        internalCode: ArchestraInternalErrorCode.ProviderAuthRequired,
+      });
+      expect(issuer.calls).toEqual(["rt_0", "rt_0"]);
+      expect(
+        (await LlmProviderApiKeyModel.findById(subscriptionKey.id))
+          ?.requiresReauthentication,
+      ).toBe(true);
+    },
+  );
+
+  tokenTest(
+    "redeems the live successor instead of persisting a pending access token that expired",
+    async ({ subscriptionKey }) => {
+      const issuer = stubSingleUseIssuer();
+      issuer.expiresIn = 60;
+      const writes = failWrites(3);
+      const manager = new XaiSubscriptionTokenManager();
+      const params = {
+        credential: subscriptionKey.credential,
+        providerApiKeyId: subscriptionKey.id,
+      };
+      try {
+        await expect(manager.getAccessToken(params)).rejects.toMatchObject({
+          statusCode: 502,
+        });
+      } finally {
+        writes.mockRestore();
+      }
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        vi.setSystemTime(Date.now() + 61_000);
+        // at_1 is past its lifetime; rt_1 (never presented) is redeemed once.
+        expect(await manager.getAccessToken(params)).toBe("at_2");
+        expect(issuer.calls).toEqual(["rt_0", "rt_1"]);
+        expect(await readCredential(subscriptionKey.secretId)).toMatchObject({
+          refreshToken: "rt_2",
+          accessToken: "at_2",
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  tokenTest(
     "drops a pending rotation once a reconnect replaced the stored credential",
     async ({ subscriptionKey }) => {
       const issuer = stubSingleUseIssuer();
-      const writes = vi
-        .spyOn(secretManager(), "updateSecret")
-        .mockImplementationOnce(async () => {
-          throw Object.assign(new Error("read ECONNRESET"), {
-            code: "ECONNRESET",
-          });
-        });
+      const writes = failWrites(3);
       const manager = new XaiSubscriptionTokenManager();
       const params = {
         credential: subscriptionKey.credential,
@@ -855,7 +951,7 @@ describe("shared refresh guards", () => {
         // over it, and nothing is redeemed.
         expect(await manager.getAccessToken(params)).toBe("at_reconnected");
         expect(issuer.calls).toEqual(["rt_0"]);
-        expect(writes).toHaveBeenCalledTimes(1);
+        expect(writes).toHaveBeenCalledTimes(3);
         expect(await readCredential(subscriptionKey.secretId)).toMatchObject({
           refreshToken: "rt_reconnected",
         });

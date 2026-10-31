@@ -16,9 +16,12 @@
  *   re-reads the secret inside that transaction, adopts an access token another
  *   replica already stored, or redeems once and writes the rotation back before
  *   the lock is released. The write is synchronous: a rotation that is not yet
- *   persisted is one the next replica cannot see. A rotation whose write-back
- *   failed stays pending in this process and is persisted by its next refresh;
- *   the issuer is never asked twice for one stored token.
+ *   persisted is one the next replica cannot see. A write-back that fails is
+ *   retried briefly under the lock; past that, the rotation stays pending in
+ *   this process, which never asks the issuer twice for one stored token and
+ *   persists the successor on its next refresh. Another replica refreshing
+ *   first would still present the spent token, so a secrets backend that stays
+ *   down longer than that retry costs the family.
  * - A caller's copy of the credential is never redeemed. Replicas decode the
  *   secret through a process-local cache, so the copy a request carries can be
  *   older or newer than what this process last saw; only its `userId` is used,
@@ -31,9 +34,11 @@
  * per process; it is the next candidate for the same lock.
  */
 import { createHmac, randomBytes } from "node:crypto";
+import { setTimeout as sleep } from "node:timers/promises";
 import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
+import { isTransientDbError } from "@/database/retry";
 import logger from "@/logging";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import { withSubscriptionCredentialLock } from "@/models/subscription-credential-lock";
@@ -209,18 +214,21 @@ export class XaiSubscriptionTokenManager {
     // The lock helper retries its callback on transient database failures, and
     // a redemption cannot be repeated: the refresh token is spent the moment
     // xAI answers, whether or not that answer gets persisted. So the issuer is
-    // called at most once per stored token, whatever the database does: a
-    // successful redemption is kept in `pendingRotations` until its write-back
-    // commits (a retry, or the next refresh, persists it instead of redeeming
-    // again), a failed one is remembered for the rest of this call (a retry
-    // does not present the token again), and neither an issuer failure nor a
-    // write-back failure is thrown through the transaction: the retry wrapper
-    // classifies network errors by shape, not by source, and would hold the
-    // lock through its whole backoff.
+    // called at most once per stored token by this process, whatever the
+    // database does: a successful redemption is kept in `pendingRotations`
+    // until its write-back commits (a retry, or the next refresh, persists it
+    // instead of redeeming again), a failed one is remembered for the rest of
+    // this call (a retry does not present the token again), and neither an
+    // issuer failure nor a write-back failure is thrown through the
+    // transaction: the retry wrapper classifies network errors by shape, not
+    // by source, and would hold the lock through its whole backoff. The
+    // write-back gets its own short retry under the lock instead, so a blip in
+    // the secrets backend does not release the lock with the successor held
+    // only here.
     let issuerFailure:
       | { error: unknown; rejected: XaiSubscriptionCredential | undefined }
       | undefined;
-    let persistFailure: unknown;
+    let persistFailure: { cause: unknown } | undefined;
     const result = await withSubscriptionCredentialLock({
       provider: "xai",
       providerApiKeyId,
@@ -243,18 +251,29 @@ export class XaiSubscriptionTokenManager {
           return undefined;
         }
         const pending = this.pendingRotations.get(providerApiKeyId);
-        let redeemed =
-          pending?.refreshToken === stored.refreshToken
-            ? pending.redeemed
-            : undefined;
-        if (!redeemed) {
-          if (pending) {
-            // The stored credential moved on (a reconnect) while this rotation
-            // waited to be persisted: it descends from a dead family now.
-            this.pendingRotations.delete(providerApiKeyId);
+        let redeemed: Redemption | undefined;
+        // What to present if a redemption is needed: the stored token, or the
+        // live successor of a pending rotation whose access token has already
+        // expired while it waited (its predecessor, the stored one, is spent).
+        let redeemFrom = stored.refreshToken;
+        if (pending?.refreshToken === stored.refreshToken) {
+          if (
+            pending.redeemed.expiresAtMs - Date.now() >
+            STORED_ACCESS_TOKEN_MIN_REMAINING_MS
+          ) {
+            redeemed = pending.redeemed;
+          } else {
+            redeemFrom =
+              pending.redeemed.rotatedRefreshToken ?? stored.refreshToken;
           }
+        } else if (pending) {
+          // The stored credential moved on (a reconnect) while this rotation
+          // waited to be persisted: it descends from a dead family now.
+          this.pendingRotations.delete(providerApiKeyId);
+        }
+        if (!redeemed) {
           try {
-            redeemed = await redeemWithXai(stored.refreshToken);
+            redeemed = await redeemWithXai(redeemFrom);
           } catch (error) {
             issuerFailure = {
               error,
@@ -279,28 +298,35 @@ export class XaiSubscriptionTokenManager {
           accessToken: redeemed.accessToken,
           accessTokenExpiresAtMs: redeemed.expiresAtMs,
         };
-        let persisted: SelectSecret | null;
-        try {
-          persisted = await secretManager().updateSecret(
-            secretId,
-            { apiKey: encodeXaiSubscriptionCredential(updated) },
-            { transaction },
-          );
-        } catch (error) {
-          persistFailure = error;
-          return undefined;
+        let persisted: SelectSecret | null = null;
+        for (let attempt = 1; ; attempt++) {
+          try {
+            persisted = await secretManager().updateSecret(
+              secretId,
+              { apiKey: encodeXaiSubscriptionCredential(updated) },
+              { transaction },
+            );
+            break;
+          } catch (error) {
+            if (attempt < WRITE_BACK_ATTEMPTS && isTransientDbError(error)) {
+              await sleep(WRITE_BACK_RETRY_DELAY_MS);
+              continue;
+            }
+            persistFailure = { cause: error };
+            return undefined;
+          }
         }
         if (!persisted) {
-          persistFailure = new ApiError(
-            502,
-            "Could not persist the refreshed SuperGrok credential",
-          );
+          persistFailure = { cause: undefined };
           return undefined;
         }
         return {
           credential: updated,
           digests: [
             hashToken(stored.refreshToken),
+            ...(redeemFrom === stored.refreshToken
+              ? []
+              : [hashToken(redeemFrom)]),
             hashToken(updated.refreshToken),
           ],
         };
@@ -325,14 +351,13 @@ export class XaiSubscriptionTokenManager {
       }
       throw issuerFailure.error;
     }
-    if (persistFailure instanceof ApiError) {
-      throw persistFailure;
-    }
     const error = new ApiError(
       502,
       "Could not persist the refreshed SuperGrok credential",
     );
-    error.cause = persistFailure;
+    if (persistFailure?.cause !== undefined) {
+      error.cause = persistFailure.cause;
+    }
     throw error;
   }
 
@@ -743,6 +768,13 @@ const VALIDATION_ROTATION_TTL_MS = 15 * 60 * 1000;
  * cost the family anyway.
  */
 const PENDING_ROTATION_TTL_MS = 60 * 60 * 1000;
+/**
+ * Attempts for the write-back under the lock when the secrets backend fails
+ * with a network-shaped error, and the pause between them. Short on purpose:
+ * the lock and a pooled connection are held throughout.
+ */
+const WRITE_BACK_ATTEMPTS = 3;
+const WRITE_BACK_RETRY_DELAY_MS = 250;
 
 /** @public — exported for unit tests; the per-token refresh headroom. */
 export function refreshBufferFor(lifetimeMs: number): number {

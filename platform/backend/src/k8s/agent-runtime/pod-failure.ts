@@ -3,7 +3,7 @@ import type { V1Pod } from "@kubernetes/client-node";
 import type { AgentRunFailureCode } from "@/services/agent-runtime/run-failure";
 import {
   AGENT_RUNTIME_WORKSPACE_FULL_EXIT_CODE,
-  AGENT_RUNTIME_WORKSPACE_UNWRITABLE_EXIT_CODE,
+  workspaceExitExplanation,
 } from "./workspace-exit";
 
 const TRUNCATED = "… (truncated)";
@@ -53,7 +53,7 @@ export function describeAgentRuntimePodFailure(
       // The runtime writes why its volume stopped the run to the termination
       // message; this says the same when that write did not happen.
       else if (kind === "Container") {
-        const workspace = WORKSPACE_EXIT_EXPLANATIONS[terminated.exitCode];
+        const workspace = workspaceExitExplanation(terminated.exitCode);
         if (workspace) details.push(workspace);
       }
     }
@@ -102,16 +102,18 @@ export function classifyAgentRuntimePodFailure(
       condition.type === "DisruptionTarget" && condition.status === "True",
   );
   if (pod.status?.reason === "Evicted" || disrupted) return "pod.evicted";
+  const containers = pod.status?.containerStatuses ?? [];
   const statuses = [
     ...(pod.status?.initContainerStatuses ?? []),
-    ...(pod.status?.containerStatuses ?? []),
+    ...containers,
   ];
   if (
     statuses.some((status) => status.state?.terminated?.reason === "OOMKilled")
   )
     return "pod.oom_killed";
+  // The runtime's startup trap sets this status when the volume was full.
   if (
-    (pod.status?.containerStatuses ?? []).some(
+    containers.some(
       (status) =>
         status.state?.terminated?.exitCode ===
         AGENT_RUNTIME_WORKSPACE_FULL_EXIT_CODE,
@@ -120,13 +122,6 @@ export function classifyAgentRuntimePodFailure(
     return "pod.workspace_full";
   return "pod.failed";
 }
-
-const WORKSPACE_EXIT_EXPLANATIONS: Record<number, string> = {
-  [AGENT_RUNTIME_WORKSPACE_FULL_EXIT_CODE]:
-    "The workspace volume is full, so the run stopped. Start a new run with a larger workspace volume.",
-  [AGENT_RUNTIME_WORKSPACE_UNWRITABLE_EXIT_CODE]:
-    "The workspace volume cannot be written, so the run stopped. It may be read-only or failing. Ask the cluster operator to check it.",
-};
 
 function containerMemoryLimit(
   pod: V1Pod,

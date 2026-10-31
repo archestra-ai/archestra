@@ -35,7 +35,7 @@ describe("a Pod the workspace volume stopped", () => {
     ],
     [
       AGENT_RUNTIME_WORKSPACE_UNWRITABLE_EXIT_CODE,
-      "The workspace volume cannot be written, so the run stopped. It may be read-only or failing. Ask the cluster operator to check it.",
+      "The workspace volume cannot be written, so the run stopped. It may be full, read-only or failing.",
     ],
   ])("exit code %i without a termination message is still explained", (exitCode, explanation) => {
     const description = describeAgentRuntimePodFailure(

@@ -111,7 +111,7 @@ while :; do
     done
     rm -f ${AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE}
     if [ "$recording_failed" = 0 ]; then
-      printf '%s\n' "touch '$turn.running'; export ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX='$turn'; /bin/sh '$request'; status=\$?; sleep 2; printf '%s\\n' \"\$status\" > '$turn.result.tmp' && mv '$turn.result.tmp' '$turn.result'; exit \"\$status\"" > "$turn.session"
+      printf '%s\n' "touch '$turn.running'; export ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX='$turn'; /bin/sh '$request'; status=\$?; sleep 2; printf '%s\\n' \"\$status\" > '$turn.result.tmp' && mv '$turn.result.tmp' '$turn.result' || rm -f '$turn.result.tmp'; exit \"\$status\"" > "$turn.session"
       tmux respawn-pane -k -t agent "/bin/sh '$turn.session'"
     fi
     startup_polls=0

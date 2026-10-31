@@ -61,6 +61,25 @@ echo VERIFIED
     expect(result.stderr).toContain("The workspace volume is full (");
   }, 30_000);
 
+  it("stops the Pod with the full-volume status when no inodes are left", () => {
+    const result = runInContainer(
+      `
+printf 'touch /tmp/started; i=0; while touch /var/run/archestra/file-$i 2>/dev/null; do i=$((i + 1)); done; exit 0\\n' > /var/run/archestra/turns/1.request
+wait_for /tmp/started
+status=0
+wait "$supervisor" || status=$?
+test "$status" = ${AGENT_RUNTIME_WORKSPACE_FULL_EXIT_CODE}
+echo VERIFIED
+`,
+      { volumeKiB: 8192, inodes: 64 },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("VERIFIED");
+    expect(result.stderr).toContain(
+      "The workspace volume is full (no room for more files), so the run stopped.",
+    );
+  }, 30_000);
+
   it("stops at startup with the full-volume status on a full volume", () => {
     const result = runInContainer(
       `
@@ -441,9 +460,10 @@ function namespaceAvailable(): boolean {
  */
 function runInContainer(
   assertions: string,
-  options: { volumeKiB?: number } = {},
+  options: { volumeKiB?: number; inodes?: number } = {},
 ) {
   const volume = options.volumeKiB;
+  const inodes = options.inodes ? `,nr_inodes=${options.inodes}` : "";
   const [command, args, prelude] = NAMESPACE
     ? [
         "bash",
@@ -455,7 +475,7 @@ function runInContainer(
           `set -o pipefail; unshare ${NAMESPACE_FLAGS.join(" ")} /bin/sh -s | cat`,
         ],
         `mount -t tmpfs tmpfs /tmp
-mount -t tmpfs -o size=${volume ?? 262144}k tmpfs /run
+mount -t tmpfs -o size=${volume ?? 262144}k${inodes} tmpfs /run
 mkdir -p /var/run/archestra/turns
 export PATH="${IMAGE_BIN}:$PATH"`,
       ]
@@ -468,7 +488,9 @@ export PATH="${IMAGE_BIN}:$PATH"`,
           "--network=none",
           "-v",
           `${IMAGE_BIN}:/usr/local/bin:ro`,
-          ...(volume ? ["--tmpfs", `/var/run/archestra:size=${volume}k`] : []),
+          ...(volume
+            ? ["--tmpfs", `/var/run/archestra:size=${volume}k${inodes}`]
+            : []),
           "--entrypoint=/bin/sh",
           SANDBOX_IMAGE ?? "",
           "-s",

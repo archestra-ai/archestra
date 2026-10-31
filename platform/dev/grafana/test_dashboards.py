@@ -20,14 +20,20 @@ def panels(items):
         yield from panels(panel.get("panels", []))
 
 
-def expression(board, title):
+def expression(board, title, variables=None):
     dashboard = json.loads((ROOT / "dashboards" / f"{board}.json").read_text())
     query = next(p for p in panels(dashboard["panels"]) if p["title"] == title)[
         "targets"
     ][0]["expr"]
+    values = {
+        "__rate_interval": "5m",
+        "__range": "5m",
+        "cost_group": "provider",
+        **(variables or {}),
+    }
     return re.sub(
-        r"\$[a-zA-Z_][a-zA-Z_0-9]*",
-        lambda m: {"$__rate_interval": "5m", "$__range": "5m"}.get(m[0], ".*"),
+        r"\$(?:\{([^}:]+)(?::[^}]+)?\}|([a-zA-Z_][a-zA-Z_0-9]*))",
+        lambda m: values.get(m[1] or m[2], ".*"),
         query,
     )
 
@@ -203,6 +209,66 @@ class PromQLTest(unittest.TestCase):
                 "promql_expr_test": [check(limit, 100, "{" + common + "}")],
             },
         ]
+        selected_tokens = expression(
+            "genai-observability", "Tokens / second", {"model": "chosen"}
+        )
+        selected_logical = expression(
+            "genai-observability", "Requests / second", {"model": "chosen"}
+        )
+        selected_cost = expression(
+            "costs-and-limits",
+            "Estimated spend by selected dimension",
+            {
+                "model": "chosen",
+                "auth_method": "provider_key",
+                "billing_mode": "metered",
+            },
+        )
+        tests.extend(
+            [
+                {
+                    "name": "model filters apply to token usage but not logical requests",
+                    "input_series": [
+                        series(
+                            'llm_tokens_total{model="chosen",provider="example",type="input"}',
+                            "0+60x5",
+                        ),
+                        series(
+                            'llm_tokens_total{model="other",provider="example",type="input"}',
+                            "0+600x5",
+                        ),
+                        series(
+                            'llm_proxy_request_duration_seconds_count{outcome="success"}',
+                            "0+60x5",
+                        ),
+                    ],
+                    "promql_expr_test": [
+                        check(selected_tokens, 1, '{provider="example",type="input"}'),
+                        check(selected_logical, 1),
+                    ],
+                },
+                {
+                    "name": "cost filters intersect model authentication and billing dimensions",
+                    "input_series": [
+                        series(
+                            'llm_cost_total{model="chosen",provider="example",auth_method="provider_key",billing_mode="metered"}',
+                            "0+60x5",
+                        ),
+                        series(
+                            'llm_cost_total{model="other",provider="example",auth_method="provider_key",billing_mode="metered"}',
+                            "0+600x5",
+                        ),
+                        series(
+                            'llm_cost_total{model="chosen",provider="example",auth_method="oauth_user",billing_mode="subscription"}',
+                            "0+600x5",
+                        ),
+                    ],
+                    "promql_expr_test": [
+                        check(selected_cost, 300, '{provider="example"}')
+                    ],
+                },
+            ]
+        )
         snapshot_age = expression(
             "agent-runtime", "Age of last successful fleet snapshot"
         )

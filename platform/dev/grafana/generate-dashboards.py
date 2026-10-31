@@ -3,6 +3,8 @@
 import json
 from pathlib import Path
 
+from dashboard_ux import refine_dashboard
+
 ROOT = Path(__file__).parent
 OUT = ROOT / "dashboards"
 CATALOG = [
@@ -241,6 +243,7 @@ def collapse_optional_rows(d):
 
 
 def decorate(d):
+    refine_dashboard(d)
     for variable in d.get("templating", {}).get("list", []):
         if variable.get("type") == "datasource":
             variable["current"] = {}
@@ -405,7 +408,7 @@ def costs():
         width=8,
     )
     b.panel(
-        "Metered estimate / hour",
+        "Estimated spend / hour",
         rate("llm_cost_total", 'billing_mode="metered"', "provider") + " * 3600",
         "currencyUSD",
         legend="{{provider}}",
@@ -431,6 +434,14 @@ def costs():
         "short",
         kind="bargauge",
         legend="{{cache_type}}",
+    )
+    b.panel(
+        "Estimated spend by selected dimension",
+        increase("llm_cost_total", group="${cost_group:raw}"),
+        "currencyUSD",
+        kind="bargauge",
+        width=24,
+        description="Estimated list-price inference cost in the selected period, grouped by Cost breakdown after applying the cost filters. Subscription usage is a price equivalent, not an extra token bill.",
     )
     b.row("Limit enforcement")
     b.panel(
@@ -526,7 +537,7 @@ def runtime():
     b.note(
         "Fleet lifecycle counters are global to the selected deployment job. Health conditions **overlap** and are database snapshots: deduplicate replicas with max before summing configured agents. Fresh heartbeats show orchestration liveness, not proof of model progress. Kubernetes panels use their own data source and require kube-state-metrics/cAdvisor; missing collectors show No samples. Change the pod regex to include custom workloads or warm pools."
     )
-    b.row("Work requiring attention")
+    b.row("Task health")
     for condition, title in [
         ("working", "Working tasks"),
         ("submitted", "Submitted tasks"),

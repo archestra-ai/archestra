@@ -2,7 +2,7 @@
 title: Guardrails and OpenAPPA Metrics
 description: Track embedded OpenAPPA hook dispatches and latency, or map standalone OpenAPPA daemon metrics.
 order: 9
-lastUpdated: 2026-10-30
+lastUpdated: 2026-10-31
 ---
 
 Track [Guardrails](/docs/agents/guardrails) hook volume, decision outcomes, and hook dispatch latency from Archestra's Prometheus `/metrics` endpoint, or map OTLP metrics from a standalone OpenAPPA daemon.
@@ -15,6 +15,8 @@ Archestra exposes two metric families on its standard Prometheus scrape endpoint
 | --- | --- | --- | --- |
 | <span id="openappa_hook_dispatches_total"></span>`openappa_hook_dispatches_total` | Counter | `hook`, `decision` | Completed embedded OpenAPPA hook dispatches, including failures; one observation after policy-move retries. |
 | <span id="openappa_hook_dispatch_duration_seconds"></span>`openappa_hook_dispatch_duration_seconds` | Histogram | `hook`, `decision` | Embedded OpenAPPA hook dispatch wall time in seconds (`0.001` to `300`s buckets), including policy resolution inside dispatch, native initialization, storage, consults, and retries. |
+
+### Dispatch Semantics
 
 Each observation records one logical hook dispatch across the embedded host boundary after any policy-move retries settle. One user request or agent turn can trigger multiple hook dispatches (such as `session_start`, `tool_result`, `prompt`, `tool_call`, and `turn_end`), and a single `tool_call` dispatch can evaluate policy rules, consult helpers or annotators, and retry when an organization's policy revision moves. These metrics do not count individual engine rule checks or unique user requests.
 
@@ -57,7 +59,7 @@ histogram_quantile(
 
 The standalone [OpenAPPA](https://github.com/archestra-ai/OpenAPPA) daemon ships a separate OpenTelemetry metrics exporter that is not wired into Archestra's embedded NAPI runtime. Standalone `appa_*` series do not appear on Archestra's `/metrics` scrape endpoint, and Archestra's built-in OTLP exporter forwards traces and logs (`/v1/traces` and `/v1/logs`), not OTLP metrics.
 
-To populate standalone daemon panels in Prometheus or Grafana, point the standalone daemon at an OpenTelemetry Collector metrics pipeline (`otlp` receiver to a `prometheus` or `prometheusremotewrite` exporter). Standard Prometheus translation maps the dotted OTLP instrument names below to `appa_*` series:
+To collect standalone daemon metrics in Prometheus, point the standalone daemon at an OpenTelemetry Collector metrics pipeline (`otlp` receiver to a `prometheus` or `prometheusremotewrite` exporter). Standard Prometheus translation maps the dotted OTLP instrument names below to `appa_*` series:
 
 | Metric | OTLP Instrument | Type | Labels | Measures |
 | --- | --- | --- | --- | --- |

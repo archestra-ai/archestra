@@ -62,6 +62,8 @@ GRAFANA_URL=https://grafana.example.com GRAFANA_TOKEN=glsa_xxx \
 
 ### Data Sources and Metric Semantics
 
+Model and agent filters on **LLM Proxy** affect upstream usage; logical request outcomes have their own filters. **Costs & Limits** has separate cost and limit filters, with **Cost breakdown** selecting the grouping dimension. **Scrape job** selects a Prometheus target group; leave **All** selected unless you need one group of processes.
+
 Each dashboard scopes its optional data sources and aggregates multi-replica metrics according to how Archestra exports them:
 
 - **Session timelines vs. runtime fleet health:** **Session Investigation** inspects individual conversations—working for both [Agent Runtime](/docs/agents/runtime) runs and external client sessions that propagate session context via [`X-Archestra-Session-Id`](/docs/llm-proxy#custom-headers) or [`X-Appa-Session-ID`](/docs/agents/guardrails/clients#session-headers)—and adds trace waterfalls and span logs when Tempo and Loki are configured. **Agent Runtime** tracks fleet, workload, and pod health rather than a per-session event timeline.

@@ -2,7 +2,7 @@
 title: LLM Metrics
 description: Look up LLM latency, token usage, prompt caching, and cost metrics.
 order: 1
-lastUpdated: 2026-10-30
+lastUpdated: 2026-10-31
 ---
 
 Track LLM request latency, token usage, and billed spend across providers and models. See [Labels](/docs/admin/observability/metrics#labels) for request and agent dimensions.
@@ -26,13 +26,21 @@ Track LLM request latency, token usage, and billed spend across providers and mo
 | <span id="agent_runs_total"></span>`agent_runs_total` | Counter | `external_agent_id` | Unique runs, counted by the [`X-Archestra-Run-Id`](/docs/llm-proxy#custom-headers) header |
 | <span id="llm_active_users"></span>`llm_active_users` | Gauge | `window` (`24h`, `7d`) only | Distinct users with at least one LLM request in the window |
 
+## Billing and Authentication Labels
+
 `billing_mode` is `metered` for per-token billing and `subscription` for flat-rate subscription credentials. Billed spend is `sum(llm_cost_total{billing_mode="metered"})`. `auth_method` is `provider_key`, `virtual_key`, `passthrough_virtual_key`, `jwks`, `oauth_client_credentials`, `oauth_user`, `internal`, or `unknown`.
 
-`llm_time_to_first_byte_seconds` minus `llm_time_to_first_token_seconds` is the time Archestra spends before the upstream call: authentication and guardrails.
+## Streaming Latency
+
+For one request, the difference between client first-byte and upstream first-chunk times includes work before the upstream call, such as authentication and guardrails. Do not subtract aggregate percentiles to estimate that duration.
+
+## Active User Aggregation
 
 Every replica reports the same `llm_active_users` value, so aggregate it with `max()`, not `sum()`. [`ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS`](/docs/admin/deployment/configuration#ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS) sets the refresh interval; `0` turns the metric off.
 
-Upstream LLM and MCP metrics carry trace exemplars, so a Grafana panel can link a data point to its trace. See [Exemplars](/docs/admin/observability#exemplars).
+## Trace Exemplars
+
+Upstream LLM latency, token, cache, and cost observations can carry trace exemplars. See [Exemplars](/docs/admin/observability#exemplars) for collection requirements.
 
 ## Proxy Request Outcomes
 

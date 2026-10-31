@@ -32,13 +32,20 @@ const InstructionMessageSchema = z.object({
   role: z.enum(["system", "developer"]),
   content: z.unknown(),
 });
-const TextPartSchema = z.object({ type: z.literal("text"), text: z.string() });
+const TextPartSchema = z.object({
+  type: z.enum(["text", "input_text"]),
+  text: z.string(),
+});
 const FunctionSchema = z.object({
   name: z.string(),
-  description: z.string().optional(),
+  description: z
+    .string()
+    .nullish()
+    .transform((description) => description ?? undefined),
 });
 const ToolSchema = z.union([
   z.object({ function: FunctionSchema }).transform((tool) => tool.function),
+  z.object({ custom: FunctionSchema }).transform((tool) => tool.custom),
   FunctionSchema,
   // Responses built-in tools have a type but no function name.
   z.object({ type: z.string() }).transform((tool) => ({ name: tool.type })),

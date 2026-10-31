@@ -81,6 +81,10 @@ STANDALONE_DIR="$PLATFORM_DIR/frontend/.next/standalone/frontend"
 # Which frontend is running, dev or e2e: recorded when it starts, so reload and
 # up --e2e keep or change it on purpose.
 FRONTEND_MODE_FILE="$STATE_DIR/frontend-mode"
+# Whether Keycloak is part of this stack: written by `up --keycloak` once it
+# starts, removed by `down`. Readiness and `e2e` fail when a requested Keycloak
+# is not running, instead of treating it as never asked for.
+KEYCLOAK_REQUESTED_FILE="$STATE_DIR/keycloak-requested"
 PGDATA="$STATE_DIR/postgres"
 DB_PORT="${ARCHESTRA_DEV_LITE_DB_PORT:-5432}"
 DB_USER=archestra
@@ -556,13 +560,14 @@ start_keycloak() {
   mkdir -p "$dist/data/import"
   cp -f "$KEYCLOAK_REALM_FILE" "$dist/data/import/archestra-realm.json"
   free_ports "$KEYCLOAK_PORT" "$KEYCLOAK_MANAGEMENT_PORT"
+  touch "$KEYCLOAK_REQUESTED_FILE"
   # Keycloak would otherwise size its heap from 70% of the Pod's memory.
   start_session keycloak "$dist" \
     "exec env KC_BOOTSTRAP_ADMIN_USERNAME=admin KC_BOOTSTRAP_ADMIN_PASSWORD=admin KC_HTTP_HOST=127.0.0.1 KC_HTTP_PORT=$KEYCLOAK_PORT KC_HTTP_MANAGEMENT_PORT=$KEYCLOAK_MANAGEMENT_PORT KC_FEATURES=token-exchange:v1,admin-fine-grained-authz:v1,jwt-authorization-grant:v1,identity-assertion-jwt:v1 KC_HOSTNAME=http://localhost:$KEYCLOAK_PORT KC_HOSTNAME_STRICT=false KC_HOSTNAME_BACKCHANNEL_DYNAMIC=true JAVA_OPTS_KC_HEAP='-Xms128m -Xmx1g' bin/kc.sh start-dev --import-realm"
 }
 
 keycloak_requested() {
-  session_alive keycloak
+  [ -f "$KEYCLOAK_REQUESTED_FILE" ]
 }
 
 keycloak_ready() {
@@ -603,8 +608,9 @@ wait_ready() {
       e2e_ok=1
     fi
     if keycloak_requested; then
-      # Ready once the realm is imported, which the first start does.
-      [ "$keycloak_ok" = 1 ] || { keycloak_ready && keycloak_ok=1 && log "Keycloak on :$KEYCLOAK_PORT, realm archestra"; }
+      # Ready once the realm is imported, which the first start does. A
+      # requested Keycloak that is not running fails the check below.
+      [ "$keycloak_ok" = 1 ] || { session_alive keycloak && keycloak_ready && keycloak_ok=1 && log "Keycloak on :$KEYCLOAK_PORT, realm archestra"; }
     else
       keycloak_ok=1
     fi
@@ -707,7 +713,7 @@ cmd_status() {
       pid="$(session_pid "$name")"
       rss="$(tree_rss_mb "$pid")"
       printf '%-10s %-8s %-8s %s\n' "$name" up "$pid" "$rss"
-    elif [ "$name" = wiremock ] || [ "$name" = a2a ] || [ "$name" = keycloak ]; then
+    elif [ "$name" = wiremock ] || [ "$name" = a2a ] || { [ "$name" = keycloak ] && ! keycloak_requested; }; then
       :
     else
       printf '%-10s %-8s %-8s %s\n' "$name" down - -
@@ -746,6 +752,7 @@ cmd_down() {
     session_alive "$name" && { log "stopping $name"; stop_session "$name"; }
   done
   tmx kill-server 2>/dev/null || true
+  rm -f "$KEYCLOAK_REQUESTED_FILE"
   if [ -s "$PGDATA/PG_VERSION" ] && pg_ctl -D "$PGDATA" status >/dev/null 2>&1; then
     log "stopping postgres"
     pg_ctl -D "$PGDATA" -m fast -w stop >> "$LOG_DIR/db-ctl.log" 2>&1 || true
@@ -784,6 +791,9 @@ available_cpus() {
 cmd_e2e() {
   e2e_enabled || die "start the stack with --e2e first"
   http_ok "http://127.0.0.1:$BACKEND_PORT/ready" || die "backend is not ready"
+  if keycloak_requested && ! session_alive keycloak; then
+    die "Keycloak was requested but is not running; see $LOG_DIR/keycloak.log, or run 'down' to drop it"
+  fi
   # The browser, the backend, the frontend server and PostgreSQL share these CPUs: fewer
   # workers and longer timeouts on a small Pod. E2E_* set by hand win.
   local cpus
@@ -853,6 +863,12 @@ cmd_reload() {
   esac
   wait_ready
 }
+
+# Sourced by scripts/dev-lite.test.sh for its functions; run as a command
+# otherwise.
+if [ "${BASH_SOURCE[0]}" != "$0" ]; then
+  return 0 2>/dev/null
+fi
 
 case "${1:-}" in
   up) shift; cmd_start 1 "$@" ;;

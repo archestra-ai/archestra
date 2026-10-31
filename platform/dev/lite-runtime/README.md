@@ -244,7 +244,10 @@ features are on. The backend gets `http://localhost:30081` among its trusted
 origins, so `up --keycloak` restarts a running backend once. `e2e` then runs
 the `identity-providers` project as well, stops naming `keycloak` in
 `E2E_UNAVAILABLE`, and points the backend-side Keycloak URL
-(`E2E_KEYCLOAK_BACKEND_URL`) at the loopback.
+(`E2E_KEYCLOAK_BACKEND_URL`) at the loopback. The request is recorded in the
+state dir until `down`: a Keycloak that exits afterwards fails `up`, `wait` and
+`e2e` with a pointer to its log instead of quietly dropping the coverage
+(`scripts/dev-lite.test.sh` covers this).
 
 The distribution is the stock release pinned in `dev-lite.sh` (version and
 SHA-256), about 170 MB, downloaded into `~/.archestra-dev-lite/keycloak` the

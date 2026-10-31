@@ -525,6 +525,31 @@ export const SHOTS: Shot[] = [
     },
   },
   {
+    asset: "automated_screenshots/agents-runtime-setup_runtime-tiers",
+    route: () => "/settings/agents",
+    beforeNavigate: async (page) => {
+      await page.route(/\/api\/(config|bootstrap)$/, async (route) => {
+        const response = await route.fetch();
+        const json = await response.json();
+        const config = json.config ?? json;
+        if (config?.features) {
+          config.features.agentRuntime = true;
+          if (config.features.agentRuntimeBackend) {
+            config.features.agentRuntimeBackend.available = true;
+          }
+        }
+        await route.fulfill({ response, json });
+      });
+    },
+    prepare: async (page) => {
+      const block = page.locator("#runtime-tiers");
+      await block
+        .getByRole("heading", { name: "Runtime tiers", exact: true })
+        .waitFor();
+    },
+    target: (page) => page.locator("#runtime-tiers"),
+  },
+  {
     asset: "automated_screenshots/agents-hooks_hooks-editor",
     route: (seed) => `/agents/${seed.agents["Support Triage"]}?section=tools`,
     viewport: { width: 1440, height: 1200 },

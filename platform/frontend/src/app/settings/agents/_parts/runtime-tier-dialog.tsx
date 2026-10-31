@@ -215,7 +215,8 @@ export function RuntimeTierDialog({
                     <Info className="size-3.5" />
                   </UnstyledButton>
                 </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
+                {/* Anchored at the icon, so the text stays inside the dialog. */}
+                <TooltipContent align="start" className="max-w-xs">
                   {POOLED_HINT}
                 </TooltipContent>
               </Tooltip>

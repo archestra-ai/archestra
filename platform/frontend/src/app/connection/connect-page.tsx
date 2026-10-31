@@ -733,6 +733,7 @@ function ConnectArea({
   const desktopSetups = useRef<DesktopSetupCache>({
     byKey: new Map(),
     requestedAt: new Map(),
+    pending: new Map(),
   });
   // The connector Desktop lists for the gateway, by the name setup registers.
   const connector =

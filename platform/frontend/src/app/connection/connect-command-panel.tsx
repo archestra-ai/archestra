@@ -228,10 +228,21 @@ export interface DesktopSetupCache {
   byKey: Map<string, CreateConnectionSetupResult>;
   /** When the band asked for each setup, by setup id. */
   requestedAt: Map<string, number>;
+  /**
+   * Setups still on their way, by payload, with the server's reason if it
+   * refuses. A panel the page remounts waits for these too.
+   */
+  pending: Map<
+    string,
+    Promise<{
+      setup: CreateConnectionSetupResult | null;
+      refusal: string | null;
+    }>
+  >;
 }
 
 function newDesktopSetupCache(): DesktopSetupCache {
-  return { byKey: new Map(), requestedAt: new Map() };
+  return { byKey: new Map(), requestedAt: new Map(), pending: new Map() };
 }
 
 /**
@@ -879,9 +890,6 @@ export function ConnectCommandPanel({
   // works for a fixed time from its creation, so switching back to earlier
   // choices (another OS, say) reuses its setup until then.
   const setupCacheRef = useRef(setupCache ?? newDesktopSetupCache());
-  // Payloads whose setup is still on its way. Switching mode or OS back to one
-  // waits for that setup instead of asking for another.
-  const inFlightRef = useRef(new Set<string>());
 
   const runGeneration = useCallback(
     async (key: string) => {
@@ -889,26 +897,30 @@ export function ConnectCommandPanel({
       if (!body) return;
       setResult(null);
       setFailure(null);
-      refusalRef.current = null;
-      const requestedAt = Date.now();
-      inFlightRef.current.add(key);
-      let created: CreateConnectionSetupResult | null;
-      try {
-        created = await createSetup(body);
-      } finally {
-        inFlightRef.current.delete(key);
+      const cache = setupCacheRef.current;
+      // A setup for these choices may already be on its way, asked for before
+      // a mode or OS switch or a remount: wait for it instead of another.
+      let request = cache.pending.get(key);
+      if (!request) {
+        const requestedAt = Date.now();
+        refusalRef.current = null;
+        request = createSetup(body)
+          .then((setup) => {
+            if (setup) {
+              cache.requestedAt.set(setup.id, requestedAt);
+              cache.byKey.set(key, setup);
+            }
+            return { setup, refusal: setup ? null : refusalRef.current };
+          })
+          .finally(() => cache.pending.delete(key));
+        cache.pending.set(key, request);
       }
-      if (created) {
-        setupCacheRef.current.requestedAt.set(created.id, requestedAt);
-        setupCacheRef.current.byKey.set(key, created);
-      }
+      const { setup: created, refusal } = await request;
       if (latestKeyRef.current !== key) return; // stale response
       setDownloadPending(false);
       preparedKeyRef.current = created ? key : null;
       setResult(created);
-      setFailure(
-        created ? null : (refusalRef.current ?? "the server gave no reason"),
-      );
+      setFailure(created ? null : (refusal ?? "the server gave no reason"));
     },
     [createSetup],
   );
@@ -962,8 +974,6 @@ export function ConnectCommandPanel({
     preparedKeyRef.current = null;
     setResult(null);
     setFailure(null);
-    // This payload's setup is on its way; it shows when it arrives.
-    if (inFlightRef.current.has(inputsKey)) return;
     const timer = setTimeout(
       () => {
         preparationStartedRef.current = true;

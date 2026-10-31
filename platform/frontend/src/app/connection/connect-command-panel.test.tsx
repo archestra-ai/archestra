@@ -784,13 +784,56 @@ describe("ConnectCommandPanel", () => {
       client: findClient("claude-desktop"),
       variant: "download" as const,
       terminal: true,
-      setupCache: { byKey: new Map(), requestedAt: new Map() },
+      setupCache: {
+        byKey: new Map(),
+        requestedAt: new Map(),
+        pending: new Map(),
+      },
     };
     const first = renderPanel(props);
     await expectShownCommand(`${COMMAND} # 1`);
     first.unmount();
     renderPanel(props);
     await expectShownCommand(`${COMMAND} # 1`);
+    expect(createSetupMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for a Desktop setup still on its way when the page remounts the panel", async () => {
+    availableKeysMock.mockReturnValue({ data: [] });
+    let arrive = () => {};
+    createSetupMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          arrive = () =>
+            resolve({
+              id: "desktop-setup",
+              command: COMMAND,
+              installerUrl: "https://proxy.example/desktop-installer",
+              expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+              tokenStart: "tok",
+              plugins: [],
+            });
+        }),
+    );
+    const props = {
+      client: findClient("claude-desktop"),
+      variant: "download" as const,
+      terminal: true,
+      setupCache: {
+        byKey: new Map(),
+        requestedAt: new Map(),
+        pending: new Map(),
+      },
+    };
+    const first = renderPanel(props);
+    await waitFor(() => expect(createSetupMock).toHaveBeenCalledTimes(1));
+    first.unmount();
+    renderPanel(props);
+    // Past the 350 ms pause before a request.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 600)));
+    expect(createSetupMock).toHaveBeenCalledTimes(1);
+    act(() => arrive());
+    await expectShownCommand(COMMAND);
     expect(createSetupMock).toHaveBeenCalledTimes(1);
   });
 

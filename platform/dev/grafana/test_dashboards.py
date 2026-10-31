@@ -329,6 +329,19 @@ class PromQLTest(unittest.TestCase):
                 "promql_expr_test": [check(phases, 2, '{phase="Running"}')],
             }
         )
+        runtime_dashboard = json.loads((ROOT / "dashboards" / "agent-runtime.json").read_text())
+        runtime_regex = next(v["current"]["value"] for v in runtime_dashboard["templating"]["list"] if v["name"] == "runtime_pod")
+        tests.append(
+            {
+                "name": "default runtime filter includes cold and warm pool pods",
+                "input_series": [
+                    series('kube_pod_status_phase{cluster="a",namespace="demo",pod="agent-run-demo",phase="Running"}', "1+0x5"),
+                    series('kube_pod_status_phase{cluster="a",namespace="demo",pod="archestra-warm-demo",phase="Running"}', "1+0x5"),
+                    series('kube_pod_status_phase{cluster="a",namespace="demo",pod="ordinary-pod",phase="Running"}', "1+0x5"),
+                ],
+                "promql_expr_test": [check(expression("agent-runtime", "Runtime pods by phase", {"runtime_pod": runtime_regex}), 2, '{phase="Running"}')],
+            }
+        )
         health = expression("agent-runtime", "Oldest task heartbeat")
         tests.append(
             {

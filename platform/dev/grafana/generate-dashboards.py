@@ -526,8 +526,8 @@ def runtime():
             "name": "runtime_pod",
             "label": "Runtime pod name regex",
             "type": "textbox",
-            "query": "agent-run-.*",
-            "current": {"text": "agent-run-.*", "value": "agent-run-.*"},
+            "query": "(agent-run|archestra-warm)-.*",
+            "current": {"text": "(agent-run|archestra-warm)-.*", "value": "(agent-run|archestra-warm)-.*"},
             "options": [],
         },
     ]

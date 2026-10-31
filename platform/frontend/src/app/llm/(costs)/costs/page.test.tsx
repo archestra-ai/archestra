@@ -643,4 +643,81 @@ describe("OrganizationCostsPage", () => {
     expect(screen.getByText("3 of 5 context measurements")).toBeInTheDocument();
     expect(screen.getByText(/not an exclusive skill cost/)).toBeInTheDocument();
   });
+  it("pins a model across people, keys, agents and metric changes, and clears back to models", async () => {
+    search = new URLSearchParams({ timeframe: "24h" });
+    models = [model("example/model+a")];
+    const selected: URL[] = [];
+    server.use(
+      http.get(`${origin}/api/statistics/model-usage`, ({ request }) => {
+        const url = new URL(request.url);
+        selected.push(url);
+        const group = url.searchParams.get("groupBy");
+        const name =
+          group === "person"
+            ? "Example person"
+            : group === "key"
+              ? "Pipeline key"
+              : "Research agent";
+        return HttpResponse.json(
+          paginated([
+            {
+              id: group,
+              name,
+              requests: 7,
+              totalTokens: 120,
+              cacheReadTokens: 40,
+              cacheWriteTokens: 10,
+              billedCost: 2,
+              subscriptionCost: 0,
+              timeSeries: [
+                {
+                  timestamp: "2026-10-30T00:00:00Z",
+                  requests: 7,
+                  totalTokens: 120,
+                  cacheReadTokens: 40,
+                  cacheWriteTokens: 10,
+                  billedCost: 2,
+                  subscriptionCost: 0,
+                },
+              ],
+            },
+          ]),
+        );
+      }),
+    );
+    show();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Explore example/model+a" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("table")).toHaveTextContent("Example person"),
+    );
+    await group("Key");
+    await waitFor(() =>
+      expect(screen.getByRole("table")).toHaveTextContent("Pipeline key"),
+    );
+    await group("Agent");
+    await waitFor(() =>
+      expect(screen.getByRole("table")).toHaveTextContent("Research agent"),
+    );
+    await metric("Requests");
+    expect(screen.getByRole("table")).toHaveTextContent("7");
+    expect(selected.map((url) => url.searchParams.get("groupBy"))).toEqual([
+      "person",
+      "key",
+      "agent",
+    ]);
+    expect(
+      selected.every(
+        (url) =>
+          url.searchParams.get("model") === "example/model+a" &&
+          url.searchParams.get("timeframe") === "24h",
+      ),
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Clear model filter" }));
+    expect(
+      await screen.findByRole("button", { name: "Explore example/model+a" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Research agent")).not.toBeInTheDocument();
+  });
 });

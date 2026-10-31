@@ -1,7 +1,25 @@
-import { render, screen, within } from "@testing-library/react";
+import { archestraApiClient } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  render as renderUi,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { makeUsageData } from "./usage.test-data";
 import { UsageContent } from "./usage-content";
 
@@ -40,7 +58,7 @@ vi.mock("recharts", async (importOriginal) => {
             active: true,
             label: String(row.name),
             payload: Object.entries(row)
-              .filter(([key]) => key !== "name")
+              .filter(([key]) => key !== "name" && key !== "id")
               .map(([dataKey, value]) => ({ dataKey, value: Number(value) })),
           })}
         </div>
@@ -48,6 +66,26 @@ vi.mock("recharts", async (importOriginal) => {
     },
   };
 });
+
+const render = (ui: ReactNode) =>
+  renderUi(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      {ui}
+    </QueryClientProvider>,
+  );
+
+const server = setupServer();
+beforeEach(() => window.history.replaceState(null, "", "/"));
+beforeAll(() => {
+  server.listen({ onUnhandledRequest: "error" });
+  archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+});
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
 
 describe("usage exploration", () => {
   it.each([
@@ -99,9 +137,38 @@ describe("usage exploration", () => {
     );
     expect(
       Object.entries(data)
-        .filter(([key]) => key !== "name")
+        .filter(([key]) => key !== "name" && key !== "id")
         .reduce((sum, [, value]) => sum + Number(value), 0),
     ).toBe(10);
+  });
+
+  it("restores an explicit grouping even when the saved desktop chart prefers lines", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/llm/usage?group=model&chart=lines&mobileChart=table",
+    );
+    render(<UsageContent {...makeUsageData()} />);
+    expect(screen.getByRole("button", { name: "by Model" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Stacked bars" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("only shows splitting when the metric and grouping support it", async () => {
+    const user = userEvent.setup();
+    render(<UsageContent {...makeUsageData()} />);
+    expect(
+      screen.queryByRole("button", { name: /^split by / }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Show / }));
+    await user.click(screen.getByRole("menuitem", { name: "Tokens" }));
+    expect(screen.getByRole("button", { name: "split by None" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /^Show / }));
+    await user.click(screen.getByRole("menuitem", { name: "Billed spend" }));
+    expect(
+      screen.queryByRole("button", { name: /^split by / }),
+    ).not.toBeInTheDocument();
   });
 
   it("changes from model totals to a real time pivot and falls back when switching to clients", async () => {
@@ -156,7 +223,9 @@ describe("usage exploration", () => {
     const user = userEvent.setup();
     render(<UsageContent {...makeUsageData()} />);
     await user.click(
-      within(screen.getByRole("table")).getByText("example-model"),
+      within(screen.getByRole("table")).getByRole("row", {
+        name: /example-model/,
+      }),
     );
     expect(screen.getByText("Chart shows example-model")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Clear selection" }));
@@ -164,7 +233,68 @@ describe("usage exploration", () => {
       screen.queryByRole("button", { name: "Clear selection" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText("Click rows to compare them in the chart"),
+      screen.getByText(/Select a model name to explore its clients/),
+    ).toBeInTheDocument();
+  });
+  it("explores a model's clients and timeline through the caller-only API and clears its filter", async () => {
+    const requested: URL[] = [];
+    server.use(
+      http.get(
+        "http://localhost:9000/api/statistics/me/model-usage",
+        ({ request }) => {
+          requested.push(new URL(request.url));
+          return HttpResponse.json({
+            data: [
+              {
+                id: "cli",
+                name: "Example coding client",
+                requests: 4,
+                totalTokens: 90,
+                cacheReadTokens: 12,
+                cacheWriteTokens: 6,
+                billedCost: 1.5,
+                subscriptionCost: 0,
+                timeSeries: [
+                  {
+                    timestamp: "2026-10-30T00:00:00Z",
+                    requests: 4,
+                    totalTokens: 90,
+                    cacheReadTokens: 12,
+                    cacheWriteTokens: 6,
+                    billedCost: 1.5,
+                    subscriptionCost: 0,
+                  },
+                ],
+              },
+            ],
+            pagination: { limit: 100, total: 1, hasNext: false },
+          });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    render(<UsageContent {...makeUsageData()} />);
+    await user.click(
+      screen.getByRole("button", { name: "Explore example-model" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("table")).toHaveTextContent(
+        "Example coding client",
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: /^by / }));
+    await user.click(screen.getByRole("menuitem", { name: "Time" }));
+    expect(
+      screen.getByRole("navigation", { name: "Model drill-down" }),
+    ).toHaveTextContent("example-model");
+    expect(requested).toHaveLength(1);
+    expect(requested[0].searchParams.get("model")).toBe("example-model");
+    expect(requested[0].searchParams.get("groupBy")).toBe("client");
+    await user.click(
+      screen.getByRole("button", { name: "Clear model filter" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Explore example-model" }),
     ).toBeInTheDocument();
   });
 });

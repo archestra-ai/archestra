@@ -69,6 +69,7 @@ export type PivotQuery = {
   group: DimId;
   split: SplitId;
   chart: ChartKind;
+  model?: string;
 };
 
 export const METRICS: Record<

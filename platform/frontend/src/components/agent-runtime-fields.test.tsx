@@ -227,6 +227,36 @@ describe("AgentRuntimeFields", () => {
     });
   });
 
+  it("raises the scaleup tier with the default tier, so the saved pair matches the form", async () => {
+    vi.mocked(useAppName).mockReturnValue("Archestra");
+    vi.mocked(useFeature).mockImplementation((flag) =>
+      flag === "agentRuntime" ? true : undefined,
+    );
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <Harness
+          initial={{ ...defaultAgentRuntime(), tier: "S", maxTier: "M" }}
+        />
+      </QueryClientProvider>,
+    );
+    const config = () =>
+      JSON.parse(screen.getByTestId("config").textContent ?? "{}");
+
+    await user.click(screen.getByLabelText("Default tier"));
+    await user.click(screen.getByRole("option", { name: /^L:/ }));
+    expect(config()).toMatchObject({ tier: "L", maxTier: "L" });
+
+    // Lowering the default tier keeps the larger scaleup tier.
+    await user.click(screen.getByLabelText("Default tier"));
+    await user.click(screen.getByRole("option", { name: /^S:/ }));
+    expect(config()).toMatchObject({ tier: "S", maxTier: "L" });
+  });
+
   it("binds built-in and organization-defined credentials to image-specific environment variable names", async () => {
     vi.mocked(useAppName).mockReturnValue("Archestra");
     vi.mocked(useFeature).mockImplementation((flag) =>

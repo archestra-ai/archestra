@@ -594,7 +594,15 @@ function AgentRuntimeTierFields({ value, onChange }: RuntimeSectionProps) {
         <Label htmlFor="agent-runtime-tier">Default tier</Label>
         <Select
           value={defaultTier}
-          onValueChange={(tier: AgentRuntimeTier) => update({ tier })}
+          onValueChange={(tier: AgentRuntimeTier) =>
+            // A default tier above the saved scaleup tier raises it too, so
+            // the saved pair matches what the form shows.
+            update(
+              TIER_ORDER.indexOf(tier) > TIER_ORDER.indexOf(scaleupTier)
+                ? { tier, maxTier: tier }
+                : { tier },
+            )
+          }
         >
           <SelectTrigger id="agent-runtime-tier" className="w-full">
             <SelectValue />

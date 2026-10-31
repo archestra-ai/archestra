@@ -521,9 +521,9 @@ function PermissionsEditor({
   const pageFooter =
     !embedded && footerContainer === undefined && !dialog && !registerSave;
   const grantList = (
-    // One grid for every row: the level column is as wide as its widest
+    // On desktop, one grid aligns every row: the level column fits its widest
     // label, so labels line up and the remove button sits right beside them.
-    <div className="grid grid-cols-[minmax(0,1fr)_max-content_auto] divide-y divide-border/60 overflow-hidden rounded-lg border bg-card text-[13px]">
+    <div className="divide-y divide-border/60 overflow-hidden rounded-lg border bg-card text-[13px] sm:grid sm:grid-cols-[minmax(0,1fr)_max-content_auto]">
       {fields.length === 0 && (
         <p className="col-span-full px-2.5 py-2.5 text-muted-foreground">
           Nobody has access yet.
@@ -542,13 +542,13 @@ function PermissionsEditor({
             key={grant.id}
             data-testid={isOwner ? "owner-grant" : undefined}
             className={cn(
-              "col-span-full grid min-h-9 grid-cols-subgrid items-center gap-x-1 py-1 pr-1.5 pl-2.5 sm:py-0",
+              "grid min-h-9 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-1 gap-y-1 py-2 pr-1.5 pl-2.5 sm:col-span-full sm:grid-cols-subgrid sm:py-0",
               // The owner is pinned first and barely tinted, so the one row
               // nobody can edit reads as the list's anchor, not another grant.
               isOwner && "bg-muted/40",
             )}
           >
-            <div className="flex min-w-16 flex-1 items-center gap-2">
+            <div className="col-span-2 flex min-w-0 flex-1 items-center gap-2 sm:col-span-1">
               {/* The glyph names the kind, so the row needs no "User" or
                   "Team" word beside the name. */}
               {/* The owner's glyph is a starred person in the brand colour
@@ -580,7 +580,7 @@ function PermissionsEditor({
                     : subjectLabels[grant.subject.type]}
                 </TooltipContent>
               </Tooltip>
-              <span className="min-w-0 truncate">
+              <span className="min-w-0 break-words sm:truncate">
                 <span className="font-medium">
                   {isSelf ? "You" : grant.name}
                 </span>

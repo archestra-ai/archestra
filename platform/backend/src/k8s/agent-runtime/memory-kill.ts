@@ -19,7 +19,8 @@ export interface MemoryEvents {
 export const READ_MEMORY_EVENTS_COMMAND = [
   "/bin/sh",
   "-c",
-  'cat /sys/fs/cgroup/memory.events 2>/dev/null; printf "peak %s\\nmax %s\\n" "$(cat /sys/fs/cgroup/memory.peak 2>/dev/null)" "$(cat /sys/fs/cgroup/memory.max 2>/dev/null)"',
+  // memory.events has its own "max" counter, so the limit gets another name.
+  'cat /sys/fs/cgroup/memory.events 2>/dev/null; printf "peak %s\\nlimit %s\\n" "$(cat /sys/fs/cgroup/memory.peak 2>/dev/null)" "$(cat /sys/fs/cgroup/memory.max 2>/dev/null)"',
   "read-memory-events",
 ];
 
@@ -39,23 +40,22 @@ export function parseMemoryEvents(output: string): MemoryEvents | null {
   return {
     oomKills: Number(oomKills),
     peakBytes: bytes("peak"),
-    limitBytes: bytes("max"),
+    limitBytes: bytes("limit"),
   };
 }
 
 /**
  * Whether the run's processes were killed for memory between two readings:
- * the one taken when the turn was first seen running, and the one taken when
- * a command in the pod failed. Without the first reading any kill counts, so
- * a retained workspace killed in an earlier turn would be blamed again; the
- * reading is taken first for that reason.
+ * the one taken when the turn was first seen running, and a later one. Both
+ * are required: a retained workspace killed in an earlier turn carries that
+ * count, and without the first reading it would be blamed again.
  */
 export function memoryKillBetween(
   before: MemoryEvents | null,
   after: MemoryEvents | null,
 ): MemoryEvents | null {
-  if (!after) return null;
-  return after.oomKills > (before?.oomKills ?? 0) ? after : null;
+  if (!before || !after) return null;
+  return after.oomKills > before.oomKills ? after : null;
 }
 
 /** The failure reason for a run whose processes the kernel killed for memory. */

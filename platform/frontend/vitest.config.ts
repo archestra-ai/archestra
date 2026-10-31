@@ -11,12 +11,15 @@ import { vitestLogPolicy } from "../vitest.shared";
 const isCI = process.env.CI === "true";
 const testFiles = partitionTestFiles();
 // Half the cores locally, and no more forks than the memory holds. CI runs on
-// a dedicated high-RAM runner where the uncapped default is fine, so it keeps
-// the 8 GiB heap ceiling and Vitest's own worker count. Override on a big
-// local machine with `--maxWorkers=<n|%>`.
-const { maxWorkers, maxOldSpaceMb } = isCI
-  ? { maxWorkers: undefined, maxOldSpaceMb: 8192 }
-  : frontendVitestResourceLimits(detectResourceEnvelope());
+// a dedicated high-RAM runner where the uncapped default is fine, so there it
+// keeps the 8 GiB heap ceiling and Vitest's own worker count; a container
+// with a memory limit is sized for the container either way. Override on a
+// big local machine with `--maxWorkers=<n|%>`.
+const envelope = detectResourceEnvelope();
+const { maxWorkers, maxOldSpaceMb } =
+  isCI && !envelope.constrained
+    ? { maxWorkers: undefined, maxOldSpaceMb: 8192 }
+    : frontendVitestResourceLimits(envelope);
 
 export default defineConfig({
   plugins: [tsconfigPaths()],

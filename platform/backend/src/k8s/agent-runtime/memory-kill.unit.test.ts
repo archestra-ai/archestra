@@ -11,13 +11,16 @@ describe("parseMemoryEvents", () => {
   test("reads the counters, the peak and the limit", () => {
     expect(
       parseMemoryEvents(
-        "low 0\nhigh 0\nmax 1203\noom 3\noom_kill 1\noom_group_kill 0\npeak 8589934592\nmax 8589934592\n",
+        "low 0\nhigh 0\nmax 1203\noom 3\noom_kill 1\noom_group_kill 0\npeak 8589934592\nlimit 8589934592\n",
       ),
     ).toEqual({ oomKills: 1, peakBytes: 8 * GIB, limitBytes: 8 * GIB });
   });
 
   test("keeps the limit and peak open when the kernel does not give them", () => {
-    expect(parseMemoryEvents("oom_kill 2\npeak \nmax max\n")).toEqual({
+    // memory.events' own "max" counter is not the limit.
+    expect(
+      parseMemoryEvents("max 1203\noom_kill 2\npeak \nlimit max\n"),
+    ).toEqual({
       oomKills: 2,
       peakBytes: null,
       limitBytes: null,
@@ -35,12 +38,11 @@ describe("memoryKillBetween", () => {
   test("is the later reading when a kill happened in between", () => {
     const after = { ...before, oomKills: 2, peakBytes: 8 * GIB };
     expect(memoryKillBetween(before, after)).toBe(after);
-    // Without a first reading, any kill counts.
-    expect(memoryKillBetween(null, after)).toBe(after);
   });
-  test("is null when nothing was killed since, or nothing could be read", () => {
+  test("is null when nothing was killed since, or a reading is missing", () => {
     expect(memoryKillBetween(before, before)).toBeNull();
-    expect(memoryKillBetween(null, { ...before, oomKills: 0 })).toBeNull();
+    // A retained workspace's earlier kill is not this turn's without a first reading.
+    expect(memoryKillBetween(null, { ...before, oomKills: 2 })).toBeNull();
     expect(memoryKillBetween(before, null)).toBeNull();
   });
 });

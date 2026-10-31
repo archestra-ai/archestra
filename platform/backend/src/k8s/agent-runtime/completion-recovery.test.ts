@@ -1093,10 +1093,16 @@ function completeExec(output = "0") {
 }
 
 test.for([
-  { name: "a memory kill inside the running pod", killed: true },
-  { name: "a failed command without a memory kill", killed: false },
-])("$name: a turn command that fails is checked against the cgroup's memory counters", async ({
+  { name: "a memory kill inside the running pod", killed: true, exit: null },
+  { name: "a failed command without a memory kill", killed: false, exit: null },
+  {
+    name: "a turn that ends non-zero after a memory kill",
+    killed: true,
+    exit: "7",
+  },
+])("$name: a turn that fails is checked against the cgroup's memory counters", async ({
   killed,
+  exit,
 }, { run }) => {
   const GIB = 1024 ** 3;
   let turnReads = 0;
@@ -1109,20 +1115,24 @@ test.for([
       // while PID 1 and the pod lived on.
       const kills = memoryReads++ === 0 || !killed ? 0 : 1;
       args[4]?.write(
-        `low 0\nhigh 0\nmax 1203\noom ${kills}\noom_kill ${kills}\noom_group_kill 0\npeak ${kills ? 8 * GIB : 2 * GIB}\nmax ${8 * GIB}\n`,
+        `low 0\nhigh 0\nmax 1203\noom ${kills}\noom_kill ${kills}\noom_group_kill 0\npeak ${kills ? 8 * GIB : 2 * GIB}\nlimit ${8 * GIB}\n`,
       );
       args[8]?.({ status: "Success" });
     } else if (command.includes("read-turn-result")) {
-      // No result yet on the first poll; the second poll's shell is killed.
+      // No result yet on the first poll. On the second, either the turn has
+      // ended with the given status, or the poll's own shell is killed.
       turnReads++;
-      args[8]?.(
-        turnReads === 1
-          ? { status: "Success" }
-          : {
-              status: "Failure",
-              message: "command terminated with non-zero exit code",
-            },
-      );
+      if (turnReads === 1) {
+        args[8]?.({ status: "Success" });
+      } else if (exit !== null) {
+        args[4]?.write(`${exit}\n`);
+        args[8]?.({ status: "Success" });
+      } else {
+        args[8]?.({
+          status: "Failure",
+          message: "command terminated with non-zero exit code",
+        });
+      }
     } else {
       args[8]?.({ status: "Success" });
     }
@@ -1132,11 +1142,21 @@ test.for([
     session: run,
     pollIntervalMs: 1,
   });
-  if (killed) {
+  const described =
+    "The run ran out of memory. The agent-runtime container reached its memory limit of 8 GiB (peak usage 8 GiB), and the kernel killed the run's processes. Start the run again at a larger tier.";
+  if (killed && exit !== null) {
+    const result = await completion;
+    expect(result).toMatchObject({
+      outcome: "failed",
+      failure: { code: "pod.oom_killed", retriable: false },
+    });
+    // The kill comes first; the exit it led to is kept after it.
+    expect(result.reason).toContain(described);
+    expect(result.reason).toContain(`status ${exit}`);
+  } else if (killed) {
     await expect(completion).resolves.toEqual({
       outcome: "failed",
-      reason:
-        "The run ran out of memory. The agent-runtime container reached its memory limit of 8 GiB (peak usage 8 GiB), and the kernel killed the run's processes. Start the run again at a larger tier.",
+      reason: described,
       failure: { code: "pod.oom_killed", retriable: false },
     });
   } else {

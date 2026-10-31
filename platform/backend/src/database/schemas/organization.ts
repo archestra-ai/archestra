@@ -106,6 +106,14 @@ const organizationsTable = pgTable("organization", {
     .default(false),
 
   /**
+   * Whether LLM proxy and MCP gateway logs keep the images, audio, video and
+   * files that requests, responses and tool calls carry, so Logs can show and
+   * play them. Off, the default, each row keeps the media's place and type
+   * but not its bytes.
+   */
+  keepMediaInLogs: boolean("keep_media_in_logs").notNull().default(false),
+
+  /**
    * @deprecated No longer consulted. Dynamic tool access is now gated solely
    * by the per-agent `access_all_tools` setting. The column is retained (not
    * dropped) to avoid a backwards-incompatible migration and to keep the

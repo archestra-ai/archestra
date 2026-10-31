@@ -154,6 +154,7 @@ import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
 import { withMediaUsageAvailability } from "@/utils/media-usage";
 import { isUuid } from "@/utils/uuid";
+import { withReplyAudioWithinLimit } from "./adapters/openai";
 import { CodexResponsesGenerationError } from "./adapters/openai-codex-translator";
 import {
   discardUnadmittedResponsesOutput,
@@ -1303,10 +1304,16 @@ async function handleObservedLLMProxy<
     appId: attributedAppId,
     source,
   };
+  // A media operation the published media tariff prices settles its cost
+  // like any other request. One it cannot price has no cost to settle, so
+  // it is refused only where a spend budget applies to it.
+  const mediaPricedForBudget =
+    provider.mediaTariffCovers?.(requestAdapter.getOriginalRequest()) === true;
   const limitContext = {
-    unpricedMediaModel: provider.unavailableUsageAccounting
-      ? actualModel
-      : undefined,
+    unpricedMediaModel:
+      provider.unavailableUsageAccounting && !mediaPricedForBudget
+        ? actualModel
+        : undefined,
     agentId: resolvedAgentId,
     userId,
     virtualKeyId,
@@ -1556,19 +1563,20 @@ async function handleObservedLLMProxy<
     // return a proper HTTP error status code (e.g. 429) instead of being
     // stuck with a 200. The AI SDK detects errors via HTTP status codes, so
     // this is critical for error propagation to clients like the chat UI.
-    let sseHeaders: Record<string, string> | undefined;
-    if (requestAdapter.isStreaming()) {
+    const commitsStreamHeaders = requestAdapter.isStreaming();
+    if (commitsStreamHeaders) {
       logger.debug(
         `[${providerName}Proxy] Preparing streaming response headers (lazy commit)`,
       );
-      sseHeaders = streamAdapter.getSSEHeaders();
     }
 
     // Helper to commit SSE headers before the first write.
-    // Safe to call multiple times — only writes headers once.
+    // Safe to call multiple times — only writes headers once. The headers are
+    // read at commit time: a byte stream (audio) learns the provider's own
+    // content type from its first chunk and relays it as the provider sent it.
     const ensureStreamHeaders = () => {
-      if (sseHeaders && !reply.raw.headersSent) {
-        reply.raw.writeHead(200, sseHeaders);
+      if (commitsStreamHeaders && !reply.raw.headersSent) {
+        reply.raw.writeHead(200, streamAdapter.getSSEHeaders());
         streamTiming.firstByteAt = Date.now();
       }
     };
@@ -2894,7 +2902,9 @@ async function handleStreaming<
           request: originalRequest,
           processedRequest: request,
           response: withProviderToolCallIds(
-            failedStreamResponse ?? streamAdapter.toProviderResponse(),
+            failedStreamResponse ??
+              streamAdapter.toLoggedResponse?.() ??
+              streamAdapter.toProviderResponse(),
             streamAdapter.state.toolCalls,
           ),
           actualModel,
@@ -2925,7 +2935,9 @@ async function handleStreaming<
       // call must not disappear from interaction history.
       await recordUsagelessInteraction(
         withProviderToolCallIds(
-          failedStreamResponse ?? streamAdapter.toProviderResponse(),
+          failedStreamResponse ??
+            streamAdapter.toLoggedResponse?.() ??
+            streamAdapter.toProviderResponse(),
           streamAdapter.state.toolCalls,
         ),
       );
@@ -3707,6 +3719,10 @@ async function handleNonStreaming<
     pluginContext,
     appaReceipts,
   } = ctx;
+  // What the log row keeps of the request; the provider and plugins still
+  // work from `originalRequest`.
+  const loggedRequest =
+    provider.toLoggedRequest?.(originalRequest) ?? originalRequest;
 
   const providerName = provider.provider;
   const sendResponse = (response: unknown) => {
@@ -3823,7 +3839,7 @@ async function handleNonStreaming<
             sessionSource,
             source,
             providerType: provider.interactionType,
-            request: originalRequest,
+            request: loggedRequest,
             processedRequest: request,
             response: error.response,
             actualModel,
@@ -4220,7 +4236,7 @@ async function handleNonStreaming<
         sessionSource,
         source,
         providerType: provider.interactionType,
-        request: originalRequest,
+        request: loggedRequest,
         processedRequest: request,
         response: responseAdapter.getLoggedResponse?.() ?? refusalResponse,
         actualModel,
@@ -4395,7 +4411,7 @@ async function handleNonStreaming<
       sessionSource,
       source,
       providerType: provider.interactionType,
-      request: originalRequest,
+      request: loggedRequest,
       processedRequest: request,
       // Bedrock<->OpenAI compat need to return OpenAI response to client, but store bedrock response for interaction log.
       // Providers which need this behavior should implement getLoggedResponse() for persisting interaction and getOriginalResponse() for returning to client.
@@ -4404,11 +4420,14 @@ async function handleNonStreaming<
       // still wins where it exists: those adapters log a different wire shape on
       // purpose, and after a rewrite they hand back that shape's rewritten form.
       // Either way under the provider's call ids, as the requests are logged.
-      response: withProviderToolCallIds(
-        generationFailed
-          ? clientResponse
-          : (responseAdapter.getLoggedResponse?.() ?? clientResponse),
-        [...(rewrittenToolCalls ?? []), ...(hostedHold?.notices ?? [])],
+      // A spoken reply keeps its audio up to the clip limit, so Logs plays it.
+      response: withReplyAudioWithinLimit(
+        withProviderToolCallIds(
+          generationFailed
+            ? clientResponse
+            : (responseAdapter.getLoggedResponse?.() ?? clientResponse),
+          [...(rewrittenToolCalls ?? []), ...(hostedHold?.notices ?? [])],
+        ),
       ),
       actualModel,
       usage,

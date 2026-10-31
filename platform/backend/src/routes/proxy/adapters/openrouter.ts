@@ -243,8 +243,8 @@ class OpenrouterStreamAdapter
   readonly provider = "openrouter" as const;
   private delegate: OpenAIStreamAdapter;
 
-  constructor() {
-    this.delegate = new OpenAIStreamAdapter();
+  constructor(request?: OpenrouterRequest) {
+    this.delegate = new OpenAIStreamAdapter("openai", request);
   }
 
   get state() {
@@ -312,11 +312,10 @@ export const openrouterAdapterFactory: LLMProvider<
     return new OpenrouterResponseAdapter(response);
   },
 
-  createStreamAdapter(): LLMStreamAdapter<
-    OpenrouterStreamChunk,
-    OpenrouterResponse
-  > {
-    return new OpenrouterStreamAdapter();
+  createStreamAdapter(
+    request?: OpenrouterRequest,
+  ): LLMStreamAdapter<OpenrouterStreamChunk, OpenrouterResponse> {
+    return new OpenrouterStreamAdapter(request);
   },
 
   extractApiKey(headers: OpenrouterHeaders): string | undefined {

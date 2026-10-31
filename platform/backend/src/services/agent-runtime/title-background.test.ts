@@ -18,7 +18,7 @@ import { runTaskInAgentRuntime } from "./pod-run";
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
 const server = useMswServer();
 
-test("background drain waits for a failed launch's title request and persisted title", async ({
+test("background drain waits for a failed launch's title request, logged in the run's LLM session, and persisted title", async ({
   makeOrganization,
   makeAdmin,
   makeMember,
@@ -87,10 +87,12 @@ test("background drain waits for a failed launch's title request and persisted t
   const response = new Promise<void>((resolve) => {
     releaseResponse = resolve;
   });
+  let titleSessionId: string | null | undefined;
   server.use(
     http.post(
       "http://127.0.0.1:9000/v1/openai/:agentId/chat/completions",
-      async () => {
+      async ({ request }) => {
+        titleSessionId = request.headers.get("x-archestra-session-id");
         markRequested();
         await response;
         return HttpResponse.json({
@@ -113,9 +115,11 @@ test("background drain waits for a failed launch's title request and persisted t
       },
     ),
   );
-  vi.spyOn(backend, "launch").mockRejectedValue(
-    new Error("publication connection lost"),
-  );
+  let launchedEnv: Parameters<typeof backend.launch>[0]["env"] | undefined;
+  vi.spyOn(backend, "launch").mockImplementation(async (spec) => {
+    launchedEnv = spec.env;
+    throw new Error("publication connection lost");
+  });
   vi.spyOn(backend, "teardown").mockResolvedValue();
   try {
     await expect(
@@ -140,9 +144,15 @@ test("background drain waits for a failed launch's title request and persisted t
     expect(drained).toBe(false);
     releaseResponse();
     await draining;
-    expect((await AgentRunModel.findByTaskId(task.id))?.title).toBe(
-      "Investigate runtime launch failure",
+    const run = await AgentRunModel.findByTaskId(task.id);
+    expect(run?.title).toBe("Investigate runtime launch failure");
+    // The title is logged in the run's own LLM session: the key the image
+    // sends as X-Archestra-Session-Id on the run's traffic, not the task id.
+    expect(titleSessionId).toBe(run?.workloadName);
+    expect(titleSessionId).toBe(
+      launchedEnv?.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID,
     );
+    expect(titleSessionId).not.toBe(task.id);
   } finally {
     releaseResponse();
     await drainBackgroundWork();

@@ -20,6 +20,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import { PreparedQuery } from "@/database/prepared-query";
 import { createPaginatedResult } from "@/database/utils/pagination";
+import { agentRunLlmSessionId } from "@/services/agent-runtime/runtime-contract";
 import type {
   AgentRunFailure,
   AgentRunListItem,
@@ -1019,6 +1020,7 @@ class AgentRunModel {
     );
     return rows.map((row) => ({
       ...row,
+      llmSessionId: agentRunLlmSessionId(row),
       prompt: extractPrompt(prompts.get(row.taskId) ?? []),
     }));
   }

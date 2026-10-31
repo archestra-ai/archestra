@@ -2,6 +2,15 @@ import type * as archestraApiTypes from "../../hey-api/clients/api/types.gen";
 import type { PartialUIMessage } from "../types";
 import type { Interaction, InteractionUtils } from "./common";
 import { tryParseJson } from "./json";
+import {
+  audioMediaType,
+  inlineMediaPart,
+  linkedMediaPart,
+  mediaFormatLabel,
+  missingAudioReason,
+  missingMediaPart,
+  pcm16ToWav,
+} from "./media";
 
 class OpenAiChatCompletionInteraction implements InteractionUtils {
   private request: archestraApiTypes.OpenAiChatCompletionRequest;
@@ -88,7 +97,8 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
   }
 
   getLastAssistantResponse(): string {
-    return this.response.choices[0]?.message?.content ?? "";
+    const message = this.response.choices[0]?.message;
+    return message?.content ?? audioTranscriptOf(message) ?? "";
   }
 
   private mapToUiMessage(
@@ -155,6 +165,14 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
           }
         }
       }
+      // A spoken reply (gpt-audio, the audio-preview models) has no text
+      // content: it plays, and its transcript stands in for the text.
+      const transcript = audioTranscriptOf(message);
+      if (transcript && !parts.some((part) => part.type === "text")) {
+        parts.unshift({ type: "text", text: transcript });
+      }
+      const spoken = this.spokenReplyPart(message);
+      if (spoken) parts.unshift(spoken);
     } else if (message.role === "tool") {
       // Handle tool response messages
       const toolContent = message.content;
@@ -205,13 +223,26 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
           if (part.type === "text") {
             parts.push({ type: "text", text: part.text });
           } else if (part.type === "image_url") {
-            parts.push({
-              type: "file",
-              mediaType: "image/*",
-              url: part.image_url.url,
-            });
+            parts.push(
+              linkedMediaPart({
+                mediaType: "image/*",
+                url: part.image_url.url,
+              }),
+            );
+          } else if (part.type === "input_audio") {
+            const { data, format } = (
+              part as { input_audio?: { data?: unknown; format?: string } }
+            ).input_audio ?? { data: undefined };
+            if (typeof data === "string" && data)
+              parts.push(
+                inlineMediaPart({
+                  mediaType: audioMediaType(format),
+                  data,
+                  caption: `Audio, ${mediaFormatLabel(audioMediaType(format))}`,
+                }),
+              );
           }
-          // Note: input_audio and file types from API would need additional handling
+          // Note: file parts from the API would need additional handling
         }
       }
     }
@@ -296,6 +327,46 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
       ...this.mapResponseToUiMessages(),
     ];
   }
+
+  /**
+   * The audio of a spoken reply, to play above its transcript. Streamed
+   * replies arrive as raw PCM, which is wrapped as WAV to play.
+   */
+  private spokenReplyPart(
+    message: unknown,
+  ): PartialUIMessage["parts"][number] | undefined {
+    const audio = (message as { audio?: unknown } | null)?.audio;
+    if (typeof audio !== "object" || audio === null) return undefined;
+    const { data, data_omitted: omitted } = audio as {
+      data?: unknown;
+      data_omitted?: unknown;
+    };
+    const format = (this.request as { audio?: { format?: string } }).audio
+      ?.format;
+    if (typeof data !== "string" || !data) {
+      return missingMediaPart({
+        kind: "audio",
+        label: "Spoken reply",
+        reason: missingAudioReason(omitted),
+      });
+    }
+    const pcm = format === "pcm16";
+    const mediaType = pcm ? "audio/wav" : audioMediaType(format);
+    return inlineMediaPart({
+      mediaType,
+      data: pcm ? pcm16ToWav(data) : data,
+      caption: `Spoken reply, ${mediaFormatLabel(mediaType)}`,
+    });
+  }
 }
 
 export default OpenAiChatCompletionInteraction;
+
+/** The transcript of a spoken reply, when the message carries one. */
+function audioTranscriptOf(message: unknown): string | undefined {
+  if (typeof message !== "object" || message === null) return undefined;
+  const audio = (message as { audio?: unknown }).audio;
+  if (typeof audio !== "object" || audio === null) return undefined;
+  const transcript = (audio as { transcript?: unknown }).transcript;
+  return typeof transcript === "string" && transcript ? transcript : undefined;
+}

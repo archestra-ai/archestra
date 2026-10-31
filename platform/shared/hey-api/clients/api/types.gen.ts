@@ -25160,6 +25160,10 @@ export type GetMyAgentRunsResponses = {
             hardDeadlineAt: string;
             lastModelActivityAt: string | null;
             sessionId: string;
+            /**
+             * Key of the run's LLM logs (/llm/logs/:id): the session id its runtime sends
+             */
+            llmSessionId: string;
             prompt: string;
             agent: {
                 id: string;
@@ -25388,6 +25392,10 @@ export type GetMyAgentRunResponses = {
         hardDeadlineAt: string;
         lastModelActivityAt: string | null;
         sessionId: string;
+        /**
+         * Key of the run's LLM logs (/llm/logs/:id): the session id its runtime sends
+         */
+        llmSessionId: string;
         prompt: string;
         agent: {
             id: string;
@@ -25541,6 +25549,10 @@ export type UpdateAgentRunResponses = {
         hardDeadlineAt: string;
         lastModelActivityAt: string | null;
         sessionId: string;
+        /**
+         * Key of the run's LLM logs (/llm/logs/:id): the session id its runtime sends
+         */
+        llmSessionId: string;
         prompt: string;
         agent: {
             id: string;
@@ -41673,6 +41685,7 @@ export type GetBootstrapResponses = {
             playwrightMcpEnabled: boolean;
             allowChatFileUploads: boolean;
             allowUnauthenticatedLlmProxyRequests: boolean;
+            keepMediaInLogs: boolean;
             allowToolAutoAssignment: boolean;
             embeddingModel: string | null;
             embeddingDimensions: EmbeddingDimensions | null;
@@ -42149,6 +42162,17 @@ export type GetNewChatBootstrapResponses = {
                 pricePerMillionCacheRead: string | null;
                 pricePerMillionCacheWrite: string | null;
                 cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+                mediaPricing: {
+                    per: 'million_tokens' | 'million_characters' | 'minute';
+                    input: Array<{
+                        kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                        usd: number;
+                    }>;
+                    output: Array<{
+                        kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                        usd: number;
+                    }>;
+                } | null;
             };
             isBest?: boolean;
             isFree: boolean;
@@ -42363,6 +42387,17 @@ export type GetNewChatBootstrapResponses = {
                     pricePerMillionCacheRead: string | null;
                     pricePerMillionCacheWrite: string | null;
                     cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+                    mediaPricing: {
+                        per: 'million_tokens' | 'million_characters' | 'minute';
+                        input: Array<{
+                            kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                            usd: number;
+                        }>;
+                        output: Array<{
+                            kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                            usd: number;
+                        }>;
+                    } | null;
                 };
                 isBest?: boolean;
                 isFree: boolean;
@@ -42700,6 +42735,17 @@ export type GetConversationBootstrapResponses = {
                     pricePerMillionCacheRead: string | null;
                     pricePerMillionCacheWrite: string | null;
                     cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+                    mediaPricing: {
+                        per: 'million_tokens' | 'million_characters' | 'minute';
+                        input: Array<{
+                            kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                            usd: number;
+                        }>;
+                        output: Array<{
+                            kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                            usd: number;
+                        }>;
+                    } | null;
                 };
                 isBest?: boolean;
                 isFree: boolean;
@@ -42914,6 +42960,17 @@ export type GetConversationBootstrapResponses = {
                         pricePerMillionCacheRead: string | null;
                         pricePerMillionCacheWrite: string | null;
                         cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+                        mediaPricing: {
+                            per: 'million_tokens' | 'million_characters' | 'minute';
+                            input: Array<{
+                                kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                                usd: number;
+                            }>;
+                            output: Array<{
+                                kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                                usd: number;
+                            }>;
+                        } | null;
                     };
                     isBest?: boolean;
                     isFree: boolean;
@@ -63254,7 +63311,11 @@ export type GetInteractionsResponses = {
             attributionLabels: {
                 [key: string]: string;
             } | null;
-            request: GeminiGenerateContentRequest | {
+            request: (GeminiGenerateContentRequest & {
+                input_files?: {
+                    [key: string]: unknown;
+                };
+            }) | {
                 [key: string]: unknown;
             };
             processedRequest?: GeminiGenerateContentRequest | {
@@ -71398,6 +71459,7 @@ export type GetInteractionsResponses = {
                     filename: string;
                     mimetype: string;
                     size: number;
+                    duration_seconds?: number;
                 };
             } | {
                 [key: string]: unknown;
@@ -71412,6 +71474,7 @@ export type GetInteractionsResponses = {
                     filename: string;
                     mimetype: string;
                     size: number;
+                    duration_seconds?: number;
                 };
             } | {
                 [key: string]: unknown;
@@ -71423,10 +71486,22 @@ export type GetInteractionsResponses = {
                 content_type: string;
                 bytes: number;
                 usage_available: boolean;
-                cost_available: false;
+                cost_available: boolean;
                 usage?: {
                     [key: string]: unknown;
                 };
+                speech_input?: string;
+                transcript?: string;
+                audio?: {
+                    content_type: string;
+                    data: string;
+                };
+                audio_omitted?: 'too_large';
+                upload?: {
+                    content_type: string;
+                    data: string;
+                };
+                upload_omitted?: 'too_large';
             } | {
                 error: string;
             } | LogContentNotStored | {
@@ -71528,6 +71603,7 @@ export type GetInteractionsResponses = {
                     filename: string;
                     mimetype: string;
                     size: number;
+                    duration_seconds?: number;
                 };
             } | {
                 [key: string]: unknown;
@@ -71542,6 +71618,7 @@ export type GetInteractionsResponses = {
                     filename: string;
                     mimetype: string;
                     size: number;
+                    duration_seconds?: number;
                 };
             } | {
                 [key: string]: unknown;
@@ -71553,10 +71630,22 @@ export type GetInteractionsResponses = {
                 content_type: string;
                 bytes: number;
                 usage_available: boolean;
-                cost_available: false;
+                cost_available: boolean;
                 usage?: {
                     [key: string]: unknown;
                 };
+                speech_input?: string;
+                transcript?: string;
+                audio?: {
+                    content_type: string;
+                    data: string;
+                };
+                audio_omitted?: 'too_large';
+                upload?: {
+                    content_type: string;
+                    data: string;
+                };
+                upload_omitted?: 'too_large';
             } | {
                 error: string;
             } | LogContentNotStored | {
@@ -71710,7 +71799,7 @@ export type GetInteractionsResponses = {
                 reason: string;
                 blockedToolCallCount: number;
             } | null;
-            type: 'azure:images';
+            type: 'azure:images' | 'openai:images';
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
@@ -72470,6 +72559,255 @@ export type GetInteractionsResponses = {
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             externalAgentIdLabel?: string | null;
+        } | {
+            id: string;
+            profileId: string | null;
+            externalAgentId: string | null;
+            runId: string | null;
+            userId: string | null;
+            serviceAccountId: string | null;
+            virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
+            environmentId: string | null;
+            connectorId: string | null;
+            appId: string | null;
+            providerApiKeyId: string | null;
+            modelPoolId: string | null;
+            attempt: number | null;
+            attemptOutcome: string | null;
+            failureReason: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
+            billingMode: 'metered' | 'subscription';
+            authenticatedAppId: string | null;
+            authenticatedAppName: string | null;
+            billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
+            request: {
+                model: string;
+                turn: number;
+                session?: {
+                    [key: string]: unknown;
+                };
+                input_text?: string;
+                input_transcript?: string;
+            } | {
+                [key: string]: unknown;
+            };
+            processedRequest?: {
+                model: string;
+                turn: number;
+                session?: {
+                    [key: string]: unknown;
+                };
+                input_text?: string;
+                input_transcript?: string;
+            } | {
+                [key: string]: unknown;
+            } | null;
+            response: {
+                id: string;
+                status: string;
+                output_transcript?: string;
+                output_audio?: {
+                    format: 'pcm16';
+                    sample_rate: number;
+                    data: string;
+                };
+                output_audio_omitted?: 'too_large';
+                output?: Array<{
+                    [key: string]: unknown;
+                }>;
+                usage?: {
+                    [key: string]: unknown;
+                };
+            } | {
+                error: string;
+            } | LogContentNotStored | {
+                __encryptedChatSealed: string;
+            } | {
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
+            };
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
+            type: 'openai:realtime';
+            model: string | null;
+            baselineModel: string | null;
+            durationMs: number | null;
+            inputTokens: number | null;
+            inputTokensEstimated: boolean;
+            outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
+            createdAt: string;
+            chatErrors?: Array<{
+                id: string;
+                conversationId: string;
+                error: {
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                    message: string;
+                    isRetryable: boolean;
+                    sessionId?: string;
+                    traceId?: string;
+                    spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
+                    authAction?: {
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        providerLabel: string;
+                    };
+                    originalError?: {
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        status?: number;
+                        message?: string;
+                        type?: string;
+                        raw?: unknown;
+                    };
+                };
+                createdAt: string;
+            }>;
+            connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
+        } | {
+            id: string;
+            profileId: string | null;
+            externalAgentId: string | null;
+            runId: string | null;
+            userId: string | null;
+            serviceAccountId: string | null;
+            virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
+            environmentId: string | null;
+            connectorId: string | null;
+            appId: string | null;
+            providerApiKeyId: string | null;
+            modelPoolId: string | null;
+            attempt: number | null;
+            attemptOutcome: string | null;
+            failureReason: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
+            billingMode: 'metered' | 'subscription';
+            authenticatedAppId: string | null;
+            authenticatedAppName: string | null;
+            billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
+            request: {
+                method: string;
+                path: string;
+                query?: string;
+                content_type?: string;
+                content_length?: number;
+                body?: unknown;
+                truncated?: boolean;
+            } | {
+                [key: string]: unknown;
+            };
+            processedRequest?: {
+                method: string;
+                path: string;
+                query?: string;
+                content_type?: string;
+                content_length?: number;
+                body?: unknown;
+                truncated?: boolean;
+            } | {
+                [key: string]: unknown;
+            } | null;
+            response: {
+                status: number;
+                content_type?: string;
+                bytes: number;
+                body?: unknown;
+                truncated?: boolean;
+                streamed?: boolean;
+            } | {
+                error: string;
+            } | LogContentNotStored | {
+                __encryptedChatSealed: string;
+            } | {
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
+            };
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
+            type: 'openai:passthrough' | 'anthropic:passthrough';
+            model: string | null;
+            baselineModel: string | null;
+            durationMs: number | null;
+            inputTokens: number | null;
+            inputTokensEstimated: boolean;
+            outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
+            createdAt: string;
+            chatErrors?: Array<{
+                id: string;
+                conversationId: string;
+                error: {
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                    message: string;
+                    isRetryable: boolean;
+                    sessionId?: string;
+                    traceId?: string;
+                    spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
+                    authAction?: {
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        providerLabel: string;
+                    };
+                    originalError?: {
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        status?: number;
+                        message?: string;
+                        type?: string;
+                        raw?: unknown;
+                    };
+                };
+                createdAt: string;
+            }>;
+            connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -72603,7 +72941,7 @@ export type GetInteractionSummariesResponses = {
             attributionLabels?: {
                 [key: string]: string;
             } | null;
-            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'kimi-code:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'azure:images' | 'azure:audio' | 'openai:audio' | 'azure:realtime' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
+            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'kimi-code:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'azure:images' | 'azure:audio' | 'openai:audio' | 'openai:images' | 'openai:passthrough' | 'anthropic:passthrough' | 'openai:realtime' | 'azure:realtime' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
             externalAgentIdLabel: string | null;
             requestType: 'main' | 'subagent';
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -74002,7 +74340,11 @@ export type GetInteractionResponses = {
         attributionLabels: {
             [key: string]: string;
         } | null;
-        request: GeminiGenerateContentRequest | {
+        request: (GeminiGenerateContentRequest & {
+            input_files?: {
+                [key: string]: unknown;
+            };
+        }) | {
             [key: string]: unknown;
         };
         processedRequest?: GeminiGenerateContentRequest | {
@@ -82146,6 +82488,7 @@ export type GetInteractionResponses = {
                 filename: string;
                 mimetype: string;
                 size: number;
+                duration_seconds?: number;
             };
         } | {
             [key: string]: unknown;
@@ -82160,6 +82503,7 @@ export type GetInteractionResponses = {
                 filename: string;
                 mimetype: string;
                 size: number;
+                duration_seconds?: number;
             };
         } | {
             [key: string]: unknown;
@@ -82171,10 +82515,22 @@ export type GetInteractionResponses = {
             content_type: string;
             bytes: number;
             usage_available: boolean;
-            cost_available: false;
+            cost_available: boolean;
             usage?: {
                 [key: string]: unknown;
             };
+            speech_input?: string;
+            transcript?: string;
+            audio?: {
+                content_type: string;
+                data: string;
+            };
+            audio_omitted?: 'too_large';
+            upload?: {
+                content_type: string;
+                data: string;
+            };
+            upload_omitted?: 'too_large';
         } | {
             error: string;
         } | LogContentNotStored | {
@@ -82276,6 +82632,7 @@ export type GetInteractionResponses = {
                 filename: string;
                 mimetype: string;
                 size: number;
+                duration_seconds?: number;
             };
         } | {
             [key: string]: unknown;
@@ -82290,6 +82647,7 @@ export type GetInteractionResponses = {
                 filename: string;
                 mimetype: string;
                 size: number;
+                duration_seconds?: number;
             };
         } | {
             [key: string]: unknown;
@@ -82301,10 +82659,22 @@ export type GetInteractionResponses = {
             content_type: string;
             bytes: number;
             usage_available: boolean;
-            cost_available: false;
+            cost_available: boolean;
             usage?: {
                 [key: string]: unknown;
             };
+            speech_input?: string;
+            transcript?: string;
+            audio?: {
+                content_type: string;
+                data: string;
+            };
+            audio_omitted?: 'too_large';
+            upload?: {
+                content_type: string;
+                data: string;
+            };
+            upload_omitted?: 'too_large';
         } | {
             error: string;
         } | LogContentNotStored | {
@@ -82458,7 +82828,7 @@ export type GetInteractionResponses = {
             reason: string;
             blockedToolCallCount: number;
         } | null;
-        type: 'azure:images';
+        type: 'azure:images' | 'openai:images';
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
@@ -83217,6 +83587,255 @@ export type GetInteractionResponses = {
         } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
+        externalAgentIdLabel?: string | null;
+    } | {
+        id: string;
+        profileId: string | null;
+        externalAgentId: string | null;
+        runId: string | null;
+        userId: string | null;
+        serviceAccountId: string | null;
+        virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
+        environmentId: string | null;
+        connectorId: string | null;
+        appId: string | null;
+        providerApiKeyId: string | null;
+        modelPoolId: string | null;
+        attempt: number | null;
+        attemptOutcome: string | null;
+        failureReason: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
+        billingMode: 'metered' | 'subscription';
+        authenticatedAppId: string | null;
+        authenticatedAppName: string | null;
+        billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
+        request: {
+            model: string;
+            turn: number;
+            session?: {
+                [key: string]: unknown;
+            };
+            input_text?: string;
+            input_transcript?: string;
+        } | {
+            [key: string]: unknown;
+        };
+        processedRequest?: {
+            model: string;
+            turn: number;
+            session?: {
+                [key: string]: unknown;
+            };
+            input_text?: string;
+            input_transcript?: string;
+        } | {
+            [key: string]: unknown;
+        } | null;
+        response: {
+            id: string;
+            status: string;
+            output_transcript?: string;
+            output_audio?: {
+                format: 'pcm16';
+                sample_rate: number;
+                data: string;
+            };
+            output_audio_omitted?: 'too_large';
+            output?: Array<{
+                [key: string]: unknown;
+            }>;
+            usage?: {
+                [key: string]: unknown;
+            };
+        } | {
+            error: string;
+        } | LogContentNotStored | {
+            __encryptedChatSealed: string;
+        } | {
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
+        };
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
+        type: 'openai:realtime';
+        model: string | null;
+        baselineModel: string | null;
+        durationMs: number | null;
+        inputTokens: number | null;
+        inputTokensEstimated: boolean;
+        outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
+        createdAt: string;
+        chatErrors?: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    providerLabel: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+        connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
+    } | {
+        id: string;
+        profileId: string | null;
+        externalAgentId: string | null;
+        runId: string | null;
+        userId: string | null;
+        serviceAccountId: string | null;
+        virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
+        environmentId: string | null;
+        connectorId: string | null;
+        appId: string | null;
+        providerApiKeyId: string | null;
+        modelPoolId: string | null;
+        attempt: number | null;
+        attemptOutcome: string | null;
+        failureReason: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
+        billingMode: 'metered' | 'subscription';
+        authenticatedAppId: string | null;
+        authenticatedAppName: string | null;
+        billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
+        request: {
+            method: string;
+            path: string;
+            query?: string;
+            content_type?: string;
+            content_length?: number;
+            body?: unknown;
+            truncated?: boolean;
+        } | {
+            [key: string]: unknown;
+        };
+        processedRequest?: {
+            method: string;
+            path: string;
+            query?: string;
+            content_type?: string;
+            content_length?: number;
+            body?: unknown;
+            truncated?: boolean;
+        } | {
+            [key: string]: unknown;
+        } | null;
+        response: {
+            status: number;
+            content_type?: string;
+            bytes: number;
+            body?: unknown;
+            truncated?: boolean;
+            streamed?: boolean;
+        } | {
+            error: string;
+        } | LogContentNotStored | {
+            __encryptedChatSealed: string;
+        } | {
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
+        };
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
+        type: 'openai:passthrough' | 'anthropic:passthrough';
+        model: string | null;
+        baselineModel: string | null;
+        durationMs: number | null;
+        inputTokens: number | null;
+        inputTokensEstimated: boolean;
+        outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
+        createdAt: string;
+        chatErrors?: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    providerLabel: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+        connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
+        requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     };
 };
@@ -98189,6 +98808,17 @@ export type GetLlmModelsResponses = {
             pricePerMillionCacheRead: string | null;
             pricePerMillionCacheWrite: string | null;
             cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+            mediaPricing: {
+                per: 'million_tokens' | 'million_characters' | 'minute';
+                input: Array<{
+                    kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                    usd: number;
+                }>;
+                output: Array<{
+                    kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                    usd: number;
+                }>;
+            } | null;
         };
         isBest?: boolean;
         isFree: boolean;
@@ -98472,6 +99102,17 @@ export type GetModelsWithApiKeysResponses = {
         pricePerMillionCacheRead: string | null;
         pricePerMillionCacheWrite: string | null;
         cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+        mediaPricing: {
+            per: 'million_tokens' | 'million_characters' | 'minute';
+            input: Array<{
+                kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                usd: number;
+            }>;
+            output: Array<{
+                kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                usd: number;
+            }>;
+        } | null;
         isFree: boolean;
         effectiveContextLength: number | null;
         embeddingClientImageCapable: boolean | null;
@@ -107916,6 +108557,780 @@ export type UpdateModelPoolResponses = {
 
 export type UpdateModelPoolResponse = UpdateModelPoolResponses[keyof UpdateModelPoolResponses];
 
+export type ModelRouterImageEditsWithDefaultAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | unknown;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd' | unknown;
+        background?: 'auto' | 'transparent' | 'opaque' | unknown;
+        output_format?: 'png' | 'jpeg' | 'webp' | unknown;
+        response_format?: 'url' | 'b64_json' | unknown;
+        user?: string;
+        safety_identifier?: unknown;
+        n?: number | unknown;
+        output_compression?: number | unknown;
+        input_fidelity?: 'high' | 'low' | unknown;
+        stream?: false | unknown;
+        /**
+         * PNG/JPEG/WebP reference files, each smaller than 50 MiB.
+         */
+        image: Array<Blob | File>;
+        /**
+         * Optional PNG alpha mask smaller than 4 MiB, matching the first image dimensions.
+         */
+        mask?: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/model-router/images/edits';
+};
+
+export type ModelRouterImageEditsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ModelRouterImageEditsWithDefaultAgentError = ModelRouterImageEditsWithDefaultAgentErrors[keyof ModelRouterImageEditsWithDefaultAgentErrors];
+
+export type ModelRouterImageEditsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type ModelRouterImageEditsWithDefaultAgentResponse = ModelRouterImageEditsWithDefaultAgentResponses[keyof ModelRouterImageEditsWithDefaultAgentResponses];
+
+export type ModelRouterImageEditsWithAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | unknown;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd' | unknown;
+        background?: 'auto' | 'transparent' | 'opaque' | unknown;
+        output_format?: 'png' | 'jpeg' | 'webp' | unknown;
+        response_format?: 'url' | 'b64_json' | unknown;
+        user?: string;
+        safety_identifier?: unknown;
+        n?: number | unknown;
+        output_compression?: number | unknown;
+        input_fidelity?: 'high' | 'low' | unknown;
+        stream?: false | unknown;
+        /**
+         * PNG/JPEG/WebP reference files, each smaller than 50 MiB.
+         */
+        image: Array<Blob | File>;
+        /**
+         * Optional PNG alpha mask smaller than 4 MiB, matching the first image dimensions.
+         */
+        mask?: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/model-router/{agentId}/images/edits';
+};
+
+export type ModelRouterImageEditsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ModelRouterImageEditsWithAgentError = ModelRouterImageEditsWithAgentErrors[keyof ModelRouterImageEditsWithAgentErrors];
+
+export type ModelRouterImageEditsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type ModelRouterImageEditsWithAgentResponse = ModelRouterImageEditsWithAgentResponses[keyof ModelRouterImageEditsWithAgentResponses];
+
+export type ModelRouterAudioSpeechWithDefaultAgentData = {
+    body: {
+        model: string;
+        input: string;
+        voice: string | {
+            id: string;
+        };
+        instructions?: string;
+        response_format?: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm';
+        speed?: number;
+        stream_format?: 'audio' | 'sse';
+        [key: string]: unknown;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/model-router/audio/speech';
+};
+
+export type ModelRouterAudioSpeechWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterAudioSpeechWithAgentData = {
+    body: {
+        model: string;
+        input: string;
+        voice: string | {
+            id: string;
+        };
+        instructions?: string;
+        response_format?: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm';
+        speed?: number;
+        stream_format?: 'audio' | 'sse';
+        [key: string]: unknown;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/model-router/{agentId}/audio/speech';
+};
+
+export type ModelRouterAudioSpeechWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterAudioTranscriptionsWithDefaultAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/model-router/audio/transcriptions';
+};
+
+export type ModelRouterAudioTranscriptionsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterAudioTranscriptionsWithAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/model-router/{agentId}/audio/transcriptions';
+};
+
+export type ModelRouterAudioTranscriptionsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterAudioTranslationsWithDefaultAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/model-router/audio/translations';
+};
+
+export type ModelRouterAudioTranslationsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterAudioTranslationsWithAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/model-router/{agentId}/audio/translations';
+};
+
+export type ModelRouterAudioTranslationsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterImagesWithDefaultAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | null;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd';
+        background?: 'auto' | 'transparent' | 'opaque';
+        output_format?: 'png' | 'jpeg' | 'webp';
+        response_format?: 'url' | 'b64_json';
+        user?: string;
+        safety_identifier?: string | null;
+        n?: number | null;
+        output_compression?: number | null;
+        moderation?: 'auto' | 'low';
+        style?: 'vivid' | 'natural';
+        stream?: false;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/model-router/images/generations';
+};
+
+export type ModelRouterImagesWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ModelRouterImagesWithDefaultAgentError = ModelRouterImagesWithDefaultAgentErrors[keyof ModelRouterImagesWithDefaultAgentErrors];
+
+export type ModelRouterImagesWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type ModelRouterImagesWithDefaultAgentResponse = ModelRouterImagesWithDefaultAgentResponses[keyof ModelRouterImagesWithDefaultAgentResponses];
+
+export type ModelRouterImagesWithAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | null;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd';
+        background?: 'auto' | 'transparent' | 'opaque';
+        output_format?: 'png' | 'jpeg' | 'webp';
+        response_format?: 'url' | 'b64_json';
+        user?: string;
+        safety_identifier?: string | null;
+        n?: number | null;
+        output_compression?: number | null;
+        moderation?: 'auto' | 'low';
+        style?: 'vivid' | 'natural';
+        stream?: false;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/model-router/{agentId}/images/generations';
+};
+
+export type ModelRouterImagesWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ModelRouterImagesWithAgentError = ModelRouterImagesWithAgentErrors[keyof ModelRouterImagesWithAgentErrors];
+
+export type ModelRouterImagesWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type ModelRouterImagesWithAgentResponse = ModelRouterImagesWithAgentResponses[keyof ModelRouterImagesWithAgentResponses];
+
 export type ModelRouterListModelsWithDefaultAgentData = {
     body?: never;
     path?: never;
@@ -108546,7 +109961,7 @@ export type ModelRouterEmbeddingsWithDefaultAgentResponses = {
         object: 'list';
         data: Array<{
             object: 'embedding';
-            embedding: Array<number>;
+            embedding: Array<number> | string;
             index?: number;
         }>;
         model: string;
@@ -108659,7 +110074,7 @@ export type ModelRouterEmbeddingsWithAgentResponses = {
         object: 'list';
         data: Array<{
             object: 'embedding';
-            embedding: Array<number>;
+            embedding: Array<number> | string;
             index?: number;
         }>;
         model: string;
@@ -112321,6 +113736,520 @@ export type OpenAiAudioTranslationsWithAgentResponses = {
     200: unknown;
 };
 
+export type OpenAiImagesWithDefaultAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | null;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd';
+        background?: 'auto' | 'transparent' | 'opaque';
+        output_format?: 'png' | 'jpeg' | 'webp';
+        response_format?: 'url' | 'b64_json';
+        user?: string;
+        safety_identifier?: string | null;
+        n?: number | null;
+        output_compression?: number | null;
+        moderation?: 'auto' | 'low';
+        style?: 'vivid' | 'natural';
+        stream?: false;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/openai/images/generations';
+};
+
+export type OpenAiImagesWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAiImagesWithDefaultAgentError = OpenAiImagesWithDefaultAgentErrors[keyof OpenAiImagesWithDefaultAgentErrors];
+
+export type OpenAiImagesWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type OpenAiImagesWithDefaultAgentResponse = OpenAiImagesWithDefaultAgentResponses[keyof OpenAiImagesWithDefaultAgentResponses];
+
+export type OpenAiImagesWithAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | null;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd';
+        background?: 'auto' | 'transparent' | 'opaque';
+        output_format?: 'png' | 'jpeg' | 'webp';
+        response_format?: 'url' | 'b64_json';
+        user?: string;
+        safety_identifier?: string | null;
+        n?: number | null;
+        output_compression?: number | null;
+        moderation?: 'auto' | 'low';
+        style?: 'vivid' | 'natural';
+        stream?: false;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/images/generations';
+};
+
+export type OpenAiImagesWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAiImagesWithAgentError = OpenAiImagesWithAgentErrors[keyof OpenAiImagesWithAgentErrors];
+
+export type OpenAiImagesWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type OpenAiImagesWithAgentResponse = OpenAiImagesWithAgentResponses[keyof OpenAiImagesWithAgentResponses];
+
+export type OpenAiImageEditsWithDefaultAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | unknown;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd' | unknown;
+        background?: 'auto' | 'transparent' | 'opaque' | unknown;
+        output_format?: 'png' | 'jpeg' | 'webp' | unknown;
+        response_format?: 'url' | 'b64_json' | unknown;
+        user?: string;
+        safety_identifier?: unknown;
+        n?: number | unknown;
+        output_compression?: number | unknown;
+        input_fidelity?: 'high' | 'low' | unknown;
+        stream?: false | unknown;
+        /**
+         * PNG/JPEG/WebP reference files, each smaller than 50 MiB.
+         */
+        image: Array<Blob | File>;
+        /**
+         * Optional PNG alpha mask smaller than 4 MiB, matching the first image dimensions.
+         */
+        mask?: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/openai/images/edits';
+};
+
+export type OpenAiImageEditsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAiImageEditsWithDefaultAgentError = OpenAiImageEditsWithDefaultAgentErrors[keyof OpenAiImageEditsWithDefaultAgentErrors];
+
+export type OpenAiImageEditsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type OpenAiImageEditsWithDefaultAgentResponse = OpenAiImageEditsWithDefaultAgentResponses[keyof OpenAiImageEditsWithDefaultAgentResponses];
+
+export type OpenAiImageEditsWithAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | unknown;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd' | unknown;
+        background?: 'auto' | 'transparent' | 'opaque' | unknown;
+        output_format?: 'png' | 'jpeg' | 'webp' | unknown;
+        response_format?: 'url' | 'b64_json' | unknown;
+        user?: string;
+        safety_identifier?: unknown;
+        n?: number | unknown;
+        output_compression?: number | unknown;
+        input_fidelity?: 'high' | 'low' | unknown;
+        stream?: false | unknown;
+        /**
+         * PNG/JPEG/WebP reference files, each smaller than 50 MiB.
+         */
+        image: Array<Blob | File>;
+        /**
+         * Optional PNG alpha mask smaller than 4 MiB, matching the first image dimensions.
+         */
+        mask?: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/images/edits';
+};
+
+export type OpenAiImageEditsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAiImageEditsWithAgentError = OpenAiImageEditsWithAgentErrors[keyof OpenAiImageEditsWithAgentErrors];
+
+export type OpenAiImageEditsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type OpenAiImageEditsWithAgentResponse = OpenAiImageEditsWithAgentResponses[keyof OpenAiImageEditsWithAgentResponses];
+
 export type OpenAiEmbeddingsWithDefaultAgentData = {
     body: {
         model: string;
@@ -112419,7 +114348,7 @@ export type OpenAiEmbeddingsWithDefaultAgentResponses = {
         object: 'list';
         data: Array<{
             object: 'embedding';
-            embedding: Array<number>;
+            embedding: Array<number> | string;
             index?: number;
         }>;
         model: string;
@@ -112532,7 +114461,7 @@ export type OpenAiEmbeddingsWithAgentResponses = {
         object: 'list';
         data: Array<{
             object: 'embedding';
-            embedding: Array<number>;
+            embedding: Array<number> | string;
             index?: number;
         }>;
         model: string;
@@ -119766,6 +121695,7 @@ export type GetOrganizationResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -120222,6 +122152,7 @@ export type UpdateAppearanceSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -120344,6 +122275,7 @@ export type UpdateSecuritySettingsData = {
         playwrightMcpEnabled?: boolean;
         allowChatFileUploads?: boolean;
         allowUnauthenticatedLlmProxyRequests?: boolean;
+        keepMediaInLogs?: boolean;
         newAppsDisabledByDefault?: boolean;
         newAppsLockedByDefault?: boolean;
         allowToolAutoAssignment?: boolean;
@@ -120445,6 +122377,7 @@ export type UpdateSecuritySettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -120665,6 +122598,7 @@ export type UpdateMcpSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -120884,6 +122818,7 @@ export type UpdateSkillsSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -121210,6 +123145,7 @@ export type UpdateAgentSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -121452,6 +123388,7 @@ export type UpdateConnectionSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -121719,6 +123656,7 @@ export type UpdateIntegrationSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -121948,6 +123886,7 @@ export type UpdateDefaultEnvironmentResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -122172,6 +124111,7 @@ export type UpdateAuthSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -122398,6 +124338,7 @@ export type UpdateKnowledgeSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -122614,6 +124555,7 @@ export type DropEmbeddingConfigResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -123192,6 +125134,7 @@ export type CompleteOnboardingResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -128737,6 +130680,10 @@ export type GetProjectRunsResponses = {
         hardDeadlineAt: string;
         lastModelActivityAt: string | null;
         sessionId: string;
+        /**
+         * Key of the run's LLM logs (/llm/logs/:id): the session id its runtime sends
+         */
+        llmSessionId: string;
         prompt: string;
         agent: {
             id: string;

@@ -67,3 +67,21 @@ export function constructStableRunName(
       .replace(/[^a-z0-9]+$/, "") || "session";
   return `agent-run-${slug}-${id.slice(0, 8)}`;
 }
+
+/**
+ * The key a run's LLM traffic is logged under (`interactions.session_id`):
+ * its frozen run name.
+ *
+ * pod-run hands the name to the image as `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID`,
+ * and the run headers an image sends on every model and gateway request
+ * carry it as `X-Archestra-Session-Id` and `X-Appa-Session-ID`. The proxy keys
+ * interactions by the first, or by the second when a client sends only that
+ * one, and refuses a run-bound request whose OpenAPPA session names another
+ * workspace. The platform's own requests for a run (its title) and every
+ * link to `/llm/logs/:id` therefore use this key. It is not the task id,
+ * which a continued session renews each turn, and not the workspace row's
+ * UUID.
+ */
+export function agentRunLlmSessionId(run: { workloadName: string }): string {
+  return run.workloadName;
+}

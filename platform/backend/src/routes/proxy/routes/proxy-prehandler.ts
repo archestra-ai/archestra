@@ -1,4 +1,5 @@
 import { Readable } from "node:stream";
+import type { SupportedProvider } from "@archestra/shared";
 import {
   errorCodes,
   type FastifyReply,
@@ -7,12 +8,19 @@ import {
 } from "fastify";
 import { mayHoldAttestationToken } from "@/archestra-mcp-server/tool-attestation";
 import logger from "@/logging";
+import { LimitValidationService } from "@/models/limit";
 import LlmThroughputModel from "@/models/llm-throughput";
 import {
   mayHoldOpenAppaPayload,
   sanitizeForwardedRequest,
 } from "@/openappa/request";
 import { ThroughputError } from "@/services/llm-throughput";
+import { ApiError } from "@/types";
+import {
+  beginPassthroughLog,
+  notePassthroughRequestBody,
+  type PassthroughIdentity,
+} from "../passthrough-log";
 import { captureClientRuntimeEvidence } from "../utils/client-runtime-evidence";
 import { removeMarkersFromBody } from "../utils/gateway-tool-declarations";
 
@@ -50,9 +58,21 @@ export function createProxyPreHandler(params: {
   authenticate?: (params: {
     request: FastifyRequest;
     agentId?: string;
-  }) => Promise<void>;
+  }) => Promise<PassthroughIdentity | undefined>;
+  /**
+   * When set, every forwarded call is logged as a `<provider>:passthrough`
+   * interaction. It also names the provider whose free operations stay
+   * available under a budget.
+   */
+  logProvider?: SupportedProvider;
 }) {
   const { apiPrefix, endpointSuffix, upstream, providerName } = params;
+  const beforeCleanBody = params.logProvider
+    ? async (request: FastifyRequest, body: unknown) => {
+        notePassthroughRequestBody(request, body);
+        await params.beforeCleanBody?.(request, body);
+      }
+    : params.beforeCleanBody;
   const rewritePrefix = params.rewritePrefix ?? "";
   const skipErrorResponse = params.skipErrorResponse ?? {
     error: {
@@ -150,7 +170,7 @@ export function createProxyPreHandler(params: {
 
     // Strip last: the body hooks (e.g. Claude Code's count observer) still
     // read X-Archestra-* headers such as the agent id.
-    cleanForwardedBody(request, params.beforeCleanBody).then(() => {
+    cleanForwardedBody(request, beforeCleanBody).then(() => {
       stripArchestraRequestHeaders(request);
       next();
     }, next);
@@ -167,7 +187,15 @@ export function createProxyPreHandler(params: {
     // the rewrite reaches Fastify instead of becoming an unhandled rejection.
     Promise.resolve()
       .then(async () => {
-        await authenticate?.({ request, agentId });
+        const identity = await authenticate?.({ request, agentId });
+        if (params.logProvider) {
+          const relative = request.url.replace(apiPrefix, "");
+          beginPassthroughLog(request, {
+            provider: params.logProvider,
+            identity,
+            pathAndQuery: relative.match(UUID_REGEX)?.[2] ?? relative,
+          });
+        }
         // Raw passthrough has neither resolved billing ownership nor a usage
         // adapter. Fail explicitly rather than let it evade configured quotas.
         // Metadata, stored results, file transfer and cancellation do not start
@@ -190,6 +218,24 @@ export function createProxyPreHandler(params: {
             message:
               "Throughput limits require a supported native inference endpoint. Unhandled inference operations are disabled while throughput limits are configured.",
           });
+        // Nor can a forwarded call be charged to a spend budget: it names no
+        // model and reports no cost to settle. Refuse it while any hard budget
+        // applies to the caller, unless the provider bills nothing for it.
+        if (!identity || isFreeOperation(request, params.logProvider)) return;
+        const violation = await LimitValidationService.checkLimitsBeforeRequest(
+          {
+            unmeteredOperation: true,
+            agentId: identity.agent.id,
+            agent: identity.agent,
+            userId: identity.userId,
+            virtualKeyId: identity.virtualKeyId,
+            passthroughVirtualKeyId: identity.passthroughVirtualKeyId,
+            llmOauthClientId: identity.authenticatedApp?.id,
+            billingTeamId: identity.billingTeamId,
+            teamMemberUserId: identity.userId ?? null,
+          },
+        );
+        if (violation) throw new ApiError(402, violation[1]);
       })
       .then(() => rewritePreHandler(request, reply, next))
       .catch((error) => {
@@ -361,5 +407,18 @@ function isNonInferenceOperation(request: FastifyRequest): boolean {
     /\/files(?:\/[^/]+)?(?::upload)?$/.test(path) ||
     /\/uploads(?:\/[^/]+(?:\/(?:parts|complete|cancel))?)?$/.test(path) ||
     /\/(?:batches|responses)\/[^/]+\/cancel$/.test(path)
+  );
+}
+
+/** Inference the provider never bills: OpenAI charges nothing for moderation. */
+function isFreeOperation(
+  request: FastifyRequest,
+  provider: SupportedProvider | undefined,
+): boolean {
+  const path = request.url.split("?")[0].replace(/\/+$/, "");
+  return (
+    provider === "openai" &&
+    request.method === "POST" &&
+    /\/moderations$/.test(path)
   );
 }

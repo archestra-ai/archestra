@@ -2,7 +2,9 @@ import { testMcpServerCommand } from "@archestra/shared/test-mcp-server";
 import { waitForServerInstallation } from "../utils";
 import { expect, test } from "./api-fixtures";
 
-test.describe("Custom YAML Spec - Server Restart on YAML Edit", () => {
+test.describe("Custom YAML Spec - Server Restart on YAML Edit", {
+  tag: "@needs-kubernetes",
+}, () => {
   test.describe.configure({ timeout: 180_000 });
 
   let catalogId: string;

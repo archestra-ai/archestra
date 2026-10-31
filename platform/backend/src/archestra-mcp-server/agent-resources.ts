@@ -956,6 +956,7 @@ async function resolveRuntimeAndModelForWrite(params: {
     ...scope,
     runtime: merged.runtime,
     agent: merged,
+    selectsModel: touchesModel,
   });
 
   return {

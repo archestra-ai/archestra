@@ -30,6 +30,7 @@ type SignalSourceErrorReason =
   | "timeout"
   | "http"
   | "invalid_response"
+  | "input_too_large"
   | "no_credentials";
 
 export class SignalSourceError extends Error {

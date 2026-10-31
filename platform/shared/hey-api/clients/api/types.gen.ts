@@ -73450,6 +73450,137 @@ export type GetUniqueUserIdsResponses = {
 
 export type GetUniqueUserIdsResponse = GetUniqueUserIdsResponses[keyof GetUniqueUserIdsResponses];
 
+export type GetInteractionAutoRoutingData = {
+    body?: never;
+    path: {
+        interactionId: string;
+    };
+    query?: never;
+    url: '/api/interactions/{interactionId}/auto-routing';
+};
+
+export type GetInteractionAutoRoutingErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetInteractionAutoRoutingError = GetInteractionAutoRoutingErrors[keyof GetInteractionAutoRoutingErrors];
+
+export type GetInteractionAutoRoutingResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        decision: {
+            id: string;
+            segment: number;
+            tierIndex: number;
+            modelId: string;
+            propensity: number;
+            u: number;
+            planId: string | null;
+            reason: 'planned' | 'cold_start' | 'scorer_error' | 'plan_stale';
+            scorerVersionId: string | null;
+            features: {
+                signals: {
+                    'jev-session': {
+                        version: string;
+                        tier_needed: [
+                            number,
+                            number,
+                            number
+                        ];
+                        p_long: number;
+                    };
+                };
+                client: string;
+            } | null;
+            scorerCost: string | null;
+            featuresSchemaVersion: number;
+            coreVersion: string;
+            planFormatVersion: number | null;
+            lambda: number | null;
+            expectedCostUsd: string | null;
+            createdAt: string;
+            tier: 'fast' | 'normal' | 'smart';
+            model: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            };
+            scorerVersion: {
+                id: string;
+                name: string;
+                model: string;
+                specHash: string;
+            } | null;
+        } | null;
+    };
+};
+
+export type GetInteractionAutoRoutingResponse = GetInteractionAutoRoutingResponses[keyof GetInteractionAutoRoutingResponses];
+
 export type GetInteractionData = {
     body?: never;
     path: {

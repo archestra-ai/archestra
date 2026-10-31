@@ -163,7 +163,7 @@ describe("POST /api/auto-routing/preview", () => {
       {
         prompt: "Review this change.",
         system_prompt: "Review migration locking.",
-        tools: "Available tools: 1\ninspect_schema: Read table metadata.",
+        tools: "Available tools: 1\ninspect_schema",
       },
     ]);
     expect(await db.$count(schema.routingDecisionsTable)).toBe(0);
@@ -225,6 +225,20 @@ describe("POST /api/auto-routing/preview", () => {
     const response = await preview({ text: "x".repeat(20_001) });
 
     expect(response.statusCode).toBe(400);
+    expect(jevStates).toEqual([]);
+  });
+
+  test("rejects oversized tool-name context instead of silently scoring only some tools", async () => {
+    await configureAutoRouting(ctx.organizationId);
+    const response = await preview({
+      request: {
+        input: "Review this change.",
+        tools: Array.from({ length: 10_000 }, (_, index) => ({
+          name: `tool_${index}`,
+        })),
+      },
+    });
+    expect(response.statusCode, response.body).toBe(400);
     expect(jevStates).toEqual([]);
   });
 

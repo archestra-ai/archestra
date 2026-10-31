@@ -1113,6 +1113,23 @@ class InteractionModel {
     };
   }
 
+  /** Visibility checks for metadata endpoints must not decrypt or reconstruct conversation payloads. */
+  static async findAccessMetadata(params: {
+    id: string;
+    organizationId: string;
+  }) {
+    const [row] = await db
+      .select({ userId: schema.interactionsTable.userId })
+      .from(schema.interactionsTable)
+      .where(
+        and(
+          eq(schema.interactionsTable.id, params.id),
+          interactionBelongsToOrganization(params.organizationId),
+        ),
+      );
+    return row ?? null;
+  }
+
   static async findById(
     idOrScope: string | { id: string; organizationId: string },
     userId?: string,

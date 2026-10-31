@@ -80,6 +80,8 @@ export async function previewAutoRouting(
 function scorerFailure(error: unknown): unknown {
   if (!(error instanceof SignalSourceError)) return error;
   switch (error.reason) {
+    case "input_too_large":
+      return new ApiError(400, error.message);
     case "no_credentials":
       return new ApiError(400, `Session scorer unavailable: ${error.message}`);
     case "timeout":

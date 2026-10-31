@@ -1,7 +1,43 @@
 import { describe, expect, test } from "vitest";
-import { scoringContext } from "./scoring-context";
+import { scoringContext, scoringContextFingerprint } from "./scoring-context";
 
 describe("scoringContext", () => {
+  test("fingerprints instructions and the complete tool-name set, independent of ordering and cache metadata", () => {
+    const first = scoringContext({
+      system: "Review migrations.",
+      tools: [
+        { name: "read_file", description: "Read files." },
+        { name: "inspect_schema" },
+      ],
+    });
+    const rewritten = scoringContext({
+      system: [
+        {
+          type: "text",
+          text: "Review migrations.",
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+      tools: [
+        { name: "inspect_schema" },
+        {
+          name: "read_file",
+          description: "Updated description.",
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+    });
+    expect(scoringContextFingerprint(first)).toBe(
+      scoringContextFingerprint(rewritten),
+    );
+    expect(scoringContextFingerprint(first)).not.toBe(
+      scoringContextFingerprint({ ...first, systemPrompt: "Translate text." }),
+    );
+    expect(scoringContextFingerprint(first)).not.toBe(
+      scoringContextFingerprint({ ...first, tools: [{ name: "read_file" }] }),
+    );
+    expect(scoringContextFingerprint({})).toBeUndefined();
+  });
   test("extracts chat system/developer instructions and function metadata, not schemas or conversation text", () => {
     expect(
       scoringContext({

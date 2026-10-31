@@ -689,7 +689,10 @@ function readingStatus(reading: Reading): "scored" | "failed" | null {
     case "read":
       return "scored";
     case "error":
-      return reading.error.reason === "invalid_response" ? "failed" : null;
+      return reading.error.reason === "invalid_response" ||
+        reading.error.reason === "input_too_large"
+        ? "failed"
+        : null;
     case "unexpected":
       return null;
   }

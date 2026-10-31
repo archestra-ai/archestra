@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { PreRunInput } from "./signals/types";
 
@@ -24,6 +25,18 @@ export function scoringContext(
     }
   }
   return { systemPrompt: system.filter(Boolean).join("\n\n"), tools };
+}
+
+/** Context identity for clients without session IDs; ignore tool ordering and cache markers. */
+export function scoringContextFingerprint(
+  context: Pick<PreRunInput, "systemPrompt" | "tools">,
+): string | undefined {
+  const system = context.systemPrompt ?? "";
+  const names = (context.tools ?? []).map((tool) => tool.name).sort();
+  if (!system && names.length === 0) return undefined;
+  return createHash("sha256")
+    .update(JSON.stringify([system, names]))
+    .digest("hex");
 }
 
 // === Internal ===

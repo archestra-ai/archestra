@@ -351,7 +351,7 @@ describe("auto routing backfill", () => {
       expect(state).toEqual({
         prompt: "Review this migration",
         system_prompt: system,
-        tools: "Available tools: 1\ninspect_schema: Read table metadata.",
+        tools: "Available tools: 1\ninspect_schema",
       });
     }
   });

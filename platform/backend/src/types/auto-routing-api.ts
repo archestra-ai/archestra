@@ -13,6 +13,7 @@ import {
   RoutingPlanRecordSchema,
   RoutingPlanStatusSchema,
   RoutingPlanTriggerSchema,
+  SelectRoutingDecisionSchema,
 } from "@/types/auto-routing";
 
 /** `routing_plans.budget_usd_per_day` is numeric(12, 2). */
@@ -156,6 +157,27 @@ export const AutoRoutingPreviewBodySchema = z.union([
 export type AutoRoutingPreviewBody = z.infer<
   typeof AutoRoutingPreviewBodySchema
 >;
+
+/** Persisted provenance, not a fresh scorer invocation or a synthesized explanation. */
+export const InteractionAutoRoutingResponseSchema = z.object({
+  decision: SelectRoutingDecisionSchema.omit({
+    organizationId: true,
+    sessionKey: true,
+  })
+    .extend({
+      tier: AutoRoutingTierNameSchema,
+      model: AutoRoutingTierModelSchema,
+      scorerVersion: z
+        .object({
+          id: z.string().uuid(),
+          name: z.string(),
+          model: z.string(),
+          specHash: z.string(),
+        })
+        .nullable(),
+    })
+    .nullable(),
+});
 
 export const AutoRoutingSimulateBodySchema = z.strictObject({
   budgetUsdPerDay: BudgetUsdPerDaySchema,

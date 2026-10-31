@@ -12,6 +12,11 @@ import { type Transaction, withDbTransaction } from "@/database";
  * backs the tests, has a single connection and would deadlock on one). The
  * caller holds a pooled connection for the whole run, including any network
  * call made under the lock, so keep those bounded.
+ *
+ * `run` can execute more than once: `withDbTransaction` retries the whole
+ * callback on transient database failures. Anything in it with an external
+ * side effect must be safe to repeat, or be remembered by the caller across
+ * attempts so a retry reuses the first attempt's outcome.
  */
 export function withSubscriptionCredentialLock<Result>(params: {
   provider: string;

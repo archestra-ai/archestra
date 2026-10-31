@@ -196,27 +196,41 @@ export class XaiSubscriptionTokenManager {
       });
     }
 
+    // The lock helper retries its callback on transient database failures, and
+    // a redemption cannot be repeated: the refresh token is spent the moment
+    // xAI answers, whether or not that answer gets persisted. So the one
+    // redemption this call makes is remembered across attempts (a retry
+    // persists it instead of redeeming again), and an issuer failure is carried
+    // out of the transaction rather than thrown through it: the retry wrapper
+    // classifies network errors by shape, not by source, and would otherwise
+    // present the same token a second time after an ambiguous response.
+    let redemption: { refreshToken: string; redeemed: Redemption } | undefined;
+    let issuerError: unknown;
     let rejectedCredential: XaiSubscriptionCredential | undefined;
-    try {
-      const result = await withSubscriptionCredentialLock({
-        provider: "xai",
-        providerApiKeyId,
-        run: async (transaction) => {
-          const stored = await readStoredCredential({
-            secretId,
-            callerUserId: credential.userId,
-            options: { skipCache: true, transaction, forUpdate: true },
-          });
-          if (adoptable(stored)) {
-            return {
-              credential: stored,
-              digests: [hashToken(stored.refreshToken)],
-            };
-          }
-          let redeemed: Awaited<ReturnType<typeof redeemWithXai>>;
+    const result = await withSubscriptionCredentialLock({
+      provider: "xai",
+      providerApiKeyId,
+      run: async (transaction): Promise<SharedTokenResult | undefined> => {
+        const stored = await readStoredCredential({
+          secretId,
+          callerUserId: credential.userId,
+          options: { skipCache: true, transaction, forUpdate: true },
+        });
+        if (adoptable(stored)) {
+          return {
+            credential: stored,
+            digests: [hashToken(stored.refreshToken)],
+          };
+        }
+        let redeemed =
+          redemption?.refreshToken === stored.refreshToken
+            ? redemption.redeemed
+            : undefined;
+        if (!redeemed) {
           try {
             redeemed = await redeemWithXai(stored.refreshToken);
           } catch (error) {
+            issuerError = error;
             if (
               error instanceof ApiError &&
               error.internalCode ===
@@ -224,57 +238,59 @@ export class XaiSubscriptionTokenManager {
             ) {
               rejectedCredential = stored;
             }
-            throw error;
+            return undefined;
           }
-          const updated = {
-            ...stored,
-            refreshToken: redeemed.rotatedRefreshToken ?? stored.refreshToken,
-            accessToken: redeemed.accessToken,
-            accessTokenExpiresAtMs: redeemed.expiresAtMs,
-          };
-          const persisted = await secretManager().updateSecret(
-            secretId,
-            { apiKey: encodeXaiSubscriptionCredential(updated) },
-            { transaction },
+          redemption = { refreshToken: stored.refreshToken, redeemed };
+        }
+        const updated = {
+          ...stored,
+          refreshToken: redeemed.rotatedRefreshToken ?? stored.refreshToken,
+          accessToken: redeemed.accessToken,
+          accessTokenExpiresAtMs: redeemed.expiresAtMs,
+        };
+        const persisted = await secretManager().updateSecret(
+          secretId,
+          { apiKey: encodeXaiSubscriptionCredential(updated) },
+          { transaction },
+        );
+        if (!persisted) {
+          throw new ApiError(
+            502,
+            "Could not persist the refreshed SuperGrok credential",
           );
-          if (!persisted) {
-            throw new ApiError(
-              502,
-              "Could not persist the refreshed SuperGrok credential",
-            );
-          }
-          return {
-            credential: updated,
-            digests: [
-              hashToken(stored.refreshToken),
-              hashToken(updated.refreshToken),
-            ],
-          };
-        },
-      });
-      if (result.digests.length > 1) {
-        // The transactional write bypassed this process's secret cache; read
-        // the committed row once so per-request decodes stop carrying the
-        // spent refresh token.
-        await secretManager().getSecret(secretId, { skipCache: true });
-      }
-      return this.rememberSharedToken(providerApiKeyId, cached, result);
-    } catch (error) {
+        }
+        return {
+          credential: updated,
+          digests: [
+            hashToken(stored.refreshToken),
+            hashToken(updated.refreshToken),
+          ],
+        };
+      },
+    });
+    if (!result) {
       if (rejectedCredential) {
         await this.recordAuthenticationFailure({
           providerApiKeyId,
           credential: rejectedCredential,
         });
       }
-      throw error;
+      throw issuerError;
     }
+    if (result.digests.length > 1) {
+      // The transactional write bypassed this process's secret cache; read
+      // the committed row once so per-request decodes stop carrying the
+      // spent refresh token.
+      await secretManager().getSecret(secretId, { skipCache: true });
+    }
+    return this.rememberSharedToken(providerApiKeyId, cached, result);
   }
 
   /** Caches the shared token for the key and returns it. */
   private rememberSharedToken(
     providerApiKeyId: string,
     cached: CachedAccessToken | undefined,
-    result: { credential: XaiSubscriptionCredential; digests: string[] },
+    result: SharedTokenResult,
   ): string {
     const expiresAtMs = result.credential.accessTokenExpiresAtMs as number;
     const accessToken = result.credential.accessToken as string;
@@ -620,6 +636,14 @@ interface InFlightRefresh {
   promise: Promise<string>;
 }
 
+type Redemption = Awaited<ReturnType<typeof redeemWithXai>>;
+
+/** What a shared refresh produced: the credential to serve and the refresh-token lineage it spans. */
+interface SharedTokenResult {
+  credential: XaiSubscriptionCredential;
+  digests: string[];
+}
+
 interface CachedAccessToken {
   accessToken: string;
   expiresAtMs: number;
@@ -847,20 +871,31 @@ async function redeemWithXai(refreshToken: string): Promise<{
   const { clientId } = config.llm.xai.subscription;
   const { tokenEndpoint } = await xaiOauthEndpoints();
 
-  const response = await fetch(tokenEndpoint, {
-    method: "POST",
-    headers: {
-      accept: "application/json",
-      "content-type": "application/x-www-form-urlencoded",
-    },
-    signal: AbortSignal.timeout(20_000),
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-      client_id: clientId,
-    }),
-    redirect: "manual",
-  });
+  let response: Response;
+  try {
+    response = await fetch(tokenEndpoint, {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      signal: AbortSignal.timeout(20_000),
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+        client_id: clientId,
+      }),
+      redirect: "manual",
+    });
+  } catch (error) {
+    // No answer from the issuer: whether it consumed the token is unknown, so
+    // the caller gets an outage, not a reconnect prompt, and does not retry.
+    logger.warn(
+      { error },
+      "[XaiSubscription] refresh token redemption request failed",
+    );
+    throw new ApiError(502, "Could not reach the xAI sign-in service");
+  }
 
   if (!response.ok) {
     const body = await response.text();

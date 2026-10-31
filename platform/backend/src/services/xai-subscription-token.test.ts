@@ -750,6 +750,84 @@ describe("shared refresh guards", () => {
     },
   );
 
+  tokenTest(
+    "a retried write-back persists the redeemed successor instead of redeeming again",
+    async ({ subscriptionKey }) => {
+      const issuer = stubSingleUseIssuer();
+      const writes = vi
+        .spyOn(secretManager(), "updateSecret")
+        .mockImplementationOnce(async () => {
+          // The connection drops after xAI answered and before the commit;
+          // the lock helper retries its whole callback.
+          throw Object.assign(new Error("Connection terminated unexpectedly"), {
+            code: "ECONNRESET",
+          });
+        });
+      try {
+        expect(
+          await new XaiSubscriptionTokenManager().getAccessToken({
+            credential: subscriptionKey.credential,
+            providerApiKeyId: subscriptionKey.id,
+          }),
+        ).toBe("at_1");
+        // rt_0 was presented once; the retry wrote the successor it had.
+        expect(issuer.calls).toEqual(["rt_0"]);
+        expect(writes).toHaveBeenCalledTimes(2);
+        expect(await readCredential(subscriptionKey.secretId)).toMatchObject({
+          refreshToken: "rt_1",
+          accessToken: "at_1",
+        });
+      } finally {
+        writes.mockRestore();
+      }
+    },
+  );
+
+  tokenTest(
+    "does not present the refresh token again when the issuer request fails",
+    async ({ subscriptionKey }) => {
+      const issuer = stubSingleUseIssuer();
+      const issuerFetch = globalThis.fetch;
+      let dropped = false;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string | URL, init?: RequestInit) => {
+          if (!dropped && String(url).endsWith("/oauth2/token")) {
+            dropped = true;
+            // What a reset socket looks like from fetch: an error the
+            // transaction retry wrapper would otherwise treat as transient.
+            throw Object.assign(new TypeError("fetch failed"), {
+              cause: Object.assign(new Error("read ECONNRESET"), {
+                code: "ECONNRESET",
+              }),
+            });
+          }
+          return issuerFetch(url, init);
+        }),
+      );
+      const params = {
+        credential: subscriptionKey.credential,
+        providerApiKeyId: subscriptionKey.id,
+      };
+      const manager = new XaiSubscriptionTokenManager();
+      await expect(manager.getAccessToken(params)).rejects.toMatchObject({
+        statusCode: 502,
+      });
+      // Nothing reached the issuer, so nothing was written or flagged.
+      expect(issuer.calls).toEqual([]);
+      expect(await readCredential(subscriptionKey.secretId)).toEqual(
+        subscriptionKey.credential,
+      );
+      expect(
+        (await LlmProviderApiKeyModel.findById(subscriptionKey.id))
+          ?.requiresReauthentication,
+      ).toBe(false);
+      // The next caller presents the token for the first time.
+      expect(await manager.getAccessToken(params)).toBe("at_1");
+      expect(issuer.calls).toEqual(["rt_0"]);
+    },
+  );
+
   test("reuses the access token stashed by an earlier validation of the same credential", async () => {
     const issuer = stubSingleUseIssuer();
     const manager = new XaiSubscriptionTokenManager();

@@ -74,7 +74,7 @@ Memory scales automatically with CPU at 2 GiB per requested CPU. The memory limi
 
 Agents do not configure CPU or memory directly. Each agent selects a [**Default tier**](/docs/agents/runtime#limits) for standard runs and an optional **Scaleup tier** for larger workloads. Choose **Fix at &lt;tier&gt;** to disable scaling up. When an agent permits scaling, a run can request any tier up to that scaleup tier.
 
-A pooled tier keeps spare containers ready so runs start at once (see [Warm Pools](#warm-pools)). Spares hold cluster CPU and memory while they wait. A tier that is not pooled starts a fresh container for each run instead.
+A **pooled** tier keeps spare containers ready so runs start at once (see [Warm Pools](#warm-pools)). Spares hold cluster CPU and memory while they wait. A tier that is not pooled starts a fresh container for each run instead.
 
 ## Warm Pools
 

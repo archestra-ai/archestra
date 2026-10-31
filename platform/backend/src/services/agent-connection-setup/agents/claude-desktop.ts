@@ -1,3 +1,7 @@
+import {
+  WINDOWS_DESKTOP_PROCESSES,
+  WINDOWS_DESKTOP_TRAY_EXIT,
+} from "../desktop/windows-desktop-processes";
 import type { SetupScriptContext } from "../types";
 
 /** Runs locally; subscription credentials never enter setup storage. */
@@ -8,6 +12,8 @@ export function renderClaudeDesktopSetupScript(
   const python = `import base64
 import json
 SETUP = json.loads(base64.b64decode('${payload}'))
+DESKTOP_PROCESSES = ${JSON.stringify(WINDOWS_DESKTOP_PROCESSES)}
+TRAY_EXIT = ${JSON.stringify(WINDOWS_DESKTOP_TRAY_EXIT)}
 ${INSTALLER}`;
   if (ctx.platform === "windows") {
     return `# Run in PowerShell
@@ -173,11 +179,14 @@ def stop_desktop(launch):
                 return
             time.sleep(0.5)
     elif sys.platform == 'win32':
-        # Close windows gracefully. Never force-stop a session with unsaved work.
-        subprocess.run(['powershell.exe', '-NoProfile', '-Command',
-            "$p = Get-Process Claude -ErrorAction SilentlyContinue; $p | ForEach-Object { [void]$_.CloseMainWindow() }; $p | Wait-Process -Timeout 10 -ErrorAction Stop"],
-            check=True, capture_output=True)
-        return
+        # Closing the window quits Desktop only when its tray icon is off.
+        # Otherwise Desktop hides in the tray, and Exit there runs its normal
+        # quit. Never force-stop a session with unsaved work.
+        if not desktop_processes_remain('$p | ForEach-Object { [void]$_.CloseMainWindow() }', 5):
+            return
+        print('Claude Desktop is still running. ' + TRAY_EXIT + ' Waiting up to two minutes...', flush=True)
+        if not desktop_processes_remain('', 120):
+            return
     else:
         executable = Path(launch[0]).resolve()
         processes = []
@@ -193,6 +202,18 @@ def stop_desktop(launch):
                 return
             time.sleep(0.5)
     raise RuntimeError('Claude Desktop is still running. Finish active tasks, quit Desktop, then rerun setup.')
+
+
+def desktop_processes_remain(action, seconds):
+    script = '\n'.join([DESKTOP_PROCESSES, '$p = Get-DesktopProcess', action,
+                        'if ($p) { $p | Wait-Process -Timeout ' + str(seconds) + ' -ErrorAction SilentlyContinue }',
+                        '@(Get-DesktopProcess).Count'])
+    result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', script],
+                            capture_output=True, text=True)
+    count = result.stdout.strip()
+    if result.returncode != 0 or not count.isdigit():
+        raise RuntimeError('Could not check whether Claude Desktop is running. Quit Desktop, then rerun setup.')
+    return int(count) > 0
 
 
 def main():

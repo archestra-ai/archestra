@@ -80,6 +80,9 @@ token = '${auth === "virtual-key" ? "archestra-test-key" : "sk-ant-oat01-test-su
 calls = []
 def native(args, **kwargs):
     calls.append(args)
+    if args[0] == 'powershell.exe' and 'Get-DesktopProcess' in args[-1]:
+        # Windows Desktop hides in the tray on the close request and exits after the tray Exit.
+        return subprocess.CompletedProcess(args, 0, stdout='1\\n' if 'CloseMainWindow' in args[-1] else '0\\n')
     # Desktop may reject the Apple event while the user quits through its menu.
     status = (0 if sum(call[0] == 'pgrep' for call in calls) == 1 else 1) if args[0] == 'pgrep' else 1 if args[0] == 'osascript' else 0
     return subprocess.CompletedProcess(args, status,
@@ -202,6 +205,11 @@ with patch('sys.platform', target_os), patch.dict(os.environ, {'LOCALAPPDATA': s
           "Quit Claude Desktop from its app menu",
         );
       }
+      expect(
+        result.stdout.includes(
+          "Right-click the Claude icon in the system tray and choose Exit",
+        ),
+      ).toBe(os === "win32");
       expect(result.stderr).toContain("Desktop could not start");
     }
   } finally {
@@ -299,6 +307,73 @@ with patch('sys.platform', 'darwin'), patch('subprocess.Popen') as desktop_proce
       expect(result.stderr).toContain("Could not reach the shared marketplace");
       expect(result.stderr).not.toContain("Traceback");
     }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Windows setup leaves Desktop configuration unchanged while Desktop stays in the system tray", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "desktop-installer-"));
+  const context: SetupScriptContext = {
+    clientId: "claude-desktop",
+    platform: "windows",
+    appName: "Test Platform",
+    proxy: {
+      authMode: "virtual-key",
+      provider: "anthropic",
+      providerLabel: "Anthropic",
+      baseUrl: "https://proxy.example/v1",
+      url: "https://proxy.example/v1/anthropic",
+      proxyName: "default",
+      virtualKey: "archestra-test-key",
+      virtualKeyName: null,
+      passthroughVirtualKey: null,
+      model: null,
+    },
+    mcp: null,
+    skills: null,
+  };
+  const script = renderSetupScript(context)
+    .split("$installer = @'\n")[1]
+    .split("\n'@")[0];
+  try {
+    await writeFile(path.join(directory, "installer.py"), script);
+    await writeFile(
+      path.join(directory, "test.py"),
+      `
+import io, json, os, pathlib, runpy, subprocess, urllib.request
+from unittest.mock import patch
+root = pathlib.Path(__file__).parent
+base = root / 'LocalAppData'
+library = base / 'Claude-3p/configLibrary'
+library.mkdir(parents=True)
+original = {'appliedId': 'previous', 'entries': [{'id': 'previous', 'name': 'Existing profile'}]}
+(library / '_meta.json').write_text(json.dumps(original))
+waits = []
+def native(args, **kwargs):
+    assert args[0] == 'powershell.exe' and 'Get-DesktopProcess' in args[-1]
+    waits.append('CloseMainWindow' in args[-1])
+    return subprocess.CompletedProcess(args, 0, stdout='1\\n')
+def upstream(request, **kwargs):
+    return io.StringIO(json.dumps({'type':'message','content':[{'type':'text','text':'OK'}]}))
+with patch('sys.platform', 'win32'), patch.dict(os.environ, {'LOCALAPPDATA': str(base)}), patch('subprocess.check_output', return_value='Claude_test!App'), patch('subprocess.run', side_effect=native), patch('subprocess.Popen') as desktop_process, patch('urllib.request.urlopen', side_effect=upstream):
+    try:
+        runpy.run_path(str(root / 'installer.py'))
+        raise AssertionError('Expected setup to stop while Desktop runs')
+    except SystemExit as error:
+        assert error.code == 1
+    assert waits == [True, False]
+    assert not desktop_process.called
+    assert sorted(os.listdir(library)) == ['_meta.json']
+    assert json.loads((library / '_meta.json').read_text()) == original
+`,
+    );
+    const result = await exec("python3", [path.join(directory, "test.py")]);
+    expect(result.stdout).toContain(
+      "Right-click the Claude icon in the system tray and choose Exit",
+    );
+    expect(result.stderr).toContain("Claude Desktop is still running");
+    expect(result.stderr).not.toContain("Traceback");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

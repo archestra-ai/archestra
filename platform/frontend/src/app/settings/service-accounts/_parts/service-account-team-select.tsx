@@ -41,6 +41,10 @@ export function ServiceAccountTeamSelect({
   return (
     <div className="space-y-2">
       <Label htmlFor={id}>Team</Label>
+      <FieldDescription>
+        Optional. The account acts for this team and gets its grants and MCP
+        connections.
+      </FieldDescription>
       <Select
         value={value ?? NO_TEAM}
         onValueChange={(next) => onChange(next === NO_TEAM ? null : next)}
@@ -57,10 +61,6 @@ export function ServiceAccountTeamSelect({
           ))}
         </SelectContent>
       </Select>
-      <FieldDescription>
-        Optional. The account acts for this team and gets its grants and MCP
-        connections.
-      </FieldDescription>
     </div>
   );
 }

@@ -1,8 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { Field, FieldControl } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 export interface ContainerDeploymentValue {
@@ -98,23 +98,28 @@ function ContainerImageField({
   autoComplete,
 }: ContainerFieldProps & { optional?: boolean }) {
   return (
-    <div className="space-y-2">
-      <Label htmlFor={id}>
-        <span>Container image</span>
-        {optional && <span> (optional)</span>}
-        {labelAddon}
-      </Label>
-      <FieldDescription description={description} />
-      <Input
-        id={id}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className="font-mono"
-        autoComplete={autoComplete}
-      />
-      <FieldDescription error={error} />
-    </div>
+    <Field
+      id={id}
+      label={
+        <>
+          <span>Container image</span>
+          {optional && <span> (optional)</span>}
+          {labelAddon}
+        </>
+      }
+      description={description}
+      error={error}
+    >
+      <FieldControl>
+        <Input
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          className="font-mono"
+          autoComplete={autoComplete}
+        />
+      </FieldControl>
+    </Field>
   );
 }
 
@@ -129,19 +134,22 @@ function ContainerCommandField({
   autoComplete,
 }: ContainerFieldProps) {
   return (
-    <div className="space-y-2">
-      <Label htmlFor={id}>Command{labelAddon}</Label>
-      <FieldDescription description={description} />
-      <Input
-        id={id}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className="font-mono"
-        autoComplete={autoComplete}
-      />
-      <FieldDescription error={error} />
-    </div>
+    <Field
+      id={id}
+      label={<>Command{labelAddon}</>}
+      description={description}
+      error={error}
+    >
+      <FieldControl>
+        <Input
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          className="font-mono"
+          autoComplete={autoComplete}
+        />
+      </FieldControl>
+    </Field>
   );
 }
 
@@ -155,34 +163,20 @@ function ContainerArgumentsField({
   autoComplete,
 }: Omit<ContainerFieldProps, "description">) {
   return (
-    <div className="space-y-2">
-      <Label htmlFor={id}>Arguments (one per line){labelAddon}</Label>
-      <Textarea
-        id={id}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className="min-h-20 font-mono"
-        autoComplete={autoComplete}
-      />
-      <FieldDescription error={error} />
-    </div>
-  );
-}
-
-function FieldDescription({
-  description,
-  error,
-}: {
-  description?: ReactNode;
-  error?: ReactNode;
-}) {
-  return (
-    <>
-      {description && (
-        <p className="text-xs text-muted-foreground">{description}</p>
-      )}
-      {error && <p className="text-sm font-medium text-destructive">{error}</p>}
-    </>
+    <Field
+      id={id}
+      label={<>Arguments (one per line){labelAddon}</>}
+      error={error}
+    >
+      <FieldControl>
+        <Textarea
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          className="min-h-20 font-mono"
+          autoComplete={autoComplete}
+        />
+      </FieldControl>
+    </Field>
   );
 }

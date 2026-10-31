@@ -25,6 +25,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Field, FieldControl } from "@/components/ui/field";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import {
@@ -412,7 +413,7 @@ export function AgentRuntimeProtocolField({
 }: RuntimeSectionProps & {
   constrainToHarness?: boolean;
   hideLabel?: boolean;
-  /** Label above, one short line below: for a field sharing a row. */
+  /** Short help text for a field sharing a row. */
   compact?: boolean;
 }) {
   const config = value;
@@ -423,25 +424,33 @@ export function AgentRuntimeProtocolField({
     constrainToHarness ? value.command : null,
   );
   return (
-    <div className="space-y-2">
-      <Label
-        htmlFor="agent-runtime-inference-protocol"
-        className={hideLabel ? "sr-only" : undefined}
-      >
-        Inference API
-      </Label>
-      {!compact && (
-        <FieldDescription>
-          Choose the API protocol the container&apos;s Agent client expects.
-          Every option stays behind the {appName} LLM proxy.
-        </FieldDescription>
-      )}
-      {!compact && constrainToHarness && allowedProtocols.length === 1 && (
-        <FieldDescription>
-          Claude Code only speaks the Anthropic Messages API, so this cannot be
-          changed.
-        </FieldDescription>
-      )}
+    <Field
+      id="agent-runtime-inference-protocol"
+      label="Inference API"
+      labelClassName={hideLabel ? "sr-only" : undefined}
+      description={
+        compact ? (
+          allowedProtocols.length === 1 && constrainToHarness ? (
+            "Fixed by the client in this image."
+          ) : (
+            `What the client speaks to the ${appName} LLM proxy.`
+          )
+        ) : (
+          <>
+            <span>
+              Choose the API protocol the container&apos;s Agent client expects.
+              Every option stays behind the {appName} LLM proxy.
+            </span>
+            {constrainToHarness && allowedProtocols.length === 1 && (
+              <span className="block">
+                Claude Code only speaks the Anthropic Messages API, so this
+                cannot be changed.
+              </span>
+            )}
+          </>
+        )
+      }
+    >
       <Select
         disabled={allowedProtocols.length === 1}
         value={config.inferenceProtocol}
@@ -449,9 +458,11 @@ export function AgentRuntimeProtocolField({
           inferenceProtocol: "openai_responses" | "openai_chat" | "anthropic",
         ) => update({ inferenceProtocol })}
       >
-        <SelectTrigger id="agent-runtime-inference-protocol" className="w-full">
-          <SelectValue />
-        </SelectTrigger>
+        <FieldControl>
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+        </FieldControl>
         <SelectContent>
           {allowedProtocols.map((protocol) => (
             <SelectItem key={protocol} value={protocol}>
@@ -460,14 +471,7 @@ export function AgentRuntimeProtocolField({
           ))}
         </SelectContent>
       </Select>
-      {compact && (
-        <FieldDescription>
-          {allowedProtocols.length === 1 && constrainToHarness
-            ? "Fixed by the client in this image."
-            : `What the client speaks to the ${appName} LLM proxy.`}
-        </FieldDescription>
-      )}
-    </div>
+    </Field>
   );
 }
 
@@ -481,41 +485,35 @@ export function AgentRuntimeSteeringField({
   const update = (patch: Partial<AgentRuntimeConfig>) =>
     onChange({ ...config, ...patch });
   return (
-    <div className="space-y-2">
-      <Label
-        htmlFor="agent-runtime-steering"
-        className={hideLabel ? "sr-only" : undefined}
-      >
-        Steering
-      </Label>
-      {!compact && (
-        <FieldDescription>
-          Turn boundary delivers follow-up instructions between Agent turns.
-          Terminal input types directly into an interactive CLI.
-        </FieldDescription>
-      )}
+    <Field
+      id="agent-runtime-steering"
+      label="Steering"
+      labelClassName={hideLabel ? "sr-only" : undefined}
+      description={
+        compact
+          ? config.steerMode === "tmux_keys"
+            ? "Follow-ups are typed into the client's terminal."
+            : "Follow-ups are delivered between turns."
+          : "Turn boundary delivers follow-up instructions between Agent turns. Terminal input types directly into an interactive CLI."
+      }
+    >
       <Select
         value={config.steerMode}
         onValueChange={(steerMode: "pipe" | "tmux_keys") =>
           update({ steerMode })
         }
       >
-        <SelectTrigger id="agent-runtime-steering" className="w-full">
-          <SelectValue />
-        </SelectTrigger>
+        <FieldControl>
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+        </FieldControl>
         <SelectContent>
           <SelectItem value="pipe">Turn boundary</SelectItem>
           <SelectItem value="tmux_keys">Terminal input</SelectItem>
         </SelectContent>
       </Select>
-      {compact && (
-        <FieldDescription>
-          {config.steerMode === "tmux_keys"
-            ? "Follow-ups are typed into the client's terminal."
-            : "Follow-ups are delivered between turns."}
-        </FieldDescription>
-      )}
-    </div>
+    </Field>
   );
 }
 
@@ -706,41 +704,40 @@ function RuntimePortsField({
     );
 
   return (
-    <div className="space-y-2">
-      <Label htmlFor="agent-runtime-ports">Ports to forward</Label>
-      <Input
-        id="agent-runtime-ports"
-        inputMode="numeric"
-        placeholder="3000, 9000"
-        value={draft}
-        aria-invalid={!valid}
-        onChange={(event) => {
-          const next = event.target.value;
-          setDraft(next);
-          const parsed = next.trim()
-            ? next
-                .split(/[\s,]+/)
-                .filter(Boolean)
-                .map(Number)
-            : [];
-          if (
-            parsed.length <= 20 &&
-            parsed.every(
-              (port) => Number.isInteger(port) && port >= 1 && port <= 65_535,
-            )
-          ) {
-            const unique = [...new Set(parsed)];
-            lastEmitted.current = unique.join(", ");
-            onChange(unique);
-          }
-        }}
-      />
-      <FieldDescription>
-        {valid
-          ? "Comma-separated, up to 20. Shown in the run's connection details."
-          : "Use up to 20 port numbers from 1 to 65535."}
-      </FieldDescription>
-    </div>
+    <Field
+      id="agent-runtime-ports"
+      label="Ports to forward"
+      description="Comma-separated, up to 20. Shown in the run's connection details."
+      error={!valid ? "Use up to 20 port numbers from 1 to 65535." : undefined}
+    >
+      <FieldControl>
+        <Input
+          inputMode="numeric"
+          placeholder="3000, 9000"
+          value={draft}
+          onChange={(event) => {
+            const next = event.target.value;
+            setDraft(next);
+            const parsed = next.trim()
+              ? next
+                  .split(/[\s,]+/)
+                  .filter(Boolean)
+                  .map(Number)
+              : [];
+            if (
+              parsed.length <= 20 &&
+              parsed.every(
+                (port) => Number.isInteger(port) && port >= 1 && port <= 65_535,
+              )
+            ) {
+              const unique = [...new Set(parsed)];
+              lastEmitted.current = unique.join(", ");
+              onChange(unique);
+            }
+          }}
+        />
+      </FieldControl>
+    </Field>
   );
 }
 
@@ -851,29 +848,30 @@ function NumberField({
   defaultValue: string | number | undefined;
 }) {
   return (
-    <div className="flex flex-col gap-2">
-      <Label htmlFor={id}>{label}</Label>
+    <Field id={id} label={label} description={description}>
       <InputGroup>
-        <InputGroupInput
-          id={id}
-          type="number"
-          min={min}
-          max={max}
-          value={value ?? ""}
-          onChange={(event) => {
-            const next = event.currentTarget.valueAsNumber;
-            onChange(
-              Number.isFinite(next) ? Math.min(max, Math.max(min, next)) : null,
-            );
-          }}
-          placeholder={installationDefaultPlaceholder(defaultValue)}
-        />
+        <FieldControl>
+          <InputGroupInput
+            type="number"
+            min={min}
+            max={max}
+            value={value ?? ""}
+            onChange={(event) => {
+              const next = event.currentTarget.valueAsNumber;
+              onChange(
+                Number.isFinite(next)
+                  ? Math.min(max, Math.max(min, next))
+                  : null,
+              );
+            }}
+            placeholder={installationDefaultPlaceholder(defaultValue)}
+          />
+        </FieldControl>
         <InputGroupAddon align="inline-end">
           <InputGroupText>{unit}</InputGroupText>
         </InputGroupAddon>
       </InputGroup>
-      <FieldDescription>{description}</FieldDescription>
-    </div>
+    </Field>
   );
 }
 
@@ -891,15 +889,15 @@ function ResourceField({
   onChange: (value: string | undefined) => void;
 }) {
   return (
-    <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
-      <Input
-        id={id}
-        value={value ?? ""}
-        onChange={(event) => onChange(event.target.value || undefined)}
-        placeholder={placeholder}
-      />
-    </div>
+    <Field id={id} label={label}>
+      <FieldControl>
+        <Input
+          value={value ?? ""}
+          onChange={(event) => onChange(event.target.value || undefined)}
+          placeholder={placeholder}
+        />
+      </FieldControl>
+    </Field>
   );
 }
 

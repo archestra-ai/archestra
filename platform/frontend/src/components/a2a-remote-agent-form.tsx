@@ -410,6 +410,11 @@ export function A2aRemoteAgentForm({
           >
             <div className="space-y-2">
               <Label htmlFor="a2a-url">Agent base URL</Label>
+              <FieldDescription id="a2a-url-help">
+                {keepsLegacySource
+                  ? "This connection uses a legacy Agent Card source. Leave this blank to keep it, or enter a base URL to replace it."
+                  : "We'll append /.well-known/agent-card.json to this base URL."}
+              </FieldDescription>
               <Input
                 id="a2a-url"
                 type="url"
@@ -426,11 +431,7 @@ export function A2aRemoteAgentForm({
                   onChange: invalidateSource,
                 })}
               />
-              <FieldDescription id="a2a-url-help">
-                {keepsLegacySource
-                  ? "This connection uses a legacy Agent Card source. Leave this blank to keep it, or enter a base URL to replace it."
-                  : "We'll append /.well-known/agent-card.json to this base URL."}
-              </FieldDescription>
+
               {form.formState.errors.url ? (
                 <p
                   id="a2a-url-error"
@@ -521,6 +522,11 @@ export function A2aRemoteAgentForm({
                     ? "Replace credential (optional)"
                     : "Credential"}
                 </Label>
+                <FieldDescription id="a2a-credential-help">
+                  {canReuseStoredCredential
+                    ? "Leave this blank to keep the stored credential, or enter a replacement."
+                    : "The credential is stored securely and cannot be shown again."}
+                </FieldDescription>
                 <SecretInput
                   id="a2a-credential"
                   revealable
@@ -533,11 +539,7 @@ export function A2aRemoteAgentForm({
                     onChange: invalidateCompatibility,
                   })}
                 />
-                <FieldDescription id="a2a-credential-help">
-                  {canReuseStoredCredential
-                    ? "Leave this blank to keep the stored credential, or enter a replacement."
-                    : "The credential is stored securely and cannot be shown again."}
-                </FieldDescription>
+
                 {form.formState.errors.credential ? (
                   <p
                     id="a2a-credential-error"

@@ -9,6 +9,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ComboboxSearchInput } from "@/components/ui/combobox-search-input";
 import {
   Popover,
   PopoverContent,
@@ -136,11 +137,10 @@ export function LabelSelect({
       <PopoverContent className="w-[260px] p-0" align="start">
         <div className="flex items-center border-b px-3 py-2">
           <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-          <input
+          <ComboboxSearchInput
             placeholder="Search keys..."
             value={keySearch}
             onChange={(e) => setKeySearch(e.target.value)}
-            className="flex w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
         <div className="max-h-[350px] overflow-y-auto p-1">
@@ -220,11 +220,10 @@ export function LabelKeyRowBase({
       >
         <div className="flex items-center border-b px-3 py-2">
           <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-          <input
+          <ComboboxSearchInput
             placeholder="Search values..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="flex w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
         <div className="max-h-[250px] overflow-y-auto p-1">

@@ -1,0 +1,31 @@
+// Native controls belong in components/ui; use the shared form recipes elsewhere.
+language js
+
+or {
+  `<input $props>$children</input>` where {
+    $props <: not contains `type="file"`,
+    $props <: not contains `type="hidden"`,
+    $props <: not contains `type="radio"`,
+    $props <: not contains `type="checkbox"`,
+    register_diagnostic(span = $props, message = "Use the shared Input control from components/ui. For label/help/control/error layout use Form* with React Hook Form, or Field/FieldControl otherwise. See archestra-dev-frontend, Shared form fields.")
+  },
+  `<input $props />` where {
+    $props <: not contains `type="file"`,
+    $props <: not contains `type="hidden"`,
+    $props <: not contains `type="radio"`,
+    $props <: not contains `type="checkbox"`,
+    register_diagnostic(span = $props, message = "Use the shared Input control from components/ui. For label/help/control/error layout use Form* with React Hook Form, or Field/FieldControl otherwise. See archestra-dev-frontend, Shared form fields.")
+  },
+  `<textarea $props>$children</textarea>` where {
+    register_diagnostic(span = $props, message = "Use the shared Textarea control from components/ui. For label/help/control/error layout use Form* with React Hook Form, or Field/FieldControl otherwise. See archestra-dev-frontend, Shared form fields.")
+  },
+  `<textarea $props />` where {
+    register_diagnostic(span = $props, message = "Use the shared Textarea control from components/ui. For label/help/control/error layout use Form* with React Hook Form, or Field/FieldControl otherwise. See archestra-dev-frontend, Shared form fields.")
+  },
+  `<select $props>$children</select>` where {
+    register_diagnostic(span = $props, message = "Use the shared Select control from components/ui. For label/help/control/error layout use Form* with React Hook Form, or Field/FieldControl otherwise. See archestra-dev-frontend, Shared form fields.")
+  },
+  `<select $props />` where {
+    register_diagnostic(span = $props, message = "Use the shared Select control from components/ui. For label/help/control/error layout use Form* with React Hook Form, or Field/FieldControl otherwise. See archestra-dev-frontend, Shared form fields.")
+  }
+}

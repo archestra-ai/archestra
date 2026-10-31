@@ -420,6 +420,12 @@ export function SelectMcpServerCredentialTypeAndTeams({
       {!hideSelector && (
         <div className="space-y-2">
           <Label htmlFor="connection-owner">Connection owner</Label>
+          <FieldDescription>
+            {
+              visibilityOptions.find((option) => option.value === scope)
+                ?.description
+            }
+          </FieldDescription>
           <Select value={scope} onValueChange={handleScopeChange}>
             <SelectTrigger id="connection-owner" className="w-full">
               <SelectValue>
@@ -443,12 +449,6 @@ export function SelectMcpServerCredentialTypeAndTeams({
               ))}
             </SelectContent>
           </Select>
-          <FieldDescription>
-            {
-              visibilityOptions.find((option) => option.value === scope)
-                ?.description
-            }
-          </FieldDescription>
         </div>
       )}
 

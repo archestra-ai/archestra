@@ -34,6 +34,7 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from "ai";
+import { and, desc, eq, gt, isNull } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -75,7 +76,7 @@ import {
 import { orderToolResultsByCall } from "@/clients/tool-result-order";
 import config from "@/config";
 import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
-import db, { withDbTransaction } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import {
@@ -347,6 +348,109 @@ function buildStreamErrorPayload(params: {
   return serialized;
 }
 
+async function findActiveConversationRuntimeTaskId(params: {
+  conversationId: string;
+  agentId: string;
+  organizationId: string;
+  userId: string;
+}): Promise<string | undefined> {
+  const { conversationId, agentId, organizationId, userId } = params;
+
+  // 1. Check for an active task/run in this conversation's context
+  const [contextTask] = await db
+    .select({
+      taskId: schema.agentRunsTable.taskId,
+      activeTaskId: schema.agentWorkspacesTable.activeTaskId,
+      lastTaskId: schema.agentWorkspacesTable.lastTaskId,
+    })
+    .from(schema.agentRunsTable)
+    .innerJoin(
+      schema.a2aTasksTable,
+      eq(schema.agentRunsTable.taskId, schema.a2aTasksTable.id),
+    )
+    .leftJoin(
+      schema.agentWorkspacesTable,
+      eq(
+        schema.agentRunsTable.workloadName,
+        schema.agentWorkspacesTable.workloadName,
+      ),
+    )
+    .where(
+      and(
+        eq(schema.a2aTasksTable.contextId, conversationId),
+        eq(schema.agentRunsTable.agentId, agentId),
+        eq(schema.agentRunsTable.organizationId, organizationId),
+        eq(schema.agentRunsTable.actorKind, "user"),
+        eq(schema.agentRunsTable.actorId, userId),
+      ),
+    )
+    .orderBy(
+      desc(schema.agentRunsTable.startedAt),
+      desc(schema.agentRunsTable.id),
+    )
+    .limit(1);
+
+  if (contextTask) {
+    return (
+      contextTask.activeTaskId ?? contextTask.taskId ?? contextTask.lastTaskId
+    );
+  }
+
+  // 2. Check for an active workspace owned by this user for this agent
+  const [workspaceRow] = await db
+    .select({
+      activeTaskId: schema.agentWorkspacesTable.activeTaskId,
+      lastTaskId: schema.agentWorkspacesTable.lastTaskId,
+    })
+    .from(schema.agentWorkspacesTable)
+    .where(
+      and(
+        eq(schema.agentWorkspacesTable.agentId, agentId),
+        eq(schema.agentWorkspacesTable.organizationId, organizationId),
+        eq(schema.agentWorkspacesTable.actorKind, "user"),
+        eq(schema.agentWorkspacesTable.actorId, userId),
+        eq(schema.agentWorkspacesTable.state, "active"),
+        gt(schema.agentWorkspacesTable.expiresAt, new Date()),
+      ),
+    )
+    .orderBy(desc(schema.agentWorkspacesTable.lastActivityAt))
+    .limit(1);
+
+  if (workspaceRow?.activeTaskId) {
+    return workspaceRow.activeTaskId;
+  }
+  if (workspaceRow?.lastTaskId) {
+    return workspaceRow.lastTaskId;
+  }
+
+  // 3. Check for any active run (endedAt is null) for this agent and user
+  const [activeRun] = await db
+    .select({
+      taskId: schema.agentRunsTable.taskId,
+    })
+    .from(schema.agentRunsTable)
+    .where(
+      and(
+        eq(schema.agentRunsTable.agentId, agentId),
+        eq(schema.agentRunsTable.organizationId, organizationId),
+        eq(schema.agentRunsTable.actorKind, "user"),
+        eq(schema.agentRunsTable.actorId, userId),
+        isNull(schema.agentRunsTable.endedAt),
+      ),
+    )
+    .orderBy(
+      desc(schema.agentRunsTable.startedAt),
+      desc(schema.agentRunsTable.id),
+    )
+    .limit(1);
+
+  if (activeRun) {
+    return activeRun.taskId;
+  }
+
+  return undefined;
+}
+
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     "/api/chat",
@@ -399,7 +503,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } = request;
 
       const rawRunId = request.headers[RUN_ID_HEADER.toLowerCase()];
-      const callerRunId = Array.isArray(rawRunId) ? rawRunId[0] : rawRunId;
+      let callerRunId = Array.isArray(rawRunId) ? rawRunId[0] : rawRunId;
 
       const chatAbortController = new AbortController();
       let activeRunError: string | null = null;
@@ -459,6 +563,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           400,
           "The agent associated with this conversation has been deleted",
         );
+      }
+
+      if (!callerRunId) {
+        callerRunId = await findActiveConversationRuntimeTaskId({
+          conversationId,
+          agentId: conversation.agentId,
+          organizationId,
+          userId: user.id,
+        });
       }
 
       if (conversation.agent.agentType !== "llm_proxy") {

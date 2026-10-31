@@ -184,7 +184,7 @@ export function RuntimeTierDialog({
             className="text-sm text-muted-foreground"
             data-testid="tier-memory"
           >
-            {memory
+            {memory && !errors.cpuRequest && !errors.cpuLimit
               ? `Memory: ${formatMemory(memory.memoryRequestMiB)}, ${formatMemory(memory.memoryLimitMiB)} limit`
               : "Memory follows the CPU request."}
           </p>

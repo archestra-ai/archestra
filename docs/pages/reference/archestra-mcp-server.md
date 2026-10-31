@@ -1755,7 +1755,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `runs[].failure` | `object \| null` | Yes | Machine-readable failure of a failed run: a stable code and whether a new run of the same Agent is likely to succeed unchanged. Null otherwise. |
 | `runs[].created_at` | `string` | No | ISO 8601. |
 | `runs[].state_changed_at` | `string \| string \| null` | Yes | ISO 8601 of the last transition. |
-| `runs[].llm_session_id` | `string \| null` | No | Verified LLM telemetry session key for /llm/logs/:id; URL-encode it as one path segment. Null when no readable logged session is available. This is not a task ID or runtime handle. |
+| `runs[].llm_session_id` | `string \| null` | No | Verified LLM telemetry session key for /llm/logs/:id (the run's workload name); URL-encode it as one path segment. Null when no readable logged session is available. It is not a run_id: never pass it to the run tools. |
 | `runs[].title` | `string` | No |  |
 | `runs[].prompt` | `string` | No |  |
 | `runs[].started_at` | `string` | No |  |

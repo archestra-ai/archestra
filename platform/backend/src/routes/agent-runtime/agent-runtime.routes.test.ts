@@ -751,6 +751,8 @@ describe("Agent Runtime routes", () => {
       statusReason: expected.message,
       failure: expected,
     });
+    // The LLM trace is keyed by the frozen run name the runtime sends.
+    expect(detail.json().llmSessionId).toBe(detail.json().workloadName);
     for (const taskId of [legacy.id, running.id]) {
       const other = await app.inject({
         method: "GET",
@@ -867,6 +869,9 @@ describe("Agent Runtime routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
+    const [ownRun] = response.json().data;
+    // The LLM trace is keyed by the frozen run name the runtime sends.
+    expect(ownRun.llmSessionId).toBe(ownRun.workloadName);
     expect(response.json().data).toEqual([
       expect.objectContaining({
         taskId: ownTask.id,

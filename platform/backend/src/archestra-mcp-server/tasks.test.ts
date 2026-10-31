@@ -24,6 +24,8 @@ import { vi } from "vitest";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import { settleFailedA2ATask } from "@/agents/a2a/a2a-task-settlement";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
+import { buildMcpGatewayTool } from "@/clients/chat-tool-builder";
+import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
@@ -405,6 +407,45 @@ describe("run tools", () => {
     expect(
       (scaleupViaDbLookupResult.content[0] as { text: string }).text,
     ).toContain(
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
+    );
+
+    // Calling start_agent_run through the chat tool wrapper resolves the persisted tier via runId:
+    const chatStartRunTool = buildMcpGatewayTool({
+      mcpTool: {
+        name: TOOL_START_AGENT_RUN_FULL_NAME,
+        inputSchema: { type: "object" },
+      },
+      ctx: {
+        agentId: target.id,
+        agentName: target.name,
+        userId: actorId,
+        organizationId,
+        runId: callerTask.id,
+        modelAcceptsImageToolResults: false,
+        mcpGwToken: {
+          tokenValue: null,
+          tokenId: actorId,
+          teamId: null,
+          isOrganizationToken: false,
+          isUserToken: true,
+        },
+        repeatTracker: new ToolCallRepeatTracker(),
+      },
+    });
+    const chatScaleupResult = await chatStartRunTool.execute?.(
+      {
+        agent_id: target.id,
+        message: "Scale up from S to M via chat path",
+        limits: { tier: "M" },
+      },
+      { toolCallId: "call-chat-scaleup-1", messages: [] },
+    );
+    const chatOutput =
+      typeof chatScaleupResult === "string"
+        ? chatScaleupResult
+        : ((chatScaleupResult as { content?: string })?.content ?? "");
+    expect(chatOutput).toContain(
       "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
     );
 

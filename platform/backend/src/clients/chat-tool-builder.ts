@@ -111,6 +111,10 @@ export interface ChatToolContext {
   sessionId?: string;
   delegationChain?: string;
   scheduleTriggerRunId?: string;
+  /** The calling agent run's task ID or run ID, when dispatched from a runtime container or chat. */
+  runId?: string;
+  /** Explicit runtime tier of the calling instance, when available. */
+  agentRuntimeTier?: string;
   abortSignal?: AbortSignal;
   elicitation?: ChatMcpElicitationBridge;
   /** User identity for OTEL span attributes */
@@ -280,6 +284,8 @@ export function buildMcpGatewayTool(params: {
                 organizationId: ctx.organizationId,
                 sessionId: ctx.sessionId,
                 scheduleTriggerRunId: ctx.scheduleTriggerRunId,
+                runId: ctx.runId,
+                agentRuntimeTier: ctx.agentRuntimeTier,
                 abortSignal: ctx.abortSignal,
                 elicitation: ctx.elicitation,
                 // EncryptedChat: never detach into a durable task — task rows
@@ -315,6 +321,7 @@ export function buildMcpGatewayTool(params: {
                   userId: ctx.userId,
                   llmSessionId: ctx.sessionId,
                   llmToolCallId: options.toolCallId,
+                  runId: ctx.runId,
                 }),
               },
             );
@@ -450,6 +457,8 @@ export function buildAgentDelegationTool(params: {
     chatOpsPinnedAgentId: ctx.chatOpsPinnedAgentId,
     sessionId: ctx.sessionId,
     scheduleTriggerRunId: ctx.scheduleTriggerRunId,
+    runId: ctx.runId,
+    agentRuntimeTier: ctx.agentRuntimeTier,
     delegationChain: ctx.delegationChain,
     openappaSubagent: ctx.appaSubagent,
     abortSignal: ctx.abortSignal,
@@ -457,6 +466,7 @@ export function buildAgentDelegationTool(params: {
       mcpGwToken: ctx.mcpGwToken,
       organizationId: ctx.organizationId,
       userId: ctx.userId,
+      runId: ctx.runId,
     }),
   };
 
@@ -1484,6 +1494,7 @@ function buildTokenAuthContext({
   userId,
   llmSessionId,
   llmToolCallId,
+  runId,
 }: {
   mcpGwToken: McpGatewayToken | null;
   organizationId: string;
@@ -1492,6 +1503,7 @@ function buildTokenAuthContext({
   llmSessionId?: string;
   /** The model's id for the tool call this context executes. */
   llmToolCallId?: string;
+  runId?: string;
 }): TokenAuthContext | undefined {
   if (!mcpGwToken) {
     return undefined;
@@ -1507,6 +1519,7 @@ function buildTokenAuthContext({
     serviceAccountId: mcpGwToken.serviceAccountId,
     oauthClientId: mcpGwToken.oauthClientId,
     oauthExecution: mcpGwToken.oauthExecution,
+    ...(runId && { runId }),
     ...(llmSessionId && { llmSessionId }),
     ...(llmToolCallId && { llmToolCallId }),
   };

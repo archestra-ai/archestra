@@ -308,7 +308,7 @@ export function describeScaleupDisabledPrompt(
 }
 
 const SCALEUP_DISABLED_PATTERN =
-  /Scaling up this agent runtime instance is disabled: the runtime tier is fixed to [^\n]+?\. You cannot scale up this instance; do not attempt to start a run at a larger tier\./;
+  /Scaling up this agent runtime instance is disabled: the runtime tier is fixed to .*\. You cannot scale up this instance; do not attempt to start a run at a larger tier\.(?=$|\r?\n)/;
 
 /**
  * Retargets the fixed-tier system instruction in an agent's prompt to match

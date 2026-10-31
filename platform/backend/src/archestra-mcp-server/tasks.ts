@@ -180,7 +180,7 @@ async function launchDelegatedTask(params: {
       );
     }
     let currentTier = context.agentRuntimeTier;
-    if (!currentTier && context.runId && context.agentId === agent.id) {
+    if (!currentTier && context.runId) {
       const currentRun = await AgentRunModel.findByTaskId(context.runId);
       if (currentRun?.agentId === agent.id) {
         currentTier = currentRun.runtimeLimits?.tier ?? undefined;

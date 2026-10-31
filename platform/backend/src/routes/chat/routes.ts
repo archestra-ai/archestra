@@ -15,6 +15,7 @@ import {
   isThinkingEffortSelfHostedProvider,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
   RouteId,
+  RUN_ID_HEADER,
   requiresOpenAiResponsesApi,
   requiresPerplexityAgentApi,
   TimeInMs,
@@ -396,6 +397,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         user,
         organizationId,
       } = request;
+
+      const rawRunId = request.headers[RUN_ID_HEADER.toLowerCase()];
+      const callerRunId = Array.isArray(rawRunId) ? rawRunId[0] : rawRunId;
 
       const chatAbortController = new AbortController();
       let activeRunError: string | null = null;
@@ -965,6 +969,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               buildChatContext({
                 conversationId,
                 agentId,
+                runId: callerRunId,
                 // The conversation came from findById, which selects the agent's
                 // prompt (only list reads omit it) — pin the optional field to
                 // the concrete `string | null` contract the builder declares.

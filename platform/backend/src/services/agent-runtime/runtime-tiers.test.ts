@@ -261,6 +261,46 @@ describe("runtime tiers", () => {
         "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to M $& (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace). You cannot scale up this instance; do not attempt to start a run at a larger tier.\n\n" +
         "System prompt footer.",
     );
+    // Retargets cleanly when tier name contains a period and the closing clause
+    const clauseTierName =
+      "M. You cannot scale up this instance; do not attempt to start a run at a larger tier.";
+    const clauseTiers: AgentRuntimeTierSize[] = [
+      {
+        name: clauseTierName,
+        cpuRequest: 2,
+        cpuLimit: null,
+        memoryRequestMiB: 4096,
+        memoryLimitMiB: 8192,
+        warmSpares: 0,
+        pooled: false,
+        workspaceGiB: null,
+      },
+      {
+        name: "L",
+        cpuRequest: 8,
+        cpuLimit: null,
+        memoryRequestMiB: 16384,
+        memoryLimitMiB: 32768,
+        warmSpares: 0,
+        pooled: false,
+        workspaceGiB: null,
+      },
+    ];
+    const clausePrompt =
+      "System prompt header.\n\n" +
+      `Scaling up this agent runtime instance is disabled: the runtime tier is fixed to ${clauseTierName} (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). You cannot scale up this instance; do not attempt to start a run at a larger tier.\n\n` +
+      "System prompt footer.";
+    const clauseTiersEnv = runtimeTiersEnv(clauseTiers, clauseTierName, 20);
+    const clauseRetargeted = retargetScaleupDisabledPrompt(
+      clausePrompt,
+      clauseTiersEnv,
+      "L",
+    );
+    expect(clauseRetargeted).toBe(
+      "System prompt header.\n\n" +
+        "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to L (8 CPU, 16 GiB (32 GiB limit), 20 GiB workspace). You cannot scale up this instance; do not attempt to start a run at a larger tier.\n\n" +
+        "System prompt footer.",
+    );
   });
 
   test("a run may ask by size: the smallest allowed tier with that much CPU and memory", () => {

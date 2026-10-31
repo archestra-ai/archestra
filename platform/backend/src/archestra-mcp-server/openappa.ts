@@ -31,12 +31,13 @@ import {
   parseCurrentTrajectory,
 } from "@/openappa/current-trajectory";
 import {
+  type ClosedHitlReviewOutcome,
   clearHitlReview,
   closureFromReviewOutcome,
   consumeHitlRuling,
   getHitlAskUserArguments,
   getHitlReviewResult,
-  type HitlReviewOutcome,
+  hitlAnswerNotRecordedResult,
   peekHitlDecision,
   recordHitlReviewResult,
   recordHitlRuling,
@@ -1192,12 +1193,18 @@ const registry = defineArchestraTools([
         return declared.result;
       }
       if (callId) {
-        const previousOutcome = await getHitlReviewResult({
-          session: reviewSession,
-          callId,
-          offerId: remedy.offer_id,
-        });
-        if (previousOutcome && previousOutcome !== "review_required") {
+        const previousOutcome = (
+          await getHitlReviewResult({
+            session: reviewSession,
+            callId,
+            offerId: remedy.offer_id,
+          })
+        )?.outcome;
+        if (
+          previousOutcome &&
+          previousOutcome !== "review_required" &&
+          previousOutcome !== "answer_not_recorded"
+        ) {
           const decided = await peekHitlDecision({
             session: reviewSession,
             offerId: remedy.offer_id,
@@ -1221,9 +1228,7 @@ const registry = defineArchestraTools([
         : null;
 
       let ruling: "approve" | "deny" | undefined;
-      let reviewOutcome:
-        | Exclude<HitlReviewOutcome, "review_required">
-        | undefined;
+      let reviewOutcome: ClosedHitlReviewOutcome | undefined;
       let precheckRefusal: string | undefined;
       if (review) {
         // Check that the reviewed call can run before prompting the user.
@@ -1275,7 +1280,16 @@ const registry = defineArchestraTools([
               // External MCP clients reach their native question tool through
               // ask_user. The review is already staged, so the model cannot
               // alter the question or bind an answer to a different offer.
-              return nativeReviewRequiredResult(remedy.offer_id);
+              const lastAnswer =
+                staged.status === "staged" ? staged.lastAnswer : undefined;
+              return lastAnswer
+                ? result(
+                    hitlAnswerNotRecordedResult(
+                      remedy.offer_id,
+                      lastAnswer.reason,
+                    ),
+                  )
+                : nativeReviewRequiredResult(remedy.offer_id);
             } else if (context.elicitation) {
               const prepared = await getHitlAskUserArguments({
                 session: reviewSession,
@@ -1742,7 +1756,7 @@ async function claimStagedRuling(params: {
   | { ok: true; ruling: "approve" | "deny" }
   | {
       ok: false;
-      outcome: Exclude<HitlReviewOutcome, "review_required">;
+      outcome: ClosedHitlReviewOutcome;
     }
 > {
   const recorded = await recordHitlRuling({
@@ -1775,7 +1789,7 @@ async function claimStagedRuling(params: {
 
 function unansweredReviewResult(
   offerId: string,
-  outcome: Exclude<HitlReviewOutcome, "review_required">,
+  outcome: ClosedHitlReviewOutcome,
 ): CallToolResult {
   const reason = {
     review_declined:

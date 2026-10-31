@@ -597,7 +597,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     });
     expect(
       await getHitlReviewResult({ session: runtimeSession, callId, offerId }),
-    ).toBe(outcome);
+    ).toEqual({ outcome: outcome });
     expect(
       await getHitlReviewResult({
         session: runtimeSession,

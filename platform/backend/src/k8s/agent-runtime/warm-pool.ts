@@ -494,6 +494,9 @@ export function servedLaunchSpec<
 >(spec: T, tier: AgentRuntimeTier | null): T {
   const served = spec.warmTiers.find((candidate) => candidate.tier === tier);
   if (!served || tier === spec.tier) return spec;
+  const requested = spec.warmTiers.find(
+    (candidate) => candidate.tier === spec.tier,
+  );
   const tiersEnv = spec.env[AGENT_RUNTIME_TIERS_ENV];
   return {
     ...spec,
@@ -519,7 +522,8 @@ export function servedLaunchSpec<
         ? {
             [AGENT_RUNTIME_TIERS_ENV]: retargetRuntimeTiersEnv(
               tiersEnv,
-              served.tier,
+              served,
+              requested,
             ),
           }
         : {}),

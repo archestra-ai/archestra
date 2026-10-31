@@ -246,10 +246,15 @@ export function runtimeTiersEnv(
 }
 
 /**
- * The same list with `current` on `tier` alone: a run served from a larger
- * tier's warm pool runs at that size, and its list must say so.
+ * The same list with `current` on the served tier alone: a run served from a
+ * larger tier's warm pool runs at that size, and its list must say so,
+ * including the served volume.
  */
-export function retargetRuntimeTiersEnv(value: string, tier: string): string {
+export function retargetRuntimeTiersEnv(
+  value: string,
+  served: { tier: string; workspaceGiB: number },
+  requested: { tier: string; workspaceGiB: number } | undefined,
+): string {
   let entries: unknown;
   try {
     entries = JSON.parse(value);
@@ -264,10 +269,14 @@ export function retargetRuntimeTiersEnv(value: string, tier: string): string {
         current?: boolean;
         name?: unknown;
       };
-      return typeof rest.name === "string" &&
-        sameAgentRuntimeTierName(rest.name, tier)
-        ? { ...rest, current: true }
-        : rest;
+      if (typeof rest.name !== "string") return rest;
+      // The served tier carries the volume the run got; the requested tier
+      // goes back to its own size, which a new run at that tier would get.
+      if (sameAgentRuntimeTierName(rest.name, served.tier))
+        return { ...rest, workspace_gib: served.workspaceGiB, current: true };
+      if (requested && sameAgentRuntimeTierName(rest.name, requested.tier))
+        return { ...rest, workspace_gib: requested.workspaceGiB };
+      return rest;
     }),
   );
 }

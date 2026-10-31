@@ -392,8 +392,10 @@ test("a run served from a larger pool is told the size of the pod it got, and it
     env: {
       ARCHESTRA_AGENT_RUNTIME_TIER: "S",
       ARCHESTRA_AGENT_RUNTIME_MAX_TIER: "L",
+      // M's entry carries a stale size and S's none: the retarget must set
+      // both from the warm tiers, not keep what the list said.
       ARCHESTRA_AGENT_RUNTIME_TIERS:
-        '[{"name":"S","cpu":2,"current":true},{"name":"M","cpu":4}]',
+        '[{"name":"S","cpu":2,"current":true},{"name":"M","cpu":4,"workspace_gib":20}]',
       ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "2",
       ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "8Gi",
       OTHER: "kept",
@@ -401,6 +403,14 @@ test("a run served from a larger pool is told the size of the pod it got, and it
   };
   const served = servedLaunchSpec(spec, "M");
   expect(served.tier).toBe("M");
+  // The current entry names the volume the prompt names; S keeps its own.
+  const listed = JSON.parse(served.env.ARCHESTRA_AGENT_RUNTIME_TIERS);
+  expect(
+    listed.find((entry: { current?: boolean }) => entry.current),
+  ).toMatchObject({ name: "M", workspace_gib: 60 });
+  expect(
+    listed.find((entry: { name: string }) => entry.name === "S"),
+  ).toMatchObject({ workspace_gib: 20 });
   expect(served.resources).toEqual(sizes.M);
   // The pod's volume is M's, and the prompt's sentence about it says so;
   // the Agent's quote of the old sentence stays as written.
@@ -413,7 +423,7 @@ test("a run served from a larger pool is told the size of the pod it got, and it
     ARCHESTRA_AGENT_RUNTIME_TIER: "M",
     ARCHESTRA_AGENT_RUNTIME_MAX_TIER: "L",
     ARCHESTRA_AGENT_RUNTIME_TIERS:
-      '[{"name":"S","cpu":2},{"name":"M","cpu":4,"current":true}]',
+      '[{"name":"S","cpu":2,"workspace_gib":20},{"name":"M","cpu":4,"workspace_gib":60,"current":true}]',
     ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "4",
     ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "16Gi",
     OTHER: "kept",

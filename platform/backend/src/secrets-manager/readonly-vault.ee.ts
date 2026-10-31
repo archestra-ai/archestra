@@ -10,6 +10,7 @@ import {
   type SecretReadOptions,
   type SecretsConnectivityResult,
   type SecretValue,
+  type SecretWriteOptions,
   type SelectSecret,
 } from "@/types";
 import { VaultClient } from "./vault-client.ee";
@@ -221,21 +222,30 @@ export default class ReadonlyVaultSecretManager
 
   /**
    * Update is not supported for BYOS secrets since we don't own the external Vault data.
+   *
+   * With `transaction`, both statements run on it: a caller that locked the
+   * row in that transaction would otherwise wait on its own lock from a
+   * second pooled connection.
    */
   async updateSecret(
     secretId: string,
     _secretValue: SecretValue,
+    options?: SecretWriteOptions,
   ): Promise<SelectSecret | null> {
-    const dbRecord = await SecretModel.findById(secretId);
+    const dbRecord = await SecretModel.findById(secretId, options?.transaction);
 
     if (!dbRecord) {
       return null;
     }
 
-    return await SecretModel.update(secretId, {
-      // Do not modify isByosVault — that flag is set at creation time and shouldn't be changed during update.
-      secret: _secretValue,
-    });
+    return await SecretModel.update(
+      secretId,
+      {
+        // Do not modify isByosVault — that flag is set at creation time and shouldn't be changed during update.
+        secret: _secretValue,
+      },
+      options?.transaction,
+    );
   }
 
   /**

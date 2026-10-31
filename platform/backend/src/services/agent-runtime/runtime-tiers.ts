@@ -20,8 +20,6 @@ import {
   ApiError,
 } from "@/types";
 
-export type { ResolvedAgentRuntimeTiers };
-
 /** What the tier resolution takes from the deployment. */
 export function agentRuntimeTierDefaults() {
   return { defaultWarmSpares: config.agentRuntime.warmPoolSize };
@@ -59,7 +57,7 @@ type SizedRuntime = Pick<AgentRuntime, "tier" | "maxTier">;
  * A tier by name, else the organization's default tier: a run whose tier was
  * removed since still gets a size.
  */
-export function tierSize(
+function tierSize(
   tiers: ResolvedAgentRuntimeTiers,
   name: string | null | undefined,
 ): AgentRuntimeTierSize {

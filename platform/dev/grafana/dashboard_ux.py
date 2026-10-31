@@ -9,14 +9,14 @@ from pathlib import Path
 ROOT = Path(__file__).parent
 DESCRIPTIONS = json.loads((ROOT / "panel-descriptions.json").read_text())
 HEADERS = {
-    "archestra-genai-observability": "Request outcomes and upstream performance. Model and agent filters apply to upstream panels.",
-    "archestra-costs-and-limits": "Estimated inference spend and limit enforcement. Cost filters do not apply to limit panels.",
-    "archestra-agent-runtime": "Task health, provisioning, and optional Kubernetes resources.",
+    "archestra-genai-observability": "Request outcomes, streaming, usage, and upstream latency.",
+    "archestra-costs-and-limits": "Estimated spend, billing coverage, and limit enforcement.",
+    "archestra-agent-runtime": "Agent lifecycle, task health, and Kubernetes resources.",
     "archestra-guardrails": "Hook decisions, policy checks, external calls, and remedies.",
-    "archestra-mcp-monitoring": "Tool calls, latency, and server state. Tool-call filters do not apply to server state.",
-    "archestra-application-metrics": "API traffic, process health, background tasks, and database pools.",
-    "archestra-rag-knowledge-base": "Document syncs, embeddings, and search. Optional diagnostics appear when those features run.",
-    "archestra-agent-sessions": "Inspect inference and tool calls for a session. Trace details require Tempo; logs require Loki.",
+    "archestra-mcp-monitoring": "Tool calls, latency, errors, and server state.",
+    "archestra-application-metrics": "API traffic, processes, queues, and database pools.",
+    "archestra-rag-knowledge-base": "Document syncs, embedding, retrieval, and diagnostics.",
+    "archestra-agent-sessions": "Session summaries, correlated operation logs, and waterfall.",
 }
 
 
@@ -353,7 +353,7 @@ def add_header(d):
     old_ids = {p["id"] for p in old}
     remaining = [p for p in d["panels"] if p["id"] not in old_ids]
     min_y = min((p["gridPos"]["y"] for p in remaining), default=2)
-    delta = 3 - min_y
+    delta = 2 - min_y
     for p in panels(remaining):
         p["gridPos"]["y"] += delta
     appa = d["uid"] == "archestra-guardrails"
@@ -370,7 +370,7 @@ def add_header(d):
         "type": "text",
         "title": "",
         "transparent": True,
-        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 3},
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 2},
         "options": {
             "mode": "html",
             "content": (
@@ -378,8 +378,8 @@ def add_header(d):
                 f'<img alt="{mark}" src="data:{mime};base64,{data}" width="48" height="48" '
                 'style="flex:0 0 48px;width:48px;height:48px;object-fit:contain;border-radius:6px" />'
                 '<div style="min-width:0">'
-                f'<h2 style="font-size:16px;line-height:24px;font-weight:600;margin:0">{title}</h2>'
-                f'<p style="font-size:14px;line-height:20px;margin:4px 0 0">{copy}</p>'
+                f'<h2 style="font-size:14px;line-height:20px;font-weight:600;margin:0">{title}</h2>'
+                f'<p style="font-size:12px;line-height:15px;margin:2px 0 0">{copy}</p>'
                 "</div></div>"
             ),
         },
@@ -396,9 +396,10 @@ def add_header(d):
             for variable in ("metrics_datasource", "traces_datasource", "logs_datasource"):
                 if variable in source_vars:
                     url += "&var-" + variable + "=${" + variable + "}"
-        tiles.append('<a target="_parent" href="' + escape(url, quote=True) + '" style="display:flex;flex:1 1 22%;width:22%;box-sizing:border-box;align-items:center;justify-content:center;text-align:center;padding:3px 5px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px">' + escape(labels.get(link["title"], link["title"])) + '</a>')
+        tiles.append('<td style="width:25%;padding:0"><a target="_parent" title="' + escape(link["title"], quote=True) + '" href="' + escape(url, quote=True) + '" style="display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escape(labels.get(link["title"], link["title"])) + '</a></td>')
+    rows = ''.join('<tr>' + ''.join(tiles[i:i+4]) + '</tr>' for i in range(0,len(tiles),4))
     navigation = {"id":90002,"type":"text","title":"","transparent":True,
-        "gridPos":{"x":12,"y":0,"w":12,"h":3},
-        "options":{"mode":"html","content":'<nav aria-label="Observability dashboards" style="display:flex;flex-wrap:wrap;gap:4px">' + ''.join(tiles) + '</nav>'}}
+        "gridPos":{"x":12,"y":0,"w":12,"h":2},
+        "options":{"mode":"html","content":'<nav aria-label="Observability dashboards"><table role="presentation" style="width:100%;table-layout:fixed;border-collapse:separate;border-spacing:2px"><tbody>' + rows + '</tbody></table></nav>'}}
     d["links"] = []
     d["panels"] = [header, navigation] + remaining

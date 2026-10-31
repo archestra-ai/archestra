@@ -30,11 +30,11 @@
         "x": 0,
         "y": 0,
         "w": 12,
-        "h": 3
+        "h": 2
       },
       "options": {
         "mode": "html",
-        "content": "<div style=\"display:flex;align-items:center;gap:16px;min-height:48px\"><img alt=\"Archestra\" src=\"data:image/png;base64,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\" width=\"48\" height=\"48\" style=\"flex:0 0 48px;width:48px;height:48px;object-fit:contain;border-radius:6px\" /><div style=\"min-width:0\"><h2 style=\"font-size:16px;line-height:24px;font-weight:600;margin:0\">Platform Health</h2><p style=\"font-size:14px;line-height:20px;margin:4px 0 0\">API traffic, process health, background tasks, and database pools.</p></div></div>"
+        "content": "<div style=\"display:flex;align-items:center;gap:16px;min-height:48px\"><img alt=\"Archestra\" src=\"data:image/png;base64,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\" width=\"48\" height=\"48\" style=\"flex:0 0 48px;width:48px;height:48px;object-fit:contain;border-radius:6px\" /><div style=\"min-width:0\"><h2 style=\"font-size:14px;line-height:20px;font-weight:600;margin:0\">Platform Health</h2><p style=\"font-size:12px;line-height:15px;margin:2px 0 0\">API traffic, processes, queues, and database pools.</p></div></div>"
       }
     },
     {
@@ -46,11 +46,11 @@
         "x": 12,
         "y": 0,
         "w": 12,
-        "h": 3
+        "h": 2
       },
       "options": {
         "mode": "html",
-        "content": "<nav aria-label=\"Observability dashboards\" style=\"display:flex;flex-wrap:wrap;gap:4px\"><a target=\"_parent\" href=\"/d/archestra-genai-observability?${__url_time_range}&amp;var-metrics_datasource=${metrics_datasource}\" style=\"display:flex;flex:1 1 22%;width:22%;box-sizing:border-box;align-items:center;justify-content:center;text-align:center;padding:3px 5px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px\">LLM Proxy</a><a target=\"_parent\" href=\"/d/archestra-costs-and-limits?${__url_time_range}&amp;var-metrics_datasource=${metrics_datasource}\" style=\"display:flex;flex:1 1 22%;width:22%;box-sizing:border-box;align-items:center;justify-content:center;text-align:center;padding:3px 5px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px\">Costs &amp; Limits</a><a target=\"_parent\" href=\"/d/archestra-agent-runtime?${__url_time_range}&amp;var-metrics_datasource=${metrics_datasource}\" style=\"display:flex;flex:1 1 22%;width:22%;box-sizing:border-box;align-items:center;justify-content:center;text-align:center;padding:3px 5px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px\">Agent Runtime</a><a target=\"_parent\" href=\"/d/archestra-guardrails?${__url_time_range}&amp;var-metrics_datasource=${metrics_datasource}\" style=\"display:flex;flex:1 1 22%;width:22%;box-sizing:border-box;align-items:center;justify-content:center;text-align:center;padding:3px 5px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px\">Guardrails</a><a target=\"_parent\" href=\"/d/archestra-mcp-monitoring?${__url_time_range}&amp;var-metrics_datasource=${metrics_datasource}\" style=\"display:flex;flex:1 1 22%;width:22%;box-sizing:border-box;align-items:center;justify-content:center;text-align:center;padding:3px 5px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px\">MCP Monitoring</a><a target=\"_parent\" href=\"/d/archestra-rag-knowledge-base?${__url_time_range}&amp;var-metrics_datasource=${metrics_datasource}\" style=\"display:flex;flex:1 1 22%;width:22%;box-sizing:border-box;align-items:center;justify-content:center;text-align:center;padding:3px 5px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px\">Knowledge Base</a><a target=\"_parent\" href=\"/d/archestra-agent-sessions?${__url_time_range}&amp;var-metrics_datasource=${metrics_datasource}\" style=\"display:flex;flex:1 1 22%;width:22%;box-sizing:border-box;align-items:center;justify-content:center;text-align:center;padding:3px 5px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px\">Sessions</a><a target=\"_parent\" href=\"https://archestra.ai/docs/admin/observability/metrics\" style=\"display:flex;flex:1 1 22%;width:22%;box-sizing:border-box;align-items:center;justify-content:center;text-align:center;padding:3px 5px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px\">Metrics docs</a></nav>"
+        "content": "<nav aria-label=\"Observability dashboards\"><table role=\"presentation\" style=\"width:100%;table-layout:fixed;border-collapse:separate;border-spacing:2px\"><tbody><tr><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"LLM Proxy\" href=\"/d/archestra-genai-observability?${__url_time_range}&amp;var-metrics_datasource=${metrics_datasource}\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">LLM Proxy</a></td><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"Costs &amp; Limits\" href=\"/d/archestra-costs-and-limits?${__url_time_range}&amp;var-metrics_datasource=${metrics_datasource}\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">Costs &amp; Limits</a></td><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"Agent Runtime\" href=\"/d/archestra-agent-runtime?${__url_time_range}&amp;var-metrics_datasource=${metrics_datasource}\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">Agent Runtime</a></td><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"Guardrails &amp; OpenAPPA\" href=\"/d/archestra-guardrails?${__url_time_range}&amp;var-metrics_datasource=${metrics_datasource}\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">Guardrails</a></td></tr><tr><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"MCP Monitoring\" href=\"/d/archestra-mcp-monitoring?${__url_time_range}&amp;var-metrics_datasource=${metrics_datasource}\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">MCP Monitoring</a></td><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"Knowledge Base Operations\" href=\"/d/archestra-rag-knowledge-base?${__url_time_range}&amp;var-metrics_datasource=${metrics_datasource}\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">Knowledge Base</a></td><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"Session Investigation\" href=\"/d/archestra-agent-sessions?${__url_time_range}&amp;var-metrics_datasource=${metrics_datasource}\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">Sessions</a></td><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"Metrics reference\" href=\"https://archestra.ai/docs/admin/observability/metrics\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">Metrics docs</a></td></tr></tbody></table></nav>"
       }
     },
     {
@@ -64,7 +64,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 3,
+        "y": 2,
         "w": 8,
         "h": 4
       },
@@ -132,7 +132,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 3,
+        "y": 2,
         "w": 8,
         "h": 4
       },
@@ -200,7 +200,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 3,
+        "y": 2,
         "w": 8,
         "h": 4
       },
@@ -263,7 +263,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 7
+        "y": 6
       },
       "id": 100,
       "panels": [],
@@ -333,7 +333,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 8
+        "y": 7
       },
       "id": 1,
       "options": {
@@ -442,7 +442,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 8
+        "y": 7
       },
       "id": 2,
       "options": {
@@ -596,7 +596,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 16
+        "y": 15
       },
       "id": 3,
       "options": {
@@ -705,7 +705,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 16
+        "y": 15
       },
       "id": 4,
       "options": {
@@ -868,7 +868,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 24
+        "y": 23
       },
       "id": 5,
       "options": {
@@ -912,7 +912,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 32
+        "y": 31
       },
       "id": 200,
       "panels": [],
@@ -990,7 +990,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 33
+        "y": 32
       },
       "id": 6,
       "options": {
@@ -1126,7 +1126,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 33
+        "y": 32
       },
       "id": 7,
       "options": {
@@ -1254,7 +1254,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 41
+        "y": 40
       },
       "id": 8,
       "options": {
@@ -1354,7 +1354,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 41
+        "y": 40
       },
       "id": 9,
       "options": {
@@ -1410,7 +1410,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 49
+        "y": 48
       },
       "id": 300,
       "panels": [],
@@ -1484,7 +1484,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 50
+        "y": 49
       },
       "id": 10,
       "options": {
@@ -1588,7 +1588,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 50
+        "y": 49
       },
       "id": 11,
       "options": {
@@ -1691,7 +1691,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 50
+        "y": 49
       },
       "id": 12,
       "options": {
@@ -1735,7 +1735,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 58
+        "y": 57
       },
       "id": 400,
       "panels": [],
@@ -1781,7 +1781,7 @@
         "h": 4,
         "w": 5,
         "x": 0,
-        "y": 59
+        "y": 58
       },
       "id": 401,
       "options": {
@@ -1858,7 +1858,7 @@
         "h": 4,
         "w": 5,
         "x": 5,
-        "y": 59
+        "y": 58
       },
       "id": 402,
       "options": {
@@ -1935,7 +1935,7 @@
         "h": 4,
         "w": 5,
         "x": 10,
-        "y": 59
+        "y": 58
       },
       "id": 403,
       "options": {
@@ -2016,7 +2016,7 @@
         "h": 4,
         "w": 5,
         "x": 15,
-        "y": 59
+        "y": 58
       },
       "id": 404,
       "options": {
@@ -2093,7 +2093,7 @@
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 59
+        "y": 58
       },
       "id": 409,
       "options": {
@@ -2194,7 +2194,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 63
+        "y": 62
       },
       "id": 405,
       "options": {
@@ -2321,7 +2321,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 63
+        "y": 62
       },
       "id": 406,
       "options": {
@@ -2422,7 +2422,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 71
+        "y": 70
       },
       "id": 407,
       "options": {
@@ -2554,7 +2554,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 71
+        "y": 70
       },
       "id": 408,
       "options": {
@@ -2611,7 +2611,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 79
+        "y": 78
       },
       "id": 500,
       "panels": [
@@ -2654,7 +2654,7 @@
             "h": 4,
             "w": 5,
             "x": 0,
-            "y": 0
+            "y": -1
           },
           "id": 501,
           "options": {
@@ -2731,7 +2731,7 @@
             "h": 4,
             "w": 5,
             "x": 5,
-            "y": 0
+            "y": -1
           },
           "id": 502,
           "options": {
@@ -2819,7 +2819,7 @@
             "h": 4,
             "w": 5,
             "x": 10,
-            "y": 0
+            "y": -1
           },
           "id": 503,
           "options": {
@@ -2903,7 +2903,7 @@
             "h": 4,
             "w": 4,
             "x": 15,
-            "y": 0
+            "y": -1
           },
           "id": 511,
           "options": {
@@ -2992,7 +2992,7 @@
             "h": 4,
             "w": 5,
             "x": 19,
-            "y": 0
+            "y": -1
           },
           "id": 513,
           "options": {
@@ -3090,7 +3090,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 4
+            "y": 3
           },
           "id": 504,
           "options": {
@@ -3191,7 +3191,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 4
+            "y": 3
           },
           "id": 505,
           "options": {
@@ -3321,7 +3321,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 12
+            "y": 11
           },
           "id": 506,
           "options": {
@@ -3435,7 +3435,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 12
+            "y": 11
           },
           "id": 507,
           "options": {
@@ -3536,7 +3536,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 20
+            "y": 19
           },
           "id": 508,
           "options": {
@@ -3676,7 +3676,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 20
+            "y": 19
           },
           "id": 509,
           "options": {
@@ -3777,7 +3777,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 28
+            "y": 27
           },
           "id": 510,
           "options": {
@@ -3878,7 +3878,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 28
+            "y": 27
           },
           "id": 512,
           "options": {
@@ -3928,7 +3928,7 @@
       "panels": [],
       "gridPos": {
         "x": 0,
-        "y": 80,
+        "y": 79,
         "w": 24,
         "h": 1
       }
@@ -3943,7 +3943,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 81,
+        "y": 80,
         "w": 12,
         "h": 8
       },
@@ -3983,7 +3983,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 81,
+        "y": 80,
         "w": 12,
         "h": 8
       },

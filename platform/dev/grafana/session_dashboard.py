@@ -39,7 +39,7 @@ def refresh_sessions():
          'datasource':{'type':'loki','uid':'${logs_datasource}'},'targets':[{'refId':'A','expr':'{service_name="Archestra"} | session_id = ${sessionId:json} | event_name != "archestra.session.summary"','direction':'forward','queryType':'range','maxLines':1000}],
          'options':{'showTime':True,'showLabels':False,'wrapLogMessage':True,'sortOrder':'Ascending','enableLogDetails':True}},
         {'id':10,'title':'Session Waterfall','type':'traces','gridPos':{'x':12,'y':16,'w':12,'h':22},'description':'All exported turns, inference, tool and Guardrails hook spans under the session trace identity. Native policy checks and consults are included in the hook boundary. Resume a session to append new spans; existing historical traces are not rewritten.',
-         'datasource':{'type':'tempo','uid':'${traces_datasource}'},'targets':[{'refId':'A','query':'${traceId}','queryType':'traceql'}]},
+         'datasource':{'type':'tempo','uid':'${traces_datasource}'},'targets':[{'refId':'A','query':'${traceId}','queryType':'traceId'}]},
     ]
     d['description'] = 'Application session summaries with correlated operation logs and the complete session trace waterfall.'
     for v in d['templating']['list']:

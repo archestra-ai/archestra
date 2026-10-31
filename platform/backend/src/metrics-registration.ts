@@ -48,7 +48,11 @@ export const registerStandaloneMetricsEndpoint = async (params: {
     if (!engine) return payload;
     // Preserve the OpenMetrics end marker if the registry enables that format.
     const hasEndMarker = /# EOF\s*$/.test(payload);
-    return `${payload.replace(/# EOF\s*$/, "").trimEnd()}\n${engine.trimEnd()}\n${hasEndMarker ? "# EOF\n" : ""}`;
+    // OpenMetrics counter metadata uses the base name; samples retain _total.
+    const engineText = hasEndMarker
+      ? engine.replace(/^# (HELP|TYPE) (appa_[a-z_]+)_total(?= )/gm, "# $1 $2")
+      : engine;
+    return `${payload.replace(/# EOF\s*$/, "").trimEnd()}\n${engineText.trimEnd()}\n${hasEndMarker ? "# EOF\n" : ""}`;
   });
 
   // SPDX-SnippetEnd

@@ -297,6 +297,7 @@ describe("run tools", () => {
 
   test("start_agent_run refuses limits above the Agent's before starting anything", async ({
     makeAgent,
+    seedAndAssignArchestraTools,
   }) => {
     const target = await makeAgent({
       organizationId,
@@ -336,6 +337,27 @@ describe("run tools", () => {
       expect(result.isError).toBe(true);
       expect((result.content[0] as { text: string }).text).toContain(message);
     }
+
+    await seedAndAssignArchestraTools(target.id);
+    const fixedMRunFromSContext: ArchestraContext = {
+      ...context,
+      agent: { id: target.id, name: target.name },
+      agentId: target.id,
+      agentRuntimeTier: "S",
+    };
+    const scaleupFromSResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      {
+        agent_id: target.id,
+        message: "Scale up from S to M",
+        limits: { tier: "M" },
+      },
+      fixedMRunFromSContext,
+    );
+    expect(scaleupFromSResult.isError).toBe(true);
+    expect((scaleupFromSResult.content[0] as { text: string }).text).toContain(
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit)). This call is not retriable; calling it again will fail.",
+    );
 
     const scaleupTarget = await makeAgent({
       organizationId,

@@ -458,7 +458,7 @@ export async function buildAgentRunLaunchSpec(params: {
     runtime: params.runtime,
     // After the workspace facts: kept as written when the volume sentence
     // is rebuilt for a served tier.
-    trail: [describeScaleupDisabledPrompt(params.runtime, tiers)],
+    trail: [describeScaleupDisabledPrompt(params.runtime, tiers, params.limits.tier)],
   });
   const secretEnv: Record<string, string> = {
     ARCHESTRA_MCP_GATEWAY_TOKEN: gatewayToken,

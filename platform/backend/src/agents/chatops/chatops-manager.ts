@@ -122,7 +122,7 @@ import {
 } from "./constants";
 import { parseJiraApprovalCommand } from "./jira-message";
 import JiraProvider from "./jira-provider";
-import MSTeamsProvider from "./ms-teams-provider";
+import type MSTeamsProvider from "./ms-teams-provider";
 import {
   assertRuntimeAcknowledgementSettled,
   sendRuntimeReplyWithAnchor,
@@ -635,6 +635,9 @@ export class ChatOpsManager {
 
     // Create providers with their config
     if (msTeamsConfig && !hiddenChannels.has("ms-teams")) {
+      // Loaded only here: the provider imports the Microsoft Graph SDKs,
+      // about 90 MB that a deployment without Teams never needs.
+      const { default: MSTeamsProvider } = await import("./ms-teams-provider");
       this.msTeamsProvider = new MSTeamsProvider(msTeamsConfig);
       this.msTeamsProvider.setEventHandler(this);
     }

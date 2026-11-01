@@ -10,6 +10,7 @@ import type {
   ChatMessage,
   ChatMessageAttachment,
 } from "@microsoft/msgraph-sdk/models";
+import { isMsTeamsConfigured } from "./ms-teams-config";
 import { resolveMSTeamsUserEmail } from "./ms-teams-user";
 // Register the chats, teams, and users fluent API extensions
 import "@microsoft/msgraph-sdk-chats";
@@ -100,11 +101,7 @@ class MSTeamsProvider implements ChatOpsProvider {
   }
 
   isConfigured(): boolean {
-    return (
-      this.config.enabled &&
-      Boolean(this.config.appId) &&
-      Boolean(this.config.appSecret)
-    );
+    return isMsTeamsConfigured(this.config);
   }
 
   /**

@@ -51,6 +51,8 @@ e2e_output() { (PATH="$FAKE_BIN:$PATH" cmd_e2e 2>&1) || true; }
 e2e_succeeds() { (PATH="$FAKE_BIN:$PATH" cmd_e2e >/dev/null 2>&1); }
 
 # --- readiness -------------------------------------------------------------
+check "wait before the servers were ever started says to run up" says "only prepared" wait_ready_loudly
+touch "$SERVERS_FILE"
 rm -f "$KEYCLOAK_REQUESTED_FILE"
 check "ready without Keycloak when none was requested" wait_ready_quietly
 
@@ -142,11 +144,76 @@ check "build mode is recorded" grep -q "mode build" <<<"$(frontend_start build)"
 check "dev mode builds nothing" fails grep -q built <<<"$(frontend_start dev)"
 check "dev mode is recorded" grep -q "mode dev" <<<"$(frontend_start dev)"
 
+# --- start order, prepare, pause --------------------------------------------
+# Every step echoes its name; the builds and servers act on a scratch platform
+# directory, so `keep` finds builds there and nothing touches the checkout.
+lifecycle() {
+  (
+    ALIVE=""
+    export ARCHESTRA_AGENT_RUNTIME_TASK_ID=task
+    unset ARCHESTRA_DEV_LITE_FRONTEND ARCHESTRA_DEV_BACKEND_WATCH
+    scratch="$ARCHESTRA_DEV_LITE_STATE_DIR/scratch-${BUILT:-1}"
+    PLATFORM_DIR="$scratch/platform"
+    STANDALONE_DIR="$scratch/standalone"
+    mkdir -p "$PLATFORM_DIR/backend/dist" "$STANDALONE_DIR"
+    if [ "${BUILT:-1}" = 1 ]; then
+      touch "$PLATFORM_DIR/backend/dist/server.mjs" "$STANDALONE_DIR/server.js"
+    fi
+    require_platform_dir() { :; }
+    for step in ensure_env install_dependencies ensure_native_addons start_postgres wait_for_db migrate \
+      build_frontend build_backend wait_ready stop_session; do
+      eval "$step() { echo \"$step \${1:-}\"; }"
+    done
+    free_ports() { :; }
+    start_session() { echo "server $1"; ALIVE="$ALIVE $1"; }
+    "$@"
+  ) 2>&1
+}
+order_of() { awk -v want="$2" '$0 ~ want { print NR; exit }' <<<"$1"; }
+rm -f "$PAUSED_FILE" "$SERVERS_FILE"
+out="$(lifecycle cmd_start 1)"
+check "up builds the frontend before the backend" test "$(order_of "$out" "^build_frontend")" -lt "$(order_of "$out" "^build_backend")"
+check "up builds both before starting a server" test "$(order_of "$out" "^build_backend")" -lt "$(order_of "$out" "^server backend")"
+check "up starts the backend, then the frontend" test "$(order_of "$out" "^server backend")" -lt "$(order_of "$out" "^server frontend")"
+check "up builds the frontend once" test "$(grep -c "^build_frontend" <<<"$out")" -eq 1
+check "up records that the servers were started" test -f "$SERVERS_FILE"
+
+out="$(lifecycle cmd_prepare)"
+check "prepare migrates" grep -q "^migrate" <<<"$out"
+check "prepare builds nothing" fails grep -q "^build_" <<<"$out"
+check "prepare starts no server" fails grep -q "^server" <<<"$out"
+
+paused_lifecycle() { touch "$PAUSED_FILE"; lifecycle "$@"; }
+out="$(paused_lifecycle cmd_start 1)"
+check "up after pause serves the builds it has" fails grep -q "^build_" <<<"$out"
+check "up after pause starts both servers" test "$(grep -c "^server" <<<"$out")" -eq 2
+check "up clears the pause" test ! -f "$PAUSED_FILE"
+out="$(BUILT=0 paused_lifecycle cmd_start 1)"
+check "up after pause builds what is missing" grep -q "^build_frontend" <<<"$out"
+
+running_pause() { (session_alive() { return 0; }; lifecycle cmd_pause); }
+out="$(running_pause)"
+check "pause stops both servers" test "$(grep -c "^stop_session" <<<"$out")" -eq 2
+check "pause records the pause" test -f "$PAUSED_FILE"
+check "pause says how to resume" grep -q "archestra-dev-lite resume" <<<"$out"
+resume_paused() { (db_ready() { return 0; }; lifecycle cmd_resume); }
+out="$(resume_paused)"
+check "resume builds nothing" fails grep -q "^build_" <<<"$out"
+check "resume starts both servers" test "$(grep -c "^server" <<<"$out")" -eq 2
+check "resume clears the pause" test ! -f "$PAUSED_FILE"
+check "resume without a pause does nothing" grep -q "not paused" <<<"$(resume_paused)"
+paused_alive() { (ALIVE=""; touch "$PAUSED_FILE"; require_sessions_alive); }
+check "a paused stack is not reported as exited" paused_alive
+rm -f "$PAUSED_FILE"
+
 # --- down --------------------------------------------------------------------
 touch "$KEYCLOAK_REQUESTED_FILE"
 ALIVE=""
+touch "$PAUSED_FILE" "$SERVERS_FILE"
 (cmd_down >/dev/null 2>&1)
 check "down drops the Keycloak request" test ! -e "$KEYCLOAK_REQUESTED_FILE"
+check "down drops the pause" test ! -e "$PAUSED_FILE"
+check "down forgets the servers were started" test ! -e "$SERVERS_FILE"
 
 if [ "$failures" -gt 0 ]; then
   echo "$failures check(s) failed" >&2

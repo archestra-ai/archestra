@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import tempfile
 import textwrap
@@ -82,11 +83,14 @@ process.stdout.write(String(vm.runInNewContext(condition, {github:{ref}, needs:{
             subprocess.run([*git, 'commit', '-qm', 'release'], check=True)
             subprocess.run([*git, 'tag', '-a', 'platform-v1.2.3-rc.4', '-m', 'release'], check=True)
             release = subprocess.check_output([*git, 'rev-parse', 'HEAD'], text=True).strip()
-            # main changes the API before the next release; the version stays.
-            (upstream/'docs/openapi.json').write_text('{"info": {"version": "1.2.3-rc.4"}, "paths": "main"}\n')
+            # The generated OpenAPI version carries a v prefix on main.
+            (upstream/'docs/openapi.json').write_text('{"info": {"version": "v1.2.3-rc.4"}, "paths": "main"}\n')
             subprocess.run([*git, 'commit', '-qam', 'main'], check=True)
             checkout = root/'checkout'
             subprocess.run(['git', 'clone', '-q', '--depth=1', f'file://{upstream}', str(checkout)], check=True)
+            helper = checkout/'platform/scripts/terraform-provider/release_version.py'
+            helper.parent.mkdir(parents=True)
+            shutil.copyfile(Path(__file__).with_name('release_version.py'), helper)
             # Stub gh: the release is published, a draft, or missing.
             bin_path = root/'bin'
             bin_path.mkdir()
@@ -124,7 +128,7 @@ process.stdout.write(String(vm.runInNewContext(condition, {github:{ref}, needs:{
             result = subprocess.run(['bash', '-c', script], cwd=checkout, capture_output=True, text=True,
                                     env=env | {'RELEASE': 'true'})
             self.assertEqual(result.returncode, 1)
-            self.assertIn('does not name a platform release', result.stdout)
+            self.assertIn('does not name a platform release', result.stderr)
             self.assertFalse((checkout/'injected').exists())
 
 

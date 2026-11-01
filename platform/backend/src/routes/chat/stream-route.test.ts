@@ -1,8 +1,11 @@
 import {
   ADMIN_ROLE_NAME,
+  TOOL_GET_AGENT_RUN_FULL_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
+  TOOL_START_AGENT_RUN_FULL_NAME,
+  TOOL_START_AGENT_RUN_SHORT_NAME,
 } from "@archestra/shared";
 import { NoSuchToolError } from "ai";
 import { vi } from "vitest";
@@ -11,12 +14,21 @@ import {
   PROJECT_INSTRUCTIONS_PREFIX,
 } from "@/agents/agent-system-prompt";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import { REPEAT_CALL_TERMINATION_CEILING } from "@/clients/tool-call-repeat-tracker";
+import { buildMcpGatewayTool } from "@/clients/chat-tool-builder";
+import {
+  REPEAT_CALL_TERMINATION_CEILING,
+  ToolCallRepeatTracker,
+} from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import {
+  A2AContextModel,
+  A2ATaskModel,
+  AgentRunModel,
+  AgentWorkspaceModel,
   FileModel,
+  McpToolCallModel,
   MemberModel,
   MessageModel,
   ModelModel,
@@ -3736,5 +3748,467 @@ describe("POST /api/chat handler composition", () => {
         conversationId,
       );
     expect(attachments).toHaveLength(0);
+  });
+
+  test("web chat turn without X-Archestra-Run-Id resolves active runtime task and refuses fixed-tier scaleup", async ({
+    makeAgent,
+    makeConversation,
+    seedAndAssignArchestraTools,
+  }) => {
+    const fixedAgent = await makeAgent({
+      organizationId,
+      name: "Fixed Tier Agent",
+      agentType: "agent",
+      runtime: {
+        image: "example.com/coding-agent:latest",
+        command: null,
+        inferenceProtocol: "openai_responses",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        tier: "M",
+        maxTier: "M",
+        environment: null,
+        credentials: [],
+        ttlHours: 12,
+        maxCostUsd: null,
+        idleTimeoutMinutes: null,
+      },
+    });
+    await seedAndAssignArchestraTools(fixedAgent.id);
+
+    const fixedConversation = await makeConversation(fixedAgent.id, {
+      userId: user.id,
+      organizationId,
+    });
+
+    const a2aContext = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: user.id,
+    });
+    expect(a2aContext.id).not.toBe(fixedConversation.id);
+    const task = await A2ATaskModel.create({
+      contextId: a2aContext.id,
+      agentId: fixedAgent.id,
+      state: "TASK_STATE_WORKING",
+    });
+
+    await McpToolCallModel.create({
+      agentId: fixedAgent.id,
+      mcpServerName: archestraMcpBranding.serverName,
+      method: "tools/call",
+      durationMs: 12,
+      toolCall: {
+        id: "call-launch-s",
+        name: TOOL_START_AGENT_RUN_FULL_NAME,
+        arguments: { agent_id: fixedAgent.id, limits: { tier: "S" } },
+      },
+      toolResult: {
+        structuredContent: { run: { run_id: task.id } },
+      },
+      userId: user.id,
+      runId: task.id,
+      sessionId: fixedConversation.id,
+      llmToolCallId: "call-launch-s",
+      authMethod: null,
+      oauthClientId: null,
+      source: "chat",
+    });
+
+    const workloadName = `agent-run-${task.id}`;
+    await AgentRunModel.create({
+      organizationId,
+      taskId: task.id,
+      agentId: fixedAgent.id,
+      actorKind: "user",
+      actorId: user.id,
+      actorUserId: user.id,
+      workloadName,
+      backend: "kubernetes",
+      runtimeScope: "default",
+      virtualApiKeyId: null,
+      runtimeLimits: {
+        tier: "S",
+        idleTimeoutMinutes: 60,
+        maxDurationHours: 1,
+        maxCostUsd: null,
+      },
+    });
+
+    await AgentWorkspaceModel.create({
+      id: task.id,
+      organizationId,
+      agentId: fixedAgent.id,
+      actorKind: "user",
+      actorId: user.id,
+      backend: "kubernetes",
+      runtimeScope: "default",
+      workloadName,
+      state: "active",
+      activeTaskId: task.id,
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+
+    // Provide start_agent_run via mockGetChatMcpTools to verify the callerRunId
+    // wiring into tool context without X-Archestra-Run-Id header:
+    mockGetChatMcpTools.mockImplementationOnce(async (params) => {
+      expect(params.runId).toBe(task.id);
+      return {
+        [archestraMcpBranding.getToolName(TOOL_START_AGENT_RUN_SHORT_NAME)]:
+          buildMcpGatewayTool({
+            mcpTool: {
+              name: TOOL_START_AGENT_RUN_FULL_NAME,
+              inputSchema: { type: "object" },
+            },
+            ctx: {
+              agentId: fixedAgent.id,
+              agentName: fixedAgent.name,
+              userId: user.id,
+              organizationId,
+              runId: params.runId,
+              modelAcceptsImageToolResults: false,
+              mcpGwToken: {
+                tokenValue: null,
+                tokenId: user.id,
+                teamId: null,
+                isOrganizationToken: false,
+                isUserToken: true,
+              },
+              repeatTracker: params.repeatTracker,
+            },
+          }),
+      };
+    });
+
+    let capturedTools:
+      | Record<string, { execute?: (...args: unknown[]) => Promise<unknown> }>
+      | undefined;
+    mockStreamText.mockImplementationOnce(
+      (config: {
+        tools?: Record<
+          string,
+          { execute?: (...args: unknown[]) => Promise<unknown> }
+        >;
+      }) => {
+        capturedTools = config.tools;
+        return fakeStreamResult(RENDERABLE_STREAM_EVENTS);
+      },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      // Explicitly NO X-Archestra-Run-Id header!
+      payload: {
+        id: fixedConversation.id,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "scale up" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockGetChatMcpTools).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: fixedConversation.id,
+        runId: task.id,
+      }),
+    );
+
+    const startTool =
+      capturedTools?.[
+        archestraMcpBranding.getToolName(TOOL_START_AGENT_RUN_SHORT_NAME)
+      ];
+    expect(startTool?.execute).toBeDefined();
+
+    const scaleupResult = await startTool?.execute?.(
+      {
+        agent_id: fixedAgent.id,
+        message: "Attempt scale up from S to M",
+        limits: { tier: "M" },
+      },
+      { toolCallId: "call-fixed-1", messages: [] },
+    );
+    const scaleupOutput =
+      typeof scaleupResult === "string"
+        ? scaleupResult
+        : ((scaleupResult as { content?: string })?.content ?? "");
+    expect(scaleupOutput).toContain(
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
+    );
+  });
+
+  test("web chat turn without X-Archestra-Run-Id leaves runId unset and keeps agent default ceiling when another active run exists", async ({
+    makeAgent,
+    makeConversation,
+    seedAndAssignArchestraTools,
+  }) => {
+    const fixedAgent = await makeAgent({
+      organizationId,
+      name: "Fixed Tier Agent Distinct Run",
+      agentType: "agent",
+      runtime: {
+        image: "example.com/coding-agent:latest",
+        command: null,
+        inferenceProtocol: "openai_responses",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        tier: "M",
+        maxTier: "M",
+        environment: null,
+        credentials: [],
+        ttlHours: 12,
+        maxCostUsd: null,
+        idleTimeoutMinutes: null,
+      },
+    });
+    await seedAndAssignArchestraTools(fixedAgent.id);
+
+    const webConversation = await makeConversation(fixedAgent.id, {
+      userId: user.id,
+      organizationId,
+    });
+
+    // Create another active run of the same user and agent with a distinct A2A context ID:
+    const otherContext = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: user.id,
+    });
+    expect(otherContext.id).not.toBe(webConversation.id);
+
+    const otherTask = await A2ATaskModel.create({
+      contextId: otherContext.id,
+      agentId: fixedAgent.id,
+      state: "TASK_STATE_WORKING",
+    });
+
+    const otherWorkload = `agent-run-${otherTask.id}`;
+    await AgentRunModel.create({
+      organizationId,
+      taskId: otherTask.id,
+      agentId: fixedAgent.id,
+      actorKind: "user",
+      actorId: user.id,
+      actorUserId: user.id,
+      workloadName: otherWorkload,
+      backend: "kubernetes",
+      runtimeScope: "default",
+      virtualApiKeyId: null,
+      runtimeLimits: {
+        tier: "S",
+        idleTimeoutMinutes: 60,
+        maxDurationHours: 1,
+        maxCostUsd: null,
+      },
+    });
+
+    await AgentWorkspaceModel.create({
+      id: otherTask.id,
+      organizationId,
+      agentId: fixedAgent.id,
+      actorKind: "user",
+      actorId: user.id,
+      backend: "kubernetes",
+      runtimeScope: "default",
+      workloadName: otherWorkload,
+      state: "active",
+      activeTaskId: otherTask.id,
+      lastTaskId: otherTask.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+
+    // Pasting another run's UUID into conversation messages must NOT claim it:
+    await MessageModel.create({
+      conversationId: webConversation.id,
+      role: "assistant",
+      content: {
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: `Copied foreign run id: ${otherTask.id}`,
+          },
+        ],
+      },
+    });
+
+    // A finished run previously started by this conversation must also be ignored:
+    const finishedTask = await A2ATaskModel.create({
+      contextId: otherContext.id,
+      agentId: fixedAgent.id,
+      state: "TASK_STATE_COMPLETED",
+    });
+    const finishedRun = await AgentRunModel.create({
+      organizationId,
+      taskId: finishedTask.id,
+      agentId: fixedAgent.id,
+      actorKind: "user",
+      actorId: user.id,
+      actorUserId: user.id,
+      workloadName: `agent-run-${finishedTask.id}`,
+      backend: "kubernetes",
+      runtimeScope: "default",
+      virtualApiKeyId: null,
+      runtimeLimits: {
+        tier: "S",
+        idleTimeoutMinutes: 60,
+        maxDurationHours: 1,
+        maxCostUsd: null,
+      },
+    });
+    await AgentRunModel.close({ id: finishedRun.id });
+    await McpToolCallModel.create({
+      agentId: fixedAgent.id,
+      mcpServerName: archestraMcpBranding.serverName,
+      method: "tools/call",
+      durationMs: 10,
+      toolCall: {
+        id: "call-finished",
+        name: TOOL_START_AGENT_RUN_FULL_NAME,
+        arguments: { agent_id: fixedAgent.id, limits: { tier: "S" } },
+      },
+      toolResult: {
+        structuredContent: { run: { run_id: finishedTask.id } },
+      },
+      userId: user.id,
+      runId: finishedTask.id,
+      sessionId: webConversation.id,
+      llmToolCallId: "call-finished",
+      authMethod: null,
+      oauthClientId: null,
+      source: "chat",
+    });
+
+    // Reading another run's status via get_agent_run must NOT store it as this conversation's run:
+    const getRunTool = buildMcpGatewayTool({
+      mcpTool: {
+        name: TOOL_GET_AGENT_RUN_FULL_NAME,
+        inputSchema: { type: "object" },
+      },
+      ctx: {
+        agentId: fixedAgent.id,
+        agentName: fixedAgent.name,
+        userId: user.id,
+        organizationId,
+        conversationId: webConversation.id,
+        sessionId: webConversation.id,
+        modelAcceptsImageToolResults: false,
+        mcpGwToken: {
+          tokenValue: null,
+          tokenId: user.id,
+          teamId: null,
+          isOrganizationToken: false,
+          isUserToken: true,
+        },
+        repeatTracker: new ToolCallRepeatTracker(),
+      },
+    });
+    await getRunTool.execute?.(
+      { run_id: otherTask.id },
+      { toolCallId: "call-get-other", messages: [] },
+    );
+
+    mockGetChatMcpTools.mockImplementationOnce(async (params) => {
+      // The web chat conversation does not own otherTask, so runId must be undefined
+      expect(params.runId).toBeUndefined();
+      return {
+        [archestraMcpBranding.getToolName(TOOL_START_AGENT_RUN_SHORT_NAME)]:
+          buildMcpGatewayTool({
+            mcpTool: {
+              name: TOOL_START_AGENT_RUN_FULL_NAME,
+              inputSchema: { type: "object" },
+            },
+            ctx: {
+              agentId: fixedAgent.id,
+              agentName: fixedAgent.name,
+              userId: user.id,
+              organizationId,
+              runId: params.runId,
+              modelAcceptsImageToolResults: false,
+              mcpGwToken: {
+                tokenValue: null,
+                tokenId: user.id,
+                teamId: null,
+                isOrganizationToken: false,
+                isUserToken: true,
+              },
+              repeatTracker: params.repeatTracker,
+            },
+          }),
+      };
+    });
+
+    let capturedTools:
+      | Record<string, { execute?: (...args: unknown[]) => Promise<unknown> }>
+      | undefined;
+    mockStreamText.mockImplementationOnce(
+      (config: {
+        tools?: Record<
+          string,
+          { execute?: (...args: unknown[]) => Promise<unknown> }
+        >;
+      }) => {
+        capturedTools = config.tools;
+        return fakeStreamResult(RENDERABLE_STREAM_EVENTS);
+      },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      // Explicitly NO X-Archestra-Run-Id header
+      payload: {
+        id: webConversation.id,
+        messages: [
+          {
+            id: "msg-2",
+            role: "user",
+            parts: [{ type: "text", text: `start run (not ${otherTask.id})` }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockGetChatMcpTools).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: webConversation.id,
+        runId: undefined,
+      }),
+    );
+
+    const startTool =
+      capturedTools?.[
+        archestraMcpBranding.getToolName(TOOL_START_AGENT_RUN_SHORT_NAME)
+      ];
+    expect(startTool?.execute).toBeDefined();
+
+    // Requesting L (above M) gets refused at M (the agent default ceiling), not S:
+    const scaleupAboveCeilingResult = await startTool?.execute?.(
+      {
+        agent_id: fixedAgent.id,
+        message: "Attempt scale up from M to L",
+        limits: { tier: "L" },
+      },
+      { toolCallId: "call-fixed-2", messages: [] },
+    );
+    const scaleupAboveCeilingOutput =
+      typeof scaleupAboveCeilingResult === "string"
+        ? scaleupAboveCeilingResult
+        : ((scaleupAboveCeilingResult as { content?: string })?.content ?? "");
+    expect(scaleupAboveCeilingOutput).toContain(
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to M (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
+    );
+    expect(scaleupAboveCeilingOutput).not.toContain("fixed to S");
   });
 });

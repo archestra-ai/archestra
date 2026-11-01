@@ -5,7 +5,7 @@ import {
   parseMemoryQuantity,
   resourceEnvelope,
   typeScriptCheckers,
-  typeScriptGoMemoryLimit,
+  typeScriptMemorySettings,
 } from "../../../vitest.resources";
 import { calculateVitestResourceLimits } from "./vitest-resource-limits";
 
@@ -194,22 +194,32 @@ describe("typeScriptCheckers", () => {
   });
 });
 
-describe("typeScriptGoMemoryLimit", () => {
+describe("typeScriptMemorySettings", () => {
   const envelope = (memoryGiB: number) => ({
     availableParallelism: 2,
     totalMemoryBytes: memoryGiB * GIB,
     constrained: true,
   });
 
-  test("leaves the compiler's working set room in the pod and the rest to its neighbours", () => {
+  test("caps the heap in tier S and drops the build state the one checker would add", () => {
     // The backend's live data at one checker is about 5 GB: a limit at or
-    // above it costs no time, one below it only makes Go collect in a loop.
-    expect(typeScriptGoMemoryLimit(envelope(8))).toBe(5 * GIB);
-    expect(typeScriptGoMemoryLimit(envelope(14))).toBe(8.75 * GIB);
+    // above it costs no time, one below it makes Go collect in a loop.
+    expect(typeScriptMemorySettings(envelope(8))).toEqual({
+      goMemoryLimitBytes: 5 * GIB,
+      incremental: false,
+    });
   });
 
-  test("keeps Go's default on a machine with the memory for four checkers", () => {
-    expect(typeScriptGoMemoryLimit(envelope(16))).toBeNull();
-    expect(typeScriptGoMemoryLimit(envelope(62))).toBeNull();
+  test("keeps incremental builds where two checkers fit, as on a 16 GB laptop", () => {
+    // Such a laptop reports a little under 16 GiB.
+    expect(typeScriptMemorySettings(envelope(15.5))).toEqual({
+      goMemoryLimitBytes: 15.5 * GIB * (5 / 8),
+      incremental: true,
+    });
+  });
+
+  test("keeps Go's defaults on a machine with the memory for four checkers", () => {
+    expect(typeScriptMemorySettings(envelope(16))).toBeNull();
+    expect(typeScriptMemorySettings(envelope(62))).toBeNull();
   });
 });

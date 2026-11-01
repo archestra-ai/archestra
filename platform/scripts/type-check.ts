@@ -8,12 +8,12 @@
  * on (`typeScriptCheckers` in vitest.resources.ts). An explicit `--checkers`
  * or `--singleThreaded` wins.
  *
- * Below 16 GiB the compiler also runs without its incremental build state,
- * which holds about 0.45 GB more at the backend's first run, and with Go's
- * soft memory limit set (`typeScriptGoMemoryLimit`), so it collects garbage
- * before it takes the pod. Together they take the backend's peak at one
- * checker on 2 CPUs from 6.2 GiB to 5.3 GiB. An explicit `--incremental` or
- * a `GOMEMLIMIT` in the environment wins.
+ * Below 16 GiB the compiler also runs with Go's soft memory limit set, so it
+ * collects garbage before it takes the pod, and below 12 GiB without its
+ * incremental build state (`typeScriptMemorySettings`). Together they take
+ * the backend's peak at one checker on 2 CPUs from 5.8 to 6.2 GiB down to
+ * 5.3 GiB. A `GOMEMLIMIT` in the environment wins, and so does an option that
+ * sets the build state up (`--incremental`, `--tsBuildInfoFile`, `--build`).
  *
  * On such a machine the compilers also take turns: a root `pnpm type-check`
  * starts every package's at once through turbo, and four of them sized for the
@@ -27,23 +27,26 @@ import path from "node:path";
 import {
   detectResourceEnvelope,
   typeScriptCheckers,
-  typeScriptGoMemoryLimit,
+  typeScriptMemorySettings,
 } from "../vitest.resources.ts";
 
 const args = process.argv.slice(2);
 const envelope = detectResourceEnvelope();
 const sized = typeScriptCheckers(envelope);
-const goMemoryLimit = typeScriptGoMemoryLimit(envelope);
+const memory = typeScriptMemorySettings(envelope);
 const tscArgs = [...args];
 if (sized !== null && !chosen("--checkers", "--singleThreaded")) {
   tscArgs.push("--checkers", String(sized));
 }
-if (goMemoryLimit !== null && !chosen("--incremental", "-i")) {
+if (
+  memory?.incremental === false &&
+  !chosen("--incremental", "-i", "--tsBuildInfoFile", "--build", "-b")
+) {
   tscArgs.push("--incremental", "false");
 }
 const env =
-  goMemoryLimit !== null && !process.env.GOMEMLIMIT
-    ? { ...process.env, GOMEMLIMIT: String(goMemoryLimit) }
+  memory !== null && !process.env.GOMEMLIMIT
+    ? { ...process.env, GOMEMLIMIT: String(memory.goMemoryLimitBytes) }
     : process.env;
 const command =
   sized !== null && hasFlock()

@@ -9,6 +9,10 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
+import {
+  detectResourceEnvelope,
+  typeScriptMemorySettings,
+} from "../../../vitest.resources";
 
 // scripts/type-check.ts, run as `pnpm type-check` runs it, against a fake
 // tsc that records when each compiler starts and ends.
@@ -33,7 +37,7 @@ describe("type-check runner", () => {
         `#!/bin/sh\necho "start $$ GOMEMLIMIT=$GOMEMLIMIT $*" >> "${log}"\nsleep 0.4\necho "end $$" >> "${log}"\n`,
       );
       chmodSync(path.join(dir, "tsc"), 0o755);
-      const env = {
+      const env: NodeJS.ProcessEnv = {
         ...process.env,
         PATH: `${dir}:${process.env.PATH}`,
         // Its own lock file: the test must not wait for a real type check.
@@ -41,6 +45,10 @@ describe("type-check runner", () => {
         ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "2",
         ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "8Gi",
       };
+      // A limit the shell already sets would win over the runner's.
+      delete env.GOMEMLIMIT;
+      // At most 8 GiB: the machine or its container may have less.
+      const expected = typeScriptMemorySettings(detectResourceEnvelope(env));
       const runs = Array.from(
         { length: 3 },
         () =>
@@ -57,8 +65,9 @@ describe("type-check runner", () => {
       expect(lines).toHaveLength(6);
       for (let i = 0; i < lines.length; i += 2) {
         const [, pid, goMemoryLimit, ...args] = lines[i].split(" ");
-        // Five eighths of 8 GiB, and no incremental build state to hold.
-        expect(goMemoryLimit).toBe(`GOMEMLIMIT=${5 * 1024 ** 3}`);
+        expect(goMemoryLimit).toBe(
+          `GOMEMLIMIT=${expected?.goMemoryLimitBytes}`,
+        );
         expect(args).toEqual([
           "--noEmit",
           "--checkers",

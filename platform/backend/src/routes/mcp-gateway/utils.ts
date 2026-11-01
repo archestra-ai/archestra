@@ -1239,6 +1239,16 @@ export async function createAgentServer(params: {
 
           // Persist archestra/agent delegation tool call to database
           try {
+            const launchedRunId = (
+              response.structuredContent as
+                | { run?: { run_id?: unknown } }
+                | undefined
+            )?.run?.run_id;
+            const persistedRunId =
+              runId ??
+              (typeof launchedRunId === "string" && launchedRunId.length > 0
+                ? launchedRunId
+                : null);
             await McpToolCallModel.create({
               agentId,
               mcpServerName: archestraMcpBranding.serverName,
@@ -1251,7 +1261,7 @@ export async function createAgentServer(params: {
               },
               toolResult: archestraResult,
               userId: tokenAuth?.userId ?? null,
-              runId: runId ?? null,
+              runId: persistedRunId,
               sessionId: tokenAuth?.llmSessionId ?? null,
               llmToolCallId: tokenAuth?.llmToolCallId ?? null,
               authMethod: deriveAuthMethod(tokenAuth) ?? null,

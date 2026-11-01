@@ -601,12 +601,17 @@ function AgentRuntimeTierFields({ value, onChange }: RuntimeSectionProps) {
           disabled={!resolved}
           onValueChange={(tier) => {
             // A default tier above the saved scaleup tier raises it too, so
-            // the saved pair matches what the form shows.
+            // the saved pair matches what the form shows. A fixed tier
+            // (maxTier equal to tier) stays fixed at the new default.
             const rank = tiers.findIndex((entry) => entry.name === tier);
             const scaleupRank = tiers.findIndex(
               (entry) => entry.name === scaleupTier,
             );
-            update(rank > scaleupRank ? { tier, maxTier: tier } : { tier });
+            const fixed =
+              value.maxTier === defaultTier || value.maxTier == null;
+            update(
+              rank > scaleupRank || fixed ? { tier, maxTier: tier } : { tier },
+            );
           }}
         >
           <SelectTrigger id="agent-runtime-tier" className="w-full">

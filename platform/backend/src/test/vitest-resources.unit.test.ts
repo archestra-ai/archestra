@@ -4,6 +4,7 @@ import {
   parseCpuQuantity,
   parseMemoryQuantity,
   resourceEnvelope,
+  typeScriptCheckers,
 } from "../../../vitest.resources";
 import { calculateVitestResourceLimits } from "./vitest-resource-limits";
 
@@ -164,5 +165,30 @@ describe("sizing inside an Agent Runtime pod", () => {
       maxWorkers: 16,
       maxOldSpaceMb: 8192,
     });
+  });
+});
+
+describe("typeScriptCheckers", () => {
+  const envelope = (memoryGiB: number, cpus: number) => ({
+    availableParallelism: cpus,
+    totalMemoryBytes: memoryGiB * GIB,
+    constrained: true,
+  });
+
+  test("runs one checker in a pod of tier S and two in tier M", () => {
+    // Staging tiers: S 2 CPU / 8Gi, M 3.5 CPU / 14Gi, L 6 CPU / 24Gi.
+    expect(typeScriptCheckers(envelope(8, 2))).toBe(1);
+    expect(typeScriptCheckers(envelope(14, 4))).toBe(2);
+    expect(typeScriptCheckers(envelope(24, 6))).toBeNull();
+  });
+
+  test("keeps the compiler's default on a machine with the memory for it", () => {
+    expect(typeScriptCheckers(envelope(16, 4))).toBeNull();
+    expect(typeScriptCheckers(envelope(62, 32))).toBeNull();
+  });
+
+  test("runs no more checkers than CPUs", () => {
+    expect(typeScriptCheckers(envelope(62, 1))).toBe(1);
+    expect(typeScriptCheckers(envelope(62, 2))).toBe(2);
   });
 });

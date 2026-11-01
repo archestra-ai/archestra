@@ -93,7 +93,9 @@ pnpm run prepare                        # Install the husky pre-commit hook. `ti
                                         # because ignoreScripts blocks lifecycle scripts (see below).
 pnpm lint                               # Check lint
 pnpm lint:fix                           # Lint and auto-fix
-pnpm type-check                         # Check TypeScript types
+pnpm type-check                         # Check TypeScript types. Run it (or `pnpm --dir <pkg> type-check`), not bare
+                                        # `tsc --noEmit`: it sizes the compiler to the memory it has. Bare tsc in
+                                        # backend/ holds about 9 GB, past a small Agent Runtime tier's limit.
 pnpm test                               # Run tests
 pnpm test:e2e                           # Run e2e tests with Playwright (chromium, webkit, firefox)
 

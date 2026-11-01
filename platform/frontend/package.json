@@ -15,7 +15,7 @@
     "lint": "biome check",
     "lint:fix": "biome check --write",
     "lint:fix:unsafe": "biome check --write --unsafe",
-    "type-check": "tsc --noEmit",
+    "type-check": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON ../scripts/type-check.ts --noEmit",
     "test": "vitest",
     "test:integration": "playwright test",
     "test:integration:ui": "playwright test --ui",

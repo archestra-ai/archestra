@@ -16,7 +16,6 @@ import {
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { type A2AActor, A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
-import type { A2AAttachment } from "@/agents/a2a-executor";
 import { watchTaskCompletion } from "@/agents/task-completion-watcher";
 import { userHasPermission } from "@/auth";
 import { getAppAssetBaseOrigin } from "@/config";
@@ -34,6 +33,7 @@ import {
 import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
 import { RouteCategory } from "@/observability/tracing";
 import { AGENT_WORKSPACE_TRANSFER_PREFIX } from "@/routes/route-paths";
+import { agentRunAttachmentsSchema } from "@/services/agent-runtime/agent-run-attachments";
 import {
   prepareAgentRuntimeBackendDriver,
   resolveAgentRuntimeBackendDriver,
@@ -87,8 +87,8 @@ import {
   AgentWorkspaceStateSchema,
   ApiError,
 } from "@/types";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 import type { A2ATaskFailure } from "@/types/a2a-task";
-import { agentRunAttachmentsSchema } from "@/types/agent-run-attachments";
 import {
   AgentRunLimitsRequestSchema,
   AgentRuntimeTierSchema,

@@ -4,7 +4,7 @@ import {
   createUpdateSchema,
 } from "drizzle-zod";
 import type { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 
 export const UserSchema = createSelectSchema(schema.usersTable);
 const UpdateUserSchema = createUpdateSchema(schema.usersTable);

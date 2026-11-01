@@ -26,6 +26,7 @@ import {
 } from "@/models";
 import ResourcePermissionAccessModel from "@/models/resource-permission-access";
 import { AGENT_WORKSPACE_TRANSFER_PREFIX } from "@/routes/route-paths";
+import { agentRunAttachmentsSchema } from "@/services/agent-runtime/agent-run-attachments";
 import {
   isAnyAgentRuntimeBackendDriverEnabled,
   resolveAgentRuntimeBackendDriver,
@@ -75,7 +76,6 @@ import {
   StartAgentRunResponseSchema,
   UpdateAgentRunSchema,
 } from "@/types";
-import { agentRunAttachmentsSchema } from "@/types/agent-run-attachments";
 import {
   AgentWorkspaceFileRequestSchema,
   AgentWorkspaceFileResultSchema,

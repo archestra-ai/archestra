@@ -10,7 +10,7 @@ import {
   createUpdateSchema,
 } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { A2ATaskFailureSchema, A2ATaskStateSchema } from "./a2a-task";
 
 /**

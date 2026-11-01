@@ -1,7 +1,7 @@
 import { PermissionsSchema } from "@archestra/shared";
 import { createInsertSchema, createUpdateSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 
 export const SelectOrganizationRoleSchema = z.object({
   /**

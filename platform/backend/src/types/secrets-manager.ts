@@ -1,5 +1,5 @@
 import type { SecretsManagerType } from "@archestra/shared";
-import type { Transaction } from "@/database";
+import type { Transaction } from "@/database/schema";
 import type { SecretValue, SelectSecret } from "./secret";
 
 /**

@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { type A2AAttachment, executeA2AMessage } from "@/agents/a2a-executor";
+import { executeA2AMessage } from "@/agents/a2a-executor";
 import { watchTaskCompletion } from "@/agents/task-completion-watcher";
 import config from "@/config";
 import logger from "@/logging";
@@ -21,6 +21,7 @@ import type {
   IncomingEmail,
   SubscriptionInfo,
 } from "@/types";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 import {
   getDefaultAgentEmailName,
   MAX_EMAIL_BODY_SIZE,

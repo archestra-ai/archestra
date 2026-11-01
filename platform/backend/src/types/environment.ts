@@ -1,7 +1,7 @@
 import type { EnvironmentDefaultableResource } from "@archestra/shared";
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { isValidCidr } from "@/utils/network";
 import { LabelWithDetailsSchema } from "./label";
 import { RetiredSharingUpdateFieldSchema } from "./visibility";

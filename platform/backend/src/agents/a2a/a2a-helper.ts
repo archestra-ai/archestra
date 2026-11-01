@@ -1,4 +1,4 @@
-import type { A2AAttachment } from "../a2a-executor";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 import type {
   A2AArchestraApprovalRequest,
   A2AArchestraTaskApprovalDecision,

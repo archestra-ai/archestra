@@ -5,7 +5,7 @@ import {
   createUpdateSchema,
 } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { AgentTypeSchema } from "./agent";
 import { InternalMcpCatalogServerTypeSchema } from "./mcp-catalog";
 import { McpServerAlertMuteSchema } from "./mcp-server-alert-mute";

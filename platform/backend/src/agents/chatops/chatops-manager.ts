@@ -12,7 +12,6 @@ import {
 import type { UIMessageChunk } from "ai";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { A2AManager, type A2ASystemParams } from "@/agents/a2a/a2a-manager";
-import type { A2AAttachment } from "@/agents/a2a-executor";
 import { watchTaskCompletion } from "@/agents/task-completion-watcher";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { agentCredentialSetupUrl } from "@/archestra-mcp-server/helpers";
@@ -75,6 +74,7 @@ import type {
   IncomingChatMessage,
   SkippedAttachment,
 } from "@/types";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 import { AgentRuntimeCredentialsRequiredError } from "@/types/agent-runtime";
 import type { ChatOpsChannelBinding } from "@/types/chatops-channel-binding";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";

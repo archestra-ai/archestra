@@ -30,7 +30,7 @@ vi.mock("./audit-log-registry", async () => {
 
   const ROUTES: Record<
     string,
-    import("./audit-log-registry").AuditableRouteConfig
+    import("@/types/audit-route-config").AuditableRouteConfig
   > = {
     // Standard CRUD routes with explicit action overrides for predictability.
     "/api/things": {

@@ -321,6 +321,19 @@ describe("describeToolMemoryKill", () => {
     );
   });
 
+  test("rounds the limit down, never up", () => {
+    // A container limited to 8G: 8,000,000,000 bytes, 7.45 GiB.
+    const decimal = { ...atLimit, limitBytes: 8_000_000_000 };
+    expect(
+      describeToolMemoryKill({
+        ...typeCheck,
+        subjectKilled: true,
+        before: { ...before, limitBytes: 8_000_000_000 },
+        after: decimal,
+      })?.split("\n")[0],
+    ).toContain("memory limit of 7.4 GiB at tier S");
+  });
+
   test("blames the machine, not the container, when the limit was not reached", () => {
     expect(
       describeToolMemoryKill({

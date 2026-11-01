@@ -3,7 +3,7 @@ import type { V1Pod } from "@kubernetes/client-node";
 import type { AgentRunFailureCode } from "@/services/agent-runtime/run-failure";
 import { AGENT_RUNTIME_TIER_ENV } from "@/services/agent-runtime/runtime-contract";
 import {
-  formatGibibytes,
+  formatLimitGibibytes,
   MEMORY_KILL_NEXT_STEP,
   parseMemoryQuantity,
 } from "./memory-kill";
@@ -181,9 +181,11 @@ function describeContainerMemoryKill(params: {
           .replace("T", " ")
           .replace(/\.\d+Z$/, " UTC")}`
       : "";
+  // A decimal quantity ("8G") is named as set, after its GiB.
+  const asSet = quantity && /\d[kMGT]$/.test(quantity) ? ` (${quantity})` : "";
   const size =
     bytes !== null
-      ? `It has a memory limit of ${formatGibibytes(bytes)}${tier ? ` at tier ${tier}` : ""}.`
+      ? `It has a memory limit of ${formatLimitGibibytes(bytes)}${asSet}${tier ? ` at tier ${tier}` : ""}.`
       : quantity
         ? `It has a memory limit of ${quantity}${tier ? ` at tier ${tier}` : ""}.`
         : tier

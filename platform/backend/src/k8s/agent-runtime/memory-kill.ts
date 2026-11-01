@@ -148,13 +148,13 @@ export function describeMemoryKill(
   if (kill.atLimit) {
     const limit =
       events.limitBytes !== null
-        ? `reached its memory limit of ${formatGibibytes(events.limitBytes)}${tier}`
+        ? `reached its memory limit of ${formatLimitGibibytes(events.limitBytes)}${tier}`
         : `hit its memory limit${tier}`;
     return `The run ran out of memory. The ${where.container} container ${limit}${peak}, and the kernel killed ${processes} of the run. ${MEMORY_KILL_NEXT_STEP}`;
   }
   const limit =
     events.limitBytes !== null
-      ? `did not reach its ${formatGibibytes(events.limitBytes)} limit${tier}`
+      ? `did not reach its ${formatLimitGibibytes(events.limitBytes)} limit${tier}`
       : `has no memory limit of its own${tier}`;
   return `The kernel killed ${processes} of the run because the node ran out of memory; the ${where.container} container ${limit}${peak}. Start the run again.`;
 }
@@ -175,12 +175,21 @@ export function parseMemoryQuantity(
   return Math.floor(Number(amount) * (MEMORY_UNITS[unit] ?? 1));
 }
 
-/** "8 GiB", "7.5 GiB": one decimal at most, none when it is zero. */
-export function formatGibibytes(bytes: number): string {
-  return `${Math.round((bytes / 1024 ** 3) * 10) / 10} GiB`;
+/**
+ * A limit in GiB, rounded down: "7.4 GiB" for 8 GB (7.45 GiB). Clients size a
+ * retry from it, so it never says more than the container had.
+ */
+export function formatLimitGibibytes(bytes: number): string {
+  // The epsilon keeps an exact 8 GiB from flooring to 7.9 on a rounding error.
+  return `${Math.floor((bytes / 1024 ** 3) * 10 + 1e-9) / 10} GiB`;
 }
 
 // ===================== internals =====================
+
+/** "8 GiB", "7.5 GiB": one decimal at most, none when it is zero. */
+function formatGibibytes(bytes: number): string {
+  return `${Math.round((bytes / 1024 ** 3) * 10) / 10} GiB`;
+}
 
 const MEMORY_UNITS: Record<string, number> = {
   "": 1,

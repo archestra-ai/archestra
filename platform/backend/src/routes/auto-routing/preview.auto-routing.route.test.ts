@@ -178,11 +178,20 @@ describe("POST /api/auto-routing/preview", () => {
     },
     { text: "Task", request: { input: "Ambiguous task" } },
     { request: [] },
-    { request: { input: "x".repeat(256 * 1024) } },
-  ])("rejects invalid or oversized request previews before scoring (case %#)", async (payload) => {
+    { request: { input: "Task" }, client: "   " },
+  ])("rejects invalid request previews before scoring (case %#)", async (payload) => {
     await configureAutoRouting(ctx.organizationId);
     const response = await preview(payload);
-    expect([400, 413]).toContain(response.statusCode);
+    expect(response.statusCode, response.body).toBe(400);
+    expect(jevStates).toEqual([]);
+  });
+
+  test("rejects request previews above the body limit before scoring", async () => {
+    await configureAutoRouting(ctx.organizationId);
+    const response = await preview({
+      request: { input: "x".repeat(256 * 1024) },
+    });
+    expect(response.statusCode, response.body).toBe(413);
     expect(jevStates).toEqual([]);
   });
 

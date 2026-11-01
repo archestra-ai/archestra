@@ -157,7 +157,7 @@ export async function resolveAutoModel(params: {
     firstUserMessage: text,
     contextFingerprint: sessionId
       ? undefined
-      : scoringContextFingerprint(scoringContext(body)),
+      : scoringContextFingerprint(scoringContext(body, { openingOnly: true })),
   });
   const decided = await sessionDecision({
     organizationId: auth.organizationId,

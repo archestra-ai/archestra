@@ -2,6 +2,34 @@ import { describe, expect, test } from "vitest";
 import { scoringContext, scoringContextFingerprint } from "./scoring-context";
 
 describe("scoringContext", () => {
+  test.each([
+    "messages",
+    "input",
+  ])("opening context ignores later instructions in %s", (field) => {
+    const opening = [
+      { role: "system", content: "Review migrations." },
+      { role: "developer", content: "Check locking." },
+      { role: "user", content: "Review this change." },
+    ];
+    const before = { [field]: opening, tools: [{ name: "read_file" }] };
+    const after = {
+      ...before,
+      [field]: [
+        ...opening,
+        { role: "assistant", content: "Checking." },
+        { role: "system", content: "Compaction note." },
+        { role: "developer", content: "Focus on the new diff." },
+        { role: "user", content: "Continue." },
+      ],
+    };
+    const context = scoringContext(after, { openingOnly: true });
+    expect(context.systemPrompt).toBe("Review migrations.\n\nCheck locking.");
+    expect(scoringContextFingerprint(context)).toBe(
+      scoringContextFingerprint(scoringContext(before, { openingOnly: true })),
+    );
+    // Scorer context is still the complete context actually sent on this request.
+    expect(scoringContext(after).systemPrompt).toContain("Compaction note.");
+  });
   test("fingerprints instructions and the complete tool-name set, independent of ordering and cache metadata", () => {
     const first = scoringContext({
       system: "Review migrations.",

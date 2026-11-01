@@ -3,7 +3,7 @@ title: Auto Routing
 description: Let Archestra pick a fast, normal, or smart model for each session of agents and chats on the organization default, and of apps
 order: 6
 alpha: "Set [`ARCHESTRA_AUTO_ROUTING_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_ENABLED) to turn it on."
-lastUpdated: 2026-11-01
+lastUpdated: 2026-11-02
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -35,13 +35,13 @@ What to know:
 
 ## How Sessions Are Routed
 
-A session is routed once, on its first request, and keeps that model for its whole life.
+A session with an explicit session ID is routed once, on its first request, and keeps that model for its whole life. Without one, Archestra infers identity from the opening context; changing that context can trigger a new choice.
 
 The scorer assesses the opening user message with a bounded excerpt of the request's system instructions and the full sorted list of tool names. It does not receive tool descriptions, parameter schemas or tool results. If tool names alone exceed 64 KiB, scoring fails instead of silently omitting tools.
 
 Under **Try a prompt**, turn on **Use request JSON** to preview an opening request body copied from LLM Logs, including its system instructions and tools. Text-only previews omit that context. A preview makes a fresh choice under the current plan; it does not replay the session's saved choice or execute the request, and scorer calls are billed.
 
-- **Session identity:** the session id if the client sends one. Otherwise the virtual key plus the first user message and a fingerprint of system instructions and tool names. Identical openings share a model only when this context also matches; tool ordering and cache markers do not change the fingerprint.
+- **Session identity:** the session id if the client sends one. Otherwise the virtual key plus the first user message, initial system instructions and current tool names. Instructions added after the first user message, tool ordering and cache markers do not change this identity. Changing the initial instructions or tool-name list can trigger another scorer call and model choice; send a stable session ID to preserve the choice across those changes.
 - **Budget:** the daily budget is an average target, not a cap. Spend on a given day can go above or below it. Hard caps come from [limits](/docs/llm-proxy/costs-and-limits/limits).
 - **Plans:** a background job builds a routing plan from past sessions. Changing the settings or the default models triggers a new plan within about a minute, and every organization is re-planned at least daily. Each plan is versioned.
 

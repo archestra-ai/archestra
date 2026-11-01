@@ -596,6 +596,67 @@ describe("Model Router auto model", () => {
     expect(await decisions(org.organizationId)).toHaveLength(3);
   });
 
+  test.each(
+    ENDPOINTS,
+  )("$ingress unnamed conversations keep their decision after later system/developer messages", async ({
+    ingress,
+    path,
+  }, { makeOrganization, makeSecret, makeLlmProviderApiKey }) => {
+    const org = await setupOrganization({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    await publishPlan(org);
+    const opening = [
+      { role: "system", content: "Review migrations." },
+      { role: "user", content: PROMPT },
+    ];
+    const extra = {
+      tools: [
+        ingress === "chat"
+          ? {
+              type: "function",
+              function: {
+                name: "read_file",
+                parameters: { type: "object", properties: {} },
+              },
+            }
+          : {
+              type: "function",
+              name: "read_file",
+              parameters: { type: "object", properties: {} },
+            },
+      ],
+    };
+    const first = await send(org, {
+      ingress,
+      path,
+      session: null,
+      messages: opening,
+      extra,
+    });
+    expect(first.statusCode, first.body).toBe(200);
+    const [initial] = await decisions(org.organizationId);
+    const next = await send(org, {
+      ingress,
+      path,
+      session: null,
+      extra,
+      messages: [
+        ...opening,
+        { role: "assistant", content: "Checking the migration." },
+        { role: "system", content: "Compaction note." },
+        { role: "developer", content: "Focus on the new diff." },
+        { role: "user", content: "Continue." },
+      ],
+    });
+    expect(next.statusCode, next.body).toBe(200);
+    expect(jevCalls).toBe(1);
+    expect(await decisions(org.organizationId)).toEqual([initial]);
+    expect(upstreamModels).toEqual([org.trio[2].modelId, org.trio[2].modelId]);
+  });
+
   test("a Responses continuation without a session id is refused before routing", async ({
     makeOrganization,
     makeSecret,

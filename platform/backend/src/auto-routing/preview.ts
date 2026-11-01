@@ -21,23 +21,28 @@ export async function previewAutoRouting(
   params: AutoRoutingPreviewBody & { organizationId: string },
 ): Promise<AutoRoutingPreviewResponse> {
   const { organizationId } = params;
-  const text =
+  const source =
     "request" in params
-      ? firstUserText(
-          params.request.input !== undefined ? "responses" : "chat_completions",
-          params.request,
-        )
-      : params.text;
-  if (text === null) {
+      ? {
+          firstUserText: firstUserText(
+            params.request.input !== undefined
+              ? "responses"
+              : "chat_completions",
+            params.request,
+          ),
+          client: params.client ?? null,
+          ...scoringContext(params.request),
+        }
+      : { firstUserText: params.text, client: null };
+  if (source.firstUserText === null) {
     throw new ApiError(
       400,
       "The request must contain an opening user message with text.",
     );
   }
   const input: PreRunInput = {
-    firstUserText: text,
-    client: "request" in params ? (params.client ?? null) : null,
-    ...("request" in params ? scoringContext(params.request) : {}),
+    ...source,
+    firstUserText: source.firstUserText,
   };
   const loaded = await loadTrio(await loadAutoRoutingSettings(organizationId));
   if (loaded.kind === "missing") {

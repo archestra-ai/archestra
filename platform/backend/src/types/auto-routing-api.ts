@@ -151,7 +151,7 @@ export const AutoRoutingPreviewBodySchema = z.union([
       .describe(
         "An opening Chat Completions, Responses or Anthropic Messages request body. Only its opening user text, system instructions and tool metadata are scored; the request is not executed.",
       ),
-    client: z.string().min(1).max(256).optional(),
+    client: z.string().trim().min(1).max(256).optional(),
   }),
 ]);
 export type AutoRoutingPreviewBody = z.infer<

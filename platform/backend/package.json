@@ -11,7 +11,8 @@
     "dist",
     "scripts",
     "drizzle.config.ts",
-    "src/database/migrations"
+    "src/database/migrations",
+    "!src/database/migrations/meta/*_snapshot.json"
   ],
   "scripts": {
     "build": "tsdown && pnpm run sentry:sourcemaps",

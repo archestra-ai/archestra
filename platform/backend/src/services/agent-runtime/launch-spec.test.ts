@@ -233,8 +233,13 @@ describe("buildAgentRunLaunchSpec", () => {
       limits: resolveAgentRunLimits({ runtime: sized, tiers: TIERS }),
       runtime: {
         ...sized,
-        // Reserved: the Agent cannot claim another size.
-        environment: [{ key: "ARCHESTRA_AGENT_RUNTIME_MAX_TIER", value: "S" }],
+        // Reserved: the Agent cannot claim another size. A toolchain thread
+        // count is the Agent's to change.
+        environment: [
+          { key: "ARCHESTRA_AGENT_RUNTIME_MAX_TIER", value: "S" },
+          { key: "ARCHESTRA_AGENT_RUNTIME_POD_CPUS", value: "64" },
+          { key: "CARGO_BUILD_JOBS", value: "1" },
+        ],
       },
       taskId: crypto.randomUUID(),
       runId: crypto.randomUUID(),
@@ -254,8 +259,17 @@ describe("buildAgentRunLaunchSpec", () => {
       ARCHESTRA_AGENT_RUNTIME_TIER: "M",
       ARCHESTRA_AGENT_RUNTIME_MAX_TIER: "L",
       ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "4",
+      ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_REQUEST: "8Gi",
       ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "16Gi",
+      ARCHESTRA_AGENT_RUNTIME_POD_CPUS: "4",
+      GOMAXPROCS: "4",
+      RAYON_NUM_THREADS: "4",
+      CARGO_BUILD_JOBS: "1",
+      ARCHESTRA_AGENT_RUNTIME_SIZED_ENV: "GOMAXPROCS,RAYON_NUM_THREADS",
     });
+    expect(spec.env).not.toHaveProperty(
+      "ARCHESTRA_AGENT_RUNTIME_POD_CPU_LIMIT",
+    );
     expect(spec.resources).toEqual({
       cpuRequest: "4",
       memoryRequest: "8Gi",
@@ -381,6 +395,33 @@ describe("buildAgentRunLaunchSpec", () => {
     expect(spec.systemPromptParts?.afterVolume).toContain(fixedNote);
     expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toMatch(
       /The workspace volume is 20 GiB in all, including any Docker data\.[\s\S]*Scaling up this agent runtime instance is disabled/,
+    );
+
+    const sRunSpec = await buildAgentRunLaunchSpec({
+      limits: resolveAgentRunLimits({
+        tiers: TIERS,
+        runtime: runtime(setup.agent, "openai_responses"),
+        requested: { tier: "S" },
+      }),
+      runtime: runtime(setup.agent, "openai_responses"),
+      taskId: crypto.randomUUID(),
+      runId: crypto.randomUUID(),
+      agentId: setup.agent.id,
+      actor: {
+        id: setup.user.id,
+        kind: "user",
+        organizationId: setup.agent.organizationId,
+      },
+      organizationId: setup.agent.organizationId,
+      runtimeScope: "agent-tests",
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      appName: "Example AI",
+      runMode: "one_shot",
+    });
+    expect(
+      sRunSpec.spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT,
+    ).toContain(
+      "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). You cannot scale up this instance; do not attempt to start a run at a larger tier.",
     );
 
     expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(

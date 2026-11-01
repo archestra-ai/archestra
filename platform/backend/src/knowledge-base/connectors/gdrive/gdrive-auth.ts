@@ -1,5 +1,9 @@
-import type { admin_directory_v1, drive_v3 } from "googleapis";
-import { google } from "googleapis";
+import { GoogleAuth, OAuth2Client } from "google-auth-library";
+// One API version per import: the package root loads all 300-odd Google APIs,
+// about 100 MB of memory in the server and 150 MB of declarations in every
+// type check.
+import { admin_directory_v1 } from "googleapis/build/src/apis/admin/directory_v1.js";
+import { drive_v3 } from "googleapis/build/src/apis/drive/v3.js";
 import type { ConnectorCredentials, GoogleDriveConfig } from "@/types";
 
 /**
@@ -145,7 +149,7 @@ export function resolveGoogleDriveAuth(params: {
 }
 
 export function buildDriveClient(auth: GoogleDriveAuth): drive_v3.Drive {
-  return google.drive({ version: "v3", auth: buildAuthClient(auth) });
+  return new drive_v3.Drive({ auth: buildAuthClient(auth) });
 }
 
 /**
@@ -161,12 +165,12 @@ export function buildAdminDirectoryClient(
       "Reading the Workspace directory requires a service account with domain-wide delegation.",
     );
   }
-  const client = new google.auth.GoogleAuth({
+  const client = new GoogleAuth({
     credentials: auth.key,
     scopes: [ADMIN_DIRECTORY_USER_READONLY_SCOPE],
     clientOptions: { subject: auth.subject },
   });
-  return google.admin({ version: "directory_v1", auth: client });
+  return new admin_directory_v1.Admin({ auth: client });
 }
 
 /**
@@ -225,7 +229,7 @@ export function describeGoogleAuthFailure(params: {
 function buildAuthClient(auth: GoogleDriveAuth) {
   switch (auth.kind) {
     case "service_account":
-      return new google.auth.GoogleAuth({
+      return new GoogleAuth({
         credentials: auth.key,
         scopes: [DRIVE_READONLY_SCOPE],
         // Domain-wide delegation: the token is minted for this user rather
@@ -234,7 +238,7 @@ function buildAuthClient(auth: GoogleDriveAuth) {
       });
 
     case "oauth": {
-      const client = new google.auth.OAuth2(auth.clientId, auth.clientSecret);
+      const client = new OAuth2Client(auth.clientId, auth.clientSecret);
       // Only the refresh token is set: google-auth-library mints an access
       // token on the first call and again whenever the current one expires, so
       // a long sync cannot die halfway through on an expired token.
@@ -243,7 +247,7 @@ function buildAuthClient(auth: GoogleDriveAuth) {
     }
 
     case "legacy_access_token": {
-      const client = new google.auth.OAuth2();
+      const client = new OAuth2Client();
       client.setCredentials({ access_token: auth.accessToken });
       return client;
     }

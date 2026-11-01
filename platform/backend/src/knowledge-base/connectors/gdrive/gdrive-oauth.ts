@@ -1,5 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { google } from "googleapis";
+import { OAuth2Client } from "google-auth-library";
+import { drive_v3 } from "googleapis/build/src/apis/drive/v3.js";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { GOOGLE_DRIVE_OAUTH_CALLBACK_PATH } from "@/routes/route-paths";
@@ -55,7 +56,7 @@ export function buildGoogleDriveAuthorizationUrl(
     );
   }
 
-  const oauth2 = new google.auth.OAuth2(
+  const oauth2 = new OAuth2Client(
     client.clientId,
     client.clientSecret,
     getGoogleDriveOAuthRedirectUri(),
@@ -93,7 +94,7 @@ export async function exchangeGoogleDriveAuthorizationCode(
     throw new Error("No Google OAuth client is configured on this deployment.");
   }
 
-  const oauth2 = new google.auth.OAuth2(
+  const oauth2 = new OAuth2Client(
     client.clientId,
     client.clientSecret,
     getGoogleDriveOAuthRedirectUri(),
@@ -109,7 +110,7 @@ export async function exchangeGoogleDriveAuthorizationCode(
   oauth2.setCredentials(tokens);
   let accountEmail: string | null = null;
   try {
-    const drive = google.drive({ version: "v3", auth: oauth2 });
+    const drive = new drive_v3.Drive({ auth: oauth2 });
     const about = await drive.about.get({ fields: "user(emailAddress)" });
     accountEmail = about.data.user?.emailAddress ?? null;
   } catch {

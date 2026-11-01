@@ -397,6 +397,112 @@ test.for([
   ).toHaveLength(1);
 });
 
+test.for([
+  { minutesLeft: 5, continues: false },
+  { minutesLeft: 10, continues: true },
+  { minutesLeft: 15, continues: true },
+])("a finished run with $minutesLeft min of retention left takes a new turn: $continues", async ({
+  minutesLeft,
+  continues,
+}) => {
+  const previous = await retainedRun();
+  const workspace = await AgentWorkspaceModel.findById(previous.taskId);
+  if (!workspace) throw new Error("Missing workspace fixture");
+  vi.useFakeTimers({ toFake: ["Date"] });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+  vi.setSystemTime(workspace.expiresAt.getTime() - minutesLeft * 60_000);
+  const status = await executeArchestraTool(
+    TOOL_GET_AGENT_RUN_FULL_NAME,
+    { run_id: previous.taskId },
+    context,
+  );
+  expect(status.structuredContent).toMatchObject({
+    workspace: continues
+      ? { can_continue: true, continuation_error: null }
+      : {
+          can_continue: false,
+          continuation_error: expect.stringContaining(
+            "cannot take another turn",
+          ),
+        },
+  });
+  if (continues) return;
+  const continuation = vi.spyOn(backend, "continueRun");
+  const result = await executeArchestraTool(
+    TOOL_STEER_AGENT_RUN_FULL_NAME,
+    { run_id: previous.taskId, message: "Review the new commits" },
+    context,
+  );
+  expect(result.isError).toBe(true);
+  expect(JSON.stringify(result.content)).toContain("cannot take another turn");
+  expect(JSON.stringify(result.content)).toContain("No new turn was started");
+  expect(continuation).not.toHaveBeenCalled();
+  expect(
+    (
+      await A2ATaskModel.listForActor({
+        actorKind: "user",
+        actorId: userId,
+        agentIds: [agent.id],
+        pageSize: 100,
+      })
+    ).tasks,
+  ).toHaveLength(1);
+});
+
+test("a live turn close to the retention deadline still takes steering", async () => {
+  const previous = await retainedRun();
+  const previousTask = await A2ATaskModel.findById(previous.taskId);
+  if (!previousTask) throw new Error("Missing task fixture");
+  const currentTask = await A2ATaskModel.create({
+    contextId: previousTask.contextId,
+    agentId: agent.id,
+    state: "TASK_STATE_WORKING",
+  });
+  await AgentRunModel.create({
+    organizationId: agent.organizationId,
+    agentId: agent.id,
+    taskId: currentTask.id,
+    actorKind: "user",
+    actorId: userId,
+    actorUserId: userId,
+    workloadName: previous.workloadName,
+    backend: "kubernetes",
+    runtimeScope: previous.runtimeScope,
+  });
+  await AgentWorkspaceModel.claim({
+    id: previous.taskId,
+    organizationId: agent.organizationId,
+    actorKind: "user",
+    actorId: userId,
+    agentId: agent.id,
+    taskId: currentTask.id,
+  });
+  vi.useFakeTimers({ toFake: ["Date"] });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+  vi.setSystemTime(Date.now() + 3600_000 - 2 * 60_000);
+  const status = await executeArchestraTool(
+    TOOL_GET_AGENT_RUN_FULL_NAME,
+    { run_id: previous.taskId },
+    context,
+  );
+  expect(status.structuredContent).toMatchObject({
+    run: { state: "working" },
+    workspace: { can_continue: true, continuation_error: null },
+  });
+  const steer = vi.spyOn(backend, "steer").mockResolvedValue();
+  const result = await executeArchestraTool(
+    TOOL_STEER_AGENT_RUN_FULL_NAME,
+    { run_id: previous.taskId, message: "Write the result file now" },
+    context,
+  );
+  expect(result.structuredContent).toMatchObject({ status: "steered" });
+  expect(steer).toHaveBeenCalledOnce();
+});
+
 test("steering rejects literal NUL characters with an actionable error before delivery", async () => {
   const previous = await retainedRun();
   const steer = vi.spyOn(backend, "steer");

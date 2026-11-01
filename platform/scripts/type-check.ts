@@ -13,12 +13,18 @@
  * whole pod would hold its memory several times over. The turn is a kernel
  * file lock (`flock`, from util-linux on Linux), which the kernel releases when
  * the compiler exits however it exits. Without `flock` they run at once.
+ *
+ * When the kernel kills the compiler for memory anyway, the shell would only
+ * say "Killed". The cgroup's counters, read before and after, say it was
+ * memory, and the runner prints the limit, the peak and what to change.
  */
 import { spawnSync } from "node:child_process";
-import { tmpdir } from "node:os";
+import { constants, tmpdir } from "node:os";
 import path from "node:path";
 import {
+  describeToolMemoryKill,
   detectResourceEnvelope,
+  readCgroupMemory,
   typeScriptCheckers,
 } from "../vitest.resources.ts";
 
@@ -41,16 +47,51 @@ const command =
         ...tscArgs,
       ]
     : ["tsc", ...tscArgs];
+const memoryBefore = readCgroupMemory();
 const result = spawnSync(command[0], command.slice(1), {
   stdio: "inherit",
   shell: process.platform === "win32",
 });
 if (result.error) throw result.error;
-process.exit(result.status ?? 1);
+// flock exits 128 + the signal when the compiler it ran was killed by one.
+const status =
+  result.status ?? (result.signal ? 128 + constants.signals[result.signal] : 1);
+if (status !== 0) {
+  const checkers = checkerCount(tscArgs);
+  const report = describeToolMemoryKill({
+    tool: "type-check",
+    subject: "tsc",
+    subjectKilled: status === 128 + constants.signals.SIGKILL,
+    before: memoryBefore,
+    after: readCgroupMemory(),
+    steps:
+      checkers > 1
+        ? [
+            `Give the compiler one checker: add --checkers 1 (this run had ${checkers}). Each checker holds its own copy of the program's types.`,
+          ]
+        : [],
+  });
+  if (report) process.stderr.write(`\n${report}\n`);
+}
+process.exit(status);
 
 // ===== Internal helpers =====
 
 function hasFlock(): boolean {
   if (process.platform !== "linux") return false;
   return spawnSync("flock", ["--version"], { stdio: "ignore" }).status === 0;
+}
+
+/** The checkers tsc ran with: its `--checkers`, one when single-threaded, else its default of four. */
+function checkerCount(tscArgs: string[]): number {
+  if (tscArgs.includes("--singleThreaded")) return 1;
+  for (const [index, arg] of tscArgs.entries()) {
+    const value = arg.startsWith("--checkers=")
+      ? arg.slice("--checkers=".length)
+      : arg === "--checkers"
+        ? tscArgs[index + 1]
+        : undefined;
+    if (value !== undefined && /^\d+$/.test(value)) return Number(value);
+  }
+  return 4;
 }

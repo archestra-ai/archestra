@@ -10,7 +10,30 @@
   },
   "overrides": [
     {
-      "includes": ["src/**/*.test.ts", "!src/**/*.ee.test.ts"],
+      "includes": [
+        "src/**/*.ee.ts",
+        "!src/**/*.ee.test.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "googleapis": "Import one API module, such as googleapis/build/src/apis/drive/v3.js, and auth classes from google-auth-library: the package root loads every Google API, about 100 MB in the server and 150 MB of declarations in each type check."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/**/*.test.ts",
+        "!src/**/*.ee.test.ts"
+      ],
       "linter": {
         "rules": {
           "style": {
@@ -20,13 +43,20 @@
                 "paths": {
                   "@/server": "Tests should import the small Fastify factory module, not the server entry point.",
                   "@/test": {
-                    "importNames": ["useRouteTestApp"],
+                    "importNames": [
+                      "useRouteTestApp"
+                    ],
                     "message": "Import useRouteTestApp directly from @/test/route-test-app."
-                  }
+                  },
+                  "googleapis": "Import one API module, such as googleapis/build/src/apis/drive/v3.js, and auth classes from google-auth-library: the package root loads every Google API, about 100 MB in the server and 150 MB of declarations in each type check."
                 },
                 "patterns": [
                   {
-                    "group": ["**/*.ee", "**/*.ee.ts", "**/*.ee.tsx"],
+                    "group": [
+                      "**/*.ee",
+                      "**/*.ee.ts",
+                      "**/*.ee.tsx"
+                    ],
                     "message": "Cannot import .ee.ts files from non-.ee.ts files. Enterprise Edition files should only be imported by other .ee.ts files. Use runtime conditional logic with config.enterpriseFeatures.core instead to avoid bundling enterprise code into OSS builds."
                   }
                 ]
@@ -37,7 +67,9 @@
       }
     },
     {
-      "includes": ["src/**/*.ee.test.ts"],
+      "includes": [
+        "src/**/*.ee.test.ts"
+      ],
       "linter": {
         "rules": {
           "style": {
@@ -47,9 +79,12 @@
                 "paths": {
                   "@/server": "Tests should import the small Fastify factory module, not the server entry point.",
                   "@/test": {
-                    "importNames": ["useRouteTestApp"],
+                    "importNames": [
+                      "useRouteTestApp"
+                    ],
                     "message": "Import useRouteTestApp directly from @/test/route-test-app."
-                  }
+                  },
+                  "googleapis": "Import one API module, such as googleapis/build/src/apis/drive/v3.js, and auth classes from google-auth-library: the package root loads every Google API, about 100 MB in the server and 150 MB of declarations in each type check."
                 }
               }
             }
@@ -58,7 +93,9 @@
       }
     },
     {
-      "includes": ["src/**/*.unit.test.ts"],
+      "includes": [
+        "src/**/*.unit.test.ts"
+      ],
       "linter": {
         "rules": {
           "style": {
@@ -71,15 +108,23 @@
                   "@/server": "Database-free unit tests must not load the server entry point.",
                   "@/models": "Database-free unit tests must not load models.",
                   "@/database": "Database-free unit tests must not load the database.",
-                  "@archestra/shared": "Import from a focused @archestra/shared subpath so unit tests do not load the shared root barrel."
+                  "@archestra/shared": "Import from a focused @archestra/shared subpath so unit tests do not load the shared root barrel.",
+                  "googleapis": "Import one API module, such as googleapis/build/src/apis/drive/v3.js, and auth classes from google-auth-library: the package root loads every Google API, about 100 MB in the server and 150 MB of declarations in each type check."
                 },
                 "patterns": [
                   {
-                    "group": ["@/models/**", "@/database/**"],
+                    "group": [
+                      "@/models/**",
+                      "@/database/**"
+                    ],
                     "message": "Database-free unit tests must not load models or database modules."
                   },
                   {
-                    "group": ["**/*.ee", "**/*.ee.ts", "**/*.ee.tsx"],
+                    "group": [
+                      "**/*.ee",
+                      "**/*.ee.ts",
+                      "**/*.ee.tsx"
+                    ],
                     "message": "Cannot import .ee.ts files from non-.ee.ts files. Enterprise Edition files should only be imported by other .ee.ts files. Use runtime conditional logic with config.enterpriseFeatures.core instead to avoid bundling enterprise code into OSS builds."
                   }
                 ]
@@ -90,7 +135,9 @@
       }
     },
     {
-      "includes": ["src/test/index.ts"],
+      "includes": [
+        "src/test/index.ts"
+      ],
       "linter": {
         "rules": {
           "style": {
@@ -99,11 +146,16 @@
               "options": {
                 "paths": {
                   "./route-test-app": "Keep route test helpers out of the general @/test barrel.",
-                  "./route-test-app.ts": "Keep route test helpers out of the general @/test barrel."
+                  "./route-test-app.ts": "Keep route test helpers out of the general @/test barrel.",
+                  "googleapis": "Import one API module, such as googleapis/build/src/apis/drive/v3.js, and auth classes from google-auth-library: the package root loads every Google API, about 100 MB in the server and 150 MB of declarations in each type check."
                 },
                 "patterns": [
                   {
-                    "group": ["**/*.ee", "**/*.ee.ts", "**/*.ee.tsx"],
+                    "group": [
+                      "**/*.ee",
+                      "**/*.ee.ts",
+                      "**/*.ee.tsx"
+                    ],
                     "message": "Cannot import .ee.ts files from non-.ee.ts files. Enterprise Edition files should only be imported by other .ee.ts files. Use runtime conditional logic with config.enterpriseFeatures.core instead to avoid bundling enterprise code into OSS builds."
                   }
                 ]

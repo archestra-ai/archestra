@@ -32,10 +32,11 @@ import {
   describeToolMemoryKill,
   detectResourceEnvelope,
   readCgroupMemory,
+  TYPE_CHECK_PEAK_BYTES,
   typeScriptCheckers,
   typeScriptMemorySettings,
 } from "../vitest.resources.ts";
-import { runHeavy, TYPE_CHECK_PEAK_BYTES } from "./heavy-lane.ts";
+import { runHeavy } from "./heavy-lane.ts";
 
 const args = process.argv.slice(2);
 const envelope = detectResourceEnvelope();

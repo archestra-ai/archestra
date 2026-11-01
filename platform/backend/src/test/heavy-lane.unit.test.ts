@@ -14,9 +14,8 @@ import {
   heavyLaneActive,
   heavyLaneCeilings,
   pausesServers,
-  runHeavy,
-} from "../../../scripts/heavy-lane";
-import { resourceEnvelope } from "../../../vitest.resources";
+  resourceEnvelope,
+} from "../../../vitest.resources";
 
 // scripts/heavy-lane.ts, as a module and as the command line the package
 // scripts and dev-lite.sh call, against fake commands that log what they do.
@@ -67,10 +66,15 @@ describe("heavy lane", () => {
     "heavy commands started together run one at a time, and a waiter says for whom",
     async () => {
       const { log, env } = scratch();
-      const runs = ["first", "second", "third"].map((name) =>
-        runCli(env, ["--label", name, "--", "sh", "-c", logged(log, name)]),
+      const run = (name: string) =>
+        runCli(env, ["--label", name, "--", "sh", "-c", logged(log, name)]);
+      // The first holds the lane before the others start, so they must wait.
+      const first = run("first");
+      await waitFor(
+        () =>
+          existsSync(log) && readFileSync(log, "utf8").includes("start first"),
       );
-      const results = await Promise.all(runs);
+      const results = await Promise.all([first, run("second"), run("third")]);
       expect(results.map((result) => result.status)).toEqual([0, 0, 0]);
       const lines = readFileSync(log, "utf8").trim().split("\n");
       expect(lines).toHaveLength(6);
@@ -79,9 +83,10 @@ describe("heavy lane", () => {
         expect(lines[i + 1]).toBe(`end ${name}`);
       }
       const waits = results
+        .slice(1)
         .map((result) => result.stderr)
         .filter((stderr) => stderr.includes("waits for"));
-      expect(waits.length).toBeGreaterThan(0);
+      expect(waits).toHaveLength(2);
       expect(results.map((result) => result.stderr).join("")).not.toContain(
         "Warning",
       );
@@ -113,17 +118,18 @@ describe("heavy lane", () => {
 
   test.skipIf(!hasFlock)(
     "a command too big to fit beside the servers has them paused, and resumed when it ends",
-    () => {
+    async () => {
       const { log, env, devLite, paused } = scratch();
-      const result = runHeavy({
-        command: "sh",
-        args: ["-c", `echo command >> ${log}; exit 3`],
-        label: "type-check (frontend)",
-        peakBytes: 2.8 * GIB,
-        env,
-        devLiteScript: devLite,
-      });
+      const result = await runCli(env, [
+        ...bigCommand(devLite),
+        "sh",
+        "-c",
+        `echo command >> ${log}; exit 3`,
+      ]);
       expect(result.status).toBe(3);
+      expect(result.stderr).toContain(
+        "heavy-lane: stopped the dev stack's backend and frontend while type-check (frontend) runs: it needs about 2.8 GiB, and beside them this pod has 1.8 GiB for it.",
+      );
       expect(readFileSync(log, "utf8").trim().split("\n")).toEqual([
         "pause",
         "command",
@@ -135,26 +141,28 @@ describe("heavy lane", () => {
 
   test.skipIf(!hasFlock)(
     "a command that fits, or a stack someone else paused, leaves the servers alone",
-    () => {
+    async () => {
       const { log, env, devLite, paused } = scratch();
-      const small = runHeavy({
-        command: "sh",
-        args: ["-c", `echo small >> ${log}`],
-        label: "knip (shared)",
-        peakBytes: 0.7 * GIB,
-        env,
-        devLiteScript: devLite,
-      });
+      const small = await runCli(env, [
+        "--label",
+        "knip (shared)",
+        "--peak-gib",
+        "0.7",
+        "--dev-lite",
+        devLite,
+        "--",
+        "sh",
+        "-c",
+        `echo small >> ${log}`,
+      ]);
       expect(small.status).toBe(0);
       writeFileSync(paused, "");
-      const big = runHeavy({
-        command: "sh",
-        args: ["-c", `echo big >> ${log}`],
-        label: "type-check (frontend)",
-        peakBytes: 2.8 * GIB,
-        env,
-        devLiteScript: devLite,
-      });
+      const big = await runCli(env, [
+        ...bigCommand(devLite),
+        "sh",
+        "-c",
+        `echo big >> ${log}`,
+      ]);
       expect(big.status).toBe(0);
       expect(readFileSync(log, "utf8").trim().split("\n")).toEqual([
         "small",
@@ -164,17 +172,15 @@ describe("heavy lane", () => {
     },
   );
 
-  test("without the lane the command runs directly", () => {
+  test("outside a small container the command runs directly", async () => {
     const { log, env, devLite } = scratch();
-    const result = runHeavy({
-      command: "sh",
-      args: ["-c", `echo direct >> ${log}`],
-      label: "type-check (frontend)",
-      peakBytes: 2.8 * GIB,
-      env,
-      lane: false,
-      devLiteScript: devLite,
-    });
+    delete env.ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT;
+    const result = await runCli(env, [
+      ...bigCommand(devLite),
+      "sh",
+      "-c",
+      `echo direct >> ${log}`,
+    ]);
     expect(result.status).toBe(0);
     expect(readFileSync(log, "utf8").trim()).toBe("direct");
   });
@@ -222,9 +228,28 @@ describe("heavy lane", () => {
     return { log, env, devLite, paused };
   }
 
+  /** The lane options of the frontend's type check, with the fake dev stack. */
+  function bigCommand(devLite: string): string[] {
+    return [
+      "--label",
+      "type-check (frontend)",
+      "--peak-gib",
+      "2.8",
+      "--dev-lite",
+      devLite,
+      "--",
+    ];
+  }
+
   /** A shell line that logs its start, holds the lane a moment, and logs its end. */
   function logged(log: string, name: string): string {
-    return `echo "start ${name}" >> ${log}; sleep 0.4; echo "end ${name}" >> ${log}`;
+    return `echo "start ${name}" >> ${log}; sleep 0.6; echo "end ${name}" >> ${log}`;
+  }
+
+  async function waitFor(condition: () => boolean): Promise<void> {
+    for (let i = 0; i < 200 && !condition(); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
   }
 
   function runCli(

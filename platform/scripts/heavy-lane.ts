@@ -21,12 +21,11 @@
  * its own heavy commands directly (`check:commit` running `type-check`), so the
  * lane never waits for itself.
  *
- * The ceilings are the 4 GiB budget measured in staging pods: per pod 1.12 GiB
- * for the runtime, the agent's harness, kernel memory, a page-cache floor and a
- * margin; PostgreSQL 0.2; the backend and frontend servers 0.85 after use.
+ * The ceilings (`heavyLaneCeilings` in vitest.resources.ts) are the 4 GiB
+ * budget measured in staging pods.
  *
  *   node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/heavy-lane.ts \
- *     [--label <text>] [--peak-gib <n>] -- <command> [args...]
+ *     [--label <text>] [--peak-gib <n>] [--dev-lite <script>] -- <command> [args...]
  *
  * (Node 24 strips the types; the flag silences its note that platform/ has no
  * package type.)
@@ -38,11 +37,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   detectResourceEnvelope,
-  type ResourceEnvelope,
+  heavyLaneActive,
+  heavyLaneCeilings,
+  pausesServers,
 } from "../vitest.resources.ts";
 
 /** Set for every command the lane runs; nested heavy commands run directly. */
-export const HEAVY_LANE_HELD_ENV = "ARCHESTRA_HEAVY_LANE";
+const HEAVY_LANE_HELD_ENV = "ARCHESTRA_HEAVY_LANE";
 
 export interface HeavyCommand {
   command: string;
@@ -55,52 +56,8 @@ export interface HeavyCommand {
   cwd?: string;
   /** Run through the lane. Default: whether the envelope is small (`heavyLaneActive`). */
   lane?: boolean;
-  /** The dev stack script whose `pause` and `resume` make room (tests pass a fake). */
+  /** The dev stack script whose `pause` and `resume` make room (default `scripts/dev-lite.sh`). */
   devLiteScript?: string;
-}
-
-/**
- * The peak a package's type check declares, wrappers included, measured at one
- * checker in a 4 GiB pod; unknown packages declare none and never pause the
- * servers.
- */
-export const TYPE_CHECK_PEAK_BYTES: Readonly<Record<string, number>> = {
-  backend: 5.6 * 1024 ** 3,
-  frontend: 2.8 * 1024 ** 3,
-  shared: 0.7 * 1024 ** 3,
-  "e2e-tests": 0.8 * 1024 ** 3,
-};
-
-/** Whether heavy commands take turns: in a container below 16 GiB. */
-export function heavyLaneActive(envelope: ResourceEnvelope): boolean {
-  return (
-    envelope.constrained && envelope.totalMemoryBytes < HEAVY_LANE_BELOW_BYTES
-  );
-}
-
-/**
- * The memory one heavy command can have: beside the dev stack's servers, and
- * with them paused (PostgreSQL keeps running).
- */
-export function heavyLaneCeilings(envelope: ResourceEnvelope): {
-  besideServersBytes: number;
-  serversPausedBytes: number;
-} {
-  const pausedBytes =
-    envelope.totalMemoryBytes - POD_FIXED_BYTES - DEV_STACK_DATABASE_BYTES;
-  return {
-    besideServersBytes: pausedBytes - DEV_STACK_SERVERS_BYTES,
-    serversPausedBytes: pausedBytes,
-  };
-}
-
-/** Whether a command of this peak has the servers paused while it runs. */
-export function pausesServers(
-  envelope: ResourceEnvelope,
-  peakBytes: number | undefined,
-): boolean {
-  if (peakBytes === undefined || !heavyLaneActive(envelope)) return false;
-  return peakBytes > heavyLaneCeilings(envelope).besideServersBytes;
 }
 
 /**
@@ -158,10 +115,6 @@ export function runHeavy(heavy: HeavyCommand): SpawnSyncReturns<Buffer> {
 // ===== Internal helpers =====
 
 const GIB = 1024 ** 3;
-const HEAVY_LANE_BELOW_BYTES = 16 * GIB;
-const POD_FIXED_BYTES = 1.12 * GIB;
-const DEV_STACK_DATABASE_BYTES = 0.2 * GIB;
-const DEV_STACK_SERVERS_BYTES = 0.85 * GIB;
 const DEV_LITE_SCRIPT = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "dev-lite.sh",
@@ -263,7 +216,7 @@ if (
     separator === -1 ? argv : argv.slice(separator + 1);
   if (!command) {
     process.stderr.write(
-      "usage: node scripts/heavy-lane.ts [--label <text>] [--peak-gib <n>] -- <command> [args...]\n",
+      "usage: node scripts/heavy-lane.ts [--label <text>] [--peak-gib <n>] [--dev-lite <script>] -- <command> [args...]\n",
     );
     process.exit(64);
   }
@@ -277,6 +230,7 @@ if (
     args,
     label: flag("--label") ?? path.basename(command),
     peakBytes: Number.isFinite(peak) && peak > 0 ? peak * GIB : undefined,
+    devLiteScript: flag("--dev-lite"),
   });
   if (result.error) throw result.error;
   process.exit(

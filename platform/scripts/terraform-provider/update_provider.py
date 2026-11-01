@@ -15,6 +15,8 @@ import shutil
 import subprocess
 import tempfile
 
+from release_version import release_version
+
 BRANCH = "automation/platform-api"
 REPOSITORY = "archestra-ai/terraform-provider-archestra"
 CLIENTS = ("internal/client/archestra_client.go", "internal/client/archestra_client_manual.go")
@@ -153,9 +155,7 @@ def prepare_candidate(args, repo, out):
     metadata = branch(repo)
     spec = args.spec.resolve()
     spec_hash = hashlib.sha256(spec.read_bytes()).hexdigest()
-    version = json.loads(spec.read_text())["info"]["version"]
-    if not re.fullmatch(r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", version):
-        raise ValueError("Invalid platform version")
+    version = release_version(spec)
     if not (repo / "platform-version.txt").is_file():
         raise ValueError("Provider update branch needs platform-version.txt; merge the provider change adding that acceptance target")
     prior = json.loads((repo / MANIFEST).read_text()) if (repo / MANIFEST).exists() else None

@@ -5,9 +5,9 @@ import UserTokenModel from "@/models/user-token";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
 import type { FastifyInstanceWithZod } from "@/server";
 import type { AuditActorType, AuditEventName, AuditOutcome } from "@/types";
+import type { AuditableRouteConfig } from "@/types/audit-route-config";
 import { trackBackgroundWork } from "@/utils/background-work";
 import {
-  type AuditableRouteConfig,
   deriveAction,
   resolveAuditableRouteConfig,
 } from "./audit-log-registry";

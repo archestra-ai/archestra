@@ -1,6 +1,6 @@
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 
 /** Who owns a reusable credential used by Agent Runtime containers. */
 export const RuntimeCredentialConnectionScopeSchema = z.enum([

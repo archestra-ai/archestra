@@ -1,6 +1,6 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import type { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 
 export const SelectA2AContextSchema = createSelectSchema(
   schema.a2aContextsTable,

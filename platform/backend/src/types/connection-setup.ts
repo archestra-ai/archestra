@@ -2,7 +2,7 @@ import { SupportedProvidersSchema } from "@archestra/shared";
 import { INSTALLER_CLIENT_IDS } from "@archestra/shared/connection-setup";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 
 export { CONNECTION_SETUP_MAX_SKILLS } from "@archestra/shared/connection-setup";
 

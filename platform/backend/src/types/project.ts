@@ -1,7 +1,7 @@
 import { CreatedByNullableSchema } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { ConversationOriginSchema } from "./conversation";
 import { LabelWithDetailsSchema } from "./label";
 

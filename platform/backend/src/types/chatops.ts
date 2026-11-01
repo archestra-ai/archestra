@@ -1,6 +1,6 @@
 import type { UIMessageChunk } from "ai";
 import { z } from "zod";
-import type { A2AAttachment } from "@/agents/a2a-executor";
+import type { A2AAttachment } from "./a2a-attachment";
 
 /**
  * ChatOps provider types enum

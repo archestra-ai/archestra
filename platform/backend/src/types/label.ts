@@ -1,7 +1,7 @@
 import { LABEL_RESERVED_CHARS } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { UuidIdSchema } from "./api";
 
 export const SelectLabelKeySchema = createSelectSchema(schema.labelKeysTable);

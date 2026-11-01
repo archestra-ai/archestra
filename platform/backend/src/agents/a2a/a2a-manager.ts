@@ -44,17 +44,14 @@ import type {
   AgentRunLimits,
   AgentRunRecord,
 } from "@/types";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 import { isTerminalA2ATaskState } from "@/types/a2a-task";
 import {
   type OutboundUrlRejection,
   validateOutboundUrl,
 } from "@/utils/outbound-url";
 import type { InteractionSource } from "../../../../shared";
-import {
-  type A2AAttachment,
-  type A2AExecuteResult,
-  executeA2AMessage,
-} from "../a2a-executor";
+import { type A2AExecuteResult, executeA2AMessage } from "../a2a-executor";
 import { type A2AActor, A2AError, A2AErrorKind } from "./a2a-base";
 import {
   type A2AContextCompactionEvent,

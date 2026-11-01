@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import type { A2AAttachment } from "@/agents/a2a-executor";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
@@ -21,6 +20,7 @@ import type {
   ThreadHistoryParams,
   UpdateApprovalRequestOptions,
 } from "@/types";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   TELEGRAM_LINK_CODE_TTL_MS,

@@ -1,6 +1,6 @@
 import { createSelectSchema } from "drizzle-zod";
 import type { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { SkillSandboxFileStorageProviderSchema } from "./skill-sandbox";
 
 export const SelectPersistedFileSchema = createSelectSchema(schema.filesTable, {

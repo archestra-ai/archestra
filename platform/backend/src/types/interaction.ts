@@ -8,7 +8,7 @@ import {
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { AgentTypeSchema } from "./agent";
 import { AttributionLabelsSchema } from "./attribution-label";
 import { AudioAuditRequestSchema, AudioAuditResponseSchema } from "./audio";

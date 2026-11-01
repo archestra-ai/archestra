@@ -63,6 +63,7 @@ import {
   UNVERIFIED_RUNTIME_SESSION,
 } from "@/services/agent-runtime/runtime-crossing";
 import {
+  agentRuntimeTier,
   organizationAgentRuntimeTiers,
   resolveAgentRunLimits,
 } from "@/services/agent-runtime/runtime-tiers";
@@ -180,6 +181,7 @@ async function launchDelegatedTask(params: {
         ),
       );
     }
+    const tiers = await organizationAgentRuntimeTiers(actor.organizationId);
     let currentTier = context.agentRuntimeTier;
     if (!currentTier && context.runId) {
       let currentRun = await AgentRunModel.findByTaskId(context.runId);
@@ -193,7 +195,11 @@ async function launchDelegatedTask(params: {
         }
       }
       if (currentRun?.agentId === agent.id) {
-        currentTier = currentRun.runtimeLimits?.tier ?? undefined;
+        // A run from before tiers were recorded is still a run of this
+        // Agent: it ran at the Agent's tier, and must hear that it cannot
+        // scale up rather than the refusal meant for outside callers.
+        currentTier =
+          currentRun.runtimeLimits?.tier ?? agentRuntimeTier(runtime, tiers);
       }
     }
     // Refuse a limit above the Agent's before a task exists: the caller hears
@@ -204,7 +210,7 @@ async function launchDelegatedTask(params: {
         runtime,
         requested: params.limits,
         currentTier,
-        tiers: await organizationAgentRuntimeTiers(actor.organizationId),
+        tiers,
       });
     } catch (error) {
       if (error instanceof ApiError)

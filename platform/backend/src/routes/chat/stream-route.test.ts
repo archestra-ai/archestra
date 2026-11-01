@@ -4193,7 +4193,8 @@ describe("POST /api/chat handler composition", () => {
       ];
     expect(startTool?.execute).toBeDefined();
 
-    // Requesting L (above M) gets refused at M (the agent default ceiling), not S:
+    // Requesting L (above M) gets refused at M (the agent default ceiling), not S.
+    // The chat turn is not a run, so it hears the tiers it may use:
     const scaleupAboveCeilingResult = await startTool?.execute?.(
       {
         agent_id: fixedAgent.id,
@@ -4207,8 +4208,8 @@ describe("POST /api/chat handler composition", () => {
         ? scaleupAboveCeilingResult
         : ((scaleupAboveCeilingResult as { content?: string })?.content ?? "");
     expect(scaleupAboveCeilingOutput).toContain(
-      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to M (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
+      "Tier L (8 CPU, 16 GiB (32 GiB limit), 20 GiB workspace) is above this Agent's scaleup tier M. Tiers this Agent's runs may use: S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace), M (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace).",
     );
-    expect(scaleupAboveCeilingOutput).not.toContain("fixed to S");
+    expect(scaleupAboveCeilingOutput).not.toContain("not retriable");
   });
 });

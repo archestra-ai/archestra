@@ -3,7 +3,7 @@ title: Agent Runtime
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-31
+lastUpdated: 2026-11-01
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -115,7 +115,7 @@ Limits protect your cluster and budget by capping runtime duration, idle time, s
 
 When starting a run through [`start_agent_run`](/docs/reference/archestra-mcp-server#start_agent_run) or [`POST /api/agents/{id}/runs`](/docs/reference/api#/Agents/startAgentRun), you can pass custom `limits`. You can request stricter limits or a different tier, either by name or by minimum compute (`min_cpu` and `min_memory_gib`). A tier chosen by minimum compute never has a smaller workspace than the agent's default tier. Requests exceeding the agent's configured limits fail with the allowed tiers named.
 
-A run that needs more compute starts a new run of the same agent at a larger tier and hands over its workspace. Setting **Scaleup tier** to **Disable autoscaling** disables scaling up. The agent runtime instance receives instructions that scaling is disabled, and scaleup attempts fail with a non-retriable error.
+A run that needs more compute starts a new run of the same agent at a larger tier and hands over its workspace. Setting **Scaleup tier** to **Disable autoscaling** disables scaling up. The agent runtime instance receives instructions that scaling is disabled, and scaleup attempts fail with a non-retriable error. A caller outside the agent's runs, such as a CI job, that asks for more than the agent's tier is told which tiers the agent can use. It can then start the run at the agent's tier.
 
 Inside a container, `ARCHESTRA_AGENT_RUNTIME_TIERS` lists the allowed tiers with their CPU, memory, and workspace size. When the requested tier has no ready warm container, Archestra serves the run from the next larger tier within the scaleup limit, unless that tier has a smaller workspace. Runs never start below their requested tier.
 

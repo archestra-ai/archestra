@@ -610,7 +610,8 @@ describe("Agent Runtime routes", () => {
     });
     vi.mocked(startDetachedAgentTask).mockResolvedValue(task);
     // A limit above the Agent's is refused with the maximum named, before
-    // any task exists.
+    // any task exists. The signed-in user is not a run, so the refusal names
+    // the tiers to retry within, not the fixed-tier refusal a run gets.
     const refused = await app.inject({
       method: "POST",
       url: `/api/agents/${agent.id}/runs`,
@@ -618,7 +619,7 @@ describe("Agent Runtime routes", () => {
     });
     expect(refused.statusCode, refused.body).toBe(400);
     expect(refused.json().error.message).toContain(
-      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to M (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
+      "Tier L (8 CPU, 16 GiB (32 GiB limit), 20 GiB workspace) is above this Agent's scaleup tier M. Tiers this Agent's runs may use: S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace), M (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace).",
     );
     expect(startDetachedAgentTask).not.toHaveBeenCalled();
 

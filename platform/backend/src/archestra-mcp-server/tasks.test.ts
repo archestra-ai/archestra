@@ -321,10 +321,12 @@ describe("run tools", () => {
       },
     });
     const sendMessage = vi.spyOn(A2AManager.prototype, "sendMessage");
+    // A caller outside any run hears the tiers it may use, so it can start
+    // the run within them.
     for (const [limits, message] of [
       [
         { tier: "L" },
-        "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to M (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
+        "Tier L (8 CPU, 16 GiB (32 GiB limit), 20 GiB workspace) is above this Agent's scaleup tier M. Tiers this Agent's runs may use: S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace), M (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace).",
       ],
       [
         { max_duration_hours: 24 },
@@ -408,6 +410,39 @@ describe("run tools", () => {
       (scaleupViaDbLookupResult.content[0] as { text: string }).text,
     ).toContain(
       "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
+    );
+
+    // A run recorded without a tier is still a run of this Agent: it hears
+    // that it cannot scale up, at the Agent's own tier.
+    const untieredTask = await A2ATaskModel.create({
+      contextId: a2aContext.id,
+      agentId: target.id,
+      state: "TASK_STATE_WORKING",
+    });
+    await AgentRunModel.create({
+      organizationId,
+      taskId: untieredTask.id,
+      agentId: target.id,
+      actorKind: "user",
+      actorId,
+      actorUserId: actorId,
+      workloadName: `test-${untieredTask.id.slice(0, 8)}`,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      runtimeLimits: null,
+    });
+    const untieredResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      {
+        agent_id: target.id,
+        message: "Scale up from a run with no recorded tier",
+        limits: { tier: "L" },
+      },
+      { ...runIdFromDbCallerContext, runId: untieredTask.id },
+    );
+    expect(untieredResult.isError).toBe(true);
+    expect((untieredResult.content[0] as { text: string }).text).toContain(
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to M (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
     );
 
     // Calling start_agent_run through the chat tool wrapper resolves the persisted tier via runId:

@@ -72,13 +72,14 @@ export function runHeavy(heavy: HeavyCommand): SpawnSyncReturns<Buffer> {
     (heavy.lane ?? heavyLaneActive(envelope)) &&
     env[HEAVY_LANE_HELD_ENV] !== "held" &&
     hasFlock();
-  const options = {
-    stdio: "inherit" as const,
-    cwd: heavy.cwd,
-    shell: process.platform === "win32",
-  };
   if (!lane) {
-    return spawnSync(heavy.command, heavy.args, { ...options, env });
+    // Windows finds `tsc.cmd` only through a shell; the lane never runs there.
+    return spawnSync(heavy.command, heavy.args, {
+      stdio: "inherit",
+      cwd: heavy.cwd,
+      env,
+      shell: process.platform === "win32",
+    });
   }
   const lock = path.join(tmpdir(), "archestra-heavy.lock");
   const holder = `${lock}.holder`;
@@ -107,7 +108,11 @@ export function runHeavy(heavy: HeavyCommand): SpawnSyncReturns<Buffer> {
       heavy.command,
       ...heavy.args,
     ],
-    { ...options, env: { ...env, [HEAVY_LANE_HELD_ENV]: "held" } },
+    {
+      stdio: "inherit",
+      cwd: heavy.cwd,
+      env: { ...env, [HEAVY_LANE_HELD_ENV]: "held" },
+    },
   );
 }
 

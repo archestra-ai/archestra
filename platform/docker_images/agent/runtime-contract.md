@@ -140,6 +140,7 @@ Archestra supplies the applicable variables below when launching a run. You do n
 | --- | --- |
 | `ARCHESTRA_AGENT_RUNTIME_AGENT_ID`, `ARCHESTRA_AGENT_RUNTIME_AGENT_NAME` | Durable Agent identity. |
 | `ARCHESTRA_AGENT_RUNTIME_RUN_ID` | The run's ID, the same on every turn. The run page is `/chat/runs/<id>`, and the run tools take it as `run_id`. |
+| `ARCHESTRA_AGENT_RUNTIME_RUN_URL` | The run's page in Archestra, the same on every turn. |
 | `ARCHESTRA_AGENT_RUNTIME_TASK_ID` | This turn's ID. The first turn's equals the run's ID. |
 | `ARCHESTRA_AGENT_RUNTIME_DIR` | Runtime-owned control and artifact directory. Defaults to `/var/run/archestra`. |
 | `ARCHESTRA_AGENT_RUNTIME_CREDENTIALS_FILE` | Managed JSON credential bundle, reread before authenticating. Each entry has `value` and Unix-millisecond `expiresAt`; the bundle is scoped by `taskId`. |

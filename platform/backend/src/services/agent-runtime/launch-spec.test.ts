@@ -40,6 +40,9 @@ import {
 import { preflightAgentRuntimeCredentials } from "./credentials";
 import { buildAgentRunLaunchSpec } from "./launch-spec";
 
+const agentRunUrl = (runId: string) =>
+  `${config.frontendBaseUrl}/chat/runs/${runId}`;
+
 describe("buildAgentRunLaunchSpec", () => {
   let previousPlatformBaseUrl: string;
 
@@ -234,6 +237,7 @@ describe("buildAgentRunLaunchSpec", () => {
     const first = await launch(firstTaskId);
     expect(first.spec.env).toMatchObject({
       ARCHESTRA_AGENT_RUNTIME_RUN_ID: firstTaskId,
+      ARCHESTRA_AGENT_RUNTIME_RUN_URL: agentRunUrl(firstTaskId),
       ARCHESTRA_AGENT_RUNTIME_TASK_ID: firstTaskId,
     });
 
@@ -255,6 +259,7 @@ describe("buildAgentRunLaunchSpec", () => {
     const followUp = await launch(followUpTaskId, firstTaskId);
     expect(followUp.spec.env).toMatchObject({
       ARCHESTRA_AGENT_RUNTIME_RUN_ID: firstTaskId,
+      ARCHESTRA_AGENT_RUNTIME_RUN_URL: agentRunUrl(firstTaskId),
       ARCHESTRA_AGENT_RUNTIME_TASK_ID: followUpTaskId,
     });
   });
@@ -311,6 +316,10 @@ describe("buildAgentRunLaunchSpec", () => {
           { key: "OPENAI_BASE_URL", value: "https://bypass.invalid" },
           { key: "ARCHESTRA_MCP_GATEWAY_TOKEN", value: "bypass-token" },
           { key: "ARCHESTRA_AGENT_RUNTIME_RUN_ID", value: "bypass-run" },
+          {
+            key: "ARCHESTRA_AGENT_RUNTIME_RUN_URL",
+            value: "https://bypass.invalid/run",
+          },
         ],
       },
       taskId,
@@ -336,6 +345,7 @@ describe("buildAgentRunLaunchSpec", () => {
       ARCHESTRA_AGENT_RUNTIME_MODEL_PROVIDER: "gemini",
       ARCHESTRA_AGENT_RUNTIME_MODEL_OUTPUT_LENGTH: "16384",
       ARCHESTRA_AGENT_RUNTIME_RUN_ID: taskId,
+      ARCHESTRA_AGENT_RUNTIME_RUN_URL: agentRunUrl(taskId),
       ARCHESTRA_LLM_PROXY_PROTOCOL: "openai_responses",
       ARCHESTRA_LLM_PROXY_URL: `https://platform.example.test/v1/model-router/${setup.agent.id}`,
       OPENAI_BASE_URL: `https://platform.example.test/v1/model-router/${setup.agent.id}`,
@@ -361,7 +371,7 @@ describe("buildAgentRunLaunchSpec", () => {
       "Files under /home/node persist across this conversation's turns",
     );
     expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
-      "ARCHESTRA_AGENT_RUNTIME_RUN_ID is this run's id",
+      "ARCHESTRA_AGENT_RUNTIME_RUN_URL is this run's page",
     );
     expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
       "The user can forward ports 3000, 9000 from this workspace",

@@ -7,6 +7,7 @@ import {
   gibFromMiB,
   memoryQuantity,
   nextLargerAgentRuntimeTier,
+  parseCpuQuantity,
   type ResolvedAgentRuntimeTiers,
   resolveAgentRuntimeTiers,
   sameAgentRuntimeTierName,
@@ -21,6 +22,14 @@ import {
   type AgentRuntimeResources,
   ApiError,
 } from "@/types";
+import {
+  AGENT_RUNTIME_CPU_LIMIT_ENV,
+  AGENT_RUNTIME_CPU_REQUEST_ENV,
+  AGENT_RUNTIME_CPUS_ENV,
+  AGENT_RUNTIME_MEMORY_LIMIT_ENV,
+  AGENT_RUNTIME_MEMORY_REQUEST_ENV,
+  AGENT_RUNTIME_TOOLCHAIN_PARALLELISM_ENVS,
+} from "./runtime-contract";
 
 /** What the tier resolution takes from the deployment. */
 export function agentRuntimeTierDefaults() {
@@ -51,6 +60,80 @@ export function tierResources(
     memoryRequest: memoryQuantity(tier.memoryRequestMiB),
     memoryLimit: memoryQuantity(tier.memoryLimitMiB),
   };
+}
+
+/**
+ * The variables that tell a run's tools the size of its Pod: the Pod's
+ * quantities, its whole CPUs, and the thread counts of common toolchains.
+ * Every variable a size can set is a key here, empty when the size has no
+ * value for it, so a run moved to another size loses what no longer applies.
+ */
+export function tierResourceEnv(resources: AgentRuntimeResources): {
+  pod: Record<string, string | undefined>;
+  toolchain: Record<string, string | undefined>;
+} {
+  const cpus = Math.max(
+    1,
+    Math.ceil(
+      parseCpuQuantity(resources.cpuLimit) ??
+        parseCpuQuantity(resources.cpuRequest) ??
+        0,
+    ),
+  );
+  const known =
+    resources.cpuLimit !== undefined || resources.cpuRequest !== undefined;
+  return {
+    pod: {
+      [AGENT_RUNTIME_CPU_REQUEST_ENV]: resources.cpuRequest,
+      [AGENT_RUNTIME_CPU_LIMIT_ENV]: resources.cpuLimit,
+      [AGENT_RUNTIME_MEMORY_REQUEST_ENV]: resources.memoryRequest,
+      [AGENT_RUNTIME_MEMORY_LIMIT_ENV]: resources.memoryLimit,
+      [AGENT_RUNTIME_CPUS_ENV]: known ? String(cpus) : undefined,
+    },
+    toolchain: Object.fromEntries(
+      AGENT_RUNTIME_TOOLCHAIN_PARALLELISM_ENVS.map((name) => [
+        name,
+        known ? String(cpus) : undefined,
+      ]),
+    ),
+  };
+}
+
+/**
+ * The size variables of a run served by a Pod of another size. The Pod's
+ * quantities follow the served size. A toolchain variable follows it too,
+ * unless the Agent's environment set it to something else: its own value
+ * stays.
+ */
+export function retargetTierResourceEnv(params: {
+  env: Record<string, string>;
+  requested: AgentRuntimeResources | null;
+  served: AgentRuntimeResources;
+}): Record<string, string> {
+  const requested = tierResourceEnv(params.requested ?? {});
+  const served = tierResourceEnv(params.served);
+  const env = { ...params.env };
+  for (const [name, value] of Object.entries(served.pod)) {
+    if (value === undefined) delete env[name];
+    else env[name] = value;
+  }
+  for (const [name, value] of Object.entries(served.toolchain)) {
+    if (env[name] !== requested.toolchain[name]) continue;
+    if (value === undefined) delete env[name];
+    else env[name] = value;
+  }
+  return env;
+}
+
+/** The variables of `tierResourceEnv` that have a value. */
+export function definedEnv(
+  env: Record<string, string | undefined>,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(env).filter(
+      (entry): entry is [string, string] => entry[1] !== undefined,
+    ),
+  );
 }
 
 type SizedRuntime = Pick<AgentRuntime, "tier" | "maxTier">;

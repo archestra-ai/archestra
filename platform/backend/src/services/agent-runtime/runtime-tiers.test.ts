@@ -9,8 +9,10 @@ import {
   resolveAgentRunLimits,
   resolveRunResources,
   resolveRunWorkspaceStorageSize,
+  retargetTierResourceEnv,
   runtimeSystemPrompt,
   runtimeTiersEnv,
+  tierResourceEnv,
   warmPoolReplicas,
   warmTierCandidates,
 } from "./runtime-tiers";
@@ -78,6 +80,63 @@ describe("runtime tiers", () => {
       cpuLimit: "750m",
       memoryRequest: "1Gi",
       memoryLimit: "1536Mi",
+    });
+  });
+
+  test("a size tells the run's tools its quantities, its whole CPUs and the toolchain thread counts", () => {
+    // No CPU limit: the request, rounded up, is the parallelism.
+    expect(
+      tierResourceEnv({
+        cpuRequest: "3500m",
+        memoryRequest: "7Gi",
+        memoryLimit: "14Gi",
+      }),
+    ).toEqual({
+      pod: {
+        ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "3500m",
+        ARCHESTRA_AGENT_RUNTIME_POD_CPU_LIMIT: undefined,
+        ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_REQUEST: "7Gi",
+        ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "14Gi",
+        ARCHESTRA_AGENT_RUNTIME_POD_CPUS: "4",
+      },
+      toolchain: {
+        GOMAXPROCS: "4",
+        CARGO_BUILD_JOBS: "4",
+        RAYON_NUM_THREADS: "4",
+      },
+    });
+    // A CPU limit caps it.
+    expect(
+      tierResourceEnv({ cpuRequest: "2", cpuLimit: "3" }).toolchain.GOMAXPROCS,
+    ).toBe("3");
+    // A size without CPU sets no thread counts.
+    expect(tierResourceEnv({ memoryLimit: "8Gi" }).toolchain).toEqual({
+      GOMAXPROCS: undefined,
+      CARGO_BUILD_JOBS: undefined,
+      RAYON_NUM_THREADS: undefined,
+    });
+    // Served by a larger Pod: quantities follow it, a limit the served size
+    // lacks goes, and a thread count the Agent set stays.
+    expect(
+      retargetTierResourceEnv({
+        env: {
+          ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "2",
+          ARCHESTRA_AGENT_RUNTIME_POD_CPU_LIMIT: "2",
+          ARCHESTRA_AGENT_RUNTIME_POD_CPUS: "2",
+          GOMAXPROCS: "2",
+          CARGO_BUILD_JOBS: "1",
+          OTHER: "kept",
+        },
+        requested: { cpuRequest: "2", cpuLimit: "2" },
+        served: { cpuRequest: "4", memoryLimit: "16Gi" },
+      }),
+    ).toEqual({
+      ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "4",
+      ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "16Gi",
+      ARCHESTRA_AGENT_RUNTIME_POD_CPUS: "4",
+      GOMAXPROCS: "4",
+      CARGO_BUILD_JOBS: "1",
+      OTHER: "kept",
     });
   });
 

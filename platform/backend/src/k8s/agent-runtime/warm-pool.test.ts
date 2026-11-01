@@ -397,7 +397,13 @@ test("a run served from a larger pool is told the size of the pod it got, and it
       ARCHESTRA_AGENT_RUNTIME_TIERS:
         '[{"name":"S","cpu":2,"current":true},{"name":"M","cpu":4,"workspace_gib":20}]',
       ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "2",
+      ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_REQUEST: "4Gi",
       ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "8Gi",
+      ARCHESTRA_AGENT_RUNTIME_POD_CPUS: "2",
+      // Toolchain thread counts follow the size, except one the Agent set.
+      GOMAXPROCS: "2",
+      RAYON_NUM_THREADS: "2",
+      CARGO_BUILD_JOBS: "1",
       OTHER: "kept",
     },
   };
@@ -425,7 +431,12 @@ test("a run served from a larger pool is told the size of the pod it got, and it
     ARCHESTRA_AGENT_RUNTIME_TIERS:
       '[{"name":"S","cpu":2,"workspace_gib":20},{"name":"M","cpu":4,"workspace_gib":60,"current":true}]',
     ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "4",
+    ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_REQUEST: "8Gi",
     ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "16Gi",
+    ARCHESTRA_AGENT_RUNTIME_POD_CPUS: "4",
+    GOMAXPROCS: "4",
+    RAYON_NUM_THREADS: "4",
+    CARGO_BUILD_JOBS: "1",
     OTHER: "kept",
   });
   // Served by its own tier, or with no tiers at all: unchanged.

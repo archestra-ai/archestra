@@ -15,8 +15,6 @@ import {
 import logger from "@/logging";
 import { AgentModel, EnvironmentModel, OrganizationModel } from "@/models";
 import {
-  AGENT_RUNTIME_CPU_REQUEST_ENV,
-  AGENT_RUNTIME_MEMORY_LIMIT_ENV,
   AGENT_RUNTIME_SYSTEM_PROMPT_ENV,
   AGENT_RUNTIME_TIER_ENV,
   AGENT_RUNTIME_TIERS_ENV,
@@ -27,6 +25,7 @@ import {
   resolveRunResources,
   resolveRunWorkspaceStorageSize,
   retargetRuntimeTiersEnv,
+  retargetTierResourceEnv,
   runtimeSystemPrompt,
   warmPoolReplicas,
 } from "@/services/agent-runtime/runtime-tiers";
@@ -515,7 +514,11 @@ export function servedLaunchSpec<
         }
       : spec.secretEnv,
     env: {
-      ...spec.env,
+      ...retargetTierResourceEnv({
+        env: spec.env,
+        requested: spec.resources,
+        served: served.resources,
+      }),
       [AGENT_RUNTIME_TIER_ENV]: tier,
       // The list the run reads to decide on a larger run marks the size it got.
       ...(tiersEnv
@@ -526,12 +529,6 @@ export function servedLaunchSpec<
               requested,
             ),
           }
-        : {}),
-      ...(served.resources.cpuRequest
-        ? { [AGENT_RUNTIME_CPU_REQUEST_ENV]: served.resources.cpuRequest }
-        : {}),
-      ...(served.resources.memoryLimit
-        ? { [AGENT_RUNTIME_MEMORY_LIMIT_ENV]: served.resources.memoryLimit }
         : {}),
     },
   };

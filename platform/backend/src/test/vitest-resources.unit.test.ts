@@ -1,8 +1,13 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, test } from "vitest";
 import {
+  describeToolMemoryKill,
   frontendVitestResourceLimits,
   parseCpuQuantity,
   parseMemoryQuantity,
+  readCgroupMemory,
   resourceEnvelope,
   typeScriptCheckers,
 } from "../../../vitest.resources";
@@ -190,5 +195,177 @@ describe("typeScriptCheckers", () => {
   test("runs no more checkers than CPUs", () => {
     expect(typeScriptCheckers(envelope(62, 1))).toBe(1);
     expect(typeScriptCheckers(envelope(62, 2))).toBe(2);
+  });
+});
+
+describe("readCgroupMemory", () => {
+  test("reads the kill counters, the peak and the limit of a cgroup", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "cgroup-"));
+    try {
+      writeFileSync(
+        path.join(dir, "memory.events"),
+        "low 0\nhigh 0\nmax 14021\noom 3\noom_kill 2\noom_group_kill 0\n",
+      );
+      writeFileSync(path.join(dir, "memory.peak"), `${8 * GIB}\n`);
+      writeFileSync(path.join(dir, "memory.max"), "max\n");
+      expect(readCgroupMemory(dir)).toEqual({
+        oomKills: 2,
+        limitHits: 3,
+        peakBytes: 8 * GIB,
+        // "max" is no limit.
+        limitBytes: null,
+      });
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  test("is null where there is no cgroup v2 memory controller", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "cgroup-"));
+    try {
+      expect(readCgroupMemory(dir)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+});
+
+describe("describeToolMemoryKill", () => {
+  const before = {
+    oomKills: 0,
+    limitHits: 10,
+    peakBytes: 5 * GIB,
+    limitBytes: 8 * GIB,
+  };
+  const atLimit = {
+    oomKills: 1,
+    limitHits: 11,
+    peakBytes: 8 * GIB,
+    limitBytes: 8 * GIB,
+  };
+  // What a pod of tier S sees: its tier and the tiers it may move to.
+  const env = {
+    ARCHESTRA_AGENT_RUNTIME_TIER: "S",
+    ARCHESTRA_AGENT_RUNTIME_TIERS: JSON.stringify([
+      { name: "S", cpu: 2, memory_gib: 4, memory_limit_gib: 8, current: true },
+      { name: "M", cpu: 3.5, memory_gib: 7, memory_limit_gib: 14 },
+    ]),
+  };
+  const typeCheck = {
+    tool: "type-check",
+    subject: "tsc",
+    steps: ["Give the compiler one checker: add --checkers 1."],
+    env,
+  };
+
+  test("names the killed command, the limit, the tier, the peak and what to change", () => {
+    expect(
+      describeToolMemoryKill({
+        ...typeCheck,
+        subjectKilled: true,
+        before,
+        after: atLimit,
+      }),
+    ).toBe(
+      [
+        "type-check: tsc was killed for memory: this container reached its memory limit of 8 GiB at tier S (peak usage 8 GiB).",
+        "To fit in memory:",
+        "  - Run type checks, test suites and builds one at a time, not side by side.",
+        "  - Give the compiler one checker: add --checkers 1.",
+        "  - Or move the work to a larger tier: start a run of this agent at M, which has a memory limit of 14 GiB, and hand over the branch.",
+      ].join("\n"),
+    );
+  });
+
+  test("says another process was killed when the command itself was not", () => {
+    expect(
+      describeToolMemoryKill({
+        ...typeCheck,
+        subjectKilled: false,
+        before,
+        after: { ...atLimit, oomKills: 2 },
+      })?.split("\n")[0],
+    ).toBe(
+      "type-check: the kernel killed 2 processes in this container for memory while tsc ran: this container reached its memory limit of 8 GiB at tier S (peak usage 8 GiB).",
+    );
+  });
+
+  test("blames the machine, not the container, when the limit was not reached", () => {
+    expect(
+      describeToolMemoryKill({
+        ...typeCheck,
+        subjectKilled: true,
+        before,
+        after: { ...before, oomKills: 1, peakBytes: 3 * GIB },
+      }),
+    ).toBe(
+      "type-check: tsc was killed for memory: the machine ran out of memory; this container stayed under its 8 GiB limit (peak usage 3 GiB). Run it again.",
+    );
+  });
+
+  test("offers only a tier with more memory, none at the largest, and more memory outside a runtime", () => {
+    const largest = describeToolMemoryKill({
+      ...typeCheck,
+      subjectKilled: true,
+      before,
+      after: atLimit,
+      env: {
+        ARCHESTRA_AGENT_RUNTIME_TIER: "M",
+        ARCHESTRA_AGENT_RUNTIME_TIERS: JSON.stringify([
+          { name: "S", memory_limit_gib: 8 },
+          { name: "M", memory_limit_gib: 14, current: true },
+        ]),
+      },
+    });
+    expect(largest?.split("\n").at(-1)).toBe(
+      "  - This run is at M, and no tier this agent may use has more memory.",
+    );
+    // A next tier with more CPU and the same memory would be killed the same way.
+    const sameMemory = describeToolMemoryKill({
+      ...typeCheck,
+      subjectKilled: true,
+      before,
+      after: atLimit,
+      env: {
+        ARCHESTRA_AGENT_RUNTIME_TIERS: JSON.stringify([
+          { name: "S", memory_limit_gib: 8, current: true },
+          { name: "S-fast", memory_limit_gib: 8 },
+          { name: "L", memory_limit_gib: 24 },
+        ]),
+      },
+    });
+    expect(sameMemory?.split("\n").at(-1)).toBe(
+      "  - Or move the work to a larger tier: start a run of this agent at L, which has a memory limit of 24 GiB, and hand over the branch.",
+    );
+    const elsewhere = describeToolMemoryKill({
+      ...typeCheck,
+      subjectKilled: true,
+      before,
+      after: atLimit,
+      env: {},
+    });
+    expect(elsewhere?.split("\n")[0]).toBe(
+      "type-check: tsc was killed for memory: this container reached its memory limit of 8 GiB (peak usage 8 GiB).",
+    );
+    expect(elsewhere?.split("\n").at(-1)).toBe("  - Or give it more memory.");
+  });
+
+  test("says nothing when nothing was killed or the counters cannot be read", () => {
+    expect(
+      describeToolMemoryKill({
+        ...typeCheck,
+        subjectKilled: true,
+        before,
+        after: before,
+      }),
+    ).toBeNull();
+    expect(
+      describeToolMemoryKill({
+        ...typeCheck,
+        subjectKilled: true,
+        before: null,
+        after: atLimit,
+      }),
+    ).toBeNull();
   });
 });

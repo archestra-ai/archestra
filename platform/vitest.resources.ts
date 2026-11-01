@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import os from "node:os";
+import path from "node:path";
 
 /**
  * The CPUs and memory a Vitest run can count on, for the worker sizing in
@@ -119,6 +121,128 @@ export function typeScriptCheckers(envelope: ResourceEnvelope): number | null {
   return checkers >= TYPESCRIPT_DEFAULT_CHECKERS ? null : checkers;
 }
 
+/**
+ * The memory counters of the cgroup a process runs in (cgroup v2). A
+ * container's memory limit is enforced by the kernel, which kills a process in
+ * it once the container reaches the limit; the killed command only says
+ * "Killed". A tool reads these before and after its child runs to say whether
+ * memory was the reason, and what to change.
+ */
+export interface CgroupMemory {
+  /** Processes of the cgroup an OOM killer killed (`memory.events` oom_kill). */
+  oomKills: number;
+  /** Times the cgroup reached its memory limit (`memory.events` oom). */
+  limitHits: number;
+  /** The highest usage seen (`memory.peak`), when the kernel gives it. */
+  peakBytes: number | null;
+  /** The limit (`memory.max`), or null without one. */
+  limitBytes: number | null;
+}
+
+/**
+ * The counters of this process's own cgroup, or of `dir`; null outside a
+ * cgroup v2 hierarchy, or when the cgroup has no memory controller.
+ */
+export function readCgroupMemory(
+  dir: string = ownCgroupDirectory(),
+): CgroupMemory | null {
+  const events = readText(path.join(dir, "memory.events"));
+  if (events === null) return null;
+  const counters = new Map<string, number>();
+  for (const line of events.split("\n")) {
+    const match = line.trim().match(/^(\S+) (\d+)$/);
+    if (match) counters.set(match[1] as string, Number(match[2]));
+  }
+  const oomKills = counters.get("oom_kill");
+  if (oomKills === undefined) return null;
+  return {
+    oomKills,
+    limitHits: counters.get("oom") ?? 0,
+    peakBytes: readBytes(path.join(dir, "memory.peak")),
+    limitBytes: readBytes(path.join(dir, "memory.max")),
+  };
+}
+
+/**
+ * What a tool prints when the kernel killed its child, or another process of
+ * the container, for memory while the child ran; null when the counters did
+ * not move or cannot be read. It names what was killed, the limit, the peak
+ * and the runtime tier, and what to change: run less at once, give the tool
+ * fewer workers, or move to a larger tier.
+ */
+export function describeToolMemoryKill(params: {
+  /** The tool printing it, as the reader called it: "type-check". */
+  tool: string;
+  /** What the tool ran: "tsc", "the tests". */
+  subject: string;
+  /** Whether the subject itself died by SIGKILL (exit status 137). */
+  subjectKilled: boolean;
+  before: CgroupMemory | null;
+  after: CgroupMemory | null;
+  /** Ways to make this tool use less, most specific first. */
+  steps: string[];
+  env?: NodeJS.ProcessEnv;
+}): string | null {
+  const { before, after } = params;
+  if (!before || !after || after.oomKills <= before.oomKills) return null;
+  const env = params.env ?? process.env;
+  const killed = after.oomKills - before.oomKills;
+  const atLimit = after.limitHits > before.limitHits;
+  const tier = env.ARCHESTRA_AGENT_RUNTIME_TIER?.trim();
+  const peak =
+    after.peakBytes !== null
+      ? ` (peak usage ${formatGibibytes(after.peakBytes)})`
+      : "";
+  const what = params.subjectKilled
+    ? `${params.subject} was killed for memory`
+    : `the kernel killed ${killed === 1 ? "a process" : `${killed} processes`} in this container for memory while ${params.subject} ran`;
+  const why = atLimit
+    ? after.limitBytes !== null
+      ? `this container reached its memory limit of ${formatGibibytes(after.limitBytes)}${tier ? ` at tier ${tier}` : ""}${peak}`
+      : `this container reached its memory limit${peak}`
+    : `the machine ran out of memory${after.limitBytes !== null ? `; this container stayed under its ${formatGibibytes(after.limitBytes)} limit${peak}` : ""}`;
+  if (!atLimit) {
+    return `${params.tool}: ${what}: ${why}. Run it again.`;
+  }
+  const steps = [
+    "Run type checks, test suites and builds one at a time, not side by side.",
+    ...params.steps,
+    largerTierStep(env),
+  ];
+  return [
+    `${params.tool}: ${what}: ${why}.`,
+    "To fit in memory:",
+    ...steps.map((step) => `  - ${step}`),
+  ].join("\n");
+}
+
+/**
+ * Prints {@link describeToolMemoryKill} when this process exits with a
+ * failure after the kernel killed something for memory: a test runner whose
+ * worker was killed reports only a worker that exited unexpectedly.
+ */
+export function reportMemoryKillsAtExit(params: {
+  tool: string;
+  subject: string;
+  steps: string[];
+}): void {
+  const registry = globalThis as { [MEMORY_KILL_REPORT]?: true };
+  if (registry[MEMORY_KILL_REPORT]) return;
+  const before = readCgroupMemory();
+  if (!before) return;
+  registry[MEMORY_KILL_REPORT] = true;
+  process.once("exit", (code) => {
+    if (code === 0) return;
+    const report = describeToolMemoryKill({
+      ...params,
+      subjectKilled: false,
+      before,
+      after: readCgroupMemory(),
+    });
+    if (report) process.stderr.write(`\n${report}\n`);
+  });
+}
+
 /** Bytes of a Kubernetes memory quantity ("8Gi", "512Mi", "8G"); 0 when unreadable. */
 export function parseMemoryQuantity(quantity: string | undefined): number {
   const match = quantity
@@ -138,6 +262,73 @@ export function parseCpuQuantity(quantity: string | undefined): number {
   return cpus > 0 ? Math.max(1, Math.floor(cpus)) : 0;
 }
 
+// ===== Internal helpers =====
+
+/** The directory of this process's cgroup v2: `/proc/self/cgroup` names it. */
+function ownCgroupDirectory(): string {
+  const entry = readText("/proc/self/cgroup")
+    ?.split("\n")
+    .find((line) => line.startsWith("0::"));
+  return path.join("/sys/fs/cgroup", entry?.slice(3).trim() || "/");
+}
+
+function readText(file: string): string | null {
+  try {
+    return readFileSync(file, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+function readBytes(file: string): number | null {
+  const text = readText(file)?.trim();
+  return text && /^\d+$/.test(text) ? Number(text) : null;
+}
+
+function formatGibibytes(bytes: number): string {
+  return `${Math.round((bytes / BYTES_PER_GIB) * 10) / 10} GiB`;
+}
+
+/**
+ * The tier to move to, from the tiers an Agent Runtime run may use
+ * (`ARCHESTRA_AGENT_RUNTIME_TIERS`, smallest first, `current` on its own).
+ */
+function largerTierStep(env: NodeJS.ProcessEnv): string {
+  let tiers: Array<{
+    name?: unknown;
+    memory_limit_gib?: unknown;
+    current?: unknown;
+  }> = [];
+  try {
+    const parsed: unknown = JSON.parse(
+      env.ARCHESTRA_AGENT_RUNTIME_TIERS ?? "[]",
+    );
+    if (Array.isArray(parsed)) tiers = parsed;
+  } catch {
+    tiers = [];
+  }
+  const current = tiers.findIndex((tier) => tier?.current === true);
+  if (current === -1) return "Or give it more memory.";
+  const limitOf = (tier: (typeof tiers)[number] | undefined) =>
+    typeof tier?.memory_limit_gib === "number" ? tier.memory_limit_gib : null;
+  const currentLimit = limitOf(tiers[current]);
+  // The list is smallest first; a tier with more CPU and the same memory
+  // would be killed the same way.
+  const larger = tiers.slice(current + 1).find((tier) => {
+    const limit = limitOf(tier);
+    return (
+      typeof tier?.name === "string" &&
+      (limit === null || currentLimit === null || limit > currentLimit)
+    );
+  });
+  if (!larger) {
+    return `This run is at ${String(tiers[current]?.name)}, and no tier this agent may use has more memory.`;
+  }
+  const limit = limitOf(larger);
+  return `Or move the work to a larger tier: start a run of this agent at ${String(larger.name)}${limit === null ? "" : `, which has a memory limit of ${limit} GiB,`} and hand over the branch.`;
+}
+
+const MEMORY_KILL_REPORT = Symbol.for("archestra.memoryKillReport");
 const BYTES_PER_MIB = 1024 ** 2;
 const BYTES_PER_GIB = 1024 ** 3;
 const TYPESCRIPT_DEFAULT_CHECKERS = 4;

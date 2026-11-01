@@ -6,6 +6,19 @@ import type WebSocket from "ws";
 export class AgentRuntimeCommandTransportError extends Error {}
 /** The pod ran the command and it ended in failure, as opposed to a connection the API server lost. */
 export class AgentRuntimeCommandFailedError extends Error {}
+/**
+ * The exec connection was refused before the command ran: denied access, an
+ * invalid connection, or a container that is no longer running.
+ */
+export class AgentRuntimeExecConnectionError extends Error {
+  constructor(
+    message: string,
+    /** The HTTP status the handshake was refused with, when it was one. */
+    readonly httpStatus?: number,
+  ) {
+    super(message);
+  }
+}
 
 /** Stream a command's output instead of collecting it.
  *
@@ -210,12 +223,16 @@ export function execAgentRuntimeCommand(params: {
 function normalizeConnectionError(error: unknown): Error {
   if (error instanceof Error) return error;
   let detail: string | undefined;
+  let httpStatus: number | undefined;
   if (error && typeof error === "object") {
     if ("message" in error && typeof error.message === "string") {
       const status = /^Unexpected server response: ([1-5]\d{2})$/.exec(
         error.message,
       )?.[1];
-      if (status) detail = `HTTP ${status}`;
+      if (status) {
+        detail = `HTTP ${status}`;
+        httpStatus = Number(status);
+      }
     }
     if (!detail && "error" in error) {
       const cause = error.error;
@@ -243,7 +260,8 @@ function normalizeConnectionError(error: unknown): Error {
       }
     }
   }
-  return new Error(
+  return new AgentRuntimeExecConnectionError(
     `Agent Runtime exec connection failed${detail ? ` (${detail})` : ""}`,
+    httpStatus,
   );
 }

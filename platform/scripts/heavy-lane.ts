@@ -63,7 +63,7 @@ export interface HeavyCommand {
 /**
  * Runs the command through the lane when it is active, else directly. The
  * result is spawnSync's: a command killed by a signal under the lane exits
- * 128 + that signal, as `flock` reports it.
+ * 128 + that signal, as a shell reports it.
  */
 export function runHeavy(heavy: HeavyCommand): SpawnSyncReturns<Buffer> {
   const env = heavy.env ?? process.env;
@@ -83,7 +83,7 @@ export function runHeavy(heavy: HeavyCommand): SpawnSyncReturns<Buffer> {
   const lock = path.join(tmpdir(), "archestra-heavy.lock");
   const holder = `${lock}.holder`;
   sayWhoHolds(lock, holder, heavy.label);
-  const devLite = heavy.devLiteScript ?? DEV_LITE_SCRIPT;
+  const devLite = heavy.devLiteScript ?? stackDevLiteScript(env);
   const pause =
     pausesServers(envelope, heavy.peakBytes) && supportsPause(devLite);
   const ceilings = heavyLaneCeilings(envelope);
@@ -92,13 +92,12 @@ export function runHeavy(heavy: HeavyCommand): SpawnSyncReturns<Buffer> {
       ? ""
       : `it needs about ${gib(heavy.peakBytes)}, and beside them this pod has ${gib(ceilings.besideServersBytes)} for it`;
   return spawnSync(
-    "flock",
+    "bash",
     [
-      lock,
-      "bash",
       "-c",
       HELD_SCRIPT,
       "heavy-lane",
+      lock,
       holder,
       heavy.label,
       pause ? "1" : "0",
@@ -115,35 +114,41 @@ export function runHeavy(heavy: HeavyCommand): SpawnSyncReturns<Buffer> {
 // ===== Internal helpers =====
 
 const GIB = 1024 ** 3;
-const DEV_LITE_SCRIPT = path.join(
+const OWN_DEV_LITE_SCRIPT = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "dev-lite.sh",
 );
 
 /**
- * Runs under the lock: records the holder for waiters, pauses the servers when
- * asked and they run, runs the command, resumes them. A no-op INT/TERM/HUP
- * handler keeps this shell alive to resume while the signal reaches the
- * command (handlers, unlike ignored signals, are not inherited).
+ * Takes the lock on its own descriptor (9), which nothing it starts inherits:
+ * a tmux server that `resume` starts would otherwise hold the lane for good.
+ * Records the holder for waiters, pauses the servers when asked and they run,
+ * runs the command, resumes them. The no-op INT/TERM/HUP handler, set before
+ * anything else, keeps this shell alive to resume while the signal reaches
+ * the command (handlers, unlike ignored signals, are not inherited). The dev
+ * stack starts without the lane's own variables.
  */
 const HELD_SCRIPT = `
-holder="$1" label="$2" pause="$3" dev_lite="$4" paused_file="$5" why="$6"
-shift 6
+lock="$1" holder="$2" label="$3" pause="$4" dev_lite="$5" paused_file="$6" why="$7"
+shift 7
+trap ':' INT TERM HUP
+exec 9>>"$lock"
+flock 9 || exit $?
 printf '%s\\t%s\\t%s\\n' "$$" "$(date +%s)" "$label" > "$holder" 2>/dev/null || :
+stack() { env -u ARCHESTRA_HEAVY_LANE -u GOMEMLIMIT bash "$dev_lite" "$1" > /dev/null 2>&1 9>&-; }
 resume=0
 if [ "$pause" = 1 ] && [ ! -e "$paused_file" ]; then
-  bash "$dev_lite" pause > /dev/null 2>&1 || :
+  stack pause || :
   if [ -e "$paused_file" ]; then
     resume=1
     echo "heavy-lane: stopped the dev stack's backend and frontend while $label runs: $why. They start again when it ends; PostgreSQL keeps running." >&2
   fi
 fi
-trap ':' INT TERM HUP
-"$@"
+"$@" 9>&-
 status=$?
 if [ "$resume" = 1 ]; then
   echo "heavy-lane: starting the dev stack's backend and frontend again" >&2
-  bash "$dev_lite" resume > /dev/null 2>&1 \\
+  stack resume \\
     || echo "heavy-lane: the backend and frontend did not start again: run 'archestra-dev-lite resume'" >&2
 fi
 : > "$holder" 2>/dev/null || :
@@ -153,6 +158,25 @@ exit "$status"
 function hasFlock(): boolean {
   if (process.platform !== "linux") return false;
   return spawnSync("flock", ["--version"], { stdio: "ignore" }).status === 0;
+}
+
+/**
+ * The dev-lite.sh of the checkout that runs the dev stack (dev-lite records it
+ * when a server starts), so a type check in another worktree pauses and
+ * resumes that stack, not its own checkout; else this checkout's.
+ */
+function stackDevLiteScript(env: NodeJS.ProcessEnv): string {
+  try {
+    const platformDir = readFileSync(
+      path.join(devLiteStateDir(env), "servers-started"),
+      "utf8",
+    ).trim();
+    const script = path.join(platformDir, "scripts", "dev-lite.sh");
+    if (platformDir && existsSync(script)) return script;
+  } catch {
+    // No stack started by a dev-lite.sh that records it.
+  }
+  return OWN_DEV_LITE_SCRIPT;
 }
 
 /** Whether this checkout's dev stack can pause (`dev-lite.sh pause`). */
@@ -165,10 +189,14 @@ function supportsPause(devLite: string): boolean {
 }
 
 function pausedFile(env: NodeJS.ProcessEnv): string {
-  const stateDir =
+  return path.join(devLiteStateDir(env), "paused");
+}
+
+function devLiteStateDir(env: NodeJS.ProcessEnv): string {
+  return (
     env.ARCHESTRA_DEV_LITE_STATE_DIR ||
-    path.join(env.HOME || homedir(), ".archestra-dev-lite");
-  return path.join(stateDir, "paused");
+    path.join(env.HOME || homedir(), ".archestra-dev-lite")
+  );
 }
 
 /** When another heavy command holds the lane, say which one this waits for. */
@@ -209,21 +237,29 @@ if (
   process.argv[1] &&
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
-  const argv = process.argv.slice(2);
-  const separator = argv.indexOf("--");
-  const flags = separator === -1 ? [] : argv.slice(0, separator);
-  const [command, ...args] =
-    separator === -1 ? argv : argv.slice(separator + 1);
-  if (!command) {
+  const usage = () => {
     process.stderr.write(
       "usage: node scripts/heavy-lane.ts [--label <text>] [--peak-gib <n>] [--dev-lite <script>] -- <command> [args...]\n",
     );
     process.exit(64);
-  }
-  const flag = (name: string) => {
-    const index = flags.indexOf(name);
-    return index === -1 ? undefined : flags[index + 1];
   };
+  // Known options, each with a value, then `--`, then the command.
+  const argv = process.argv.slice(2);
+  const options = new Map<string, string>();
+  let index = 0;
+  for (; index < argv.length && argv[index] !== "--"; index += 2) {
+    const [name, value] = [argv[index], argv[index + 1]];
+    if (
+      !["--label", "--peak-gib", "--dev-lite"].includes(name) ||
+      value === undefined
+    ) {
+      usage();
+    }
+    options.set(name, value);
+  }
+  const [command, ...args] = argv.slice(index + 1);
+  if (index >= argv.length || !command) usage();
+  const flag = (name: string) => options.get(name);
   const peak = Number(flag("--peak-gib"));
   const result = runHeavy({
     command,

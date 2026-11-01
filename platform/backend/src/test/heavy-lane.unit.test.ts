@@ -65,16 +65,26 @@ describe("heavy lane", () => {
   test.skipIf(!hasFlock)(
     "heavy commands started together run one at a time, and a waiter says for whom",
     async () => {
-      const { log, env } = scratch();
-      const run = (name: string) =>
-        runCli(env, ["--label", name, "--", "sh", "-c", logged(log, name)]);
-      // The first holds the lane before the others start, so they must wait.
-      const first = run("first");
-      await waitFor(
-        () =>
-          existsSync(log) && readFileSync(log, "utf8").includes("start first"),
+      const { log, env, root } = scratch();
+      const release = path.join(root, "release");
+      // The first holds the lane until both others have said they wait.
+      const first = runCli(env, [
+        "--label",
+        "first",
+        "--",
+        "sh",
+        "-c",
+        `echo "start first" >> ${log}; while [ ! -e ${release} ]; do sleep 0.05; done; echo "end first" >> ${log}`,
+      ]);
+      await waitFor(() => readIfExists(log).includes("start first"));
+      const waiters = ["second", "third"].map((name) =>
+        runCli(env, ["--label", name, "--", "sh", "-c", logged(log, name)]),
       );
-      const results = await Promise.all([first, run("second"), run("third")]);
+      await waitFor(() =>
+        waiters.every((waiter) => waiter.stderr().includes("waits for")),
+      );
+      writeFileSync(release, "");
+      const results = await Promise.all([first, ...waiters]);
       expect(results.map((result) => result.status)).toEqual([0, 0, 0]);
       const lines = readFileSync(log, "utf8").trim().split("\n");
       expect(lines).toHaveLength(6);
@@ -82,16 +92,13 @@ describe("heavy lane", () => {
         const name = lines[i].split(" ")[1];
         expect(lines[i + 1]).toBe(`end ${name}`);
       }
-      const waits = results
-        .slice(1)
-        .map((result) => result.stderr)
-        .filter((stderr) => stderr.includes("waits for"));
-      expect(waits).toHaveLength(2);
+      for (const waiter of results.slice(1)) {
+        expect(waiter.stderr).toMatch(
+          /^heavy-lane: (second|third) waits for first \(pid \d+, running \d+ s\): one memory-heavy command runs at a time in this pod\.$/m,
+        );
+      }
       expect(results.map((result) => result.stderr).join("")).not.toContain(
         "Warning",
-      );
-      expect(waits[0]).toMatch(
-        /^heavy-lane: \w+ waits for (\w+ \(pid \d+, running \d+ s\)|another memory-heavy command): one memory-heavy command runs at a time in this pod\.$/m,
       );
     },
     30_000,
@@ -172,17 +179,57 @@ describe("heavy lane", () => {
     },
   );
 
-  test("outside a small container the command runs directly", async () => {
-    const { log, env, devLite } = scratch();
-    delete env.ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT;
-    const result = await runCli(env, [
-      ...bigCommand(devLite),
-      "sh",
-      "-c",
-      `echo direct >> ${log}`,
-    ]);
-    expect(result.status).toBe(0);
-    expect(readFileSync(log, "utf8").trim()).toBe("direct");
+  test.skipIf(!hasFlock)(
+    "a process a heavy command leaves running does not keep the lane",
+    async () => {
+      const { log, env } = scratch();
+      // As a tmux server started by `resume` would: still alive after the command.
+      const first = await runCli(env, [
+        "--label",
+        "first",
+        "--",
+        "sh",
+        "-c",
+        "sleep 5 > /dev/null 2>&1 &",
+      ]);
+      expect(first.status).toBe(0);
+      const started = Date.now();
+      const second = await runCli(env, [
+        "--label",
+        "second",
+        "--",
+        "sh",
+        "-c",
+        `echo second >> ${log}`,
+      ]);
+      expect(second.status).toBe(0);
+      expect(second.stderr).not.toContain("waits for");
+      expect(Date.now() - started).toBeLessThan(4_000);
+    },
+    30_000,
+  );
+
+  test.skipIf(!hasFlock)(
+    "a command already under the lane neither waits nor pauses the servers",
+    async () => {
+      const { log, env, devLite } = scratch();
+      env.ARCHESTRA_HEAVY_LANE = "held";
+      const result = await runCli(env, [
+        ...bigCommand(devLite),
+        "sh",
+        "-c",
+        `echo direct >> ${log}`,
+      ]);
+      expect(result.status).toBe(0);
+      expect(readFileSync(log, "utf8").trim()).toBe("direct");
+    },
+  );
+
+  test("refuses a command line without the -- before the command", async () => {
+    const { env } = scratch();
+    const result = await runCli(env, ["pnpm", "exec", "vitest", "--", "run"]);
+    expect(result.status).toBe(64);
+    expect(result.stderr).toContain("usage:");
   });
 
   // ===== Helpers =====
@@ -225,7 +272,7 @@ describe("heavy lane", () => {
       ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "1",
     };
     delete env.ARCHESTRA_HEAVY_LANE;
-    return { log, env, devLite, paused };
+    return { root, log, env, devLite, paused };
   }
 
   /** The lane options of the frontend's type check, with the fake dev stack. */
@@ -247,26 +294,38 @@ describe("heavy lane", () => {
   }
 
   async function waitFor(condition: () => boolean): Promise<void> {
-    for (let i = 0; i < 200 && !condition(); i++) {
+    for (let i = 0; i < 400; i++) {
+      if (condition()) return;
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
+    throw new Error("timed out waiting for the condition");
   }
 
+  function readIfExists(file: string): string {
+    return existsSync(file) ? readFileSync(file, "utf8") : "";
+  }
+
+  /** The lane's command line; `stderr()` reads what it printed so far. */
   function runCli(
     env: NodeJS.ProcessEnv,
     args: string[],
-  ): Promise<{ status: number | null; stderr: string }> {
-    return new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, [...NODE_FLAGS, LANE, ...args], {
-        env,
-        stdio: ["ignore", "ignore", "pipe"],
-      });
-      let stderr = "";
-      child.stderr.on("data", (chunk) => {
-        stderr += chunk;
-      });
-      child.on("error", reject);
-      child.on("close", (status) => resolve({ status, stderr }));
-    });
+  ): Promise<{ status: number | null; stderr: string }> & {
+    stderr: () => string;
+  } {
+    let stderr = "";
+    const done = new Promise<{ status: number | null; stderr: string }>(
+      (resolve, reject) => {
+        const child = spawn(process.execPath, [...NODE_FLAGS, LANE, ...args], {
+          env,
+          stdio: ["ignore", "ignore", "pipe"],
+        });
+        child.stderr.on("data", (chunk) => {
+          stderr += chunk;
+        });
+        child.on("error", reject);
+        child.on("close", (status) => resolve({ status, stderr }));
+      },
+    );
+    return Object.assign(done, { stderr: () => stderr });
   }
 });

@@ -56,7 +56,7 @@ const env =
   memory !== null && !process.env.GOMEMLIMIT
     ? { ...process.env, GOMEMLIMIT: String(memory.goMemoryLimitBytes) }
     : process.env;
-const pkg = path.basename(process.cwd());
+const pkg = checkedPackage();
 const memoryBefore = readCgroupMemory();
 // Where checkers are sized, compilers and the other heavy tools take turns
 // (scripts/heavy-lane.ts), and one too big to fit beside the dev stack's
@@ -95,6 +95,29 @@ if (status === 128 + constants.signals.SIGKILL) {
 process.exit(status);
 
 // ===== Internal helpers =====
+
+/**
+ * The package this check covers: the directory of its `--project`/`-p` when
+ * given (the migration linter checks its project from backend/), else the
+ * working directory. It names the check and its declared peak.
+ */
+function checkedPackage(): string {
+  for (const [index, arg] of args.entries()) {
+    const lower = arg.toLowerCase();
+    const value = lower.startsWith("--project=")
+      ? arg.slice("--project=".length)
+      : lower === "--project" || lower === "-p"
+        ? args[index + 1]
+        : undefined;
+    if (value) {
+      const project = path.resolve(value);
+      return path.basename(
+        project.endsWith(".json") ? path.dirname(project) : project,
+      );
+    }
+  }
+  return path.basename(process.cwd());
+}
 
 /**
  * Whether the caller passed one of these options, bare or as `--name=value`.

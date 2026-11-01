@@ -68,6 +68,7 @@
     "type-check": {
       "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts",
         "$TURBO_ROOT$/scripts/type-check.ts",
+        "$TURBO_ROOT$/scripts/heavy-lane.ts",
         "$TURBO_ROOT$/vitest.resources.ts"
       ]
     },

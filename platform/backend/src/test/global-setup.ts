@@ -24,14 +24,19 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildExtAppsInlineBundle } from "../standalone-scripts/build-ext-apps-inline";
 import { SNAPSHOT_PATH_ENV } from "./migrations-helper.js";
-import { pruneSnapshotCache, snapshotCachePath } from "./pglite-snapshot.js";
+import {
+  pruneSnapshotCache,
+  snapshotCachePath,
+  touchSnapshot,
+} from "./pglite-snapshot-cache.js";
 
 export default async function setup() {
   // Database-backed projects call this setup. Vitest initializes their global
   // setups sequentially in one process, so the first project publishes the
-  // path and the others reuse it.
-  const existingSnapshotPath = process.env[SNAPSHOT_PATH_ENV];
-  if (existingSnapshotPath && fs.existsSync(existingSnapshotPath)) return;
+  // path and the others reuse it. A path inherited from elsewhere, or for
+  // other migrations, is not reused: cached snapshots outlive the run.
+  const snapshotPath = snapshotCachePath();
+  if (process.env[SNAPSHOT_PATH_ENV] === snapshotPath) return;
 
   // The MCP-App connector inlines this generated, gitignored bundle and the
   // connector route tests read it, so build it once if a fresh checkout (CI)
@@ -40,11 +45,12 @@ export default async function setup() {
     buildExtAppsInlineBundle();
   }
 
-  const snapshotPath = snapshotCachePath();
-  if (!fs.existsSync(snapshotPath)) {
+  if (fs.existsSync(snapshotPath)) {
+    touchSnapshot(snapshotPath);
+  } else {
     buildSnapshotInChildProcess(snapshotPath);
-    pruneSnapshotCache(SNAPSHOTS_KEPT);
   }
+  pruneSnapshotCache(SNAPSHOTS_KEPT);
   process.env[SNAPSHOT_PATH_ENV] = snapshotPath;
 
   return () => {
@@ -56,6 +62,8 @@ export default async function setup() {
 
 /** Snapshots kept on disk: the current one and a few for other branches. */
 const SNAPSHOTS_KEPT = 3;
+/** About ten times what a build takes on 2 CPUs. */
+const BUILD_TIMEOUT_MS = 5 * 60 * 1000;
 
 function buildSnapshotInChildProcess(snapshotPath: string): void {
   const testDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -63,8 +71,13 @@ function buildSnapshotInChildProcess(snapshotPath: string): void {
   const result = spawnSync(
     process.execPath,
     ["--import", "tsx", script, snapshotPath],
-    // From the backend directory, where `--import tsx` resolves.
-    { stdio: "inherit", cwd: path.resolve(testDirectory, "../..") },
+    {
+      stdio: "inherit",
+      // From the backend directory, where `--import tsx` resolves.
+      cwd: path.resolve(testDirectory, "../.."),
+      // A hung build must fail the run, not hold it until the CI job dies.
+      timeout: BUILD_TIMEOUT_MS,
+    },
   );
   if (result.error) throw result.error;
   if (result.status !== 0) {

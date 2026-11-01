@@ -1122,6 +1122,11 @@ export async function processProxyResults(params: {
    * remedy never ran, and the model reads what the client returned.
    */
   isControlResult?: (result: CommonToolResult) => boolean;
+  /**
+   * Whether the proxy verified this result as a child return against the
+   * crossing the runtime retained, and replaced its content with that return.
+   */
+  isVerifiedChildReturn?: (result: CommonToolResult) => boolean;
   /** Canonical status for this session's server-staged, still-pending review. */
   pendingReviewResult?: (
     result: CommonToolResult,
@@ -1189,6 +1194,21 @@ export async function processProxyResults(params: {
       policy,
       principal,
     });
+    // A client can read a crossed child return with a call it made itself:
+    // Copilot CLI reads a finished background agent with read_agent when it
+    // announces the agent is idle. The runtime released no such call, but
+    // the return was verified against the crossing the runtime retained, so
+    // that verified text goes through.
+    if (
+      approved.code === UNRELEASED_CALL_CODE &&
+      params.isVerifiedChildReturn?.(result) === true
+    ) {
+      updates[result.id] = {
+        content: resultOutput(result),
+        outputSource: "runtime",
+      };
+      continue;
+    }
     const pendingReview =
       approved.code === UNRELEASED_CALL_CODE
         ? await params.pendingReviewResult?.(result)
@@ -1691,6 +1711,22 @@ export async function returnRuntimeValue(params: {
     : { kind: "held", reason: outcome.content };
 }
 
+/** The runtime's refusal of a report that its spawn call can no longer take. */
+const OUTCOME_MISMATCH_REASON =
+  "this outcome does not match the open dispatch; it is not reported";
+
+/**
+ * The runtime would not report a child's return against its spawn call: the
+ * call no longer takes that outcome. A turn end closes every call still open,
+ * a spawn whose child runs in the background included, so a return that
+ * arrives after it is refused this way. Nothing crossed into the parent.
+ */
+export class SpawnReturnNotReported extends ApiError {
+  constructor(message: string) {
+    super(409, message);
+  }
+}
+
 /**
  * Verifies that a parent carrier contains bytes admitted through ChildEnd.
  *
@@ -1723,6 +1759,9 @@ export async function approveSpawnReturn(params: {
         "OpenAPPA spawn dispatch already closed; child return matches the retained crossing",
       );
       return;
+    }
+    if (decision.reason === OUTCOME_MISMATCH_REASON) {
+      throw new SpawnReturnNotReported(msg);
     }
     throw new ApiError(409, msg);
   }

@@ -105,6 +105,15 @@ export type AppaSpawnPromptField = {
 
 export type AppaSpawnResultDisposition = "pending" | "failed";
 
+/**
+ * What a spawn call needs so its child runs on a model this proxy routes:
+ * arguments to add to the released call, or a refusal for a call that names
+ * a model this proxy does not route.
+ */
+export type AppaSpawnModel =
+  | { stamp: Record<string, unknown> }
+  | { refusal: string };
+
 export type AppaClientAdapter = {
   readonly id: string;
   /** Prefix for this client's native spawn/child namespace. */
@@ -195,6 +204,12 @@ export type AppaClientAdapter = {
   extractSessionIdentity?(
     context: AppaMatchContext,
   ): AppaSessionIdentity | undefined;
+  /**
+   * The prompt a child's opening message carries, as the spawner handed it:
+   * without the preamble this client puts in front of it. A delegation
+   * marker closes that prompt, so its digest is taken over this text.
+   */
+  childOpeningPrompt?(text: string): string;
   /** Native parent named by a spawn-prepared child request, if any. */
   nativeSpawnParentId?(
     context: AppaMatchContext,
@@ -214,6 +229,15 @@ export type AppaClientAdapter = {
   isChildCompletionResult?(result: CommonToolResult): boolean;
   /** Returns bounded launch metadata and strips arbitrary acknowledgment text. */
   normalizeChildLaunchResult?(result: CommonToolResult): string | undefined;
+  /**
+   * The client resumes the parent's conversation by itself when a child it
+   * launched in the background finishes, and hands the parent its return
+   * then (Copilot CLI: a system notification and its own read_agent call).
+   * The parent's turn is not over until that return arrives: a turn end
+   * closes every call still open, the spawn included, and the return could
+   * no longer be reported against it.
+   */
+  readonly resumesForBackgroundReturns?: true;
   /**
    * Reads a native message between agents of one session, such as a
    * teammate writing to its lead. `to` is the recipient as the client names
@@ -285,6 +309,20 @@ export type AppaClientAdapter = {
     namespace?: string;
     arguments: unknown;
   }): string[] | undefined;
+  /**
+   * Keeps a spawn's child on a model this proxy routes. A client that runs a
+   * subagent on its own default model unless the call names one (Copilot CLI
+   * signed in to GitHub) would otherwise start the child on a model whose
+   * requests never reach this proxy, out of Guardrails' sight. Undefined when
+   * the call needs nothing.
+   */
+  spawnModel?(params: {
+    requestBody: unknown;
+    /** The model this request asked the proxy for. */
+    model: string;
+    name: string;
+    arguments: Record<string, unknown>;
+  }): AppaSpawnModel | undefined;
   /** Native conversation ID that child subagents report as their parent. */
   nativeConversationId(context: AppaMatchContext): string | undefined;
   /**

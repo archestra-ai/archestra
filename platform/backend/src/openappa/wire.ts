@@ -57,6 +57,7 @@ export type AppaSessionIdentity = {
     | "claude-metadata"
     | "opencode-session"
     | "codex-turn-metadata"
+    | "copilot-cli-prompt-cache-key"
     | "opencode-session-header"
     | "opencode-hosted-header"
     | "kilo-session-header"
@@ -557,29 +558,102 @@ export function stripAppaTools(params: {
       (spelling) => spelling.name === name && spelling.namespace === namespace,
     );
   };
+  // Search outputs the strip leaves with nothing in them: the provider refuses
+  // an empty one, so each leaves the history together with its call.
+  const emptiedSearches = new Set<Record<string, unknown>>();
   for (const { holder, key } of toolContainers(params.body)) {
     // Gemini accepts a lone tool object where it accepts a list of them; the
     // filter below needs the list.
     if (asRecord(holder[key])) holder[key] = [holder[key]];
     const declared = holder[key];
     if (!Array.isArray(declared)) continue;
-    holder[key] = declared.filter((tool) => {
+    const remaining = declared.filter((tool) => {
       const group = groupedMembers(tool);
       if (group) {
-        // A group keeps its other tools; only the named one leaves.
+        // A group keeps its other tools; only the named one leaves. A group
+        // the strip empties leaves with it: the provider refuses one.
         const namespace = groupNamespace(tool);
-        group.holder[group.key] = group.members.filter(
+        const kept = group.members.filter(
           (member) => !isStripped(member, namespace),
         );
-        return true;
+        group.holder[group.key] = kept;
+        return kept.length > 0 || group.members.length === 0;
       }
       return !isStripped(tool, undefined);
+    });
+    holder[key] = remaining;
+    if (
+      holder.type === "tool_search_output" &&
+      declared.length > 0 &&
+      remaining.length === 0
+    )
+      emptiedSearches.add(holder);
+  }
+  const record = asRecord(params.body);
+  if (emptiedSearches.size > 0 && record && Array.isArray(record.input)) {
+    const callIds = new Set(
+      [...emptiedSearches].flatMap((search) =>
+        typeof search.call_id === "string" ? [search.call_id] : [],
+      ),
+    );
+    record.input = record.input.filter((item) => {
+      const entry = asRecord(item);
+      if (!entry) return true;
+      if (emptiedSearches.has(entry)) return false;
+      return !(
+        entry.type === "tool_search_call" &&
+        typeof entry.call_id === "string" &&
+        callIds.has(entry.call_id)
+      );
     });
   }
   // A change that names a tool no longer declared is rejected by the provider.
   stripInlineToolChanges(params.body, (change) =>
     isStripped({ name: change.name }, undefined),
   );
+}
+
+/**
+ * Loads declarations up front: drops `defer_loading` from each, by its exact
+ * wire name and namespace, in the request's own tool containers. Copies a
+ * tool search output carries in history stay as they came. A client that
+ * defers its MCP tools behind the provider's own tool search (Copilot CLI)
+ * otherwise reaches them only through that search, which can come back
+ * empty for exactly these tools. A namespace may mix loaded and deferred
+ * members, so the rest of it stays deferred.
+ */
+export function loadDeclarationsUpFront(params: {
+  body: unknown;
+  tools: readonly DeclaredToolSpelling[];
+}): void {
+  if (params.tools.length === 0) return;
+  const record = asRecord(params.body);
+  if (!record) return;
+  const named = (tool: unknown, namespace: string | undefined) => {
+    const name = declaredToolName(tool);
+    return params.tools.some(
+      (spelling) => spelling.name === name && spelling.namespace === namespace,
+    );
+  };
+  const load = (tool: unknown, namespace: string | undefined) => {
+    const declaration = asRecord(tool);
+    if (declaration?.defer_loading === true && named(tool, namespace))
+      delete declaration.defer_loading;
+  };
+  const containers: unknown[] = TOOL_CONTAINERS.map((key) => record[key]);
+  const toolConfig = asRecord(record.toolConfig);
+  if (toolConfig) containers.push(toolConfig.tools);
+  for (const container of containers) {
+    for (const tool of containerTools(container)) {
+      const group = groupedMembers(tool);
+      if (!group) {
+        load(tool, undefined);
+        continue;
+      }
+      const namespace = groupNamespace(tool);
+      for (const member of group.members) load(member, namespace);
+    }
+  }
 }
 
 /**

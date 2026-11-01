@@ -114,6 +114,34 @@ export function scrubOpenappaIngress(params: {
  * for ingress. `translatedCallId` maps a call id of the client's wire to the
  * id the translated body carries, where the two differ.
  */
+/**
+ * The delegation markers in a request's opening messages, with each prompt
+ * digest taken as the client's adapter reads the opening text: a client that
+ * puts its own preamble in front of a child's prompt still binds the marker
+ * to the prompt the spawner handed over.
+ */
+export function collectClientDelegationMarkers(params: {
+  family:
+    | Extract<AppaWireFamily, "openai:responses" | "openai:chatCompletions">
+    | AppaWireFamily;
+  body: unknown;
+  headers: Readonly<Record<string, string | string[] | undefined>>;
+}): AppaDelegationMarker[] {
+  const adapter = APPA_CLIENT_ADAPTERS.find((candidate) =>
+    candidate.matches({ headers: params.headers, requestBody: params.body }),
+  );
+  return collectDelegationMarkers({
+    family: params.family,
+    body: params.body,
+    ...(adapter?.childOpeningPrompt
+      ? {
+          openingPrompt: (text: string) =>
+            adapter.childOpeningPrompt?.(text) ?? text,
+        }
+      : {}),
+  });
+}
+
 export function scrubTranslatedClientWire(params: {
   request: FastifyRequest;
   family: Extract<
@@ -209,21 +237,22 @@ function scrubFamilyWire(params: {
       (proof) => stripChildTrajectoryReceipts(proof).receipts,
     ),
   );
+  const nativeClient = APPA_CLIENT_ADAPTERS.find((adapter) =>
+    adapter.matches({ headers, requestBody: body }),
+  );
   // A route that translated the wire first collected the markers from the
   // client's own wire; the translated text may no longer end with them.
   const delegationMarkers =
     collectedDelegationMarkers(request) ??
-    collectDelegationMarkers({ family, body });
+    collectClientDelegationMarkers({ family, body, headers });
   const releasedSpawnCalls = collectReleasedSpawnCalls({ family, body });
   stripDelegationMarkers({ family, body });
-  const nativeClient = APPA_CLIENT_ADAPTERS.find((adapter) =>
-    adapter.matches({ headers, requestBody: body }),
-  );
   const childReturnOptions = {
     // Kilo Code frames its background tasks as OpenCode does.
     openCodeBackgroundReturns:
       !!nativeClient && isOpenCodeFamilyClient(nativeClient.id),
     codexMailboxReturns: nativeClient?.id === "codex",
+    copilotAgentReports: nativeClient?.id === "copilot-cli",
     onRefusal: (refusal: ApiError) => {
       childReturnRefusal ??= refusal;
     },

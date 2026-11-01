@@ -64,13 +64,18 @@ export function collectAndStripChildReturns(
   options: {
     openCodeBackgroundReturns?: boolean;
     codexMailboxReturns?: boolean;
+    /** Copilot CLI reads a finished background agent with `read_agent`. */
+    copilotAgentReports?: boolean;
     onRefusal?: RefusalSink;
   } = {},
 ): CollectedChildReturns {
   const collected: CollectedChildReturns = {
     completions: [],
   };
-  const nativeResultCallIds = collectNativeResultCallIds(body);
+  const nativeResultCallIds = collectNativeResultCallIds(
+    body,
+    options.copilotAgentReports ? COPILOT_REPORT_TOOLS : undefined,
+  );
   if (options.codexMailboxReturns) {
     collectCodexMailboxReturns(body, collected, options.onRefusal);
   }
@@ -132,6 +137,12 @@ export function collectAndStripChildReturns(
           startsWithEnvelope(value, SUBAGENT_NOTIFICATION))
       ) {
         rewritten = replaceSubagentNotifications(value, context, collected);
+      } else if (
+        options.copilotAgentReports &&
+        context.nativeResultSite &&
+        COPILOT_AGENT_REPORT.test(value)
+      ) {
+        rewritten = replaceCopilotAgentReport(value, context, collected);
       } else if (
         context.nativeResultSite &&
         isCompleteTaskResultFraming(value)
@@ -548,6 +559,36 @@ function replaceSubagentNotifications(
   }
   if (cursor === 0 || canonical.length === 0) return value;
   return canonical.join("\n");
+}
+
+/**
+ * Copilot CLI's report of a finished background agent, as its `read_agent`
+ * returns it: a status line, then each turn the agent finished, as
+ * `[Turn <n>]` and the text that turn returned. A turn that crossed through
+ * this proxy ends with the return marker; each is read as its own return,
+ * and the status line stays as it came. Copilot's subagents report no id of
+ * their own, so the agent id in the status line names nothing the runtime
+ * knows and is not read as the child's id.
+ */
+function replaceCopilotAgentReport(
+  value: string,
+  context: WalkContext,
+  collected: CollectedChildReturns,
+): string {
+  if (!hasMarker(value)) return value;
+  const turns = [...value.matchAll(COPILOT_REPORT_TURN)];
+  if (turns.length === 0) {
+    throw new ApiError(400, "OpenAPPA received a malformed agent report");
+  }
+  const parts = [value.slice(0, turns[0].index)];
+  turns.forEach((turn, index) => {
+    const start = (turn.index ?? 0) + turn[0].length;
+    const end = turns[index + 1]?.index ?? value.length;
+    const parsed = stripMarker(value.slice(start, end), context, true);
+    if (parsed.marker) recordCompletion(parsed, context, collected);
+    parts.push(turn[0], parsed.value);
+  });
+  return parts.join("");
 }
 
 /**
@@ -977,8 +1018,16 @@ const NATIVE_COMPLETION_TOOLS = new Set([
   "wait_agent",
 ]);
 const NATIVE_METADATA = /^[A-Za-z0-9_.:@/-]{1,512}$/;
+/** Copilot CLI's tool that reads what a background agent returned. */
+const COPILOT_REPORT_TOOLS: ReadonlySet<string> = new Set(["read_agent"]);
+/** `read_agent`'s report of an agent that finished: idle, or completed. */
+const COPILOT_AGENT_REPORT = /^Agent (?:is idle|completed|has completed)\b/;
+const COPILOT_REPORT_TURN = /(?:^|\r?\n\r?\n)\[Turn \d+\]\r?\n/g;
 
-function collectNativeResultCallIds(body: unknown): Set<string> {
+function collectNativeResultCallIds(
+  body: unknown,
+  moreTools?: ReadonlySet<string>,
+): Set<string> {
   const ids = new Set<string>();
   const root = asRecord(body);
   for (const message of Array.isArray(root?.messages) ? root.messages : []) {
@@ -994,6 +1043,7 @@ function collectNativeResultCallIds(body: unknown): Set<string> {
         stringField(toolCall?.id),
         stringField(fn?.name) ?? stringField(toolCall?.name),
         stringField(fn?.namespace) ?? stringField(toolCall?.namespace),
+        moreTools,
       );
     }
     for (const block of Array.isArray(record.content) ? record.content : []) {
@@ -1004,6 +1054,7 @@ function collectNativeResultCallIds(body: unknown): Set<string> {
         stringField(toolUse.id),
         stringField(toolUse.name),
         stringField(toolUse.namespace),
+        moreTools,
       );
     }
   }
@@ -1018,6 +1069,7 @@ function collectNativeResultCallIds(body: unknown): Set<string> {
         stringField(call.call_id) ?? stringField(call.id),
         stringField(call.name),
         stringField(call.namespace),
+        moreTools,
       );
     }
   }
@@ -1029,13 +1081,11 @@ function addNativeResultCallId(
   callId: string | undefined,
   name: string | undefined,
   namespace: string | undefined,
+  moreTools?: ReadonlySet<string>,
 ): void {
-  if (
-    !callId ||
-    !name ||
-    !isNativeToolNamespace(namespace) ||
-    !NATIVE_COMPLETION_TOOLS.has(localNativeToolName(name))
-  )
+  if (!callId || !name || !isNativeToolNamespace(namespace)) return;
+  const local = localNativeToolName(name);
+  if (!NATIVE_COMPLETION_TOOLS.has(local) && moreTools?.has(local) !== true)
     return;
   ids.add(normalizeCallId(callId) ?? callId);
 }

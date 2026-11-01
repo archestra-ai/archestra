@@ -360,6 +360,62 @@ describe("extractGatewayToolDeclarations", () => {
     expect(declarations[3].contract).not.toBe(declarations[0].contract);
   });
 
+  test("contract evidence ignores a loading hint and the null fields a tool search echo adds", () => {
+    // Copilot CLI declares a gateway tool deferred in its namespace; once the
+    // model's server-side search loaded it, the provider's search output
+    // repeats it with `output_schema: null` added. A real output schema is
+    // still a difference.
+    const schema = {
+      type: "object",
+      properties: { offer_id: { type: "string" } },
+    };
+    const tool = {
+      type: "function",
+      name: "archestra-archestra__execute_remedy_plan",
+      strict: false,
+      parameters: schema,
+    };
+    const declarations = extractGatewayToolDeclarations({
+      tools: [
+        {
+          type: "namespace",
+          name: "archestra",
+          tools: [{ ...tool, defer_loading: true }],
+        },
+      ],
+      input: [
+        {
+          type: "tool_search_output",
+          call_id: "ts_1",
+          execution: "server",
+          tools: [
+            {
+              type: "namespace",
+              name: "archestra",
+              tools: [{ ...tool, defer_loading: true, output_schema: null }],
+            },
+          ],
+        },
+        {
+          type: "tool_search_output",
+          call_id: "ts_2",
+          execution: "server",
+          tools: [
+            {
+              type: "namespace",
+              name: "archestra",
+              tools: [{ ...tool, output_schema: { type: "object" } }],
+            },
+          ],
+        },
+      ],
+    });
+    expect(declarations).toHaveLength(3);
+    expect(declarations[0].contract).toEqual(expect.any(String));
+    expect(declarations[1].contract).toBe(declarations[0].contract);
+    expect(declarations[2].contract).not.toBe(declarations[0].contract);
+  });
+
   test("deep schemas cannot collapse to a truncation sentinel", () => {
     const nested = (leaf: string) => {
       let value: Record<string, unknown> = { const: leaf };

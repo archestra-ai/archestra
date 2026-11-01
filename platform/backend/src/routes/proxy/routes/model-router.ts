@@ -32,8 +32,10 @@ import {
 } from "@/models";
 import AgentTeamModel from "@/models/agent-team";
 import { getLlmProxyRequestTelemetry } from "@/observability/llm-proxy-request";
-import { collectDelegationMarkers } from "@/openappa/delegation";
-import { scrubTranslatedClientWire } from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
+import {
+  collectClientDelegationMarkers,
+  scrubTranslatedClientWire,
+} from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
 import { setCollectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import { resolveAzureModelCapabilities } from "@/services/azure-model-capabilities";
@@ -889,7 +891,11 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   // from the wire the client sent, where each still ends its own part.
   setCollectedDelegationMarkers(
     request,
-    collectDelegationMarkers({ family: "openai:responses", body }),
+    collectClientDelegationMarkers({
+      family: "openai:responses",
+      body,
+      headers: request.headers,
+    }),
   );
   // The translation also joins an OpenCode-family subagent return with the
   // parts beside it, so returns are read from the client's wire too.

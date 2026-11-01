@@ -229,14 +229,20 @@ describe("runtime tiers", () => {
   });
 
   test("a caller outside any run gets refusals that code-review-action retries at the Agent's own size", () => {
-    // code-review-action starts a review with a memory floor and, when the
-    // Agent refuses it, starts the run again without one. It recognizes the
+    // code-review-action starts a review with a size request (a CPU or
+    // memory floor, a shorter duration) and, when the Agent refuses it,
+    // starts the run again without one. It recognizes the
     // refusal by this wording (src/archestra/client.ts, `refusedLimits`); a
     // refusal it does not recognize fails every review on that Agent.
     const RETRIED_AT_OWN_SIZE =
       /is above this Agent's|sizes its runs with explicit resources|No tier this Agent's runs may use|There is no tier named|has less than the/i;
     const fixedS = { ...DEFAULTS, tier: "S", maxTier: "S" };
-    const refusal = (requested: { tier?: string; minMemoryGib?: number }) => {
+    const refusal = (requested: {
+      tier?: string;
+      minCpu?: number;
+      minMemoryGib?: number;
+      maxDurationHours?: number;
+    }) => {
       try {
         resolveAgentRunLimits({ runtime: fixedS, tiers: TIERS, requested });
       } catch (error) {
@@ -246,8 +252,10 @@ describe("runtime tiers", () => {
     };
     for (const requested of [
       { minMemoryGib: 7 },
+      { minCpu: 3 },
       { tier: "M" },
       { tier: "S", minMemoryGib: 7 },
+      { maxDurationHours: 9999 },
     ]) {
       expect(refusal(requested)).toMatch(RETRIED_AT_OWN_SIZE);
       expect(refusal(requested)).not.toContain("not retriable");

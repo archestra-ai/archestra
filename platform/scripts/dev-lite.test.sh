@@ -101,6 +101,42 @@ check "e2e without Keycloak: no identity-providers project" fails grep -q -- "--
 out="$(E2E_UNAVAILABLE= e2e_output)"
 check "a value set by hand wins, even an empty one" grep -q "E2E_UNAVAILABLE= " <<<"$out"
 
+# --- modes -------------------------------------------------------------------
+# Each case runs in a subshell with its own environment: a test run inside an
+# Agent Runtime must not see the pod's variables.
+outside() { (unset ARCHESTRA_AGENT_RUNTIME_TASK_ID ARCHESTRA_DEV_LITE_FRONTEND ARCHESTRA_DEV_LITE_SOURCE_MAPS; "$@"); }
+inside() { (unset ARCHESTRA_DEV_LITE_FRONTEND ARCHESTRA_DEV_LITE_SOURCE_MAPS; export ARCHESTRA_AGENT_RUNTIME_TASK_ID=task; "$@"); }
+gives() { local want="$1" got; shift; got="$("$@" 2>/dev/null)" || return 1; [ "$got" = "$want" ]; }
+with_frontend() { local value="$1"; shift; ARCHESTRA_DEV_LITE_FRONTEND="$value" "$@"; }
+with_maps() { local value="$1"; shift; ARCHESTRA_DEV_LITE_SOURCE_MAPS="$value" "$@"; }
+
+check "outside an Agent Runtime the frontend is the dev server" gives dev outside default_frontend_mode
+check "inside one it is a production build" gives build inside default_frontend_mode
+check "ARCHESTRA_DEV_LITE_FRONTEND chooses" gives dev inside with_frontend dev default_frontend_mode
+check "an unknown frontend mode is refused" fails inside with_frontend fast default_frontend_mode
+check "outside an Agent Runtime the backend keeps source maps" gives " --enable-source-maps" outside backend_node_flags
+check "inside one it runs without them" gives "" inside backend_node_flags
+check "ARCHESTRA_DEV_LITE_SOURCE_MAPS chooses" gives " --enable-source-maps" inside with_maps true backend_node_flags
+check "an unknown source-maps value is refused" fails inside with_maps yes backend_node_flags
+
+# start_frontend builds for every mode but dev, and records the mode, which
+# `reload frontend` starts again.
+frontend_start() {
+  (
+    ALIVE=""
+    free_ports() { :; }
+    build_frontend() { echo built; }
+    start_session() { echo "started in $2"; }
+    start_frontend "$1"
+    echo "mode $(frontend_mode)"
+  )
+}
+out="$(frontend_start build)"
+check "build mode builds, then serves the standalone server" grep -q "started in $STANDALONE_DIR" <<<"$out"
+check "build mode is recorded" grep -q "mode build" <<<"$(frontend_start build)"
+check "dev mode builds nothing" fails grep -q built <<<"$(frontend_start dev)"
+check "dev mode is recorded" grep -q "mode dev" <<<"$(frontend_start dev)"
+
 # --- down --------------------------------------------------------------------
 touch "$KEYCLOAK_REQUESTED_FILE"
 ALIVE=""

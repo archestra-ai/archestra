@@ -81,6 +81,28 @@ exits, it restarts after a second; five exits within 60 s of starting stop the
 loop until the next reload. `ARCHESTRA_DEV_BACKEND_WATCH=true` brings the watcher
 back.
 
+Inside an Agent Runtime the frontend is a production build served by its
+standalone server, not the Next dev server, and the backend runs without
+source maps. Nothing watches files: after frontend edits run
+`archestra-dev-lite reload frontend`, which rebuilds it, before you run tests
+against the stack or share a preview. `ARCHESTRA_DEV_LITE_FRONTEND=dev` brings
+the dev server back and `ARCHESTRA_DEV_LITE_SOURCE_MAPS=true` the source maps;
+`restart` applies a changed setting. Outside an Agent Runtime both default to
+the dev setup. Measured on 2026-11-01 against the same backend, six pages
+opened twice by a signed-in user:
+
+| | Next dev server | Production build |
+| --- | --- | --- |
+| Before the first page | starts in 3 s, 0.8 GB | build 78 s at 2 CPUs, at most 5.5 GB while it runs |
+| First visit of six pages | 40 s | 1 s |
+| Memory after both visits | 3.6 GB | 0.24 GB |
+| `frontend/.next` on disk | 0.5 GB | 1.1 GB, 0.6 GB of it the build cache |
+
+| Backend server at idle | With source maps | Without |
+| --- | --- | --- |
+| Resident memory | 1.2 GB | 0.9 GB |
+| JavaScript heap used | 611 MB | 450 MB |
+
 ## Build
 
 ```bash

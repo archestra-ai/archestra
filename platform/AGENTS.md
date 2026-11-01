@@ -18,8 +18,13 @@
      stack as plain processes:
      `scripts/dev-lite.sh up` (PostgreSQL 18, backend :9000, frontend :3000;
      `status`, `logs <component>`, `up --e2e` then `e2e` for the Playwright
-     lite projects, `down`). After backend changes run
-     `scripts/dev-lite.sh reload backend`. MCP server installs, nested Agent
+     lite projects, `down`). Inside an Agent Runtime both servers run builds,
+     not dev servers: nothing watches files, so after a change and before you
+     run tests against the stack or share a preview, run
+     `scripts/dev-lite.sh reload backend` (about 15 s) or
+     `scripts/dev-lite.sh reload frontend` (a production build, about 45 to
+     80 s). `ARCHESTRA_DEV_LITE_FRONTEND=dev` gives the Next dev server back
+     (about 3.5 GB once pages are open). MCP server installs, nested Agent
      Runtime, the code runtime, Vault, Keycloak specs and the `api-k8s`,
      `hibernation` and `vault-k8s` Playwright projects need the Tilt stack.
 4. **Documentation** - The `archestra-docs-writer` skill decides whether a change needs docs and how to write them. Read it before touching `../docs/pages`.

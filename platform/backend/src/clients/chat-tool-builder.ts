@@ -347,6 +347,18 @@ export function buildMcpGatewayTool(params: {
                 mcpTool.name,
                 toolArguments,
               );
+            } else if (!ctx.runId) {
+              const launchedRunId = (
+                archestraResponse.structuredContent as
+                  | { run?: { run_id?: unknown } }
+                  | undefined
+              )?.run?.run_id;
+              if (
+                typeof launchedRunId === "string" &&
+                launchedRunId.length > 0
+              ) {
+                ctx.runId = launchedRunId;
+              }
             }
 
             // Verifiable citations (#7161): capture the returned KB chunks

@@ -3778,14 +3778,28 @@ describe("POST /api/chat handler composition", () => {
     });
 
     const a2aContext = await A2AContextModel.create({
-      id: fixedConversation.id,
       actorKind: "user",
       actorId: user.id,
     });
+    expect(a2aContext.id).not.toBe(fixedConversation.id);
     const task = await A2ATaskModel.create({
       contextId: a2aContext.id,
       agentId: fixedAgent.id,
       state: "TASK_STATE_WORKING",
+    });
+
+    await MessageModel.create({
+      conversationId: fixedConversation.id,
+      role: "assistant",
+      content: {
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: `Agent run started (run_id: ${task.id})`,
+          },
+        ],
+      },
     });
 
     const workloadName = `agent-run-${task.id}`;

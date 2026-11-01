@@ -34,7 +34,16 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from "ai";
-import { and, desc, eq } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -348,16 +357,151 @@ function buildStreamErrorPayload(params: {
   return serialized;
 }
 
+const UUID_IN_MESSAGE_REGEX =
+  /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+function extractMessageUuids(value: unknown): string[] {
+  if (typeof value === "string") {
+    return value.match(UUID_IN_MESSAGE_REGEX) ?? [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap(extractMessageUuids);
+  }
+  if (value && typeof value === "object") {
+    return Object.values(value).flatMap(extractMessageUuids);
+  }
+  return [];
+}
+
 async function findActiveConversationRuntimeTaskId(params: {
   conversationId: string;
   agentId: string;
   organizationId: string;
   userId: string;
+  messages?: unknown[];
 }): Promise<string | undefined> {
-  const { conversationId, agentId, organizationId, userId } = params;
+  const { conversationId, agentId, organizationId, userId, messages } = params;
 
-  // 1. Check for an active task/run in this conversation's context
-  const [contextTask] = await db
+  const excludedIds = new Set([
+    conversationId.toLowerCase(),
+    agentId.toLowerCase(),
+    userId.toLowerCase(),
+  ]);
+  const [storedMessages, storedToolCalls] = await Promise.all([
+    db
+      .select({ content: schema.messagesTable.content })
+      .from(schema.messagesTable)
+      .where(eq(schema.messagesTable.conversationId, conversationId)),
+    db
+      .select({
+        toolCall: schema.mcpToolCallsTable.toolCall,
+        toolResult: schema.mcpToolCallsTable.toolResult,
+      })
+      .from(schema.mcpToolCallsTable)
+      .where(
+        or(
+          eq(schema.mcpToolCallsTable.sessionId, conversationId),
+          eq(
+            schema.mcpToolCallsTable.encryptedChatConversationId,
+            conversationId,
+          ),
+        ),
+      ),
+  ]);
+
+  const candidateTaskIds = [
+    ...new Set(
+      [
+        ...extractMessageUuids(messages),
+        ...storedMessages.flatMap((row) => extractMessageUuids(row.content)),
+        ...storedToolCalls.flatMap((row) => [
+          ...extractMessageUuids(row.toolCall),
+          ...extractMessageUuids(row.toolResult),
+        ]),
+      ]
+        .map((id) => id.toLowerCase())
+        .filter((id) => !excludedIds.has(id)),
+    ),
+  ];
+
+  const userScopedConversationSessionId = `user:${userId}|${conversationId}`;
+
+  const ownershipConditions: SQL[] = [
+    eq(schema.a2aTasksTable.contextId, conversationId),
+    inArray(
+      schema.agentRunsTable.taskId,
+      db
+        .select({
+          taskId: sql<string>`${schema.scheduleTriggerRunsTable.runtimeTaskId}`,
+        })
+        .from(schema.scheduleTriggerRunsTable)
+        .where(
+          and(
+            eq(
+              schema.scheduleTriggerRunsTable.chatConversationId,
+              conversationId,
+            ),
+            isNotNull(schema.scheduleTriggerRunsTable.runtimeTaskId),
+          ),
+        ),
+    ),
+    sql`${schema.agentRunsTable.taskId}::text IN (
+      SELECT ${schema.interactionsTable.runId}
+      FROM ${schema.interactionsTable}
+      WHERE ${schema.interactionsTable.sessionId} = ${conversationId}
+        AND ${schema.interactionsTable.runId} IS NOT NULL
+    )`,
+    sql`${schema.agentRunsTable.id}::text IN (
+      SELECT ${schema.interactionsTable.runId}
+      FROM ${schema.interactionsTable}
+      WHERE ${schema.interactionsTable.sessionId} = ${conversationId}
+        AND ${schema.interactionsTable.runId} IS NOT NULL
+    )`,
+    sql`${schema.agentRunsTable.taskId}::text IN (
+      SELECT ${schema.mcpToolCallsTable.runId}
+      FROM ${schema.mcpToolCallsTable}
+      WHERE (
+        ${schema.mcpToolCallsTable.sessionId} = ${conversationId}
+        OR ${schema.mcpToolCallsTable.encryptedChatConversationId} = ${conversationId}::uuid
+      )
+        AND ${schema.mcpToolCallsTable.runId} IS NOT NULL
+    )`,
+    sql`${schema.agentRunsTable.id}::text IN (
+      SELECT ${schema.mcpToolCallsTable.runId}
+      FROM ${schema.mcpToolCallsTable}
+      WHERE (
+        ${schema.mcpToolCallsTable.sessionId} = ${conversationId}
+        OR ${schema.mcpToolCallsTable.encryptedChatConversationId} = ${conversationId}::uuid
+      )
+        AND ${schema.mcpToolCallsTable.runId} IS NOT NULL
+    )`,
+    inArray(
+      schema.agentRunsTable.workloadName,
+      db
+        .select({
+          workloadName: sql<string>`substr(${schema.openappaSessionsTable.sessionId}, strpos(${schema.openappaSessionsTable.sessionId}, '|') + 1)`,
+        })
+        .from(schema.openappaSessionsTable)
+        .where(
+          and(
+            eq(schema.openappaSessionsTable.organizationId, organizationId),
+            inArray(schema.openappaSessionsTable.parentId, [
+              userScopedConversationSessionId,
+              conversationId,
+            ]),
+          ),
+        ),
+    ),
+    ...(candidateTaskIds.length > 0
+      ? [
+          inArray(schema.agentRunsTable.taskId, candidateTaskIds),
+          inArray(schema.agentRunsTable.id, candidateTaskIds),
+          inArray(schema.agentWorkspacesTable.id, candidateTaskIds),
+        ]
+      : []),
+  ];
+
+  const [ownedTask] = await db
     .select({
       taskId: schema.agentRunsTable.taskId,
       activeTaskId: schema.agentWorkspacesTable.activeTaskId,
@@ -377,11 +521,11 @@ async function findActiveConversationRuntimeTaskId(params: {
     )
     .where(
       and(
-        eq(schema.a2aTasksTable.contextId, conversationId),
         eq(schema.agentRunsTable.agentId, agentId),
         eq(schema.agentRunsTable.organizationId, organizationId),
         eq(schema.agentRunsTable.actorKind, "user"),
         eq(schema.agentRunsTable.actorId, userId),
+        or(...ownershipConditions),
       ),
     )
     .orderBy(
@@ -390,10 +534,8 @@ async function findActiveConversationRuntimeTaskId(params: {
     )
     .limit(1);
 
-  if (contextTask) {
-    return (
-      contextTask.activeTaskId ?? contextTask.taskId ?? contextTask.lastTaskId
-    );
+  if (ownedTask) {
+    return ownedTask.activeTaskId ?? ownedTask.taskId ?? ownedTask.lastTaskId;
   }
 
   return undefined;
@@ -519,6 +661,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: conversation.agentId,
           organizationId,
           userId: user.id,
+          messages: messages as unknown[],
         });
       }
 

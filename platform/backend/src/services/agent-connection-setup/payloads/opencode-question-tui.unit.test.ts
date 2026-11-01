@@ -118,20 +118,26 @@ test("explicit single-choice and typed replies use the native question SDK", asy
 });
 
 test.each([
+  "Inspect",
   "Allow",
   "Deny",
-  "Inspect",
 ])("sends %s literally, never auto-approves Inspect", async (label) => {
   const preview = "command: pwd\nCoverage: this call";
   const f = await fixture(
     `Run bash?\n\nCall preview (${preview.length} characters):\n${preview}`,
-    ["Allow", "Deny", "Inspect"],
+    ["Inspect", "Allow", "Deny"],
   );
   expect(f.view().title).toContain(preview);
+  expect(f.view().options.map((option) => option.title)).toEqual([
+    "Inspect",
+    "Allow",
+    "Deny",
+    "Dismiss",
+  ]);
   expect(f.view().options.some((option) => option.value === "custom")).toBe(
     false,
   );
-  await f.select(["Allow", "Deny", "Inspect"].indexOf(label));
+  await f.select(["Inspect", "Allow", "Deny"].indexOf(label));
   expect(f.reply).toHaveBeenCalledExactlyOnceWith({
     requestID: "question-1",
     answers: [[label]],
@@ -145,7 +151,7 @@ test("pages the complete review, including hostile separators, before offering a
   const full = `Exact arguments:\n${"abcdef".repeat(1000)}\nEND OF REVIEW`;
   const f = await fixture(
     `Run bash?\n\nCall preview (${preview.length} characters):\n${preview}\n\nFull review:\n${full}`,
-    ["Allow", "Deny", "Inspect"],
+    ["Inspect", "Allow", "Deny"],
   );
   const seen: string[] = [];
   for (
@@ -161,7 +167,10 @@ test("pages the complete review, including hostile separators, before offering a
   expect(seen.join("\n")).toContain("END OF REVIEW");
   expect(f.reply).not.toHaveBeenCalled();
   await f.select(0);
-  expect(f.reply).toHaveBeenCalledTimes(1);
+  expect(f.reply).toHaveBeenCalledExactlyOnceWith({
+    requestID: "question-1",
+    answers: [["Inspect"]],
+  });
   expect(f.reject).not.toHaveBeenCalled();
   f.dispose();
 });

@@ -20,9 +20,9 @@ describe.each([
         callPreview: "command: Inspect for the complete value",
         header: "Tool call",
         options: [
+          { label: "Inspect" },
           { label: "Allow", preview: "Coverage: only this call" },
           { label: "Deny" },
-          { label: "Inspect" },
         ],
         remedy_offer_ids: ["offer-test"],
       },

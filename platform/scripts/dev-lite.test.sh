@@ -153,7 +153,7 @@ check "dev mode is recorded" grep -q "mode dev" <<<"$(frontend_start dev)"
 # directory, so `keep` finds builds there and nothing touches the checkout.
 lifecycle() {
   (
-    ALIVE=""
+    ALIVE="${LIFE_ALIVE:-}"
     export ARCHESTRA_AGENT_RUNTIME_TASK_ID=task
     unset ARCHESTRA_DEV_LITE_FRONTEND ARCHESTRA_DEV_BACKEND_WATCH
     scratch="$ARCHESTRA_DEV_LITE_STATE_DIR/scratch-${BUILT:-1}"
@@ -165,9 +165,10 @@ lifecycle() {
     fi
     require_platform_dir() { :; }
     for step in ensure_env install_dependencies ensure_native_addons start_postgres wait_for_db migrate \
-      build_frontend build_backend wait_ready stop_session; do
+      build_frontend build_backend wait_ready; do
       eval "$step() { echo \"$step \${1:-}\"; }"
     done
+    stop_session() { echo "stop_session $1"; ALIVE="${ALIVE// $1/}"; }
     free_ports() { :; }
     start_session() { echo "server $1"; ALIVE="$ALIVE $1"; }
     "$@"
@@ -189,7 +190,7 @@ check "prepare migrates" grep -q "^migrate" <<<"$out"
 check "prepare builds nothing" fails grep -q "^build_" <<<"$out"
 check "prepare starts no server" fails grep -q "^server" <<<"$out"
 
-paused_lifecycle() { echo "${PAUSED_MODE:-build}" > "$PAUSED_FILE"; lifecycle "$@"; }
+paused_lifecycle() { printf 'frontend=%s\nbackend=1\n' "${PAUSED_MODE:-build}" > "$PAUSED_FILE"; lifecycle "$@"; }
 out="$(paused_lifecycle cmd_start 1)"
 check "up after pause serves the builds it has" fails grep -q "^build_" <<<"$out"
 check "up after pause starts both servers" test "$(grep -c "^server" <<<"$out")" -eq 2
@@ -211,9 +212,30 @@ check "resume builds nothing" fails grep -q "^build_" <<<"$out"
 check "resume starts both servers" test "$(grep -c "^server" <<<"$out")" -eq 2
 check "resume clears the pause" test ! -f "$PAUSED_FILE"
 check "resume without a pause does nothing" grep -q "not paused" <<<"$(resume_paused)"
-echo none > "$PAUSED_FILE"
+printf 'frontend=none\nbackend=1\n' > "$PAUSED_FILE"
 out="$(resume_paused)"
-check "resume starts only what pause stopped" test "$(grep -c "^server" <<<"$out")" -eq 1
+check "resume of a backend-only pause starts only the backend" test "$(grep -c "^server" <<<"$out")" -eq 1
+printf 'frontend=build\nbackend=0\n' > "$PAUSED_FILE"
+out="$(resume_paused)"
+check "resume of a frontend-only pause starts only the frontend" test "$(grep "^server" <<<"$out")" = "server frontend"
+printf 'frontend=build\nbackend=1\n' > "$PAUSED_FILE"
+out="$( (BUILT=0; db_ready() { return 0; }; lifecycle cmd_resume) )"
+check "resume makes a missing build before either server starts" test "$(order_of "$out" "^build_frontend")" -lt "$(order_of "$out" "^server backend")"
+printf 'frontend=build\nbackend=1\n' > "$PAUSED_FILE"
+( (db_ready() { return 0; }; start_backend() { return 1; }; lifecycle cmd_resume) >/dev/null 2>&1 ) || true
+check "a failed resume keeps the pause" grep -q "^frontend=build" "$PAUSED_FILE"
+rm -f "$PAUSED_FILE"
+reload_beside_backend() { (frontend_mode() { echo build; }; LIFE_ALIVE=" backend" lifecycle cmd_reload frontend); }
+out="$(reload_beside_backend)"
+check "a production frontend reload stops the backend before it builds" test "$(order_of "$out" "^stop_session backend")" -lt "$(order_of "$out" "^build_frontend")"
+check "and starts it again before the frontend" test "$(order_of "$out" "^server backend")" -lt "$(order_of "$out" "^server frontend")"
+other="$ARCHESTRA_DEV_LITE_STATE_DIR/other-checkout"
+mkdir -p "$other/scripts"
+printf 'echo "delegated $*"\n' > "$other/scripts/dev-lite.sh"
+echo "$other" > "$SERVERS_FILE"
+check "pause acts on the checkout whose servers run" grep -q "delegated pause" <<<"$(lifecycle cmd_pause)"
+check "resume too" grep -q "delegated resume" <<<"$(lifecycle cmd_resume)"
+rm -f "$SERVERS_FILE"
 echo build > "$PAUSED_FILE"
 reload_paused() { (lifecycle cmd_reload frontend) || true; }
 check "reload refuses while paused" grep -q "resume' first" <<<"$(reload_paused)"

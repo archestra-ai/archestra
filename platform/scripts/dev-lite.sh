@@ -820,7 +820,7 @@ cmd_start() {
   local paused=0 keep_frontend=0
   if [ -f "$PAUSED_FILE" ]; then
     paused=1
-    [ "$(cat "$PAUSED_FILE")" = "$frontend" ] && keep_frontend=1
+    [ "$(paused_value frontend)" = "$frontend" ] && keep_frontend=1
   fi
   if [ "$frontend" != dev ] && ! session_alive frontend \
     && { [ "$keep_frontend" = 0 ] || [ ! -f "$STANDALONE_DIR/server.js" ]; }; then
@@ -865,12 +865,31 @@ cmd_prepare() {
   echo "dev stack prepared (dependencies, PostgreSQL, migrations); 'archestra-dev-lite up' builds and starts the backend and frontend"
 }
 
+# A value `pause` recorded: frontend=<mode or none>, backend=1 or 0.
+paused_value() {
+  sed -n "s/^$1=//p" "$PAUSED_FILE" 2>/dev/null | head -n 1
+}
+
+# pause and resume act on the checkout whose servers run (recorded when they
+# started), not on the checkout they are called from: a type check in another
+# worktree must restore the stack it paused.
+delegate_to_stack_checkout() {
+  local recorded
+  recorded="$(cat "$SERVERS_FILE" 2>/dev/null || true)"
+  if [ -n "$recorded" ] && [ "$recorded" != "$PLATFORM_DIR" ] && [ -f "$recorded/scripts/dev-lite.sh" ]; then
+    exec bash "$recorded/scripts/dev-lite.sh" "$@"
+  fi
+}
+
 # Stop the two servers and keep PostgreSQL and the builds: the memory they hold
 # (about 0.8 GiB after use) goes to one command that cannot fit beside them.
 cmd_pause() {
-  local name stopped=""
+  local name stopped="" frontend=none backend=0
   require_platform_dir
+  delegate_to_stack_checkout pause
   mkdir -p "$STATE_DIR"
+  if session_alive frontend; then frontend="$(frontend_mode)"; fi
+  session_alive backend && backend=1
   for name in frontend backend; do
     if session_alive "$name"; then
       stop_session "$name"
@@ -879,10 +898,7 @@ cmd_pause() {
   done
   if [ -n "$stopped" ] || [ -f "$PAUSED_FILE" ]; then
     if [ ! -f "$PAUSED_FILE" ]; then
-      case " $stopped " in
-        *" frontend "*) frontend_mode > "$PAUSED_FILE" ;;
-        *) echo none > "$PAUSED_FILE" ;;
-      esac
+      printf 'frontend=%s\nbackend=%s\n' "$frontend" "$backend" > "$PAUSED_FILE"
     fi
     echo "dev stack paused:${stopped:- nothing was running}; 'archestra-dev-lite resume' starts it again"
   else
@@ -890,20 +906,30 @@ cmd_pause() {
   fi
 }
 
-# Start what `pause` stopped, from the builds on disk.
+# Start what `pause` stopped, from the builds on disk: a missing build is made
+# first, before either server starts. The pause stays recorded until both
+# start, so a failed resume can be retried.
 cmd_resume() {
   require_platform_dir
+  delegate_to_stack_checkout resume
   if [ ! -f "$PAUSED_FILE" ]; then
     echo "dev stack not paused"
     return 0
   fi
+  local frontend backend
+  frontend="$(paused_value frontend)"
+  backend="$(paused_value backend)"
   db_ready || start_postgres
   wait_for_db
-  local mode
-  mode="$(cat "$PAUSED_FILE")"
+  if [ "$frontend" != none ] && [ "$frontend" != dev ] && [ ! -f "$STANDALONE_DIR/server.js" ]; then
+    build_frontend
+  fi
+  if [ "$backend" = 1 ] && ! backend_watch && [ ! -f "$PLATFORM_DIR/backend/dist/server.mjs" ]; then
+    build_backend
+  fi
+  if [ "$backend" = 1 ]; then start_backend || die "the backend did not start; the stack stays paused"; fi
+  if [ "$frontend" != none ]; then start_frontend "$frontend" keep || die "the frontend did not start; the stack stays paused"; fi
   rm -f "$PAUSED_FILE"
-  start_backend
-  [ "$mode" = none ] || start_frontend "$mode" keep
   wait_ready
 }
 
@@ -1068,7 +1094,18 @@ cmd_reload() {
       # A production build (build or e2e mode) is rebuilt first.
       log "reloading the frontend"
       stop_session frontend
-      start_frontend "$(frontend_mode)"
+      # A production build runs alone: the backend stops for it and comes
+      # back from its own build before the frontend starts.
+      local mode restart_backend=0
+      mode="$(frontend_mode)"
+      if [ "$mode" != dev ] && session_alive backend; then
+        log "stopping the backend while the frontend builds"
+        stop_session backend
+        restart_backend=1
+      fi
+      [ "$mode" != dev ] && build_frontend
+      [ "$restart_backend" = 1 ] && start_backend
+      start_frontend "$mode" keep
       ;;
     *) die "reload: expected backend or frontend" ;;
   esac

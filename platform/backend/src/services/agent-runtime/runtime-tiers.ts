@@ -376,6 +376,8 @@ function allowedTiersSentence(
  * The limits one run gets from the Agent's settings (its values, else the
  * deployment defaults) and a caller's request. A request above the Agent's
  * value is refused with that value named, so the caller can retry within it.
+ * When the Agent's scaleup is disabled, only a caller that is itself a run
+ * (`currentTier` set) gets the not-retriable fixed-tier refusal instead.
  * A tier is chosen by name, or by the CPU and memory the work needs, which
  * gives the smallest tier that fits and has no smaller workspace than the
  * Agent's default tier: asking for CPU must not cost the run its disk. The
@@ -418,6 +420,12 @@ export function resolveAgentRunLimits(params: {
       400,
       `Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to ${fixedCeilingTier.name} (${describeTier(fixedCeilingTier)}). This call is not retriable; calling it again will fail.`,
     );
+  // Only a run can scale itself up. A caller outside any run (a CI review, a
+  // script) starts a new run: a size above the fixed tier gets the ordinary
+  // refusal naming the tiers it may use, and the caller can start the run
+  // without the request. Callers such as code-review-action match that
+  // wording to retry at the Agent's own size.
+  const refuseAsScaleup = isScaleupDisabled && callerTierName !== null;
 
   if (requested.tier !== undefined) {
     const named = findAgentRuntimeTier(tiers.tiers, requested.tier);
@@ -427,7 +435,7 @@ export function resolveAgentRunLimits(params: {
         `There is no tier named ${requested.tier}. ${allowedTiersSentence(allowed)}`,
       );
     if (
-      isScaleupDisabled &&
+      refuseAsScaleup &&
       agentRuntimeTierRank(tiers.tiers, named.name) >
         agentRuntimeTierRank(tiers.tiers, fixedCeilingName)
     ) {
@@ -437,7 +445,7 @@ export function resolveAgentRunLimits(params: {
       agentRuntimeTierRank(tiers.tiers, named.name) >
       agentRuntimeTierRank(tiers.tiers, maxTier)
     ) {
-      if (isScaleupDisabled) {
+      if (refuseAsScaleup) {
         throw scaleupDisabledError();
       }
       throw new ApiError(
@@ -464,7 +472,7 @@ export function resolveAgentRunLimits(params: {
     if (requested.tier !== undefined) {
       const named = tierSize(tiers, tier);
       if (!fits(named)) {
-        if (isScaleupDisabled) {
+        if (refuseAsScaleup) {
           throw scaleupDisabledError();
         }
         throw new ApiError(
@@ -481,8 +489,9 @@ export function resolveAgentRunLimits(params: {
       if (!smallest) {
         // With scaleup fixed, the default tier is the largest allowed and
         // always has its own disk, so nothing qualifies only when the work
-        // needs a larger tier: the fixed-scaleup refusal is the reason.
-        if (isScaleupDisabled) {
+        // needs a larger tier: for a run, the fixed-scaleup refusal is the
+        // reason.
+        if (refuseAsScaleup) {
           throw scaleupDisabledError();
         }
         throw new ApiError(
@@ -514,7 +523,7 @@ export function resolveAgentRunLimits(params: {
     agentRuntimeTierRank(tiers.tiers, tier) >
       agentRuntimeTierRank(tiers.tiers, maxTier)
   ) {
-    if (isScaleupDisabled) {
+    if (refuseAsScaleup) {
       throw scaleupDisabledError();
     }
     const resolvedTier = tierSize(tiers, tier);

@@ -321,10 +321,12 @@ describe("run tools", () => {
       },
     });
     const sendMessage = vi.spyOn(A2AManager.prototype, "sendMessage");
+    // A caller outside any run hears the tiers it may use, so it can start
+    // the run within them.
     for (const [limits, message] of [
       [
         { tier: "L" },
-        "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to M (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
+        "Tier L (8 CPU, 16 GiB (32 GiB limit), 20 GiB workspace) is above this Agent's scaleup tier M. Tiers this Agent's runs may use: S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace), M (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace).",
       ],
       [
         { max_duration_hours: 24 },

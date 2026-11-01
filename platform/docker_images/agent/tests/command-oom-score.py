@@ -279,7 +279,7 @@ class CommandOomScoreTest(unittest.TestCase):
     # OpenClaw and Copilot remove BASH_ENV from their commands' environment.
     if CLIENT not in ("openclaw", "copilot"):
         def test_an_earlier_bash_env_still_runs(self):
-            # A derived image can set its own BASH_ENV, as Lobster's worker does.
+            # A derived image can set its own BASH_ENV before the launcher runs.
             self.run_client(plain=False, earlier_bash_env=True)
 
     def run_client(self, plain, earlier_bash_env=False):

@@ -281,7 +281,7 @@ export function planDispatchModeToolCallRewrites(params: {
     // shape and dispatch something the model did not ask for.
     let toolArgs: unknown;
     try {
-      toolArgs = JSON.parse(toolCall.arguments || "{}");
+      toolArgs = JSON.parse(toolCallArgumentsText(toolCall.arguments));
     } catch {
       return toolCall;
     }

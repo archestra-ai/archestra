@@ -12,7 +12,10 @@ import {
   buildSubscriptionOffers,
   type SubscriptionOffer,
 } from "./subscription-offers";
-import { SubscriptionProviderCards } from "./subscription-provider-cards";
+import {
+  SubscriptionCard,
+  SubscriptionProviderCards,
+} from "./subscription-provider-cards";
 
 vi.mock("@/lib/auth/auth.query");
 
@@ -202,3 +205,22 @@ function renderCards({
   );
   return { onConnect, onManage, onDisconnect };
 }
+
+describe("SubscriptionCard", () => {
+  it("connects on the card itself when given an inline action", () => {
+    render(
+      <SubscriptionCard
+        kind="github-copilot"
+        provider="github-copilot"
+        name="Personal subscription"
+        description="Sign in with your own subscription."
+        isLoading={false}
+        status="not-connected"
+        connectAction={<button type="button">Sign in</button>}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
+    expect(screen.getByText("Not connected")).toBeVisible();
+  });
+});

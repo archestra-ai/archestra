@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  COPILOT_ENV_HANDLED_MARKER,
   isDefaultBrandedAppName,
   STARTUP_GUARD_FORMAT_VERSION,
   type StartupGuardClientId,
@@ -17,6 +18,13 @@ import {
   ARCHESTRA_MARK_TAGLINE_ROW,
 } from "@/services/archestra-mark";
 import { CODEX_HANDOFF_HELPER } from "../payloads/codex-handoff";
+import {
+  COPILOT_LEGACY_ENV_UNSET_ARGS,
+  COPILOT_LEGACY_EXPORT_LINE_PATTERN,
+  COPILOT_LEGACY_EXPORT_OURS_PATTERN,
+  copilotLegacyEnvSetShell,
+  copilotStripProfileLinesBash,
+} from "../payloads/copilot-provider-config";
 import { MANAGED_INSTRUCTIONS_REFRESH } from "../payloads/managed-instructions-refresh";
 import { OPENCODE_HANDOFF_PLUGIN } from "../payloads/opencode-handoff";
 import { STARTUP_GUARD_REFRESH } from "../payloads/startup-guard-refresh";
@@ -79,6 +87,12 @@ import type { SetupScriptContext, SetupScriptProxySection } from "../types";
 interface StartupGuardMcpSection {
   /** Logical server name registered in the client (slug). */
   serverName: string;
+  /**
+   * Prefix advertised by this deployment's built-in MCP tools. Known at
+   * setup, which renders the shell-profile wrapper; the guard refresh
+   * artifact re-renders only the guard script and carries none.
+   */
+  toolPrefix?: string;
   /** Gateway URL, e.g. https://host/v1/mcp/<gateway-slug>. */
   url: string;
   /** Id-or-slug as embedded in the URL; null when it could not be derived. */
@@ -189,6 +203,16 @@ export interface StartupGuardClient {
    */
   inlineConfigEnv?: string;
   /**
+   * Arguments the wrapper puts before the user's on every conversation
+   * launch while the gateway is connected (not disconnected from the guard's
+   * menu), such as a client's per-launch tool approvals for the guardrail
+   * helpers. Each entry is one argument; the engines quote it.
+   */
+  gatewayLaunchArgs?: (mcp: {
+    serverName: string;
+    toolPrefix: string;
+  }) => string[];
+  /**
    * Reverse-of-connect commands for the `mcp)` disconnect case — may reference
    * `$MCP_SERVER_NAME` and must run silenced (`command <binary> ...`). Only
    * emitted when the guard covers an MCP gateway.
@@ -294,6 +318,17 @@ export interface StartupGuardWindowsClient {
   proxyDisconnectNote(ctx: StartupGuardContext): string;
 }
 
+/** The per-launch arguments a client's wrapper adds while its gateway is connected. */
+export function gatewayLaunchArgsFor(
+  ctx: StartupGuardContext,
+  client: StartupGuardClient,
+): string[] {
+  const toolPrefix = ctx.mcp?.toolPrefix;
+  return ctx.mcp && toolPrefix !== undefined && client.gatewayLaunchArgs
+    ? client.gatewayLaunchArgs({ serverName: ctx.mcp.serverName, toolPrefix })
+    : [];
+}
+
 /**
  * Derive the guard's context from the setup-script context: pass the remotes
  * through, extract each ref from the same URLs connect wires into the client,
@@ -323,6 +358,7 @@ export function buildStartupGuardContext(
     mcp: ctx.mcp
       ? {
           serverName: ctx.mcp.serverName,
+          toolPrefix: ctx.mcp.toolPrefix,
           url: ctx.mcp.url,
           ref: mcpParsed?.ref ?? null,
         }
@@ -514,6 +550,38 @@ if [ "$ACTIVE_TOTAL" -eq 0 ]; then
   [ "$ARCH_DISCONNECT_ALL" = "1" ] && printf 'Nothing left to disconnect. Removed the ${client.label} startup check.\\n'
   exit 0
 fi
+${
+  client.clientId === "copilot-cli" && ctx.proxy
+    ? `
+# Copilot CLI uses its provider environment variables instead of providers.json
+# (with only COPILOT_MODEL set it refuses to start the saved model). The
+# exports an earlier setup wrote are removed here as well as at setup, so a
+# refreshed guard repairs older installs; the live shell is reported unless the
+# wrapper already drops the variables for this launch.
+copilot_legacy_env_repair() {
+  already_disconnected proxy && return 0
+  archestra_copilot_legacy_lines=${sh(COPILOT_LEGACY_EXPORT_LINE_PATTERN)}
+  archestra_copilot_ours_lines=${sh(COPILOT_LEGACY_EXPORT_OURS_PATTERN)}
+  archestra_profile_lines_removed=0
+  ${copilotStripProfileLinesBash("archestra_copilot_legacy_lines", "archestra_copilot_ours_lines")}
+  if [ "$archestra_profile_lines_removed" = 1 ]; then
+    printf '%s\\n' "$APP_NAME: removed the COPILOT_PROVIDER_* and COPILOT_MODEL exports an earlier setup added to your shell profile; Copilot CLI would use them instead of providers.json. Open a new terminal to drop them from this shell." >&2
+  fi
+  [ "\${${COPILOT_ENV_HANDLED_MARKER}:-0}" = 1 ] && return 0
+  ${copilotLegacyEnvSetShell("archestra_copilot_env_set")}
+  if [ -n "$archestra_copilot_env_set" ]; then
+    case "$archestra_copilot_env_set" in
+      *" "*" "*) archestra_copilot_env_it=them ;;
+      *) archestra_copilot_env_it=it ;;
+    esac
+    printf '%s\\n' "$APP_NAME:$archestra_copilot_env_set set in this shell: Copilot CLI uses $archestra_copilot_env_it instead of providers.json (with only COPILOT_MODEL it refuses to start the saved model). Run: unset$archestra_copilot_env_set   then start ${client.binary} again, or reconnect from the $APP_NAME /connection page to refresh the launcher." >&2
+  fi
+  return 0
+}
+copilot_legacy_env_repair || true
+`
+    : ""
+}
 
 HEALTH_BODY=''
 fetch_health() { # one attempt; fills HEALTH_BODY. 0 = platform answered.
@@ -1315,6 +1383,36 @@ finish_guard
 }
 
 /**
+ * The Copilot CLI launch lines of the profile wrapper. With the LLM proxy
+ * connected, `$archestra_copilot_strip` (set above when any of Copilot's
+ * provider variables is in the environment) launches through `env -u …`, so
+ * Copilot sees neither COPILOT_MODEL nor COPILOT_PROVIDER_* and uses
+ * providers.json; the shell keeps the variables.
+ */
+function copilotBashLaunch(handoffEnabled: boolean, strip: boolean): string {
+  const plain = handoffEnabled
+    ? `if [ -n "$archestra_instructions_dir" ]; then
+    COPILOT_CUSTOM_INSTRUCTIONS_DIRS="\${COPILOT_CUSTOM_INSTRUCTIONS_DIRS:+$COPILOT_CUSTOM_INSTRUCTIONS_DIRS,}$archestra_instructions_dir" command copilot "$@"
+  else
+    command copilot "$@"
+  fi`
+    : `command copilot "$@"`;
+  if (!strip) return plain;
+  const stripped = handoffEnabled
+    ? `if [ -n "$archestra_instructions_dir" ]; then
+      env ${COPILOT_LEGACY_ENV_UNSET_ARGS} COPILOT_CUSTOM_INSTRUCTIONS_DIRS="\${COPILOT_CUSTOM_INSTRUCTIONS_DIRS:+$COPILOT_CUSTOM_INSTRUCTIONS_DIRS,}$archestra_instructions_dir" copilot "$@"
+    else
+      env ${COPILOT_LEGACY_ENV_UNSET_ARGS} copilot "$@"
+    fi`
+    : `env ${COPILOT_LEGACY_ENV_UNSET_ARGS} copilot "$@"`;
+  return `if [ "$archestra_copilot_strip" = 1 ]; then
+    ${stripped}
+  else
+    ${plain}
+  fi`;
+}
+
+/**
  * The setup-script section that installs the guard: writes the script file,
  * marks it executable, and hooks the `<binary>()` wrapper into the user's shell
  * profiles inside an idempotent marker block. Relies on the setup script's
@@ -1351,6 +1449,7 @@ export function buildStartupGuardInstallSection(
             ? `printf '%s' ${sh(OPENCODE_HANDOFF_PLUGIN)} > "${guardPath}.handoff.mjs"\nchmod 600 "${guardPath}.handoff.mjs"`
             : `rm -f "${guardPath}.handoff.mjs"`
           : "";
+  const gatewayLaunchArgs = gatewayLaunchArgsFor(ctx, client);
   const launchArgs =
     client.clientId === "codex"
       ? `local archestra_prompt_config
@@ -1434,6 +1533,26 @@ ${client.binary}() {
     ${client.utilitySubcommands.join("|")}|--help|-h|--version|-v) command ${client.binary} "$@"; return $? ;;
   esac
   ${
+    client.clientId === "copilot-cli" && ctx.proxy
+      ? `# Copilot CLI uses its provider environment variables instead of providers.json
+  # (and with only COPILOT_MODEL set refuses to start the saved model). While
+  # the LLM proxy is connected, launch without them; the guard is told so it
+  # does not report them again.
+  archestra_copilot_strip=0
+  if [ -f "$HOME/${client.scriptRelpath}" ] && ! grep -qx proxy "$HOME/${client.skipRelpath}" 2>/dev/null; then
+    ${copilotLegacyEnvSetShell("archestra_copilot_env_set")}
+    if [ -n "$archestra_copilot_env_set" ]; then
+      archestra_copilot_strip=1
+      case "$archestra_copilot_env_set" in
+        *" "*" "*) archestra_copilot_env_them='those variables'; archestra_copilot_env_it=them ;;
+        *) archestra_copilot_env_them='that variable'; archestra_copilot_env_it=it ;;
+      esac
+      printf '%s\\n' "archestra: ignoring$archestra_copilot_env_set for this launch. The LLM proxy connection is active, and Copilot CLI would use $archestra_copilot_env_them instead of providers.json; unset $archestra_copilot_env_it to silence this notice." >&2
+    fi
+  fi`
+      : ""
+  }
+  ${
     ctx.managedRuntimeSource
       ? `if [ -f "${guardPath}" ]; then
     command -v node >/dev/null 2>&1 || { printf '%s\\n' 'Node.js is required for the managed launcher.' >&2; return 1; }
@@ -1449,8 +1568,15 @@ ${client.binary}() {
       : ""
   }
   if [ -x "$HOME/${client.scriptRelpath}" ]; then
-    "$HOME/${client.scriptRelpath}" "$@" || true
+    ${client.clientId === "copilot-cli" && ctx.proxy ? `${COPILOT_ENV_HANDLED_MARKER}="$archestra_copilot_strip" ` : ""}"$HOME/${client.scriptRelpath}" "$@" || true
   fi${promptArgs}
+  ${
+    gatewayLaunchArgs.length > 0
+      ? `if [ -f "$HOME/${client.scriptRelpath}" ] && ! grep -qx mcp "$HOME/${client.skipRelpath}" 2>/dev/null; then
+    set -- ${gatewayLaunchArgs.map(sh).join(" ")} "$@"
+  fi`
+      : ""
+  }
   ${
     client.clientId === "codex" && ctx.proxy
       ? `local archestra_direct_config
@@ -1466,18 +1592,18 @@ ${client.binary}() {
       : ""
   }
   ${
-    handoffEnabled && client.clientId === "copilot-cli"
-      ? `if [ -n "$archestra_instructions_dir" ]; then
-    COPILOT_CUSTOM_INSTRUCTIONS_DIRS="\${COPILOT_CUSTOM_INSTRUCTIONS_DIRS:+$COPILOT_CUSTOM_INSTRUCTIONS_DIRS,}$archestra_instructions_dir" command ${client.binary} "$@"
-  else`
-      : handoffEnabled && client.inlineConfigEnv
-        ? `if [ -n "$archestra_opencode_handoff" ] && [ -z "\${${client.inlineConfigEnv}:-}" ]; then
+    client.clientId === "copilot-cli"
+      ? copilotBashLaunch(handoffEnabled, Boolean(ctx.proxy))
+      : `${
+          handoffEnabled && client.inlineConfigEnv
+            ? `if [ -n "$archestra_opencode_handoff" ] && [ -z "\${${client.inlineConfigEnv}:-}" ]; then
     ${client.inlineConfigEnv}="{\\"plugin\\":[\\"file://$archestra_opencode_handoff\\"]}" command ${client.binary} "$@"
   else`
-        : ""
-  }
+            : ""
+        }
   command ${client.binary} "$@"
-  ${handoffEnabled && (client.clientId === "copilot-cli" || client.inlineConfigEnv) ? "fi" : ""}
+  ${handoffEnabled && client.inlineConfigEnv ? "fi" : ""}`
+  }
   archestra_client_status=$?
   ${refreshBlock ? `${refreshFunctionName} "$@" || true` : ":"}
   return "$archestra_client_status"

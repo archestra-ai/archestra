@@ -260,7 +260,46 @@ export const COPILOT_PROVIDER_ENV_KEYS = {
    * pairs; a literal `\n` also separates entries.
    */
   headers: "COPILOT_PROVIDER_HEADERS",
+  /** "completions" (default) or "responses"; setup selects "responses" where the proxy serves it. */
+  wireApi: "COPILOT_PROVIDER_WIRE_API",
 } as const;
+
+/**
+ * Copilot CLI's environment-variable provider configuration (BYOK), from
+ * `copilot help providers`. Once providers.json carries the Archestra provider
+ * these only interfere: with COPILOT_PROVIDER_BASE_URL set Copilot ignores
+ * providers.json and uses the variables (sending the prefixed model name as
+ * the wire model); with only COPILOT_MODEL set it refuses to start the saved
+ * model ("Reasoning effort 'medium' is not supported for model
+ * 'archestra/<model>'", Copilot CLI 1.0.105); other partial sets print
+ * warnings. Setup removes the ones an earlier setup saved, the launch check
+ * drops them all from Copilot's environment while the LLM proxy is connected,
+ * and the closing note reports any that remain.
+ */
+export const COPILOT_LEGACY_PROVIDER_ENV_VARS = [
+  "COPILOT_MODEL",
+  "COPILOT_PROVIDER_BASE_URL",
+  "COPILOT_PROVIDER_TYPE",
+  "COPILOT_PROVIDER_API_KEY",
+  "COPILOT_PROVIDER_API_KEY_COMMAND",
+  "COPILOT_PROVIDER_BEARER_TOKEN",
+  "COPILOT_PROVIDER_WIRE_API",
+  "COPILOT_PROVIDER_TRANSPORT",
+  "COPILOT_PROVIDER_AZURE_API_VERSION",
+  "COPILOT_PROVIDER_HEADERS",
+  "COPILOT_PROVIDER_MODEL_ID",
+  "COPILOT_PROVIDER_WIRE_MODEL",
+  "COPILOT_PROVIDER_MAX_PROMPT_TOKENS",
+  "COPILOT_PROVIDER_MAX_OUTPUT_TOKENS",
+] as const;
+
+/**
+ * Set by the Copilot CLI profile wrapper while it runs the launch check, once
+ * the wrapper itself drops COPILOT_LEGACY_PROVIDER_ENV_VARS for the launch.
+ * A guard refreshed under an older wrapper (which cannot) reports the
+ * variables instead.
+ */
+export const COPILOT_ENV_HANDLED_MARKER = "ARCHESTRA_COPILOT_ENV_HANDLED";
 
 /**
  * Per-client startup-guard ("pre-loader") install locations, one entry per
@@ -346,8 +385,11 @@ export type StartupGuardClientId = keyof typeof STARTUP_GUARD_INSTALL;
  * permission cleanup; reusing version 2 would not prompt those users to reconnect.
  * Version 10 moves Claude Code allow rules to the tool prefix `/v1/health`
  * reports, so installed guards pick that up without a reconnect.
+ * Version 11 adds the Copilot CLI provider-environment repair (see
+ * COPILOT_LEGACY_PROVIDER_ENV_VARS) to the guard, so installed guards pick it
+ * up at their next launch.
  */
-export const STARTUP_GUARD_FORMAT_VERSION = 10;
+export const STARTUP_GUARD_FORMAT_VERSION = 11;
 
 /**
  * The managed instructions a deployment uses until an admin edits them. It

@@ -12,6 +12,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import {
+  REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
+  TOOL_ASK_USER_SHORT_NAME,
+} from "@archestra/shared/archestra-mcp-server";
+import {
   defaultRuntimeHandoffInstructions,
   STARTUP_GUARD_INSTALL,
 } from "@archestra/shared/consts";
@@ -486,8 +490,18 @@ exit 0
           "$HOME",
           "*",
         ];
+        // While the gateway is connected, Copilot's wrapper lets the
+        // guardrail helpers run without a prompt, before the user's arguments.
+        const copilotApprovals =
+          clientId === "copilot-cli"
+            ? [
+                ...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
+                TOOL_ASK_USER_SHORT_NAME,
+              ].map((name) => `--allow-tool=test_gateway(archestra__${name})`)
+            : [];
         expect(calls.filter((args) => args.includes("invoke"))).toEqual([
           ...Array.from({ length: 4 }, () => [
+            ...copilotApprovals,
             ...(clientId === "codex"
               ? [
                   "-c",

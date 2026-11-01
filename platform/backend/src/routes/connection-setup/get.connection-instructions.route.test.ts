@@ -256,6 +256,7 @@ test("saved organization changes reach the next installed agent launch through t
         skills: null,
         mcp: {
           serverName: "gateway",
+          toolPrefix: "archestra__",
           url: `${origin}/v1/mcp/${gateway.id}`,
           ref: gateway.id,
         },

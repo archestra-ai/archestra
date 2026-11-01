@@ -20,7 +20,11 @@ import {
 } from "@archestra/shared/consts";
 import { describe, expect, test } from "vitest";
 import type { SetupScriptContext } from "../index";
-import { CLAUDE_CODE_GUARD_CLIENT, CODEX_GUARD_CLIENT } from "./clients";
+import {
+  CLAUDE_CODE_GUARD_CLIENT,
+  CODEX_GUARD_CLIENT,
+  COPILOT_GUARD_CLIENT,
+} from "./clients";
 import {
   buildStartupGuardContext,
   buildStartupGuardInstallSection,
@@ -1155,6 +1159,87 @@ describe("renderStartupGuardScript", () => {
   });
 });
 
+describe("copilot guard repair of Copilot's provider variables", () => {
+  // The gateway stays connected, so skipping the proxy below leaves a remote
+  // for the guard to keep checking instead of uninstalling itself.
+  const copilotCtx: StartupGuardContext = { ...CTX, skills: null };
+
+  test("a refreshed guard removes the exports an earlier setup wrote and reports the live shell", async () => {
+    const script = renderStartupGuardScript(copilotCtx, COPILOT_GUARD_CLIENT);
+    const guardHome = await makeGuardHome({
+      script,
+      curlExitCode: 0,
+      curlBody: '{"mcp":"ok","llm":"ok"}',
+    });
+    const zshrc = path.join(guardHome.home, ".zshrc");
+    const before = await readFile(zshrc, "utf8");
+    await writeFile(
+      zshrc,
+      `${before}export COPILOT_PROVIDER_BASE_URL='https://archestra.example.com/v1/connection-setup/cps1_old/openai'\nexport COPILOT_PROVIDER_API_KEY='arch_old'\nexport COPILOT_MODEL='archestra/old'\nexport KEEP_ME=1\n`,
+      "utf8",
+    );
+    const other = path.join(guardHome.home, ".bash_profile");
+    await writeFile(
+      other,
+      "export COPILOT_MODEL='gpt-4o'\nexport COPILOT_PROVIDER_BASE_URL='http://localhost:11434/v1'\n",
+      "utf8",
+    );
+    const run = (env: Record<string, string>) =>
+      execFileAsync("bash", [guardHome.guardFile], {
+        env: { ...guardHome.env, ...env },
+      });
+    const first = await run({ COPILOT_MODEL: "archestra/old" });
+    // our group went, the other profile's own provider stayed
+    expect(await readFile(zshrc, "utf8")).toBe(`${before}export KEEP_ME=1\n`);
+    expect(await readFile(other, "utf8")).toBe(
+      "export COPILOT_MODEL='gpt-4o'\nexport COPILOT_PROVIDER_BASE_URL='http://localhost:11434/v1'\n",
+    );
+    expect(first.stderr).toContain(
+      "Archestra: removed the COPILOT_PROVIDER_* and COPILOT_MODEL exports an earlier setup added to your shell profile",
+    );
+    // an old wrapper cannot drop the live variables; say what to do
+    expect(first.stderr).toContain(
+      "Archestra: COPILOT_MODEL set in this shell: Copilot CLI uses it instead of providers.json",
+    );
+    expect(first.stderr).toContain("Run: unset COPILOT_MODEL");
+    // a new wrapper drops them itself and says so
+    const handled = await run({
+      COPILOT_MODEL: "archestra/old",
+      ARCHESTRA_COPILOT_ENV_HANDLED: "1",
+    });
+    expect(handled.stderr).not.toContain("set in this shell");
+    expect(handled.stderr).not.toContain("removed the COPILOT_PROVIDER_*");
+    // a disconnected proxy leaves everything alone
+    await writeFile(
+      path.join(guardHome.home, COPILOT_GUARD_CLIENT.skipRelpath),
+      "proxy\n",
+      "utf8",
+    );
+    await writeFile(
+      zshrc,
+      `${before}export COPILOT_MODEL='archestra/old'\n`,
+      "utf8",
+    );
+    const skipped = await run({ COPILOT_MODEL: "archestra/old" });
+    expect(skipped.stderr).not.toContain("COPILOT_MODEL");
+    expect(await readFile(zshrc, "utf8")).toBe(
+      `${before}export COPILOT_MODEL='archestra/old'\n`,
+    );
+  });
+
+  test("other clients' guards carry no Copilot repair", () => {
+    expect(
+      renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
+    ).not.toContain("copilot_legacy_env_repair");
+    expect(
+      renderStartupGuardScript(
+        { ...copilotCtx, proxy: null },
+        COPILOT_GUARD_CLIENT,
+      ),
+    ).not.toContain("copilot_legacy_env_repair");
+  });
+});
+
 describe("buildStartupGuardInstallSection", () => {
   test.each([
     [CLAUDE_CODE_GUARD_CLIENT, ["stop session-123", "login", "upgrade"]],
@@ -1217,6 +1302,93 @@ describe("buildStartupGuardInstallSection", () => {
     expect(section).toContain('command claude "$@"');
     // strip-then-append keeps re-runs from duplicating the block
     expect(section).toContain("awk -v start=");
+  });
+
+  test("the copilot wrapper launches without Copilot's provider variables while the proxy is connected, and keeps them in the shell", async () => {
+    // Copilot CLI uses COPILOT_MODEL / COPILOT_PROVIDER_* instead of
+    // providers.json, so the wrapper drops them for the launch only.
+    const { home, guardFile } = await runInstallSection({
+      ctx: { ...CTX, mcp: null, skills: null },
+      client: COPILOT_GUARD_CLIENT,
+    });
+    // The launch check itself is covered above; record what the wrapper tells it.
+    await writeFile(
+      guardFile,
+      `#!/bin/sh\nprintf 'handled=%s\\n' "\${ARCHESTRA_COPILOT_ENV_HANDLED-none}" >&2\nexit 0\n`,
+      "utf8",
+    );
+    const bin = path.join(home, "bin");
+    await mkdir(bin);
+    const fake = path.join(bin, "copilot");
+    await writeFile(
+      fake,
+      `#!/bin/sh\nprintf 'model=%s base=%s args=%s\\n' "\${COPILOT_MODEL-unset}" "\${COPILOT_PROVIDER_BASE_URL-unset}" "$*"\n`,
+      "utf8",
+    );
+    await chmod(fake, 0o755);
+    const launch = (shell: string, rc: string, env: Record<string, string>) =>
+      execFileAsync(
+        shell,
+        [
+          "-c",
+          `source "$HOME/${rc}" && copilot -p hi && printf 'after=%s\\n' "$COPILOT_MODEL"`,
+        ],
+        {
+          env: {
+            ...process.env,
+            HOME: home,
+            ZDOTDIR: home,
+            PATH: `${bin}:${process.env.PATH}`,
+            ...env,
+          } as Record<string, string>,
+        },
+      );
+    const legacy = {
+      COPILOT_MODEL: "gpt-4o",
+      COPILOT_PROVIDER_BASE_URL: "http://localhost:11434/v1",
+    };
+    for (const [shell, rc] of [
+      ["bash", ".bashrc"],
+      ["zsh", ".zshrc"],
+    ] as const) {
+      const stripped = await launch(shell, rc, legacy);
+      expect(stripped.stdout).toBe(
+        "model=unset base=unset args=-p hi\nafter=gpt-4o\n",
+      );
+      expect(stripped.stderr).toContain(
+        "archestra: ignoring COPILOT_MODEL COPILOT_PROVIDER_BASE_URL for this launch. The LLM proxy connection is active, and Copilot CLI would use those variables instead of providers.json; unset them to silence this notice.",
+      );
+      expect(stripped.stderr).toContain("handled=1");
+      // one variable is named as one
+      const single = await launch(shell, rc, { COPILOT_MODEL: "gpt-4o" });
+      expect(single.stderr).toContain(
+        "archestra: ignoring COPILOT_MODEL for this launch. The LLM proxy connection is active, and Copilot CLI would use that variable instead of providers.json; unset it to silence this notice.",
+      );
+      const clean = await launch(shell, rc, {});
+      expect(clean.stdout).toBe("model=unset base=unset args=-p hi\nafter=\n");
+      expect(clean.stderr).not.toContain("ignoring");
+      expect(clean.stderr).toContain("handled=0");
+    }
+    // Once the proxy remote is disconnected the variables are Copilot's business again.
+    await writeFile(
+      path.join(home, COPILOT_GUARD_CLIENT.skipRelpath),
+      "proxy\n",
+      "utf8",
+    );
+    const kept = await launch("bash", ".bashrc", legacy);
+    expect(kept.stdout).toBe(
+      "model=gpt-4o base=http://localhost:11434/v1 args=-p hi\nafter=gpt-4o\n",
+    );
+    expect(kept.stderr).not.toContain("ignoring");
+  });
+
+  test("a copilot wrapper without a proxy never touches Copilot's provider variables", () => {
+    const section = buildStartupGuardInstallSection(
+      { ...CTX, proxy: null },
+      COPILOT_GUARD_CLIENT,
+    );
+    expect(section).not.toContain("archestra_copilot_strip");
+    expect(section).toContain('command copilot "$@"');
   });
 
   test("detects a pre-feature guard (no version stamp) and upgrades it without prompting", () => {

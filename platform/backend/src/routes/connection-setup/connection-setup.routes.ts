@@ -17,6 +17,7 @@ import {
 } from "@archestra/shared";
 import {
   CONNECTION_SETUP_TOKEN_TTL_MS,
+  connectionModelServesClient,
   defaultConnectionModel,
   INSTALLER_CLIENT_KEY_PROVIDERS,
   INSTALLER_CLIENT_LABELS,
@@ -36,6 +37,7 @@ import {
   AgentModel,
   ConnectionSetupModel,
   MemberModel,
+  ModelModel,
   OrganizationModel,
   PluginModel,
   SkillMarketplaceCredentialModel,
@@ -177,6 +179,13 @@ const CreateConnectionSetupBodySchema = z.object({
    * silently skipped when the caller lacks llmVirtualKey:create.
    */
   attributePassthrough: z.boolean().default(true),
+  /**
+   * The provider key a virtual-key setup binds for a per-user provider when
+   * the user can use more than one: their own GitHub Copilot sign-in, or an
+   * organization's GitHub Copilot plan shared with them. Omitted, the setup
+   * binds the user's own sign-in.
+   */
+  providerApiKeyId: z.string().uuid().optional(),
   /**
    * Explicit model for the Copilot CLI's provider wiring — the CLI refuses to
    * launch a BYOK provider without one, so the wizard's review step picks it.
@@ -493,6 +502,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         provider: requestedProvider,
         proxyAuth,
         attributePassthrough,
+        providerApiKeyId,
         model: requestedModel,
         skills,
         pluginIds: requestedPluginIds,
@@ -575,6 +585,27 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           400,
           "model is only supported for copilot-cli, claude-desktop, pi and kimi-code setups",
         );
+      }
+      // A model the catalog knows to be served elsewhere would fail every
+      // request; a model the catalog doesn't know is the user's to vouch for.
+      if (model && provider && clientId === "copilot-cli") {
+        const known = await ModelModel.findByProviderAndModelId(
+          provider,
+          model,
+        );
+        if (
+          known &&
+          !connectionModelServesClient({
+            clientId,
+            provider,
+            supportedEndpoints: known.supportedEndpoints,
+          })
+        ) {
+          throw new ApiError(
+            400,
+            `${model} is served only through Chat Completions on ${providerDisplayNames[provider] ?? provider}, and Copilot CLI connects through the Responses API. Choose another model.`,
+          );
+        }
       }
       // Kimi Code names one model in its provider entry. Without a choice,
       // use the provider's default.
@@ -665,6 +696,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 preferredProviderKeyId:
                   mappedKeys?.find((key) => key.provider === provider)
                     ?.providerApiKeyId ?? null,
+                selectedProviderKeyId: providerApiKeyId ?? null,
               }));
           }
           // Fail here, where the Connect page shows the message, rather than

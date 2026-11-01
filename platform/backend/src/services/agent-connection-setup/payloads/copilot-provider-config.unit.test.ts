@@ -69,10 +69,10 @@ async function fixture() {
   const registry = path.join(env.COPILOT_HOME, "providers.json");
   const settings = path.join(env.COPILOT_HOME, "settings.json");
   await mkdir(env.COPILOT_HOME);
-  const run = async (ctx = context) => {
+  const run = async (ctx = context, extraEnv: Record<string, string> = {}) => {
     const script = path.join(home, "setup.sh");
     await writeFile(script, renderSetupScript(ctx));
-    return exec("bash", [script], { env });
+    return exec("bash", [script], { env: { ...env, ...extraEnv } });
   };
   const remove = () =>
     exec(process.execPath, ["-e", COPILOT_PROVIDER_CONFIG_NODE], {
@@ -109,11 +109,13 @@ test("setup saves credentials and model, preserves other settings, reruns safely
       name: "archestra",
       type: "openai",
       baseUrl: proxy.url,
-      apiKey: proxy.virtualKey,
       headers: {
         "X-Archestra-Agent-Id": "github_copilot_cli",
         "X-Archestra-Virtual-Key": "arch_attribution",
       },
+      // OpenAI serves the Responses API, the wire Guardrails follow Copilot on.
+      wireApi: "responses",
+      apiKey: proxy.virtualKey,
     },
   ]);
   expect(installed.models).toContainEqual({
@@ -132,33 +134,18 @@ test("setup saves credentials and model, preserves other settings, reruns safely
     0o600,
   );
   expect(stdout).not.toMatch(/<your-[a-z-]+>/);
-  expect(stdout.indexOf("Environment variables (optional)")).toBeGreaterThan(
+  // The closing note names the saved model and says to leave COPILOT_MODEL
+  // unset; the former "optional" exports (which set it) are gone.
+  expect(stdout.indexOf("Model selection")).toBeGreaterThan(
     stdout.indexOf("Copilot CLI is connected"),
   );
+  expect(stdout).toContain("Copilot starts with archestra/gpt-4o");
   expect(stdout.indexOf("Next: open a new terminal")).toBeGreaterThan(
-    stdout.indexOf("export COPILOT_PROVIDER_API_KEY="),
+    stdout.indexOf("Leave COPILOT_MODEL unset"),
   );
-  expect(stdout.match(/^ {2}export COPILOT_PROVIDER_API_KEY=/gm)).toHaveLength(
-    1,
-  );
-  // Executing the optional exports must round-trip even quotes/metacharacters.
-  const exports = stdout
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith("export "))
-    .join("\n");
-  const printed = await exec(
-    "bash",
-    [
-      "-c",
-      `${exports}\nnode -e 'console.log(JSON.stringify({key:process.env.COPILOT_PROVIDER_API_KEY, model:process.env.COPILOT_MODEL}))'`,
-    ],
-    { env: f.env },
-  );
-  expect(JSON.parse(printed.stdout)).toEqual({
-    key: proxy.virtualKey,
-    model: "archestra/gpt-4o",
-  });
+  expect(stdout).not.toContain("export COPILOT_");
+  expect(stdout).not.toContain("COPILOT_MODEL is set to");
+  expect(stdout).not.toContain("Removed the COPILOT_MODEL export");
   await f.run({ ...context, proxy: { ...proxy, model: "gpt-4.1" } });
   expect(
     (await json(f.registry)).models.filter(
@@ -166,9 +153,10 @@ test("setup saves credentials and model, preserves other settings, reruns safely
     ),
   ).toHaveLength(1);
   expect(await json(`${f.registry}.archestra-backup`)).toEqual(original);
+  // Exports an earlier setup's instructions had people add by hand.
   await writeFile(
     path.join(f.home, ".zshrc"),
-    `${exports}\nexport KEEP_ME=1\n`,
+    "export COPILOT_PROVIDER_API_KEY='arch_test'\nexport COPILOT_MODEL='archestra/gpt-4o'\nexport KEEP_ME=1\n",
   );
   await mkdir(path.join(f.home, ".config/fish/conf.d"), { recursive: true });
   const fishProfile = path.join(f.home, ".config/fish/conf.d/provider.fish");
@@ -188,6 +176,78 @@ test("setup saves credentials and model, preserves other settings, reruns safely
   expect(await readFile(fishProfile, "utf8")).toBe("set -gx KEEP_ME 1\n");
   expect(await json(f.registry)).toEqual(original);
   expect((await json(f.settings)).model).toBe("personal/local");
+});
+
+test("setup removes the provider exports an earlier setup left and warns about the live variables", async () => {
+  const f = await fixture();
+  await writeFile(
+    path.join(f.home, ".zshrc"),
+    "export COPILOT_PROVIDER_BASE_URL='https://proxy.example.com/v1/connection-setup/cps1_old/openai'\nexport COPILOT_PROVIDER_API_KEY='arch_old'\nexport COPILOT_MODEL='archestra/old'\nexport KEEP_ME=1\n",
+  );
+  await mkdir(path.join(f.home, ".config/fish/conf.d"), { recursive: true });
+  const fishProfile = path.join(f.home, ".config/fish/conf.d/provider.fish");
+  await writeFile(
+    fishProfile,
+    "set -gx COPILOT_MODEL 'archestra/old'\nset -gx COPILOT_PROVIDER_TYPE openai\nset -gx KEEP_ME 1\n",
+  );
+  const { stdout } = await f.run(context, {
+    COPILOT_MODEL: "archestra/old",
+    COPILOT_PROVIDER_BASE_URL:
+      "https://proxy.example.com/v1/connection-setup/cps1_old/openai",
+  });
+  // .zshrc also gains the launch-check block; only the stale exports went.
+  const zshrc = await readFile(path.join(f.home, ".zshrc"), "utf8");
+  expect(zshrc).not.toContain("export COPILOT_");
+  expect(zshrc).toContain("export KEEP_ME=1\n");
+  expect(await readFile(fishProfile, "utf8")).toBe("set -gx KEEP_ME 1\n");
+  expect(stdout).toContain(
+    "Removed the COPILOT_PROVIDER_* and COPILOT_MODEL exports an earlier setup added to your shell profile",
+  );
+  expect(stdout).toContain(
+    "still set in open terminals: COPILOT_MODEL COPILOT_PROVIDER_BASE_URL.",
+  );
+  expect(stdout).toContain(
+    "Run: unset COPILOT_MODEL COPILOT_PROVIDER_BASE_URL",
+  );
+  // The script dropped the variables itself, so the closing note has nothing left to flag.
+  expect(stdout).not.toContain("Set in this shell:");
+  expect((await json(f.settings)).model).toBe("archestra/gpt-4o");
+});
+
+test("provider variables that are not ours are left alone and listed in the closing note", async () => {
+  const f = await fixture();
+  const ollama =
+    "export COPILOT_MODEL='gpt-4o'\nexport COPILOT_PROVIDER_BASE_URL='http://localhost:11434/v1'\n";
+  await writeFile(path.join(f.home, ".zshrc"), ollama);
+  const { stdout } = await f.run(context, {
+    COPILOT_MODEL: "gpt-4o",
+    COPILOT_PROVIDER_BASE_URL: "http://localhost:11434/v1",
+  });
+  expect(await readFile(path.join(f.home, ".zshrc"), "utf8")).toContain(ollama);
+  expect(stdout).not.toContain("Removed the COPILOT_PROVIDER_*");
+  expect(stdout).toContain(
+    "Set in this shell: COPILOT_MODEL, COPILOT_PROVIDER_BASE_URL. To remove them:",
+  );
+  expect(stdout).toContain("unset COPILOT_MODEL COPILOT_PROVIDER_BASE_URL");
+  expect(stdout).toContain(
+    "The launch check drops them while the LLM proxy is connected.",
+  );
+});
+
+test("a provider without a Responses route keeps Copilot's default wire", async () => {
+  const f = await fixture();
+  const { stdout } = await f.run({
+    ...context,
+    proxy: {
+      ...proxy,
+      provider: "groq",
+      providerLabel: "Groq",
+      url: "https://proxy.example.com/v1/groq",
+    },
+  });
+  const installed = await json(f.registry);
+  expect(installed.providers[0]).not.toHaveProperty("wireApi");
+  expect(stdout).not.toContain("COPILOT_PROVIDER_WIRE_API");
 });
 
 test("custom config paths are honored and missing credentials are not reported as installed", async () => {
@@ -257,11 +317,26 @@ test("PowerShell embeds the same executable writer and prints optional instructi
     Buffer.from(marker ?? "", "base64").toString("utf8"),
   ).optionalInstructions;
   expect(instructions).toBeDefined();
+  // The closing note gives PowerShell commands for a COPILOT_MODEL still set.
   const { stdout } = await exec(process.execPath, ["-e", instructions ?? ""], {
-    env: { ...f.env, ARCHESTRA_COPILOT_SHELL: "powershell" },
+    env: {
+      ...f.env,
+      ARCHESTRA_COPILOT_SHELL: "powershell",
+      COPILOT_MODEL: "archestra/other",
+    },
   });
+  expect(stdout).toContain("Copilot starts with archestra/gpt-4o");
+  expect(stdout).toContain("Set in this shell: COPILOT_MODEL. To remove it:");
+  expect(stdout).toContain("Remove-Item Env:COPILOT_MODEL");
   expect(stdout).toContain(
-    "$env:COPILOT_PROVIDER_API_KEY = 'arch_test''$`\\key'",
+    "[Environment]::SetEnvironmentVariable('COPILOT_MODEL', $null, 'User')",
+  );
+  expect(stdout).not.toContain("unset COPILOT_MODEL");
+  // The PowerShell setup also clears the set an earlier setup persisted.
+  expect(script).toContain("$archLegacyNames = @('COPILOT_MODEL', ");
+  expect(script).toContain("-like '*/v1/connection-setup/*'");
+  expect(script).toContain(
+    "[Environment]::SetEnvironmentVariable($archName, $null, $archScope)",
   );
   expect(script.indexOf(instructions ?? "")).toBeGreaterThan(
     script.indexOf("Copilot CLI is connected"),
@@ -278,14 +353,13 @@ test("older Copilot versions fail before changing provider files", async () => {
   await expect(stat(f.registry)).rejects.toThrow();
 });
 
-test("fish instructions quote credentials literally and a changed user model survives reconnect/disconnect", async () => {
+test("fish gets its own unset command and a changed user model survives reconnect/disconnect", async () => {
   const f = await fixture();
   f.env.SHELL = "/usr/bin/fish";
-  const { stdout } = await f.run();
-  expect(stdout).toContain(
-    "set -gx COPILOT_PROVIDER_API_KEY 'arch_test\\'$`\\\\key'",
-  );
-  expect(stdout).not.toContain("export COPILOT_PROVIDER_API_KEY=");
+  const { stdout } = await f.run(context, { COPILOT_MODEL: "gpt-4o" });
+  expect(stdout).toContain("set -e COPILOT_MODEL");
+  expect(stdout).not.toContain("unset COPILOT_MODEL");
+  expect(stdout).not.toContain("export COPILOT_");
   await writeFile(f.settings, JSON.stringify({ model: "personal/new-model" }));
   await f.run();
   await f.remove();

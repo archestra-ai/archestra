@@ -49,10 +49,15 @@ export type ConsentProxyMode =
   | "per-user"
   | "unavailable";
 
-/** The optional setup choices on the connection approval page, collapsed by default. */
+/**
+ * The setup choices on the connection approval page: optional and collapsed
+ * by default, required and open when the setup can't be approved without a
+ * change here.
+ */
 export function ConnectionConsentOptions({
   open,
   onOpenChange,
+  required = false,
   clientLabel,
   tools,
   proxy,
@@ -62,6 +67,8 @@ export function ConnectionConsentOptions({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** A choice here must change before the setup can be approved. */
+  required?: boolean;
   clientLabel: string;
   tools: {
     gateways: AgentSelectorAgent[];
@@ -74,8 +81,14 @@ export function ConnectionConsentOptions({
     setInclude: (value: boolean) => void;
     mode: ConsentProxyMode;
     providerLabels: string[];
+    /** The account a per-user provider bills, such as an enterprise plan. */
+    accountLabel?: string | null;
     /** Provider choice, offered only for the user's own key. */
     providerPicker: ReactNode;
+    /** Account choice, offered when the user may use more than one. */
+    accountPicker?: ReactNode;
+    /** The accounts of a per-user provider still to connect, as cards. */
+    accountCards?: ReactNode;
     modelPicker: ReactNode;
   } | null;
   skills: {
@@ -114,12 +127,18 @@ export function ConnectionConsentOptions({
           />
           <span className="font-medium">Setup options</span>
           <span className="min-w-0 truncate text-xs text-muted-foreground">
-            <span>· optional</span>
-            {!open && (
-              <span className="hidden sm:inline">
-                {" "}
-                — the defaults work, open to fine-tune
-              </span>
+            {required ? (
+              <span>· required — choose below to approve</span>
+            ) : (
+              <>
+                <span>· optional</span>
+                {!open && (
+                  <span className="hidden sm:inline">
+                    {" "}
+                    — the defaults work, open to fine-tune
+                  </span>
+                )}
+              </>
             )}
           </span>
           <ChevronDown
@@ -176,12 +195,20 @@ export function ConnectionConsentOptions({
                 disabled: proxy.mode === "unavailable",
               }}
             >
-              {proxyOn && (proxy.providerPicker || proxy.modelPicker) && (
-                <div className="flex flex-wrap gap-2">
-                  {proxy.providerPicker}
-                  {proxy.modelPicker}
-                </div>
-              )}
+              {proxyOn &&
+                (proxy.providerPicker ||
+                  proxy.accountPicker ||
+                  proxy.accountCards ||
+                  proxy.modelPicker) && (
+                  <div className="flex flex-wrap gap-2">
+                    {proxy.providerPicker}
+                    {proxy.accountPicker}
+                    {proxy.accountCards && (
+                      <div className="basis-full">{proxy.accountCards}</div>
+                    )}
+                    {proxy.modelPicker}
+                  </div>
+                )}
             </Row>
           )}
 
@@ -484,7 +511,9 @@ function proxySummary(
     case "all-providers":
       return `${list} · one virtual key, plus your own sign-ins`;
     case "per-user":
-      return `Connect your own ${labels[0] ?? "provider"} account`;
+      return proxy.accountLabel
+        ? `${labels[0] ?? "Your provider"} · ${proxy.accountLabel}`
+        : `Connect your own ${labels[0] ?? "provider"} account`;
     case "unavailable":
       return "No provider key available";
   }

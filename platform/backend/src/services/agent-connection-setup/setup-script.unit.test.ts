@@ -749,6 +749,107 @@ process.exit(0);
 }
 
 /**
+ * Runs the Copilot CLI setup's skills step against a fake `copilot` that keeps
+ * marketplaces in COPILOT_HOME/settings.json as Copilot does and, like
+ * Copilot, refuses `marketplace add` for a name it already holds.
+ */
+async function runCopilotMarketplaceRegistration(params: {
+  initialSource: "stale" | "current" | "missing";
+}): Promise<{
+  commands: string[];
+  settings: Record<string, unknown>;
+  output: string;
+}> {
+  const root = await mkdtemp(path.join(tmpdir(), "archestra-copilot-mkt-"));
+  const home = path.join(root, "home");
+  const copilotHome = path.join(root, "copilot-home");
+  const bin = path.join(root, "bin");
+  const settingsPath = path.join(copilotHome, "settings.json");
+  const commandLog = path.join(root, "copilot-commands.log");
+  const scriptPath = path.join(root, "setup.sh");
+  const fakeCopilotPath = path.join(bin, "copilot");
+  const name = AUTHENTICATED_SKILLS.marketplaceName;
+  try {
+    await mkdir(copilotHome, { recursive: true });
+    await mkdir(bin, { recursive: true });
+    await writeFile(commandLog, "", "utf8");
+    const url =
+      params.initialSource === "stale"
+        ? "http://token:archestra_mkt_earlier@stack2.localhost9002/skills/marketplace.git"
+        : AUTHENTICATED_SKILLS.cloneUrl;
+    await writeFile(
+      settingsPath,
+      JSON.stringify({
+        model: "archestra/gpt-6.1-sol",
+        extraKnownMarketplaces: {
+          "other-marketplace": {
+            source: { source: "git", url: "https://example.com/other.git" },
+          },
+          ...(params.initialSource === "missing"
+            ? {}
+            : { [name]: { source: { source: "git", url } } }),
+        },
+      }),
+      "utf8",
+    );
+    await writeFile(
+      fakeCopilotPath,
+      `#!/usr/bin/env node
+const fs = require("node:fs");
+const args = process.argv.slice(2);
+const settingsPath = process.env.COPILOT_HOME + "/settings.json";
+if (args[0] !== "plugin") process.exit(0);
+fs.appendFileSync(process.env.ARCHESTRA_TEST_COMMAND_LOG, args.join(" ") + "\\n");
+const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+const marketplaces = settings.extraKnownMarketplaces || (settings.extraKnownMarketplaces = {});
+if (args[1] === "marketplace" && args[2] === "add") {
+  const marketplace = ${JSON.stringify(name)};
+  if (marketplaces[marketplace]) {
+    console.error('Marketplace "' + marketplace + '" already registered');
+    process.exit(1);
+  }
+  marketplaces[marketplace] = { source: { source: "git", url: args[3] } };
+  fs.writeFileSync(settingsPath, JSON.stringify(settings));
+}
+process.exit(0);
+`,
+      "utf8",
+    );
+    await chmod(fakeCopilotPath, 0o755);
+    await writeFile(
+      scriptPath,
+      renderSetupScript({
+        ...fullContext("copilot-cli"),
+        mcp: null,
+        proxy: null,
+        skills: AUTHENTICATED_SKILLS,
+      }),
+      "utf8",
+    );
+    const { stdout, stderr } = await execFileAsync("bash", [scriptPath], {
+      env: {
+        ...process.env,
+        HOME: home,
+        COPILOT_HOME: copilotHome,
+        NO_COLOR: "1",
+        PATH: `${bin}:${process.env.PATH}`,
+        ARCHESTRA_TEST_COMMAND_LOG: commandLog,
+      },
+    });
+    return {
+      commands: (await readFile(commandLog, "utf8"))
+        .trim()
+        .split("\n")
+        .filter(Boolean),
+      settings: JSON.parse(await readFile(settingsPath, "utf8")),
+      output: `${stdout}${stderr}`,
+    };
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+/**
  * A python pty driver that reproduces the exact `curl | bash` shape inside a
  * terminal: bash reads the script from a pipe (so its stdin is NOT a tty, and
  * every command inherits that pipe), while its stdout IS a real tty. The driver
@@ -1407,6 +1508,95 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
       );
       expect(`${result.stdout}${result.stderr}`).not.toContain("INSTALL_RAN");
     }
+  });
+
+  test("copilot-cli: points an earlier marketplace registration at this setup's credential", async () => {
+    // `copilot plugin marketplace add` refuses a name Copilot already holds,
+    // so a re-run used to keep the earlier setup's credential and every
+    // marketplace refresh failed once that credential stopped working.
+    const result = await runCopilotMarketplaceRegistration({
+      initialSource: "stale",
+    });
+
+    expect(result.commands).toEqual([
+      `plugin marketplace update ${AUTHENTICATED_SKILLS.marketplaceName}`,
+    ]);
+    expect(result.settings).toEqual({
+      model: "archestra/gpt-6.1-sol",
+      extraKnownMarketplaces: {
+        "other-marketplace": {
+          source: { source: "git", url: "https://example.com/other.git" },
+        },
+        [AUTHENTICATED_SKILLS.marketplaceName]: {
+          source: { source: "git", url: AUTHENTICATED_SKILLS.cloneUrl },
+        },
+      },
+    });
+    expect(result.output).toContain(
+      `Pointed the "${AUTHENTICATED_SKILLS.marketplaceName}" marketplace at this setup's source`,
+    );
+    expect(result.output).not.toContain("archestra_mkt_");
+  });
+
+  test.each([
+    ["current", []],
+    ["missing", [`plugin marketplace add ${AUTHENTICATED_SKILLS.cloneUrl}`]],
+  ] as const)("copilot-cli: a %s marketplace registration ends on this setup's source", async (initialSource, commands) => {
+    const result = await runCopilotMarketplaceRegistration({ initialSource });
+
+    expect(result.commands).toEqual(commands);
+    expect(result.settings).toMatchObject({
+      extraKnownMarketplaces: {
+        [AUTHENTICATED_SKILLS.marketplaceName]: {
+          source: { source: "git", url: AUTHENTICATED_SKILLS.cloneUrl },
+        },
+      },
+    });
+    expect(result.output).not.toContain(
+      "Marketplace may already be registered",
+    );
+  });
+
+  test.each([
+    ["macos", [], 'Marketplace "acme-skills" registered'],
+    ["windows", [], 'Marketplace "acme-skills" registered'],
+    ["macos", ["acme-plugin"], 'Installed from "acme-skills"'],
+  ] as const)("copilot-cli on %s with plugins %j says what setup did with the marketplace", (platform, pluginNames, detail) => {
+    // Copilot installs only the plugins setup names; the shared skills are
+    // added from its marketplace browser, as the closing note says.
+    const script = renderSetupScript({
+      ...fullContext("copilot-cli", platform),
+      skills: { ...AUTHENTICATED_SKILLS, pluginNames: [...pluginNames] },
+    });
+    expect(script).toContain(detail);
+    expect(script).not.toContain(
+      pluginNames.length === 0
+        ? 'Installed from "acme-skills"'
+        : 'Marketplace "acme-skills" registered',
+    );
+  });
+
+  test("copilot-cli on Windows points an earlier marketplace registration at this setup's source", () => {
+    const script = renderSetupScript({
+      ...fullContext("copilot-cli", "windows"),
+      skills: AUTHENTICATED_SKILLS,
+    });
+    expect(script).toContain(
+      `$env:ARCHESTRA_MARKETPLACE_URL = '${AUTHENTICATED_SKILLS.cloneUrl}'`,
+    );
+    expect(script).toContain(
+      "} elseif ($archMarketplaceState -eq 'updated') {",
+    );
+    expect(script).toContain(
+      `Invoke-ArchRedacted { copilot plugin marketplace update '${AUTHENTICATED_SKILLS.marketplaceName}' }`,
+    );
+    expect(script).toContain(
+      `Invoke-ArchRedacted { copilot plugin marketplace add '${AUTHENTICATED_SKILLS.cloneUrl}' }`,
+    );
+    // The credential reaches the helper through the environment only.
+    expect(script).toContain(
+      "Remove-Item Env:ARCHESTRA_MARKETPLACE_NAME, Env:ARCHESTRA_MARKETPLACE_URL",
+    );
   });
 
   test("claude-code: installs the startup guard and wraps claude in the shell profiles", () => {
@@ -3005,8 +3195,7 @@ if (process.argv[2] === 'debug') {
     expect(script).toContain(
       'ARCHESTRA_COPILOT_API_KEY="${ARCHESTRA_GHCP_TOKEN:-}"',
     );
-    // client attribution rides COPILOT_PROVIDER_HEADERS (proxy-only headers)
-    expect(script).toContain("COPILOT_PROVIDER_HEADERS");
+    // client attribution rides the provider's headers in providers.json
     expect(script).toContain('"X-Archestra-Agent-Id":"github_copilot_cli"');
   });
 
@@ -3036,6 +3225,70 @@ if (process.argv[2] === 'debug') {
         proxy: { ...GITHUB_COPILOT_PROXY, githubCopilot: null },
       }),
     ).toThrow(/device-flow configuration/);
+  });
+
+  test.each([
+    ["openai", true],
+    ["github-copilot", true],
+    ["azure", true],
+    ["groq", false],
+    ["mistral", false],
+  ] as const)("copilot-cli on %s selects the Responses API in providers.json: %s", async (provider, responses) => {
+    const ctx = fullContext("copilot-cli");
+    const script = renderSetupScript({
+      ...ctx,
+      proxy: {
+        ...(provider === "github-copilot" ? GITHUB_COPILOT_PROXY : PROXY),
+        provider,
+        providerLabel: provider,
+        url: `https://archestra.example.com/v1/${provider}`,
+      },
+    });
+    await expectValidBash(script);
+    const config = script.match(/ARCHESTRA_COPILOT_CONFIG='([^']*)' /)?.[1];
+    expect(config).toBeDefined();
+    const parsed = JSON.parse(config ?? "");
+    expect(parsed.url).toBe(`https://archestra.example.com/v1/${provider}`);
+    if (responses) expect(parsed.wireApi).toBe("responses");
+    else expect(parsed).not.toHaveProperty("wireApi");
+  });
+
+  test("copilot-cli lets the guardrail helpers run without a prompt while the gateway is connected", async () => {
+    const script = renderSetupScript(fullContext("copilot-cli"));
+    await expectValidBash(script);
+    // The approvals live in the shell-profile wrapper, after the guard ran.
+    const wrapper = script.slice(script.indexOf(`${"copilot"}() {`));
+    expect(wrapper).toContain(
+      '"$HOME/.archestra/copilot-startup-guard.sh" "$@" || true',
+    );
+    for (const name of [
+      "get_remedy_plans",
+      "execute_remedy_plan",
+      "yell",
+      "ask_user",
+    ]) {
+      expect(wrapper).toContain(
+        `'--allow-tool=${MCP.serverName}(${MCP.toolPrefix}${name})'`,
+      );
+    }
+    // Only while the gateway stays connected from the guard's menu, and
+    // before the user's own arguments.
+    expect(wrapper).toMatch(
+      /grep -qx mcp "\$HOME\/\.archestra\/copilot-startup-guard\.skip" 2>\/dev\/null; then\n\s+set -- '--allow-tool=/,
+    );
+    expect(wrapper).toContain(
+      `'--allow-tool=${MCP.serverName}(${MCP.toolPrefix}ask_user)' "$@"`,
+    );
+    // Not without a gateway: the helpers live on it.
+    const proxyOnly = renderSetupScript({
+      ...fullContext("copilot-cli"),
+      mcp: null,
+    });
+    expect(proxyOnly).not.toContain("--allow-tool=");
+    // Other clients keep their own approval mechanisms.
+    expect(renderSetupScript(fullContext("codex"))).not.toContain(
+      "--allow-tool=",
+    );
   });
 
   test("github-copilot: hostile server values stay literal in the link section", async () => {
@@ -3581,6 +3834,34 @@ describe("renderSetupScript (windows)", () => {
       `"model":"${PROVIDER_MODEL_TIERS["github-copilot"].normal}"`,
     );
     expect(script).toContain('"X-Archestra-Agent-Id":"github_copilot_cli"');
+  });
+
+  test("copilot-cli on Windows selects the Responses API and allows the guardrail helpers", () => {
+    const script = renderSetupScript(fullContext("copilot-cli", "windows"));
+    expect(script).toContain('"wireApi":"responses"');
+    expect(script).toContain(
+      `$archGatewayArgs = @('--allow-tool=${MCP.serverName}(${MCP.toolPrefix}get_remedy_plans)', '--allow-tool=${MCP.serverName}(${MCP.toolPrefix}execute_remedy_plan)'`,
+    );
+    expect(script).toContain(
+      `'--allow-tool=${MCP.serverName}(${MCP.toolPrefix}ask_user)')`,
+    );
+    expect(script).toContain(
+      "Select-String -Path $archGatewaySkip -Pattern '^mcp$' -Quiet",
+    );
+    expect(script).toContain("& $archReal.Source @archGatewayArgs @args");
+    const groq = renderSetupScript({
+      ...fullContext("copilot-cli", "windows"),
+      proxy: {
+        ...PROXY,
+        provider: "groq",
+        providerLabel: "Groq",
+        url: "https://archestra.example.com/v1/groq",
+      },
+    });
+    expect(groq).not.toContain('"wireApi"');
+    expect(renderSetupScript(fullContext("codex", "windows"))).not.toContain(
+      "--allow-tool=",
+    );
   });
 
   test("cursor: merges mcp.json and prints manual model steps", () => {

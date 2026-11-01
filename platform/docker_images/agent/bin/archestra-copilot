@@ -165,6 +165,7 @@ def run_prompt(task, session_id, home, config, entries):
         try:
             child = subprocess.Popen(args, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                      stderr=subprocess.DEVNULL, text=True, pass_fds=(descriptor.fileno(),), start_new_session=True)
+            raise_command_scores(child)
             def guard_startup():
                 deadline = time.monotonic() + 30
                 while child.poll() is None:
@@ -259,6 +260,7 @@ def run_terminal(task, session_id, home, config, entries, artifact):
             if task:
                 args.extend(["--interactive", task])
             child = subprocess.Popen(args, env=env, pass_fds=(descriptor.fileno(),))
+            raise_command_scores(child)
             for number in signals:
                 signal.signal(number, lambda signum, _frame: child.send_signal(signum))
             while child.poll() is None:
@@ -440,6 +442,43 @@ def runtime_headers():
     if env.get("ARCHESTRA_AGENT_RUNTIME_BINDING"):
         headers["X-Archestra-Runtime-Binding"] = env["ARCHESTRA_AGENT_RUNTIME_BINDING"]
     return headers
+
+
+def raise_command_scores(client):
+    """The client's shell commands take the highest OOM score, as in the other
+    maintained images (archestra-command-oom-score.sh): on a node that kills one
+    process at the memory limit, the kernel then kills the command, not the
+    client. Copilot starts each command as `bash --norc --noprofile -c` and
+    removes BASH_ENV from its environment, so no shell startup file runs in it.
+    Every process below the client is raised instead, ten times a second; the
+    client and this launcher keep the container's score."""
+    def raise_scores():
+        while client.poll() is None:
+            for pid in descendants(client.pid):
+                score = Path(f"/proc/{pid}/oom_score_adj")
+                with contextlib.suppress(OSError, ValueError):
+                    if int(score.read_text()) < 1000:
+                        score.write_text("1000")
+            time.sleep(0.1)
+    threading.Thread(target=raise_scores, daemon=True).start()
+
+
+def descendants(root):
+    children = {}
+    for entry in os.scandir("/proc"):
+        if entry.name.isdigit():
+            # The command name in parentheses can hold spaces: the parent PID
+            # is the second field after it.
+            with contextlib.suppress(OSError, ValueError, IndexError):
+                parent = int(Path(entry.path, "stat").read_text().rpartition(")")[2].split()[1])
+                children.setdefault(parent, []).append(int(entry.name))
+    found = []
+    pending = [root]
+    while pending:
+        below = children.get(pending.pop(), [])
+        found.extend(below)
+        pending.extend(below)
+    return found
 
 
 def stop(child):

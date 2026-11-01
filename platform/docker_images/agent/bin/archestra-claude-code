@@ -322,6 +322,15 @@ args+=(--settings "${settings_file}")
 
 tui_start=(python3 "${script_dir}/archestra-claude-tui-start")
 
+# The client's shell commands take the highest OOM score; the client and this
+# launcher keep the container's (archestra-command-oom-score.sh). Set last, so
+# nothing the launcher started before gets it.
+command_oom_score="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/archestra-command-oom-score.sh"
+if [[ "${BASH_ENV:-}" != "${command_oom_score}" ]]; then
+  export ARCHESTRA_AGENT_RUNTIME_BASH_ENV="${BASH_ENV:-}"
+fi
+export BASH_ENV="${command_oom_score}"
+
 case "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" in
   interactive)
     # The same native TUI discovers tools before receiving a task. An empty

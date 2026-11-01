@@ -82,6 +82,34 @@ use them for Agent Runtime workspaces.
 
 The native wrappers create client configuration at run time under `/var/run/archestra`. Credentials are never baked into images. On the provider path, the runtime receives a temporary virtual key and routes inference through the Agent-scoped LLM proxy. The upstream provider credential stays in the backend.
 
+## Memory limits
+
+The agent's shell commands take the highest OOM score, 1000. The client, its
+launcher, tmux and PID 1 keep the container's own score. On a node that kills
+one process at a container's memory limit (the kubelet's
+`singleProcessOOMKill`), the kernel then kills the command, and the agent sees
+it fail instead of losing its session. A process with score 1000 is one of the
+agent's commands.
+
+How each client gets it:
+
+- **Claude Code, Codex, OpenCode, Hermes, Grok Build, Kimi Code**: these run
+  commands with `bash -c`. Each launcher exports
+  `BASH_ENV=archestra-command-oom-score.sh` just before it starts the client,
+  and that file raises the shell's score. Claude Code and Kimi Code give the
+  shell a socket for its input, sometimes with `SHLVL=0`. Bash then reads
+  `/etc/bash.bashrc` instead of `BASH_ENV`, and the image's `/etc/bash.bashrc`
+  runs the same file.
+- **OpenClaw** raises the score of every process it starts on its own.
+- **GitHub Copilot CLI** removes `BASH_ENV` and starts
+  `bash --norc --noprofile`. Its launcher raises every process below the
+  client to 1000, ten times a second.
+
+A `BASH_ENV` that the client's environment already had, such as a derived
+image's own, still runs after the hook. `tests/command-oom-score.py` checks
+each client during the image build: its shell tool's command gets 1000, and the
+client keeps its score.
+
 Claude Code personal subscriptions use a token from the configured secrets backend. The wrapper sends inference through the Agent-scoped LLM proxy with a personal passthrough key, so token usage appears in proxy logs. The OAuth token remains the provider credential; subscription requests do not count toward metered cost limits. MCP calls use the Agent-scoped gateway and its tool policies.
 
 Delegated Claude Code assignments stay open until registered background work finishes and the main agent handles its result. This includes shells, subagents and native scheduled monitors. Stop background servers and delete recurring monitors when the assignment is done. Unregistered detached processes are not detected. See the [background-work contract](runtime-contract.md#background-work-in-maintained-images) for lifecycle and failure rules. Codex and OpenCode adapters are not included.

@@ -133,6 +133,19 @@ COPY docker_images/agent/environment.md /etc/archestra/agent-environment.md
 # own test honest and gives anyone debugging inside a pod the same tool.
 COPY backend/src/static/workspace-files.py /usr/local/bin/archestra-workspace-files
 RUN chmod 0755 /usr/local/bin/archestra-*
+# The agent client's shell commands take the highest OOM score through the
+# BASH_ENV its launcher sets (archestra-command-oom-score.sh). Bash skips
+# BASH_ENV in two cases and reads this file instead: an interactive shell, and
+# a command line whose input is a socket while SHLVL is below 1, which is how
+# Claude Code and Kimi Code start their shell commands. Only a shell whose
+# BASH_ENV is that file runs it, so other shells in the pod are unaffected.
+RUN { printf '%s\n' \
+        '# Agent Runtime: a shell the agent client started takes the highest OOM score.' \
+        'case "${BASH_ENV:-}" in */archestra-command-oom-score.sh) . "${BASH_ENV}" ;; esac' \
+        ''; \
+      cat /etc/bash.bashrc; \
+    } > /tmp/bash.bashrc \
+ && mv /tmp/bash.bashrc /etc/bash.bashrc
 
 ENV HOME=/home/node
 RUN mkdir -p /home/node/workspace /var/run/archestra \
@@ -168,7 +181,8 @@ RUN --network=none \
 
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
-    python3 /tmp/agent-image-tests/mcp-startup.py claude-code
+    python3 /tmp/agent-image-tests/mcp-startup.py claude-code \
+ && python3 /tmp/agent-image-tests/command-oom-score.py claude-code
 
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
@@ -187,7 +201,8 @@ RUN --network=none \
 
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
-    python3 /tmp/agent-image-tests/mcp-startup.py codex
+    python3 /tmp/agent-image-tests/mcp-startup.py codex \
+ && python3 /tmp/agent-image-tests/command-oom-score.py codex
 
 FROM agent-base AS agent-opencode
 USER root
@@ -202,7 +217,8 @@ USER 1000:1000
 
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
-    python3 /tmp/agent-image-tests/mcp-startup.py opencode
+    python3 /tmp/agent-image-tests/mcp-startup.py opencode \
+ && python3 /tmp/agent-image-tests/command-oom-score.py opencode
 
 FROM agent-base AS agent-hermes
 ARG TARGETARCH
@@ -266,7 +282,8 @@ RUN --network=none \
 
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
-    python3 /tmp/agent-image-tests/mcp-startup.py hermes
+    python3 /tmp/agent-image-tests/mcp-startup.py hermes \
+ && python3 /tmp/agent-image-tests/command-oom-score.py hermes
 
 FROM agent-base AS agent-openclaw
 USER root
@@ -292,7 +309,8 @@ RUN --network=none \
 USER 1000:1000
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
-    python3 /tmp/agent-image-tests/mcp-startup.py openclaw
+    python3 /tmp/agent-image-tests/mcp-startup.py openclaw \
+ && python3 /tmp/agent-image-tests/command-oom-score.py openclaw
 
 # The npm package's postinstall only unpacks the platform binary into
 # ~/.grok/bin, under the persisted HOME, and writes ~/.grok/config.toml. Unpack
@@ -324,7 +342,8 @@ USER 1000:1000
 
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
-    python3 /tmp/agent-image-tests/mcp-startup.py grok
+    python3 /tmp/agent-image-tests/mcp-startup.py grok \
+ && python3 /tmp/agent-image-tests/command-oom-score.py grok
 
 # The npm package's postinstall only renames a previous Python kimi shim on
 # global installs. Install the checksummed tarball without lifecycle scripts.
@@ -354,7 +373,8 @@ USER 1000:1000
 
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
-    python3 /tmp/agent-image-tests/mcp-startup.py kimi
+    python3 /tmp/agent-image-tests/mcp-startup.py kimi \
+ && python3 /tmp/agent-image-tests/command-oom-score.py kimi
 
 # Redistribute the unmodified native binary and its license/notices together.
 # No package lifecycle scripts or automatic updates run in this image.
@@ -379,4 +399,5 @@ RUN case "$TARGETARCH" in \
 USER 1000:1000
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
-    python3 /tmp/agent-image-tests/copilot.py
+    python3 /tmp/agent-image-tests/copilot.py \
+ && python3 /tmp/agent-image-tests/command-oom-score.py copilot

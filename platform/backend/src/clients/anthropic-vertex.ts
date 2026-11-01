@@ -1,4 +1,5 @@
 import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic";
+import type { LanguageModel } from "ai";
 import { GoogleAuth } from "google-auth-library";
 import config from "@/config";
 import {
@@ -106,10 +107,8 @@ export const anthropicVertexClient = new AnthropicVertexClient();
 // ===== Internal types =====
 
 /**
- * The language model the Vertex provider returns. Named from the provider
- * factory because its interface package is not a backend dependency, so
- * emitted declarations could not import it.
+ * A model instance, never a gateway model id. Named from `ai`, a backend
+ * dependency, so the emitted declaration names no provider package; the only
+ * caller hands it to the AI SDK as an opaque model.
  */
-type VertexAnthropicModel = ReturnType<
-  ReturnType<typeof createVertexAnthropic>
->;
+type VertexAnthropicModel = Exclude<LanguageModel, string>;

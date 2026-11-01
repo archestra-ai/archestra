@@ -20,23 +20,22 @@ vi.mock("@/task-queue", () => ({
 
 const mockGetToken = vi.hoisted(() => vi.fn());
 const mockAboutGet = vi.hoisted(() => vi.fn());
-vi.mock("googleapis", () => {
+vi.mock("google-auth-library", () => {
   class MockOAuth2 {
     setCredentials = vi.fn();
     getToken = (...args: unknown[]) => mockGetToken(...args);
     generateAuthUrl = (options: { state: string }) =>
       `https://accounts.google.com/o/oauth2/v2/auth?state=${encodeURIComponent(options.state)}`;
   }
-  return {
-    google: {
-      auth: { OAuth2: MockOAuth2, GoogleAuth: class {} },
-      drive: () => ({
-        about: { get: (...a: unknown[]) => mockAboutGet(...a) },
-      }),
-      admin: () => ({ users: { list: vi.fn() } }),
-    },
-  };
+  return { OAuth2Client: MockOAuth2, GoogleAuth: class {} };
 });
+vi.mock("googleapis/build/src/apis/drive/v3.js", () => ({
+  drive_v3: {
+    Drive: class {
+      about = { get: (...a: unknown[]) => mockAboutGet(...a) };
+    },
+  },
+}));
 
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";

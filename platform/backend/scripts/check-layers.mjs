@@ -99,11 +99,11 @@ function upwardImports() {
 function report(added, removed) {
   if (added.length > 0) {
     console.error(
-      `${added.length} new import(s) from a lower backend layer to a higher one, or from source to test code (layers.mjs):\n${added
+      `${added.length} new violation(s) of the backend's layer order (layers.mjs):\n${added
         .map((entry) => `  ${entry}`)
         .join(
           "\n",
-        )}\nMove the imported code down, the importing code up, or invert the dependency.`,
+        )}\nMove the imported code down, the importing code up, or invert the dependency; a file in no layer needs its directory added to one.`,
     );
   }
   if (removed.length > 0) {
@@ -125,7 +125,11 @@ function parseArguments(args) {
     const arg = args[index];
     if (arg === "--update") parsed.update = true;
     else if (arg === "--allow-new") parsed.allowNew = true;
-    else if (arg === "--known" && args[index + 1]) {
+    else if (arg === "--known") {
+      if (!args[index + 1]) {
+        console.error("--known needs the path of a list");
+        process.exit(2);
+      }
       parsed.known = path.resolve(args[++index]);
     } else {
       console.error(

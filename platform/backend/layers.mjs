@@ -83,6 +83,17 @@ export default {
       },
     })),
     {
+      name: "source-file-in-a-layer",
+      severity: "error",
+      comment:
+        "Every backend source file belongs to a layer, so the order covers it. Add its directory to a layer in layers.mjs.",
+      from: {
+        path: "^src/",
+        pathNot: [TESTS, "^src/static/", ...layers.map((layer) => layer.path)],
+      },
+      to: {},
+    },
+    {
       name: "source-imports-no-test-code",
       severity: "error",
       comment:

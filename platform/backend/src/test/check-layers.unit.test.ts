@@ -30,7 +30,7 @@ describe("check-layers", () => {
     const check = checkLayers("--known", edited);
     expect(check.status).toBe(1);
     expect(check.stderr).toContain(
-      "1 new import(s) from a lower backend layer to a higher one",
+      "1 new violation(s) of the backend's layer order",
     );
     expect(check.stderr).toContain(unlisted);
     expect(check.stderr).toContain("1 listed upward import(s) no longer exist");

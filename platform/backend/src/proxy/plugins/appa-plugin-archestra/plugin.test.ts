@@ -3785,9 +3785,9 @@ describe("asking through the client's own question tool", () => {
       expect(first.card.question).toContain("Call preview (");
       expect(first.card.question).not.toContain(command);
       expect(first.card.options.map((option) => option.label)).toEqual([
+        "Inspect",
         "Allow",
         "Deny",
-        "Inspect",
       ]);
       await f.answer(first.answerId, first.card.question, "Inspect");
       expect(
@@ -3962,15 +3962,17 @@ describe("asking through the client's own question tool", () => {
       const first = await askCard();
       expect(first.card.question).toBe("Run archestra__start_agent_run?");
       expect(first.card.options.map((option) => option.label)).toEqual([
+        "Inspect",
         "Allow",
         "Deny",
-        "Inspect",
       ]);
-      expect(first.card.options[0].preview).toContain("4,080 characters");
+      expect(
+        first.card.options.find((option) => option.label === "Allow")?.preview,
+      ).toContain("4,080 characters");
       expect(first.reviewDetails).toBeUndefined();
-      expect(first.card.options[0].preview).not.toContain(
-        JSON.parse(review.arguments).message,
-      );
+      expect(
+        first.card.options.find((option) => option.label === "Allow")?.preview,
+      ).not.toContain(JSON.parse(review.arguments).message);
       await answer(first.answerId, first.card.question, "Inspect");
       expect(
         await peekHitlRuling({ session: trusted.session, offerId }),
@@ -4027,16 +4029,16 @@ describe("asking through the client's own question tool", () => {
       await plugin.onSessionInit(context);
       const first = await askCard();
       expect(first.card.options.map((option) => option.label)).toEqual([
-        "Deny",
         "Inspect",
+        "Deny",
       ]);
       await answer(first.answerId, first.card.question, "Inspect");
       const inspected = await askCard();
       expect(inspected.reviewDetails).toBeDefined();
       expect(inspected.card.options.map((option) => option.label)).toEqual([
+        "Inspect",
         "Allow",
         "Deny",
-        "Inspect",
       ]);
       const approved = await answer(
         inspected.answerId,
@@ -4117,13 +4119,15 @@ describe("asking through the client's own question tool", () => {
       expect(issued.card.header).toBe("Tool call");
       expect(issued.card.multiSelect).toBe(false);
       expect(issued.card.options.map((option) => option.label)).toEqual([
+        "Inspect",
         "Allow",
         "Deny",
-        "Inspect",
       ]);
       // One bounded card: a short question, a preview within the client cap.
       expect(issued.card.question).toBe("Run Bash?");
-      const preview = issued.card.options[0]?.preview ?? "";
+      const preview =
+        issued.card.options.find((option) => option.label === "Allow")
+          ?.preview ?? "";
       expect(preview.length).toBeLessThanOrEqual(2000);
       // Plain text: the policy scope readable, no markdown markers, no JSON
       // fragment encoding, the long command left to Inspect with its size.
@@ -4212,9 +4216,9 @@ describe("asking through the client's own question tool", () => {
       expect(next.reviewDetails).toContain("### Policy review");
       expect(next.card.question).toBe(first.card.question);
       expect(next.card.options.map((option) => option.label)).toEqual([
+        "Inspect",
         "Allow",
         "Deny",
-        "Inspect",
       ]);
       const approved = await answer(next.answerId, next.card.question, "Allow");
       expect(approved.guidance).toContain("approved OpenAPPA offer IDs");
@@ -4257,9 +4261,9 @@ describe("asking through the client's own question tool", () => {
       const repeated = await askCard();
       expect(repeated.reviewDetails).toBeUndefined();
       expect(repeated.card.options.map((option) => option.label)).toEqual([
+        "Inspect",
         "Allow",
         "Deny",
-        "Inspect",
       ]);
     } finally {
       processResults.mockRestore();
@@ -4648,9 +4652,9 @@ describe("asking through the client's own question tool", () => {
         "the readers must be the public audience",
       );
       expect(first.card.options.map((option) => option.label)).toEqual([
+        "Inspect",
         "Allow",
         "Deny",
-        "Inspect",
       ]);
       expect(first.card.options.some((option) => "preview" in option)).toBe(
         false,
@@ -5151,16 +5155,16 @@ describe("asking through the client's own question tool", () => {
       const issued = await askCard();
       expect(issued.card.question).toBe("Run Bash?");
       expect(issued.card.header).toBe("Tool call");
-      const [allow, deny, inspect] = issued.card.options;
+      const [inspect, allow, deny] = issued.card.options;
       expect(allow?.preview).toBe(
         "command: ls -la\n\nAlso accepts:\n  the readers must be the public\n    audience",
       );
       expect(deny?.preview).toBe("command: ls -la");
       expect(inspect?.preview).toBe("command: ls -la");
       expect(issued.card.options.map((option) => option.label)).toEqual([
+        "Inspect",
         "Allow",
         "Deny",
-        "Inspect",
       ]);
       expect(issued.reviewDetails).toBeUndefined();
       await answer(issued.answerId, issued.card.question, "Inspect");

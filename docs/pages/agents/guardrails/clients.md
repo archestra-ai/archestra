@@ -31,7 +31,7 @@ Connect the client to the LLM Proxy and the MCP Gateway on the [connection page]
 
 ### Use Guardrails in Kimi Code
 
-Kimi Code shows a review in its own question form: choose **Allow**, **Deny**, or **Inspect**. **Inspect** shows the complete review, and you then choose **Allow** or **Deny**. Escape closes the form without approving or denying.
+Kimi Code shows a review in its own question form: choose **Inspect**, **Allow**, or **Deny**. **Inspect** shows the complete review, and you then choose **Allow** or **Deny**. Escape closes the form without approving or denying.
 
 - Subagents run under Guardrails only as new foreground `Agent` calls. A background, resumed, or swarm subagent is refused before it starts.
 - Setup starts Kimi Code in Ask When Needed mode, so the guardrail helpers run without a prompt. Kimi Code 2.3.3 cannot approve single gateway tools, so this mode also runs your other gateway calls and routine commands without asking. It still asks before dangerous commands and shows reviews.

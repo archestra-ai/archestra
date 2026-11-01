@@ -54,6 +54,7 @@ import {
   getClaudeCodeCloudProvider,
   preflightAgentRuntimeModelCompatibility,
 } from "./model-compatibility";
+import { agentRunUrl } from "./run-handle";
 import {
   AGENT_RUNTIME_CPU_LIMIT_ENV,
   AGENT_RUNTIME_CPU_REQUEST_ENV,
@@ -333,6 +334,8 @@ export async function buildAgentRunLaunchSpec(params: {
   const maxTier = agentRuntimeMaxTier(params.runtime, tiers);
   const allowedTiers = agentRuntimeAllowedTiers(params.runtime, tiers);
   const sizeEnv = tierResourceEnv(resources);
+  // The run's stable id: its page, its workspace and the run tools' run_id.
+  const stableRunId = boundWorkspace?.id ?? params.taskId;
   const nonSecretEnv: Record<string, string> = {
     // Toolchain thread counts follow the run's size unless the Agent's own
     // environment, next, sets them.
@@ -352,7 +355,9 @@ export async function buildAgentRunLaunchSpec(params: {
     ARCHESTRA_AGENT_RUNTIME_AGENT_NAME: agent.name,
     // The run's id for its page (/chat/runs/:id) and the run tools' run_id:
     // the first turn's task id, which names its workspace. Every turn keeps it.
-    ARCHESTRA_AGENT_RUNTIME_RUN_ID: boundWorkspace?.id ?? params.taskId,
+    ARCHESTRA_AGENT_RUNTIME_RUN_ID: stableRunId,
+    // Nothing else in the Pod names the Archestra address a person opens.
+    ARCHESTRA_AGENT_RUNTIME_RUN_URL: agentRunUrl(stableRunId),
     ARCHESTRA_AGENT_RUNTIME_TASK_ID: params.taskId,
     ARCHESTRA_AGENT_RUNTIME_MODEL: runtimeModel,
     // Native CLIs use provider-published model slugs for local metadata and
@@ -469,9 +474,9 @@ export async function buildAgentRunLaunchSpec(params: {
         "Paths advertised as code-sandbox mounts belong to that separate sandbox, " +
         "not this runtime's filesystem.",
       // Static text, so the prompt stays the same for every run of the Agent.
-      "ARCHESTRA_AGENT_RUNTIME_RUN_ID is this run's id: its page is /chat/runs/<id>, " +
-        "the run tools take it as run_id, and follow-ups keep it. " +
-        "Read environment variables by name; the environment also holds this run's credentials.",
+      "ARCHESTRA_AGENT_RUNTIME_RUN_URL is this run's page, and ARCHESTRA_AGENT_RUNTIME_RUN_ID is its id, " +
+        "which the run tools take as run_id; follow-ups keep both. " +
+        "Read a variable by name (printenv NAME): the environment also holds this run's credentials.",
     ],
     runtime: params.runtime,
     // After the workspace facts: kept as written when the volume sentence
@@ -611,6 +616,7 @@ const RESERVED_RUNTIME_ENV_KEYS = new Set([
   "ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL",
   "ARCHESTRA_AGENT_RUNTIME_OPENAPPA",
   "ARCHESTRA_AGENT_RUNTIME_RUN_ID",
+  "ARCHESTRA_AGENT_RUNTIME_RUN_URL",
   "ARCHESTRA_AGENT_RUNTIME_STEER_FIFO",
   "ARCHESTRA_AGENT_RUNTIME_TASK_ID",
   "ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT",

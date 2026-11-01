@@ -515,6 +515,16 @@ describe("normalizeToolCallsForPolicy", () => {
     expect(result[0].isRunToolDispatchTarget).toBeUndefined();
   });
 
+  // GitHub Copilot's Chat Completions streams no argument text for a Claude
+  // model's call to a tool without parameters: policy sees an empty object.
+  test("reads empty string arguments as an empty object", () => {
+    const result = normalizeToolCallsForPolicy([
+      { name: "tool1", arguments: "" },
+    ]);
+
+    expect(result[0].toolCallArgs).toBe("{}");
+  });
+
   test("passes through valid JSON string arguments", () => {
     const result = normalizeToolCallsForPolicy([
       { name: "tool1", arguments: '{"key":"value"}' },

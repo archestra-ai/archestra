@@ -66,6 +66,7 @@ import {
   isConnectionErrno,
   isTimeoutErrno,
 } from "@/utils/network-errors";
+import { toolCallArgumentsText } from "./tool-call-arguments";
 import * as utils from "./utils";
 import { estimateToolTokens } from "./utils/cost-optimization";
 import {
@@ -130,9 +131,10 @@ export function normalizeToolCallsForPolicy(
     let args: unknown;
     let argsString: string;
     if (typeof tc.arguments === "string") {
+      const text = toolCallArgumentsText(tc.arguments);
       try {
-        args = JSON.parse(tc.arguments);
-        argsString = tc.arguments;
+        args = JSON.parse(text);
+        argsString = text;
       } catch {
         args = undefined;
         argsString = JSON.stringify({ raw: tc.arguments });

@@ -61,6 +61,7 @@ import { startedUnenforced } from "@/openappa/unenforced";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { readYellResult } from "@/openappa/yell-session";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
+import { toolCallArgumentsText } from "@/routes/proxy/tool-call-arguments";
 import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-names";
 import {
   type GuardrailsV2Activation,
@@ -1297,7 +1298,10 @@ export async function evaluateToolCalls(
       throw new ApiError(400, "OpenAPPA requires distinct tool-call IDs");
     }
     ids.add(call.id);
-    if (typeof call.arguments === "string" && !isJson(call.arguments)) {
+    if (
+      typeof call.arguments === "string" &&
+      !isJson(toolCallArgumentsText(call.arguments))
+    ) {
       malformedIds.add(call.id);
     }
   }

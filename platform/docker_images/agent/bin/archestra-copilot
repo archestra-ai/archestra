@@ -294,7 +294,7 @@ def run_terminal(task, session_id, home, config, entries, artifact):
                                 entries.append({"type": "tool_result", "toolCallId": data.get("toolCallId"),
                                                 "text": redact(json.dumps(data.get("result", {}))), "isError": not data.get("success", True)})
                             atomic(artifact, json.dumps({"version": 1, "provider": "copilot", "entries": entries}))
-                            change, answered = turn_attention(kind, data, answered)
+                            change, answered = turn_attention(event, answered)
                             if change:
                                 attention(*change)
                 time.sleep(0.1)
@@ -479,22 +479,29 @@ def managed_json(path):
     return {}
 
 
-def turn_attention(kind, data, answered):
+def turn_attention(event, answered):
     """Return the attention change one native event makes, and whether the
-    latest model call answered the user.
+    main agent's current turn has answered the user.
 
     Copilot ends a turn after every model call, also one whose tool calls run
     next, and its idle event is not written to disk. Only a turn that ended in
     an answer, or an aborted turn, leaves the session waiting for its user.
+    Subagent events carry `agentId`; Copilot's own turn tracking skips them.
     """
+    data = event.get("data") or {}
+    if event.get("agentId") or data.get("agentId"):
+        return None, answered
+    kind = event.get("type")
     if kind == "assistant.message":
-        answered = not data.get("toolRequests")
+        return None, not data.get("toolRequests")
     if kind in ("user.message", "assistant.turn_start"):
-        return ("clear",), answered
-    if (kind == "assistant.turn_end" and answered) or kind == "abort":
-        return ("set", "Waiting for input"), answered
+        return ("clear",), False
+    if kind == "assistant.turn_end":
+        return (("set", "Waiting for input") if answered else None), False
+    if kind == "abort":
+        return ("set", "Waiting for input"), False
     if kind == "session.error":
-        return ("set", "API error: check terminal"), answered
+        return ("set", "API error: check terminal"), False
     return None, answered
 
 

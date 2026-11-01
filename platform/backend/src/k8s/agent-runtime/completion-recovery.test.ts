@@ -6,6 +6,7 @@ import type WebSocket from "ws";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import { a2aTaskRunService } from "@/agents/a2a/a2a-task-run-service";
 import config from "@/config";
+import logger from "@/logging";
 import {
   A2AArtifactModel,
   A2AContextModel,
@@ -17,9 +18,11 @@ import { afterEach, test as base, beforeEach, expect } from "@/test";
 import { useMswServer } from "@/test/msw";
 import type { AgentRunRecord } from "@/types";
 import manager from "./manager";
+import { MEMORY_EVENTS_SEPARATOR } from "./memory-kill";
 import { AGENT_RUNTIME_TASK_LABEL } from "./naming";
 import { agentSandboxApi } from "./sandbox-api";
 
+vi.mock("@/logging");
 // The singleton caches clients: keep this fake cluster out of shared workers.
 vi.mock("@/config", async () =>
   (await import("@/test/mocks/config")).configModuleMock({
@@ -1154,48 +1157,59 @@ test.for([
   polls = 2,
   nodeOom = false,
 }, { run }) => {
-  const GIB = 1024 ** 3;
   let turnReads = 0;
   let memoryReads = 0;
   if (finished) {
+    // The workspace finishes after the turn was first seen running.
+    let sandboxReads = 0;
     server.use(
       http.get(sandboxUrl, () =>
         HttpResponse.json({
-          status: {
-            conditions: [
-              {
-                type: "Finished",
-                status: "True",
-                reason: "PodFailed",
-                message: "Pod failed",
-              },
-            ],
-          },
+          status:
+            ++sandboxReads < polls
+              ? {}
+              : {
+                  conditions: [
+                    {
+                      type: "Finished",
+                      status: "True",
+                      reason: "PodFailed",
+                      message: "Pod failed",
+                    },
+                  ],
+                },
         }),
       ),
     );
   }
+  useRunningTierPod();
+  // The counters when the turn was first seen running, then after the
+  // failure: the kernel killed the run's tsc, shell and tmux server while
+  // PID 1 and the pod lived on.
+  const counters_ = (kills: number) =>
+    counters
+      ? `low 0\nhigh 0\nmax 1203\noom ${nodeOom ? 0 : kills}\noom_kill ${kills}\noom_group_kill 0\npeak ${kills && !nodeOom ? 8 * GIB : nodeOom ? 3 * GIB : 2 * GIB}\nlimit ${8 * GIB}\n`
+      : `peak \nlimit \n`;
   vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
     const command = (args[3] as string[]).join(" ");
     if (command.includes("read-memory-events")) {
-      // The counters when the turn was first seen running, then after the
-      // failure: the kernel killed the run's tsc, shell and tmux server
-      // while PID 1 and the pod lived on.
-      const kills = memoryReads++ === 0 || !killed ? 0 : 1;
-      if (counters) {
-        args[4]?.write(
-          `low 0\nhigh 0\nmax 1203\noom ${nodeOom ? 0 : kills}\noom_kill ${kills}\noom_group_kill 0\npeak ${kills && !nodeOom ? 8 * GIB : nodeOom ? 3 * GIB : 2 * GIB}\nlimit ${8 * GIB}\n`,
-        );
-      }
+      memoryReads++;
+      args[4]?.write(counters_(killed ? 1 : 0));
       args[8]?.({ status: "Success" });
     } else if (command.includes("read-turn-result")) {
       // No result until the last poll. Then either the turn has ended with
       // the given status, or the poll's own shell is killed.
       turnReads++;
+      const kills = turnReads < polls || !killed ? 0 : 1;
       if (turnReads < polls || finished) {
+        args[4]?.write(`\n${MEMORY_EVENTS_SEPARATOR}\n${counters_(kills)}`);
         args[8]?.({ status: "Success" });
       } else if (exit !== null) {
-        args[4]?.write(`${exit}\n`);
+        // The counters are read after the result: the kill that ended the
+        // turn is in the same output.
+        args[4]?.write(
+          `${exit}\n\n${MEMORY_EVENTS_SEPARATOR}\n${counters_(kills)}`,
+        );
         args[8]?.({ status: "Success" });
       } else {
         args[8]?.({
@@ -1213,15 +1227,15 @@ test.for([
     pollIntervalMs: 1,
   });
   const described =
-    "The run ran out of memory. The agent-runtime container reached its memory limit of 8 GiB (peak usage 8 GiB), and the kernel killed the run's processes. Start the run again at a larger tier.";
+    "The run ran out of memory. The agent-runtime container reached its memory limit of 8 GiB at tier S (peak usage 8 GiB), and the kernel killed a process of the run. Start the run again at a larger tier, or have the agent run memory-heavy commands, such as type checks, test suites and builds, one at a time and with fewer workers.";
   if (!counters) {
-    // The first reading is tried a few times, then the container is left alone.
     await expect(completion).resolves.toEqual({
       outcome: "failed",
       reason: "The Agent Runtime turn exited with status 7",
       failure: { code: "turn.exit_status", retriable: false },
     });
-    expect(memoryReads).toBe(3);
+    // The counters come with each poll: no command of their own.
+    expect(memoryReads).toBe(0);
     expect(turnReads).toBe(polls);
     return;
   }
@@ -1233,7 +1247,8 @@ test.for([
     });
     expect(result.reason).toContain(described);
     expect(result.reason).toContain("Pod failed");
-    expect(memoryReads).toBe(2);
+    // The poll that saw the workspace finish carried the counters.
+    expect(memoryReads).toBe(0);
     return;
   }
   if (killed && exit?.includes("claude_rate_limit")) {
@@ -1260,7 +1275,7 @@ test.for([
     await expect(completion).resolves.toEqual({
       outcome: "failed",
       reason:
-        "The kernel killed the run's processes because the node ran out of memory; the agent-runtime container did not hit its 8 GiB limit (peak usage 3 GiB). Start the run again.",
+        "The kernel killed a process of the run because the node ran out of memory; the agent-runtime container did not reach its 8 GiB limit at tier S (peak usage 3 GiB). Start the run again.",
       failure: { code: "turn.process_exited", retriable: false },
     });
   } else if (killed) {
@@ -1274,7 +1289,161 @@ test.for([
       "Command in Agent Runtime pod failed",
     );
   }
-  // One reading when the pod was first seen running, one after the failure.
-  expect(memoryReads).toBe(2);
+  // A poll that ended the turn carried its own counters; a poll whose command
+  // failed is followed by one read of them.
+  expect(memoryReads).toBe(exit === null ? 1 : 0);
   expect(turnReads).toBe(polls);
 });
+
+test.for([
+  "the command fails in the pod",
+  "the kubelet refuses the exec",
+])("a container the kernel killed as a whole is reported from its pod's status, not as an unknown failure: %s", async (shape, {
+  run,
+}) => {
+  // memory.oom.group: the kernel kills every process in the container, PID 1
+  // included. The poll's command fails, nothing can be read from the
+  // container, and the kubelet reports the exit a few polls later.
+  let podReadsAfterKill: number | null = null;
+  server.use(
+    http.get(podsUrl, () => {
+      if (podReadsAfterKill !== null) podReadsAfterKill++;
+      const exited = podReadsAfterKill !== null && podReadsAfterKill > 2;
+      return HttpResponse.json({
+        items: [
+          {
+            ...tierPod(),
+            status: exited
+              ? {
+                  phase: "Failed",
+                  containerStatuses: [
+                    {
+                      name: "agent-runtime",
+                      containerID: "containerd://first",
+                      state: {
+                        terminated: {
+                          exitCode: 137,
+                          reason: "OOMKilled",
+                          finishedAt: "2026-11-01T12:50:30Z",
+                        },
+                      },
+                    },
+                  ],
+                }
+              : tierPod().status,
+          },
+        ],
+      });
+    }),
+  );
+  let turnReads = 0;
+  vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
+    const command = (args[3] as string[]).join(" ");
+    if (command.includes("read-turn-result") && ++turnReads === 1) {
+      args[4]?.write(
+        `\n${MEMORY_EVENTS_SEPARATOR}\noom 0\noom_kill 0\npeak ${2 * GIB}\nlimit ${8 * GIB}\n`,
+      );
+      args[8]?.({ status: "Success" });
+      return socket();
+    }
+    // The container is gone: nothing runs in it any more.
+    podReadsAfterKill ??= 0;
+    if (shape === "the kubelet refuses the exec") {
+      throw { message: "Unexpected server response: 500" };
+    }
+    args[8]?.({
+      status: "Failure",
+      message: "container is in CONTAINER_EXITED state",
+    });
+    return socket();
+  });
+  const result = await manager.waitForCompletion({
+    session: run,
+    pollIntervalMs: 1,
+  });
+  expect(result).toMatchObject({
+    outcome: "failed",
+    failure: { code: "pod.oom_killed", retriable: false },
+  });
+  expect(result.reason?.split("\n")[0]).toBe(
+    "The run ran out of memory. The kernel killed every process in the agent-runtime container (OOMKilled, exit code 137) at 2026-11-01 12:50:30 UTC. It has a memory limit of 8 GiB at tier S. Start the run again at a larger tier, or have the agent run memory-heavy commands, such as type checks, test suites and builds, one at a time and with fewer workers.",
+  );
+  expect(result.reason).toContain(
+    "Container agent-runtime: OOMKilled (exit code 137, memory limit 8Gi)",
+  );
+});
+
+test("a process killed for memory while the turn goes on is reported, and the turn is not failed for it", async ({
+  run,
+}) => {
+  useRunningTierPod();
+  const warn = vi.mocked(logger.warn);
+  warn.mockClear();
+  let turnReads = 0;
+  vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
+    const command = (args[3] as string[]).join(" ");
+    if (command.includes("read-turn-result")) {
+      turnReads++;
+      // Single-process OOM kill: the agent's type check dies on the second
+      // poll, the agent goes on and finishes its turn on the fourth.
+      const kills = turnReads >= 2 ? 1 : 0;
+      args[4]?.write(
+        `${turnReads === 4 ? "0\n" : ""}\n${MEMORY_EVENTS_SEPARATOR}\noom ${kills}\noom_kill ${kills}\npeak ${(kills ? 8 : 2) * GIB}\nlimit ${8 * GIB}\n`,
+      );
+    }
+    args[8]?.({ status: "Success" });
+    return socket();
+  });
+  await expect(
+    manager.waitForCompletion({ session: run, pollIntervalMs: 1 }),
+  ).resolves.toEqual({ outcome: "succeeded" });
+  const reports = warn.mock.calls.filter(
+    ([, message]) =>
+      message ===
+      "The kernel killed a process of an Agent Runtime run for memory",
+  );
+  // Once, when it happened: later polls see the same count.
+  expect(reports).toHaveLength(1);
+  expect(reports[0]?.[0]).toMatchObject({
+    taskId: run.taskId,
+    podName: "worker",
+    tier: "S",
+    killed: 1,
+    atLimit: true,
+    memoryLimitBytes: 8 * GIB,
+  });
+});
+
+const GIB = 1024 ** 3;
+
+/** A running pod of tier S with an 8Gi limit, as the platform creates it. */
+function tierPod() {
+  return {
+    metadata: { name: "worker" },
+    spec: {
+      containers: [
+        {
+          name: "agent-runtime",
+          env: [{ name: "ARCHESTRA_AGENT_RUNTIME_TIER", value: "S" }],
+          resources: { limits: { memory: "8Gi" } },
+        },
+      ],
+    },
+    status: {
+      phase: "Running",
+      containerStatuses: [
+        {
+          name: "agent-runtime",
+          containerID: "containerd://first",
+          state: { running: {} },
+        },
+      ],
+    },
+  };
+}
+
+function useRunningTierPod() {
+  server.use(
+    http.get(podsUrl, () => HttpResponse.json({ items: [tierPod()] })),
+  );
+}

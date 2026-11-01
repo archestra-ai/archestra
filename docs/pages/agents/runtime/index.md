@@ -161,7 +161,7 @@ A failed run carries a stable `failure.code`, so a script can retry or stop with
 | `launch.capacity_timeout` | Yes | The pod did not start or resume in time. |
 | `launch.credentials_timeout` | Yes | The run's credentials did not reach the pod in time. |
 | `pod.evicted` | Yes | Kubernetes evicted or preempted the pod. |
-| `pod.oom_killed` | No | The agent ran out of memory. |
+| `pod.oom_killed` | No | The run reached its tier's memory limit, and the kernel killed it. |
 | `pod.workspace_full` | No | The agent filled its workspace volume. Ask an administrator for a larger volume. |
 | `pod.image_pull` | No | The image could not be pulled. |
 | `pod.failed` | No | The pod failed for another reason. |
@@ -188,6 +188,7 @@ What to know:
 
 - **A run does not start:** see [Setup troubleshooting](/docs/agents/runtime/setup#troubleshooting).
 - **A run ends with a pod failure:** open **Failed details** for the Kubernetes pod name, failure reason, and container exit code when available. Share these details with your cluster operator; for example, `OOMKilled` identifies a memory termination and `Evicted` includes Kubernetes' eviction message.
+- **A run ends with `pod.oom_killed`:** the run used all the memory of its [runtime tier](/docs/agents/runtime/setup#runtime-tiers). **Failed details** names the memory limit, the tier, and when the kernel killed the run. Start the run again at a larger tier, or have the agent run type checks, test suites, and builds one at a time and with fewer workers.
 - **A run ends with `pod.workspace_full`:** the agent filled its workspace volume, which holds the home directory and, for privileged agents, the Docker data. **Failed details** shows how much of the volume was used. Start a new run after an administrator gives the agent's [runtime tier](/docs/agents/runtime/setup#runtime-tiers) a larger **Workspace** size. A tier with no size uses [`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE). Exit code 77 means the volume refuses writes for another reason, such as a read-only or failing volume: ask your cluster operator to check it.
 - **A model call fails with a Guardrails error:** the message says what to do, and the status says who.
   - `400`: the conversation holds content [Guardrails](/docs/agents/guardrails) cannot store, such as binary tool output. Rewind past it or start a new conversation.

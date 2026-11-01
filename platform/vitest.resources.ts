@@ -198,9 +198,9 @@ export function describeToolMemoryKill(params: {
     : `the kernel killed ${killed === 1 ? "a process" : `${killed} processes`} in this container for memory while ${params.subject} ran`;
   const why = atLimit
     ? after.limitBytes !== null
-      ? `this container reached its memory limit of ${formatGibibytes(after.limitBytes)}${tier ? ` at tier ${tier}` : ""}${peak}`
+      ? `this container reached its memory limit of ${formatLimitGibibytes(after.limitBytes)}${tier ? ` at tier ${tier}` : ""}${peak}`
       : `this container reached its memory limit${peak}`
-    : `the machine ran out of memory${after.limitBytes !== null ? `; this container stayed under its ${formatGibibytes(after.limitBytes)} limit${peak}` : ""}`;
+    : `the machine ran out of memory${after.limitBytes !== null ? `; this container stayed under its ${formatLimitGibibytes(after.limitBytes)} limit${peak}` : ""}`;
   if (!atLimit) {
     return `${params.tool}: ${what}: ${why}. Run it again.`;
   }
@@ -287,6 +287,12 @@ function readBytes(file: string): number | null {
 
 function formatGibibytes(bytes: number): string {
   return `${Math.round((bytes / BYTES_PER_GIB) * 10) / 10} GiB`;
+}
+
+/** A limit, rounded down: it never reads as more than the container had. */
+function formatLimitGibibytes(bytes: number): string {
+  // The epsilon keeps an exact 8 GiB from flooring to 7.9 on a rounding error.
+  return `${Math.floor((bytes / BYTES_PER_GIB) * 10 + 1e-9) / 10} GiB`;
 }
 
 /**

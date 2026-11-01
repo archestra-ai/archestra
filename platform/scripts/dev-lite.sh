@@ -464,9 +464,8 @@ frontend_env() {
 # without source maps, 4.8 to 5.0 GiB with them) and again after every
 # frontend change (`reload frontend`, about 13 s and 1.2 GiB from the warm
 # build cache). `e2e` is `build` with the e2e environment, for the Playwright
-# suite. Inside an Agent
-# Runtime the default is `build`, elsewhere `dev`; ARCHESTRA_DEV_LITE_FRONTEND
-# chooses.
+# suite. Inside an Agent Runtime the default is `build`, elsewhere `dev`;
+# ARCHESTRA_DEV_LITE_FRONTEND chooses.
 start_frontend() {
   local mode="${1:-dev}"
   if session_alive frontend; then

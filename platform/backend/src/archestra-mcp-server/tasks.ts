@@ -1243,13 +1243,13 @@ const registry = defineArchestraTools([
             }),
           });
         if (session.endedAt) {
-          if (
-            !workspace ||
-            !workspaceContinuation({ workspace, liveTurn: false }).canContinue
-          ) {
+          const decision = workspace
+            ? workspaceContinuation({ workspace, liveTurn: false })
+            : null;
+          if (!decision?.canContinue) {
             return errorResult(
-              workspace && retentionTooShortForTurn(workspace)
-                ? `${retentionTooShortMessage(workspace)} No new run was started.`
+              decision?.retentionTooShort
+                ? `${decision.continuationError} No new turn was started.`
                 : "The run is unavailable, busy, or expired. No new run was started. Read get_agent_run for its current state; do not use start_agent_run as a retry.",
             );
           }
@@ -2201,17 +2201,28 @@ const WITHHELD_STATUS_REASON =
 function workspaceContinuation(params: {
   workspace: AgentWorkspace;
   liveTurn: boolean;
-}): { canContinue: boolean; continuationError: string | null } {
+}): {
+  canContinue: boolean;
+  continuationError: string | null;
+  /** Refused only because too little retention is left for a new turn. */
+  retentionTooShort: boolean;
+} {
   const { workspace } = params;
-  const refused = (continuationError: string) => ({
+  const refused = (continuationError: string, retentionTooShort = false) => ({
     canContinue: false,
     continuationError,
+    retentionTooShort,
   });
+  const allowed = {
+    canContinue: true,
+    continuationError: null,
+    retentionTooShort: false,
+  };
   if (workspace.expiresAt.getTime() <= Date.now())
     return refused(
       "This run expired and cannot resume. Do not call start_agent_run to replace it. Recover available run history and explain the blocker.",
     );
-  if (params.liveTurn) return { canContinue: true, continuationError: null };
+  if (params.liveTurn) return allowed;
   if (workspace.state === "deleted")
     return refused(
       "This run's workspace was removed and cannot resume. Do not call start_agent_run to replace it. Recover available run history and explain the blocker.",
@@ -2223,22 +2234,15 @@ function workspaceContinuation(params: {
     return refused(
       "This workspace is not ready for continuation. Check get_agent_run again and use steer_agent_run with the same run_id when available; do not start a replacement run.",
     );
-  if (retentionTooShortForTurn(workspace))
-    return refused(retentionTooShortMessage(workspace));
-  return { canContinue: true, continuationError: null };
-}
-
-function retentionTooShortForTurn(workspace: AgentWorkspace): boolean {
   const left = workspace.expiresAt.getTime() - Date.now();
-  return left > 0 && left < MIN_CONTINUATION_MS;
-}
-
-function retentionTooShortMessage(workspace: AgentWorkspace): string {
-  const minutes = Math.max(
-    1,
-    Math.ceil((workspace.expiresAt.getTime() - Date.now()) / 60_000),
-  );
-  return `This run cannot take another turn: its saved files are kept only until ${workspace.expiresAt.toISOString()} (${minutes} min from now), and a new turn would be stopped then. Copy any files you need with read_workspace_file or transfer_workspace_file before that time; to keep working, start a new run with start_agent_run.`;
+  if (left < MIN_CONTINUATION_MS) {
+    const minutes = Math.floor(left / 60_000);
+    return refused(
+      `This run cannot take another turn: its saved files are kept only until ${workspace.expiresAt.toISOString()} (${minutes < 1 ? "less than 1" : minutes} min from now), a new turn needs at least ${MIN_CONTINUATION_MS / 60_000} min, and it would be stopped at that time. Copy any files you need with read_workspace_file or transfer_workspace_file before then, and tell the user about the deadline. Do not call start_agent_run to replace this run unless the user asks: a new run has none of this run's files or conversation.`,
+      true,
+    );
+  }
+  return allowed;
 }
 
 function describeProtocolState(task: { status: { state?: string } }): string {

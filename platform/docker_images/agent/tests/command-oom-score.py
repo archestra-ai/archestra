@@ -56,6 +56,9 @@ def probe(report):
         'echo "shell $$ $(cat /proc/$$/oom_score_adj) $(readlink /proc/$$/exe)"; '
         'echo "flags $- bash_env=${BASH_ENV-unset} at_exec=$(tr "\\000" "\\n" < /proc/$$/environ | grep -c ^BASH_ENV=) shlvl_at_exec=$(tr "\\000" "\\n" < /proc/$$/environ | sed -n s/^SHLVL=//p) stdin=$(readlink /proc/$$/fd/0) args=$(tr "\\000\\n" "  " < /proc/$$/cmdline | cut -c1-300)"; '
         "echo \"child $(sh -c 'cat /proc/$$/oom_score_adj')\"; "
+        # A process whose parent exits leaves the shell's process tree.
+        "sh -c 'sleep 3 </dev/null >/dev/null 2>&1 & echo $! > \"$1\"' orphan \"$r.detached\"; sleep 0.5; "
+        'echo "detached $(cat /proc/$(cat "$r.detached")/oom_score_adj)"; '
         'p=$$; while p=$(ps -o ppid= -p "$p" | tr -d " "); [ -n "$p" ] && [ "$p" -gt 1 ]; do '
         'echo "parent $p $(cat /proc/$p/oom_score_adj) $(readlink /proc/$p/exe) $(tr "\\000\\n" "  " < /proc/$p/cmdline | cut -c1-200)"; '
         'done; } > "$r.tmp" 2>&1; mv "$r.tmp" "$r"; echo PROBE_RAN'
@@ -249,6 +252,23 @@ class CommandOomScoreTest(unittest.TestCase):
             result = subprocess.run([str(script)], stdin=theirs, env=env, capture_output=True, text=True, timeout=10)
             self.assertEqual(result.stdout.strip(), baseline, result.stderr)
 
+    def test_the_launchers_hook_scripts_keep_their_score(self):
+        # Codex runs a hook as `bash -c <hook>`; the launcher wrote the hook to
+        # the runtime directory, and it is no agent command.
+        baseline = Path("/proc/self/oom_score_adj").read_text().strip()
+        with tempfile.TemporaryDirectory() as runtime:
+            hook = Path(runtime) / "client-attention-hook.sh"
+            hook.write_text("#!/bin/bash\ncat /proc/$$/oom_score_adj\n")
+            hook.chmod(0o755)
+            env = {**os.environ, "ARCHESTRA_AGENT_RUNTIME_DIR": runtime, "BASH_ENV": str(BIN / "archestra-command-oom-score.sh")}
+
+            def run(line):
+                return subprocess.run(["bash", "-c", line], env=env, capture_output=True, text=True, timeout=10).stdout.split()
+
+            self.assertEqual(run(str(hook)), [baseline])
+            # A command line that does more than run the hook is a command.
+            self.assertEqual(run(f"{hook}; cat /proc/$$/oom_score_adj"), ["1000", "1000"])
+
     def test_delegated_tui(self):
         self.run_client(plain=False)
 
@@ -256,7 +276,8 @@ class CommandOomScoreTest(unittest.TestCase):
         def test_plain_cli(self):
             self.run_client(plain=True)
 
-    if CLIENT != "copilot":
+    # OpenClaw and Copilot remove BASH_ENV from their commands' environment.
+    if CLIENT not in ("openclaw", "copilot"):
         def test_an_earlier_bash_env_still_runs(self):
             # A derived image can set its own BASH_ENV, as Lobster's worker does.
             self.run_client(plain=False, earlier_bash_env=True)
@@ -308,7 +329,8 @@ class CommandOomScoreTest(unittest.TestCase):
             self.assertEqual(shell[0], "shell", lines)
             self.assertEqual(shell[2], "1000", "The command did not take the highest OOM score\n" + "\n".join(lines))
             self.assertEqual(lines[2], "child 1000", "A process the command started did not inherit its score")
-            parents = [line.split(maxsplit=4) for line in lines[3:]]
+            self.assertEqual(lines[3], "detached 1000", "A process the command detached did not keep its score")
+            parents = [line.split(maxsplit=4) for line in lines[4:]]
             # Shells between the command and the client belong to the command;
             # the first process above them is the client or its helper.
             above = [parent for parent in parents if Path(parent[3]).name not in SHELLS]

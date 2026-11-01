@@ -99,16 +99,22 @@ How each client gets it:
   and that file raises the shell's score. Claude Code and Kimi Code give the
   shell a socket for its input, sometimes with `SHLVL=0`. Bash then reads
   `/etc/bash.bashrc` instead of `BASH_ENV`, and the image's `/etc/bash.bashrc`
-  runs the same file.
-- **OpenClaw** raises the score of every process it starts on its own.
-- **GitHub Copilot CLI** removes `BASH_ENV` and starts
-  `bash --norc --noprofile`. Its launcher raises every process below the
-  client to 1000, ten times a second.
+  runs the same file. A hook script the launcher wrote to the runtime
+  directory keeps its score when the client runs it as `bash -c <hook>`, as
+  Codex does.
+- **OpenClaw** raises the score of every process it starts on its own and
+  drops `BASH_ENV`, so its launcher sets nothing.
+- **GitHub Copilot CLI** drops `BASH_ENV` and starts
+  `bash --norc --noprofile`. Its launcher raises every shell the client starts,
+  and every process below one, ten times a second, so a command can run for up
+  to 0.1 s with the container's score. The launcher is a child subreaper: a
+  process a command leaves behind stays below it and is raised too.
 
 A `BASH_ENV` that the client's environment already had, such as a derived
-image's own, still runs after the hook. `tests/command-oom-score.py` checks
-each client during the image build: its shell tool's command gets 1000, and the
-client keeps its score.
+image's own, still runs after the hook in the client's non-interactive shells.
+`tests/command-oom-score.py` checks each client during the image build: its
+shell tool's command, a process the command starts and a process it leaves
+behind all get 1000, and the client and launcher keep their score.
 
 Claude Code personal subscriptions use a token from the configured secrets backend. The wrapper sends inference through the Agent-scoped LLM proxy with a personal passthrough key, so token usage appears in proxy logs. The OAuth token remains the provider credential; subscription requests do not count toward metered cost limits. MCP calls use the Agent-scoped gateway and its tool policies.
 

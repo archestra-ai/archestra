@@ -6,6 +6,7 @@ JSON events and consumes pipe steering only between completed prompts.
 """
 
 import contextlib
+import ctypes
 import http.client
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -125,6 +126,9 @@ def main():
     finally:
         if steer is not None:
             os.close(steer)
+
+
+PR_SET_CHILD_SUBREAPER = 36
 
 
 def client_environment(home, gate):
@@ -450,11 +454,35 @@ def raise_command_scores(client):
     process at the memory limit, the kernel then kills the command, not the
     client. Copilot starts each command as `bash --norc --noprofile -c` and
     removes BASH_ENV from its environment, so no shell startup file runs in it.
-    Every process below the client is raised instead, ten times a second; the
-    client and this launcher keep the container's score."""
+    This launcher raises them instead, ten times a second: every shell the
+    client starts and every process below one, so a command can run for up to
+    0.1 s with the container's score. The launcher becomes a child subreaper,
+    so a command that detaches (setsid, nohup) stays below it, is raised as
+    well, and is reaped here when it exits. The client, its other helpers and
+    this launcher keep the container's score."""
+    launcher = os.getpid()
+    helpers = str(Path(__file__).resolve().parent) + "/archestra-"
+    with contextlib.suppress(OSError, AttributeError):
+        ctypes.CDLL(None, use_errno=True).prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0)
+
     def raise_scores():
         while client.poll() is None:
-            for pid in descendants(client.pid):
+            table = processes()
+            children = {}
+            for pid, (parent, _state, _exe) in table.items():
+                children.setdefault(parent, []).append(pid)
+            pending = [pid for pid in children.get(client.pid, []) if table[pid][2] in ("bash", "dash", "sh")]
+            for pid in children.get(launcher, []):
+                if pid == client.pid or helpers in command_line(pid):
+                    continue
+                if table[pid][1] == "Z":
+                    with contextlib.suppress(ChildProcessError):
+                        os.waitpid(pid, os.WNOHANG)
+                else:
+                    pending.append(pid)
+            while pending:
+                pid = pending.pop()
+                pending.extend(children.get(pid, []))
                 score = Path(f"/proc/{pid}/oom_score_adj")
                 with contextlib.suppress(OSError, ValueError):
                     if int(score.read_text()) < 1000:
@@ -463,22 +491,24 @@ def raise_command_scores(client):
     threading.Thread(target=raise_scores, daemon=True).start()
 
 
-def descendants(root):
-    children = {}
+def processes():
+    """Each process: its parent, state and executable name."""
+    table = {}
     for entry in os.scandir("/proc"):
         if entry.name.isdigit():
-            # The command name in parentheses can hold spaces: the parent PID
-            # is the second field after it.
+            # The command name in parentheses can hold spaces: the state and
+            # parent PID are the first two fields after it.
             with contextlib.suppress(OSError, ValueError, IndexError):
-                parent = int(Path(entry.path, "stat").read_text().rpartition(")")[2].split()[1])
-                children.setdefault(parent, []).append(int(entry.name))
-    found = []
-    pending = [root]
-    while pending:
-        below = children.get(pending.pop(), [])
-        found.extend(below)
-        pending.extend(below)
-    return found
+                state, parent = Path(entry.path, "stat").read_text().rpartition(")")[2].split()[:2]
+                exe = os.path.basename(os.readlink(entry.path + "/exe")) if state != "Z" else ""
+                table[int(entry.name)] = (int(parent), state, exe)
+    return table
+
+
+def command_line(pid):
+    with contextlib.suppress(OSError):
+        return Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace")
+    return ""
 
 
 def stop(child):

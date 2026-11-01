@@ -40,6 +40,8 @@ const config: KnipConfig = {
     "@archestra/image-rs",
     "@archestra/openappa-rs",
     "@archestra/router-rs",
+    // Provides tsc, which scripts/type-check.ts runs for `pnpm type-check`.
+    "typescript-7",
   ],
   ignoreBinaries: [
     // biome and concurrently are in root package.json

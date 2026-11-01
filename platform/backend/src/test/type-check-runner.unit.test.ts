@@ -24,13 +24,13 @@ describe("type-check runner", () => {
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
   test.skipIf(!hasFlock)(
-    "in a small pod, compilers started together run one at a time with one checker",
+    "in a small pod, compilers started together run one at a time with one checker and a capped heap",
     async () => {
       dir = mkdtempSync(path.join(tmpdir(), "type-check-runner-"));
       const log = path.join(dir, "log");
       writeFileSync(
         path.join(dir, "tsc"),
-        `#!/bin/sh\necho "start $$ $*" >> "${log}"\nsleep 0.4\necho "end $$" >> "${log}"\n`,
+        `#!/bin/sh\necho "start $$ GOMEMLIMIT=$GOMEMLIMIT $*" >> "${log}"\nsleep 0.4\necho "end $$" >> "${log}"\n`,
       );
       chmodSync(path.join(dir, "tsc"), 0o755);
       const env = {
@@ -56,8 +56,16 @@ describe("type-check runner", () => {
       // Each start is followed by its own end before the next start.
       expect(lines).toHaveLength(6);
       for (let i = 0; i < lines.length; i += 2) {
-        const [, pid, ...args] = lines[i].split(" ");
-        expect(args).toEqual(["--noEmit", "--checkers", "1"]);
+        const [, pid, goMemoryLimit, ...args] = lines[i].split(" ");
+        // Five eighths of 8 GiB, and no incremental build state to hold.
+        expect(goMemoryLimit).toBe(`GOMEMLIMIT=${5 * 1024 ** 3}`);
+        expect(args).toEqual([
+          "--noEmit",
+          "--checkers",
+          "1",
+          "--incremental",
+          "false",
+        ]);
         expect(lines[i + 1]).toBe(`end ${pid}`);
       }
     },

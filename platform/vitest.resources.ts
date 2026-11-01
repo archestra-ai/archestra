@@ -119,6 +119,29 @@ export function typeScriptCheckers(envelope: ResourceEnvelope): number | null {
   return checkers >= TYPESCRIPT_DEFAULT_CHECKERS ? null : checkers;
 }
 
+/**
+ * The Go soft memory limit (`GOMEMLIMIT`, bytes) for the TypeScript 7
+ * compiler in `pnpm type-check`; null on a machine with 16 GiB or more, where
+ * Go's default applies. Below that, `scripts/type-check.ts` also turns
+ * incremental builds off.
+ *
+ * Go collects garbage when its heap doubles, so a compiler holding 5 GB of
+ * types can take its whole pod before it collects. With the limit at five
+ * eighths of the envelope it collects as it nears it and leaves the rest of
+ * the pod free. The backend at one checker on 2 CPUs measured 5.8 GiB without
+ * the limit and 5.3 GiB with 5 GiB, in the same time. Below the program's
+ * live data (about 5 GB for the backend) a limit only costs time: 4 GiB took
+ * the run from 35 s to 2.5 min and still peaked at 5 GiB.
+ */
+export function typeScriptGoMemoryLimit(
+  envelope: ResourceEnvelope,
+): number | null {
+  if (envelope.totalMemoryBytes >= TYPESCRIPT_FULL_MEMORY_BYTES) return null;
+  return Math.floor(
+    envelope.totalMemoryBytes * TYPESCRIPT_GO_MEMORY_LIMIT_FRACTION,
+  );
+}
+
 /** Bytes of a Kubernetes memory quantity ("8Gi", "512Mi", "8G"); 0 when unreadable. */
 export function parseMemoryQuantity(quantity: string | undefined): number {
   const match = quantity
@@ -141,6 +164,9 @@ export function parseCpuQuantity(quantity: string | undefined): number {
 const BYTES_PER_MIB = 1024 ** 2;
 const BYTES_PER_GIB = 1024 ** 3;
 const TYPESCRIPT_DEFAULT_CHECKERS = 4;
+/** From here up the compiler keeps Go's defaults and its incremental builds. */
+const TYPESCRIPT_FULL_MEMORY_BYTES = 16 * BYTES_PER_GIB;
+const TYPESCRIPT_GO_MEMORY_LIMIT_FRACTION = 5 / 8;
 const MEMORY_UNITS: Record<string, number> = {
   "": 1,
   k: 1000,

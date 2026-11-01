@@ -5,6 +5,7 @@ import {
   parseMemoryQuantity,
   resourceEnvelope,
   typeScriptCheckers,
+  typeScriptGoMemoryLimit,
 } from "../../../vitest.resources";
 import { calculateVitestResourceLimits } from "./vitest-resource-limits";
 
@@ -190,5 +191,25 @@ describe("typeScriptCheckers", () => {
   test("runs no more checkers than CPUs", () => {
     expect(typeScriptCheckers(envelope(62, 1))).toBe(1);
     expect(typeScriptCheckers(envelope(62, 2))).toBe(2);
+  });
+});
+
+describe("typeScriptGoMemoryLimit", () => {
+  const envelope = (memoryGiB: number) => ({
+    availableParallelism: 2,
+    totalMemoryBytes: memoryGiB * GIB,
+    constrained: true,
+  });
+
+  test("leaves the compiler's working set room in the pod and the rest to its neighbours", () => {
+    // The backend's live data at one checker is about 5 GB: a limit at or
+    // above it costs no time, one below it only makes Go collect in a loop.
+    expect(typeScriptGoMemoryLimit(envelope(8))).toBe(5 * GIB);
+    expect(typeScriptGoMemoryLimit(envelope(14))).toBe(8.75 * GIB);
+  });
+
+  test("keeps Go's default on a machine with the memory for four checkers", () => {
+    expect(typeScriptGoMemoryLimit(envelope(16))).toBeNull();
+    expect(typeScriptGoMemoryLimit(envelope(62))).toBeNull();
   });
 });

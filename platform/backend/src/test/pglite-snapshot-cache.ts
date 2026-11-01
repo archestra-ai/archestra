@@ -52,7 +52,13 @@ export function publishedSnapshotIsCurrent(
   published: string | undefined,
   current: string,
 ): boolean {
-  return published === runSnapshotPath(current) && fs.existsSync(published);
+  if (published === undefined) return false;
+  const runPrefix = `${current}.${process.pid}-`;
+  return (
+    published.startsWith(runPrefix) &&
+    /^\d+\.inuse$/.test(published.slice(runPrefix.length)) &&
+    fs.existsSync(published)
+  );
 }
 
 /**
@@ -63,9 +69,9 @@ export function publishedSnapshotIsCurrent(
  * Returns the run's path, or null when the snapshot is not cached.
  */
 export function claimSnapshot(snapshot: string): string | null {
-  const runPath = runSnapshotPath(snapshot);
+  const now = new Date();
+  const runPath = runSnapshotPath(snapshot, now.getTime());
   try {
-    const now = new Date();
     fs.utimesSync(snapshot, now, now);
     fs.rmSync(runPath, { force: true });
     try {
@@ -109,6 +115,10 @@ export function pruneSnapshotCache(
     if (mtimeMs !== undefined) entries.push({ file, mtimeMs, kind });
   }
   const unusedFor = (entry: CacheEntry, ms: number) => now - entry.mtimeMs > ms;
+  // A run name is a hard link: its mtime is the snapshot's, which every later
+  // claim refreshes, so its age is the claim time in its name.
+  const claimedFor = (entry: CacheEntry, ms: number) =>
+    now - (claimedAt(entry.file) ?? entry.mtimeMs) > ms;
   const snapshots = entries
     .filter((entry) => entry.kind === "snapshot")
     .sort((a, b) => b.mtimeMs - a.mtimeMs);
@@ -120,14 +130,17 @@ export function pruneSnapshotCache(
       (entry) => entry.kind === "partial" && unusedFor(entry, IN_USE_WINDOW_MS),
     ),
     ...entries.filter(
-      (entry) => entry.kind === "run" && unusedFor(entry, RUN_NAME_MAX_AGE_MS),
+      (entry) => entry.kind === "run" && claimedFor(entry, RUN_NAME_MAX_AGE_MS),
     ),
   ];
   for (const entry of removable) {
     // Another run may have used it since the listing: then it stays. A run
     // that uses it between this check and the removal still reads its own
-    // name for it; only the next run misses the cache.
-    if (modifiedAt(entry.file) !== entry.mtimeMs) continue;
+    // name for it; only the next run misses the cache. (A run name's mtime
+    // moves with every claim of its snapshot and says nothing about its run.)
+    if (entry.kind !== "run" && modifiedAt(entry.file) !== entry.mtimeMs) {
+      continue;
+    }
     fs.rmSync(entry.file, { force: true });
   }
 }
@@ -138,11 +151,18 @@ const IN_USE_WINDOW_MS = 60 * 60 * 1000;
 
 /**
  * This run's own name for a cached snapshot (see claimSnapshot): the path its
- * global setup publishes to the workers.
+ * global setup publishes to the workers. It records when the run claimed it.
  */
-function runSnapshotPath(snapshot: string): string {
-  return `${snapshot}.${process.pid}.inuse`;
+function runSnapshotPath(snapshot: string, claimedAtMs: number): string {
+  return `${snapshot}.${process.pid}-${claimedAtMs}.inuse`;
 }
+
+/** When a run claimed the snapshot behind a run name, from the name. */
+function claimedAt(runName: string): number | undefined {
+  const match = /\.\d+-(\d+)\.inuse$/.exec(runName);
+  return match ? Number(match[1]) : undefined;
+}
+
 /** No test run takes a day: a run name this old outlived its run. */
 const RUN_NAME_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 

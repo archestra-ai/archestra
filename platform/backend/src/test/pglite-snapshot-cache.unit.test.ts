@@ -37,9 +37,10 @@ describe("pruneSnapshotCache", () => {
     // A build that died, and one another run is still writing.
     write("f.tar.gz.123.partial", 2);
     write("g.tar.gz.456.partial", 0.1);
-    // The name of a run that died before its teardown, and of a live run.
-    write("h.tar.gz.789.inuse", 25);
-    write("e.tar.gz.790.inuse", 1.5);
+    // The names of a run that died before its teardown, and of a live run,
+    // with the times they claimed their snapshots.
+    write(`h.tar.gz.789-${now - 25 * 3600_000}.inuse`, 25);
+    write(`e.tar.gz.790-${now - 1.5 * 3600_000}.inuse`, 1.5);
 
     pruneSnapshotCache(3, directory, now);
 
@@ -47,7 +48,7 @@ describe("pruneSnapshotCache", () => {
       "c.tar.gz",
       "d.tar.gz",
       "e.tar.gz",
-      "e.tar.gz.790.inuse",
+      `e.tar.gz.790-${now - 1.5 * 3600_000}.inuse`,
       "g.tar.gz.456.partial",
     ]);
   });
@@ -96,6 +97,31 @@ describe("pruneSnapshotCache", () => {
     expect(() =>
       pruneSnapshotCache(3, path.join(os.tmpdir(), "no-such-snapshot-cache")),
     ).not.toThrow();
+  });
+
+  test("removes a dead run's name by its claim time, though later claims of the snapshot refresh its mtime", () => {
+    const directory = fs.mkdtempSync(
+      path.join(os.tmpdir(), "pglite-snapshot-"),
+    );
+    try {
+      const now = Date.now();
+      const snapshot = path.join(directory, "a.tar.gz");
+      fs.writeFileSync(snapshot, "snapshot");
+      // Another process claimed the snapshot two days ago and died: its name is
+      // a hard link to the cached file, as claimSnapshot makes it.
+      const abandoned = `${snapshot}.${process.pid + 1}-${now - 48 * 3600_000}.inuse`;
+      fs.linkSync(snapshot, abandoned);
+      // This run's claim refreshes the mtime the two names share.
+      const runSnapshot = claimSnapshot(snapshot);
+
+      pruneSnapshotCache(3, directory, now);
+
+      expect(fs.existsSync(abandoned)).toBe(false);
+      expect(fs.existsSync(snapshot)).toBe(true);
+      expect(fs.existsSync(runSnapshot as string)).toBe(true);
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
   });
 });
 

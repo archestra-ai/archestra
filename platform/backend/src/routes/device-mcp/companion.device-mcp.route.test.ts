@@ -1,3 +1,9 @@
+import { execFileSync, spawn } from "node:child_process";
+import { once } from "node:events";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import type { DeviceMcpConfig } from "@archestra/shared/device-mcp";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
@@ -44,6 +50,177 @@ describe("real companion and device relay", () => {
     await app.register(deviceMcpRoutes);
     await app.register(mcpGatewayRoutes);
   });
+
+  test.skipIf(process.platform !== "darwin")(
+    "macOS standalone CLI pairs in a real terminal and exchanges a gateway call over TCP",
+    async ({
+      makeMember,
+      makeInternalMcpCatalog,
+      makeAgent,
+      makeAgentTool,
+    }) => {
+      const bundle = fileURLToPath(
+        new URL("../../../dist/device-mcp-client.mjs", import.meta.url),
+      );
+      execFileSync(process.execPath, [
+        fileURLToPath(
+          new URL("../../device-mcp-client/build.mjs", import.meta.url),
+        ),
+      ]);
+      await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+      await OrganizationModel.patch(ctx.organizationId, {
+        deviceMcpEnabled: true,
+      });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: ctx.organizationId,
+        authorId: ctx.user.id,
+        serverType: "device",
+        deviceConfig: fixtureConfig,
+      });
+      const [tool] = await ToolModel.findByCatalogId(catalog.id, {
+        kind: "caller",
+        userId: ctx.user.id,
+        organizationId: ctx.organizationId,
+      });
+      const agent = await makeAgent({
+        organizationId: ctx.organizationId,
+        authorId: ctx.user.id,
+        agentType: "mcp_gateway",
+        accessAllTools: false,
+        toolExposureMode: "full",
+      });
+      await makeAgentTool(agent.id, tool.id, {
+        credentialResolutionMode: "dynamic",
+      });
+      const gatewayToken = await UserTokenModel.create(
+        ctx.user.id,
+        ctx.organizationId,
+      );
+      const pairing = await deviceMcpService.pair({
+        organizationId: ctx.organizationId,
+        userId: ctx.user.id,
+        catalogId: catalog.id,
+        name: "Standalone CLI fixture",
+        replaceExisting: false,
+      });
+      const address = await ctx.app.listen({ host: "127.0.0.1", port: 0 });
+      // expect(1) gives the actual CLI a PTY even when Vitest itself uses
+      // pipes. Approval still waits for the test to inspect the pending state.
+      const terminalDir = mkdtempSync(join(tmpdir(), "device-mcp-terminal-"));
+      const terminalScript = join(terminalDir, "companion.exp");
+      writeFileSync(
+        terminalScript,
+        `set timeout 15
+log_user 1
+spawn -noecho {*}$argv
+expect {
+  "Type CONNECT to pair this device" {}
+  eof {exit 70}
+  timeout {exit 71}
+}
+puts "CONSENT_READY"
+flush stdout
+if {[gets stdin approval] < 0 || $approval ne "CONNECT"} {exit 72}
+send -- "CONNECT[format %c 13]"
+expect eof
+set result [wait]
+exit [lindex $result 3]
+`,
+      );
+      const cli = spawn(
+        "/usr/bin/expect",
+        [
+          terminalScript,
+          process.execPath,
+          bundle,
+          "--url",
+          address,
+          "--code",
+          pairing.code,
+        ],
+        { stdio: ["pipe", "pipe", "pipe"] },
+      );
+      let output = "";
+      cli.stdout.on("data", (chunk) => {
+        output += chunk.toString();
+      });
+      cli.stderr.on("data", (chunk) => {
+        output += chunk.toString();
+      });
+      const exited = once(cli, "exit");
+      try {
+        await expect
+          .poll(() => output, { timeout: 10_000 })
+          .toContain("CONSENT_READY");
+        expect(
+          (
+            await deviceMcpService.list({
+              organizationId: ctx.organizationId,
+              userId: ctx.user.id,
+              catalogId: catalog.id,
+            })
+          )[0].status,
+        ).toBe("setup_required");
+        cli.stdin.write("CONNECT\n");
+        await expect
+          .poll(() => output, { timeout: 10_000 })
+          .toContain("Device MCP is ready");
+        expect(
+          (
+            await deviceMcpService.list({
+              organizationId: ctx.organizationId,
+              userId: ctx.user.id,
+              catalogId: catalog.id,
+            })
+          )[0].status,
+        ).toBe("online");
+        const response = await fetch(`${address}/v1/mcp/${agent.id}`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            accept: "application/json, text/event-stream",
+            authorization: `Bearer ${gatewayToken.value}`,
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 7,
+            method: "tools/call",
+            params: {
+              name: tool.name,
+              arguments: { text: "standalone CLI TCP roundtrip" },
+            },
+          }),
+        });
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({
+          result: {
+            content: [{ type: "text", text: "standalone CLI TCP roundtrip" }],
+            structuredContent: { executionCount: 1 },
+          },
+        });
+        await deviceMcpService.revoke({
+          id: pairing.id,
+          organizationId: ctx.organizationId,
+          userId: ctx.user.id,
+        });
+        await Promise.race([
+          exited,
+          delay(5000).then(() => {
+            throw new Error(
+              "Standalone companion did not exit after token revocation",
+            );
+          }),
+        ]);
+        expect(cli.exitCode).toBe(1);
+        expect(output).toContain("Device connection request failed (401)");
+      } finally {
+        if (cli.exitCode === null) cli.kill("SIGHUP");
+        await exited;
+        rmSync(terminalDir, { recursive: true, force: true });
+      }
+    },
+    30_000,
+  );
 
   test("routes personal gateway and chat/runtime dispatch through the actual outbound companion and stdio MCP", async ({
     makeMember,

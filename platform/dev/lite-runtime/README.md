@@ -1,7 +1,8 @@
 # Lite Agent Runtime image
 
 A runtime image for Archestra work that runs the dev stack as plain processes:
-PostgreSQL, the backend dev server and the Next.js dev server. No Docker, kind,
+PostgreSQL, the backend server and the frontend (a production build by default,
+the Next.js dev server on request). No Docker, kind,
 Helm or Tilt inside the pod, so the pod needs no privilege and no Docker volume,
 starts in half the time of the full stack and idles at a tenth of its CPU (see
 "Lite and full stacks side by side" below).
@@ -70,9 +71,10 @@ archestra-dev-lite down          # stop; data and caches stay
 `platform/scripts/dev-lite.sh --help` lists every option. Each component runs
 in its own tmux session (`tmux -L archestra-dev-lite ls`), so a shell tool's
 process-group cleanup cannot stop the stack. The backend and frontend run
-their dev commands directly (`tsdown`, `next dev`), not through
-`pnpm dev --filter`: the pnpm and turbo wrappers cost eight extra Node
-processes and about 1 GB of RSS.
+their commands directly (`tsdown` and `node dist/server.mjs`; `next build` and
+the standalone `server.js`, or `next dev`), not through `pnpm dev --filter`:
+the pnpm and turbo wrappers cost eight extra Node processes and about 1 GB of
+RSS.
 
 The image sets `ARCHESTRA_DEV_BACKEND_WATCH=false`: the backend builds once and runs
 without the tsdown watcher, which keeps about 1.2 GB resident. After backend
@@ -190,10 +192,9 @@ under Settings > Agents > Runtime tiers):
 
 L keeps no warm spares by default: its runs are rare and an idle spare holds 8
 CPU and 16 GiB.
-The frontend dev server is the largest and most variable consumer. The e2e
-mode (`up --e2e`) already serves a production build instead (see below); doing
-the same for preview-only runs would cost a build per start and is a candidate
-follow-up.
+The frontend dev server was the largest and most variable consumer, so
+inside an Agent Runtime the stack now serves a production build, as `up --e2e`
+already did (see "Use" above).
 
 ## Lite and full stacks side by side
 
@@ -232,7 +233,8 @@ server were killed for memory. With `--e2e` the frontend is therefore a
 production build served by its standalone server, as CI and the released image
 serve it: it compiles nothing while the specs run and holds a few hundred MB.
 After frontend edits in e2e mode, `reload frontend` rebuilds it; `restart`
-without `--e2e` returns to the dev server. On 2 to 4 CPUs `e2e` also runs fewer
+without `--e2e` starts the configured mode, a production build inside an Agent
+Runtime unless `ARCHESTRA_DEV_LITE_FRONTEND=dev`. On 2 to 4 CPUs `e2e` also runs fewer
 workers with scaled timeouts (`E2E_WORKERS`, `E2E_TIMEOUT_SCALE`), and the
 build runs one Next worker per CPU.
 

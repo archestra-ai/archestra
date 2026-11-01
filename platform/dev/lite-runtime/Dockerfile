@@ -65,7 +65,7 @@ RUN su node -s /bin/bash -c ' \
 
 COPY --chmod=0755 bin/archestra-dev-lite /usr/local/bin/archestra-dev-lite
 RUN printf '%s\n' \
-      '- Archestra dev stack without Docker or Kubernetes: `archestra-dev-lite up` in a checkout (PostgreSQL, backend on :9000, frontend on :3000); `archestra-dev-lite status|logs|down`. The backend does not watch for changes here: after editing backend code run `archestra-dev-lite reload backend` (rebuild and restart, about 15 s). The frontend dev server picks up its own changes.' \
+      '- Archestra dev stack without Docker or Kubernetes: `archestra-dev-lite up` in a checkout (PostgreSQL, backend on :9000, frontend on :3000); `archestra-dev-lite status|logs|down`. Nothing watches for changes here: the backend is built once and the frontend is a production build. After editing code, and before running tests against the stack or sharing a preview, run `archestra-dev-lite reload backend` (about 15 s) or `archestra-dev-lite reload frontend` (a rebuild, about 45 to 80 s). `ARCHESTRA_DEV_LITE_FRONTEND=dev` with `archestra-dev-lite restart` gives the Next dev server, which reloads on its own but holds about 3.5 GB.' \
       >> /etc/archestra/agent-environment.md
 
 ENV ARCHESTRA_DEV_BACKEND_WATCH=false \

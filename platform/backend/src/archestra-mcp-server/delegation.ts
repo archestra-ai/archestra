@@ -435,6 +435,7 @@ export async function handleDelegation(
       chatOpsThreadId: context.chatOpsThreadId,
       chatOpsPinnedAgentId: context.chatOpsPinnedAgentId,
       scheduleTriggerRunId: context.scheduleTriggerRunId,
+      runId: context.runId,
       abortSignal: context.abortSignal,
       // Surface the child's tool calls on the caller's conversation, attributed
       // to this delegation call. The shared bridge is threaded into the child

@@ -731,6 +731,7 @@ export class A2AManager {
               userId: a2aActorUserId(actor),
               oauthExecution: actor.oauthExecution,
               sessionId,
+              runId: runOpts.taskId,
               source: systemParams?.source,
               // A chat posts a paused review to the requester (see ChatOps).
               // Detached tasks a chat starts report back without a form.

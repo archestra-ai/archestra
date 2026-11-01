@@ -1,5 +1,6 @@
 import {
   ADMIN_ROLE_NAME,
+  TOOL_GET_AGENT_RUN_FULL_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -14,7 +15,10 @@ import {
 } from "@/agents/agent-system-prompt";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { buildMcpGatewayTool } from "@/clients/chat-tool-builder";
-import { REPEAT_CALL_TERMINATION_CEILING } from "@/clients/tool-call-repeat-tracker";
+import {
+  REPEAT_CALL_TERMINATION_CEILING,
+  ToolCallRepeatTracker,
+} from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -24,6 +28,7 @@ import {
   AgentRunModel,
   AgentWorkspaceModel,
   FileModel,
+  McpToolCallModel,
   MemberModel,
   MessageModel,
   ModelModel,
@@ -3788,18 +3793,26 @@ describe("POST /api/chat handler composition", () => {
       state: "TASK_STATE_WORKING",
     });
 
-    await MessageModel.create({
-      conversationId: fixedConversation.id,
-      role: "assistant",
-      content: {
-        role: "assistant",
-        parts: [
-          {
-            type: "text",
-            text: `Agent run started (run_id: ${task.id})`,
-          },
-        ],
+    await McpToolCallModel.create({
+      agentId: fixedAgent.id,
+      mcpServerName: archestraMcpBranding.serverName,
+      method: "tools/call",
+      durationMs: 12,
+      toolCall: {
+        id: "call-launch-s",
+        name: TOOL_START_AGENT_RUN_FULL_NAME,
+        arguments: { agent_id: fixedAgent.id, limits: { tier: "S" } },
       },
+      toolResult: {
+        structuredContent: { run: { run_id: task.id } },
+      },
+      userId: user.id,
+      runId: task.id,
+      sessionId: fixedConversation.id,
+      llmToolCallId: "call-launch-s",
+      authMethod: null,
+      oauthClientId: null,
+      source: "chat",
     });
 
     const workloadName = `agent-run-${task.id}`;
@@ -4012,6 +4025,97 @@ describe("POST /api/chat handler composition", () => {
       expiresAt: new Date(Date.now() + 3600_000),
     });
 
+    // Pasting another run's UUID into conversation messages must NOT claim it:
+    await MessageModel.create({
+      conversationId: webConversation.id,
+      role: "assistant",
+      content: {
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: `Copied foreign run id: ${otherTask.id}`,
+          },
+        ],
+      },
+    });
+
+    // A finished run previously started by this conversation must also be ignored:
+    const finishedTask = await A2ATaskModel.create({
+      contextId: otherContext.id,
+      agentId: fixedAgent.id,
+      state: "TASK_STATE_COMPLETED",
+    });
+    const finishedRun = await AgentRunModel.create({
+      organizationId,
+      taskId: finishedTask.id,
+      agentId: fixedAgent.id,
+      actorKind: "user",
+      actorId: user.id,
+      actorUserId: user.id,
+      workloadName: `agent-run-${finishedTask.id}`,
+      backend: "kubernetes",
+      runtimeScope: "default",
+      virtualApiKeyId: null,
+      runtimeLimits: {
+        tier: "S",
+        idleTimeoutMinutes: 60,
+        maxDurationHours: 1,
+        maxCostUsd: null,
+      },
+    });
+    await AgentRunModel.close({ id: finishedRun.id });
+    await McpToolCallModel.create({
+      agentId: fixedAgent.id,
+      mcpServerName: archestraMcpBranding.serverName,
+      method: "tools/call",
+      durationMs: 10,
+      toolCall: {
+        id: "call-finished",
+        name: TOOL_START_AGENT_RUN_FULL_NAME,
+        arguments: { agent_id: fixedAgent.id, limits: { tier: "S" } },
+      },
+      toolResult: {
+        structuredContent: { run: { run_id: finishedTask.id } },
+      },
+      userId: user.id,
+      runId: finishedTask.id,
+      sessionId: webConversation.id,
+      llmToolCallId: "call-finished",
+      authMethod: null,
+      oauthClientId: null,
+      source: "chat",
+    });
+
+    // Reading another run's status via get_agent_run must NOT store it as this conversation's run:
+    const getRunTool = buildMcpGatewayTool({
+      mcpTool: {
+        name: TOOL_GET_AGENT_RUN_FULL_NAME,
+        inputSchema: { type: "object" },
+      },
+      ctx: {
+        agentId: fixedAgent.id,
+        agentName: fixedAgent.name,
+        userId: user.id,
+        organizationId,
+        conversationId: webConversation.id,
+        sessionId: webConversation.id,
+        modelAcceptsImageToolResults: false,
+        mcpGwToken: {
+          tokenValue: null,
+          tokenId: user.id,
+          teamId: null,
+          isOrganizationToken: false,
+          isUserToken: true,
+        },
+        repeatTracker: new ToolCallRepeatTracker(),
+      },
+    });
+    await getRunTool.execute?.(
+      { run_id: otherTask.id },
+      { toolCallId: "call-get-other", messages: [] },
+    );
+
     mockGetChatMcpTools.mockImplementationOnce(async (params) => {
       // The web chat conversation does not own otherTask, so runId must be undefined
       expect(params.runId).toBeUndefined();
@@ -4067,7 +4171,7 @@ describe("POST /api/chat handler composition", () => {
           {
             id: "msg-2",
             role: "user",
-            parts: [{ type: "text", text: "start run" }],
+            parts: [{ type: "text", text: `start run (not ${otherTask.id})` }],
           },
         ],
       },

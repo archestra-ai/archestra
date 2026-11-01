@@ -17,6 +17,10 @@ export const AGENT_RUNTIME_WORKSPACE_UNWRITABLE_EXIT_CODE = 77;
  *
  * The runtime directory is on the workspace volume, next to the home
  * directory and, for privileged runs, the Docker data, so a run can fill it.
+ * All three are subPaths of the one claim, so they share one filesystem: a
+ * write through any of them takes the same blocks and inodes, and the probe
+ * and `df` on the runtime directory see the whole claim. The manifests tests
+ * pin that layout.
  * Under `set -e`, the first write the volume refuses then ends PID 1 with
  * status 1 or 2, and Kubernetes reports "exit code 1" and nothing else. When
  * PID 1 ends that way, the trap tries one small write. Only if the volume

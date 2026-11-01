@@ -144,10 +144,43 @@ describe("Model Router auto model", () => {
           ],
           extra:
             ingress === "chat"
-              ? { tools: [{ type: "function", function: tool }] }
+              ? {
+                  tools: [
+                    { type: "function", function: tool },
+                    {
+                      type: "custom",
+                      custom: {
+                        name: "parse_sql",
+                        description: "Parse a SQL statement.",
+                        format: { type: "text" },
+                      },
+                    },
+                  ],
+                }
               : {
                   instructions: "Use evidence from the repository.",
-                  tools: [{ type: "function", ...tool }],
+                  input: [
+                    {
+                      role: "developer",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: "Review database migrations safely.",
+                        },
+                      ],
+                    },
+                    { role: "user", content: PROMPT },
+                  ],
+                  tools: [
+                    { type: "function", ...tool },
+                    {
+                      type: "function",
+                      name: "lookup",
+                      description: null,
+                      parameters: null,
+                      strict: null,
+                    },
+                  ],
                 },
         });
 
@@ -162,7 +195,9 @@ describe("Model Router auto model", () => {
             "Use evidence from the repository.",
           );
         expect(state.tools).toBe(
-          "Available tools: 1\nread_file: Read a repository file.",
+          ingress === "chat"
+            ? "Available tools: 2\nread_file: Read a repository file.\nparse_sql: Parse a SQL statement."
+            : "Available tools: 2\nread_file: Read a repository file.\nlookup",
         );
         expect(state.tools).not.toContain("parameters");
       });

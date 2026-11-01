@@ -20,6 +20,7 @@ import {
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_START_AGENT_RUN_SHORT_NAME,
 } from "@archestra/shared";
 import {
   type McpUiToolMeta,
@@ -56,7 +57,7 @@ import {
   readKbChunksFromToolResult,
 } from "@/knowledge-base/quote-verification";
 import logger from "@/logging";
-import { ToolModel } from "@/models";
+import { McpToolCallModel, ToolModel } from "@/models";
 import { metrics } from "@/observability";
 import {
   ATTR_MCP_IS_ERROR_RESULT,
@@ -348,16 +349,57 @@ export function buildMcpGatewayTool(params: {
                 toolArguments,
               );
             } else if (!ctx.runId) {
-              const launchedRunId = (
-                archestraResponse.structuredContent as
-                  | { run?: { run_id?: unknown } }
-                  | undefined
-              )?.run?.run_id;
+              const targetToolName = resolveRunToolTargetName(
+                mcpTool.name,
+                toolArguments,
+              );
+              const isStartAgentRun =
+                archestraMcpBranding.getToolShortName(targetToolName) ===
+                  TOOL_START_AGENT_RUN_SHORT_NAME ||
+                targetToolName === TOOL_START_AGENT_RUN_SHORT_NAME;
+              const launchedRunId = isStartAgentRun
+                ? (
+                    archestraResponse.structuredContent as
+                      | { run?: { run_id?: unknown } }
+                      | undefined
+                  )?.run?.run_id
+                : undefined;
               if (
                 typeof launchedRunId === "string" &&
                 launchedRunId.length > 0
               ) {
                 ctx.runId = launchedRunId;
+                const sessionId = ctx.conversationId ?? ctx.sessionId ?? null;
+                if (sessionId) {
+                  try {
+                    await McpToolCallModel.create({
+                      agentId: ctx.agentId,
+                      mcpServerName: archestraMcpBranding.serverName,
+                      method: "tools/call",
+                      durationMs: Math.max(0, Date.now() - startTime),
+                      toolCall: {
+                        id: options.toolCallId,
+                        name: mcpTool.name,
+                        arguments: toolArguments || {},
+                      },
+                      toolResult: ctx.suppressContentLogging
+                        ? { redacted: true }
+                        : archestraResponse,
+                      userId: ctx.userId ?? null,
+                      runId: launchedRunId,
+                      sessionId,
+                      llmToolCallId: options.toolCallId ?? null,
+                      authMethod: null,
+                      oauthClientId: ctx.mcpGwToken?.oauthClientId ?? null,
+                      source: "chat",
+                    });
+                  } catch (dbError) {
+                    logger.info(
+                      { err: dbError },
+                      "Failed to persist archestra run launch tool call",
+                    );
+                  }
+                }
               }
             }
 

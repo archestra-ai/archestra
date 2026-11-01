@@ -40,6 +40,7 @@ import {
   eq,
   inArray,
   isNotNull,
+  isNull,
   or,
   type SQL,
   sql,
@@ -357,73 +358,13 @@ function buildStreamErrorPayload(params: {
   return serialized;
 }
 
-const UUID_IN_MESSAGE_REGEX =
-  /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
-
-function extractMessageUuids(value: unknown): string[] {
-  if (typeof value === "string") {
-    return value.match(UUID_IN_MESSAGE_REGEX) ?? [];
-  }
-  if (Array.isArray(value)) {
-    return value.flatMap(extractMessageUuids);
-  }
-  if (value && typeof value === "object") {
-    return Object.values(value).flatMap(extractMessageUuids);
-  }
-  return [];
-}
-
 async function findActiveConversationRuntimeTaskId(params: {
   conversationId: string;
   agentId: string;
   organizationId: string;
   userId: string;
-  messages?: unknown[];
 }): Promise<string | undefined> {
-  const { conversationId, agentId, organizationId, userId, messages } = params;
-
-  const excludedIds = new Set([
-    conversationId.toLowerCase(),
-    agentId.toLowerCase(),
-    userId.toLowerCase(),
-  ]);
-  const [storedMessages, storedToolCalls] = await Promise.all([
-    db
-      .select({ content: schema.messagesTable.content })
-      .from(schema.messagesTable)
-      .where(eq(schema.messagesTable.conversationId, conversationId)),
-    db
-      .select({
-        toolCall: schema.mcpToolCallsTable.toolCall,
-        toolResult: schema.mcpToolCallsTable.toolResult,
-      })
-      .from(schema.mcpToolCallsTable)
-      .where(
-        or(
-          eq(schema.mcpToolCallsTable.sessionId, conversationId),
-          eq(
-            schema.mcpToolCallsTable.encryptedChatConversationId,
-            conversationId,
-          ),
-        ),
-      ),
-  ]);
-
-  const candidateTaskIds = [
-    ...new Set(
-      [
-        ...extractMessageUuids(messages),
-        ...storedMessages.flatMap((row) => extractMessageUuids(row.content)),
-        ...storedToolCalls.flatMap((row) => [
-          ...extractMessageUuids(row.toolCall),
-          ...extractMessageUuids(row.toolResult),
-        ]),
-      ]
-        .map((id) => id.toLowerCase())
-        .filter((id) => !excludedIds.has(id)),
-    ),
-  ];
-
+  const { conversationId, agentId, organizationId, userId } = params;
   const userScopedConversationSessionId = `user:${userId}|${conversationId}`;
 
   const ownershipConditions: SQL[] = [
@@ -492,20 +433,12 @@ async function findActiveConversationRuntimeTaskId(params: {
           ),
         ),
     ),
-    ...(candidateTaskIds.length > 0
-      ? [
-          inArray(schema.agentRunsTable.taskId, candidateTaskIds),
-          inArray(schema.agentRunsTable.id, candidateTaskIds),
-          inArray(schema.agentWorkspacesTable.id, candidateTaskIds),
-        ]
-      : []),
   ];
 
   const [ownedTask] = await db
     .select({
       taskId: schema.agentRunsTable.taskId,
       activeTaskId: schema.agentWorkspacesTable.activeTaskId,
-      lastTaskId: schema.agentWorkspacesTable.lastTaskId,
     })
     .from(schema.agentRunsTable)
     .innerJoin(
@@ -525,6 +458,20 @@ async function findActiveConversationRuntimeTaskId(params: {
         eq(schema.agentRunsTable.organizationId, organizationId),
         eq(schema.agentRunsTable.actorKind, "user"),
         eq(schema.agentRunsTable.actorId, userId),
+        isNull(schema.agentRunsTable.endedAt),
+        inArray(schema.a2aTasksTable.state, [
+          "TASK_STATE_SUBMITTED",
+          "TASK_STATE_WORKING",
+          "TASK_STATE_INPUT_REQUIRED",
+        ]),
+        or(
+          isNull(schema.agentWorkspacesTable.id),
+          inArray(schema.agentWorkspacesTable.state, [
+            "active",
+            "idle",
+            "suspended",
+          ]),
+        ),
         or(...ownershipConditions),
       ),
     )
@@ -535,7 +482,7 @@ async function findActiveConversationRuntimeTaskId(params: {
     .limit(1);
 
   if (ownedTask) {
-    return ownedTask.activeTaskId ?? ownedTask.taskId ?? ownedTask.lastTaskId;
+    return ownedTask.activeTaskId ?? ownedTask.taskId;
   }
 
   return undefined;
@@ -661,7 +608,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: conversation.agentId,
           organizationId,
           userId: user.id,
-          messages: messages as unknown[],
         });
       }
 

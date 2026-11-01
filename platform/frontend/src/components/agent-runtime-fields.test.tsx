@@ -289,7 +289,42 @@ describe("AgentRuntimeFields", () => {
         }
       >
         <Harness
-          initial={{ ...defaultAgentRuntime(), tier: "S", maxTier: "M" }}
+          initial={{ ...defaultAgentRuntime(), tier: "M", maxTier: "L" }}
+        />
+      </QueryClientProvider>,
+    );
+    const config = () =>
+      JSON.parse(screen.getByTestId("config").textContent ?? "{}");
+
+    // Lowering the default tier keeps the larger scaleup tier.
+    await user.click(screen.getByLabelText("Default tier"));
+    await user.click(screen.getByRole("option", { name: /^S:/ }));
+    expect(config()).toMatchObject({ tier: "S", maxTier: "L" });
+
+    // Raising the default tier above the scaleup tier raises scaleup too.
+    await user.click(screen.getByLabelText("Scaleup tier"));
+    await user.click(screen.getByRole("option", { name: /^M:/ }));
+    expect(config()).toMatchObject({ tier: "S", maxTier: "M" });
+
+    await user.click(screen.getByLabelText("Default tier"));
+    await user.click(screen.getByRole("option", { name: /^L:/ }));
+    expect(config()).toMatchObject({ tier: "L", maxTier: "L" });
+  });
+
+  it("keeps Disable autoscaling when lowering a fixed default tier", async () => {
+    vi.mocked(useAppName).mockReturnValue("Archestra");
+    vi.mocked(useFeature).mockImplementation((flag) =>
+      flag === "agentRuntime" ? true : undefined,
+    );
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <Harness
+          initial={{ ...defaultAgentRuntime(), tier: "M", maxTier: "M" }}
         />
       </QueryClientProvider>,
     );
@@ -297,13 +332,8 @@ describe("AgentRuntimeFields", () => {
       JSON.parse(screen.getByTestId("config").textContent ?? "{}");
 
     await user.click(screen.getByLabelText("Default tier"));
-    await user.click(screen.getByRole("option", { name: /^L:/ }));
-    expect(config()).toMatchObject({ tier: "L", maxTier: "L" });
-
-    // Lowering the default tier keeps the larger scaleup tier.
-    await user.click(screen.getByLabelText("Default tier"));
     await user.click(screen.getByRole("option", { name: /^S:/ }));
-    expect(config()).toMatchObject({ tier: "S", maxTier: "L" });
+    expect(config()).toMatchObject({ tier: "S", maxTier: "S" });
   });
 
   it("binds built-in and organization-defined credentials to image-specific environment variable names", async () => {

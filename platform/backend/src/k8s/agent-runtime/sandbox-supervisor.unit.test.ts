@@ -80,6 +80,34 @@ echo VERIFIED
     );
   }, 30_000);
 
+  // The Pod mounts subdirectories of one claim at the runtime directory, the
+  // home directory and the Docker data. Bind mounts of a sized tmpfs do the
+  // same, which needs the namespace harness.
+  it.skipIf(!NAMESPACE)(
+    "stops the Pod with the full-volume status when the home directory fills the shared volume",
+    () => {
+      const result = runInContainer(
+        `
+printf 'touch /tmp/started; ${fillVolume(HOME_SUBPATH)}; exit 0\\n' > /var/run/archestra/turns/1.request
+wait_for /tmp/started
+status=0
+wait "$supervisor" || status=$?
+test "$status" = ${AGENT_RUNTIME_WORKSPACE_FULL_EXIT_CODE}
+test ! -e /var/run/archestra/fill
+test -s /run/claim/home/fill
+echo VERIFIED
+`,
+        { volumeKiB: 2048, subPaths: true },
+      );
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain("VERIFIED");
+      expect(result.stderr).toMatch(
+        /agent-runtime: The workspace volume is full \(\d+ of 2 MiB used\), so the run stopped\./,
+      );
+    },
+    30_000,
+  );
+
   it("stops at startup with the full-volume status on a full volume", () => {
     const result = runInContainer(
       `
@@ -431,9 +459,15 @@ echo VERIFIED
 
 const IMAGE_BIN = path.resolve("../docker_images/agent/bin");
 
-/** Fills the runtime directory's volume: large blocks, then the last pages. */
-const FILL_VOLUME =
-  "dd if=/dev/zero of=/var/run/archestra/fill bs=32k 2>/dev/null || true; dd if=/dev/zero of=/var/run/archestra/fill2 bs=1k 2>/dev/null || true";
+/** Fills the volume of `directory`: large blocks, then the last pages. */
+function fillVolume(directory: string): string {
+  return `dd if=/dev/zero of=${directory}/fill bs=32k 2>/dev/null || true; dd if=/dev/zero of=${directory}/fill2 bs=1k 2>/dev/null || true`;
+}
+
+const FILL_VOLUME = fillVolume("/var/run/archestra");
+
+/** Where `subPaths` mounts the claim's home subdirectory. */
+const HOME_SUBPATH = "/tmp/home";
 
 /** Whether this machine can run the script in an unprivileged user namespace. */
 function namespaceAvailable(): boolean {
@@ -456,14 +490,28 @@ function namespaceAvailable(): boolean {
  * Runs the supervisor as a child of a shell at PID 1, then the assertions in
  * that shell. In a container the runtime directory is the image's; in a
  * namespace it is a private tmpfs of `volumeKiB` (256 MiB when not given),
- * which is also what a full-volume case uses in a container.
+ * which is also what a full-volume case uses in a container. With `subPaths`
+ * (namespace only), the tmpfs is the claim: its `runtime` and `home`
+ * subdirectories are bind-mounted at the runtime directory and HOME_SUBPATH,
+ * as the Pod mounts its subpaths.
  */
 function runInContainer(
   assertions: string,
-  options: { volumeKiB?: number; inodes?: number } = {},
+  options: { volumeKiB?: number; inodes?: number; subPaths?: boolean } = {},
 ) {
+  if (options.subPaths && !NAMESPACE)
+    throw new Error("subPaths needs the namespace harness");
   const volume = options.volumeKiB;
   const inodes = options.inodes ? `,nr_inodes=${options.inodes}` : "";
+  const claim = `-o size=${volume ?? 262144}k${inodes} tmpfs`;
+  const namespaceVolume = options.subPaths
+    ? `mount -t tmpfs tmpfs /run
+mkdir -p /run/claim /var/run/archestra ${HOME_SUBPATH}
+mount -t tmpfs ${claim} /run/claim
+mkdir -p /run/claim/runtime /run/claim/home
+mount --bind /run/claim/runtime /var/run/archestra
+mount --bind /run/claim/home ${HOME_SUBPATH}`
+    : `mount -t tmpfs ${claim} /run`;
   const [command, args, prelude] = NAMESPACE
     ? [
         "bash",
@@ -475,7 +523,7 @@ function runInContainer(
           `set -o pipefail; unshare ${NAMESPACE_FLAGS.join(" ")} /bin/sh -s | cat`,
         ],
         `mount -t tmpfs tmpfs /tmp
-mount -t tmpfs -o size=${volume ?? 262144}k${inodes} tmpfs /run
+${namespaceVolume}
 mkdir -p /var/run/archestra/turns
 export PATH="$ARCHESTRA_TEST_IMAGE_BIN:$PATH"`,
       ]

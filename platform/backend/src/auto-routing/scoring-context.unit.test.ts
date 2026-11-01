@@ -97,6 +97,77 @@ describe("scoringContext", () => {
     expect(scoringContext(body)).toEqual({});
   });
 
+  test("preserves Responses system and developer input_text without forwarding non-text parts", () => {
+    expect(
+      scoringContext({
+        input: [
+          {
+            role: "system",
+            content: [
+              { type: "input_text", text: "Review database migrations." },
+            ],
+          },
+          {
+            role: "developer",
+            content: [
+              { type: "input_text", text: "Check locking." },
+              {
+                type: "input_image",
+                image_url: "https://example.com/private.png",
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [{ type: "input_text", text: "Review this change." }],
+          },
+        ],
+      }),
+    ).toEqual({
+      systemPrompt: "Review database migrations.\n\nCheck locking.",
+      tools: [],
+    });
+  });
+
+  test("preserves nested custom tool identity without forwarding its grammar", () => {
+    expect(
+      scoringContext({
+        tools: [
+          {
+            type: "custom",
+            custom: {
+              name: "parse_sql",
+              description: "Parse a SQL statement.",
+              format: {
+                type: "grammar",
+                grammar: { syntax: "regex", definition: "private grammar" },
+              },
+            },
+          },
+        ],
+      }),
+    ).toEqual({
+      systemPrompt: "",
+      tools: [{ name: "parse_sql", description: "Parse a SQL statement." }],
+    });
+  });
+
+  test("preserves function names when Responses descriptions are null", () => {
+    expect(
+      scoringContext({
+        tools: [
+          {
+            type: "function",
+            name: "lookup",
+            description: null,
+            parameters: null,
+            strict: null,
+          },
+        ],
+      }),
+    ).toEqual({ systemPrompt: "", tools: [{ name: "lookup" }] });
+  });
+
   test("tolerates malformed optional entries without losing valid context", () => {
     expect(
       scoringContext({

@@ -106,11 +106,14 @@ FRONTEND_MODE_FILE="$STATE_DIR/frontend-mode"
 # starts, removed by `down`. Readiness and `e2e` fail when a requested Keycloak
 # is not running, instead of treating it as never asked for.
 KEYCLOAK_REQUESTED_FILE="$STATE_DIR/keycloak-requested"
-# Written by `pause` and removed by `resume`/`down`: the servers were stopped on
-# purpose, to give one memory-heavy command their memory, and come back.
+# Written by `pause` with the frontend mode it stopped (or `none`), removed by
+# `resume`/`up`/`down`: the servers were stopped on purpose, to give one
+# memory-heavy command their memory, and come back from the same builds.
 PAUSED_FILE="$STATE_DIR/paused"
-# Written when `up` or `start` starts the servers and removed by `down`: after
-# `prepare` alone there is nothing to wait for yet.
+# Written whenever a backend or frontend session starts, with the platform/
+# directory it serves, and removed by `down`: after `prepare` alone there is
+# nothing to wait for yet, and `pause`/`resume` from another checkout (a
+# worktree's type check) act on the checkout that runs the stack.
 SERVERS_FILE="$STATE_DIR/servers-started"
 PGDATA="$STATE_DIR/postgres"
 DB_PORT="${ARCHESTRA_DEV_LITE_DB_PORT:-5432}"
@@ -276,6 +279,9 @@ start_session() {
     return 0
   fi
   mkdir -p "$LOG_DIR"
+  case "$name" in
+    backend | frontend) printf '%s\n' "$PLATFORM_DIR" > "$SERVERS_FILE" ;;
+  esac
   # One log per run: readiness checks must not read an earlier run's crash.
   if [ -f "$LOG_DIR/$name.log" ]; then mv -f "$LOG_DIR/$name.log" "$LOG_DIR/$name.previous.log"; fi
   tmx new-session -d -s "$name" -c "$dir" \
@@ -699,17 +705,20 @@ http_ok() {
 # Every session this stack started must still be alive: the first one that
 # exited fails the wait with the tail of its log, whatever answered before.
 require_sessions_alive() {
-  local name
+  local name servers="backend frontend"
   # Paused on purpose: the command that paused them resumes them.
-  [ -f "$PAUSED_FILE" ] && return 0
-  [ -f "$SERVERS_FILE" ] || die "the backend and frontend are not started (the stack is only prepared): run 'archestra-dev-lite up'"
-  for name in backend frontend $(e2e_requested && echo "wiremock a2a") $(keycloak_requested && echo keycloak); do
+  [ -f "$PAUSED_FILE" ] && servers=""
+  if [ -n "$servers" ] && [ ! -f "$SERVERS_FILE" ] && ! session_alive backend && ! session_alive frontend; then
+    die "the backend and frontend are not started (the stack is only prepared): run 'archestra-dev-lite up'"
+  fi
+  for name in $servers $(e2e_requested && echo "wiremock a2a") $(keycloak_requested && echo keycloak); do
     session_alive "$name" || { tail -n 40 "$LOG_DIR/$name.log" >&2 2>/dev/null || true; die "$name exited; see $LOG_DIR/$name.log"; }
   done
 }
 
 wait_ready() {
   local deadline=$((SECONDS + ${ARCHESTRA_DEV_LITE_TIMEOUT_SECONDS:-900})) backend_ok=0 frontend_ok=0 e2e_ok=0 keycloak_ok=0
+  [ -f "$PAUSED_FILE" ] && log "the backend and frontend are paused for a memory-heavy command; waiting until they resume ('archestra-dev-lite resume' resumes them now)"
   while (( SECONDS < deadline )); do
     require_sessions_alive
     [ "$backend_ok" = 1 ] || { http_ok "http://127.0.0.1:$BACKEND_PORT/ready" && backend_ok=1 && log "backend answers on :$BACKEND_PORT"; }
@@ -807,10 +816,19 @@ cmd_start() {
   [ "$e2e" = 1 ] && frontend=e2e
   # Builds first, one at a time, then the servers (see build_backend). Servers
   # that `pause` stopped come back from their builds.
-  local paused=0
-  [ -f "$PAUSED_FILE" ] && paused=1
+  # The paused frontend's build is reused only for the mode it served.
+  local paused=0 keep_frontend=0
+  if [ -f "$PAUSED_FILE" ]; then
+    paused=1
+    [ "$(cat "$PAUSED_FILE")" = "$frontend" ] && keep_frontend=1
+  fi
   if [ "$frontend" != dev ] && ! session_alive frontend \
-    && { [ "$paused" = 0 ] || [ ! -f "$STANDALONE_DIR/server.js" ]; }; then
+    && { [ "$keep_frontend" = 0 ] || [ ! -f "$STANDALONE_DIR/server.js" ]; }; then
+    # A running backend would hold its memory next to the build.
+    if session_alive backend; then
+      log "stopping the backend while the frontend builds"
+      stop_session backend
+    fi
     build_frontend
   fi
   if ! backend_watch && ! session_alive backend \
@@ -818,7 +836,6 @@ cmd_start() {
     build_backend
   fi
   rm -f "$PAUSED_FILE"
-  touch "$SERVERS_FILE"
   start_backend
   start_frontend "$frontend" keep
   [ "$e2e" = 1 ] && start_e2e_deps
@@ -835,6 +852,10 @@ cmd_start() {
 cmd_prepare() {
   require_platform_dir
   mkdir -p "$STATE_DIR" "$LOG_DIR"
+  # Markers a killed container left behind: nothing runs yet.
+  if ! session_alive backend && ! session_alive frontend; then
+    rm -f "$PAUSED_FILE" "$SERVERS_FILE"
+  fi
   ensure_env 0 0
   install_dependencies
   ensure_native_addons
@@ -857,7 +878,12 @@ cmd_pause() {
     fi
   done
   if [ -n "$stopped" ] || [ -f "$PAUSED_FILE" ]; then
-    touch "$PAUSED_FILE"
+    if [ ! -f "$PAUSED_FILE" ]; then
+      case " $stopped " in
+        *" frontend "*) frontend_mode > "$PAUSED_FILE" ;;
+        *) echo none > "$PAUSED_FILE" ;;
+      esac
+    fi
     echo "dev stack paused:${stopped:- nothing was running}; 'archestra-dev-lite resume' starts it again"
   else
     echo "dev stack not running; nothing to pause"
@@ -873,9 +899,11 @@ cmd_resume() {
   fi
   db_ready || start_postgres
   wait_for_db
-  start_backend
-  start_frontend "$(frontend_mode)" keep
+  local mode
+  mode="$(cat "$PAUSED_FILE")"
   rm -f "$PAUSED_FILE"
+  start_backend
+  [ "$mode" = none ] || start_frontend "$mode" keep
   wait_ready
 }
 
@@ -1028,6 +1056,7 @@ cmd_restart() {
 # changes reach the running server: tsdown builds, then the server starts.
 cmd_reload() {
   require_platform_dir
+  [ -f "$PAUSED_FILE" ] && die "the backend and frontend are paused for a memory-heavy command: run 'archestra-dev-lite resume' first"
   case "${1:-}" in
     backend)
       log "reloading the backend"

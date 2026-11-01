@@ -51,7 +51,11 @@ e2e_output() { (PATH="$FAKE_BIN:$PATH" cmd_e2e 2>&1) || true; }
 e2e_succeeds() { (PATH="$FAKE_BIN:$PATH" cmd_e2e >/dev/null 2>&1); }
 
 # --- readiness -------------------------------------------------------------
-check "wait before the servers were ever started says to run up" says "only prepared" wait_ready_loudly
+never_started() { (ALIVE=""; ARCHESTRA_DEV_LITE_TIMEOUT_SECONDS=2 wait_ready) 2>&1 || true; }
+check "wait before the servers were ever started says to run up" grep -q "only prepared" <<<"$(never_started)"
+check "a stack an older dev-lite.sh started counts as started" wait_ready_quietly
+marker_of() { (ALIVE=""; tmx() { return 0; }; start_session backend /tmp true; cat "$SERVERS_FILE"); }
+check "starting a server records the checkout it serves" test "$(marker_of)" = "$PLATFORM_DIR"
 touch "$SERVERS_FILE"
 rm -f "$KEYCLOAK_REQUESTED_FILE"
 check "ready without Keycloak when none was requested" wait_ready_quietly
@@ -176,20 +180,24 @@ check "up builds the frontend before the backend" test "$(order_of "$out" "^buil
 check "up builds both before starting a server" test "$(order_of "$out" "^build_backend")" -lt "$(order_of "$out" "^server backend")"
 check "up starts the backend, then the frontend" test "$(order_of "$out" "^server backend")" -lt "$(order_of "$out" "^server frontend")"
 check "up builds the frontend once" test "$(grep -c "^build_frontend" <<<"$out")" -eq 1
-check "up records that the servers were started" test -f "$SERVERS_FILE"
+backend_running_up() { (session_alive() { [ "$1" = backend ]; }; lifecycle cmd_start 1); }
+out="$(backend_running_up)"
+check "up stops a running backend before the frontend builds" test "$(order_of "$out" "^stop_session backend")" -lt "$(order_of "$out" "^build_frontend")"
 
 out="$(lifecycle cmd_prepare)"
 check "prepare migrates" grep -q "^migrate" <<<"$out"
 check "prepare builds nothing" fails grep -q "^build_" <<<"$out"
 check "prepare starts no server" fails grep -q "^server" <<<"$out"
 
-paused_lifecycle() { touch "$PAUSED_FILE"; lifecycle "$@"; }
+paused_lifecycle() { echo "${PAUSED_MODE:-build}" > "$PAUSED_FILE"; lifecycle "$@"; }
 out="$(paused_lifecycle cmd_start 1)"
 check "up after pause serves the builds it has" fails grep -q "^build_" <<<"$out"
 check "up after pause starts both servers" test "$(grep -c "^server" <<<"$out")" -eq 2
 check "up clears the pause" test ! -f "$PAUSED_FILE"
 out="$(BUILT=0 paused_lifecycle cmd_start 1)"
-check "up after pause builds what is missing" grep -q "^build_frontend" <<<"$out"
+check "up after pause builds what is missing, before any server starts" test "$(order_of "$out" "^build_frontend")" -lt "$(order_of "$out" "^server backend")"
+out="$(PAUSED_MODE=dev paused_lifecycle cmd_start 1)"
+check "up after pausing another frontend mode builds this one" grep -q "^build_frontend" <<<"$out"
 
 running_pause() { (session_alive() { return 0; }; lifecycle cmd_pause); }
 out="$(running_pause)"
@@ -197,11 +205,18 @@ check "pause stops both servers" test "$(grep -c "^stop_session" <<<"$out")" -eq
 check "pause records the pause" test -f "$PAUSED_FILE"
 check "pause says how to resume" grep -q "archestra-dev-lite resume" <<<"$out"
 resume_paused() { (db_ready() { return 0; }; lifecycle cmd_resume); }
+running_pause >/dev/null
 out="$(resume_paused)"
 check "resume builds nothing" fails grep -q "^build_" <<<"$out"
 check "resume starts both servers" test "$(grep -c "^server" <<<"$out")" -eq 2
 check "resume clears the pause" test ! -f "$PAUSED_FILE"
 check "resume without a pause does nothing" grep -q "not paused" <<<"$(resume_paused)"
+echo none > "$PAUSED_FILE"
+out="$(resume_paused)"
+check "resume starts only what pause stopped" test "$(grep -c "^server" <<<"$out")" -eq 1
+echo build > "$PAUSED_FILE"
+reload_paused() { (lifecycle cmd_reload frontend) || true; }
+check "reload refuses while paused" grep -q "resume' first" <<<"$(reload_paused)"
 paused_alive() { (ALIVE=""; touch "$PAUSED_FILE"; require_sessions_alive); }
 check "a paused stack is not reported as exited" paused_alive
 rm -f "$PAUSED_FILE"

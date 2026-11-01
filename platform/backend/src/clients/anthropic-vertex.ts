@@ -14,7 +14,10 @@ class AnthropicVertexClient {
     return config.llm.anthropic.vertexAi.enabled;
   }
 
-  createModel(params: { modelId: string; fetch?: typeof globalThis.fetch }) {
+  createModel(params: {
+    modelId: string;
+    fetch?: typeof globalThis.fetch;
+  }): ReturnType<ReturnType<typeof createVertexAnthropic>> {
     const { project, location, credentialsFile } = this.getConfig();
     const provider = createVertexAnthropic({
       project,

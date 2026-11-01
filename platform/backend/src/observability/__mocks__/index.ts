@@ -12,7 +12,10 @@
  */
 import { vi } from "vitest";
 
-export const initializeObservabilityMetrics = vi.fn();
+/** Named so the emitted declarations need no reference to @vitest/spy. */
+type MockFunction = (...args: unknown[]) => unknown;
+
+export const initializeObservabilityMetrics = vi.fn<MockFunction>();
 export const metrics = inertNamespace(2);
 export const tracing = inertNamespace(1);
 
@@ -24,7 +27,10 @@ function inertNamespace(depth: number): Record<string, never> {
       // Play nice with promise-resolution and module interop probes.
       if (prop === "then" || prop === Symbol.toStringTag) return undefined;
       if (!children.has(prop)) {
-        children.set(prop, depth > 1 ? inertNamespace(depth - 1) : vi.fn());
+        children.set(
+          prop,
+          depth > 1 ? inertNamespace(depth - 1) : vi.fn<MockFunction>(),
+        );
       }
       return children.get(prop);
     },

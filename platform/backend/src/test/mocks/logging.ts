@@ -1,5 +1,8 @@
 import { vi } from "vitest";
 
+/** Named so the emitted declarations need no reference to @vitest/spy. */
+type MockFunction = (...args: unknown[]) => unknown;
+
 /**
  * Canonical module mock for `@/logging`, for tests that ASSERT on logger
  * calls. Activated with a bare `vi.mock("@/logging");` — Vitest resolves the
@@ -23,15 +26,15 @@ import { vi } from "vitest";
  */
 export function loggingModuleMock() {
   const logger = {
-    fatal: vi.fn(),
-    error: vi.fn(),
-    warn: vi.fn(),
-    info: vi.fn(),
-    debug: vi.fn(),
-    trace: vi.fn(),
-    silent: vi.fn(),
+    fatal: vi.fn<MockFunction>(),
+    error: vi.fn<MockFunction>(),
+    warn: vi.fn<MockFunction>(),
+    info: vi.fn<MockFunction>(),
+    debug: vi.fn<MockFunction>(),
+    trace: vi.fn<MockFunction>(),
+    silent: vi.fn<MockFunction>(),
     level: "silent",
-    child: vi.fn(),
+    child: vi.fn<MockFunction>(),
   };
   logger.child.mockReturnValue(logger);
   return { default: logger };

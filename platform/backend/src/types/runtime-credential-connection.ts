@@ -1,5 +1,6 @@
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
+import type { $brand } from "zod/v4/core";
 import { schema } from "@/database";
 
 /** Who owns a reusable credential used by Agent Runtime containers. */
@@ -25,7 +26,7 @@ export const GitHubUserIdSchema = z
   .int()
   .positive()
   .brand<"GitHubUserId">();
-export type GitHubUserId = z.infer<typeof GitHubUserIdSchema>;
+export type GitHubUserId = number & $brand<"GitHubUserId">;
 
 export { GITHUB_COM_API_URL } from "@archestra/shared";
 

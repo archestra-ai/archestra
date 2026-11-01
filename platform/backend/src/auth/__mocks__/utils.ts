@@ -6,6 +6,9 @@
  */
 import { vi } from "vitest";
 
-export const hasPermission = vi.fn();
-export const userHasPermission = vi.fn();
-export const getPermissionsForUserContext = vi.fn();
+/** Named so the emitted declarations need no reference to @vitest/spy. */
+type MockFunction = (...args: unknown[]) => unknown;
+
+export const hasPermission = vi.fn<MockFunction>();
+export const userHasPermission = vi.fn<MockFunction>();
+export const getPermissionsForUserContext = vi.fn<MockFunction>();

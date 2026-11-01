@@ -1,5 +1,8 @@
 import { vi } from "vitest";
 
+/** Named so the emitted declarations need no reference to @vitest/spy. */
+type MockFunction = (...args: unknown[]) => unknown;
+
 /**
  * Canonical module mock for `@/auth`.
  *
@@ -24,7 +27,7 @@ import { vi } from "vitest";
  * specifier (vitest-dev/vitest#10145).
  */
 export function authModuleMock() {
-  const getAgentTypePermissionChecker = vi.fn();
+  const getAgentTypePermissionChecker = vi.fn<MockFunction>();
   return {
     // ./agent-type-permissions
     getAgentTypePermissionChecker,
@@ -33,25 +36,25 @@ export function authModuleMock() {
     getAgentTypeListPermissionChecker: vi.fn((...args: unknown[]) =>
       getAgentTypePermissionChecker(...args),
     ),
-    hasAnyAgentTypeAdminPermission: vi.fn(),
-    hasAnyAgentTypeReadPermission: vi.fn(),
-    isAgentTypeAdmin: vi.fn(),
-    requireAgentModifyPermission: vi.fn(),
-    requireAgentTypePermission: vi.fn(),
+    hasAnyAgentTypeAdminPermission: vi.fn<MockFunction>(),
+    hasAnyAgentTypeReadPermission: vi.fn<MockFunction>(),
+    isAgentTypeAdmin: vi.fn<MockFunction>(),
+    requireAgentModifyPermission: vi.fn<MockFunction>(),
+    requireAgentTypePermission: vi.fn<MockFunction>(),
     // ./better-auth — only the API surface tests actually exercise
     betterAuth: {
       api: {
-        getSession: vi.fn(),
-        verifyApiKey: vi.fn(),
-        hasPermission: vi.fn(),
+        getSession: vi.fn<MockFunction>(),
+        verifyApiKey: vi.fn<MockFunction>(),
+        hasPermission: vi.fn<MockFunction>(),
       },
       $context: Promise.resolve({}),
     },
     // ./fastify-plugin
-    fastifyAuthPlugin: vi.fn(),
+    fastifyAuthPlugin: vi.fn<MockFunction>(),
     // ./utils
-    hasPermission: vi.fn(),
-    isGlobalAdmin: vi.fn(),
-    userHasPermission: vi.fn(),
+    hasPermission: vi.fn<MockFunction>(),
+    isGlobalAdmin: vi.fn<MockFunction>(),
+    userHasPermission: vi.fn<MockFunction>(),
   };
 }

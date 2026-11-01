@@ -303,7 +303,7 @@ describe("describeToolMemoryKill", () => {
     );
   });
 
-  test("offers no larger tier at the largest one, and more memory outside a runtime", () => {
+  test("offers only a tier with more memory, none at the largest, and more memory outside a runtime", () => {
     const largest = describeToolMemoryKill({
       ...typeCheck,
       subjectKilled: true,
@@ -318,7 +318,24 @@ describe("describeToolMemoryKill", () => {
       },
     });
     expect(largest?.split("\n").at(-1)).toBe(
-      "  - This run is at M, the largest tier this agent may use.",
+      "  - This run is at M, and no tier this agent may use has more memory.",
+    );
+    // A next tier with more CPU and the same memory would be killed the same way.
+    const sameMemory = describeToolMemoryKill({
+      ...typeCheck,
+      subjectKilled: true,
+      before,
+      after: atLimit,
+      env: {
+        ARCHESTRA_AGENT_RUNTIME_TIERS: JSON.stringify([
+          { name: "S", memory_limit_gib: 8, current: true },
+          { name: "S-fast", memory_limit_gib: 8 },
+          { name: "L", memory_limit_gib: 24 },
+        ]),
+      },
+    });
+    expect(sameMemory?.split("\n").at(-1)).toBe(
+      "  - Or move the work to a larger tier: start a run of this agent at L, which has a memory limit of 24 GiB, and hand over the branch.",
     );
     const elsewhere = describeToolMemoryKill({
       ...typeCheck,

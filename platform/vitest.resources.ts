@@ -309,15 +309,23 @@ function largerTierStep(env: NodeJS.ProcessEnv): string {
   }
   const current = tiers.findIndex((tier) => tier?.current === true);
   if (current === -1) return "Or give it more memory.";
-  const next = tiers[current + 1];
-  if (!next || typeof next.name !== "string") {
-    return `This run is at ${String(tiers[current]?.name)}, the largest tier this agent may use.`;
+  const limitOf = (tier: (typeof tiers)[number] | undefined) =>
+    typeof tier?.memory_limit_gib === "number" ? tier.memory_limit_gib : null;
+  const currentLimit = limitOf(tiers[current]);
+  // The list is smallest first; a tier with more CPU and the same memory
+  // would be killed the same way.
+  const larger = tiers.slice(current + 1).find((tier) => {
+    const limit = limitOf(tier);
+    return (
+      typeof tier?.name === "string" &&
+      (limit === null || currentLimit === null || limit > currentLimit)
+    );
+  });
+  if (!larger) {
+    return `This run is at ${String(tiers[current]?.name)}, and no tier this agent may use has more memory.`;
   }
-  const limit =
-    typeof next.memory_limit_gib === "number"
-      ? `, which has a memory limit of ${next.memory_limit_gib} GiB,`
-      : "";
-  return `Or move the work to a larger tier: start a run of this agent at ${next.name}${limit} and hand over the branch.`;
+  const limit = limitOf(larger);
+  return `Or move the work to a larger tier: start a run of this agent at ${String(larger.name)}${limit === null ? "" : `, which has a memory limit of ${limit} GiB,`} and hand over the branch.`;
 }
 
 const MEMORY_KILL_REPORT = Symbol.for("archestra.memoryKillReport");

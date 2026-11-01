@@ -56,12 +56,14 @@ if (result.error) throw result.error;
 // flock exits 128 + the signal when the compiler it ran was killed by one.
 const status =
   result.status ?? (result.signal ? 128 + constants.signals[result.signal] : 1);
-if (status !== 0) {
+// Only a compiler that was itself killed: a type error while another process
+// of the container was killed is still a type error.
+if (status === 128 + constants.signals.SIGKILL) {
   const checkers = checkerCount(tscArgs);
   const report = describeToolMemoryKill({
     tool: "type-check",
     subject: "tsc",
-    subjectKilled: status === 128 + constants.signals.SIGKILL,
+    subjectKilled: true,
     before: memoryBefore,
     after: readCgroupMemory(),
     steps:

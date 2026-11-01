@@ -36,7 +36,6 @@ import McpDeploymentLeaseModel, {
 import ServiceAccountModel from "@/models/service-account";
 import { reportAgentRuntimeSteer } from "@/observability/metrics/agent-runtime";
 import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
-import type { AgentRunCompletion } from "@/services/agent-runtime/backends/types";
 import {
   agentRuntimeFailureReason,
   agentRuntimeTurnFailure,
@@ -90,14 +89,13 @@ import {
 } from "./manifests";
 import {
   describeMemoryKill,
-  MEMORY_EVENTS_SCRIPT,
+  MEMORY_EVENTS_AFTER_RESULT_SCRIPT,
   type MemoryEvents,
   type MemoryKill,
   memoryKillBetween,
   parseMemoryEvents,
   READ_MEMORY_EVENTS_COMMAND,
   splitTurnPoll,
-  TURN_RESULT_SEPARATOR,
 } from "./memory-kill";
 import {
   AGENT_RUNTIME_LEASE_SCOPE,
@@ -1285,6 +1283,7 @@ class AgentRuntimeManager {
               tier: agentRuntimePodTier(pod),
               atStart: null,
               latest: null,
+              unanswered: 0,
             };
           }
           const poll = splitTurnPoll(
@@ -1294,13 +1293,14 @@ class AgentRuntimeManager {
               command: [
                 "/bin/sh",
                 "-c",
-                `${MEMORY_EVENTS_SCRIPT}; printf '%s\\n' '${TURN_RESULT_SEPARATOR}'; file="/var/run/archestra/turns/$1"; if [ -f "$file.exit" ]; then status="$(cat "$file.exit")"; printf "%s\\n" "$status"; if [ -f "$file.failure" ]; then head -c 4097 "$file.failure" 2>/dev/null || true; fi; fi`,
+                `file="/var/run/archestra/turns/$1"; if [ -f "$file.exit" ]; then status="$(cat "$file.exit")"; printf "%s\\n" "$status"; if [ -f "$file.failure" ]; then head -c 4097 "$file.failure" 2>/dev/null || true; fi; fi; ${MEMORY_EVENTS_AFTER_RESULT_SCRIPT}`,
                 "read-turn-result",
                 params.session.taskId,
               ],
             }),
           );
           if (params.abortSignal?.aborted) break;
+          running.unanswered = 0;
           if (poll.memory) {
             const sincePrevious = memoryKillBetween(
               running.latest,
@@ -1369,12 +1369,12 @@ class AgentRuntimeManager {
             "The Agent Runtime run exited without completing";
           // A workspace that finished or expired while its pod still runs: a
           // supervisor whose tmux server the kernel killed never publishes a
-          // result, and the kill is what ended the turn.
+          // result, and the kill is what ended the turn. This iteration's poll
+          // read the counters.
           const killed =
-            pod?.status?.phase === "Running" && pod.metadata?.name && running
-              ? await this.memoryKillSince(params.session, running)
+            pod?.status?.phase === "Running" && running
+              ? memoryKillBetween(running.atStart, running.latest)
               : null;
-          if (params.abortSignal?.aborted) break;
           const failure = agentRunFailure(
             podFailure && pod
               ? classifyAgentRuntimePodFailure(pod)
@@ -1396,19 +1396,48 @@ class AgentRuntimeManager {
         retryDelayMs = interval;
       } catch (error) {
         if (params.abortSignal?.aborted) break;
-        if (
-          running &&
-          (error instanceof AgentRuntimeCommandFailedError ||
-            error instanceof AgentRuntimeExecConnectionError)
-        ) {
-          const explained = await this.explainFailedPoll({
-            session: params.session,
-            running,
-            pollIntervalMs: interval,
-            abortSignal: params.abortSignal,
-          });
+        if (running && mayMeanContainerExit(error)) {
+          // The poll's command failed. A container that lives on answers with
+          // its counters: a kill since the turn's first reading ended the
+          // turn's processes and the poll's shell with them.
+          const now = await this.readMemoryEvents(
+            params.session,
+            running.podName,
+          ).catch(() => undefined);
           if (params.abortSignal?.aborted) break;
-          if (explained) return explained;
+          const killed =
+            now === undefined ? null : memoryKillBetween(running.atStart, now);
+          if (killed) {
+            // A container that hit its limit ran out of memory; a node that
+            // did took the process with it, which says nothing about the
+            // run's size.
+            return {
+              outcome: "failed",
+              reason: describeMemoryKill(killed, {
+                container: AGENT_RUNTIME_CONTAINER_NAME,
+                tier: running.tier,
+              }),
+              failure: agentRunFailure(
+                killed.atLimit ? "pod.oom_killed" : "turn.process_exited",
+              ),
+            };
+          }
+          // A container that does not answer at all may have exited: a
+          // memory kill of the whole container (the kubelet's default on
+          // cgroup v2, `memory.oom.group`) takes PID 1 with it. The pod still
+          // reads Running until the kubelet reports the exit, a few seconds
+          // later; the next polls then report the pod's failure, OOMKilled.
+          if (
+            now === undefined &&
+            running.unanswered < CONTAINER_EXIT_REPORT_POLLS
+          ) {
+            running.unanswered++;
+            await delay(
+              Math.min(interval, CONTAINER_EXIT_REPORT_POLL_MS),
+              params.abortSignal,
+            );
+            continue;
+          }
         }
         if (!isTransientObservationError(error)) throw error;
         // A failed read says nothing about the worker's outcome. Keep ownership
@@ -1962,93 +1991,6 @@ done`
   }
 
   /**
-   * The memory kill since the turn's first reading, from a fresh one; null
-   * without a first reading, without a kill, or when the pod cannot say.
-   */
-  private async memoryKillSince(
-    session: AgentRunRecord,
-    running: RunningContainer,
-  ): Promise<MemoryKill | null> {
-    if (!running.atStart) return null;
-    return memoryKillBetween(
-      running.atStart,
-      await this.readMemoryEvents(session, running.podName).catch(() => null),
-    );
-  }
-
-  /**
-   * Why a poll's command failed, when memory says. A container that lives on
-   * answers with its counters: a kill since the turn's first reading ended
-   * the turn's processes and the poll's shell with them. A container the
-   * kernel killed as a whole (the kubelet's default on cgroup v2,
-   * `memory.oom.group`) cannot run a command at all, and the pod still reads
-   * Running until the kubelet reports the exit, a few seconds later; its
-   * status then says OOMKilled. Null when neither explains the failure.
-   */
-  private async explainFailedPoll(params: {
-    session: AgentRunRecord;
-    running: RunningContainer;
-    pollIntervalMs: number;
-    abortSignal?: AbortSignal;
-  }): Promise<AgentRunCompletion | null> {
-    let now: MemoryEvents | null;
-    try {
-      now = await this.readMemoryEvents(params.session, params.running.podName);
-    } catch {
-      const pod = await this.waitForContainerExit(params);
-      const podFailure = describeAgentRuntimePodFailure(
-        pod,
-        params.session.runtimeScope,
-      );
-      if (!pod || !podFailure) return null;
-      return {
-        outcome: "failed",
-        reason: podFailure,
-        failure: agentRunFailure(classifyAgentRuntimePodFailure(pod)),
-      };
-    }
-    const killed = memoryKillBetween(params.running.atStart, now);
-    if (!killed) return null;
-    // The poll's shell died with the run's processes. A container that hit its
-    // limit ran out of memory; a node that did took the process with it, which
-    // says nothing about the run's size.
-    return {
-      outcome: "failed",
-      reason: describeMemoryKill(killed, {
-        container: AGENT_RUNTIME_CONTAINER_NAME,
-        tier: params.running.tier,
-      }),
-      failure: agentRunFailure(
-        killed.atLimit ? "pod.oom_killed" : "turn.process_exited",
-      ),
-    };
-  }
-
-  /**
-   * The pod once Kubernetes reports that its container ended, or null when it
-   * still runs, or is gone or replaced, after a short wait.
-   */
-  private async waitForContainerExit(params: {
-    session: AgentRunRecord;
-    running: RunningContainer;
-    pollIntervalMs: number;
-    abortSignal?: AbortSignal;
-  }): Promise<k8s.V1Pod | null> {
-    const pollMs = Math.min(params.pollIntervalMs, CONTAINER_EXIT_POLL_MS);
-    for (let attempt = 0; attempt < CONTAINER_EXIT_POLLS; attempt++) {
-      if (attempt > 0) await delay(pollMs, params.abortSignal);
-      if (params.abortSignal?.aborted) return null;
-      // A read the API server refused is tried again: the wait is short.
-      const pod = await this.findPod(params.session).catch(() => undefined);
-      if (pod === undefined) continue;
-      if (pod?.metadata?.name !== params.running.podName) return null;
-      if (pod.status?.phase === "Failed" || pod.status?.phase === "Succeeded")
-        return pod;
-    }
-    return null;
-  }
-
-  /**
    * A process of a running turn the kernel killed for memory. With
    * single-process OOM kills the container lives on and the turn goes on: the
    * agent sees its command die, and this says why, for whoever looks into the
@@ -2239,6 +2181,23 @@ interface RunningContainer {
   atStart: MemoryEvents | null;
   /** The counters at the latest poll. */
   latest: MemoryEvents | null;
+  /** Polls in a row whose command failed and that no command could explain. */
+  unanswered: number;
+}
+
+/**
+ * A poll's command failed in a way that a container that is no longer running
+ * also causes: the command failed in the pod, or the exec handshake was
+ * refused with 400 (the API server: a completed pod), 404 or 500 (the
+ * kubelet: no running container). Denied access, throttling and an
+ * unreachable API server are not.
+ */
+function mayMeanContainerExit(error: unknown): boolean {
+  if (error instanceof AgentRuntimeCommandFailedError) return true;
+  return (
+    error instanceof AgentRuntimeExecConnectionError &&
+    [400, 404, 500].includes(error.httpStatus ?? 0)
+  );
 }
 
 /**
@@ -2301,11 +2260,12 @@ const AGENT_RUNTIME_COMPLETION_POLL_MS = 5_000;
 const MEMORY_EVENTS_READ_TIMEOUT_MS = 15_000;
 /**
  * How long a container that stopped answering is given to show up as ended in
- * its pod's status. The kubelet notices an exit within about a second and
- * reports it a few seconds later; a node under memory pressure is slower.
+ * its pod's status: about 20 seconds. The kubelet notices an exit within about
+ * a second and reports it a few seconds later; a node under memory pressure is
+ * slower.
  */
-const CONTAINER_EXIT_POLLS = 20;
-const CONTAINER_EXIT_POLL_MS = 1_000;
+const CONTAINER_EXIT_REPORT_POLLS = 20;
+const CONTAINER_EXIT_REPORT_POLL_MS = 1_000;
 /**
  * Turn failures a memory kill explains: the process died without a word of
  * its own. An image's envelope code (a provider error it reported itself)

@@ -18,7 +18,7 @@ import { afterEach, test as base, beforeEach, expect } from "@/test";
 import { useMswServer } from "@/test/msw";
 import type { AgentRunRecord } from "@/types";
 import manager from "./manager";
-import { TURN_RESULT_SEPARATOR } from "./memory-kill";
+import { MEMORY_EVENTS_SEPARATOR } from "./memory-kill";
 import { AGENT_RUNTIME_TASK_LABEL } from "./naming";
 import { agentSandboxApi } from "./sandbox-api";
 
@@ -1160,19 +1160,24 @@ test.for([
   let turnReads = 0;
   let memoryReads = 0;
   if (finished) {
+    // The workspace finishes after the turn was first seen running.
+    let sandboxReads = 0;
     server.use(
       http.get(sandboxUrl, () =>
         HttpResponse.json({
-          status: {
-            conditions: [
-              {
-                type: "Finished",
-                status: "True",
-                reason: "PodFailed",
-                message: "Pod failed",
-              },
-            ],
-          },
+          status:
+            ++sandboxReads < polls
+              ? {}
+              : {
+                  conditions: [
+                    {
+                      type: "Finished",
+                      status: "True",
+                      reason: "PodFailed",
+                      message: "Pod failed",
+                    },
+                  ],
+                },
         }),
       ),
     );
@@ -1197,11 +1202,13 @@ test.for([
       turnReads++;
       const kills = turnReads < polls || !killed ? 0 : 1;
       if (turnReads < polls || finished) {
-        args[4]?.write(`${counters_(kills)}${TURN_RESULT_SEPARATOR}\n`);
+        args[4]?.write(`\n${MEMORY_EVENTS_SEPARATOR}\n${counters_(kills)}`);
         args[8]?.({ status: "Success" });
       } else if (exit !== null) {
+        // The counters are read after the result: the kill that ended the
+        // turn is in the same output.
         args[4]?.write(
-          `${counters_(kills)}${TURN_RESULT_SEPARATOR}\n${exit}\n`,
+          `${exit}\n\n${MEMORY_EVENTS_SEPARATOR}\n${counters_(kills)}`,
         );
         args[8]?.({ status: "Success" });
       } else {
@@ -1240,7 +1247,8 @@ test.for([
     });
     expect(result.reason).toContain(described);
     expect(result.reason).toContain("Pod failed");
-    expect(memoryReads).toBe(1);
+    // The poll that saw the workspace finish carried the counters.
+    expect(memoryReads).toBe(0);
     return;
   }
   if (killed && exit?.includes("claude_rate_limit")) {
@@ -1287,7 +1295,10 @@ test.for([
   expect(turnReads).toBe(polls);
 });
 
-test("a container the kernel killed as a whole is reported from its pod's status, not as an unknown failure", async ({
+test.for([
+  "the command fails in the pod",
+  "the kubelet refuses the exec",
+])("a container the kernel killed as a whole is reported from its pod's status, not as an unknown failure: %s", async (shape, {
   run,
 }) => {
   // memory.oom.group: the kernel kills every process in the container, PID 1
@@ -1330,17 +1341,20 @@ test("a container the kernel killed as a whole is reported from its pod's status
     const command = (args[3] as string[]).join(" ");
     if (command.includes("read-turn-result") && ++turnReads === 1) {
       args[4]?.write(
-        `oom 0\noom_kill 0\npeak ${2 * GIB}\nlimit ${8 * GIB}\n${TURN_RESULT_SEPARATOR}\n`,
+        `\n${MEMORY_EVENTS_SEPARATOR}\noom 0\noom_kill 0\npeak ${2 * GIB}\nlimit ${8 * GIB}\n`,
       );
       args[8]?.({ status: "Success" });
-    } else {
-      // The container is gone: nothing runs in it any more.
-      podReadsAfterKill ??= 0;
-      args[8]?.({
-        status: "Failure",
-        message: "container is in CONTAINER_EXITED state",
-      });
+      return socket();
     }
+    // The container is gone: nothing runs in it any more.
+    podReadsAfterKill ??= 0;
+    if (shape === "the kubelet refuses the exec") {
+      throw { message: "Unexpected server response: 500" };
+    }
+    args[8]?.({
+      status: "Failure",
+      message: "container is in CONTAINER_EXITED state",
+    });
     return socket();
   });
   const result = await manager.waitForCompletion({
@@ -1374,7 +1388,7 @@ test("a process killed for memory while the turn goes on is reported, and the tu
       // poll, the agent goes on and finishes its turn on the fourth.
       const kills = turnReads >= 2 ? 1 : 0;
       args[4]?.write(
-        `oom ${kills}\noom_kill ${kills}\npeak ${(kills ? 8 : 2) * GIB}\nlimit ${8 * GIB}\n${TURN_RESULT_SEPARATOR}\n${turnReads === 4 ? "0\n" : ""}`,
+        `${turnReads === 4 ? "0\n" : ""}\n${MEMORY_EVENTS_SEPARATOR}\noom ${kills}\noom_kill ${kills}\npeak ${(kills ? 8 : 2) * GIB}\nlimit ${8 * GIB}\n`,
       );
     }
     args[8]?.({ status: "Success" });

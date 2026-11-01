@@ -29,8 +29,11 @@ export interface MemoryKill {
   atLimit: boolean;
 }
 
-/** Prints the cgroup's counters, peak and limit for {@link parseMemoryEvents}. */
-export const MEMORY_EVENTS_SCRIPT =
+/**
+ * Prints the cgroup's counters, peak and limit for {@link parseMemoryEvents}.
+ * Defined before the commands below, which are built from it at load.
+ */
+const MEMORY_EVENTS_SCRIPT =
   // memory.events has its own "max" counter, so the limit gets another name.
   'cat /sys/fs/cgroup/memory.events 2>/dev/null; printf "peak %s\\nlimit %s\\n" "$(cat /sys/fs/cgroup/memory.peak 2>/dev/null)" "$(cat /sys/fs/cgroup/memory.max 2>/dev/null)"';
 
@@ -43,29 +46,36 @@ export const READ_MEMORY_EVENTS_COMMAND = [
 ];
 
 /**
- * Ends the counters in a completion poll's output. The poll reads them with
+ * Starts the counters in a completion poll's output. The poll reads them with
  * the turn's result in one exec, so a memory kill is seen as it happens
- * without a second command per poll.
+ * without a second command per poll. They come after the result: a kill that
+ * ended the turn while the poll ran is counted in the same output.
+ *
+ * @public — tests build a pod's poll output with it
  */
-export const TURN_RESULT_SEPARATOR = "--- archestra turn result ---";
+export const MEMORY_EVENTS_SEPARATOR = "--- archestra memory events ---";
+
+/** Ends a poll's script: prints the separator on a line of its own, then the counters. */
+export const MEMORY_EVENTS_AFTER_RESULT_SCRIPT = `printf '\\n%s\\n' '${MEMORY_EVENTS_SEPARATOR}'; ${MEMORY_EVENTS_SCRIPT}`;
 
 /**
- * A completion poll's output: the counters before {@link TURN_RESULT_SEPARATOR}
- * and the turn's result after it. Output without the separator is the result
- * alone, with no counters.
+ * A completion poll's output: the turn's result before the last
+ * {@link MEMORY_EVENTS_SEPARATOR} and the counters after it. Output without
+ * the separator is the result alone, with no counters.
  */
 export function splitTurnPoll(output: string): {
   memory: MemoryEvents | null;
   result: string;
 } {
   const lines = output.split("\n");
-  const separator = lines.findIndex(
-    (line) => line.trim() === TURN_RESULT_SEPARATOR,
+  const separator = lines.findLastIndex(
+    (line) => line.trim() === MEMORY_EVENTS_SEPARATOR,
   );
   if (separator === -1) return { memory: null, result: output };
+  // The separator's own leading newline ends the result's last line.
   return {
-    memory: parseMemoryEvents(lines.slice(0, separator).join("\n")),
-    result: lines.slice(separator + 1).join("\n"),
+    memory: parseMemoryEvents(lines.slice(separator + 1).join("\n")),
+    result: lines.slice(0, separator).join("\n"),
   };
 }
 

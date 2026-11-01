@@ -1,11 +1,11 @@
 import { describe, expect, test } from "vitest";
 import {
   describeMemoryKill,
+  MEMORY_EVENTS_SEPARATOR,
   memoryKillBetween,
   parseMemoryEvents,
   parseMemoryQuantity,
   splitTurnPoll,
-  TURN_RESULT_SEPARATOR,
 } from "./memory-kill";
 
 const GIB = 1024 ** 3;
@@ -38,10 +38,10 @@ describe("parseMemoryEvents", () => {
 });
 
 describe("splitTurnPoll", () => {
-  test("separates the counters from the turn's result", () => {
+  test("separates the turn's result from the counters read after it", () => {
     expect(
       splitTurnPoll(
-        `low 0\nmax 4\noom 1\noom_kill 1\npeak ${8 * GIB}\nlimit ${8 * GIB}\n${TURN_RESULT_SEPARATOR}\n75\n{"code":"runtime.pane_exited"}\n`,
+        `75\n{"code":"runtime.pane_exited"}\n${MEMORY_EVENTS_SEPARATOR}\nlow 0\nmax 4\noom 1\noom_kill 1\npeak ${8 * GIB}\nlimit ${8 * GIB}\n`,
       ),
     ).toEqual({
       memory: {
@@ -50,16 +50,30 @@ describe("splitTurnPoll", () => {
         peakBytes: 8 * GIB,
         limitBytes: 8 * GIB,
       },
-      result: '75\n{"code":"runtime.pane_exited"}\n',
+      result: '75\n{"code":"runtime.pane_exited"}',
+    });
+  });
+
+  test("gives back the result exactly as the script printed it", () => {
+    // The separator starts on a line of its own: a failure envelope has no
+    // trailing newline, a bare status has one.
+    expect(
+      splitTurnPoll(`7\n\n${MEMORY_EVENTS_SEPARATOR}\noom_kill 0\n`),
+    ).toMatchObject({
+      result: "7\n",
+    });
+    expect(
+      splitTurnPoll(`\n${MEMORY_EVENTS_SEPARATOR}\noom_kill 0\n`),
+    ).toMatchObject({
+      result: "",
     });
   });
 
   test("has no counters but keeps the result when the container has none", () => {
     // No cgroup v2: the cat finds nothing, only peak and limit are printed.
-    expect(splitTurnPoll(`peak \nlimit \n${TURN_RESULT_SEPARATOR}\n`)).toEqual({
-      memory: null,
-      result: "",
-    });
+    expect(
+      splitTurnPoll(`0\n\n${MEMORY_EVENTS_SEPARATOR}\npeak \nlimit \n`),
+    ).toEqual({ memory: null, result: "0\n" });
   });
 
   test("reads output without the separator as the result alone", () => {

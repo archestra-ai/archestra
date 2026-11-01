@@ -81,6 +81,11 @@ interface RunCommandParams extends SandboxLimits {
   secretEnv?: SecretEnvVar[];
   /** Bytes written to the live command's standard input. */
   stdin?: string;
+  /**
+   * Id of the sandbox the command belongs to. Keys its Dagger layer chain so
+   * sandboxes with equal history never share a cached result (#8662).
+   */
+  sandboxKey?: string;
 }
 
 interface RunCommandResult {
@@ -109,6 +114,11 @@ interface ReadArtifactParams extends SandboxLimits {
    * on (else the replay bypasses the environment's egress policy).
    */
   environment?: EnvironmentTarget;
+  /**
+   * Must match the key the sandbox's commands ran with, so the replay reuses
+   * their cached layers instead of re-running them.
+   */
+  sandboxKey?: string;
 }
 
 interface ReadArtifactResult {
@@ -200,6 +210,7 @@ class SandboxRuntimeService {
           environment: params.environment,
           secretEnv: params.secretEnv,
           stdin: params.stdin,
+          sandboxKey: params.sandboxKey,
         }),
       );
     } catch (error) {
@@ -223,6 +234,7 @@ class SandboxRuntimeService {
           path: params.path,
           defaultCwd: params.defaultCwd,
           environment: params.environment,
+          sandboxKey: params.sandboxKey,
         }),
       );
     } catch (error) {

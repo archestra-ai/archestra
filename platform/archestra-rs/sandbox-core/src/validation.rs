@@ -85,6 +85,30 @@ pub(crate) fn validate_stdin(stdin: Option<&str>) -> Result<()> {
     }
 }
 
+/// bound on a sandbox key: it becomes an environment value in every layer of
+/// the sandbox's chain, so keep it short and free of shell/GraphQL-sensitive
+/// characters. sandbox ids are UUIDs, well inside this.
+const MAX_SANDBOX_KEY_BYTES: usize = 128;
+
+pub(crate) fn validate_sandbox_key(key: Option<&str>) -> Result<()> {
+    let Some(key) = key else { return Ok(()) };
+    if key.is_empty() || key.len() > MAX_SANDBOX_KEY_BYTES {
+        return Err(SandboxError::InvalidInput(format!(
+            "sandbox key must be 1-{MAX_SANDBOX_KEY_BYTES} bytes, got {}",
+            key.len()
+        )));
+    }
+    if !key
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        return Err(SandboxError::InvalidInput(
+            "sandbox key may contain only ASCII letters, digits, '-' and '_'".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 /// bound on a variable name: names are inlined into engine queries and echoed
 /// in error messages, so they must stay short.
 const MAX_ENV_NAME_BYTES: usize = 128;
@@ -275,6 +299,22 @@ fn within_sandbox_roots(path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sandbox_key_accepts_uuids_and_none() {
+        assert!(validate_sandbox_key(None).is_ok());
+        assert!(validate_sandbox_key(Some("abcdef00-1111-2222-3333-444455556666")).is_ok());
+        assert!(validate_sandbox_key(Some("sandbox_1")).is_ok());
+    }
+
+    #[test]
+    fn sandbox_key_rejects_empty_long_and_unsafe_values() {
+        assert!(validate_sandbox_key(Some("")).is_err());
+        assert!(validate_sandbox_key(Some(&"a".repeat(MAX_SANDBOX_KEY_BYTES + 1))).is_err());
+        for bad in ["a b", "a;b", "a\"b", "a\nb", "a/b", "ä"] {
+            assert!(validate_sandbox_key(Some(bad)).is_err(), "{bad:?} accepted");
+        }
+    }
 
     #[test]
     fn shell_quote_single_quotes_and_escapes_quotes() {

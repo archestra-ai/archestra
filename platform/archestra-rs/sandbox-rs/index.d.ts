@@ -62,6 +62,13 @@ export interface ReadArtifactInput {
    * under. A request whose entries carry `hostPath` fails without it.
    */
   spoolRoot?: string
+  /**
+   * Identifies the sandbox this request belongs to. The backend keys the
+   * sandbox's layer chain on it, so two sandboxes with the same history never
+   * share a cached command result (#8662). Omit only for one-off runs that
+   * have no sandbox of their own.
+   */
+  sandboxKey?: string
 }
 
 export interface ReplayCommand {
@@ -142,6 +149,13 @@ export interface RunSandboxInput {
    * definition (not a filesystem layer), so it never persists in the sandbox.
    */
   stdin?: string
+  /**
+   * Identifies the sandbox this request belongs to. The backend keys the
+   * sandbox's layer chain on it, so two sandboxes with the same history never
+   * share a cached command result (#8662). Omit only for one-off runs that
+   * have no sandbox of their own.
+   */
+  sandboxKey?: string
 }
 
 /**

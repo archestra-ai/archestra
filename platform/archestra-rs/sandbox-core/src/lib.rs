@@ -12,8 +12,8 @@ mod validation;
 
 use crate::validation::{
     skill_root_path, validate_artifact_path, validate_cwd, validate_file_encoding,
-    validate_host_file_path, validate_secret_env, validate_snapshot_file_path, validate_stdin,
-    validate_upload_path,
+    validate_host_file_path, validate_sandbox_key, validate_secret_env,
+    validate_snapshot_file_path, validate_stdin, validate_upload_path,
 };
 
 pub use backends::dagger::{DEFAULT_APT_PACKAGES, DEFAULT_BASE_IMAGE};
@@ -420,6 +420,13 @@ pub struct RunSandboxInput {
     /// definition (not a filesystem layer), so it never persists in the sandbox.
     #[serde(default)]
     pub stdin: Option<String>,
+    /// Identifies the sandbox this request belongs to. The backend keys the
+    /// sandbox's layer chain on it, so two sandboxes with the same history never
+    /// share a cached command result (#8662). Omit only for one-off runs that
+    /// have no sandbox of their own.
+    #[cfg_attr(feature = "napi", napi(js_name = "sandboxKey"))]
+    #[serde(default)]
+    pub sandbox_key: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -444,6 +451,13 @@ pub struct ReadArtifactInput {
     #[cfg_attr(feature = "napi", napi(js_name = "spoolRoot"))]
     #[serde(default)]
     pub spool_root: Option<String>,
+    /// Identifies the sandbox this request belongs to. The backend keys the
+    /// sandbox's layer chain on it, so two sandboxes with the same history never
+    /// share a cached command result (#8662). Omit only for one-off runs that
+    /// have no sandbox of their own.
+    #[cfg_attr(feature = "napi", napi(js_name = "sandboxKey"))]
+    #[serde(default)]
+    pub sandbox_key: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -500,6 +514,7 @@ pub async fn run_sandbox(input: RunSandboxInput) -> Result<CommandExecution> {
     let secret_env = input.secret_env.unwrap_or_default();
     validate_secret_env(&secret_env)?;
     validate_stdin(input.stdin.as_deref())?;
+    validate_sandbox_key(input.sandbox_key.as_deref())?;
     let target = runtime_target_from(input.environment)?;
     let replay_steps = replay_entries_to_steps(input.replay_entries, input.spool_root.as_deref())?;
     let req = backend::RunRequest {
@@ -510,6 +525,7 @@ pub async fn run_sandbox(input: RunSandboxInput) -> Result<CommandExecution> {
         timeout_seconds: input.timeout_seconds,
         secret_env,
         stdin: input.stdin,
+        sandbox_key: input.sandbox_key,
         traceparent,
     };
     session::submit(target, move |reply| session::SessionMsg::Run {
@@ -526,6 +542,7 @@ pub async fn read_artifact(input: ReadArtifactInput) -> Result<ArtifactBytes> {
     let traceparent = tracing_ctx::current_traceparent(&span).or_else(|| input.traceparent.clone());
     validate_artifact_path(&input.path)?;
     validate_cwd(&input.default_cwd)?;
+    validate_sandbox_key(input.sandbox_key.as_deref())?;
     let target = runtime_target_from(input.environment)?;
     let replay_steps = replay_entries_to_steps(input.replay_entries, input.spool_root.as_deref())?;
     let req = backend::ArtifactRequest {
@@ -533,6 +550,7 @@ pub async fn read_artifact(input: ReadArtifactInput) -> Result<ArtifactBytes> {
         limits: input.limits,
         path: input.path,
         default_cwd: input.default_cwd,
+        sandbox_key: input.sandbox_key,
         traceparent,
     };
     session::submit(target, move |reply| session::SessionMsg::ReadArtifact {
@@ -613,6 +631,7 @@ mod tests {
                 value: "hunter2-plaintext".into(),
             }]),
             stdin: None,
+            sandbox_key: None,
         };
         let debug = format!("{input:?}");
         let json = serde_json::to_string(&input).unwrap();

@@ -23,6 +23,8 @@ pub(crate) struct RunRequest {
     pub timeout_seconds: u32,
     pub secret_env: Vec<SecretEnvVar>,
     pub stdin: Option<String>,
+    /// keys the layer chain to one sandbox; see [`crate::RunSandboxInput::sandbox_key`].
+    pub sandbox_key: Option<String>,
     pub traceparent: Option<String>,
 }
 
@@ -33,6 +35,9 @@ pub(crate) struct ArtifactRequest {
     pub limits: Limits,
     pub path: String,
     pub default_cwd: String,
+    /// must match the key the sandbox's commands ran with, so the replay hits
+    /// the same cached layers.
+    pub sandbox_key: Option<String>,
     pub traceparent: Option<String>,
 }
 

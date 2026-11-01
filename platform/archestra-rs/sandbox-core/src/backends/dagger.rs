@@ -215,6 +215,7 @@ impl SandboxBackend for DaggerBackend {
             timeout_seconds: 0,
             secret_env: Vec::new(),
             stdin: None,
+            sandbox_key: req.sandbox_key,
             traceparent: None,
         };
         let materialized = materialize(&self.client, warm, &run).await?;
@@ -874,6 +875,24 @@ fn check_replay_layer_budget(steps: &[ReplayStep]) -> Result<()> {
     Ok(())
 }
 
+/// environment variable that carries the sandbox key into the layer chain.
+const SANDBOX_KEY_ENV: &str = "ARCHESTRA_SANDBOX_KEY";
+
+/// root every sandbox's chain in a layer that names the sandbox. Dagger's
+/// cache is content-addressed and nothing else in the chain identifies the
+/// sandbox, so without this two sandboxes with equal history (e.g. two fresh
+/// ones) resolve to the same exec and the second is served the first's result,
+/// across users too (#8662). env vars are part of every later exec's cache key,
+/// so one sandbox's replay still hits its own cached layers, while a live
+/// command runs once per sandbox and history position. `None` keeps the
+/// unkeyed chain for callers without a sandbox of their own.
+fn keyed_base(warm: Container, sandbox_key: Option<&str>) -> Container {
+    match sandbox_key {
+        Some(key) => warm.with_env_variable(SANDBOX_KEY_ENV, key),
+        None => warm,
+    }
+}
+
 #[tracing::instrument(
     name = "sandbox.materialize",
     skip_all,
@@ -882,7 +901,7 @@ fn check_replay_layer_budget(steps: &[ReplayStep]) -> Result<()> {
 async fn materialize(client: &DaggerConn, warm: Container, req: &RunRequest) -> Result<Container> {
     check_replay_layer_budget(&req.replay_steps)?;
 
-    let mut container = warm;
+    let mut container = keyed_base(warm, req.sandbox_key.as_deref());
     let mut budget = ChainBudget::new();
 
     // replay re-applies every prior step on each call (commands re-execute,

@@ -35,7 +35,7 @@ export type PrefetchedMcpServer = {
   catalogId: string | null;
   teamId?: string | null;
   scope: ResourceVisibilityScope;
-  serverType?: "app" | "builtin" | "local" | "remote";
+  serverType?: "app" | "builtin" | "local" | "remote" | "device";
 };
 
 type AgentToolAssignmentPrefetchedData = {
@@ -453,6 +453,20 @@ async function validateCatalogRequirements(params: {
     : await InternalMcpCatalogModel.findById(tool.catalogId, {
         expandSecrets: false,
       });
+
+  if (
+    catalogItem?.serverType === "device" &&
+    credentialResolutionMode !== "dynamic"
+  ) {
+    return {
+      code: "validation_error",
+      error: {
+        type: "validation_error",
+        message:
+          "Device tools require personal, call-time credential resolution.",
+      },
+    };
+  }
 
   if (catalogItem?.serverType === "local") {
     if (!mcpServerId && !usesLateBoundResolution) {

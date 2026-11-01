@@ -25,6 +25,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { DeviceMcpSetup } from "@/components/device-mcp-setup";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import type { OverviewFact } from "@/components/overview-summary";
 import { PageBackLink } from "@/components/page-back-link";
@@ -393,7 +394,8 @@ function CatalogItemDetails({
   );
   // Remote servers manage credentials; local servers manage hosted
   // installations. Built-ins need neither.
-  const showConnectionsTab = variant !== "builtin" && !isPlaywright;
+  const showConnectionsTab =
+    variant !== "builtin" && !isPlaywright && item.serverType !== "device";
   const connectionsLayout = useConnectionsLayout({
     item,
     servers: allServersForCatalog,
@@ -604,7 +606,7 @@ function CatalogItemDetails({
       icon={<McpCatalogIcon icon={item.icon} catalogId={item.id} size={24} />}
       title={<span className="block min-w-0 truncate">{item.name}</span>}
       status={
-        statusIssue ? undefined : (
+        statusIssue || item.serverType === "device" ? undefined : (
           <ServerStatus
             variant={variant}
             deploymentSummary={deploymentSummary}
@@ -728,7 +730,11 @@ function CatalogItemDetails({
               servers={allServersForCatalog}
             />
 
-            <McpServerConnectionPanel spec={spec} />
+            {item.serverType === "device" ? (
+              <DeviceMcpSetup catalogId={item.id} />
+            ) : (
+              <McpServerConnectionPanel spec={spec} />
+            )}
 
             <SettingsSectionGroup>
               {showConnectionsTab && (

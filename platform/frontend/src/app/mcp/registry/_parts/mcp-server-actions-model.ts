@@ -21,16 +21,18 @@ export interface McpServerActionDefinition {
  */
 export function getMcpServerActionModel(item: {
   id: string;
-  serverType: "app" | "builtin" | "local" | "remote";
+  serverType: "app" | "builtin" | "local" | "remote" | "device";
 }): McpServerActionDefinition[] {
   const pathname = `/mcp/registry/${item.id}`;
   return [
     {
       id: "connections",
       label:
-        item.serverType === "local" || item.serverType === "app"
-          ? "Installations"
-          : "Credentials",
+        item.serverType === "device"
+          ? "Your device"
+          : item.serverType === "local" || item.serverType === "app"
+            ? "Installations"
+            : "Credentials",
       href:
         item.serverType === "builtin"
           ? undefined
@@ -75,7 +77,10 @@ export function mcpServerLogsHref({
   item,
   serverId,
 }: {
-  item: { id: string; serverType: "app" | "builtin" | "local" | "remote" };
+  item: {
+    id: string;
+    serverType: "app" | "builtin" | "local" | "remote" | "device";
+  };
   serverId?: string;
 }): string | null {
   if (item.serverType !== "local") return null;

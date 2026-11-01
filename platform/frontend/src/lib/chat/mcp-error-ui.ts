@@ -28,6 +28,7 @@ export type ToolAuthState =
     }
   | {
       kind: "auth-required";
+      message?: string;
       catalogName: string;
       actionUrl: string;
       action: AuthRequiredAction;
@@ -157,6 +158,9 @@ export function resolveToolAuthState(params: {
     const action = inferAuthRequiredAction(actionUrl, structuredError.action);
     return {
       kind: "auth-required",
+      ...(action === "connect_device"
+        ? { message: structuredError.message }
+        : {}),
       catalogName: structuredError.catalogName,
       actionUrl,
       action,

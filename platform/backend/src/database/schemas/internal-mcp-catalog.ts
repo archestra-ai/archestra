@@ -1,3 +1,4 @@
+import type { DeviceMcpConfig } from "@archestra/shared/device-mcp";
 import {
   type AnyPgColumn,
   boolean,
@@ -97,6 +98,7 @@ const internalMcpCatalogTable = softDeletablePgTable(
     ), // For local config secret env vars storage
     // Local server configuration - uses LocalConfig type from @/types
     localConfig: jsonb("local_config").$type<LocalConfig>(),
+    deviceConfig: jsonb("device_config").$type<DeviceMcpConfig>(),
     // Custom Kubernetes deployment spec YAML (if null, generated from localConfig)
     deploymentSpecYaml: text("deployment_spec_yaml"),
     userConfig: jsonb("user_config").$type<UserConfig>().default({}),

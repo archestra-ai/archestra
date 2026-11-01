@@ -159,7 +159,7 @@ Archestra supplies the applicable variables below when launching a run. You do n
 | `AWS_BEARER_TOKEN_BEDROCK` | The run’s virtual key for the Bedrock proxy. AWS credentials remain server-side. |
 | `OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL` | Native client aliases for the Agent-scoped proxy. |
 | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` | Native client aliases for the virtual key on the standard provider path. These are omitted when the official Claude Code image uses its run-scoped subscription token. |
-| `ARCHESTRA_MCP_GATEWAY_URL`, `ARCHESTRA_MCP_GATEWAY_TOKEN` | Agent-scoped MCP endpoint and the initiating user's bearer token. |
+| `ARCHESTRA_MCP_GATEWAY_URL`, `ARCHESTRA_MCP_GATEWAY_TOKEN` | Agent-scoped MCP endpoint and the initiating actor's gateway credential. In organizations with device MCP servers enabled, human runtimes receive an expiring credential bound to their exact Agent and active task; it also authorizes attention reports only for that task. |
 | `ARCHESTRA_AGENT_RUNTIME_STEER_FIFO` | Turn-boundary steering channel. |
 | `ARCHESTRA_AGENT_RUNTIME_IDLE_TIMEOUT_SECONDS` | How long a completed turn may wait for follow-up work before the run exits. |
 | `ARCHESTRA_AGENT_RUNTIME_OPENAPPA` | `1` when Guardrails v2 (OpenAPPA) governed the deployment at launch. A client must then declare every tool inline: OpenAPPA refuses a session that hides tools behind a provider-side tool search or a code-mode program. The Codex image turns off tool search, code mode, and hosted web search. |

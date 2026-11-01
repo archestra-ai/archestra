@@ -695,3 +695,30 @@ describe("auth parsers on unrelated text", () => {
     expect(parseAuthRequired(envelope)?.catalogName).toBe("GitHub");
   });
 });
+
+it("preserves the device setup action and uncertain-outcome guidance", () => {
+  const message =
+    "Device disconnected. Its outcome is unknown; inspect the local application before retrying.";
+  expect(
+    resolveToolAuthState({
+      rawOutput: {
+        archestraError: {
+          type: "auth_required",
+          message,
+          catalogId: "device-1",
+          catalogName: "Device tools",
+          action: "connect_device",
+          actionUrl: "http://localhost:3000/mcp/registry/device-1",
+        },
+      },
+    }),
+  ).toEqual({
+    kind: "auth-required",
+    catalogId: "device-1",
+    catalogName: "Device tools",
+    message,
+    action: "connect_device",
+    actionUrl: "http://localhost:3000/mcp/registry/device-1",
+    providerId: null,
+  });
+});

@@ -17,6 +17,7 @@ export * from "./citation-quotes";
 export * from "./client-mark";
 export * from "./consts";
 export * from "./created-by";
+export * from "./device-mcp";
 export * from "./docs";
 export * from "./e2e-test-ids";
 export * from "./encrypted-chat-content";

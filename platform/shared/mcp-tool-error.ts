@@ -20,6 +20,7 @@ export const GenericMcpToolErrorSchema = z
 export const AuthRequiredActionSchema = z.enum([
   "install_mcp_credentials",
   "connect_identity_provider",
+  "connect_device",
 ]);
 
 export const AuthRequiredMcpToolErrorSchema = z

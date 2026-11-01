@@ -1,4 +1,13 @@
 export const RouteId = {
+  ListDeviceMcpConnections: "listDeviceMcpConnections",
+  PairDeviceMcp: "pairDeviceMcp",
+  RevokeDeviceMcp: "revokeDeviceMcp",
+  InspectDeviceMcpPairing: "inspectDeviceMcpPairing",
+  RedeemDeviceMcpPairing: "redeemDeviceMcpPairing",
+  OpenDeviceMcpSession: "openDeviceMcpSession",
+  PollDeviceMcp: "pollDeviceMcp",
+  SubmitDeviceMcpResult: "submitDeviceMcpResult",
+
   ListAgentRuntimeTemplates: "listAgentRuntimeTemplates",
   GetAgentRuntimeTemplate: "getAgentRuntimeTemplate",
   GetRuntimeTemplateSettings: "getRuntimeTemplateSettings",

@@ -7,6 +7,7 @@ import ApiKeyModel from "@/models/api-key";
 import AppModel from "@/models/app";
 import BrowserStorageStateModel from "@/models/browser-storage-state";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
+import DeviceMcpModel from "@/models/device-mcp";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
@@ -89,6 +90,12 @@ type AuditDecision =
  * @public — consumed by audit-log-snapshot.test.ts invariant tests
  */
 export const AUDIT_DECISIONS = {
+  deviceMcpConnectionsTable: { audited: true, model: DeviceMcpModel },
+  deviceMcpCommandsTable: {
+    audited: false,
+    reason:
+      "Ephemeral device relay execution state; tool calls retain the existing MCP audit path",
+  },
   jiraChatOpsIdentitiesTable: {
     audited: false,
     reason:

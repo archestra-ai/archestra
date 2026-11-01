@@ -17,6 +17,7 @@ import {
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { DeviceMcpSetup } from "@/components/device-mcp-setup";
 import {
   OAuthConfirmationDialog,
   type OAuthInstallResult,
@@ -138,6 +139,14 @@ export function useTestConnectionTarget(item: CatalogItem) {
  * item prompts for them) and reports the connection status live.
  */
 export function TestConnectionStep({ item }: { item: CatalogItem }) {
+  return item.serverType === "device" ? (
+    <DeviceMcpSetup catalogId={item.id} />
+  ) : (
+    <HostedTestConnectionStep item={item} />
+  );
+}
+
+function HostedTestConnectionStep({ item }: { item: CatalogItem }) {
   const { statuses: deploymentStatuses } = useMcpDeploymentStatuses();
   useMcpInstallationStatusCacheSync();
   const installMutation = useInstallMcpServer();
@@ -337,7 +346,9 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
             status={isInstalling && !status ? "pending" : (status ?? null)}
             serverId={target?.id}
             deploymentStatuses={deploymentStatuses}
-            serverType={item.serverType}
+            serverType={
+              item.serverType === "device" ? undefined : item.serverType
+            }
           />
         </div>
       )}

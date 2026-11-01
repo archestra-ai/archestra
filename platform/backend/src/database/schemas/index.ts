@@ -124,6 +124,10 @@ export {
   conversationShareUsersTable,
   default as conversationSharesTable,
 } from "./conversation-share";
+export {
+  deviceMcpCommandsTable,
+  deviceMcpConnectionsTable,
+} from "./device-mcp";
 export { default as encryptionKeyCanariesTable } from "./encryption-key-canary";
 export { default as environmentsTable } from "./environment";
 export { default as environmentDefaultUserLimitsTable } from "./environment-default-user-limits";

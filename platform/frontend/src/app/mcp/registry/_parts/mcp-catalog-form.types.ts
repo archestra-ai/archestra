@@ -1,4 +1,5 @@
 import {
+  DeviceMcpConfigSchema,
   HEADER_NAME_REGEX,
   HEADER_NAME_VALIDATION_MESSAGE,
   HttpUrlSchema,
@@ -201,7 +202,8 @@ const activeAuthFormSchema = z
     name: z.string().trim().min(1, "Name is required"),
     description: z.string().optional().or(z.literal("")),
     icon: z.string().nullable().optional(),
-    serverType: z.enum(["remote", "local"]),
+    serverType: z.enum(["remote", "local", "device"]),
+    deviceConfigJson: z.string().optional(),
     multitenant: z.boolean().optional(),
     serverUrl: HttpUrlSchema.optional().or(z.literal("")),
     // Carried from an existing entry so a save keeps it; choosing "None"
@@ -268,6 +270,28 @@ const activeAuthFormSchema = z
         continue;
       }
       normalizedHeaders.add(normalizedHeaderName);
+    }
+  })
+  .superRefine((data, ctx) => {
+    if (data.serverType !== "device") return;
+    try {
+      const config = JSON.parse(data.deviceConfigJson ?? "");
+      const result = DeviceMcpConfigSchema.safeParse(config);
+      if (!result.success)
+        ctx.addIssue({
+          code: "custom",
+          path: ["deviceConfigJson"],
+          message: result.error.issues
+            .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+            .join("; "),
+        });
+    } catch {
+      ctx.addIssue({
+        code: "custom",
+        path: ["deviceConfigJson"],
+        message:
+          "Enter valid JSON with a version, Mac and Windows launch commands, and reviewed tools.",
+      });
     }
   })
   .refine(

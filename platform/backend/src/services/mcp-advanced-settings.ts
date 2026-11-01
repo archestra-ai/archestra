@@ -55,6 +55,7 @@ const MCP_RUNTIME_FIELDS = [
   "serverType",
   "serverUrl",
   "localConfig",
+  "deviceConfig",
   "deploymentSpecYaml",
   "installationCommand",
   "userConfig",

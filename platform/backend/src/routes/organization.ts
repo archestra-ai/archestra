@@ -273,7 +273,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
         description:
-          "Update MCP settings (online catalog availability, idle hibernation)",
+          "Update MCP settings (online catalog availability, device connections, idle hibernation)",
         // SPDX-SnippetEnd
         tags: ["Organization"],
         body: UpdateMcpSettingsSchema,

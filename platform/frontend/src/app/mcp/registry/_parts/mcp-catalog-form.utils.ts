@@ -5,6 +5,7 @@ import type {
   ImagePullPolicy,
   ImagePullSecretConfig,
 } from "@archestra/shared";
+import { DeviceMcpConfigSchema } from "@archestra/shared";
 import { parseDockerArgsToLocalConfig } from "./docker-args-parser";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 
@@ -69,6 +70,23 @@ export function transformFormToApiData(
       requiresAuth: values.requiresAuth,
     }),
   };
+
+  if (values.serverType === "device") {
+    return {
+      ...data,
+      requiresAuth: false,
+      labels: values.labels ?? [],
+      environmentId: values.environmentId ?? null,
+      localConfig: null,
+      serverUrl: null,
+      userConfig: {},
+      oauthConfig: null,
+      enterpriseManagedConfig: null,
+      deviceConfig: DeviceMcpConfigSchema.parse(
+        JSON.parse(values.deviceConfigJson ?? ""),
+      ),
+    };
+  }
 
   // Keep imported declarations in sync with the editable header rows. Otherwise
   // a renamed or deleted header would be imported again on the next load.
@@ -515,7 +533,10 @@ export function transformCatalogItemToFormValues(
     name: item.name,
     description: item.description || "",
     icon: item.icon ?? null,
-    serverType: item.serverType as "remote" | "local",
+    serverType: item.serverType as "remote" | "local" | "device",
+    deviceConfigJson: item.deviceConfig
+      ? JSON.stringify(item.deviceConfig, null, 2)
+      : "",
     multitenant: item.serverType === "local" && Boolean(item.multitenant),
     serverUrl: item.serverUrl || "",
     requiresAuth: item.requiresAuth,

@@ -85,6 +85,7 @@ import {
   UserModel,
 } from "@/models";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
+import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
 import type { A2AOAuthExecution } from "@/routes/mcp-gateway/utils";
 import { discoverOAuthEndpoints, refreshOAuthToken } from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
@@ -102,6 +103,7 @@ import {
   getCallerAccessibleCatalogIds,
   isToolCatalogAccessible,
 } from "@/services/caller-catalog-access";
+import { deviceMcpService } from "@/services/device-mcp";
 import { evaluateRemoteServerUrlAgainstNetworkPolicy } from "@/services/environments/remote-server-network-policy";
 import {
   type ResolvedEnterpriseTransportCredential,
@@ -139,7 +141,7 @@ import type {
   ResourceVisibilityScope,
   ToolOwner,
 } from "@/types";
-import { agentOwner } from "@/types";
+import { ApiError, agentOwner } from "@/types";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
@@ -322,6 +324,8 @@ function isTransientResourceReadError(error: unknown): boolean {
  * Token authentication context for dynamic credential resolution
  */
 export type TokenAuthContext = {
+  /** Trusted in-process runner context; never accepted from an API payload. */
+  isBackgroundExecution?: boolean;
   oauthExecution?: A2AOAuthExecution;
   tokenId: string;
   teamId: string | null;
@@ -721,6 +725,105 @@ class McpClient {
         encryptedChatContent,
         startedAt,
       });
+    }
+
+    // A device connection is always personal. Resolve the human execution
+    // identity before ordinary credential policy can select a static/team
+    // installation or the catalog's shared default connection.
+    if (catalogItem.serverType === "device") {
+      try {
+        if (
+          !tokenAuth?.userId ||
+          !tokenAuth.organizationId ||
+          tokenAuth.serviceAccountId ||
+          tokenAuth.teamId ||
+          tokenAuth.isOrganizationToken
+        ) {
+          throw new Error(
+            "Device tools require a personal user identity. Connect your own device from this server’s registry entry.",
+          );
+        }
+        if (
+          tokenAuth.isBackgroundExecution ||
+          (tokenAuth.runId &&
+            (await ScheduleTriggerRunModel.isRuntimeTaskScheduled(
+              tokenAuth.runId,
+              tokenAuth.organizationId,
+            )))
+        ) {
+          throw new Error(
+            "Device tools are unavailable to scheduled tasks. Start an interactive personal session to use your computer.",
+          );
+        }
+        if (tool.credentialResolutionMode !== "dynamic") {
+          throw new Error(
+            "Device tools require personal, call-time credential resolution.",
+          );
+        }
+        if (catalogItem.organizationId !== tokenAuth.organizationId) {
+          throw new Error("Device server is unavailable in this organization.");
+        }
+        const { organizationId, userId } = tokenAuth;
+        if (authInfo)
+          authInfo = {
+            ...authInfo,
+            executedAs: {
+              kind: "personal",
+              ownerUserId: userId,
+              ownerName:
+                (await UserModel.getNamesByIds([userId])).get(userId) ?? null,
+            },
+          };
+        const result = await llmProxyTiming.hijackedUpstream(() =>
+          deviceMcpService.callTool({
+            organizationId,
+            userId,
+            catalogId: catalogItem.id,
+            toolName:
+              tool.rawName ??
+              this.stripServerPrefix(toolCall.name, catalogItem.name),
+            arguments: toolCall.arguments,
+            abortSignal: options?.abortSignal,
+          }),
+        );
+        return await this.createSuccessResult({
+          toolCall,
+          owner,
+          mcpServerName: catalogItem.name,
+          content: result.content as ContentBlock[],
+          isError: !!result.isError,
+          _meta: result._meta,
+          structuredContent: result.structuredContent,
+          authInfo,
+          encryptedChatContent,
+          startedAt,
+        });
+      } catch (error) {
+        return this.createErrorResult({
+          toolCall,
+          owner,
+          mcpServerName: catalogItem.name,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Device server is unavailable. Reconnect your device from the registry entry.",
+          ...(error instanceof ApiError && error.statusCode === 409
+            ? {
+                structuredError: {
+                  type: "auth_required" as const,
+                  message: error.message,
+                  catalogId: catalogItem.id,
+                  catalogName: catalogItem.name,
+                  action: "connect_device" as const,
+                  actionUrl: `${config.frontendBaseUrl}/mcp/registry/${catalogItem.id}`,
+                },
+              }
+            : {}),
+          authInfo,
+          encryptedChatContent,
+          startedAt,
+        });
+      }
     }
 
     // SEP-2243 x-mcp-header: mirror annotated argument values into

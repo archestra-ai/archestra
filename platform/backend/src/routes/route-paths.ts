@@ -161,3 +161,12 @@ export const OPENAPPA_ARCHESTRA_ANNOTATOR_PATH =
 
 /** Authenticated read-only instruction refresh for installed connection wrappers. */
 export const CONNECTION_INSTRUCTIONS_PATH = "/v1/connection-instructions";
+
+/** Exact proof-authenticated POST endpoints; all others require normal API auth. */
+export const DEVICE_MCP_PROOF_PATHS = new Set([
+  "/api/device-mcp/inspect",
+  "/api/device-mcp/redeem",
+  "/api/device-mcp/session",
+  "/api/device-mcp/poll",
+  "/api/device-mcp/result",
+]);

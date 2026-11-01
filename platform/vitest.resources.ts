@@ -111,14 +111,51 @@ export function frontendVitestResourceLimits(envelope: ResourceEnvelope): {
  * the default. More checkers than CPUs only adds memory.
  */
 export function typeScriptCheckers(envelope: ResourceEnvelope): number | null {
-  const memoryGiB = envelope.totalMemoryBytes / BYTES_PER_GIB;
+  const memory = envelope.totalMemoryBytes;
   const byMemory =
-    memoryGiB < 12 ? 1 : memoryGiB < 16 ? 2 : TYPESCRIPT_DEFAULT_CHECKERS;
+    memory < TYPESCRIPT_ONE_CHECKER_BELOW_BYTES
+      ? 1
+      : memory < TYPESCRIPT_FULL_MEMORY_BYTES
+        ? 2
+        : TYPESCRIPT_DEFAULT_CHECKERS;
   const checkers = Math.max(
     1,
     Math.min(byMemory, envelope.availableParallelism),
   );
   return checkers >= TYPESCRIPT_DEFAULT_CHECKERS ? null : checkers;
+}
+
+/**
+ * How the TypeScript 7 compiler in `pnpm type-check` keeps its heap inside
+ * the envelope; null from 16 GiB up, where it keeps Go's defaults and its
+ * incremental build state.
+ *
+ * `goMemoryLimitBytes` is Go's soft memory limit (`GOMEMLIMIT`). Go collects
+ * garbage when its heap doubles, so a compiler holding 5 GB of types can take
+ * its whole pod before it collects. With the limit at five eighths of the
+ * envelope it collects as it nears it and leaves the rest of the pod free.
+ * The backend at one checker on 2 CPUs measured 5.8 to 6.2 GiB without the
+ * limit and 5.3 GiB with 5 GiB, in about the same time. Below the program's
+ * live data (about 5 GB for the backend) the limit still lowers the peak but
+ * costs time: 4 GiB took the run from 35 s to 2.5 min and peaked at 5 GiB.
+ *
+ * `incremental` is false where one checker runs (under 12 GiB). Writing the
+ * build state holds about 0.3 GB more at the backend's peak (5.6 against
+ * 5.3 GiB with the limit). The state only speeds up a later run whose edits
+ * stay in test files (8 s against 50 s); an edit to a source file that many
+ * files import re-checks nearly the whole program either way.
+ */
+export function typeScriptMemorySettings(
+  envelope: ResourceEnvelope,
+): { goMemoryLimitBytes: number; incremental: boolean } | null {
+  const memory = envelope.totalMemoryBytes;
+  if (memory >= TYPESCRIPT_FULL_MEMORY_BYTES) return null;
+  return {
+    goMemoryLimitBytes: Math.floor(
+      memory * TYPESCRIPT_GO_MEMORY_LIMIT_FRACTION,
+    ),
+    incremental: memory >= TYPESCRIPT_ONE_CHECKER_BELOW_BYTES,
+  };
 }
 
 /**
@@ -332,6 +369,11 @@ const MEMORY_KILL_REPORT = Symbol.for("archestra.memoryKillReport");
 const BYTES_PER_MIB = 1024 ** 2;
 const BYTES_PER_GIB = 1024 ** 3;
 const TYPESCRIPT_DEFAULT_CHECKERS = 4;
+/** From here up the compiler runs four checkers with Go's defaults. */
+const TYPESCRIPT_FULL_MEMORY_BYTES = 16 * BYTES_PER_GIB;
+/** Below this the compiler runs one checker without incremental build state. */
+const TYPESCRIPT_ONE_CHECKER_BELOW_BYTES = 12 * BYTES_PER_GIB;
+const TYPESCRIPT_GO_MEMORY_LIMIT_FRACTION = 5 / 8;
 const MEMORY_UNITS: Record<string, number> = {
   "": 1,
   k: 1000,

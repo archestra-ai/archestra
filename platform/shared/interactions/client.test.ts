@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { COPILOT_CLI_MARK } from "../client-mark";
 import { OPENCODE_FAMILY } from "../opencode-family";
 import {
   ARCHESTRA_CODEX_CONNECTION_ORIGINATOR,
@@ -11,6 +12,7 @@ import {
   isClaudeDesktopClientAgentId,
   isCodexOriginator,
   isCodexUserAgent,
+  isCopilotCliClientAgentId,
   isKiloClientAgentId,
   isKiloUserAgent,
   isKimiCodeUserAgent,
@@ -183,5 +185,26 @@ describe("Claude Desktop client attribution", () => {
     expect(isClaudeDesktopClientAgentId(CLAUDE_CODE_CLIENT_ID)).toBe(false);
     expect(isClaudeDesktopClientAgentId("anthropic_claude")).toBe(false);
     expect(isClaudeDesktopClientAgentId(undefined)).toBe(false);
+  });
+});
+
+describe("isCopilotCliClientAgentId", () => {
+  test("recognizes the Copilot CLI id the setup sends, case-insensitively", () => {
+    expect(isCopilotCliClientAgentId("github_copilot_cli")).toBe(true);
+    expect(isCopilotCliClientAgentId(" GitHub_Copilot_CLI ")).toBe(true);
+    expect(isCopilotCliClientAgentId("openai_codex")).toBe(false);
+    expect(isCopilotCliClientAgentId("cursor")).toBe(false);
+  });
+
+  test("draws the Copilot CLI with its own mark, the one on its Connect tile", () => {
+    expect(clientForExternalAgentIds(["github_copilot_cli"])).toMatchObject({
+      filter: "copilot-cli",
+      mark: COPILOT_CLI_MARK,
+    });
+    expect(CLIENT_FILTER_OPTIONS).toContainEqual(
+      expect.objectContaining({ value: "copilot-cli", mark: COPILOT_CLI_MARK }),
+    );
+    expect(isCopilotCliClientAgentId(undefined)).toBe(false);
+    expect(isCopilotCliClientAgentId(null)).toBe(false);
   });
 });

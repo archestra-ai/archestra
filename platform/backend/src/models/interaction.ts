@@ -3933,6 +3933,9 @@ function isHarnessInjectedUserBlock(text: string): boolean {
   if (!trimmed) return true;
   return (
     trimmed.startsWith("<system-reminder>") ||
+    // Copilot CLI's own notes to the model: deferred tools, background agents.
+    trimmed.startsWith("<system_reminder>") ||
+    trimmed.startsWith("<system_notification>") ||
     trimmed.startsWith("<local-command-stdout>") ||
     trimmed.startsWith("<local-command-stderr>") ||
     trimmed.startsWith("<local-command-caveat>") ||
@@ -3980,6 +3983,64 @@ function extractGenuineAnthropicUserMessage(request: unknown): string | null {
   return null;
 }
 
+/** The datetime line Copilot CLI opens every user message with. */
+const LEADING_DATETIME = /^\s*<current_datetime>[^<]*<\/current_datetime>\s*/;
+
+/**
+ * The last text a person wrote in a Responses request's `input`, past the
+ * notes a client sends as user messages (Copilot CLI's deferred-tools
+ * reminder and background-agent notices), Copilot's leading datetime line and
+ * the labels of attached images and files.
+ */
+function extractGenuineResponsesUserMessage(request: unknown): string | null {
+  const input = (request as { input?: unknown } | null)?.input;
+  if (!Array.isArray(input)) return null;
+  for (let i = input.length - 1; i >= 0; i--) {
+    const item = input[i] as {
+      type?: string;
+      role?: string;
+      content?: unknown;
+    } | null;
+    if (
+      item?.role !== "user" ||
+      (item.type !== undefined && item.type !== "message")
+    )
+      continue;
+    const texts = writtenTexts(item.content);
+    for (let j = texts.length - 1; j >= 0; j--) {
+      const text = texts[j].replace(LEADING_DATETIME, "");
+      if (!isHarnessInjectedUserBlock(text)) return text.trim();
+    }
+  }
+  return null;
+}
+
+/**
+ * The text parts of one user message, past the labels of its attachments.
+ * Copilot CLI sends each attached image or file as a text part naming it
+ * (`Image file at path …`, `Document at path "…"`) right before the image or
+ * file part, after the person's prompt. A text part followed by a part that
+ * is not text is such a label, unless the message has no other text.
+ */
+function writtenTexts(content: unknown): string[] {
+  if (typeof content === "string") return [content];
+  if (!Array.isArray(content)) return [];
+  const textOf = (part: unknown) => {
+    const text = (part as { text?: unknown } | null)?.text;
+    return typeof text === "string" ? text : undefined;
+  };
+  const texts: string[] = [];
+  const unlabeled: string[] = [];
+  content.forEach((part, index) => {
+    const text = textOf(part);
+    if (text === undefined) return;
+    texts.push(text);
+    const next = content[index + 1];
+    if (next === undefined || textOf(next) !== undefined) unlabeled.push(text);
+  });
+  return unlabeled.length > 0 ? unlabeled : texts;
+}
+
 /**
  * The session title's text: the last user message. A media row may keep
  * what the user said on its response (the text a speech call spoke), so the
@@ -3993,6 +4054,12 @@ function buildLastUserMessagePreview(
   try {
     if (type === "anthropic:messages") {
       const genuine = extractGenuineAnthropicUserMessage(request);
+      if (genuine) {
+        return truncatePreview(genuine);
+      }
+    }
+    if (type.endsWith(":responses")) {
+      const genuine = extractGenuineResponsesUserMessage(request);
       if (genuine) {
         return truncatePreview(genuine);
       }

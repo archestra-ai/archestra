@@ -717,6 +717,7 @@ const GROUPING_LABELS: Record<string, string> = {
   appa_header: "X-Appa-Session-ID header",
   openwebui_chat: "Open WebUI chat",
   codex_session: "Codex session",
+  copilot_session: "Copilot CLI session",
   opencode_session: "OpenCode session",
   kilo_session: "Kilo session",
   kimi_code_session: "Kimi Code session",

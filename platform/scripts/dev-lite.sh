@@ -27,8 +27,9 @@
 #                              the CPUs available and skips the specs tagged for
 #                              Kubernetes or Keycloak (E2E_UNAVAILABLE)
 #   scripts/dev-lite.sh restart [options]      down, then up again
-#   scripts/dev-lite.sh reload backend|frontend  restart one component; the backend
-#                              is rebuilt first when the watcher is off
+#   scripts/dev-lite.sh reload backend|frontend  restart one component, rebuilt
+#                              first when it runs a build (the backend without
+#                              its watcher, the frontend as a production build)
 #   scripts/dev-lite.sh down                   stop everything; data and caches stay
 #   scripts/dev-lite.sh reset                  down, then delete the database and state
 #
@@ -55,6 +56,15 @@
 #       keeps the build resident (about 1.2 GB); false: build once (3 s) and run
 #       the server alone, `reload backend` rebuilds. Default false inside an
 #       Agent Runtime, true elsewhere, as for the Tilt stack.
+#   ARCHESTRA_DEV_LITE_SOURCE_MAPS
+#       true: the backend server (without the watcher) runs with
+#       --enable-source-maps, about 300 MB more at idle. Default false inside
+#       an Agent Runtime, true elsewhere.
+#   ARCHESTRA_DEV_LITE_FRONTEND
+#       dev: the Next dev server (about 3.5 GB once six pages are open); build:
+#       a production build served by its standalone server (about 0.24 GB;
+#       `reload frontend` rebuilds it after changes). Default build inside an
+#       Agent Runtime, dev elsewhere. --e2e always builds.
 #   ARCHESTRA_DEV_LITE_KUBECONFIG
 #       kubeconfig for the MCP orchestrator (default: none, orchestrator disabled)
 #   ARCHESTRA_DEV_LITE_PUBLIC_FRONTEND_URL, ARCHESTRA_DEV_LITE_PUBLIC_API_URL
@@ -410,9 +420,9 @@ start_backend() {
   # off, tsdown builds once and the server runs alone until `reload backend`.
   local run="exec ./node_modules/.bin/tsdown --watch" watch="${ARCHESTRA_DEV_BACKEND_WATCH:-}"
   if [ -z "$watch" ]; then
-    # Inside an Agent Runtime (the pod sets ARCHESTRA_AGENT_RUNTIME_TASK_ID)
-    # the agent reloads on demand; elsewhere keep the watcher.
-    if [ -n "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:-}" ]; then watch=false; else watch=true; fi
+    # Inside an Agent Runtime the agent reloads on demand; elsewhere keep the
+    # watcher.
+    if in_agent_runtime; then watch=false; else watch=true; fi
   fi
   if [ "$watch" = false ]; then
     log "backend watcher off: run 'archestra-dev-lite reload backend' after backend changes"
@@ -420,8 +430,10 @@ start_backend() {
     # server, so a crash or an OOM kill would otherwise end it. Five exits
     # within 60 s of starting end the loop so a server that cannot start does
     # not spin.
+    local flags
+    flags="$(backend_node_flags)"
     # shellcheck disable=SC2016 # expanded by the session's own shell
-    run='./node_modules/.bin/tsdown || exit 1; quick_exits=0; while :; do started=$(date +%s); node --enable-source-maps dist/server.mjs; status=$?; if [ $(( $(date +%s) - started )) -ge 60 ]; then quick_exits=0; else quick_exits=$((quick_exits + 1)); fi; if [ "$quick_exits" -ge 5 ]; then echo "backend exited ($status) five times right after starting; giving up" >&2; exit "$status"; fi; echo "backend exited ($status); restarting in 1 s" >&2; sleep 1; done'
+    run='./node_modules/.bin/tsdown || exit 1; quick_exits=0; while :; do started=$(date +%s); node'"$flags"' dist/server.mjs; status=$?; if [ $(( $(date +%s) - started )) -ge 60 ]; then quick_exits=0; else quick_exits=$((quick_exits + 1)); fi; if [ "$quick_exits" -ge 5 ]; then echo "backend exited ($status) five times right after starting; giving up" >&2; exit "$status"; fi; echo "backend exited ($status); restarting in 1 s" >&2; sleep 1; done'
   fi
   start_session backend "$PLATFORM_DIR/backend" \
     "export ARCHESTRA_LOGGING_LEVEL=${ARCHESTRA_DEV_LITE_BACKEND_LOG_LEVEL:-info} ARCHESTRA_ANALYTICS=disabled ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE=0; $run"
@@ -443,24 +455,27 @@ frontend_env() {
   done
 }
 
-# The frontend runs the Next dev server, or for the e2e suite (e2e=1) a
-# production build served by its standalone server, as CI and the released
-# image serve it. Once the specs have opened their pages the dev server holds
-# about 5 GB, which leaves too little of a 2-CPU, 8 GiB Pod for Chromium and
-# the backend; the standalone server holds a few hundred MB and compiles
-# nothing while the specs run.
+# The frontend runs in one of three modes. `dev` is the Next dev server: it
+# compiles each page on its first visit and then holds about 3.5 GB after six
+# pages. `build` is a production build served by its standalone server, as CI
+# and the released image serve it: about 240 MB after the same pages, at the
+# cost of a build (about 80 s at 2 CPUs, about 5.5 GB while it runs) before it
+# starts and again after every frontend change (`reload frontend`). `e2e` is
+# `build` with the e2e environment, for the Playwright suite. Inside an Agent
+# Runtime the default is `build`, elsewhere `dev`; ARCHESTRA_DEV_LITE_FRONTEND
+# chooses.
 start_frontend() {
-  local e2e="${1:-0}"
+  local mode="${1:-dev}"
   if session_alive frontend; then
     log "frontend already running"
     return 0
   fi
   free_ports "$FRONTEND_PORT"
-  if [ "$e2e" = 1 ]; then
+  if [ "$mode" != dev ]; then
     build_frontend
     start_session frontend "$STANDALONE_DIR" \
       "exec env PORT=$FRONTEND_PORT HOSTNAME=127.0.0.1 NODE_ENV=production $(frontend_env)node --env-file=$(printf '%q' "$ENV_FILE") server.js"
-    echo e2e > "$FRONTEND_MODE_FILE"
+    echo "$mode" > "$FRONTEND_MODE_FILE"
     return 0
   fi
   echo dev > "$FRONTEND_MODE_FILE"
@@ -470,7 +485,38 @@ start_frontend() {
     "exec env PORT=$FRONTEND_PORT ARCHESTRA_DEV_BUNDLER=${ARCHESTRA_DEV_BUNDLER:-turbopack} $(frontend_env)node --env-file=$(printf '%q' "$ENV_FILE") scripts/dev.mjs"
 }
 
-# `next build` with the e2e environment, then the static assets and public
+# The frontend mode `up` starts without --e2e: ARCHESTRA_DEV_LITE_FRONTEND
+# (build or dev), else build inside an Agent Runtime and dev elsewhere.
+default_frontend_mode() {
+  case "${ARCHESTRA_DEV_LITE_FRONTEND:-}" in
+    build | dev) echo "$ARCHESTRA_DEV_LITE_FRONTEND" ;;
+    "") if in_agent_runtime; then echo build; else echo dev; fi ;;
+    *) die "ARCHESTRA_DEV_LITE_FRONTEND must be build or dev, not $ARCHESTRA_DEV_LITE_FRONTEND" ;;
+  esac
+}
+
+# Node flags of the backend server when it runs without the watcher. Source
+# maps give stack traces in TypeScript, and cost about 300 MB of the server's
+# 1.2 GB at idle: off inside an Agent Runtime, on elsewhere;
+# ARCHESTRA_DEV_LITE_SOURCE_MAPS (true or false) chooses.
+backend_node_flags() {
+  local maps="${ARCHESTRA_DEV_LITE_SOURCE_MAPS:-}"
+  if [ -z "$maps" ]; then
+    if in_agent_runtime; then maps=false; else maps=true; fi
+  fi
+  case "$maps" in
+    true) printf ' --enable-source-maps' ;;
+    false) ;;
+    *) die "ARCHESTRA_DEV_LITE_SOURCE_MAPS must be true or false, not $maps" ;;
+  esac
+}
+
+# Inside an Agent Runtime: the pod sets ARCHESTRA_AGENT_RUNTIME_TASK_ID.
+in_agent_runtime() {
+  [ -n "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:-}" ]
+}
+
+# `next build` with the stack's environment, then the static assets and public
 # files next to the standalone server, as the platform image lays them out.
 # Node loads the env file for a small launcher that runs the build as a child,
 # as scripts/dev.mjs does for the dev server: Next passes its own Node flags to
@@ -481,7 +527,7 @@ build_frontend() {
   local started=$SECONDS cpus launcher
   cpus="$(available_cpus)"
   launcher='const { status } = require("node:child_process").spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build", "--turbopack"], { stdio: "inherit" }); process.exit(status ?? 1);'
-  log "building the frontend for e2e (production build, as CI serves it); log in $LOG_DIR/frontend-build.log"
+  log "building the frontend (production build, as CI serves it); log in $LOG_DIR/frontend-build.log"
   # frontend_env quotes its values for a shell, as the session commands do.
   (
     cd "$PLATFORM_DIR/frontend"
@@ -574,7 +620,7 @@ keycloak_ready() {
   http_ok "http://127.0.0.1:$KEYCLOAK_PORT/realms/archestra/.well-known/openid-configuration"
 }
 
-# The frontend the stack last started: dev, or e2e for the production build.
+# The frontend the stack last started: dev, build, or e2e (see start_frontend).
 frontend_mode() {
   cat "$FRONTEND_MODE_FILE" 2>/dev/null || echo dev
 }
@@ -649,7 +695,7 @@ wait_ready() {
 # --- commands --------------------------------------------------------------
 
 cmd_start() {
-  local wait="$1" e2e=0 keycloak=0 mock_data=0 name
+  local wait="$1" e2e=0 keycloak=0 mock_data=0 name frontend
   shift
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -661,6 +707,7 @@ cmd_start() {
     esac
   done
   require_platform_dir
+  frontend="$(default_frontend_mode)"
   mkdir -p "$STATE_DIR" "$LOG_DIR"
   # An Agent Runtime starts the stack on every turn: leave a running one alone.
   if session_alive backend && session_alive frontend && db_ready \
@@ -701,7 +748,7 @@ cmd_start() {
       || { tail -n 20 "$LOG_DIR/seed-mock-data.log" >&2; die "mock data seed failed"; }
   fi
   start_backend
-  start_frontend "$e2e"
+  if [ "$e2e" = 1 ]; then start_frontend e2e; else start_frontend "$frontend"; fi
   [ "$e2e" = 1 ] && start_e2e_deps
   [ "$keycloak" = 1 ] && start_keycloak
   log "started; logs in $LOG_DIR"
@@ -865,10 +912,10 @@ cmd_reload() {
       start_backend
       ;;
     frontend)
-      # In e2e mode this rebuilds the production frontend.
+      # A production build (build or e2e mode) is rebuilt first.
       log "reloading the frontend"
       stop_session frontend
-      if [ "$(frontend_mode)" = e2e ]; then start_frontend 1; else start_frontend; fi
+      start_frontend "$(frontend_mode)"
       ;;
     *) die "reload: expected backend or frontend" ;;
   esac

@@ -1425,17 +1425,15 @@ class AgentRuntimeManager {
           // A container that does not answer at all may have exited: a
           // memory kill of the whole container (the kubelet's default on
           // cgroup v2, `memory.oom.group`) takes PID 1 with it. The pod still
-          // reads Running until the kubelet reports the exit, a few seconds
-          // later; the next polls then report the pod's failure, OOMKilled.
+          // reads Running until the kubelet reports the exit, up to half a
+          // minute later; the next polls then report the pod's failure,
+          // OOMKilled.
           if (
             now === undefined &&
             running.unanswered < CONTAINER_EXIT_REPORT_POLLS
           ) {
             running.unanswered++;
-            await delay(
-              Math.min(interval, CONTAINER_EXIT_REPORT_POLL_MS),
-              params.abortSignal,
-            );
+            await delay(interval, params.abortSignal);
             continue;
           }
         }
@@ -2259,13 +2257,12 @@ const AGENT_RUNTIME_COMPLETION_POLL_MS = 5_000;
 /** Reading the cgroup's memory counters is a short exec; a pod under memory pressure may be slow to answer. */
 const MEMORY_EVENTS_READ_TIMEOUT_MS = 15_000;
 /**
- * How long a container that stopped answering is given to show up as ended in
- * its pod's status: about 20 seconds. The kubelet notices an exit within about
- * a second and reports it a few seconds later; a node under memory pressure is
- * slower.
+ * Polls a container that stopped answering is given to show up as ended in
+ * its pod's status: about a minute at the usual interval. On staging a pod
+ * whose container the kernel killed for memory read Failed 22 seconds after
+ * the kill.
  */
-const CONTAINER_EXIT_REPORT_POLLS = 20;
-const CONTAINER_EXIT_REPORT_POLL_MS = 1_000;
+const CONTAINER_EXIT_REPORT_POLLS = 12;
 /**
  * Turn failures a memory kill explains: the process died without a word of
  * its own. An image's envelope code (a provider error it reported itself)

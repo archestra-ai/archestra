@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.4.16](https://github.com/archestra-ai/archestra/compare/platform-v1.4.15...platform-v1.4.16) (2026-11-01)
+
+
+### Bug Fixes
+
+* **agent-runtime:** a finished run takes no new turn minutes before its retention ends [1.4] ([#10016](https://github.com/archestra-ai/archestra/issues/10016)) ([4ee8bb4](https://github.com/archestra-ai/archestra/commit/4ee8bb4ff212225a9e9765e46d0fde557446748c))
+* **agent-runtime:** give runs the id their page and the run tools use (backport release/1.4) ([#10034](https://github.com/archestra-ai/archestra/issues/10034)) ([a244b88](https://github.com/archestra-ai/archestra/commit/a244b8838713ca8848bb9fdd4396d2e969970510))
+* **agent-runtime:** give runs their page URL (backport release/1.4) ([#10040](https://github.com/archestra-ai/archestra/issues/10040)) ([e5daa5a](https://github.com/archestra-ai/archestra/commit/e5daa5a00d7acf4803687ca6d8617056826401a8))
+* **agent-runtime:** give the agent's shell commands the highest OOM score [1.4] ([#10046](https://github.com/archestra-ai/archestra/issues/10046)) ([750b51a](https://github.com/archestra-ai/archestra/commit/750b51a1fccb993e648f534d6420ea10bca5a115))
+* **agent-runtime:** say when a run was killed for memory [1.4] ([#10026](https://github.com/archestra-ai/archestra/issues/10026)) ([15772b2](https://github.com/archestra-ai/archestra/commit/15772b22d6edd345da8d29f035f797348ea5276f))
+
 ## [1.4.15](https://github.com/archestra-ai/archestra/compare/platform-v1.4.14...platform-v1.4.15) (2026-10-31)
 
 

@@ -100,6 +100,25 @@ export function frontendVitestResourceLimits(envelope: ResourceEnvelope): {
   return { maxWorkers, maxOldSpaceMb };
 }
 
+/**
+ * How many checkers the TypeScript 7 compiler runs for `pnpm type-check`;
+ * null leaves its default of four. Each checker holds its own copy of the
+ * checked types, so memory follows the count, not the CPUs. The backend, the
+ * largest program, measured cold: one checker 6.0 GB, two 7.3 GB, four 9.3
+ * GB. A run of an 8 GiB tier killed for memory during a review was running
+ * the default. More checkers than CPUs only adds memory.
+ */
+export function typeScriptCheckers(envelope: ResourceEnvelope): number | null {
+  const memoryGiB = envelope.totalMemoryBytes / BYTES_PER_GIB;
+  const byMemory =
+    memoryGiB < 12 ? 1 : memoryGiB < 16 ? 2 : TYPESCRIPT_DEFAULT_CHECKERS;
+  const checkers = Math.max(
+    1,
+    Math.min(byMemory, envelope.availableParallelism),
+  );
+  return checkers >= TYPESCRIPT_DEFAULT_CHECKERS ? null : checkers;
+}
+
 /** Bytes of a Kubernetes memory quantity ("8Gi", "512Mi", "8G"); 0 when unreadable. */
 export function parseMemoryQuantity(quantity: string | undefined): number {
   const match = quantity
@@ -120,6 +139,8 @@ export function parseCpuQuantity(quantity: string | undefined): number {
 }
 
 const BYTES_PER_MIB = 1024 ** 2;
+const BYTES_PER_GIB = 1024 ** 3;
+const TYPESCRIPT_DEFAULT_CHECKERS = 4;
 const MEMORY_UNITS: Record<string, number> = {
   "": 1,
   k: 1000,

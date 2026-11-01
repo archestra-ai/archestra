@@ -36,7 +36,7 @@
     "knip": "pnpm knip:dev && pnpm knip:production",
     "knip:dev": "knip",
     "knip:production": "knip --production",
-    "type-check": "tsc --noEmit",
+    "type-check": "tsx ../scripts/type-check.ts --noEmit",
     "update:openappa-template": "node scripts/update-openappa-template.mjs",
     "check:migrations": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/check-drizzle-migration-journal.ts && TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/lint-drizzle-migrations.ts",
     "check:sandbox-base": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/check-sandbox-base-sync.ts",

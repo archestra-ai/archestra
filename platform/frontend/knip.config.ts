@@ -16,11 +16,14 @@ const config: KnipConfig = {
     "postcss",
     // Used via dynamic import in use-layout-nodes.ts (Knip doesn't detect the pattern)
     "elkjs",
+    // Provides tsc, which scripts/type-check.ts runs for `pnpm type-check`.
+    "typescript-7",
   ],
   ignoreBinaries: [
-    // biome and concurrently are in root package.json
+    // biome, concurrently, and tsx are in the workspace root package.json
     "biome",
     "concurrently",
+    "tsx",
   ],
   rules: {
     // shadcn/ui components export all variants for completeness - intentional pattern

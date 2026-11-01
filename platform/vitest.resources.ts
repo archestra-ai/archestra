@@ -159,6 +159,58 @@ export function typeScriptMemorySettings(
 }
 
 /**
+ * The peak a package's type check declares, wrappers included, measured at one
+ * checker in a 4 GiB pod; unknown packages declare none and never pause the
+ * servers.
+ */
+export const TYPE_CHECK_PEAK_BYTES: Readonly<Record<string, number>> = {
+  backend: 5.6 * 1024 ** 3,
+  frontend: 2.8 * 1024 ** 3,
+  shared: 0.7 * 1024 ** 3,
+  "e2e-tests": 0.8 * 1024 ** 3,
+};
+
+/**
+ * Whether memory-heavy commands take turns (`scripts/heavy-lane.ts`): in a
+ * container below 16 GiB, where two of them side by side can take the
+ * container past its limit.
+ */
+export function heavyLaneActive(envelope: ResourceEnvelope): boolean {
+  return (
+    envelope.constrained && envelope.totalMemoryBytes < HEAVY_LANE_BELOW_BYTES
+  );
+}
+
+/**
+ * The memory one heavy command can have: beside the dev stack's backend and
+ * frontend servers, and with them paused (PostgreSQL keeps running). The 4 GiB
+ * budget measured in staging pods: per pod 1.12 GiB for the runtime, the
+ * agent's harness, kernel memory, a page-cache floor the tools still run on
+ * and a margin; PostgreSQL 0.2; the two servers 0.85 after use. In a 4 GiB pod
+ * that leaves 1.83 GiB beside the servers and 2.68 with them paused.
+ */
+export function heavyLaneCeilings(envelope: ResourceEnvelope): {
+  besideServersBytes: number;
+  serversPausedBytes: number;
+} {
+  const pausedBytes =
+    envelope.totalMemoryBytes - POD_FIXED_BYTES - DEV_STACK_DATABASE_BYTES;
+  return {
+    besideServersBytes: pausedBytes - DEV_STACK_SERVERS_BYTES,
+    serversPausedBytes: pausedBytes,
+  };
+}
+
+/** Whether a command of this peak has the servers paused while it runs. */
+export function pausesServers(
+  envelope: ResourceEnvelope,
+  peakBytes: number | undefined,
+): boolean {
+  if (peakBytes === undefined || !heavyLaneActive(envelope)) return false;
+  return peakBytes > heavyLaneCeilings(envelope).besideServersBytes;
+}
+
+/**
  * The memory counters of the cgroup a process runs in (cgroup v2). A
  * container's memory limit is enforced by the kernel, which kills a process in
  * it once the container reaches the limit; the killed command only says
@@ -380,6 +432,10 @@ const TYPESCRIPT_FULL_MEMORY_BYTES = 16 * BYTES_PER_GIB;
 /** Below this the compiler runs one checker without incremental build state. */
 const TYPESCRIPT_ONE_CHECKER_BELOW_BYTES = 12 * BYTES_PER_GIB;
 const TYPESCRIPT_GO_MEMORY_LIMIT_FRACTION = 5 / 8;
+const HEAVY_LANE_BELOW_BYTES = 16 * BYTES_PER_GIB;
+const POD_FIXED_BYTES = 1.12 * BYTES_PER_GIB;
+const DEV_STACK_DATABASE_BYTES = 0.2 * BYTES_PER_GIB;
+const DEV_STACK_SERVERS_BYTES = 0.85 * BYTES_PER_GIB;
 const MEMORY_UNITS: Record<string, number> = {
   "": 1,
   k: 1000,

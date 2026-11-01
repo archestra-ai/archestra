@@ -50,7 +50,7 @@
     "codegen": "pnpm codegen:api-client && pnpm codegen:theme-css",
     "check:ci": "concurrently --kill-others-on-fail --group --names type-check,test,knip,biome 'pnpm type-check' 'pnpm test' 'pnpm knip' 'biome ci'",
     "check:commit": "concurrently --kill-others-on-fail --group --names type-check,knip,biome 'pnpm type-check' 'pnpm knip' 'biome ci'",
-    "knip": "knip"
+    "knip": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON ../scripts/heavy-lane.ts --label \"knip (shared)\" -- knip"
   },
   "keywords": [],
   "author": "",

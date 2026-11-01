@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 /** Directory of the cached snapshots, inside the backend's node_modules cache. */
-export const SNAPSHOT_CACHE_DIR = path.resolve(
+const SNAPSHOT_CACHE_DIR = path.resolve(
   testDirectory,
   "../../node_modules/.cache/pglite-snapshot",
 );
@@ -45,28 +45,48 @@ export function snapshotCachePath(): string {
 
 /**
  * Whether the snapshot path another project's global setup published in
- * this run can be reused: it names the current inputs and the file is there.
+ * this run can be reused: it is this run's name for the current inputs'
+ * snapshot, and the file is there.
  */
 export function publishedSnapshotIsCurrent(
   published: string | undefined,
   current: string,
 ): boolean {
-  return published === current && fs.existsSync(current);
+  return published === runSnapshotPath(current) && fs.existsSync(published);
 }
 
 /**
- * Marks a snapshot as used now, so pruning keeps the snapshots runs actually
- * use rather than the ones built last.
+ * Marks a cached snapshot as used now, so pruning keeps the snapshots runs
+ * actually use rather than the ones built last, and hard-links it to this
+ * run's own name. The workers read that name, so another run pruning the
+ * cache can remove the cached name without the file going away under them.
+ * Returns the run's path, or null when the snapshot is not cached.
  */
-export function touchSnapshot(file: string): void {
-  const now = new Date();
-  fs.utimesSync(file, now, now);
+export function claimSnapshot(snapshot: string): string | null {
+  const runPath = runSnapshotPath(snapshot);
+  try {
+    const now = new Date();
+    fs.utimesSync(snapshot, now, now);
+    fs.rmSync(runPath, { force: true });
+    try {
+      fs.linkSync(snapshot, runPath);
+    } catch (error) {
+      if (errorCode(error) === "ENOENT") throw error;
+      // A file system without hard links: a private copy is as safe.
+      fs.copyFileSync(snapshot, runPath);
+    }
+    return runPath;
+  } catch (error) {
+    if (errorCode(error) === "ENOENT") return null;
+    throw error;
+  }
 }
 
 /**
- * Removes all but the `keep` most recently used snapshots, and builds that
- * died before finishing. A file used or written within the last hour stays
- * either way: another run may be reading it, or still writing it.
+ * Removes all but the `keep` most recently used snapshots, builds that died
+ * before finishing, and the run names (claimSnapshot) of runs that died
+ * before their teardown. A snapshot used or written within the last hour
+ * stays either way, and so does one another run uses while this one prunes.
  */
 export function pruneSnapshotCache(
   keep: number,
@@ -79,37 +99,79 @@ export function pruneSnapshotCache(
   } catch {
     return;
   }
-  const entries: { file: string; mtimeMs: number; partial: boolean }[] = [];
+  const entries: CacheEntry[] = [];
   for (const name of names) {
-    if (!name.endsWith(".tar.gz") && !name.endsWith(".partial")) continue;
+    const kind = cacheEntryKind(name);
+    if (!kind) continue;
     const file = path.join(directory, name);
-    try {
-      entries.push({
-        file,
-        mtimeMs: fs.statSync(file).mtimeMs,
-        partial: name.endsWith(".partial"),
-      });
-    } catch {
-      // Another run renamed or removed it since the listing: nothing to prune.
-    }
+    const mtimeMs = modifiedAt(file);
+    // Undefined: another run renamed or removed it since the listing.
+    if (mtimeMs !== undefined) entries.push({ file, mtimeMs, kind });
   }
-  const settled = (entry: { mtimeMs: number }) =>
-    now - entry.mtimeMs > IN_USE_WINDOW_MS;
+  const unusedFor = (entry: CacheEntry, ms: number) => now - entry.mtimeMs > ms;
   const snapshots = entries
-    .filter((entry) => !entry.partial)
+    .filter((entry) => entry.kind === "snapshot")
     .sort((a, b) => b.mtimeMs - a.mtimeMs);
   const removable = [
-    ...snapshots.slice(keep),
-    ...entries.filter((entry) => entry.partial),
-  ].filter(settled);
-  for (const { file } of removable) {
-    fs.rmSync(file, { force: true });
+    ...snapshots
+      .slice(keep)
+      .filter((entry) => unusedFor(entry, IN_USE_WINDOW_MS)),
+    ...entries.filter(
+      (entry) => entry.kind === "partial" && unusedFor(entry, IN_USE_WINDOW_MS),
+    ),
+    ...entries.filter(
+      (entry) => entry.kind === "run" && unusedFor(entry, RUN_NAME_MAX_AGE_MS),
+    ),
+  ];
+  for (const entry of removable) {
+    // Another run may have used it since the listing: then it stays. A run
+    // that uses it between this check and the removal still reads its own
+    // name for it; only the next run misses the cache.
+    if (modifiedAt(entry.file) !== entry.mtimeMs) continue;
+    fs.rmSync(entry.file, { force: true });
   }
 }
 
 // ===== Internal helpers =====
 
 const IN_USE_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * This run's own name for a cached snapshot (see claimSnapshot): the path its
+ * global setup publishes to the workers.
+ */
+function runSnapshotPath(snapshot: string): string {
+  return `${snapshot}.${process.pid}.inuse`;
+}
+/** No test run takes a day: a run name this old outlived its run. */
+const RUN_NAME_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+type CacheEntry = {
+  file: string;
+  mtimeMs: number;
+  kind: "snapshot" | "partial" | "run";
+};
+
+function cacheEntryKind(name: string): CacheEntry["kind"] | null {
+  if (name.endsWith(".tar.gz")) return "snapshot";
+  if (name.endsWith(".partial")) return "partial";
+  if (name.endsWith(".inuse")) return "run";
+  return null;
+}
+
+function modifiedAt(file: string): number | undefined {
+  try {
+    return fs.statSync(file).mtimeMs;
+  } catch {
+    return undefined;
+  }
+}
+
+function errorCode(error: unknown): string | undefined {
+  return error instanceof Error && "code" in error
+    ? String(error.code)
+    : undefined;
+}
 
 /** The installed PGlite's version, read from the package.json above its entry. */
 function pgliteVersion(): string {

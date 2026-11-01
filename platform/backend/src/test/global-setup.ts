@@ -25,10 +25,10 @@ import { fileURLToPath } from "node:url";
 import { buildExtAppsInlineBundle } from "../standalone-scripts/build-ext-apps-inline";
 import { SNAPSHOT_PATH_ENV } from "./migrations-helper.js";
 import {
+  claimSnapshot,
   pruneSnapshotCache,
   publishedSnapshotIsCurrent,
   snapshotCachePath,
-  touchSnapshot,
 } from "./pglite-snapshot-cache.js";
 
 export default async function setup() {
@@ -48,16 +48,16 @@ export default async function setup() {
     buildExtAppsInlineBundle();
   }
 
-  if (fs.existsSync(snapshotPath)) {
-    touchSnapshot(snapshotPath);
-  } else {
-    buildSnapshotInChildProcess(snapshotPath);
-  }
+  // The workers read the run's own name for the snapshot, which pruning by
+  // another run cannot remove.
+  const runSnapshot =
+    claimSnapshot(snapshotPath) ?? buildAndClaimSnapshot(snapshotPath);
   pruneSnapshotCache(SNAPSHOTS_KEPT);
-  process.env[SNAPSHOT_PATH_ENV] = snapshotPath;
+  process.env[SNAPSHOT_PATH_ENV] = runSnapshot;
 
   return () => {
     delete process.env[SNAPSHOT_PATH_ENV];
+    fs.rmSync(runSnapshot, { force: true });
   };
 }
 
@@ -67,6 +67,15 @@ export default async function setup() {
 const SNAPSHOTS_KEPT = 3;
 /** About ten times what a build takes on 2 CPUs. */
 const BUILD_TIMEOUT_MS = 5 * 60 * 1000;
+
+function buildAndClaimSnapshot(snapshotPath: string): string {
+  buildSnapshotInChildProcess(snapshotPath);
+  const runSnapshot = claimSnapshot(snapshotPath);
+  if (!runSnapshot) {
+    throw new Error(`The PGlite test snapshot build left no ${snapshotPath}`);
+  }
+  return runSnapshot;
+}
 
 function buildSnapshotInChildProcess(snapshotPath: string): void {
   const testDirectory = path.dirname(fileURLToPath(import.meta.url));

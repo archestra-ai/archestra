@@ -1,11 +1,16 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import {
+  claimSnapshot,
   pruneSnapshotCache,
   publishedSnapshotIsCurrent,
 } from "./pglite-snapshot-cache";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("pruneSnapshotCache", () => {
   let directory: string | undefined;
@@ -32,6 +37,9 @@ describe("pruneSnapshotCache", () => {
     // A build that died, and one another run is still writing.
     write("f.tar.gz.123.partial", 2);
     write("g.tar.gz.456.partial", 0.1);
+    // The name of a run that died before its teardown, and of a live run.
+    write("h.tar.gz.789.inuse", 25);
+    write("e.tar.gz.790.inuse", 1.5);
 
     pruneSnapshotCache(3, directory, now);
 
@@ -39,8 +47,34 @@ describe("pruneSnapshotCache", () => {
       "c.tar.gz",
       "d.tar.gz",
       "e.tar.gz",
+      "e.tar.gz.790.inuse",
       "g.tar.gz.456.partial",
     ]);
+  });
+
+  test("keeps a snapshot another run uses between the listing and the removal", () => {
+    directory = fs.mkdtempSync(path.join(os.tmpdir(), "pglite-snapshot-"));
+    const now = Date.now();
+    const snapshot = path.join(directory, "a.tar.gz");
+    fs.writeFileSync(snapshot, "a");
+    const daysAgo = (now - 48 * 3600_000) / 1000;
+    fs.utimesSync(snapshot, daysAgo, daysAgo);
+    // Another run claims the snapshot right after this one listed it: its
+    // second look at the file is the check before the removal.
+    const statSync = fs.statSync;
+    let looks = 0;
+    vi.spyOn(fs, "statSync").mockImplementation(((
+      file: fs.PathLike,
+      options?: fs.StatSyncOptions,
+    ) => {
+      if (file === snapshot && ++looks === 2) claimSnapshot(snapshot);
+      return statSync(file, options);
+    }) as typeof fs.statSync);
+
+    pruneSnapshotCache(0, directory, now);
+
+    expect(looks).toBe(2);
+    expect(fs.existsSync(snapshot)).toBe(true);
   });
 
   test("keeps a snapshot another run may still be reading, even beyond the limit", () => {
@@ -65,6 +99,34 @@ describe("pruneSnapshotCache", () => {
   });
 });
 
+describe("claimSnapshot", () => {
+  let directory: string | undefined;
+  afterEach(() => {
+    if (directory) fs.rmSync(directory, { recursive: true, force: true });
+    directory = undefined;
+  });
+
+  test("gives the run a name for the snapshot that pruning the cache does not remove", () => {
+    directory = fs.mkdtempSync(path.join(os.tmpdir(), "pglite-snapshot-"));
+    const snapshot = path.join(directory, "a.tar.gz");
+    fs.writeFileSync(snapshot, "snapshot");
+
+    const runSnapshot = claimSnapshot(snapshot);
+    expect(runSnapshot).not.toBeNull();
+    // A pruner that listed the snapshot before this run used it removes it.
+    fs.rmSync(snapshot);
+
+    expect(fs.readFileSync(runSnapshot as string, "utf8")).toBe("snapshot");
+  });
+
+  test("returns null when the snapshot is not cached", () => {
+    directory = fs.mkdtempSync(path.join(os.tmpdir(), "pglite-snapshot-"));
+
+    expect(claimSnapshot(path.join(directory, "a.tar.gz"))).toBeNull();
+    expect(fs.readdirSync(directory)).toEqual([]);
+  });
+});
+
 describe("publishedSnapshotIsCurrent", () => {
   let directory: string | undefined;
   afterEach(() => {
@@ -72,19 +134,24 @@ describe("publishedSnapshotIsCurrent", () => {
     directory = undefined;
   });
 
-  test("reuses only a published path that names the current snapshot and still exists", () => {
+  test("reuses only this run's name for the current snapshot, while it exists", () => {
     directory = fs.mkdtempSync(path.join(os.tmpdir(), "pglite-snapshot-"));
     const current = path.join(directory, "current.tar.gz");
-
-    // The current inputs' path, but its file was pruned or deleted.
-    expect(publishedSnapshotIsCurrent(current, current)).toBe(false);
-
     fs.writeFileSync(current, "snapshot");
-    expect(publishedSnapshotIsCurrent(current, current)).toBe(true);
-    // A path inherited from elsewhere, or none.
+    const runSnapshot = claimSnapshot(current) as string;
+
+    expect(publishedSnapshotIsCurrent(runSnapshot, current)).toBe(true);
+    // The cached name itself, another snapshot's run name, or none.
+    expect(publishedSnapshotIsCurrent(current, current)).toBe(false);
+    const old = path.join(directory, "old.tar.gz");
+    fs.writeFileSync(old, "snapshot");
     expect(
-      publishedSnapshotIsCurrent(path.join(directory, "old.tar.gz"), current),
+      publishedSnapshotIsCurrent(claimSnapshot(old) as string, current),
     ).toBe(false);
     expect(publishedSnapshotIsCurrent(undefined, current)).toBe(false);
+
+    // This run's name, but its file was deleted.
+    fs.rmSync(runSnapshot);
+    expect(publishedSnapshotIsCurrent(runSnapshot, current)).toBe(false);
   });
 });

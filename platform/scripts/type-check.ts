@@ -15,26 +15,28 @@
  * 5.3 GiB. A `GOMEMLIMIT` in the environment wins, and so does an option that
  * sets the build state up (`--incremental`, `--tsBuildInfoFile`, `--build`).
  *
- * On such a machine the compilers also take turns: a root `pnpm type-check`
- * starts every package's at once through turbo, and four of them sized for the
- * whole pod would hold its memory several times over. The turn is a kernel
- * file lock (`flock`, from util-linux on Linux), which the kernel releases when
- * the compiler exits however it exits. Without `flock` they run at once.
+ * On such a machine the compilers also take turns, with every other
+ * memory-heavy tool (`scripts/heavy-lane.ts`): a root `pnpm type-check` starts
+ * every package's at once through turbo, and four of them sized for the whole
+ * pod would hold its memory several times over. A package whose compiler does
+ * not fit beside the dev stack's servers (`TYPE_CHECK_PEAK_BYTES`) has them
+ * paused while it runs. Without `flock` they run at once.
  *
  * When the kernel kills the compiler for memory anyway, the shell would only
  * say "Killed". The cgroup's counters, read before and after, say it was
  * memory, and the runner prints the limit, the peak and what to change.
  */
-import { spawnSync } from "node:child_process";
-import { constants, tmpdir } from "node:os";
+import { constants } from "node:os";
 import path from "node:path";
 import {
   describeToolMemoryKill,
   detectResourceEnvelope,
   readCgroupMemory,
+  TYPE_CHECK_PEAK_BYTES,
   typeScriptCheckers,
   typeScriptMemorySettings,
 } from "../vitest.resources.ts";
+import { runHeavy } from "./heavy-lane.ts";
 
 const args = process.argv.slice(2);
 const envelope = detectResourceEnvelope();
@@ -54,23 +56,21 @@ const env =
   memory !== null && !process.env.GOMEMLIMIT
     ? { ...process.env, GOMEMLIMIT: String(memory.goMemoryLimitBytes) }
     : process.env;
-const command =
-  sized !== null && hasFlock()
-    ? [
-        "flock",
-        path.join(tmpdir(), "archestra-type-check.lock"),
-        "tsc",
-        ...tscArgs,
-      ]
-    : ["tsc", ...tscArgs];
+const pkg = checkedPackage();
 const memoryBefore = readCgroupMemory();
-const result = spawnSync(command[0], command.slice(1), {
-  stdio: "inherit",
+// Where checkers are sized, compilers and the other heavy tools take turns
+// (scripts/heavy-lane.ts), and one too big to fit beside the dev stack's
+// servers has them paused while it runs.
+const result = runHeavy({
+  command: "tsc",
+  args: tscArgs,
   env,
-  shell: process.platform === "win32",
+  label: `type-check (${pkg})`,
+  peakBytes: TYPE_CHECK_PEAK_BYTES[pkg],
+  lane: sized !== null,
 });
 if (result.error) throw result.error;
-// flock exits 128 + the signal when the compiler it ran was killed by one.
+// The lane exits 128 + the signal when the compiler it ran was killed by one.
 const status =
   result.status ?? (result.signal ? 128 + constants.signals[result.signal] : 1);
 // Only a compiler that was itself killed: a type error while another process
@@ -97,6 +97,29 @@ process.exit(status);
 // ===== Internal helpers =====
 
 /**
+ * The package this check covers: the directory of its `--project`/`-p` when
+ * given (the migration linter checks its project from backend/), else the
+ * working directory. It names the check and its declared peak.
+ */
+function checkedPackage(): string {
+  for (const [index, arg] of args.entries()) {
+    const lower = arg.toLowerCase();
+    const value = lower.startsWith("--project=")
+      ? arg.slice("--project=".length)
+      : lower === "--project" || lower === "-p"
+        ? args[index + 1]
+        : undefined;
+    if (value) {
+      const project = path.resolve(value);
+      return path.basename(
+        project.endsWith(".json") ? path.dirname(project) : project,
+      );
+    }
+  }
+  return path.basename(process.cwd());
+}
+
+/**
  * Whether the caller passed one of these options, bare or as `--name=value`.
  * The compiler reads option names in any case (`--Incremental`).
  */
@@ -108,11 +131,6 @@ function chosen(...names: string[]): boolean {
       return option === wanted || option.startsWith(`${wanted}=`);
     });
   });
-}
-
-function hasFlock(): boolean {
-  if (process.platform !== "linux") return false;
-  return spawnSync("flock", ["--version"], { stdio: "ignore" }).status === 0;
 }
 
 /** The checkers tsc ran with: its `--checkers`, one when single-threaded, else its default of four. */

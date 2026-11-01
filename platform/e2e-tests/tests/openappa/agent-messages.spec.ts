@@ -776,7 +776,10 @@ delta = {}
     await reply(
       [
         { contains: alicePrompt },
-        { contains: "Run this call; this session's trust drops to suspicious for the rest of this session" },
+        {
+          contains:
+            "Run this call; this session's trust drops to suspicious for the rest of this session",
+        },
         absent("Authorized"),
         absent(`${cue}-spawn`),
       ],
@@ -1117,7 +1120,10 @@ delta = {}
           priority: 1,
           bodyPatterns: [
             { contains: callId("read") },
-            { contains: "Run this call; this session's trust drops to suspicious for the rest of this session" },
+            {
+              contains:
+                "Run this call; this session's trust drops to suspicious for the rest of this session",
+            },
           ],
           events: toolUseEvents(`msg_${cue}_acceptread`, [
             {

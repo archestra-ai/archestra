@@ -2113,7 +2113,8 @@ async function governedRunOutput(params: {
       ? withheld(crossed.reason)
       : errorResult(crossed.reason);
   }
-  const { canContinue } = workspaceContinuation({
+  // The refusal reasons are host-written and name nothing the run produced.
+  const { canContinue, continuationError } = workspaceContinuation({
     workspace,
     liveTurn:
       workspace.state === "active" &&
@@ -2132,7 +2133,7 @@ async function governedRunOutput(params: {
         state: workspace.state,
         retained_until: workspace.expiresAt.toISOString(),
         can_continue: canContinue,
-        continuation_error: null,
+        continuation_error: continuationError,
         connection: null,
       },
       session: {

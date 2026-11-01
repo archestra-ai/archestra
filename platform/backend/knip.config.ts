@@ -10,6 +10,8 @@ const config: KnipConfig = {
     "src/routes/**/*.ts!",
     // Standalone scripts run via `tsx` from package.json scripts (not picked up by tsdown plugin)
     "src/standalone-scripts/**/*.ts!",
+    // The `!` script entries below are package.json scripts too, so the dev
+    // pass calls them redundant; the production pass needs them.
     // Container/Helm entrypoint; referenced outside the TypeScript module graph.
     "scripts/migrate-with-lock.mjs!",
     // Operator-run concurrent DDL, also shipped in the production image.
@@ -44,9 +46,10 @@ const config: KnipConfig = {
     "pwsh",
     "flock",
   ],
-  // Exports used in their own file (a schema built from others, a type a
-  // public signature names) are not dead, as knip 5 judged them.
-  ignoreExportsUsedInFile: true,
+  // An export its own file names in a type (a schema behind a z.infer, a type
+  // in a public signature) is not dead, as knip 5 judged it. Exports used in
+  // their own file only at runtime are still reported.
+  ignoreExportsUsedInFile: { type: true, interface: true },
   rules: {
     // knip runs per workspace, outside the root that holds pnpm's catalog,
     // so it cannot resolve `catalog:`; pnpm install already fails on a bad one.

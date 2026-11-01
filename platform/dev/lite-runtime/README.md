@@ -84,8 +84,8 @@ loop until the next reload. `ARCHESTRA_DEV_BACKEND_WATCH=true` brings the watche
 back.
 
 Inside an Agent Runtime the frontend is a production build served by its
-standalone server, not the Next dev server, and the backend runs without
-source maps. Nothing watches files: after frontend edits run
+standalone server, not the Next dev server, and neither the backend server
+nor the frontend build carries source maps. Nothing watches files: after frontend edits run
 `archestra-dev-lite reload frontend`, which rebuilds it, before you run tests
 against the stack or share a preview. `ARCHESTRA_DEV_LITE_FRONTEND=dev` brings
 the dev server back and `ARCHESTRA_DEV_LITE_SOURCE_MAPS=true` the source maps;
@@ -104,6 +104,11 @@ opened twice by a signed-in user:
 | --- | --- | --- |
 | Resident memory | 1.2 GB | 0.9 GB |
 | JavaScript heap used | 611 MB | 450 MB |
+
+| Frontend production build at 2 CPUs (2026-11-01) | With source maps | Without |
+| --- | --- | --- |
+| Cold build: peak memory of the build's processes, time | 4.8–4.9 GiB, 83–92 s | 3.7 GiB, 73–82 s |
+| `reload frontend` after an edit (build cache warm) | 1.2–2.0 GiB, 11–13 s | 1.2 GiB, 13 s |
 
 ## Build
 

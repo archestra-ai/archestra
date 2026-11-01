@@ -1007,7 +1007,12 @@ cmd_e2e() {
   # workers and longer timeouts on a small Pod. E2E_* set by hand win.
   local cpus
   cpus="$(available_cpus)"
-  if [ "$cpus" -le 2 ]; then
+  # At one CPU two workers and their browsers only contend, and each worker
+  # with its renderer holds 0.6 GiB; one worker keeps the run beside the stack
+  # in a 4 GiB pod.
+  if [ "$cpus" -le 1 ]; then
+    export E2E_WORKERS="${E2E_WORKERS:-1}" E2E_TIMEOUT_SCALE="${E2E_TIMEOUT_SCALE:-4}"
+  elif [ "$cpus" -le 2 ]; then
     export E2E_WORKERS="${E2E_WORKERS:-2}" E2E_TIMEOUT_SCALE="${E2E_TIMEOUT_SCALE:-3}"
   elif [ "$cpus" -le 4 ]; then
     export E2E_WORKERS="${E2E_WORKERS:-3}" E2E_TIMEOUT_SCALE="${E2E_TIMEOUT_SCALE:-2}"
@@ -1035,7 +1040,7 @@ cmd_e2e() {
   # The backend reaches Keycloak on the loopback; the browser uses localhost.
   keycloak_requested && export E2E_KEYCLOAK_BACKEND_URL="http://127.0.0.1:$KEYCLOAK_PORT"
   if [ $# -gt 0 ]; then
-    exec pnpm exec playwright test "$@"
+    run_playwright "$@"
   fi
   # Same projects as scripts/e2e-lite.sh; identity-providers needs Keycloak.
   # Without Keycloak, the specs that need it (identity providers, JWKS auth for
@@ -1043,7 +1048,15 @@ cmd_e2e() {
   # those that need a Kubernetes cluster (MCP server installs, the orchestrator).
   local projects=(--project=chromium --project=api)
   keycloak_requested && projects+=(--project=identity-providers)
-  exec pnpm exec playwright test "${projects[@]}" --grep-invert @quickstart
+  run_playwright "${projects[@]}" --grep-invert @quickstart
+}
+
+# Playwright from the e2e package, without pnpm's two wrapper processes, in
+# the heavy lane (scripts/heavy-lane.ts) so it never runs beside a type check
+# or a build. It declares no peak: the servers it tests are never paused.
+run_playwright() {
+  exec node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON "$SCRIPT_DIR/heavy-lane.ts" \
+    --label "e2e (Playwright)" -- "$PLATFORM_DIR/e2e-tests/node_modules/.bin/playwright" test "$@"
 }
 
 cmd_restart() {

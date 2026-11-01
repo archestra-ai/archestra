@@ -25,11 +25,10 @@ keycloak_ready() { [ "$KEYCLOAK_ANSWERS" = 1 ]; }
 db_ready() { return 0; }
 tmx() { return 0; }
 log() { :; }
-# `e2e` ends in `exec pnpm ...`: a pnpm on PATH that prints what it got.
-FAKE_BIN="$ARCHESTRA_DEV_LITE_STATE_DIR/bin"
-mkdir -p "$FAKE_BIN"
-printf '#!/usr/bin/env bash\necho "E2E_UNAVAILABLE=${E2E_UNAVAILABLE-unset} E2E_KEYCLOAK_BACKEND_URL=${E2E_KEYCLOAK_BACKEND_URL-unset} args: $*"\n' > "$FAKE_BIN/pnpm"
-chmod +x "$FAKE_BIN/pnpm"
+# `e2e` ends in run_playwright: here it prints what Playwright would get.
+run_playwright() {
+  echo "E2E_UNAVAILABLE=${E2E_UNAVAILABLE-unset} E2E_KEYCLOAK_BACKEND_URL=${E2E_KEYCLOAK_BACKEND_URL-unset} E2E_WORKERS=${E2E_WORKERS-unset} E2E_TIMEOUT_SCALE=${E2E_TIMEOUT_SCALE-unset} args: $*"
+}
 
 failures=0
 check() {
@@ -47,8 +46,8 @@ says() {
 }
 wait_ready_quietly() { (ARCHESTRA_DEV_LITE_TIMEOUT_SECONDS=2 wait_ready >/dev/null 2>&1); }
 wait_ready_loudly() { (ARCHESTRA_DEV_LITE_TIMEOUT_SECONDS=2 wait_ready) || true; }
-e2e_output() { (PATH="$FAKE_BIN:$PATH" cmd_e2e 2>&1) || true; }
-e2e_succeeds() { (PATH="$FAKE_BIN:$PATH" cmd_e2e >/dev/null 2>&1); }
+e2e_output() { (cmd_e2e 2>&1) || true; }
+e2e_succeeds() { (cmd_e2e >/dev/null 2>&1); }
 
 # --- readiness -------------------------------------------------------------
 never_started() { (ALIVE=""; ARCHESTRA_DEV_LITE_TIMEOUT_SECONDS=2 wait_ready) 2>&1 || true; }
@@ -106,6 +105,9 @@ check "e2e without Keycloak: no backend-side Keycloak URL" grep -q "E2E_KEYCLOAK
 check "e2e without Keycloak: no identity-providers project" fails grep -q -- "--project=identity-providers" <<<"$out"
 out="$(E2E_UNAVAILABLE= e2e_output)"
 check "a value set by hand wins, even an empty one" grep -q "E2E_UNAVAILABLE= " <<<"$out"
+e2e_at() { local stub_cpus="$1"; (available_cpus() { echo "$stub_cpus"; }; unset E2E_WORKERS E2E_TIMEOUT_SCALE; cmd_e2e 2>&1) || true; }
+check "e2e at one CPU runs one worker with timeouts x4" grep -q "E2E_WORKERS=1 E2E_TIMEOUT_SCALE=4 " <<<"$(e2e_at 1)"
+check "e2e at two CPUs runs two workers with timeouts x3" grep -q "E2E_WORKERS=2 E2E_TIMEOUT_SCALE=3 " <<<"$(e2e_at 2)"
 
 # --- modes -------------------------------------------------------------------
 # Each case runs in a subshell with its own environment: a test run inside an

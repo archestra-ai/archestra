@@ -129,6 +129,9 @@ def main():
 
 
 PR_SET_CHILD_SUBREAPER = 36
+# Children this launcher starts besides the client; see raise_command_scores.
+OWN_CHILDREN = set()
+OWN_CHILDREN_LOCK = threading.Lock()
 
 
 def client_environment(home, gate):
@@ -459,32 +462,34 @@ def raise_command_scores(client):
     well, and is reaped here when it exits. The client, its other helpers and
     this launcher keep the container's score."""
     launcher = os.getpid()
-    helpers = str(Path(__file__).resolve().parent) + "/archestra-"
     with contextlib.suppress(OSError, AttributeError):
         ctypes.CDLL(None, use_errno=True).prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0)
 
     def raise_scores():
         while client.poll() is None:
-            table = processes()
-            children = {}
-            for pid, (parent, _state, _exe) in table.items():
-                children.setdefault(parent, []).append(pid)
-            pending = [pid for pid in children.get(client.pid, []) if table[pid][2] in ("bash", "dash", "sh")]
-            for pid in children.get(launcher, []):
-                if pid == client.pid or helpers in command_line(pid):
-                    continue
-                if table[pid][1] == "Z":
-                    with contextlib.suppress(ChildProcessError):
-                        os.waitpid(pid, os.WNOHANG)
-                else:
-                    pending.append(pid)
-            while pending:
-                pid = pending.pop()
-                pending.extend(children.get(pid, []))
-                score = Path(f"/proc/{pid}/oom_score_adj")
-                with contextlib.suppress(OSError, ValueError):
-                    if int(score.read_text()) < 1000:
-                        score.write_text("1000")
+            # Held for the whole scan: a child this launcher starts meanwhile
+            # is recorded before it can be mistaken for an adopted process.
+            with OWN_CHILDREN_LOCK:
+                table = processes()
+                children = {}
+                for pid, (parent, _state, _exe) in table.items():
+                    children.setdefault(parent, []).append(pid)
+                pending = [pid for pid in children.get(client.pid, []) if table[pid][2] in ("bash", "dash", "sh")]
+                for pid in children.get(launcher, []):
+                    if pid == client.pid or pid in OWN_CHILDREN:
+                        continue
+                    if table[pid][1] == "Z":
+                        with contextlib.suppress(ChildProcessError):
+                            os.waitpid(pid, os.WNOHANG)
+                    else:
+                        pending.append(pid)
+                while pending:
+                    pid = pending.pop()
+                    pending.extend(children.get(pid, []))
+                    score = Path(f"/proc/{pid}/oom_score_adj")
+                    with contextlib.suppress(OSError, ValueError):
+                        if int(score.read_text()) < 1000:
+                            score.write_text("1000")
             time.sleep(0.1)
     threading.Thread(target=raise_scores, daemon=True).start()
 
@@ -501,12 +506,6 @@ def processes():
                 exe = os.path.basename(os.readlink(entry.path + "/exe")) if state != "Z" else ""
                 table[int(entry.name)] = (int(parent), state, exe)
     return table
-
-
-def command_line(pid):
-    with contextlib.suppress(OSError):
-        return Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace")
-    return ""
 
 
 def stop(child):
@@ -576,7 +575,16 @@ def turn_attention(event, answered):
 
 def attention(action, label=""):
     helper = Path(__file__).with_name("archestra-agent-attention")
-    subprocess.run([str(helper), action, label], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    # Started under the lock raise_command_scores scans with: it is this
+    # launcher's own child, not a process a command left behind.
+    with OWN_CHILDREN_LOCK:
+        child = subprocess.Popen([str(helper), action, label], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        OWN_CHILDREN.add(child.pid)
+    try:
+        child.wait()
+    finally:
+        with OWN_CHILDREN_LOCK:
+            OWN_CHILDREN.discard(child.pid)
 
 
 def fail(code, message):

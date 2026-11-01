@@ -489,7 +489,6 @@ PYTHON
       "${runtime_dir}/turn-complete" \
       "${message_cursor}" &
 
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     exec "${script_dir}/archestra-tui-run" \
       "${runtime_dir}/turn-complete" \
       "${runtime_dir}/final-answer.txt" \

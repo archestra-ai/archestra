@@ -43,9 +43,14 @@ case "$-" in
     if [ -n "${ARCHESTRA_AGENT_RUNTIME_BASH_ENV:-}" ]; then
       __archestra_bash_env="${ARCHESTRA_AGENT_RUNTIME_BASH_ENV}"
       case "${__archestra_bash_env}" in
-        *[\$\`]*) eval "__archestra_bash_env=\"${__archestra_bash_env//\"/\\\"}\"" ;;
+        *[\$\`]*)
+          eval "__archestra_bash_env=\"${__archestra_bash_env//\"/\\\"}\"" 2>/dev/null \
+            || __archestra_bash_env="${ARCHESTRA_AGENT_RUNTIME_BASH_ENV}"
+          ;;
       esac
-      if [ "${__archestra_bash_env}" != "${BASH_SOURCE[0]:-}" ]; then
+      # Like BASH_ENV itself, a file that is not there is skipped quietly.
+      if [ -r "${__archestra_bash_env}" ] \
+        && [ "${__archestra_bash_env}" != "${BASH_SOURCE[0]:-}" ]; then
         # shellcheck source=/dev/null
         . "${__archestra_bash_env}"
       fi

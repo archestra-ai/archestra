@@ -44,6 +44,12 @@ export const AGENT_RUNTIME_TOOLCHAIN_PARALLELISM_ENVS = [
   "CARGO_BUILD_JOBS",
   "RAYON_NUM_THREADS",
 ] as const;
+/**
+ * The toolchain variables above that the platform set from the run's size,
+ * comma-separated. A run served by a Pod of another size updates only these:
+ * the rest came from the Agent's environment.
+ */
+export const AGENT_RUNTIME_SIZED_ENV = "ARCHESTRA_AGENT_RUNTIME_SIZED_ENV";
 /** Stable command that joins the interactive session from any exec client. */
 export const AGENT_RUNTIME_ATTACH_SCRIPT = `${AGENT_RUNTIME_DIR}/attach`;
 /** Startup hook used by interactive shells opened directly in an Agent Runtime pod. */

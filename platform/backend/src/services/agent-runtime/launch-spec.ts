@@ -61,6 +61,7 @@ import {
   AGENT_RUNTIME_MAX_TIER_ENV,
   AGENT_RUNTIME_MEMORY_LIMIT_ENV,
   AGENT_RUNTIME_MEMORY_REQUEST_ENV,
+  AGENT_RUNTIME_SIZED_ENV,
   AGENT_RUNTIME_STEER_FIFO,
   AGENT_RUNTIME_SYSTEM_PROMPT_ENV,
   AGENT_RUNTIME_TIER_ENV,
@@ -78,6 +79,7 @@ import {
   resolveRunWorkspaceStorageSize,
   runtimeSystemPrompt,
   runtimeTiersEnv,
+  sizedToolchainEnv,
   tierResourceEnv,
   tierResources,
   tierWorkspaceGiB,
@@ -331,7 +333,10 @@ export async function buildAgentRunLaunchSpec(params: {
   const nonSecretEnv: Record<string, string> = {
     // Toolchain thread counts follow the run's size unless the Agent's own
     // environment, next, sets them.
-    ...definedEnv(sizeEnv.toolchain),
+    ...sizedToolchainEnv({
+      resources,
+      agentEnvKeys: (params.runtime.environment ?? []).map(({ key }) => key),
+    }),
     // The Agent Runtime run's own environment goes first: the addresses below must win.
     // An entry overriding ANTHROPIC_BASE_URL would be exactly the bypass the
     // platform-URL guard above exists to prevent.
@@ -570,6 +575,7 @@ const RESERVED_RUNTIME_ENV_KEYS = new Set([
   AGENT_RUNTIME_MEMORY_REQUEST_ENV,
   AGENT_RUNTIME_MEMORY_LIMIT_ENV,
   AGENT_RUNTIME_CPUS_ENV,
+  AGENT_RUNTIME_SIZED_ENV,
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_AUTH_TOKEN",
   "ANTHROPIC_BASE_URL",

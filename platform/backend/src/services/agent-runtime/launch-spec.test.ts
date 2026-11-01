@@ -265,6 +265,7 @@ describe("buildAgentRunLaunchSpec", () => {
       GOMAXPROCS: "4",
       RAYON_NUM_THREADS: "4",
       CARGO_BUILD_JOBS: "1",
+      ARCHESTRA_AGENT_RUNTIME_SIZED_ENV: "GOMAXPROCS,RAYON_NUM_THREADS",
     });
     expect(spec.env).not.toHaveProperty(
       "ARCHESTRA_AGENT_RUNTIME_POD_CPU_LIMIT",

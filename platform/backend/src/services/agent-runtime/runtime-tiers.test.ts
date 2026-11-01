@@ -12,6 +12,7 @@ import {
   retargetTierResourceEnv,
   runtimeSystemPrompt,
   runtimeTiersEnv,
+  sizedToolchainEnv,
   tierResourceEnv,
   warmPoolReplicas,
   warmTierCandidates,
@@ -115,27 +116,43 @@ describe("runtime tiers", () => {
       CARGO_BUILD_JOBS: undefined,
       RAYON_NUM_THREADS: undefined,
     });
+    // A launch sets the thread counts the Agent's environment leaves unset,
+    // and lists them.
+    expect(
+      sizedToolchainEnv({
+        resources: { cpuRequest: "2" },
+        agentEnvKeys: ["CARGO_BUILD_JOBS", "OTHER"],
+      }),
+    ).toEqual({
+      GOMAXPROCS: "2",
+      RAYON_NUM_THREADS: "2",
+      ARCHESTRA_AGENT_RUNTIME_SIZED_ENV: "GOMAXPROCS,RAYON_NUM_THREADS",
+    });
     // Served by a larger Pod: quantities follow it, a limit the served size
-    // lacks goes, and a thread count the Agent set stays.
+    // lacks goes, and only the listed thread counts move. The Agent's own
+    // CARGO_BUILD_JOBS stays although it equals the requested size's default.
     expect(
       retargetTierResourceEnv({
         env: {
           ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "2",
           ARCHESTRA_AGENT_RUNTIME_POD_CPU_LIMIT: "2",
           ARCHESTRA_AGENT_RUNTIME_POD_CPUS: "2",
+          ARCHESTRA_AGENT_RUNTIME_SIZED_ENV: "GOMAXPROCS,RAYON_NUM_THREADS",
           GOMAXPROCS: "2",
-          CARGO_BUILD_JOBS: "1",
+          RAYON_NUM_THREADS: "2",
+          CARGO_BUILD_JOBS: "2",
           OTHER: "kept",
         },
-        requested: { cpuRequest: "2", cpuLimit: "2" },
         served: { cpuRequest: "4", memoryLimit: "16Gi" },
       }),
     ).toEqual({
       ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "4",
       ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "16Gi",
       ARCHESTRA_AGENT_RUNTIME_POD_CPUS: "4",
+      ARCHESTRA_AGENT_RUNTIME_SIZED_ENV: "GOMAXPROCS,RAYON_NUM_THREADS",
       GOMAXPROCS: "4",
-      CARGO_BUILD_JOBS: "1",
+      RAYON_NUM_THREADS: "4",
+      CARGO_BUILD_JOBS: "2",
       OTHER: "kept",
     });
   });

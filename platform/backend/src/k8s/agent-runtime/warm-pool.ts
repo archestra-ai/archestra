@@ -516,7 +516,6 @@ export function servedLaunchSpec<
     env: {
       ...retargetTierResourceEnv({
         env: spec.env,
-        requested: spec.resources,
         served: served.resources,
       }),
       [AGENT_RUNTIME_TIER_ENV]: tier,

@@ -400,10 +400,12 @@ test("a run served from a larger pool is told the size of the pod it got, and it
       ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_REQUEST: "4Gi",
       ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "8Gi",
       ARCHESTRA_AGENT_RUNTIME_POD_CPUS: "2",
-      // Toolchain thread counts follow the size, except one the Agent set.
+      // Toolchain thread counts the platform set follow the size; the
+      // Agent's CARGO_BUILD_JOBS stays, though it equals S's default.
+      ARCHESTRA_AGENT_RUNTIME_SIZED_ENV: "GOMAXPROCS,RAYON_NUM_THREADS",
       GOMAXPROCS: "2",
       RAYON_NUM_THREADS: "2",
-      CARGO_BUILD_JOBS: "1",
+      CARGO_BUILD_JOBS: "2",
       OTHER: "kept",
     },
   };
@@ -434,9 +436,10 @@ test("a run served from a larger pool is told the size of the pod it got, and it
     ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_REQUEST: "8Gi",
     ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "16Gi",
     ARCHESTRA_AGENT_RUNTIME_POD_CPUS: "4",
+    ARCHESTRA_AGENT_RUNTIME_SIZED_ENV: "GOMAXPROCS,RAYON_NUM_THREADS",
     GOMAXPROCS: "4",
     RAYON_NUM_THREADS: "4",
-    CARGO_BUILD_JOBS: "1",
+    CARGO_BUILD_JOBS: "2",
     OTHER: "kept",
   });
   // Served by its own tier, or with no tiers at all: unchanged.

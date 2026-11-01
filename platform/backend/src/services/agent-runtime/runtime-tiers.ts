@@ -28,6 +28,7 @@ import {
   AGENT_RUNTIME_CPUS_ENV,
   AGENT_RUNTIME_MEMORY_LIMIT_ENV,
   AGENT_RUNTIME_MEMORY_REQUEST_ENV,
+  AGENT_RUNTIME_SIZED_ENV,
   AGENT_RUNTIME_TOOLCHAIN_PARALLELISM_ENVS,
 } from "./runtime-contract";
 
@@ -101,28 +102,54 @@ export function tierResourceEnv(resources: AgentRuntimeResources): {
 
 /**
  * The size variables of a run served by a Pod of another size. The Pod's
- * quantities follow the served size. A toolchain variable follows it too,
- * unless the Agent's environment set it to something else: its own value
- * stays.
+ * quantities follow the served size, and so do the toolchain variables the
+ * platform set (`AGENT_RUNTIME_SIZED_ENV`); a value from the Agent's
+ * environment stays, even one equal to the requested size's default.
  */
 export function retargetTierResourceEnv(params: {
   env: Record<string, string>;
-  requested: AgentRuntimeResources | null;
   served: AgentRuntimeResources;
 }): Record<string, string> {
-  const requested = tierResourceEnv(params.requested ?? {});
   const served = tierResourceEnv(params.served);
   const env = { ...params.env };
   for (const [name, value] of Object.entries(served.pod)) {
     if (value === undefined) delete env[name];
     else env[name] = value;
   }
-  for (const [name, value] of Object.entries(served.toolchain)) {
-    if (env[name] !== requested.toolchain[name]) continue;
-    if (value === undefined) delete env[name];
-    else env[name] = value;
+  const sized = new Set(
+    (env[AGENT_RUNTIME_SIZED_ENV] ?? "").split(",").filter(Boolean),
+  );
+  for (const name of sized) {
+    const value = served.toolchain[name];
+    if (value === undefined) {
+      delete env[name];
+      sized.delete(name);
+    } else env[name] = value;
   }
+  if (sized.size > 0) env[AGENT_RUNTIME_SIZED_ENV] = [...sized].join(",");
+  else delete env[AGENT_RUNTIME_SIZED_ENV];
   return env;
+}
+
+/**
+ * The toolchain variables a launch sets from the run's size: those the
+ * Agent's environment leaves unset, and the list of them that a retarget
+ * may update.
+ */
+export function sizedToolchainEnv(params: {
+  resources: AgentRuntimeResources;
+  agentEnvKeys: Iterable<string>;
+}): Record<string, string> {
+  const own = new Set(params.agentEnvKeys);
+  const sized = Object.fromEntries(
+    Object.entries(
+      definedEnv(tierResourceEnv(params.resources).toolchain),
+    ).filter(([name]) => !own.has(name)),
+  );
+  const names = Object.keys(sized);
+  return names.length > 0
+    ? { ...sized, [AGENT_RUNTIME_SIZED_ENV]: names.join(",") }
+    : {};
 }
 
 /** The variables of `tierResourceEnv` that have a value. */

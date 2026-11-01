@@ -95,7 +95,7 @@ opened twice by a signed-in user:
 
 | | Next dev server | Production build |
 | --- | --- | --- |
-| Before the first page | starts in 3 s, 0.8 GB | build 78 s at 2 CPUs, at most 5.5 GB while it runs |
+| Before the first page | starts in 3 s, 0.8 GB | build about 75 s at 2 CPUs, its own peak 3.7 GiB without source maps (see below) |
 | First visit of six pages | 40 s | 1 s |
 | Memory after both visits | 3.6 GB | 0.24 GB |
 | `frontend/.next` on disk | 0.5 GB | 1.1 GB, 0.6 GB of it the build cache |

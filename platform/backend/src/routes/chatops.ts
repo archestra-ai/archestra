@@ -35,8 +35,8 @@ import {
   SLACK_DEFAULT_CONNECTION_MODE,
   TELEGRAM_LINK_CODE_TTL_MS,
 } from "@/agents/chatops/constants";
+import { isMsTeamsConfigured } from "@/agents/chatops/ms-teams-config";
 import { msTeamsDirectory } from "@/agents/chatops/ms-teams-directory";
-import MSTeamsProvider from "@/agents/chatops/ms-teams-provider";
 import { resolveMSTeamsUserEmail } from "@/agents/chatops/ms-teams-user";
 import { getMsTeamsSignInRedirectUri } from "@/agents/chatops/ms-teams-user-sign-in";
 import { slackAppFactory } from "@/agents/chatops/slack-app-factory";
@@ -1971,7 +1971,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const stored = row?.value;
       const updatedAt = row?.updatedAt ?? null;
       return {
-        configured: stored ? new MSTeamsProvider(stored).isConfigured() : false,
+        configured: stored ? isMsTeamsConfigured(stored) : false,
         updatedAt,
         enabled: stored?.enabled ?? false,
         appId: stored?.appId || null,

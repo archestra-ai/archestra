@@ -1,7 +1,13 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalEnv": ["ARCHESTRA_*", "NEXT_PUBLIC_ARCHESTRA_*", "CODEGEN"],
-  "globalPassThroughEnv": ["TMPDIR"],
+  "globalPassThroughEnv": [
+    "TMPDIR",
+    "GOMEMLIMIT",
+    "GOMAXPROCS",
+    "CARGO_BUILD_JOBS",
+    "RAYON_NUM_THREADS"
+  ],
   "globalDependencies": [".env", "pnpm-workspace.yaml"],
   "tasks": {
     "build": {

@@ -67,11 +67,18 @@ process.exit(result.status ?? 1);
 
 // ===== Internal helpers =====
 
-/** Whether the caller passed one of these options, bare or as `--name=value`. */
+/**
+ * Whether the caller passed one of these options, bare or as `--name=value`.
+ * The compiler reads option names in any case (`--Incremental`).
+ */
 function chosen(...names: string[]): boolean {
-  return args.some((arg) =>
-    names.some((name) => arg === name || arg.startsWith(`${name}=`)),
-  );
+  return args.some((arg) => {
+    const option = arg.toLowerCase();
+    return names.some((name) => {
+      const wanted = name.toLowerCase();
+      return option === wanted || option.startsWith(`${wanted}=`);
+    });
+  });
 }
 
 function hasFlock(): boolean {

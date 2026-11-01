@@ -17,7 +17,7 @@ class AnthropicVertexClient {
   createModel(params: {
     modelId: string;
     fetch?: typeof globalThis.fetch;
-  }): ReturnType<ReturnType<typeof createVertexAnthropic>> {
+  }): VertexAnthropicModel {
     const { project, location, credentialsFile } = this.getConfig();
     const provider = createVertexAnthropic({
       project,
@@ -102,3 +102,14 @@ class AnthropicVertexClient {
 }
 
 export const anthropicVertexClient = new AnthropicVertexClient();
+
+// ===== Internal types =====
+
+/**
+ * The language model the Vertex provider returns. Named from the provider
+ * factory because its interface package is not a backend dependency, so
+ * emitted declarations could not import it.
+ */
+type VertexAnthropicModel = ReturnType<
+  ReturnType<typeof createVertexAnthropic>
+>;

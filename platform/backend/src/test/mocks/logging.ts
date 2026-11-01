@@ -1,7 +1,5 @@
 import { vi } from "vitest";
-
-/** Named so the emitted declarations need no reference to @vitest/spy. */
-type MockFunction = (...args: unknown[]) => unknown;
+import type { MockFunction } from "./mock-function";
 
 /**
  * Canonical module mock for `@/logging`, for tests that ASSERT on logger

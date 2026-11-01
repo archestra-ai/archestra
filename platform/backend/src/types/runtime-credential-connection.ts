@@ -26,7 +26,16 @@ export const GitHubUserIdSchema = z
   .int()
   .positive()
   .brand<"GitHubUserId">();
+/**
+ * The schema's output, spelled with zod's `$brand` imported from its core
+ * entry: the declaration emitter cannot name the brand through `z`.
+ */
 export type GitHubUserId = number & $brand<"GitHubUserId">;
+// Fails to compile when the schema's output and GitHubUserId drift apart.
+const _gitHubUserIdMatchesSchema: SameType<
+  z.infer<typeof GitHubUserIdSchema>,
+  GitHubUserId
+> = true;
 
 export { GITHUB_COM_API_URL } from "@archestra/shared";
 
@@ -46,3 +55,11 @@ export const McpCredentialBlockerSchema = z.object({
   reason: z.enum(["no_access", "not_connected", "not_set_up", "personal_only"]),
 });
 export type McpCredentialBlocker = z.infer<typeof McpCredentialBlockerSchema>;
+
+// ===== Internal types =====
+
+/** True when A and B are the same type, false otherwise. */
+type SameType<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : false;

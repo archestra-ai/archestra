@@ -12,8 +12,7 @@
  */
 import { vi } from "vitest";
 
-/** Named so the emitted declarations need no reference to @vitest/spy. */
-type MockFunction = (...args: unknown[]) => unknown;
+import type { MockFunction } from "@/test/mocks/mock-function";
 
 export const initializeObservabilityMetrics = vi.fn<MockFunction>();
 export const metrics = inertNamespace(2);

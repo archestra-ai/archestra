@@ -460,8 +460,9 @@ frontend_env() {
 # compiles each page on its first visit and then holds about 3.5 GB after six
 # pages. `build` is a production build served by its standalone server, as CI
 # and the released image serve it: about 240 MB after the same pages, at the
-# cost of a build (about 80 s at 2 CPUs, about 5.5 GB while it runs) before it
-# starts and again after every frontend change (`reload frontend`). `e2e` is
+# cost of a build before it starts (cold, about 75 s at 2 CPUs and 3.7 GiB
+# without source maps, 4.9 GiB with them) and again after every frontend change
+# (`reload frontend`, about 13 s and 1.2 GiB from the warm build cache). `e2e` is
 # `build` with the e2e environment, for the Playwright suite. Inside an Agent
 # Runtime the default is `build`, elsewhere `dev`; ARCHESTRA_DEV_LITE_FRONTEND
 # chooses.
@@ -499,32 +500,29 @@ default_frontend_mode() {
 # Whether the stack carries source maps: off inside an Agent Runtime, on
 # elsewhere; ARCHESTRA_DEV_LITE_SOURCE_MAPS (true or false) chooses. They give
 # stack traces in TypeScript. The backend server holds about 300 MB more with
-# them (1.2 GB at idle), and a cold frontend build about 1.1 GiB more at its
-# peak (4.8 against 3.7 GiB at 2 CPUs).
-source_maps() {
+# them (1.2 GB at idle), and a cold frontend build peaks about 1.1 GiB higher
+# (4.8 to 5.0 GiB against 3.7 GiB at 2 CPUs).
+source_maps_on() {
   local maps="${ARCHESTRA_DEV_LITE_SOURCE_MAPS:-}"
   if [ -z "$maps" ]; then
     if in_agent_runtime; then maps=false; else maps=true; fi
   fi
   case "$maps" in
-    true | false) printf '%s' "$maps" ;;
+    true) return 0 ;;
+    false) return 1 ;;
     *) die "ARCHESTRA_DEV_LITE_SOURCE_MAPS must be true or false, not $maps" ;;
   esac
 }
 
 # Node flags of the backend server when it runs without the watcher.
 backend_node_flags() {
-  local maps
-  maps="$(source_maps)" || exit 1
-  if [ "$maps" = true ]; then printf ' --enable-source-maps'; fi
+  if source_maps_on; then printf ' --enable-source-maps'; fi
 }
 
-# Environment of the frontend's production build: without source maps,
-# next.config.ts builds neither the server's nor the browser's.
+# Environment of the frontend's production build: next.config.ts writes no
+# source maps when it says so.
 frontend_build_env() {
-  local maps
-  maps="$(source_maps)" || exit 1
-  if [ "$maps" = false ]; then printf 'ARCHESTRA_FRONTEND_SOURCE_MAPS=false '; fi
+  if ! source_maps_on; then printf 'ARCHESTRA_DEV_LITE_SOURCE_MAPS=false '; fi
 }
 
 # Inside an Agent Runtime: the pod sets ARCHESTRA_AGENT_RUNTIME_TASK_ID.

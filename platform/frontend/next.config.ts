@@ -9,13 +9,16 @@ import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
 /**
- * `ARCHESTRA_FRONTEND_SOURCE_MAPS=false` builds without source maps, for the
- * server or the browser, so server errors name built chunks rather than
- * TypeScript lines. `scripts/dev-lite.sh` sets it inside an Agent Runtime
- * unless `ARCHESTRA_DEV_LITE_SOURCE_MAPS=true`: a cold build at 2 CPUs then
- * peaks at 3.7 GiB instead of 4.8 to 5.0 GiB.
+ * A production build with `ARCHESTRA_DEV_LITE_SOURCE_MAPS=false` writes no
+ * source maps, neither the server's nor the browser's, so server errors name
+ * built chunks rather than TypeScript lines. `scripts/dev-lite.sh` passes it
+ * inside an Agent Runtime unless that variable is `true`: a cold build at 2
+ * CPUs then peaks at 3.7 GiB instead of 4.8 to 5.0 GiB. The dev server keeps
+ * its source maps either way.
  */
-const sourceMaps = process.env.ARCHESTRA_FRONTEND_SOURCE_MAPS !== "false";
+const sourceMaps =
+  process.env.NODE_ENV === "development" ||
+  process.env.ARCHESTRA_DEV_LITE_SOURCE_MAPS !== "false";
 
 const platformPkg = JSON.parse(
   readFileSync(resolve(import.meta.dirname, "../package.json"), "utf-8"),
@@ -67,7 +70,9 @@ const nextConfig: NextConfig = {
     incomingRequests: true,
   },
   experimental: {
-    ...(sourceMaps ? {} : { serverSourceMaps: false }),
+    ...(sourceMaps
+      ? {}
+      : { serverSourceMaps: false, turbopackSourceMaps: false }),
     // Avoid evaluating every shared schema and SDK when a page imports a constant.
     optimizePackageImports:
       process.env.NODE_ENV === "development" ? ["@archestra/shared"] : [],
@@ -273,8 +278,8 @@ const sentryWebpackOptions = {
   // https://vercel.com/docs/cron-jobs
   automaticVercelMonitors: true,
 
-  // Without source maps the plugin neither turns on the browser's nor writes
-  // them for upload.
+  // Without source maps the plugin neither turns the browser's back on nor
+  // prepares them for upload.
   ...(sourceMaps ? {} : { sourcemaps: { disable: true } }),
 };
 

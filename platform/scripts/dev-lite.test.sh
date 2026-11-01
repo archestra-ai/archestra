@@ -118,9 +118,10 @@ check "outside an Agent Runtime the backend keeps source maps" gives " --enable-
 check "inside one it runs without them" gives "" inside backend_node_flags
 check "ARCHESTRA_DEV_LITE_SOURCE_MAPS chooses" gives " --enable-source-maps" inside with_maps true backend_node_flags
 check "an unknown source-maps value is refused" fails inside with_maps yes backend_node_flags
-check "inside an Agent Runtime the frontend builds without source maps" gives "ARCHESTRA_FRONTEND_SOURCE_MAPS=false " inside frontend_build_env
+check "inside an Agent Runtime the frontend builds without source maps" gives "ARCHESTRA_DEV_LITE_SOURCE_MAPS=false " inside frontend_build_env
 check "outside one the frontend build keeps them" gives "" outside frontend_build_env
 check "ARCHESTRA_DEV_LITE_SOURCE_MAPS chooses the frontend build's too" gives "" inside with_maps true frontend_build_env
+check "and turns them off outside an Agent Runtime" gives "ARCHESTRA_DEV_LITE_SOURCE_MAPS=false " outside with_maps false frontend_build_env
 check "an unknown source-maps value stops the frontend build" fails inside with_maps yes frontend_build_env
 
 # start_frontend builds for every mode but dev, and records the mode, which

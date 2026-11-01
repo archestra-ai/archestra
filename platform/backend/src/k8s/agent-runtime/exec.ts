@@ -6,6 +6,11 @@ import type WebSocket from "ws";
 export class AgentRuntimeCommandTransportError extends Error {}
 /** The pod ran the command and it ended in failure, as opposed to a connection the API server lost. */
 export class AgentRuntimeCommandFailedError extends Error {}
+/**
+ * The exec connection was refused before the command ran: denied access, an
+ * invalid connection, or a container that is no longer running.
+ */
+export class AgentRuntimeExecConnectionError extends Error {}
 
 /** Stream a command's output instead of collecting it.
  *
@@ -243,7 +248,7 @@ function normalizeConnectionError(error: unknown): Error {
       }
     }
   }
-  return new Error(
+  return new AgentRuntimeExecConnectionError(
     `Agent Runtime exec connection failed${detail ? ` (${detail})` : ""}`,
   );
 }

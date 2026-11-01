@@ -496,6 +496,33 @@ describe("auto routing backfill", () => {
     });
   });
 
+  test("oversized tool names fail terminally without spending the scorer budget", async () => {
+    await turn("oversized", "Review this oversized agent", {
+      request: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Review this oversized agent" }],
+        tools: Array.from({ length: 10_000 }, (_, index) => ({
+          type: "function" as const,
+          function: { name: `tool_${index}`, parameters: { type: "object" } },
+        })),
+      },
+    });
+    await turn("valid", "Review this valid agent");
+
+    await scanAndScore({ maxSessions: 2, maxCostUsd: 0.002 });
+
+    expect(prompts).toEqual(["Review this valid agent"]);
+    expect(await readings()).toEqual({ oversized: "failed", valid: "scored" });
+    expect((await describeBackfill(organizationId)).backfill).toMatchObject({
+      status: "done",
+      spentCostUsd: 0.001,
+      progress: { scored: 1 },
+    });
+    await runBackfill();
+    expect(prompts).toHaveLength(1);
+    expect(await readings()).toEqual({ oversized: "failed", valid: "scored" });
+  });
+
   test("stops at the cost ceiling and still lets the next fit read what it scored", async () => {
     await sessions(6);
     const before = await AutoRoutingSettingsModel.find(organizationId);

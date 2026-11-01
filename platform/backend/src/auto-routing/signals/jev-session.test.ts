@@ -2,6 +2,7 @@ import { delay, HttpResponse, http } from "msw";
 import config from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
+import { scoringContext } from "../scoring-context";
 import { JevSessionSource } from "./jev-session";
 import { JEV_SESSION_SPEC } from "./spec";
 import { SignalSourceError } from "./types";
@@ -222,11 +223,13 @@ describe("JevSessionSource", () => {
     await source.read(
       {
         ...INPUT,
-        systemPrompt: `Use ${secret}. ${"instruction ".repeat(1000)} End of instructions.`,
-        tools: Array.from({ length: 100 }, (_, index) => ({
-          name: `tool_${index}`,
-          description: `Use ${secret}. ${"description ".repeat(1000)}`,
-        })),
+        ...scoringContext({
+          system: `Use ${secret}. ${"instruction ".repeat(1000)} End of instructions.`,
+          tools: Array.from({ length: 100 }, (_, index) => ({
+            name: `tool_${index}`,
+            description: `Use ${secret}. ${"description ".repeat(1000)}`,
+          })),
+        }),
       },
       ctx(),
     );
@@ -260,10 +263,12 @@ describe("JevSessionSource", () => {
     await source.read(
       {
         ...INPUT,
-        tools: [
-          { name: "z_lookup", description: `${"word ".repeat(100)}END` },
-          { name: "a_search" },
-        ],
+        ...scoringContext({
+          tools: [
+            { name: "z_lookup", description: `${"word ".repeat(100)}END` },
+            { name: "a_search" },
+          ],
+        }),
       },
       ctx(),
     );

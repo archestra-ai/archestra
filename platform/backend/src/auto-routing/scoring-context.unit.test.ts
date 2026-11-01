@@ -64,7 +64,7 @@ describe("scoringContext", () => {
       }),
     ).toEqual({
       systemPrompt: "You review database migrations.\n\nCheck locking.",
-      tools: [{ name: "read_file", description: "Read a repository file." }],
+      tools: [{ name: "read_file" }],
     });
   });
 
@@ -91,9 +91,7 @@ describe("scoringContext", () => {
     ).toEqual({
       systemPrompt:
         "Plan safe deployments.\nAsk before changing infrastructure.",
-      tools: [
-        { name: "inspect_deployment", description: "Read deployment status." },
-      ],
+      tools: [{ name: "inspect_deployment" }],
     });
   });
 
@@ -117,10 +115,7 @@ describe("scoringContext", () => {
       }),
     ).toEqual({
       systemPrompt: "Find supporting evidence.\n\nCite primary sources.",
-      tools: [
-        { name: "search_docs", description: "Search documentation." },
-        { name: "web_search" },
-      ],
+      tools: [{ name: "search_docs" }, { name: "web_search" }],
     });
   });
 
@@ -184,7 +179,7 @@ describe("scoringContext", () => {
       }),
     ).toEqual({
       systemPrompt: "",
-      tools: [{ name: "parse_sql", description: "Parse a SQL statement." }],
+      tools: [{ name: "parse_sql" }],
     });
   });
 

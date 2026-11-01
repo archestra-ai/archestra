@@ -617,8 +617,11 @@ async function scoreSession(params: {
         case "read":
           return reading.value.costUsd ?? reserved;
         case "error":
-          // No key: nothing was sent.
-          return reading.error.reason === "no_credentials" ? 0 : reserved;
+          // Missing credentials and oversized local input never reach the scorer.
+          return reading.error.reason === "no_credentials" ||
+            reading.error.reason === "input_too_large"
+            ? 0
+            : reserved;
         case "unexpected":
           return reserved;
       }

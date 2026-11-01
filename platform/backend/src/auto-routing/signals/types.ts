@@ -5,8 +5,8 @@ export interface PreRunInput {
   firstUserText: string;
   client: string | null;
   systemPrompt?: string;
-  /** Names and descriptions only: never parameter schemas or tool results. */
-  tools?: { name: string; description?: string }[];
+  /** Names only: never descriptions, parameter schemas or tool results. */
+  tools?: { name: string }[];
 }
 
 export interface SignalSourceContext {

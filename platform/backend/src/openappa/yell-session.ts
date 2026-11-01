@@ -10,6 +10,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
+import { toolCallArgumentsText } from "@/routes/proxy/tool-call-arguments";
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
 import { ApiError } from "@/types";
 import type { OpenAppaSession } from "./service";
@@ -65,7 +66,7 @@ export function isReportingToolCall(params: {
   const { call, resolution, nativeQuestion } = params;
   if (typeof call.arguments === "string") {
     try {
-      JSON.parse(call.arguments);
+      JSON.parse(toolCallArgumentsText(call.arguments));
     } catch {
       return false;
     }

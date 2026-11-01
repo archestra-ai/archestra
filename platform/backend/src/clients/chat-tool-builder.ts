@@ -20,6 +20,7 @@ import {
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_START_AGENT_RUN_SHORT_NAME,
 } from "@archestra/shared";
 import {
   type McpUiToolMeta,
@@ -347,19 +348,27 @@ export function buildMcpGatewayTool(params: {
                 mcpTool.name,
                 toolArguments,
               );
-            } else {
-              const launchedRunId = (
-                archestraResponse.structuredContent as
-                  | { run?: { run_id?: unknown } }
-                  | undefined
-              )?.run?.run_id;
+            } else if (!ctx.runId) {
+              const targetToolName = resolveRunToolTargetName(
+                mcpTool.name,
+                toolArguments,
+              );
+              const isStartAgentRun =
+                archestraMcpBranding.getToolShortName(targetToolName) ===
+                  TOOL_START_AGENT_RUN_SHORT_NAME ||
+                targetToolName === TOOL_START_AGENT_RUN_SHORT_NAME;
+              const launchedRunId = isStartAgentRun
+                ? (
+                    archestraResponse.structuredContent as
+                      | { run?: { run_id?: unknown } }
+                      | undefined
+                  )?.run?.run_id
+                : undefined;
               if (
                 typeof launchedRunId === "string" &&
                 launchedRunId.length > 0
               ) {
-                if (!ctx.runId) {
-                  ctx.runId = launchedRunId;
-                }
+                ctx.runId = launchedRunId;
                 const sessionId = ctx.conversationId ?? ctx.sessionId ?? null;
                 if (sessionId) {
                   try {

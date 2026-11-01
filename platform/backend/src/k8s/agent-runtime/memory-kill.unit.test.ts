@@ -161,6 +161,25 @@ describe("describeMemoryKill", () => {
     );
   });
 
+  test("rounds a limit down, never up", () => {
+    // memory.max of a container limited to 8G: 8,000,000,000 bytes, 7.45 GiB.
+    expect(
+      describeMemoryKill(
+        {
+          events: {
+            oomKills: 1,
+            limitHits: 1,
+            peakBytes: 8_000_000_000,
+            limitBytes: 8_000_000_000,
+          },
+          killed: 1,
+          atLimit: true,
+        },
+        where,
+      ),
+    ).toContain("reached its memory limit of 7.4 GiB at tier S");
+  });
+
   test("blames the node, not the size, when the container stayed under its limit", () => {
     expect(
       describeMemoryKill(

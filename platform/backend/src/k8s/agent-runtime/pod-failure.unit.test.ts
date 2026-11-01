@@ -101,6 +101,20 @@ describe("a container the kernel killed for memory", () => {
     expect(classifyAgentRuntimePodFailure(pod)).toBe("pod.oom_killed");
   });
 
+  test("never names a larger limit than the container had", () => {
+    // 8G is 7.45 GiB: rounded to 7.5 it would say more than the pod had, and
+    // a client sizing its retry from it would read the wrong figure.
+    const pod = failedPod({ exitCode: 137, reason: "OOMKilled" });
+    pod.spec = {
+      containers: [
+        { name: "agent-runtime", resources: { limits: { memory: "8G" } } },
+      ],
+    };
+    expect(
+      describeAgentRuntimePodFailure(pod, "archestra")?.split("\n")[0],
+    ).toContain("It has a memory limit of 7.4 GiB (8G).");
+  });
+
   test("still explains a pod without a limit, a tier or an exit time", () => {
     expect(
       describeAgentRuntimePodFailure(

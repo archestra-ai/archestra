@@ -8,6 +8,7 @@ import { assert, vi } from "vitest";
 import config from "@/config";
 import {
   AgentModel,
+  AgentWorkspaceModel,
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
@@ -206,6 +207,75 @@ describe("buildAgentRunLaunchSpec", () => {
     }
   });
 
+  test("names the run by the id its page and the run tools use, on every turn", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "openai",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    const launch = (taskId: string, workspaceId?: string) =>
+      buildAgentRunLaunchSpec({
+        limits: resolveAgentRunLimits({
+          tiers: TIERS,
+          runtime: runtime(setup.agent, "openai_responses"),
+        }),
+        runtime: runtime(setup.agent, "openai_responses"),
+        taskId,
+        runId: crypto.randomUUID(),
+        agentId: setup.agent.id,
+        actor: {
+          id: setup.user.id,
+          kind: "user",
+          organizationId: setup.agent.organizationId,
+        },
+        organizationId: setup.agent.organizationId,
+        runtimeScope: "agent-tests",
+        effectiveNetworkPolicy: { source: "built_in", policy: null },
+        appName: "Archestra",
+        runMode: "one_shot",
+        ...(workspaceId ? { workspaceId } : {}),
+      });
+
+    const firstTaskId = crypto.randomUUID();
+    const first = await launch(firstTaskId);
+    expect(first.spec.env).toMatchObject({
+      ARCHESTRA_AGENT_RUNTIME_RUN_ID: firstTaskId,
+      ARCHESTRA_AGENT_RUNTIME_TASK_ID: firstTaskId,
+    });
+
+    // A follow-up is a new task in the workspace the first turn created.
+    await AgentWorkspaceModel.create({
+      id: firstTaskId,
+      organizationId: setup.agent.organizationId,
+      agentId: setup.agent.id,
+      actorKind: "user",
+      actorId: setup.user.id,
+      backend: "kubernetes",
+      runtimeScope: "agent-tests",
+      workloadName: `agent-run-test-${firstTaskId.slice(0, 8)}`,
+      state: "idle",
+      lastTaskId: firstTaskId,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const followUpTaskId = crypto.randomUUID();
+    const followUp = await launch(followUpTaskId, firstTaskId);
+    expect(followUp.spec.env).toMatchObject({
+      ARCHESTRA_AGENT_RUNTIME_RUN_ID: firstTaskId,
+      ARCHESTRA_AGENT_RUNTIME_TASK_ID: followUpTaskId,
+    });
+  });
+
   test("tells the run its size and the largest tier it may move to, and offers it the larger warm pool", async ({
     makeOrganization,
     makeAdmin,
@@ -314,6 +384,7 @@ describe("buildAgentRunLaunchSpec", () => {
     });
     const systemPrompt = "Review the repository's release instructions.";
     await AgentModel.update(setup.agent.id, { systemPrompt });
+    const taskId = crypto.randomUUID();
     const runId = crypto.randomUUID();
 
     const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
@@ -335,7 +406,7 @@ describe("buildAgentRunLaunchSpec", () => {
           { key: "ARCHESTRA_AGENT_RUNTIME_RUN_ID", value: "bypass-run" },
         ],
       },
-      taskId: crypto.randomUUID(),
+      taskId,
       runId,
       agentId: setup.agent.id,
       actor: {
@@ -357,7 +428,7 @@ describe("buildAgentRunLaunchSpec", () => {
       ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "selected-model",
       ARCHESTRA_AGENT_RUNTIME_MODEL_PROVIDER: "gemini",
       ARCHESTRA_AGENT_RUNTIME_MODEL_OUTPUT_LENGTH: "16384",
-      ARCHESTRA_AGENT_RUNTIME_RUN_ID: runId,
+      ARCHESTRA_AGENT_RUNTIME_RUN_ID: taskId,
       ARCHESTRA_LLM_PROXY_PROTOCOL: "openai_responses",
       ARCHESTRA_LLM_PROXY_URL: `https://platform.example.test/v1/model-router/${setup.agent.id}`,
       OPENAI_BASE_URL: `https://platform.example.test/v1/model-router/${setup.agent.id}`,
@@ -381,6 +452,9 @@ describe("buildAgentRunLaunchSpec", () => {
     );
     expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
       "Files under /home/node persist across this conversation's turns",
+    );
+    expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
+      "ARCHESTRA_AGENT_RUNTIME_RUN_ID is this run's id",
     );
     expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
       "The user can forward ports 3000, 9000 from this workspace",
@@ -868,7 +942,7 @@ describe("buildAgentRunLaunchSpec", () => {
     expect(spec.env.ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL).toBe(expectedModel);
     expect(spec.env).not.toHaveProperty("CLAUDE_CODE_OAUTH_TOKEN");
     expect(spec.env).not.toHaveProperty("CLAUDE_CONFIG_DIR");
-    expect(spec.env.ARCHESTRA_AGENT_RUNTIME_RUN_ID).toBe(runId);
+    expect(spec.env.ARCHESTRA_AGENT_RUNTIME_RUN_ID).toBe(taskId);
 
     expect(virtualApiKeyId).toBeTruthy();
     expect(

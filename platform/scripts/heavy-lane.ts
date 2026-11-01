@@ -17,6 +17,10 @@
  * them again with `resume` when it ends, however it ends short of SIGKILL. It
  * says so on stderr. A stack paused by someone else stays as it was.
  *
+ * Today the type check (`scripts/type-check.ts`) and the frontend, shared and
+ * e2e-tests knip runs take the lane, so a package's `check:commit` no longer
+ * runs tsc and knip side by side.
+ *
  * A command started under the lane sees `ARCHESTRA_HEAVY_LANE=held` and runs
  * its own heavy commands directly (`check:commit` running `type-check`), so the
  * lane never waits for itself.
@@ -105,6 +109,7 @@ export function runHeavy(heavy: HeavyCommand): SpawnSyncReturns<Buffer> {
       devLite,
       pausedFile(env),
       why,
+      String(process.pid),
       heavy.command,
       ...heavy.args,
     ],
@@ -127,18 +132,21 @@ const OWN_DEV_LITE_SCRIPT = path.join(
 /**
  * Takes the lock on its own descriptor (9), which nothing it starts inherits:
  * a tmux server that `resume` starts would otherwise hold the lane for good.
- * Records the holder for waiters, pauses the servers when asked and they run,
- * runs the command, resumes them. The no-op INT/TERM/HUP handler, set before
- * anything else, keeps this shell alive to resume while the signal reaches
- * the command (handlers, unlike ignored signals, are not inherited). The dev
- * stack starts without the lane's own variables.
+ * A signal while it waits ends it; once it holds the lane it runs nothing for
+ * a caller that has gone. It records the holder for waiters, pauses the
+ * servers when asked and they run, runs the command and resumes them. From
+ * then on a no-op INT/TERM/HUP handler keeps this shell alive to resume while
+ * the signal reaches the command (handlers, unlike ignored signals, are not
+ * inherited). The dev stack starts without the lane's own variables.
  */
 const HELD_SCRIPT = `
-lock="$1" holder="$2" label="$3" pause="$4" dev_lite="$5" paused_file="$6" why="$7"
-shift 7
-trap ':' INT TERM HUP
+lock="$1" holder="$2" label="$3" pause="$4" dev_lite="$5" paused_file="$6" why="$7" caller="$8"
+shift 8
 exec 9>>"$lock"
 flock 9 || exit $?
+# A caller that went away while this waited no longer wants the command.
+kill -0 "$caller" 2>/dev/null || exit 143
+trap ':' INT TERM HUP
 printf '%s\\t%s\\t%s\\n' "$$" "$(date +%s)" "$label" > "$holder" 2>/dev/null || :
 stack() { env -u ARCHESTRA_HEAVY_LANE -u GOMEMLIMIT bash "$dev_lite" "$1" > /dev/null 2>&1 9>&-; }
 resume=0
@@ -265,12 +273,14 @@ if (
   const [command, ...args] = argv.slice(index + 1);
   if (index >= argv.length || !command) usage();
   const flag = (name: string) => options.get(name);
-  const peak = Number(flag("--peak-gib"));
+  const peakFlag = flag("--peak-gib");
+  const peak = Number(peakFlag);
+  if (peakFlag !== undefined && !(Number.isFinite(peak) && peak > 0)) usage();
   const result = runHeavy({
     command,
     args,
     label: flag("--label") ?? path.basename(command),
-    peakBytes: Number.isFinite(peak) && peak > 0 ? peak * GIB : undefined,
+    peakBytes: peakFlag === undefined ? undefined : peak * GIB,
     devLiteScript: flag("--dev-lite"),
   });
   if (result.error) throw result.error;

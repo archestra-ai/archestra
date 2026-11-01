@@ -223,9 +223,10 @@ type AppaPluginBinding = {
   /** True when the model's response contained tool calls awaiting client execution. */
   turnOpen: boolean;
   /**
-   * Background launches this request answers whose return has not arrived,
-   * for a client that resumes the conversation when a child finishes. The
-   * turn that answers them stays open.
+   * Background launches in this request's last tool round whose return has
+   * not arrived, for a client that resumes the conversation when a child
+   * finishes. A reply to this request does not end the turn while any is
+   * counted.
    */
   pendingBackgroundSpawns: number;
   /** True on internal loopback Chat requests. */
@@ -484,9 +485,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
     Object.assign(childResultUpdates, childReturns.updates);
     if (binding.adapter?.resumesForBackgroundReturns) {
-      // Only a launch this request answers holds the turn. A later turn does
-      // not wait on it: a running child keeps its spawn open by itself, and one
-      // that never reports must not hold the session.
+      // Only a launch result in this request's last tool round holds the turn.
+      // A later reply does not wait on it: a running child keeps its spawn open
+      // by itself, and one that never reports must not hold the session.
       const answered = new Set(
         [...latestResponsesToolRound(binding.requestBody)].map(
           withoutTrajectoryStamp,
@@ -1925,9 +1926,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (binding.session.parent_id) {
       return;
     }
-    // The model answers a background launch while its child may not have
-    // started. Ending the turn now would close that child's spawn call, and
-    // its return could no longer be reported (resumesForBackgroundReturns).
+    // This request's last tool round holds a background launch result, and its
+    // child may not have started. Ending the turn now would close that child's
+    // spawn call, and its return could no longer be reported
+    // (resumesForBackgroundReturns).
     if (binding.pendingBackgroundSpawns > 0) {
       logger.debug(
         { pendingBackgroundSpawns: binding.pendingBackgroundSpawns },

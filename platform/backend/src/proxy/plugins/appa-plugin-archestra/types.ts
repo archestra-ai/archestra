@@ -233,10 +233,10 @@ export type AppaClientAdapter = {
    * The client resumes the parent's conversation by itself when a child it
    * launched in the background finishes, and hands the parent its return
    * then (Copilot CLI: a system notification and its own read_agent call).
-   * The turn that answers the launch stays open: its child may not have
-   * started when the model's reply ends the turn, and a turn end closes the
-   * spawn of a child that has not started. A child that runs keeps its spawn
-   * open across turns by itself.
+   * A reply to a request whose last tool round holds the launch result does
+   * not end the turn: the child may not have started yet, and a turn end
+   * closes the spawn of a child that has not started. A child that runs
+   * keeps its spawn open across turns by itself.
    */
   readonly resumesForBackgroundReturns?: true;
   /**

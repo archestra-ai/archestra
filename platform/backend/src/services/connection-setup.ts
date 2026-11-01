@@ -221,6 +221,12 @@ export async function ensureConnectionVirtualKey(params: {
     scope: "personal",
     authorId: userId,
     providerApiKeys: [{ provider, providerApiKeyId: keyToBind.id }],
+    // A picked account came around the future-providers path; the key still
+    // takes that setting.
+    includeFutureProviders:
+      picked &&
+      (existingMode?.includeFutureProviders ??
+        params.includeFutureProviders) === true,
   });
 
   // Names are not unique, so two concurrent setups can both miss the lookup

@@ -318,6 +318,11 @@ describe("ensureConnectionVirtualKey", () => {
     for (const attempt of [1, 2]) {
       const { virtualApiKeyId } = await connect();
       expect(
+        (await VirtualApiKeyModel.findById(virtualApiKeyId))
+          ?.includeFutureProviders,
+        `attempt ${attempt}`,
+      ).toBe(true);
+      expect(
         (await VirtualApiKeyModel.getProviderApiKeys(virtualApiKeyId)).filter(
           (key) => key.provider === "github-copilot",
         ),

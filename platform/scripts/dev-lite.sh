@@ -58,8 +58,9 @@
 #       Agent Runtime, true elsewhere, as for the Tilt stack.
 #   ARCHESTRA_DEV_LITE_SOURCE_MAPS
 #       true: the backend server (without the watcher) runs with
-#       --enable-source-maps, about 300 MB more at idle. Default false inside
-#       an Agent Runtime, true elsewhere.
+#       --enable-source-maps, about 300 MB more at idle, and the frontend's
+#       production build writes source maps, about 1.1 GiB more at its peak.
+#       Default false inside an Agent Runtime, true elsewhere.
 #   ARCHESTRA_DEV_LITE_FRONTEND
 #       dev: the Next dev server (about 3.5 GB once six pages are open); build:
 #       a production build served by its standalone server (about 0.24 GB;
@@ -459,11 +460,12 @@ frontend_env() {
 # compiles each page on its first visit and then holds about 3.5 GB after six
 # pages. `build` is a production build served by its standalone server, as CI
 # and the released image serve it: about 240 MB after the same pages, at the
-# cost of a build (about 80 s at 2 CPUs, about 5.5 GB while it runs) before it
-# starts and again after every frontend change (`reload frontend`). `e2e` is
-# `build` with the e2e environment, for the Playwright suite. Inside an Agent
-# Runtime the default is `build`, elsewhere `dev`; ARCHESTRA_DEV_LITE_FRONTEND
-# chooses.
+# cost of a build before it starts (cold, about 75 s at 2 CPUs and 3.7 GiB
+# without source maps, 4.8 to 5.0 GiB with them) and again after every
+# frontend change (`reload frontend`, about 13 s and 1.2 GiB from the warm
+# build cache). `e2e` is `build` with the e2e environment, for the Playwright
+# suite. Inside an Agent Runtime the default is `build`, elsewhere `dev`;
+# ARCHESTRA_DEV_LITE_FRONTEND chooses.
 start_frontend() {
   local mode="${1:-dev}"
   if session_alive frontend; then
@@ -495,20 +497,32 @@ default_frontend_mode() {
   esac
 }
 
-# Node flags of the backend server when it runs without the watcher. Source
-# maps give stack traces in TypeScript, and cost about 300 MB of the server's
-# 1.2 GB at idle: off inside an Agent Runtime, on elsewhere;
-# ARCHESTRA_DEV_LITE_SOURCE_MAPS (true or false) chooses.
-backend_node_flags() {
+# Whether the stack carries source maps: off inside an Agent Runtime, on
+# elsewhere; ARCHESTRA_DEV_LITE_SOURCE_MAPS (true or false) chooses. They give
+# stack traces in TypeScript. The backend server holds about 300 MB more with
+# them (1.2 GB at idle), and a cold frontend build peaks about 1.1 GiB higher
+# (4.8 to 5.0 GiB against 3.7 GiB at 2 CPUs).
+source_maps_on() {
   local maps="${ARCHESTRA_DEV_LITE_SOURCE_MAPS:-}"
   if [ -z "$maps" ]; then
     if in_agent_runtime; then maps=false; else maps=true; fi
   fi
   case "$maps" in
-    true) printf ' --enable-source-maps' ;;
-    false) ;;
+    true) return 0 ;;
+    false) return 1 ;;
     *) die "ARCHESTRA_DEV_LITE_SOURCE_MAPS must be true or false, not $maps" ;;
   esac
+}
+
+# Node flags of the backend server when it runs without the watcher.
+backend_node_flags() {
+  if source_maps_on; then printf ' --enable-source-maps'; fi
+}
+
+# Environment of the frontend's production build: next.config.ts writes no
+# source maps when it says so.
+frontend_build_env() {
+  if ! source_maps_on; then printf 'ARCHESTRA_DEV_LITE_SOURCE_MAPS=false '; fi
 }
 
 # Inside an Agent Runtime: the pod sets ARCHESTRA_AGENT_RUNTIME_TASK_ID.
@@ -524,14 +538,15 @@ in_agent_runtime() {
 # CIRCLE_NODE_TOTAL, else from every CPU of the node; here they follow the
 # CPUs this stack can count on.
 build_frontend() {
-  local started=$SECONDS cpus launcher
+  local started=$SECONDS cpus launcher build_env
   cpus="$(available_cpus)"
+  build_env="$(frontend_build_env)" || exit 1
   launcher='const { status } = require("node:child_process").spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build", "--turbopack"], { stdio: "inherit" }); process.exit(status ?? 1);'
   log "building the frontend (production build, as CI serves it); log in $LOG_DIR/frontend-build.log"
   # frontend_env quotes its values for a shell, as the session commands do.
   (
     cd "$PLATFORM_DIR/frontend"
-    bash -c "exec env CIRCLE_NODE_TOTAL=$((cpus + 1)) $(frontend_env)node --env-file=$(printf '%q' "$ENV_FILE") -e $(printf '%q' "$launcher")"
+    bash -c "exec env CIRCLE_NODE_TOTAL=$((cpus + 1)) $build_env$(frontend_env)node --env-file=$(printf '%q' "$ENV_FILE") -e $(printf '%q' "$launcher")"
   ) > "$LOG_DIR/frontend-build.log" 2>&1 \
     || { tail -n 30 "$LOG_DIR/frontend-build.log" >&2; die "frontend build failed"; }
   rm -rf "$STANDALONE_DIR/.next/static" "$STANDALONE_DIR/public"

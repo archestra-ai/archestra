@@ -1,5 +1,10 @@
 import { stripVTControlCharacters } from "node:util";
 import type { V1Pod } from "@kubernetes/client-node";
+import {
+  formatLimitGibibytes,
+  MEMORY_KILL_NEXT_STEP,
+  parseMemoryQuantity,
+} from "./memory-kill";
 import { workspaceExitExplanation } from "./workspace-exit";
 
 const TRUNCATED = "… (truncated)";
@@ -12,6 +17,9 @@ export function describeAgentRuntimePodFailure(
 ): string | null {
   if (pod?.status?.phase !== "Failed") return null;
 
+  // A container the kernel killed for memory is said first, in plain words:
+  // it is the most common pod failure and the one a reader can act on.
+  const explanations: string[] = [];
   const details: string[] = [];
   const reason = diagnosticText(pod.status.reason);
   const message = diagnosticText(pod.status.message);
@@ -41,6 +49,16 @@ export function describeAgentRuntimePodFailure(
           ? containerMemoryLimit(pod, status.name)
           : null;
       if (memoryLimit) exit.push(`memory limit ${memoryLimit}`);
+      if (kind === "Container" && terminated.reason === "OOMKilled") {
+        explanations.push(
+          describeContainerMemoryKill({
+            pod,
+            container: diagnosticText(status.name),
+            exitCode: terminated.exitCode,
+            finishedAt: terminated.finishedAt,
+          }),
+        );
+      }
       details.push(
         `${kind} ${diagnosticText(status.name)}: ${diagnosticText(terminated.reason) || "Terminated"} (${exit.join(", ")})`,
       );
@@ -80,6 +98,7 @@ export function describeAgentRuntimePodFailure(
   }
   const name = diagnosticText(pod.metadata?.name);
   const summary = [
+    ...explanations,
     "The Agent Runtime pod failed.",
     ...(name ? [`Pod: ${diagnosticText(namespace)}/${name}`] : []),
     ...details,
@@ -87,6 +106,45 @@ export function describeAgentRuntimePodFailure(
   return summary.length > 4096
     ? `${summary.slice(0, 4096 - TRUNCATED.length - 1)}\n${TRUNCATED}`
     : summary;
+}
+
+/**
+ * A container the kernel killed for memory as a whole. On cgroup v2 the
+ * kubelet sets `memory.oom.group`, so the kernel kills every process in the
+ * container, PID 1 included, and the container exits: what it was running at
+ * the time is gone with it. The limit is named as "memory limit of 8 GiB":
+ * clients read the size the run had from it.
+ */
+function describeContainerMemoryKill(params: {
+  pod: V1Pod;
+  container: string;
+  exitCode: number;
+  finishedAt: Date | undefined;
+}): string {
+  const quantity = containerMemoryLimit(params.pod, params.container);
+  const bytes = parseMemoryQuantity(quantity ?? undefined);
+  const at =
+    params.finishedAt && !Number.isNaN(new Date(params.finishedAt).getTime())
+      ? ` at ${new Date(params.finishedAt)
+          .toISOString()
+          .replace("T", " ")
+          .replace(/\.\d+Z$/, " UTC")}`
+      : "";
+  // A decimal quantity ("8G") is named as set, after its GiB.
+  const asSet = quantity && /\d[kMGT]$/.test(quantity) ? ` (${quantity})` : "";
+  const size =
+    bytes !== null
+      ? `It has a memory limit of ${formatLimitGibibytes(bytes)}${asSet}.`
+      : quantity
+        ? `It has a memory limit of ${quantity}.`
+        : "";
+  return [
+    `The run ran out of memory. The kernel killed every process in the ${params.container} container (OOMKilled, exit code ${params.exitCode})${at}.`,
+    size,
+    MEMORY_KILL_NEXT_STEP,
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function containerMemoryLimit(

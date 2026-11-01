@@ -1,11 +1,13 @@
 /**
  * A memory kill inside a running pod. The kernel enforces a container's
- * memory limit by killing the largest process in its cgroup, not the
- * container: an agent whose type check or test run passes the limit loses
- * that process, its shell and the tmux server around them, while PID 1 lives
- * on and the pod stays Running. Nothing in the pod's status says so; the
- * cgroup's `memory.events` does: `oom_kill` counts processes killed by any
- * OOM killer, `oom` the times this cgroup hit its own limit.
+ * memory limit by killing processes in its cgroup. With the kubelet's default
+ * on cgroup v2 (`memory.oom.group`) it kills every process in the container,
+ * PID 1 included, and the container exits: `pod-failure.ts` reports that from
+ * the pod's status. With single-process OOM kills it kills only the largest
+ * process, often the agent's type check or test run, and the container lives
+ * on. Nothing in the pod's status says so then; the cgroup's `memory.events`
+ * does: `oom_kill` counts processes killed by any OOM killer, `oom` the times
+ * this cgroup hit its own limit.
  */
 export interface MemoryEvents {
   /** Processes of the cgroup killed by an OOM killer, the node's included. */
@@ -21,18 +23,61 @@ export interface MemoryEvents {
 /** A kill between two readings, and whether the container's own limit caused it. */
 export interface MemoryKill {
   events: MemoryEvents;
+  /** Processes the kernel killed between the two readings. */
+  killed: number;
   /** True when the cgroup hit its limit in between; false for a node that ran out of memory. */
   atLimit: boolean;
 }
+
+/**
+ * Prints the cgroup's counters, peak and limit for {@link parseMemoryEvents}.
+ * Defined before the commands below, which are built from it at load.
+ */
+const MEMORY_EVENTS_SCRIPT =
+  // memory.events has its own "max" counter, so the limit gets another name.
+  'cat /sys/fs/cgroup/memory.events 2>/dev/null; printf "peak %s\\nlimit %s\\n" "$(cat /sys/fs/cgroup/memory.peak 2>/dev/null)" "$(cat /sys/fs/cgroup/memory.max 2>/dev/null)"';
 
 /** Runs in the pod's shell; its output is parsed by {@link parseMemoryEvents}. */
 export const READ_MEMORY_EVENTS_COMMAND = [
   "/bin/sh",
   "-c",
-  // memory.events has its own "max" counter, so the limit gets another name.
-  'cat /sys/fs/cgroup/memory.events 2>/dev/null; printf "peak %s\\nlimit %s\\n" "$(cat /sys/fs/cgroup/memory.peak 2>/dev/null)" "$(cat /sys/fs/cgroup/memory.max 2>/dev/null)"',
+  MEMORY_EVENTS_SCRIPT,
   "read-memory-events",
 ];
+
+/**
+ * Starts the counters in a completion poll's output. The poll reads them with
+ * the turn's result in one exec, so a memory kill is seen as it happens
+ * without a second command per poll. They come after the result: a kill that
+ * ended the turn while the poll ran is counted in the same output.
+ *
+ * @public — tests build a pod's poll output with it
+ */
+export const MEMORY_EVENTS_SEPARATOR = "--- archestra memory events ---";
+
+/** Ends a poll's script: prints the separator on a line of its own, then the counters. */
+export const MEMORY_EVENTS_AFTER_RESULT_SCRIPT = `printf '\\n%s\\n' '${MEMORY_EVENTS_SEPARATOR}'; ${MEMORY_EVENTS_SCRIPT}`;
+
+/**
+ * A completion poll's output: the turn's result before the last
+ * {@link MEMORY_EVENTS_SEPARATOR} and the counters after it. Output without
+ * the separator is the result alone, with no counters.
+ */
+export function splitTurnPoll(output: string): {
+  memory: MemoryEvents | null;
+  result: string;
+} {
+  const lines = output.split("\n");
+  const separator = lines.findLastIndex(
+    (line) => line.trim() === MEMORY_EVENTS_SEPARATOR,
+  );
+  if (separator === -1) return { memory: null, result: output };
+  // The separator's own leading newline ends the result's last line.
+  return {
+    memory: parseMemoryEvents(lines.slice(separator + 1).join("\n")),
+    result: lines.slice(0, separator).join("\n"),
+  };
+}
 
 /** The counters of `memory.events`, peak and limit; null when the output has no counters. */
 export function parseMemoryEvents(output: string): MemoryEvents | null {
@@ -70,38 +115,90 @@ export function memoryKillBetween(
   after: MemoryEvents | null,
 ): MemoryKill | null {
   if (!before || !after || after.oomKills <= before.oomKills) return null;
-  return { events: after, atLimit: after.limitHits > before.limitHits };
+  return {
+    events: after,
+    killed: after.oomKills - before.oomKills,
+    atLimit: after.limitHits > before.limitHits,
+  };
 }
 
 /**
  * The failure reason for a run whose processes the kernel killed for memory.
- * A container that hit its own limit needs a larger tier; a node that ran out
- * of memory does not, and the run can simply start again.
+ * A container that hit its own limit needs a larger tier or less at once; a
+ * node that ran out of memory does not, and the run can simply start again.
+ * The limit is named as "memory limit of 8 GiB": clients read the size the
+ * run had from it.
  */
 export function describeMemoryKill(
   kill: MemoryKill,
-  container: string,
+  where: {
+    container: string;
+    /** The runtime tier the pod runs at, when it says. */
+    tier: string | null;
+  },
 ): string {
   const { events } = kill;
   const peak =
     events.peakBytes !== null
       ? ` (peak usage ${formatGibibytes(events.peakBytes)})`
       : "";
+  const tier = where.tier ? ` at tier ${where.tier}` : "";
+  const processes =
+    kill.killed === 1 ? "a process" : `${kill.killed} processes`;
   if (kill.atLimit) {
     const limit =
       events.limitBytes !== null
-        ? `reached its memory limit of ${formatGibibytes(events.limitBytes)}`
-        : "hit its memory limit";
-    return `The run ran out of memory. The ${container} container ${limit}${peak}, and the kernel killed the run's processes. Start the run again at a larger tier.`;
+        ? `reached its memory limit of ${formatLimitGibibytes(events.limitBytes)}${tier}`
+        : `hit its memory limit${tier}`;
+    return `The run ran out of memory. The ${where.container} container ${limit}${peak}, and the kernel killed ${processes} of the run. ${MEMORY_KILL_NEXT_STEP}`;
   }
   const limit =
     events.limitBytes !== null
-      ? `did not hit its ${formatGibibytes(events.limitBytes)} limit`
-      : "has no memory limit of its own";
-  return `The kernel killed the run's processes because the node ran out of memory; the ${container} container ${limit}${peak}. Start the run again.`;
+      ? `did not reach its ${formatLimitGibibytes(events.limitBytes)} limit${tier}`
+      : `has no memory limit of its own${tier}`;
+  return `The kernel killed ${processes} of the run because the node ran out of memory; the ${where.container} container ${limit}${peak}. Start the run again.`;
 }
 
-function formatGibibytes(bytes: number): string {
-  const gib = bytes / 1024 ** 3;
-  return `${Number.isInteger(gib) ? gib : gib.toFixed(1)} GiB`;
+/** What to do about a container that reached its memory limit. */
+export const MEMORY_KILL_NEXT_STEP =
+  "Start the run again at a larger tier, or have the agent run memory-heavy commands, such as type checks, test suites and builds, one at a time and with fewer workers.";
+
+/** Bytes of a Kubernetes memory quantity ("8Gi", "8589934592", "8G"); null when unreadable. */
+export function parseMemoryQuantity(
+  quantity: string | undefined,
+): number | null {
+  const match = quantity
+    ?.trim()
+    .match(/^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|k|M|G|T)?$/);
+  if (!match) return null;
+  const [, amount, unit = ""] = match;
+  return Math.floor(Number(amount) * (MEMORY_UNITS[unit] ?? 1));
 }
+
+/**
+ * A limit in GiB, rounded down: "7.4 GiB" for 8 GB (7.45 GiB). Clients size a
+ * retry from it, so it never says more than the container had.
+ */
+export function formatLimitGibibytes(bytes: number): string {
+  // The epsilon keeps an exact 8 GiB from flooring to 7.9 on a rounding error.
+  return `${Math.floor((bytes / 1024 ** 3) * 10 + 1e-9) / 10} GiB`;
+}
+
+// ===================== internals =====================
+
+/** "8 GiB", "7.5 GiB": one decimal at most, none when it is zero. */
+function formatGibibytes(bytes: number): string {
+  return `${Math.round((bytes / 1024 ** 3) * 10) / 10} GiB`;
+}
+
+const MEMORY_UNITS: Record<string, number> = {
+  "": 1,
+  k: 1000,
+  M: 1000 ** 2,
+  G: 1000 ** 3,
+  T: 1000 ** 4,
+  Ki: 1024,
+  Mi: 1024 ** 2,
+  Gi: 1024 ** 3,
+  Ti: 1024 ** 4,
+};

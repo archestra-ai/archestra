@@ -171,6 +171,38 @@ export const TYPE_CHECK_PEAK_BYTES: Readonly<Record<string, number>> = {
 };
 
 /**
+ * The live data of the whole programs a package's type check covers: Go's heap
+ * in use at the end of a one-checker check (`--extendedDiagnostics`, "Memory
+ * used"). The frontend measured 1.98 GB; a soft limit below its live data only
+ * costs time (at 1.5 GiB the frontend check took a third longer).
+ */
+export const TYPE_CHECK_LIVE_BYTES: Readonly<Record<string, number>> = {
+  frontend: 1.9 * 1024 ** 3,
+};
+
+/**
+ * Go's soft memory limit (`GOMEMLIMIT`) for a whole program's check in a small
+ * container: the memory the heavy lane gives the command (beside the dev
+ * stack's servers, or with them paused when its declared peak needs that),
+ * less what the compiler holds outside Go's heap (about 0.5 GiB), and never
+ * below the program's live data. Null where the lane is off (16 GiB and up).
+ */
+export function wholeProgramGoMemoryLimit(
+  envelope: ResourceEnvelope,
+  program: { liveBytes: number; peakBytes?: number },
+): number | null {
+  if (!heavyLaneActive(envelope)) return null;
+  const ceilings = heavyLaneCeilings(envelope);
+  const room = pausesServers(envelope, program.peakBytes)
+    ? ceilings.serversPausedBytes
+    : ceilings.besideServersBytes;
+  return Math.max(
+    program.liveBytes,
+    Math.floor(room - TYPESCRIPT_OUTSIDE_HEAP_BYTES),
+  );
+}
+
+/**
  * Whether memory-heavy commands take turns (`scripts/heavy-lane.ts`): in a
  * container below 16 GiB, where two of them side by side can take the
  * container past its limit.
@@ -433,6 +465,8 @@ const TYPESCRIPT_FULL_MEMORY_BYTES = 16 * BYTES_PER_GIB;
 const TYPESCRIPT_ONE_CHECKER_BELOW_BYTES = 12 * BYTES_PER_GIB;
 const TYPESCRIPT_GO_MEMORY_LIMIT_FRACTION = 5 / 8;
 const HEAVY_LANE_BELOW_BYTES = 16 * BYTES_PER_GIB;
+/** What tsgo holds outside Go's heap at its peak: 2.48 GiB RSS on a 1.98 GB heap. */
+const TYPESCRIPT_OUTSIDE_HEAP_BYTES = 0.5 * BYTES_PER_GIB;
 const POD_FIXED_BYTES = 1.12 * BYTES_PER_GIB;
 const DEV_STACK_DATABASE_BYTES = 0.2 * BYTES_PER_GIB;
 const DEV_STACK_SERVERS_BYTES = 0.85 * BYTES_PER_GIB;

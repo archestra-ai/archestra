@@ -11,6 +11,7 @@ import {
   resourceEnvelope,
   typeScriptCheckers,
   typeScriptMemorySettings,
+  wholeProgramGoMemoryLimit,
 } from "../../../vitest.resources";
 import { calculateVitestResourceLimits } from "./vitest-resource-limits";
 
@@ -410,6 +411,45 @@ describe("describeToolMemoryKill", () => {
         before: null,
         after: atLimit,
       }),
+    ).toBeNull();
+  });
+});
+
+describe("wholeProgramGoMemoryLimit", () => {
+  const pod = (gib: number) =>
+    resourceEnvelope({ ...NODE, constrainedMemoryBytes: gib * GIB });
+
+  test("in a 4 GiB pod the frontend gets the room left with the servers paused, less the compiler's own", () => {
+    // 2.68 GiB with the servers paused, less 0.5 GiB outside Go's heap.
+    expect(
+      (wholeProgramGoMemoryLimit(pod(4), {
+        liveBytes: 1.9 * GIB,
+        peakBytes: 2.8 * GIB,
+      }) ?? 0) / GIB,
+    ).toBeCloseTo(2.18, 2);
+  });
+
+  test("never goes below the program's live data", () => {
+    expect(
+      wholeProgramGoMemoryLimit(pod(4), {
+        liveBytes: 4.8 * GIB,
+        peakBytes: 5.6 * GIB,
+      }),
+    ).toBe(4.8 * GIB);
+  });
+
+  test("a check that fits beside the servers gets the room beside them", () => {
+    expect(
+      (wholeProgramGoMemoryLimit(pod(4), {
+        liveBytes: 0.4 * GIB,
+        peakBytes: 0.7 * GIB,
+      }) ?? 0) / GIB,
+    ).toBeCloseTo(1.33, 2);
+  });
+
+  test("sets nothing where the lane is off", () => {
+    expect(
+      wholeProgramGoMemoryLimit(pod(24), { liveBytes: 1.9 * GIB }),
     ).toBeNull();
   });
 });

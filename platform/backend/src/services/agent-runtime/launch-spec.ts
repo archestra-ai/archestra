@@ -67,7 +67,10 @@ export async function buildAgentRunLaunchSpec(params: {
   runtime: ResolvedAgentRuntime;
   /** The A2A task this run carries; its id names the workload. */
   taskId: string;
-  /** The user-facing Agent run id used by /chat/runs/:id and telemetry. */
+  /**
+   * This turn's run record id. It names the turn's service-account token; the
+   * run's own id (`ARCHESTRA_AGENT_RUNTIME_RUN_ID`) is its workspace id.
+   */
   runId: string;
   /** Agent the task belongs to, for the proxy and gateway routes. */
   agentId: string;
@@ -294,7 +297,9 @@ export async function buildAgentRunLaunchSpec(params: {
     ),
     ARCHESTRA_AGENT_RUNTIME_AGENT_ID: params.runtime.agentId,
     ARCHESTRA_AGENT_RUNTIME_AGENT_NAME: agent.name,
-    ARCHESTRA_AGENT_RUNTIME_RUN_ID: params.runId,
+    // The run's id for its page (/chat/runs/:id) and the run tools' run_id:
+    // the first turn's task id, which names its workspace. Every turn keeps it.
+    ARCHESTRA_AGENT_RUNTIME_RUN_ID: boundWorkspace?.id ?? params.taskId,
     ARCHESTRA_AGENT_RUNTIME_TASK_ID: params.taskId,
     ARCHESTRA_AGENT_RUNTIME_MODEL: runtimeModel,
     // Native CLIs use provider-published model slugs for local metadata and
@@ -409,6 +414,10 @@ export async function buildAgentRunLaunchSpec(params: {
         "decode resources marked base64 with a shell decoder, not a text-file tool. " +
         "Paths advertised as code-sandbox mounts belong to that separate sandbox, " +
         "not this runtime's filesystem.",
+      // Static text, so the prompt stays the same for every run of the Agent.
+      "ARCHESTRA_AGENT_RUNTIME_RUN_ID is this run's id: its page is /chat/runs/<id>, " +
+        "the run tools take it as run_id, and follow-ups keep it. " +
+        "Read environment variables by name; the environment also holds this run's credentials.",
       describeRuntimeWorkspace(params.runtime),
     ]
       .filter(Boolean)

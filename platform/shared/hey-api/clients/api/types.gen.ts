@@ -52587,6 +52587,7 @@ export type CreateConnectionSetupData = {
         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         proxyAuth?: 'provider-key' | 'virtual-key' | 'primary-providers';
         attributePassthrough?: boolean;
+        providerApiKeyId?: string;
         model?: string;
         skills?: {
             skillIds: Array<string>;

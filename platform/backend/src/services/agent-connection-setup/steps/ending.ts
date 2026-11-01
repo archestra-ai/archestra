@@ -57,7 +57,8 @@ export function buildEnding(
           : hasPlugins
             ? "Plugins"
             : "Skills",
-      detail: `Installed from "${ctx.skills.marketplaceName}"`,
+      detail:
+        agent.skillsDetail ?? `Installed from "${ctx.skills.marketplaceName}"`,
     });
   }
   parts.push(...(agent.parts ?? []));

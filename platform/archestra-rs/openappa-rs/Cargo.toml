@@ -27,10 +27,10 @@ crate-type = ["cdylib"]
 # (#725), shorter block feedback (#726), the replay stand-in (#739), a
 # subagent's return declared without review or ahead of its spawn (#763), and
 # the required readers named in reviews and block reasons (#764).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b23aeed0af161b0bedc169fcb43a862b167bc032", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b23aeed0af161b0bedc169fcb43a862b167bc032" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b23aeed0af161b0bedc169fcb43a862b167bc032", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b23aeed0af161b0bedc169fcb43a862b167bc032" }
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "790a2de43bf0c56c490bff8d5f931ed61cab68ab", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "790a2de43bf0c56c490bff8d5f931ed61cab68ab" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "790a2de43bf0c56c490bff8d5f931ed61cab68ab", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "790a2de43bf0c56c490bff8d5f931ed61cab68ab" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

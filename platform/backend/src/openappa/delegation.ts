@@ -162,9 +162,15 @@ export function isDelegationMarkerItem(value: unknown): boolean {
 export function collectDelegationMarkers(params: {
   family: AppaWireFamily;
   body: unknown;
+  /**
+   * The prompt the text before a marker carries, as the spawner handed it:
+   * a client that puts a preamble in front of a child's opening message
+   * (the Copilot CLI's datetime line) names what to take the digest over.
+   */
+  openingPrompt?: (text: string) => string;
 }): AppaDelegationMarker[] {
   return userTexts(params).flatMap((text) => {
-    const marker = trailingMarker(text);
+    const marker = trailingMarker(text, params.openingPrompt);
     return marker ? [marker] : [];
   });
 }
@@ -357,7 +363,10 @@ function digestOf(text: string): string {
 
 const EMPTY_PROMPT_DIGEST = digestOf("");
 
-function trailingMarker(text: string): AppaDelegationMarker | undefined {
+function trailingMarker(
+  text: string,
+  openingPrompt: (text: string) => string = (prompt) => prompt,
+): AppaDelegationMarker | undefined {
   if (!text.includes(MARKER_PREFIX)) return undefined;
   const trimmed = closingBody(text.trimEnd()).trimEnd();
   const lineStart = trimmed.lastIndexOf("\n") + 1;
@@ -368,7 +377,9 @@ function trailingMarker(text: string): AppaDelegationMarker | undefined {
   return {
     token: match[1],
     parentId: match[2],
-    promptDigest: digestOf(withoutClientPreamble(trimmed.slice(0, lineStart))),
+    promptDigest: digestOf(
+      openingPrompt(withoutClientPreamble(trimmed.slice(0, lineStart))),
+    ),
     ...(token.spawnCallId ? { spawnCallId: token.spawnCallId } : {}),
     ...(token.runtimeSessionId
       ? { runtimeSessionId: token.runtimeSessionId }

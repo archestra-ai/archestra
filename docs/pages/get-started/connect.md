@@ -2,7 +2,7 @@
 title: Connect Your Agents
 description: Connect your AI client to Archestra's tools, models, and shared skills
 order: 2
-lastUpdated: 2026-10-27
+lastUpdated: 2026-11-01
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -22,7 +22,7 @@ Open **Connect** in the Archestra sidebar and choose how to connect:
 
 To leave out the proxy, skills, or plugins, open **Setup options** on the approval page before you approve. Your admin decides which provider keys the proxy uses for each client.
 
-Guardrails recognize Archestra Chat, Claude Code, Codex CLI, OpenCode, Kilo Code, and Kimi Code automatically. Custom clients and workflows need a [session header](/docs/agents/guardrails/clients#session-headers) so Guardrails can track their conversations.
+Guardrails recognize Archestra Chat, Claude Code, Codex CLI, Copilot CLI, OpenCode, Kilo Code, and Kimi Code automatically. Custom clients and workflows need a [session header](/docs/agents/guardrails/clients#session-headers) so Guardrails can track their conversations.
 
 ![Connect with Codex selected and its setup command](/docs/automated_screenshots/platform-connection_connect-with-ai.webp)
 
@@ -65,7 +65,7 @@ Some clients need one more step. The installer prints any other steps under **Go
 - **Claude Code:** if you skipped the sign-in, start Claude Code, run `/mcp`, select the gateway, and choose **Authenticate**.
 - **Codex:** if you skipped the sign-in, run `codex mcp login <gateway>`.
 - **Cursor:** quit and reopen Cursor, then sign in to the gateway under **Customize → MCPs**. Setup points Cursor's OpenAI API key settings at the [Model Router](/docs/llm-proxy/model-router) with a virtual key for your model providers. Cursor's model picker then lists only the models the Model Router offers you, such as `anthropic:claude-sonnet-4-6`. Setup switches off Cursor's built-in models. Switch one back on under **Settings → Models**.
-- **Copilot CLI:** setup saves your provider settings and available key in `providers.json` and selects the model in `settings.json`. If setup reports a missing key, add it to `providers.json`. The environment variables printed at the end are optional.
+- **Copilot CLI:** setup saves your provider settings and available key in `providers.json` and selects the model in `settings.json`. GitHub Copilot is the provider selected by default. The page offers your own sign-in and your organization's enterprise plan as two cards, keeps the one not connected yet on offer, and lists the models the chosen account serves with a default selected; the model list stays off until an account is connected, or a key exists for another provider you choose. If setup reports a missing key, add it to `providers.json`. Leave `COPILOT_MODEL` and the `COPILOT_PROVIDER_*` variables unset: Copilot CLI uses them instead of `providers.json`, and with only `COPILOT_MODEL` set it refuses to start the saved model. Setup removes the values an earlier setup saved, the launch check ignores the rest while the LLM proxy is connected, and the closing note lists any that remain. With OpenAI, Azure, GitHub Copilot, or xAI, setup selects the Responses API so [Guardrails](/docs/agents/guardrails/clients#copilot-cli) can follow the session, and Connect lists only models that serve that API. For example, Claude models on GitHub Copilot serve only Chat Completions, so they are not listed. With GitHub Copilot, you connect your account under Model routing in Setup options on the approval page. If your organization also connected its Copilot plan, **Setup options** let you choose your personal subscription or the enterprise plan.
 - **OpenCode:** if you skipped the sign-in, run `opencode mcp auth <gateway>`. While connected, OpenCode lists only the providers and models Archestra serves you, under their usual names. A `model`, `small_model` or agent `model` setting that Archestra does not serve is ignored, and setup names it. Providers you sign in to from OpenCode itself, such as a ChatGPT or Claude subscription or your own key, also go through Archestra. Restart OpenCode after signing in to one.
 - **Kimi Code:** if you skipped the sign-in, start `kimi` and run `/mcp-config login <gateway>`. With your own key, the `archestra` model uses your Kimi Code sign-in, so run `kimi login` before setup, or set `KIMI_API_KEY` (`MOONSHOT_API_KEY` for a Moonshot key). New sessions use the `archestra` model; models from your other Kimi Code providers do not go through Archestra. Setup starts Kimi Code in Ask When Needed mode, so gateway calls run without asking; disconnecting restores your previous mode.
 - **Kilo Code:** if you skipped the sign-in, run `kilo mcp auth <gateway>`. Setup writes its settings to `~/.config/kilo/kilo.json`. If your `kilo.jsonc` already registers the same gateway under another name, setup disables that duplicate and preserves its comments and connection settings. Providers and models work as for OpenCode, and providers that do not go through Archestra, such as the Kilo Gateway, are turned off while connected.

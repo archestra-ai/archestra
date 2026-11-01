@@ -1,4 +1,5 @@
 import {
+  COPILOT_ENV_HANDLED_MARKER,
   isDefaultBrandedAppName,
   STARTUP_GUARD_FORMAT_VERSION,
 } from "@archestra/shared";
@@ -11,11 +12,13 @@ import {
   archestraMarkWithText,
 } from "@/services/archestra-mark";
 import { CODEX_HANDOFF_HELPER } from "../payloads/codex-handoff";
+import { COPILOT_LEGACY_ENV_PS_ARRAY } from "../payloads/copilot-provider-config";
 import { MANAGED_INSTRUCTIONS_REFRESH_WINDOWS } from "../payloads/managed-instructions-refresh.windows";
 import { OPENCODE_HANDOFF_PLUGIN } from "../payloads/opencode-handoff";
 import { describeMarketplaceContents } from "../steps/marketplace-copy";
 import { psq } from "../steps/quoting";
 import {
+  gatewayLaunchArgsFor,
   type StartupGuardClient,
   type StartupGuardContext,
   startupGuardRefreshInstall,
@@ -203,6 +206,41 @@ function Remove-ArchGuard {
 
 if ($ArchDisconnectAll -and $ActiveRemotes.Count -eq 0) { Write-Output 'Nothing left to disconnect. Removing the ${client.label} startup check.' }
 if ($ActiveRemotes.Count -eq 0) { Remove-ArchGuard; return }
+${
+  client.clientId === "copilot-cli" && ctx.proxy
+    ? `
+# Copilot CLI uses its provider environment variables instead of providers.json
+# (with only COPILOT_MODEL set it refuses to start the saved model). The values
+# an earlier setup persisted are removed here as well as at setup, so a
+# refreshed guard repairs older installs; this session's are dropped unless the
+# wrapper already does that for the launch.
+function Repair-ArchCopilotEnv {
+  if ($ArchDisconnectAll -or ($DisconnectedKinds -contains 'proxy')) { return }
+  $archNames = ${COPILOT_LEGACY_ENV_PS_ARRAY}
+  foreach ($archScope in @('User', 'Process')) {
+    $archOurs = (([Environment]::GetEnvironmentVariable('COPILOT_PROVIDER_BASE_URL', $archScope)) -like '*/v1/connection-setup/*') -or (([Environment]::GetEnvironmentVariable('COPILOT_PROVIDER_HEADERS', $archScope)) -like '*X-Archestra-*') -or (([Environment]::GetEnvironmentVariable('COPILOT_PROVIDER_API_KEY', $archScope)) -like 'arch_*') -or (([Environment]::GetEnvironmentVariable('COPILOT_MODEL', $archScope)) -like 'archestra/*')
+    if (-not $archOurs) { continue }
+    $archRemoved = @()
+    foreach ($archName in $archNames) {
+      if ([Environment]::GetEnvironmentVariable($archName, $archScope)) {
+        [Environment]::SetEnvironmentVariable($archName, $null, $archScope)
+        $archRemoved += $archName
+      }
+    }
+    if ($archRemoved.Count -gt 0) { Write-Warning ($AppName + ': removed ' + ($archRemoved -join ', ') + ' (' + $archScope + ' scope) left by an earlier setup; Copilot CLI would use them instead of providers.json.') }
+  }
+  if ($env:${COPILOT_ENV_HANDLED_MARKER} -eq '1') { return }
+  $archSet = @($archNames | Where-Object { [Environment]::GetEnvironmentVariable($_, 'Process') })
+  if ($archSet.Count -gt 0) {
+    foreach ($archName in $archSet) { Remove-Item -Path ('Env:' + $archName) -ErrorAction SilentlyContinue }
+    $archThose = if ($archSet.Count -eq 1) { @('that variable', 'it') } else { @('those variables', 'them') }
+    Write-Warning ($AppName + ': ignoring ' + ($archSet -join ', ') + ' for this session. The LLM proxy connection is active, and Copilot CLI would use ' + $archThose[0] + ' instead of providers.json. Remove ' + $archThose[1] + ', or reconnect from the ' + $AppName + ' /connection page to refresh the launcher.')
+  }
+}
+try { Repair-ArchCopilotEnv } catch { }
+`
+    : ""
+}
 
 # Retry budget for the single health request when the platform is
 # unreachable: capped exponential backoff (1,2,4,4...s) + 0-1s jitter, 15s
@@ -1068,6 +1106,18 @@ export function buildWindowsStartupGuardInstallSection(
             ? `[IO.File]::WriteAllBytes(($archGuardPath + '.handoff.mjs'), [Convert]::FromBase64String('${Buffer.from(OPENCODE_HANDOFF_PLUGIN).toString("base64")}'))`
             : `Remove-Item -Force -ErrorAction SilentlyContinue ($archGuardPath + '.handoff.mjs')`
           : "";
+  const gatewayLaunchArgs = gatewayLaunchArgsFor(ctx, client);
+  // Splatted before the user's arguments on a conversation launch while the
+  // gateway is connected; an empty array splats nothing.
+  const gatewayArgsBlock =
+    gatewayLaunchArgs.length > 0
+      ? `$archGatewayArgs = @()
+    $archGatewaySkip = Join-Path $env:USERPROFILE ${psq(client.skipRelpath)}
+    if ((Test-Path $archGuard) -and -not ((Test-Path $archGatewaySkip) -and (Select-String -Path $archGatewaySkip -Pattern '^mcp$' -Quiet))) {
+      $archGatewayArgs = @(${gatewayLaunchArgs.map(psq).join(", ")})
+    }`
+      : "";
+  const gatewaySplat = gatewayLaunchArgs.length > 0 ? "@archGatewayArgs " : "";
   const launchArgs =
     client.clientId === "codex"
       ? `try {
@@ -1179,7 +1229,28 @@ function ${client.binary} {
   }`
       : ""
   }
-  if (-not $archUtilityCommand -and (Test-Path $archGuard)) { try { & $archGuard @args } catch { } }
+  ${
+    client.clientId === "copilot-cli" && ctx.proxy
+      ? `# Copilot CLI uses its provider environment variables instead of providers.json
+  # (and with only COPILOT_MODEL set refuses to start the saved model). While
+  # the LLM proxy is connected, launch without them and put them back after;
+  # the guard is told so it does not report them again.
+  $archCopilotSaved = @{}
+  $archCopilotSkippedProxy = 'proxy' -in @(Get-Content -Path (Join-Path $env:USERPROFILE ${psq(client.skipRelpath)}) -ErrorAction SilentlyContinue)
+  if (-not $archUtilityCommand -and (Test-Path $archGuard) -and -not $archCopilotSkippedProxy) {
+    foreach ($archName in ${COPILOT_LEGACY_ENV_PS_ARRAY}) {
+      $archValue = [Environment]::GetEnvironmentVariable($archName, 'Process')
+      if ($archValue) { $archCopilotSaved[$archName] = $archValue; Remove-Item -Path ('Env:' + $archName) -ErrorAction SilentlyContinue }
+    }
+    if ($archCopilotSaved.Count -gt 0) {
+      $archThose = if ($archCopilotSaved.Count -eq 1) { @('that variable', 'it') } else { @('those variables', 'them') }
+      Write-Warning ('Ignoring ' + (@($archCopilotSaved.Keys | Sort-Object) -join ', ') + ' for this launch: the LLM proxy connection is active, and Copilot CLI would use ' + $archThose[0] + ' instead of providers.json. Remove ' + $archThose[1] + ' to silence this notice.')
+    }
+  }
+  try {
+  if (-not $archUtilityCommand -and (Test-Path $archGuard)) { try { $env:${COPILOT_ENV_HANDLED_MARKER} = '1'; & $archGuard @args } catch { } finally { Remove-Item Env:${COPILOT_ENV_HANDLED_MARKER} -ErrorAction SilentlyContinue } }`
+      : `if (-not $archUtilityCommand -and (Test-Path $archGuard)) { try { & $archGuard @args } catch { } }`
+  }
   $archReal = Get-Command -Name ${client.binary} -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
   if (-not $archReal) {
     $archReal = Get-Command -Name ${client.binary} -ErrorAction SilentlyContinue |
@@ -1189,6 +1260,7 @@ function ${client.binary} {
   if ($archReal) {
     if ($archUtilityCommand) { & $archReal.Source @args; return }
     ${promptArgs}
+    ${gatewayArgsBlock}
     ${client.clientId === "codex" ? "$archDirectReady = $false" : ""}
     ${
       client.clientId === "codex" && ctx.proxy
@@ -1251,12 +1323,19 @@ function ${client.binary} {
     } else {
       & $archReal.Source @args
     }`
-        : `& $archReal.Source ${handoffEnabled ? "@archLaunchArgs" : "@args"}`
+        : `& $archReal.Source ${gatewaySplat}${handoffEnabled ? "@archLaunchArgs" : "@args"}`
     }
     ${handoffEnabled && client.clientId === "copilot-cli" ? `} finally { $env:COPILOT_CUSTOM_INSTRUCTIONS_DIRS = $archPreviousDirs }` : handoffEnabled && client.inlineConfigEnv ? `} finally { $env:${client.inlineConfigEnv} = $archPreviousConfigContent }` : ""}
     ${refreshCall}
   }
   else { Write-Error "${client.binary} executable not found on PATH" }
+  ${
+    client.clientId === "copilot-cli" && ctx.proxy
+      ? `} finally {
+    foreach ($archName in @($archCopilotSaved.Keys)) { [Environment]::SetEnvironmentVariable($archName, $archCopilotSaved[$archName], 'Process') }
+  }`
+      : ""
+  }
 }
 ${client.markerEnd}
 '@

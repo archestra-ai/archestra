@@ -8,6 +8,7 @@ import {
   CLAUDE_METADATA_SESSION_SOURCE,
   CODEX_CLIENT_FILTER,
   CODEX_CLIENT_ID,
+  COPILOT_CLI_CLIENT_ID,
 } from "@archestra/shared";
 import { eq, inArray, type SQL } from "drizzle-orm";
 import db, { schema } from "@/database";
@@ -2839,6 +2840,139 @@ describe("InteractionModel", () => {
 
       expect(sessions.data).toHaveLength(1);
       expect(sessions.data[0].lastUserMessagePreview).toBe("Hi from codex cli");
+    });
+
+    test("shows a Copilot CLI session by the person's prompt, not the notes Copilot adds", async ({
+      makeAdmin,
+      makeAgent,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent({ name: "Agent" });
+      const text = (value: string) => [{ type: "input_text", text: value }];
+      // Copilot opens each user message with a datetime line, and sends its
+      // deferred-tools reminder and background-agent notices as user messages
+      // after the person's prompt.
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "copilot-responses-session",
+        externalAgentId: COPILOT_CLI_CLIENT_ID,
+        request: {
+          model: "gpt-6.1-sol",
+          input: [
+            { type: "message", role: "system", content: "You are Copilot." },
+            {
+              type: "message",
+              role: "user",
+              content: text(
+                "<current_datetime>2026-11-01T00:42:10.436+04:00</current_datetime>\n\nUse the task tool to start a subagent.",
+              ),
+            },
+            {
+              type: "message",
+              role: "user",
+              content: text(
+                "<system_reminder>\nIMPORTANT: The tools listed below are deferred.\n</system_reminder>",
+              ),
+            },
+            {
+              type: "function_call",
+              call_id: "c1",
+              name: "task",
+              arguments: "{}",
+            },
+            { type: "function_call_output", call_id: "c1", output: "done" },
+            {
+              role: "user",
+              content: text(
+                '<system_notification>\nAgent "pwd-runner" (task) has finished processing and is now idle.\n</system_notification>',
+              ),
+            },
+          ],
+        } as unknown as InsertInteraction["request"],
+        response: {
+          id: "r1",
+          object: "response",
+          created: Date.now(),
+          model: "gpt-6.1-sol",
+        } as unknown as InsertInteraction["response"],
+        type: "github-copilot:responses",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "copilot-responses-session" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].lastUserMessagePreview).toBe(
+        "Use the task tool to start a subagent.",
+      );
+    });
+
+    test.for([
+      {
+        name: "a Copilot CLI prompt with an attached image",
+        parts: [
+          {
+            type: "input_text",
+            text: '<current_datetime>2026-11-01T02:00:40.896+04:00</current_datetime>\n\nRun "echo appa-publish --target staging" in the shell.',
+          },
+          {
+            type: "input_text",
+            text: "Image file at path C:\\Users\\mark\\AppData\\Local\\Temp\\copilot-image-c552fb.png",
+          },
+          {
+            type: "input_image",
+            image_url: "data:image/png;base64,iVBORw0KGgo=",
+            detail: "auto",
+          },
+        ],
+        expected: 'Run "echo appa-publish --target staging" in the shell.',
+      },
+      {
+        name: "a prompt followed by an image without a label",
+        parts: [
+          { type: "input_text", text: "What does this screenshot show?" },
+          {
+            type: "input_image",
+            image_url: "data:image/png;base64,iVBORw0KGgo=",
+          },
+        ],
+        expected: "What does this screenshot show?",
+      },
+    ])("names a session by $name, not by an attachment's label", async ({
+      parts,
+      expected,
+    }, { makeAdmin, makeAgent }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent({ name: "Agent" });
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "responses-attachment-session",
+        externalAgentId: COPILOT_CLI_CLIENT_ID,
+        request: {
+          model: "gpt-6.1-sol",
+          input: [{ type: "message", role: "user", content: parts }],
+        } as unknown as InsertInteraction["request"],
+        response: {
+          id: "r1",
+          object: "response",
+          created: Date.now(),
+          model: "gpt-6.1-sol",
+        } as unknown as InsertInteraction["response"],
+        type: "github-copilot:responses",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "responses-attachment-session" },
+      );
+
+      expect(sessions.data[0].lastUserMessagePreview).toBe(expected);
     });
 
     test("skips prompt suggestion generator requests when deriving the preview", async ({

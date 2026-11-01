@@ -1,11 +1,17 @@
+import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
-import { ConnectionSetupModel, VirtualApiKeyModel } from "@/models";
+import {
+  ConnectionSetupModel,
+  LlmProviderApiKeyModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
+import { encodeGithubAppReference } from "@/services/github-app-copilot-token";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { CONNECTION_SETUP_MAX_SKILLS, type User } from "@/types";
 
@@ -1224,6 +1230,112 @@ describe("POST /api/connection-setups", () => {
     }
     expect(script.body).not.toContain('"archestra-openai"');
     expect(script.body).toContain("opencode-primary-state.json");
+  });
+
+  test("Copilot CLI refuses a model its provider serves only through Chat Completions", async () => {
+    await ModelModel.create({
+      provider: "github-copilot",
+      modelId: "claude-sonnet-5.5",
+      externalId: "github-copilot/claude-sonnet-5.5",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportedEndpoints: ["/chat/completions"],
+    });
+    await ModelModel.create({
+      provider: "github-copilot",
+      modelId: "gpt-5.6-sol",
+      externalId: "github-copilot/gpt-5.6-sol",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportedEndpoints: ["/responses"],
+    });
+    const connect = (model: string) =>
+      app.inject({
+        method: "POST",
+        url: "/api/connection-setups",
+        payload: {
+          clientId: "copilot-cli",
+          baseUrl: "http://localhost:9000/v1",
+          provider: "github-copilot",
+          model,
+        },
+      });
+
+    const refused = await connect("claude-sonnet-5.5");
+    expect(refused.statusCode).toBe(400);
+    expect(refused.json().error.message).toBe(
+      "claude-sonnet-5.5 is served only through Chat Completions on GitHub Copilot, and Copilot CLI connects through the Responses API. Choose another model.",
+    );
+    expect((await connect("gpt-5.6-sol")).statusCode).toBe(200);
+    // A model the catalog doesn't know is the user's to vouch for.
+    expect((await connect("my-custom-model")).statusCode).toBe(200);
+  });
+
+  test("Copilot CLI binds the GitHub Copilot account the user picks", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const ownSignIn = await makeLlmProviderApiKey(
+      organizationId,
+      (await makeSecret()).id,
+      { provider: "github-copilot", userId: user.id },
+    );
+    const planValue = encodeGithubAppReference({
+      ref: { organizationId, credentialId: randomUUID() },
+      installationId: "2",
+      organization: "acme",
+      githubUrl: "https://github.com",
+    });
+    const plan = await LlmProviderApiKeyModel.create(
+      {
+        organizationId,
+        name: "GitHub Copilot (acme)",
+        provider: "github-copilot",
+        secretId: (await makeSecret({ secret: { apiKey: planValue } })).id,
+        scope: "org",
+        userId: null,
+      },
+      {
+        apiKeyValue: planValue,
+        initialPermissionGrants: [
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
+      },
+    );
+    const connect = (providerApiKeyId?: string) =>
+      app.inject({
+        method: "POST",
+        url: "/api/connection-setups",
+        payload: {
+          clientId: "copilot-cli",
+          baseUrl: "http://localhost:9000/v1",
+          provider: "github-copilot",
+          proxyAuth: "virtual-key",
+          model: "gpt-5.5",
+          ...(providerApiKeyId ? { providerApiKeyId } : {}),
+        },
+      });
+    const boundKey = async (response: Awaited<ReturnType<typeof connect>>) => {
+      expect(response.statusCode, response.body).toBe(200);
+      const rawToken = response
+        .json()
+        .command.match(/script\/([^']+)'/)?.[1] as string;
+      const setup = await ConnectionSetupModel.findByToken(rawToken);
+      return (
+        await VirtualApiKeyModel.getProviderApiKeys(
+          setup?.virtualApiKeyId as string,
+        )
+      ).map((mapping) => mapping.providerApiKeyId);
+    };
+
+    expect(await boundKey(await connect(plan.id))).toEqual([plan.id]);
+    expect(await boundKey(await connect())).toEqual([ownSignIn.id]);
+    const unknown = await connect(randomUUID());
+    expect(unknown.statusCode).toBe(404);
+    expect(unknown.json().error.message).toContain("not available to you");
   });
 
   test("rejects OpenCode providers without a verified passthrough wire", async ({

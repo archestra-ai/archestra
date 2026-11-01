@@ -3614,8 +3614,9 @@ fn render_remedy_outcome(outcome: RemedyOutcome, act: &RemedyAct) -> napi::Resul
 /// returned a block, and the offer was retired.
 /// Otherwise, the original runtime text returns unchanged.
 fn render_human_denial(presentation: &RemedyPresentation, act: &RemedyAct) -> Option<String> {
+    let block = denied_block(&presentation.feedback);
     let denied = act.ruling == Some(RulingInput::Deny)
-        && presentation.feedback.starts_with("[appa] Blocked:")
+        && block.starts_with("[appa] Blocked:")
         && !presentation
             .offers
             .iter()
@@ -3642,9 +3643,22 @@ fn render_human_denial(presentation: &RemedyPresentation, act: &RemedyAct) -> Op
     );
     if !presentation.offers.is_empty() {
         text.push_str("\n\nThe policy still offers options that do not need this reviewer:\n");
-        text.push_str(&presentation.feedback);
+        text.push_str(block);
     }
     Some(text)
+}
+
+/// The call's block in a denial's feedback, past the line the runtime leads it with to name
+/// the authority that denied the plan. The text above says who refused the call.
+fn denied_block(feedback: &str) -> &str {
+    match feedback.split_once('\n') {
+        Some((lead, block))
+            if lead.starts_with("[appa] authority ") && lead.ends_with(" denied this plan.") =>
+        {
+            block
+        }
+        _ => feedback,
+    }
 }
 
 fn unknown_control_reason(reason: &RemedyRefusal) -> Option<&'static str> {
@@ -5092,6 +5106,31 @@ mod remedy_tests {
         assert_eq!(response["result"]["content"][0]["text"], text);
         assert_eq!(response["result"]["isError"], false);
         assert_eq!(response["output_source"], "runtime");
+    }
+
+    #[test]
+    fn a_human_denial_reads_as_final_past_the_line_naming_the_authority() {
+        let feedback = format!("[appa] authority human-approval denied this plan.\n{DENIED_BLOCK}");
+        let response = render(
+            declined(&feedback, &[]),
+            &owner(None),
+            Some(RulingInput::Deny),
+        );
+        let denial = text(&response);
+        assert!(denial.starts_with("[appa] Denied:"), "{denial}");
+        assert!(!denial.contains("denied this plan"), "{denial}");
+
+        let remaining =
+            format!("{feedback}\n\nContinue:\n  - execute_remedy_plan(offer_id: \"{OTHER}\")");
+        let response = render(
+            declined(&remaining, &[OTHER]),
+            &owner(None),
+            Some(RulingInput::Deny),
+        );
+        let denial = text(&response);
+        assert!(denial.starts_with("[appa] Denied:"), "{denial}");
+        assert!(denial.ends_with(&remaining[remaining.find('\n').unwrap() + 1..]));
+        assert!(!denial.contains("denied this plan"), "{denial}");
     }
 
     #[test]

@@ -253,18 +253,15 @@ test("Copilot prints saved credentials once in the final instructions, after the
   const summary = result.output.indexOf(
     "Copilot CLI connection settings are saved",
   );
-  const optional = result.output.indexOf("Environment variables (optional)");
-  const credentials = result.output.indexOf(
-    "export COPILOT_PROVIDER_API_KEY='test-key'",
-  );
+  const modelNote = result.output.indexOf("Model selection");
   const signIn = result.output.indexOf("Authorize Copilot CLI for the");
   expect(summary).toBeGreaterThan(-1);
-  expect(optional).toBeGreaterThan(summary);
-  expect(credentials).toBeGreaterThan(optional);
-  expect(signIn).toBeGreaterThan(credentials);
-  expect(
-    result.output.match(/^ {2}export COPILOT_PROVIDER_API_KEY=/gm),
-  ).toHaveLength(1);
+  expect(modelNote).toBeGreaterThan(summary);
+  expect(signIn).toBeGreaterThan(modelNote);
+  expect(result.output).toContain("Copilot starts with archestra/gpt-4o");
+  // The former "optional" exports told people to set COPILOT_MODEL, which
+  // Copilot CLI then refuses to start a provider model with.
+  expect(result.output).not.toContain("export COPILOT_");
   expect(result.output).toContain(
     "copilot -i 'What can you do with my Test tools from the test MCP server? Do not call, test, reconnect or sign in to my other MCP servers. Leave them out of your answer.'",
   );

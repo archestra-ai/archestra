@@ -165,6 +165,8 @@ export interface AgentScriptRenderer {
 export interface AgentEnding {
   /** Replaces the shared "LLM proxy" line when the agent says it better. */
   proxyDetail?: string;
+  /** Replaces the shared skills line, for an agent that installed nothing from the marketplace. */
+  skillsDetail?: string;
   /** Extra "what was set up" lines, e.g. the launch check. */
   parts?: SetupEndingPart[];
   /**

@@ -1,4 +1,5 @@
 import {
+  providerDisplayNames,
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -70,6 +71,13 @@ export async function ensureConnectionVirtualKey(params: {
    * resolution falls back to the user's personal → team → org precedence.
    */
   preferredProviderKeyId?: string | null;
+  /**
+   * The key the user picked for a per-user provider when they can use more
+   * than one: their own GitHub Copilot sign-in, or an organization's GitHub
+   * Copilot plan (a GitHub App key) shared with them. Omitted, the setup binds
+   * the user's own sign-in.
+   */
+  selectedProviderKeyId?: string | null;
   includeFutureProviders?: boolean;
 }): Promise<{
   virtualApiKeyId: string;
@@ -83,6 +91,7 @@ export async function ensureConnectionVirtualKey(params: {
     provider,
     clientId,
     preferredProviderKeyId,
+    selectedProviderKeyId,
   } = params;
 
   const existingMode = await VirtualApiKeyModel.findByAuthorScopeName({
@@ -91,9 +100,15 @@ export async function ensureConnectionVirtualKey(params: {
     scope: "personal",
     name: connectionVirtualKeyName({ userEmail, clientId }),
   });
+  // An account the user picked for a per-user provider takes the path below,
+  // which checks and binds it. Through primary providers it would be dropped:
+  // they never map a per-user credential.
+  const picked =
+    !!selectedProviderKeyId && providerRequiresPerUserCredential(provider);
   if (
-    existingMode?.includeFutureProviders ||
-    (!existingMode && params.includeFutureProviders)
+    !picked &&
+    (existingMode?.includeFutureProviders ||
+      (!existingMode && params.includeFutureProviders))
   ) {
     const result = await ensurePrimaryProviderKey({
       organizationId,
@@ -117,15 +132,25 @@ export async function ensureConnectionVirtualKey(params: {
   // org/team-shared default, which would hand one account's credential to
   // everyone. getCurrentApiKey already resolves only the acting user's personal
   // key for per-user providers, so skip the admin-default precedence entirely.
+  // The user may instead pick a key they can use themselves: canUseKey refuses
+  // anyone else's sign-in and admits an organization plan shared with them.
   const isPerUser = providerRequiresPerUserCredential(provider);
   const providerApiKey = isPerUser
-    ? await LlmProviderApiKeyModel.getCurrentApiKey({
-        organizationId,
-        userId,
-        userTeamIds,
-        provider,
-        conversationId: null,
-      })
+    ? selectedProviderKeyId
+      ? await resolveSelectedPerUserKey({
+          organizationId,
+          userId,
+          userTeamIds,
+          provider,
+          providerApiKeyId: selectedProviderKeyId,
+        })
+      : await LlmProviderApiKeyModel.getCurrentApiKey({
+          organizationId,
+          userId,
+          userTeamIds,
+          provider,
+          conversationId: null,
+        })
     : ((await resolvePreferredProviderKey({
         preferredProviderKeyId,
         organizationId,
@@ -196,6 +221,12 @@ export async function ensureConnectionVirtualKey(params: {
     scope: "personal",
     authorId: userId,
     providerApiKeys: [{ provider, providerApiKeyId: keyToBind.id }],
+    // A picked account came around the future-providers path; the key still
+    // takes that setting.
+    includeFutureProviders:
+      picked &&
+      (existingMode?.includeFutureProviders ??
+        params.includeFutureProviders) === true,
   });
 
   // Names are not unique, so two concurrent setups can both miss the lookup
@@ -354,6 +385,37 @@ async function resolvePreferredProviderKey(params: {
       "resolvePreferredProviderKey: configured default key invalid; falling back to precedence resolution",
     );
     return null;
+  }
+  return key;
+}
+
+/**
+ * The per-user provider key the user picked. Unlike an admin mapping, a pick
+ * that is gone or not theirs to use is refused rather than replaced: binding
+ * another account in its place would bill the wrong subscription.
+ */
+async function resolveSelectedPerUserKey(params: {
+  organizationId: string;
+  userId: string;
+  userTeamIds: string[];
+  provider: SupportedProvider;
+  providerApiKeyId: string;
+}) {
+  const key = await LlmProviderApiKeyModel.findById(params.providerApiKeyId);
+  if (
+    !key ||
+    key.organizationId !== params.organizationId ||
+    key.provider !== params.provider ||
+    !(await LlmProviderApiKeyModel.canUseKey(
+      key,
+      params.userId,
+      params.userTeamIds,
+    ))
+  ) {
+    throw new ApiError(
+      404,
+      `The selected ${providerDisplayNames[params.provider]} account is not available to you. Choose another one, or connect your own account.`,
+    );
   }
   return key;
 }

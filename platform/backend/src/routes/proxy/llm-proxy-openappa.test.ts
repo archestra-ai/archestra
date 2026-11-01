@@ -1210,6 +1210,866 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(JSON.stringify(sent[1])).toContain("Tool output denied");
   });
 
+  const COPILOT_KEY = "efeab99e17779df23bb5d2437f3c8f8f";
+  const copilotHeaders = {
+    "user-agent": "OpenAI/JS 5.20.1",
+    "x-archestra-agent-id": "github_copilot_cli",
+    "x-initiator": "user",
+    "x-interaction-type": "conversation-user",
+  };
+
+  test.for([
+    "deny",
+    "result",
+    "undeclared",
+  ] as const)("Copilot CLI Responses %s roots on the prompt cache key and checks native calls", async (outcome, {
+    seedAndAssignArchestraTools,
+  }) => {
+    if (outcome === "undeclared") await seedAndAssignArchestraTools(agent.id);
+    await app.register(openAiProxyRoutes);
+    await ModelModel.upsert({
+      externalId: "openai/gpt-5.5",
+      provider: "openai",
+      modelId: "gpt-5.5",
+      inputModalities: null,
+      outputModalities: null,
+      lastSyncedAt: new Date(),
+    });
+    const sent: unknown[] = [];
+    const call = {
+      type: "function_call",
+      id: "fc_copilot",
+      call_id: "call_copilot_bash",
+      name: "bash",
+      arguments: JSON.stringify({ command: "echo test", description: "echo" }),
+      status: "completed",
+    };
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockReturnValue({
+      responses: {
+        create: async (params: unknown) => {
+          sent.push(structuredClone(params));
+          return {
+            id: "resp_copilot",
+            object: "response",
+            created_at: 1,
+            status: "completed",
+            model: "gpt-5.5",
+            output: [call],
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          };
+        },
+      },
+    } as never);
+    // Copilot's opening turn: a user message with its datetime preamble, no
+    // session header, and the session named by prompt_cache_key only.
+    const input = [
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: "<current_datetime>2026-10-28T23:02:45.235+04:00</current_datetime>\n\nRun the tool",
+          },
+        ],
+      },
+    ];
+    const send = (items: unknown[]) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/responses`,
+        headers: {
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformKey,
+          ...copilotHeaders,
+        },
+        payload: {
+          model: "gpt-5.5",
+          stream: false,
+          store: false,
+          prompt_cache_key: COPILOT_KEY,
+          parallel_tool_calls: true,
+          input: items,
+          tools: [
+            {
+              type: "function",
+              name: "bash",
+              parameters: {
+                type: "object",
+                properties: {
+                  command: { type: "string" },
+                  description: { type: "string" },
+                },
+              },
+            },
+            ...(outcome === "undeclared"
+              ? [
+                  {
+                    type: "function",
+                    // Copilot spells an MCP tool <server>-<advertised name>.
+                    name: "prod_gateway-archestra__get_remedy_plans",
+                    description: attestToolDescription({
+                      organizationId: agent.organizationId,
+                      gatewayId: agent.id,
+                      advertisedName: "archestra__get_remedy_plans",
+                      kind: "b",
+                      description: "Read the blocked ruling",
+                    }),
+                    parameters: { type: "object", properties: {} },
+                  },
+                  {
+                    type: "function",
+                    name: "prod_gateway-archestra__execute_remedy_plan",
+                    description: attestToolDescription({
+                      organizationId: agent.organizationId,
+                      gatewayId: agent.id,
+                      advertisedName: "archestra__execute_remedy_plan",
+                      kind: "b",
+                      description: "Apply a remedy",
+                    }),
+                    parameters: { type: "object", properties: {} },
+                  },
+                ]
+              : []),
+          ],
+        },
+      });
+    block = outcome === "deny";
+    if (outcome === "undeclared") {
+      const dispatch = native.dispatchHook.getMockImplementation();
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        if (JSON.parse(raw).event === "tool_call")
+          throw Object.assign(new Error("private native diagnostic"), {
+            code: "undeclared_tool",
+          });
+        return dispatch?.(raw);
+      });
+    }
+    const first = await send(input);
+    expect(first.statusCode, first.body).toBe(200);
+    // The root is the Copilot session, not a per-request session.
+    const started = events.filter((event) => event.event === "session_start");
+    expect(started).toHaveLength(1);
+    expect(String(started[0].session_id).endsWith(COPILOT_KEY)).toBe(true);
+    expect(started[0].parent_id ?? null).toBeNull();
+    const calls = first.json().output;
+    if (outcome === "undeclared") {
+      const notice = calls.find(
+        (item: { type?: string }) => item.type === "function_call",
+      );
+      expect(notice?.name, first.body).toBe(
+        "prod_gateway-archestra__get_remedy_plans",
+      );
+      expect(notice.arguments).toContain("No remedy plan is available");
+      expect(first.body).not.toContain("private native diagnostic");
+      return;
+    }
+    if (outcome === "deny") {
+      expect(
+        calls.some((item: { name?: string }) => item.name === "bash"),
+      ).toBe(false);
+      return;
+    }
+    expect(calls.some((item: { name?: string }) => item.name === "bash")).toBe(
+      true,
+    );
+    const dispatch = native.dispatchHook.getMockImplementation();
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      if (event.event !== "tool_result") return dispatch?.(raw);
+      events.push(event);
+      return JSON.stringify({
+        decision: "deny_call",
+        feedback: "Tool output denied",
+        approved_output: "Tool output denied",
+        output_source: "runtime",
+      });
+    });
+    // The continuation replays the stamped call and its result, as Copilot does.
+    const next = await send([
+      ...input,
+      ...calls,
+      {
+        type: "function_call_output",
+        call_id: call.call_id,
+        output:
+          "RAW DENIED COPILOT RESULT\n<shellId: 0 completed with exit code 0>",
+      },
+    ]);
+    expect(next.statusCode, next.body).toBe(200);
+    expect(events.some((event) => event.event === "tool_result")).toBe(true);
+    // The continuation stays on the same root: no session opens under another id.
+    for (const event of events.filter((e) => e.event === "session_start")) {
+      expect(String(event.session_id).endsWith(COPILOT_KEY)).toBe(true);
+    }
+    expect(sent).toHaveLength(2);
+    expect(JSON.stringify(sent[1])).not.toContain("RAW DENIED COPILOT RESULT");
+    expect(JSON.stringify(sent[1])).toContain("Tool output denied");
+  });
+
+  test("Copilot CLI subagents bind through the task prompt's delegation marker and are refused without one", async () => {
+    config.openappa.offerSigningSecret = "copilot-subagent-marker-test";
+    await app.register(openAiProxyRoutes);
+    await ModelModel.upsert({
+      externalId: "openai/gpt-5.5",
+      provider: "openai",
+      modelId: "gpt-5.5",
+      inputModalities: null,
+      outputModalities: null,
+      lastSyncedAt: new Date(),
+    });
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockReturnValue({
+      responses: {
+        create: async () => ({
+          id: "resp_copilot_child",
+          object: "response",
+          created_at: 1,
+          status: "completed",
+          model: "gpt-5.5",
+          output: [
+            {
+              id: "msg_child",
+              type: "message",
+              role: "assistant",
+              status: "completed",
+              content: [
+                { type: "output_text", text: "child done", annotations: [] },
+              ],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        }),
+      },
+    } as never);
+    const prompt = "Say hi from the child";
+    const marker = mintDelegationMarker({
+      organizationId: agent.organizationId,
+      callerId: `user:${userId}`,
+      parentId: COPILOT_KEY,
+      spawnerNativeId: COPILOT_KEY,
+      prompt,
+      spawnCallId: "call_spawn",
+    });
+    const send = (opening: string, subagent: boolean) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/responses`,
+        headers: {
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformKey,
+          ...copilotHeaders,
+          ...(subagent
+            ? {
+                "x-initiator": "agent",
+                "x-interaction-type": "conversation-subagent",
+              }
+            : {}),
+        },
+        payload: {
+          model: "gpt-5.5",
+          stream: false,
+          store: false,
+          // Copilot's subagents share the parent's key and carry no id of their own.
+          prompt_cache_key: COPILOT_KEY,
+          input: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "input_text",
+                  text: `<current_datetime>2026-10-28T23:02:45.311+04:00</current_datetime>\n\n${opening}`,
+                },
+              ],
+            },
+          ],
+          tools: [
+            {
+              type: "function",
+              name: "bash",
+              parameters: { type: "object", properties: {} },
+            },
+          ],
+        },
+      });
+    const child = await send(`${prompt}\n\n${marker}`, true);
+    expect(child.statusCode, child.body).toBe(200);
+    const childStart = events.find(
+      (event) =>
+        event.event === "session_start" &&
+        String(event.session_id).endsWith(`${COPILOT_KEY}:call_spawn`),
+    );
+    expect(childStart, JSON.stringify(events)).toBeDefined();
+    expect(String(childStart?.parent_id).endsWith(COPILOT_KEY)).toBe(true);
+
+    const unmarked = await send(prompt, true);
+    expect(unmarked.statusCode, unmarked.body).toBe(400);
+    expect(unmarked.body).toContain(
+      "carries no delegation marker from a task call",
+    );
+
+    // The parent's own turn with the same key stays a root.
+    events.length = 0;
+    const parent = await send("Delegate", false);
+    expect(parent.statusCode, parent.body).toBe(200);
+    const parentStart = events.find((event) => event.event === "session_start");
+    expect(String(parentStart?.session_id).endsWith(COPILOT_KEY)).toBe(true);
+    expect(parentStart?.parent_id ?? null).toBeNull();
+  });
+
+  test("Copilot CLI reads a governed background agent's return with a read_agent call it made itself", async () => {
+    config.openappa.offerSigningSecret = "copilot-read-agent-test";
+    await app.register(openAiProxyRoutes);
+    await ModelModel.upsert({
+      externalId: "openai/gpt-5.5",
+      provider: "openai",
+      modelId: "gpt-5.5",
+      inputModalities: null,
+      outputModalities: null,
+      lastSyncedAt: new Date(),
+    });
+    const sent: unknown[] = [];
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockReturnValue({
+      responses: {
+        create: async (params: unknown) => {
+          sent.push(structuredClone(params));
+          return {
+            id: "resp_copilot_parent",
+            object: "response",
+            created_at: 1,
+            status: "completed",
+            model: "gpt-5.5",
+            output: [
+              {
+                id: "msg_parent",
+                type: "message",
+                role: "assistant",
+                status: "completed",
+                content: [
+                  {
+                    type: "output_text",
+                    text: "It ran in the lab.",
+                    annotations: [],
+                  },
+                ],
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          };
+        },
+      },
+    } as never);
+    const value = "C:\\Users\\mark\\appa-root-flow\\lab";
+    const agentId = "5ef9a71d-f2c6-47f4-abe6-3d0adb3141ef";
+    // Copilot makes this call itself when it announces the agent is idle.
+    const readCall = "d2a07213-03ad-49a9-a289-6acec57aba87";
+    const prompt = "Run pwd and report it.";
+    const parent = `user:${userId}|${COPILOT_KEY}`;
+    const marker = mintDelegationMarker({
+      organizationId: agent.organizationId,
+      callerId: `user:${userId}`,
+      parentId: COPILOT_KEY,
+      spawnerNativeId: COPILOT_KEY,
+      prompt,
+      spawnCallId: "call_spawn",
+    });
+    // The child ran through the proxy and crossed its return. Copilot's
+    // subagents report no id of their own.
+    native.loadChildReturns.mockImplementation(
+      async (_organizationId: string, parentSessionId: string) =>
+        parentSessionId === parent
+          ? [
+              {
+                childSessionId: `${parent}:call_spawn`,
+                spawnCallId: "call_spawn",
+                value,
+              },
+            ]
+          : [],
+    );
+    const defaultDispatch = native.dispatchHook.getMockImplementation();
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      if (event.event === "tool_result" && event.spawned_id) {
+        events.push(event);
+        return JSON.stringify({ decision: "ack" });
+      }
+      // The runtime released no read_agent call, as for the real binding.
+      if (event.event === "tool_result" && event.tool_call_id === readCall) {
+        events.push(event);
+        return JSON.stringify({
+          decision: "replace_output",
+          code: "unreleased_call",
+          output_source: "runtime",
+          approved_output:
+            "[appa] Tool output withheld: this result has no record of releasing a call.",
+        });
+      }
+      if (!defaultDispatch) throw new Error("missing native mock");
+      return defaultDispatch(raw);
+    });
+    events.length = 0;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      headers: {
+        authorization: "Bearer test-key",
+        "x-archestra-virtual-key": platformKey,
+        ...copilotHeaders,
+      },
+      payload: {
+        model: "gpt-5.5",
+        stream: false,
+        store: false,
+        prompt_cache_key: COPILOT_KEY,
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: "<current_datetime>2026-11-01T00:43:06.768+04:00</current_datetime>\n\nStart a subagent in the background that runs pwd, then read its result.",
+              },
+            ],
+          },
+          {
+            type: "function_call",
+            id: "fc_spawn",
+            call_id: "call_spawn",
+            name: "task",
+            status: "completed",
+            arguments: JSON.stringify({
+              agent_type: "task",
+              description: "Run pwd",
+              mode: "background",
+              name: "pwd-runner",
+              prompt: `${prompt}\n\n${marker}`,
+              model: "archestra/gpt-5.5",
+            }),
+          },
+          {
+            type: "function_call_output",
+            call_id: "call_spawn",
+            output: `Agent started in background with agent_id: ${agentId}. You'll be notified when it completes.`,
+          },
+          {
+            type: "message",
+            role: "assistant",
+            content: [{ type: "output_text", text: "Waiting for it." }],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: '<system_notification>\nAgent "pwd-runner" (task) has finished processing and is now idle.\n</system_notification>',
+              },
+            ],
+          },
+          {
+            type: "function_call",
+            id: "fc_read",
+            call_id: readCall,
+            name: "read_agent",
+            status: "completed",
+            arguments: JSON.stringify({ agent_id: agentId, since_turn: 0 }),
+          },
+          {
+            type: "function_call_output",
+            call_id: readCall,
+            output: `Agent is idle (waiting for messages). agent_id: ${agentId}, agent_type: task, status: idle, description: Run pwd, elapsed: 3s, total_turns: 1\n\n[Turn 0]\n${value}\n\n${mintChildReturnMarker(
+              {
+                organizationId: agent.organizationId,
+                callerId: `user:${userId}`,
+                parentId: parent,
+                childId: `${parent}:call_spawn`,
+                spawnCallId: "call_spawn",
+                value,
+              },
+            )}`,
+          },
+        ],
+        tools: [
+          {
+            type: "function",
+            name: "task",
+            parameters: {
+              type: "object",
+              properties: { prompt: { type: "string" } },
+            },
+          },
+          {
+            type: "function",
+            name: "read_agent",
+            parameters: {
+              type: "object",
+              properties: { agent_id: { type: "string" } },
+            },
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.body).not.toContain("OpenAPPA blocked");
+    expect(sent).toHaveLength(1);
+    const upstream = (sent[0] as { input: Array<Record<string, unknown>> })
+      .input;
+    // The model reads the verified return, without the client's status line.
+    expect(
+      upstream.find(
+        (item) =>
+          item.type === "function_call_output" && item.call_id === readCall,
+      )?.output,
+    ).toBe(value);
+    expect(JSON.stringify(upstream)).not.toContain("finished subagent");
+    expect(
+      events
+        .filter((event) => event.spawned_id)
+        .map((event) => event.tool_call_id),
+    ).toEqual(["call_spawn"]);
+  });
+
+  describe("Copilot CLI background agents across a turn", () => {
+    const value = "C:\\Users\\mark\\appa-root-flow\\lab";
+    const agentId = "23ec0773-4acb-4200-92a9-4e643870c94d";
+    // Copilot makes this call itself when it announces the agent is idle.
+    const readCall = "c613c943-fe02-4c1c-9c4c-2f6f0ad0a9d1";
+    const prompt = "Run pwd and report it.";
+    const OUTCOME_MISMATCH =
+      "this outcome does not match the open dispatch; it is not reported";
+    /**
+     * Spawn calls the stand-in runtime holds open, those whose subagent
+     * started, and those it closed.
+     */
+    let open: Set<string>;
+    let started: Set<string>;
+    let closed: Set<string>;
+    let sent: Array<{ input: Array<Record<string, unknown>> }>;
+
+    const parent = () => `user:${userId}|${COPILOT_KEY}`;
+    const launched = () => [
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: "<current_datetime>2026-11-01T02:57:47.037+04:00</current_datetime>\n\nStart a subagent in the background with the task tool that runs pwd, then read its result with read_agent.",
+          },
+        ],
+      },
+      {
+        type: "function_call",
+        id: "fc_spawn",
+        call_id: "call_spawn",
+        name: "task",
+        status: "completed",
+        arguments: JSON.stringify({
+          agent_type: "task",
+          description: "Print current working directory",
+          mode: "background",
+          name: "pwd-agent",
+          prompt: `${prompt}\n\n${mintDelegationMarker({
+            organizationId: agent.organizationId,
+            callerId: `user:${userId}`,
+            parentId: COPILOT_KEY,
+            spawnerNativeId: COPILOT_KEY,
+            prompt,
+            spawnCallId: "call_spawn",
+          })}`,
+          model: "archestra/gpt-5.5",
+        }),
+      },
+      {
+        type: "function_call_output",
+        call_id: "call_spawn",
+        output: `Agent started in background with agent_id: ${agentId}. You'll be notified when it completes. Tell the user you're waiting and end your response, or continue unrelated work until notified.`,
+      },
+    ];
+    const reported = () => [
+      ...launched(),
+      {
+        type: "message",
+        role: "assistant",
+        content: [
+          {
+            type: "output_text",
+            text: "The background subagent has started; I'm waiting for its result.",
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: '<system_notification>\nAgent "pwd-agent" (task) has finished processing and is now idle.\n</system_notification>',
+          },
+        ],
+      },
+      {
+        type: "function_call",
+        id: "fc_read",
+        call_id: readCall,
+        name: "read_agent",
+        status: "completed",
+        arguments: JSON.stringify({ agent_id: agentId, since_turn: 0 }),
+      },
+      {
+        type: "function_call_output",
+        call_id: readCall,
+        output: `Agent is idle (waiting for messages). agent_id: ${agentId}, agent_type: task, status: idle, description: Print current working directory, elapsed: 5s, total_turns: 1, model: archestra/gpt-5.5\n\n[Turn 0]\n${value}\n\n${mintChildReturnMarker(
+          {
+            organizationId: agent.organizationId,
+            callerId: `user:${userId}`,
+            parentId: parent(),
+            childId: `${parent()}:call_spawn`,
+            spawnCallId: "call_spawn",
+            value,
+          },
+        )}`,
+      },
+    ];
+    const send = (input: unknown[]) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/responses`,
+        headers: {
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformKey,
+          ...copilotHeaders,
+        },
+        payload: {
+          model: "gpt-5.5",
+          stream: false,
+          store: false,
+          prompt_cache_key: COPILOT_KEY,
+          input,
+          tools: [
+            {
+              type: "function",
+              name: "task",
+              parameters: {
+                type: "object",
+                properties: { prompt: { type: "string" } },
+              },
+            },
+            {
+              type: "function",
+              name: "read_agent",
+              parameters: {
+                type: "object",
+                properties: { agent_id: { type: "string" } },
+              },
+            },
+            // The gateway's remedy tools: with them the proxy governs the
+            // session's turns, and ends a turn the model closes.
+            ...(
+              [
+                ["archestra__get_remedy_plans", "Read the blocked ruling"],
+                ["archestra__execute_remedy_plan", "Apply a remedy"],
+              ] as const
+            ).map(([advertisedName, description]) => ({
+              type: "function",
+              // Copilot spells an MCP tool <server>-<advertised name>.
+              name: `prod_gateway-${advertisedName}`,
+              description: attestToolDescription({
+                organizationId: agent.organizationId,
+                gatewayId: agent.id,
+                advertisedName,
+                kind: "b",
+                description,
+              }),
+              parameters: { type: "object", properties: {} },
+            })),
+          ],
+        },
+      });
+    const readOutput = () =>
+      sent
+        .at(-1)
+        ?.input.find(
+          (item) =>
+            item.type === "function_call_output" && item.call_id === readCall,
+        )?.output;
+
+    beforeEach(async ({ seedAndAssignArchestraTools }) => {
+      await seedAndAssignArchestraTools(agent.id);
+      config.openappa.offerSigningSecret = "copilot-background-turn-test";
+      await app.register(openAiProxyRoutes);
+      await ModelModel.upsert({
+        externalId: "openai/gpt-5.5",
+        provider: "openai",
+        modelId: "gpt-5.5",
+        inputModalities: null,
+        outputModalities: null,
+        lastSyncedAt: new Date(),
+      });
+      sent = [];
+      vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockReturnValue({
+        responses: {
+          create: async (params: unknown) => {
+            sent.push(structuredClone(params) as (typeof sent)[number]);
+            return {
+              id: "resp_copilot_parent",
+              object: "response",
+              created_at: 1,
+              status: "completed",
+              model: "gpt-5.5",
+              output: [
+                {
+                  id: "msg_parent",
+                  type: "message",
+                  role: "assistant",
+                  status: "completed",
+                  content: [
+                    { type: "output_text", text: "Done.", annotations: [] },
+                  ],
+                },
+              ],
+              usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+            };
+          },
+        },
+      } as never);
+      // The child ran through the proxy and crossed its return.
+      native.loadChildReturns.mockImplementation(
+        async (_organizationId: string, parentSessionId: string) =>
+          parentSessionId === parent()
+            ? [
+                {
+                  childSessionId: `${parent()}:call_spawn`,
+                  spawnCallId: "call_spawn",
+                  value,
+                },
+              ]
+            : [],
+      );
+      // As appa-runtime's on_turn_end does, a turn end closes the calls still
+      // open but a spawn whose subagent started, which stays open for its
+      // result. A later report against a closed call is refused, as
+      // decide_outcome does.
+      open = new Set(["call_spawn"]);
+      started = new Set(["call_spawn"]);
+      closed = new Set();
+      const defaultDispatch = native.dispatchHook.getMockImplementation();
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw);
+        if (event.event === "turn_end") {
+          events.push(event);
+          for (const id of open) {
+            if (started.has(id)) continue;
+            closed.add(id);
+            open.delete(id);
+          }
+          return JSON.stringify({ decision: "ack" });
+        }
+        if (event.event === "tool_result" && event.spawned_id) {
+          events.push(event);
+          if (closed.has(event.tool_call_id)) {
+            return JSON.stringify({
+              decision: "block",
+              reason: OUTCOME_MISMATCH,
+              output_source: "runtime",
+              approved_output: `[appa] Tool output withheld: ${OUTCOME_MISMATCH}`,
+            });
+          }
+          open.delete(event.tool_call_id);
+          return JSON.stringify({ decision: "ack" });
+        }
+        // The runtime released no read_agent call, as for the real binding.
+        if (event.event === "tool_result" && event.tool_call_id === readCall) {
+          events.push(event);
+          return JSON.stringify({
+            decision: "replace_output",
+            code: "unreleased_call",
+            output_source: "runtime",
+            approved_output:
+              "[appa] Tool output withheld: this result has no record of releasing a call.",
+          });
+        }
+        if (!defaultDispatch) throw new Error("missing native mock");
+        return defaultDispatch(raw);
+      });
+      events.length = 0;
+    });
+
+    test("keeps the turn open until the agent's return arrives, so the return is reported", async () => {
+      // The model tells the user it waits and ends its response.
+      const waiting = await send(launched());
+      expect(waiting.statusCode, waiting.body).toBe(200);
+      expect(events.filter((event) => event.event === "turn_end")).toEqual([]);
+      expect(open.has("call_spawn")).toBe(true);
+
+      // Copilot comes back by itself with its read_agent report.
+      const returned = await send(reported());
+      expect(returned.statusCode, returned.body).toBe(200);
+      expect(readOutput()).toBe(value);
+      expect(JSON.stringify(sent.at(-1))).not.toContain("finished subagent");
+      const order = events.flatMap((event) =>
+        event.event === "turn_end"
+          ? ["turn_end"]
+          : event.event === "tool_result" && event.spawned_id
+            ? [`return:${event.tool_call_id}`]
+            : [],
+      );
+      // The return is reported against the open spawn, then the turn ends.
+      expect(order).toEqual(["return:call_spawn", "turn_end"]);
+    });
+
+    test("holds only the turn that answers the launch, so an agent that never reports holds nothing later", async () => {
+      const waiting = await send(launched());
+      expect(waiting.statusCode, waiting.body).toBe(200);
+      expect(events.filter((event) => event.event === "turn_end")).toEqual([]);
+
+      // The person moves on; the agent is cancelled and never reported.
+      const later = await send([
+        ...launched(),
+        {
+          type: "message",
+          role: "assistant",
+          content: [
+            {
+              type: "output_text",
+              text: "The background subagent has started; I'm waiting for its result.",
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: "Never mind it. What is 2 + 2?" },
+          ],
+        },
+      ]);
+      expect(later.statusCode, later.body).toBe(200);
+      expect(events.filter((event) => event.event === "turn_end")).toHaveLength(
+        1,
+      );
+      // The runtime keeps the started child's spawn open across that turn end.
+      expect(open.has("call_spawn")).toBe(true);
+    });
+
+    test("withholds a return its spawn call no longer takes, and the session goes on", async () => {
+      // A new prompt's first call settled the turn before the subagent
+      // started, so the runtime closed the spawn.
+      open.clear();
+      started.clear();
+      closed.add("call_spawn");
+
+      for (const attempt of [1, 2]) {
+        const response = await send(reported());
+        expect(
+          response.statusCode,
+          `attempt ${attempt}: ${response.body}`,
+        ).toBe(200);
+        expect(readOutput()).toBe(
+          "[appa] Tool output withheld: this subagent returned after its call was closed, so its result does not reach this session. Start the subagent again if you still need it.",
+        );
+        expect(JSON.stringify(sent.at(-1))).not.toContain(value);
+      }
+    });
+  });
+
   /** The notice call the client received, arguments included. */
   const noticeFrom = (body: string, stream: boolean) => {
     if (!stream) {

@@ -4,7 +4,7 @@ sidebarTitle: Clients
 description: Make Guardrails check your client, with built-in support or session headers
 order: 3
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-27
+lastUpdated: 2026-11-01
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -21,6 +21,7 @@ These clients work without extra configuration:
 - **Claude Code**
 - **Claude Desktop** (Code and Cowork tabs)
 - **Codex CLI**
+- **Copilot CLI** (see [Copilot CLI](#copilot-cli) for the providers it works with)
 - **Pi**
 - **OpenCode**
 - **Kilo Code**
@@ -51,6 +52,16 @@ Reconnect through the connection page and restart the client to install the ques
 - **Inspect** requires a separate answer afterward. Reading or paging through the review never selects **Allow**.
 - Multi-question and multi-select forms, small terminals, and forms with many or long option labels use the native UI.
 - An existing `tui.jsonc` is preserved without automatic registration. The native question remains available.
+
+<a id="copilot-cli"></a>
+
+### Copilot CLI
+
+Guardrails follow a Copilot CLI session when its model requests use the OpenAI Responses API. Copilot names its conversation only there. Setup selects that API when the proxy serves it for your provider: OpenAI, Azure, GitHub Copilot, or xAI. On other providers Copilot keeps the Chat Completions API, and the proxy treats it as an unrecognized client.
+
+- **Reconnect to turn it on:** a Copilot CLI connected before this support stays on the Chat Completions API. Connect it again from the [connection page](/docs/get-started/connect).
+- **Subagents:** Guardrails follow a subagent that the `task` tool starts. Signed in to GitHub, Copilot would otherwise run a subagent on its own default model, whose requests go to GitHub directly, so the proxy runs it on your session's model instead. A `task` call that names a model outside your Archestra provider is refused, with the models you can use. A background subagent's result reaches your session when Copilot reads it with `read_agent`, also after you send a new prompt while the subagent runs. Subagents from fleet mode or dynamic workflows have no governed parent, and the proxy refuses their model requests.
+- **Approvals:** a review shows as Copilot's own question in an interactive session. Copilot loads most MCP tools only when the model searches for them, so the proxy loads the remedy, question, and report tools up front. Copilot's MCP client declines the gateway's form, so a one-shot (`-p`) session cannot answer a review. Setup lets Copilot run the guardrail helpers, such as [`get_remedy_plans`](/docs/reference/archestra-mcp-server#get_remedy_plans), without asking each time.
 
 <a id="session-headers"></a>
 

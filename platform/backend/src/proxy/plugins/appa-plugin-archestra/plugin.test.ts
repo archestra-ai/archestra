@@ -55,6 +55,7 @@ import {
   AppaClaudeDesktopAdapter,
 } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
+import { AppaCopilotCliAdapter } from "./adapters/copilot-cli";
 import { AppaKimiCodeAdapter } from "./adapters/kimi-code";
 import { AppaKiloAdapter, AppaOpenCodeAdapter } from "./adapters/opencode";
 import { AppaPluginArchestra } from "./plugin";
@@ -5771,6 +5772,76 @@ describe("rendering runtime text for this client", () => {
     }
   });
 
+  test("passes an annotator failure on as its own notice: no remedy note, no client failure", async ({
+    makeOrganization,
+  }) => {
+    config.openappa.enabled = true;
+    config.openappa.yellEnabled = true;
+    const organizationId = (await makeOrganization()).id;
+    // The runtime could not rule on the call (its annotator failed), so the
+    // call never ran and there is no ruling to remedy: the gateway tools would
+    // change nothing. A Copilot CLI session often sends its first request
+    // before the gateway's tools arrive; that must not turn an annotator
+    // failure into "connect the gateway", nor count as a client that cannot
+    // receive remedies.
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({
+      sessionId: "annotator-failed",
+      organizationId,
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: undefined,
+      customTools: new Set(),
+      declaredTools: [{ name: "fetch_copilot_cli_documentation" }],
+    };
+    const notice =
+      '[appa] Not checked: OpenAPPA could not rule on this call because its annotator "archestra.llm-annotator" returned an error. The call did not run. Retrying it will not help. Tell the user that Guardrails could not check this call.';
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async () => [
+        { kind: "deny" as const, feedback: notice, unanswered: true as const },
+      ]);
+    const cancelCalls = vi
+      .spyOn(appaService, "cancelCalls")
+      .mockResolvedValue(undefined);
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "call",
+            name: "fetch_copilot_cli_documentation",
+            arguments: {},
+          },
+        ],
+      });
+      expect(outcome).toMatchObject({
+        decision: "refuse",
+        refusal: {
+          reason: "openappa_unanswered_annotation",
+          blockedToolName: "fetch_copilot_cli_documentation",
+          blockedToolId: "call",
+        },
+      });
+      const message = (outcome as { refusal: { contentMessage: string } })
+        .refusal.contentMessage;
+      expect(message).toBe(notice);
+      const reports = await OpenAppaYellModel.list({
+        organizationId,
+        status: "unresolved",
+        limit: 10,
+      });
+      expect(reports.data).toHaveLength(0);
+    } finally {
+      cancelCalls.mockRestore();
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
   test("refuses the turn and saves a local diagnostic when the client cannot receive remedies", async ({
     makeOrganization,
   }) => {
@@ -10502,6 +10573,114 @@ describe("delegation markers", () => {
       expect(evaluate.mock.calls[0]?.[1][0]?.arguments).toEqual(
         agentCall().arguments,
       );
+    });
+
+    describe("Copilot CLI task model", () => {
+      const KEY = "efeab99e17779df23bb5d2437f3c8f8f";
+      const copilotContext = () => {
+        const context = clientContext({
+          interactionType: "openai:responses",
+          headers: { "x-archestra-agent-id": "github_copilot_cli" },
+          sessionId: `user:user|${KEY}`,
+          body: {
+            model: "gpt-6.1-sol",
+            prompt_cache_key: KEY,
+            input: [{ type: "message", role: "user", content: "Delegate" }],
+            tools: [
+              {
+                type: "function",
+                name: "task",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    prompt: { type: "string" },
+                    model: {
+                      type: "string",
+                      enum: ["archestra/gpt-6.1-sol", "gpt-5.6-luna"],
+                    },
+                  },
+                },
+              },
+            ],
+          },
+          tools: true,
+        });
+        context.model = "gpt-6.1-sol";
+        return context;
+      };
+      const task = (args: Record<string, unknown> = {}) => ({
+        id: "call_task",
+        name: "task",
+        arguments: { prompt: "Run pwd and report it.", ...args },
+      });
+
+      test("runs the subagent on the session's own model, and the registry accepts the rewritten call", async () => {
+        const registry = new LlmProxyPluginRegistry();
+        registry.register(
+          new AppaPluginArchestra([new AppaCopilotCliAdapter()]),
+        );
+        const context = copilotContext();
+        await registry.onSessionInit(context);
+
+        const outcome = await registry.onToolCalls({
+          ...context,
+          canRewriteToolCalls: true,
+          toolCalls: [task()],
+        });
+
+        if (outcome.decision !== "allow") throw new Error("expected the task");
+        expect(outcome.toolCalls[0]).toMatchObject({
+          id: "call_task",
+          name: "task",
+          arguments: {
+            prompt: expect.stringContaining("[appa] delegated trajectory"),
+            model: "archestra/gpt-6.1-sol",
+          },
+        });
+        // The runtime ruled on the call the model wrote.
+        expect(evaluate.mock.calls[0]?.[1][0]?.arguments).toEqual(
+          task().arguments,
+        );
+      });
+
+      test("keeps a routed model the call names, as a marker-only change", async () => {
+        const plugin = new AppaPluginArchestra([new AppaCopilotCliAdapter()]);
+        const context = copilotContext();
+        await plugin.onSessionInit(context);
+        const outcome = await plugin.onToolCalls(
+          toolCalls(context, [task({ model: "archestra/gpt-6.1-sol" })]),
+        );
+        expect(outcome).toMatchObject({
+          decision: "allow",
+          annotated: [{ id: "call_task", name: "task", field: "prompt" }],
+        });
+        expect(outcome).not.toHaveProperty("rewritten");
+      });
+
+      test("refuses a model the proxy never sees, without a ruling, and says which models keep the child governed", async () => {
+        const plugin = new AppaPluginArchestra([new AppaCopilotCliAdapter()]);
+        const context = copilotContext();
+        await plugin.onSessionInit(context);
+        const outcome = await plugin.onToolCalls(
+          toolCalls(context, [task({ model: "gpt-5.6-luna" })]),
+        );
+        expect(evaluate).not.toHaveBeenCalled();
+        expect(outcome).toMatchObject({
+          decision: "allow",
+          blocked: [
+            {
+              id: "call_task",
+              name: "task",
+              reason: expect.stringContaining(
+                'would start its subagent on "gpt-5.6-luna"',
+              ),
+            },
+          ],
+        });
+        expect(JSON.stringify(outcome)).toContain(
+          "with model set to one of: archestra/gpt-6.1-sol.",
+        );
+      });
     });
 
     test("reports the annotation it made, and nothing for a batch without spawns", async () => {

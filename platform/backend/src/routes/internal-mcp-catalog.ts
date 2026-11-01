@@ -70,6 +70,7 @@ import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 import { propagateAppCatalogChange } from "@/services/apps/app-mcp-backing";
 import { CredentialAccess } from "@/services/credential-access";
 import { preflightMcpCredentials } from "@/services/credentials";
+import { deviceMcpService } from "@/services/device-mcp";
 import {
   assertCanAssignEnvironment,
   assertRemoteServerUrlAllowedByNetworkPolicy,
@@ -979,6 +980,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "App catalog entities are managed via the Apps API.",
         );
       }
+      if (restBody.serverType === "device") {
+        await deviceMcpService.assertEnabled(request.organizationId);
+        if (!restBody.deviceConfig)
+          throw new ApiError(
+            400,
+            "Device servers require reviewed launch configuration",
+          );
+      }
       await assertCanWriteMcpDeploymentYaml({
         userId: request.user.id,
         organizationId: request.organizationId,
@@ -1489,6 +1498,34 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!originalCatalogItem) {
         throw new ApiError(404, "Catalog item not found");
+      }
+
+      if (
+        originalCatalogItem.serverType === "device" ||
+        restBody.serverType === "device"
+      ) {
+        await deviceMcpService.assertEnabled(request.organizationId);
+        if (
+          restBody.serverType &&
+          restBody.serverType !== originalCatalogItem.serverType
+        )
+          throw new ApiError(
+            400,
+            "Device server hosting cannot be changed after creation",
+          );
+        if (
+          restBody.deviceConfig === null ||
+          !(restBody.deviceConfig ?? originalCatalogItem.deviceConfig)
+        )
+          throw new ApiError(
+            400,
+            "Device servers require reviewed launch configuration",
+          );
+        if (restBody.dynamicConnectionMcpServerId)
+          throw new ApiError(
+            400,
+            "Device servers use each caller’s own paired device",
+          );
       }
 
       if (

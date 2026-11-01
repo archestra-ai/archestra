@@ -185,7 +185,7 @@ export function ChooseToolsView({
       />
 
       <div className="flex min-h-0 flex-1 flex-col">
-        {!builtIn && (
+        {!builtIn && catalog.serverType !== "device" && (
           <div className="shrink-0 space-y-2 px-5 pt-4 pb-3">
             <h3 id="credential-mode-label" className="text-sm font-semibold">
               Whose connection do the tools use?

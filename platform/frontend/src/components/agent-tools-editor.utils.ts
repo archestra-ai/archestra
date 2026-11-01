@@ -108,6 +108,7 @@ export function buildBulkToolUpdate(params: {
     const useDynamicCredential =
       isPlaywrightCatalogItem(changes.catalogItem.id) ||
       changes.catalogItem.serverType === "app" ||
+      changes.catalogItem.serverType === "device" ||
       changes.credentialSourceId === DYNAMIC_CREDENTIAL_VALUE;
     const useEnterpriseManagedCredential =
       prefersEnterpriseManaged && useDynamicCredential;

@@ -8,6 +8,7 @@ import {
   LocalConfigSchema,
   OAuthConfigSchema,
 } from "@archestra/shared";
+import { DeviceMcpConfigSchema } from "@archestra/shared/device-mcp";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -32,6 +33,7 @@ export const InternalMcpCatalogServerTypeSchema = z.enum([
   "local",
   "remote",
   "builtin",
+  "device",
   // Platform-authored MCP App: in-process, HTML-backed, viewer-scoped. Backs a
   // real mcp_server exposing an `open` launch tool, but opts out of K8s deploy /
   // install / cascade / discovery. Served in-process via the owned-app builder.
@@ -164,6 +166,7 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
     oauthConfig: OAuthConfigSchema.nullable(),
     enterpriseManagedConfig: EnterpriseManagedCredentialConfigSchema.nullable(),
     localConfig: LocalConfigSelectSchema.nullable(),
+    deviceConfig: DeviceMcpConfigSchema.nullable(),
     clonedFrom: z.string().uuid().nullable(),
     // Serialized as a nullable string (not the enum) because the OpenAPI client
     // generator drops `null` from a `nullable` enum; the column keeps its
@@ -233,6 +236,7 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
     enterpriseManagedConfig:
       EnterpriseManagedCredentialConfigSchema.nullable().optional(),
     localConfig: LocalConfigSchema.nullable().optional(),
+    deviceConfig: DeviceMcpConfigSchema.nullable().optional(),
     clonedFrom: z.string().uuid().nullable().optional(),
     // Labels are synced separately via McpCatalogLabelModel
     labels: z.array(CatalogLabelSchema).optional(),
@@ -304,6 +308,7 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     enterpriseManagedConfig:
       EnterpriseManagedCredentialConfigSchema.nullable().optional(),
     localConfig: LocalConfigSchema.nullable().optional(),
+    deviceConfig: DeviceMcpConfigSchema.nullable().optional(),
     // Labels are synced separately via McpCatalogLabelModel
     labels: z.array(CatalogLabelSchema).optional(),
   })
@@ -395,6 +400,9 @@ function validateEnterpriseManagedTransportConfig(
 
 function validateInternalMcpCatalog(
   value: {
+    deviceConfig?: unknown;
+    dynamicConnectionMcpServerId?: string | null;
+    multitenant?: boolean;
     serverType?: InternalMcpCatalogServerType;
     enterpriseManagedConfig?: unknown;
     localConfig?: {
@@ -405,6 +413,24 @@ function validateInternalMcpCatalog(
   },
   ctx: z.RefinementCtx,
 ): void {
+  if (value.serverType === "device") {
+    if (value.deviceConfig === null)
+      ctx.addIssue({
+        code: "custom",
+        path: ["deviceConfig"],
+        message: "Device servers require reviewed launch configuration",
+      });
+    if (
+      value.dynamicConnectionMcpServerId ||
+      value.multitenant ||
+      value.enterpriseManagedConfig
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["serverType"],
+        message: "Device servers use each caller’s own paired device",
+      });
+  }
   validateEnterpriseManagedTransportConfig(value, ctx);
   validateHeaderMappedUserConfig(value.userConfig, ctx);
 }

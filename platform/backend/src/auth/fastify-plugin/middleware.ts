@@ -26,6 +26,7 @@ import {
   CONNECTION_RUNTIME_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
   CONNECTION_STARTUP_GUARD_PATH,
+  DEVICE_MCP_PROOF_PATHS,
   GITHUB_ACTIONS_TOKEN_PATH,
   GUARDRAILS_NOOP_ANNOTATOR_PATH,
   HEALTH_PATH,
@@ -167,6 +168,8 @@ export class Authnz {
       );
       return true;
     }
+    if (method === "POST" && DEVICE_MCP_PROOF_PATHS.has(url.split("?")[0]))
+      return true;
     const isGetOrHead = method === "GET" || method === "HEAD";
     if (
       url.startsWith("/api/auth") ||

@@ -299,7 +299,7 @@ async function handleMcpPostRequest(
     return;
   }
 
-  const runId = readHeader(request, RUN_ID_HEADER);
+  const runId = tokenAuthContext?.runId ?? readHeader(request, RUN_ID_HEADER);
   const currentToolCallId = logicalToolCallId(body);
 
   // Read from the raw body: the SDK's request schemas drop unknown params, so
@@ -921,6 +921,12 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         throw new ApiError(401, "Unauthorized");
       }
 
+      if (
+        tokenAuth.authenticatedRuntimeTaskId &&
+        tokenAuth.authenticatedRuntimeTaskId !== request.body.taskId
+      ) {
+        throw new ApiError(404, "Run not found");
+      }
       const run = await AgentRunModel.findByTaskId(request.body.taskId);
       if (
         !run ||
@@ -1270,10 +1276,21 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         };
       }
 
-      const runId = readHeader(request, RUN_ID_HEADER);
+      const presentedRunId = readHeader(request, RUN_ID_HEADER);
+      const runId = tokenAuth.authenticatedRuntimeTaskId ?? presentedRunId;
+      if (
+        tokenAuth.authenticatedRuntimeTaskId &&
+        presentedRunId &&
+        presentedRunId !== tokenAuth.authenticatedRuntimeTaskId
+      )
+        throw new ApiError(
+          403,
+          "Runtime credential does not match the presented task",
+        );
       const llmSessionId = gatewayLlmSessionId(request);
       const llmToolCallId = gatewayLlmToolCallId(request.body);
       const tokenAuthContext: TokenAuthContext = {
+        isBackgroundExecution: tokenAuth.isBackgroundExecution,
         tokenId: tokenAuth.tokenId,
         teamId: tokenAuth.teamId,
         isOrganizationToken: tokenAuth.isOrganizationToken,

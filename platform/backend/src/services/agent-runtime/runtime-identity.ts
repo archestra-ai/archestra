@@ -7,11 +7,14 @@ import {
   AgentWorkspaceModel,
   OpenAppaSessionModel,
 } from "@/models";
+import DeviceMcpModel from "@/models/device-mcp";
 import type { RuntimeIdentitySnapshot } from "@/models/proxy-request-context";
+import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
 import { scopedSessionId } from "@/openappa/actor";
 import type { OpenAppaSession } from "@/openappa/service";
 import { type AgentRunActorKind, type AgentRunRecord, ApiError } from "@/types";
 import type { AgentWorkspace } from "@/types/agent-workspace";
+import { issueRuntimeGatewayCredential } from "./runtime-gateway-credential";
 
 /**
  * Stable OpenAPPA principal for a non-user runtime workspace.
@@ -470,6 +473,30 @@ export async function stampRuntimeBinding(params: {
   });
   if (!token) {
     throw new ApiError(500, "Could not mint the runtime binding");
+  }
+  // A device-enabled organization must never give a runtime its user's
+  // reusable personal bearer. Origin is authenticated even if code omits or
+  // replaces every optional request header.
+  if (
+    identity.actorKind === "user" &&
+    (await DeviceMcpModel.enabled(identity.organizationId))
+  ) {
+    if (!identity.actorUserId)
+      throw new ApiError(403, "Human runtime identity is unavailable");
+    params.spec.secretEnv.ARCHESTRA_MCP_GATEWAY_TOKEN =
+      issueRuntimeGatewayCredential({
+        organizationId: identity.organizationId,
+        userId: identity.actorUserId,
+        agentId: identity.agentId,
+        workspaceId: identity.workspaceId,
+        taskId: identity.taskId,
+        background: await ScheduleTriggerRunModel.isRuntimeTaskScheduled(
+          identity.taskId,
+          identity.organizationId,
+        ),
+        expiresAt,
+      });
+    delete params.spec.env.ARCHESTRA_MCP_GATEWAY_TOKEN;
   }
   params.spec.secretEnv[RUNTIME_BINDING_ENV] = token;
   delete params.spec.env[RUNTIME_BINDING_ENV];

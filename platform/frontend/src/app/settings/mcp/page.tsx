@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -33,11 +34,6 @@ import {
   useOrganization,
   useUpdateMcpSettings,
 } from "@/lib/organization.query";
-
-const TOGGLE_OPTION_LABELS = {
-  enabled: "Enabled",
-  disabled: "Disabled",
-} as const;
 
 const MCP_SETTINGS_PERMISSIONS: Permissions = {
   organizationSettings: ["update"],
@@ -59,6 +55,10 @@ export default function McpSettingsPage() {
   );
 
   const serverCatalogEnabled = organization?.onlineMcpCatalogEnabled ?? true;
+  const serverDeviceMcpEnabled = organization?.deviceMcpEnabled ?? false;
+  const [deviceMcpEnabled, setDeviceMcpEnabled] = useState(
+    serverDeviceMcpEnabled,
+  );
   const serverPersonalAccessAllTools =
     organization?.defaultPersonalAgentAccessAllTools ?? true;
   const [personalAccessAllTools, setPersonalAccessAllTools] = useState(
@@ -82,6 +82,7 @@ export default function McpSettingsPage() {
   useEffect(() => {
     if (organization) {
       setCatalogEnabled(organization.onlineMcpCatalogEnabled);
+      setDeviceMcpEnabled(organization.deviceMcpEnabled ?? false);
       setPersonalAccessAllTools(
         organization.defaultPersonalAgentAccessAllTools ?? true,
       );
@@ -94,6 +95,8 @@ export default function McpSettingsPage() {
   }, [organization]);
 
   const catalogChanged = !isPending && catalogEnabled !== serverCatalogEnabled;
+  const deviceMcpChanged =
+    !isPending && deviceMcpEnabled !== serverDeviceMcpEnabled;
   const personalToolModeChanged =
     !isPending && personalAccessAllTools !== serverPersonalAccessAllTools;
   // SPDX-SnippetBegin
@@ -104,6 +107,7 @@ export default function McpSettingsPage() {
   // SPDX-SnippetEnd
   const hasChanges =
     personalToolModeChanged ||
+    deviceMcpChanged ||
     catalogChanged /* SPDX-SnippetBegin */ ||
     /* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */
     /* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */ hibernationChanged /* SPDX-SnippetEnd */;
@@ -115,6 +119,7 @@ export default function McpSettingsPage() {
     // not be allowed to set.
     await updateMcpSettingsMutation.mutateAsync({
       ...(catalogChanged ? { onlineMcpCatalogEnabled: catalogEnabled } : {}),
+      ...(deviceMcpChanged ? { deviceMcpEnabled } : {}),
       ...(personalToolModeChanged
         ? { defaultPersonalAgentAccessAllTools: personalAccessAllTools }
         : {}),
@@ -130,6 +135,7 @@ export default function McpSettingsPage() {
 
   const handleCancel = () => {
     setCatalogEnabled(serverCatalogEnabled);
+    setDeviceMcpEnabled(serverDeviceMcpEnabled);
     setPersonalAccessAllTools(serverPersonalAccessAllTools);
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -202,6 +208,7 @@ export default function McpSettingsPage() {
           description="Let people add MCP servers from the public online catalog. When disabled, new servers are always configured manually."
           control={
             <ToggleControl
+              label="Online MCP catalog"
               value={catalogEnabled}
               onChange={setCatalogEnabled}
               isSaving={updateMcpSettingsMutation.isPending}
@@ -220,6 +227,7 @@ export default function McpSettingsPage() {
               description="Hibernates self-hosted MCP servers that go unused, scaling them to zero until the next tool call. Beta feature."
               control={
                 <ToggleControl
+                  label="Idle hibernation"
                   value={hibernationEnabled}
                   onChange={setHibernationEnabled}
                   isSaving={updateMcpSettingsMutation.isPending}
@@ -229,6 +237,18 @@ export default function McpSettingsPage() {
           </DisabledEnterpriseSection>
         )}
         {/* SPDX-SnippetEnd */}
+        <SettingsBlock
+          title="Device MCP servers"
+          description="Let each user connect MCP servers running on their own Mac or Windows device. Stop personal runtime sessions before enabling. In this preview, scheduled agents can use external tools only. Turning this off revokes device connections; users must pair again."
+          control={
+            <ToggleControl
+              label="Device MCP servers"
+              value={deviceMcpEnabled}
+              onChange={setDeviceMcpEnabled}
+              isSaving={updateMcpSettingsMutation.isPending}
+            />
+          }
+        />
         <SettingsSaveBar
           hasChanges={hasChanges}
           isSaving={updateMcpSettingsMutation.isPending}
@@ -241,12 +261,14 @@ export default function McpSettingsPage() {
   );
 }
 
-/** Enabled/disabled select shared by every block on this page. */
+/** Accessible boolean control shared by the MCP settings. */
 function ToggleControl({
+  label,
   value,
   onChange,
   isSaving,
 }: {
+  label: string;
   value: boolean;
   onChange: (next: boolean) => void;
   isSaving: boolean;
@@ -257,24 +279,12 @@ function ToggleControl({
       noPermissionHandle="tooltip"
     >
       {({ hasPermission }) => (
-        <Select
-          value={value ? "enabled" : "disabled"}
-          onValueChange={(next) => onChange(next === "enabled")}
+        <Switch
+          aria-label={label}
+          checked={value}
+          onCheckedChange={onChange}
           disabled={isSaving || !hasPermission}
-        >
-          <SelectTrigger className="w-48">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(TOGGLE_OPTION_LABELS).map(
-              ([optionValue, label]) => (
-                <SelectItem key={optionValue} value={optionValue}>
-                  {label}
-                </SelectItem>
-              ),
-            )}
-          </SelectContent>
-        </Select>
+        />
       )}
     </WithPermissions>
   );

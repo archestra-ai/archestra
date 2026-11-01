@@ -52,6 +52,7 @@ function setPermission(hasPermission: boolean) {
 function setOrganization(
   settings: Partial<{
     onlineMcpCatalogEnabled: boolean;
+    deviceMcpEnabled: boolean;
     defaultPersonalAgentAccessAllTools: boolean;
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -63,6 +64,7 @@ function setOrganization(
   vi.mocked(useOrganization).mockReturnValue({
     data: {
       onlineMcpCatalogEnabled: true,
+      deviceMcpEnabled: false,
       defaultPersonalAgentAccessAllTools: true,
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -115,6 +117,10 @@ function blockSelect(title: string) {
   return within(section).getByRole("combobox");
 }
 
+function blockSwitch(title: string) {
+  return screen.getByRole("switch", { name: title });
+}
+
 describe("McpSettingsPage", () => {
   it("starts in All mode and saves Custom as a creation default", async () => {
     const user = userEvent.setup();
@@ -148,7 +154,7 @@ describe("McpSettingsPage", () => {
     renderPage();
 
     expect(screen.getByText("Online MCP catalog")).toBeInTheDocument();
-    expect(blockSelect("Online MCP catalog")).toHaveTextContent("Enabled");
+    expect(blockSwitch("Online MCP catalog")).toBeChecked();
   });
 
   // SPDX-SnippetBegin
@@ -159,7 +165,7 @@ describe("McpSettingsPage", () => {
     renderPage();
 
     expect(screen.getByText("Idle hibernation")).toBeInTheDocument();
-    expect(blockSelect("Idle hibernation")).toHaveTextContent("Enabled");
+    expect(blockSwitch("Idle hibernation")).toBeChecked();
   });
   // SPDX-SnippetEnd
 
@@ -167,14 +173,15 @@ describe("McpSettingsPage", () => {
     setOrganization({ onlineMcpCatalogEnabled: false });
     renderPage();
 
-    expect(blockSelect("Online MCP catalog")).toHaveTextContent("Disabled");
+    expect(blockSwitch("Online MCP catalog")).not.toBeChecked();
   });
 
   it("disables the control when the user cannot update MCP settings", () => {
     setPermission(false);
     renderPage();
 
-    expect(blockSelect("Online MCP catalog")).toBeDisabled();
+    expect(blockSwitch("Online MCP catalog")).toBeDisabled();
+    expect(blockSwitch("Device MCP servers")).toBeDisabled();
   });
 
   // SPDX-SnippetBegin
@@ -184,8 +191,8 @@ describe("McpSettingsPage", () => {
     vi.mocked(useEnterpriseFeature).mockReturnValue(false);
     renderPage();
 
-    expect(blockSelect("Idle hibernation")).toBeDisabled();
-    expect(blockSelect("Online MCP catalog")).toBeEnabled();
+    expect(blockSwitch("Idle hibernation")).toBeDisabled();
+    expect(blockSwitch("Online MCP catalog")).toBeEnabled();
   });
 
   it("hides hibernation entirely while the beta flag is off", () => {
@@ -193,21 +200,20 @@ describe("McpSettingsPage", () => {
     renderPage();
 
     expect(screen.queryByText("Idle hibernation")).not.toBeInTheDocument();
-    expect(blockSelect("Online MCP catalog")).toBeEnabled();
+    expect(blockSwitch("Online MCP catalog")).toBeEnabled();
   });
 
   it("enables the hibernation control once enterprise core is active", () => {
     renderPage();
 
-    expect(blockSelect("Idle hibernation")).toBeEnabled();
+    expect(blockSwitch("Idle hibernation")).toBeEnabled();
   });
 
   it("saves only the settings the user changed", async () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(blockSelect("Idle hibernation"));
-    await user.click(await screen.findByRole("option", { name: "Enabled" }));
+    await user.click(blockSwitch("Idle hibernation"));
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(mockMutateAsync).toHaveBeenCalledWith({
@@ -223,10 +229,8 @@ describe("McpSettingsPage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(blockSelect("Online MCP catalog"));
-    await user.click(await screen.findByRole("option", { name: "Disabled" }));
-    await user.click(blockSelect("Idle hibernation"));
-    await user.click(await screen.findByRole("option", { name: "Enabled" }));
+    await user.click(blockSwitch("Online MCP catalog"));
+    await user.click(blockSwitch("Idle hibernation"));
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(mockMutateAsync).toHaveBeenCalledWith({
@@ -235,6 +239,28 @@ describe("McpSettingsPage", () => {
     });
   });
   // SPDX-SnippetEnd
+
+  it("requires an explicit device opt-in and saves only that change", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    expect(blockSwitch("Device MCP servers")).not.toBeChecked();
+    await user.click(blockSwitch("Device MCP servers"));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(mockMutateAsync).toHaveBeenCalledWith({ deviceMcpEnabled: true });
+  });
+
+  it("cancels an unsaved device change and can disable an existing opt-in", async () => {
+    setOrganization({ deviceMcpEnabled: true });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(blockSwitch("Device MCP servers"));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(blockSwitch("Device MCP servers")).toBeChecked();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+    await user.click(blockSwitch("Device MCP servers"));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(mockMutateAsync).toHaveBeenCalledWith({ deviceMcpEnabled: false });
+  });
 
   it("shows a loading state instead of the control while the org is pending", () => {
     vi.mocked(useOrganization).mockReturnValue({

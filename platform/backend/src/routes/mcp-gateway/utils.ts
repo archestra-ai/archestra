@@ -110,6 +110,10 @@ import {
 import { openappaEnabled, openappaYellEnabled } from "@/openappa/service";
 import { sanitizeGeminiToolSchema } from "@/routes/proxy/adapters/gemini-schema";
 import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
+import {
+  isRuntimeGatewayCredential,
+  resolveRuntimeGatewayCredential,
+} from "@/services/agent-runtime/runtime-gateway-credential";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
 import {
   agentToolExclusionsService,
@@ -186,6 +190,9 @@ export { deriveAuthMethod };
  * Token authentication result
  */
 export interface TokenAuthResult {
+  /** Present only after authenticating a scoped runtime bearer. */
+  authenticatedRuntimeTaskId?: string;
+  isBackgroundExecution?: boolean;
   tokenId: string;
   teamId: string | null;
   isOrganizationToken: boolean;
@@ -2211,6 +2218,37 @@ async function authenticateUngated(
   lookups: RequestLookups | undefined,
   requiredOAuthScope: "mcp" | "a2a",
 ): Promise<GatewayAuthOutcome> {
+  if (isRuntimeGatewayCredential(tokenValue)) {
+    if (requiredOAuthScope !== MCP_GATEWAY_OAUTH_SCOPE)
+      return { result: null, reason: "invalid_token" };
+    // Never cache this path: task completion, membership and grants revoke it immediately.
+    const runtime = await resolveRuntimeGatewayCredential(
+      tokenValue,
+      profileId,
+    );
+    if (!runtime) return { result: null, reason: "invalid_token" };
+    const token = await UserTokenModel.findByUserAndOrg(
+      runtime.userId,
+      runtime.organizationId,
+    );
+    if (!token) return { result: null, reason: "invalid_token" };
+    const result = await validateResolvedUserToken({
+      profileId,
+      token,
+      lookups,
+    });
+    return result
+      ? {
+          result: {
+            ...result,
+            authenticatedRuntimeTaskId: runtime.taskId,
+            isBackgroundExecution: runtime.isBackgroundExecution,
+          },
+          reason: null,
+        }
+      : { result: null, reason: "invalid_token" };
+  }
+
   const tokenHashes = buildTokenHashes(profileId, tokenValue);
   const authCacheKey = `${tokenHashes.cacheKey}:${requiredOAuthScope}`;
   const cachedResult = getCachedTokenAuthResult(authCacheKey);

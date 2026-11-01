@@ -494,6 +494,7 @@ export const UpdateSecuritySettingsSchema = z.object({
 });
 
 export const UpdateMcpSettingsSchema = z.object({
+  deviceMcpEnabled: z.boolean().optional(),
   onlineMcpCatalogEnabled: z.boolean().optional(),
   defaultPersonalAgentAccessAllTools: z.boolean().optional(),
   // SPDX-SnippetBegin

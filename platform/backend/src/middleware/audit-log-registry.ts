@@ -9,6 +9,7 @@ import BrowserStorageStateModel from "@/models/browser-storage-state";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import chatOpsConfigModel from "@/models/chatops-config";
 import DevFeedbackConfigModel from "@/models/dev-feedback-config";
+import DeviceMcpModel from "@/models/device-mcp";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
@@ -151,6 +152,16 @@ export function deriveAction(
  * @public — consumed by audit-log-snapshot.test.ts to verify registry invariants
  */
 export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
+  "/api/device-mcp/pair": {
+    resourceType: "deviceMcp",
+    action: "deviceMcp.created",
+    fetchById: (id, orgId) => DeviceMcpModel.findByIdForAudit(id, orgId),
+  },
+  "/api/device-mcp/:id": {
+    resourceType: "deviceMcp",
+    action: "deviceMcp.revoked",
+    fetchById: (id, orgId) => DeviceMcpModel.findByIdForAudit(id, orgId),
+  },
   "/api/openappa/yells/:id": {
     resourceType: "openappaYell",
     action: "openappaYell.updated",

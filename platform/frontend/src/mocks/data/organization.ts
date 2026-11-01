@@ -19,6 +19,7 @@ export function makeOrganization(
     theme: "modern-minimal",
     customFont: "inter",
     onlineMcpCatalogEnabled: true,
+    deviceMcpEnabled: false,
     defaultPersonalAgentAccessAllTools: true,
     mcpIdleHibernationEnabled: false,
     onlineSkillCatalogEnabled: true,

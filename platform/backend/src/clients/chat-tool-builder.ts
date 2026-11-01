@@ -323,6 +323,7 @@ export function buildMcpGatewayTool(params: {
                   llmSessionId: ctx.sessionId,
                   llmToolCallId: options.toolCallId,
                   runId: ctx.runId,
+                  isBackgroundExecution: !!ctx.scheduleTriggerRunId,
                 }),
               },
             );
@@ -453,6 +454,7 @@ export function buildMcpGatewayTool(params: {
               toolCallId: options.toolCallId,
               llmSessionId: ctx.sessionId,
               isUiProvidingTool,
+              isBackgroundExecution: !!ctx.scheduleTriggerRunId,
               suppressContentLogging: ctx.suppressContentLogging,
               encryptedChatAudit: ctx.encryptedChatAudit,
             });
@@ -521,6 +523,7 @@ export function buildAgentDelegationTool(params: {
       organizationId: ctx.organizationId,
       userId: ctx.userId,
       runId: ctx.runId,
+      isBackgroundExecution: !!ctx.scheduleTriggerRunId,
     }),
   };
 
@@ -1042,6 +1045,7 @@ async function executeWithToolSpan<R>(params: {
  * Context for MCP tool execution with browser sync support.
  */
 interface ToolExecutionContext {
+  isBackgroundExecution?: boolean;
   toolName: string;
   toolArguments: Record<string, unknown> | undefined;
   agentId: string;
@@ -1201,6 +1205,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
         oauthClientId: mcpGwToken.oauthClientId,
         oauthExecution: mcpGwToken.oauthExecution,
         organizationId,
+        isBackgroundExecution: ctx.isBackgroundExecution,
         userId: mcpGwToken.oauthClientId ? undefined : userId,
         // Exact links to the LLM turn: the run's own session id and the
         // model's id for this call (the row's tool_call.id stays our own).
@@ -1543,6 +1548,7 @@ function toolProvidesUiResource(tool: CatalogTool): boolean {
 }
 
 function buildTokenAuthContext({
+  isBackgroundExecution,
   mcpGwToken,
   organizationId,
   userId,
@@ -1558,6 +1564,7 @@ function buildTokenAuthContext({
   /** The model's id for the tool call this context executes. */
   llmToolCallId?: string;
   runId?: string;
+  isBackgroundExecution?: boolean;
 }): TokenAuthContext | undefined {
   if (!mcpGwToken) {
     return undefined;
@@ -1569,6 +1576,7 @@ function buildTokenAuthContext({
     isOrganizationToken: mcpGwToken.isOrganizationToken,
     organizationId,
     isUserToken: mcpGwToken.isUserToken,
+    isBackgroundExecution,
     userId: mcpGwToken.isUserToken ? userId : undefined,
     serviceAccountId: mcpGwToken.serviceAccountId,
     oauthClientId: mcpGwToken.oauthClientId,

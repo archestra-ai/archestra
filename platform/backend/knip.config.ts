@@ -10,6 +10,10 @@ const config: KnipConfig = {
     "src/routes/**/*.ts!",
     // Standalone scripts run via `tsx` from package.json scripts (not picked up by tsdown plugin)
     "src/standalone-scripts/**/*.ts!",
+    // Foreground device connector launched from the registry's setup command.
+    "src/device-mcp-client/cli.ts!",
+    // Optional source build command; not a production server entry point.
+    "src/device-mcp-client/build.mjs",
     // Container/Helm entrypoint; referenced outside the TypeScript module graph.
     "scripts/migrate-with-lock.mjs!",
     // Operator-run concurrent DDL, also shipped in the production image.
@@ -24,6 +28,8 @@ const config: KnipConfig = {
     "scripts/update-openappa-template.mjs!",
     // Test infrastructure used by *.test.ts files (dev-only entries)
     "src/test/**/*.ts",
+    // Spawned as a real subprocess by companion tests; excluded in production.
+    "src/test/fixtures/device-mcp.mjs",
     // Loaded by `vitest run --config` for the opt-in session storage benchmark.
     "vitest.benchmark.config.ts",
   ],

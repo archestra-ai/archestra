@@ -37,6 +37,7 @@ import {
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
+import { deviceMcpService } from "@/services/device-mcp";
 import {
   assertCanAssignEnvironment,
   resolveDefaultEnvironmentForNewResource,
@@ -196,7 +197,12 @@ const McpConfigToolSchema = z
     serverType: InsertInternalMcpCatalogSchema.shape.serverType
       .exclude(["app"])
       .optional()
-      .describe("Server type: local, remote, or builtin."),
+      .describe("Server type: local, remote, device, or builtin."),
+    deviceConfig: InsertInternalMcpCatalogSchema.shape.deviceConfig
+      .optional()
+      .describe(
+        "[Device] Reviewed versioned macOS/Windows launch commands and tool manifest. Each user must pair their own computer.",
+      ),
     serverUrl: InsertInternalMcpCatalogSchema.shape.serverUrl
       .optional()
       .describe("[Remote] The URL of the remote MCP server."),
@@ -410,7 +416,7 @@ const CreateMcpServerToolArgsSchema = CatalogMetadataToolSchema.extend({
     .exclude(["app"])
     .optional()
     .describe(
-      "Server type: local, remote, or builtin. (The `app` type is reserved for user-generated Apps managed on the Apps surface, not creatable via this tool.)",
+      "Server type: local, remote, device, or builtin. (The `app` type is reserved for user-generated Apps managed on the Apps surface, not creatable via this tool.)",
     ),
 })
   .merge(McpConfigToolSchema.partial())
@@ -966,6 +972,21 @@ async function handleEditMcpConfig(
       );
     }
 
+    if (existing.serverType === "device" || args.serverType === "device") {
+      await deviceMcpService.assertEnabled(organizationId);
+      if (args.serverType && args.serverType !== existing.serverType)
+        return errorResult(
+          "Device server hosting cannot be changed after creation.",
+        );
+      if (
+        args.deviceConfig === null ||
+        !(args.deviceConfig ?? existing.deviceConfig)
+      )
+        return errorResult(
+          "Device servers require reviewed launch configuration.",
+        );
+    }
+
     try {
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -1005,6 +1026,8 @@ async function handleEditMcpConfig(
     }
 
     const updateData: Record<string, unknown> = {};
+    if (args.deviceConfig !== undefined)
+      updateData.deviceConfig = args.deviceConfig;
     if (args.serverType !== undefined) updateData.serverType = args.serverType;
     if (args.serverUrl !== undefined) updateData.serverUrl = args.serverUrl;
     if (args.requiresAuth !== undefined)
@@ -1196,8 +1219,10 @@ async function handleCreateMcpServer(
     }
 
     const serverType = args.serverType ?? "local";
-    if (!["local", "remote", "builtin"].includes(serverType)) {
-      return errorResult("serverType must be one of: local, remote, builtin.");
+    if (!["local", "remote", "builtin", "device"].includes(serverType)) {
+      return errorResult(
+        "serverType must be one of: local, remote, device, builtin.",
+      );
     }
 
     const transportTypeError = nonLocalTransportTypeError({
@@ -1207,6 +1232,14 @@ async function handleCreateMcpServer(
     if (transportTypeError) return errorResult(transportTypeError);
 
     const labels = args.labels ? deduplicateLabels(args.labels) : undefined;
+
+    if (serverType === "device") {
+      await deviceMcpService.assertEnabled(organizationId);
+      if (!args.deviceConfig)
+        return errorResult(
+          "Device servers require reviewed launch configuration.",
+        );
+    }
 
     const localConfigFields = [
       "command",
@@ -1237,6 +1270,8 @@ async function handleCreateMcpServer(
       // visibility column is NOT NULL; nothing reads it.
       scope: "personal",
     };
+    if (args.deviceConfig !== undefined)
+      createParams.deviceConfig = args.deviceConfig;
     if (args.description !== undefined)
       createParams.description = args.description;
     if (args.icon !== undefined) createParams.icon = args.icon;
@@ -1395,6 +1430,11 @@ async function handleDeployMcpServer(
         `This MCP server requires environment variables to be provided during installation: ${requiredPromptedEnvVars.map((e) => e.key).join(", ")}. Please install it through the UI at /mcp/registry.`,
       );
     }
+
+    if (catalogItem.serverType === "device")
+      return errorResult(
+        "Connect your own device from this server’s registry entry.",
+      );
 
     const scope = args.scope ?? "personal";
     const teamId = args.teamId ?? null;

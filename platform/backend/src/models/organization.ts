@@ -9,7 +9,8 @@ import {
   type SupportedProvider,
   TimeInMs,
 } from "@archestra/shared";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { ApiError } from "@archestra/shared/types";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
@@ -318,11 +319,67 @@ class OrganizationModel {
     data: Partial<Organization>;
     tx?: Transaction;
   }): Promise<Organization | null> {
+    if (params.data.deviceMcpEnabled !== undefined && !params.tx) {
+      return db.transaction((tx) =>
+        OrganizationModel.patchInTransaction({ ...params, tx }),
+      );
+    }
+    if (params.data.deviceMcpEnabled === true) {
+      const tx = params.tx ?? db;
+      const [current] = await tx
+        .select({ enabled: schema.organizationsTable.deviceMcpEnabled })
+        .from(schema.organizationsTable)
+        .where(eq(schema.organizationsTable.id, params.id))
+        .for("update");
+      if (current && !current.enabled) {
+        const [openRun] = await tx
+          .select({ id: schema.agentRunsTable.id })
+          .from(schema.agentRunsTable)
+          .where(
+            and(
+              eq(schema.agentRunsTable.organizationId, params.id),
+              eq(schema.agentRunsTable.actorKind, "user"),
+              isNull(schema.agentRunsTable.endedAt),
+            ),
+          )
+          .limit(1);
+        if (openRun)
+          throw new ApiError(
+            409,
+            "Stop existing personal runtime sessions before enabling device MCP servers, then start fresh sessions to use scoped credentials.",
+          );
+      }
+    }
     const [row] = await (params.tx ?? db)
       .update(schema.organizationsTable)
       .set(params.data)
       .where(eq(schema.organizationsTable.id, params.id))
       .returning();
+    if (params.data.deviceMcpEnabled === false && row) {
+      // Turning off access is a revocation, not a temporary pause. Re-enabling
+      // requires fresh device consent and cannot resurrect queued operations.
+      const tx = params.tx ?? db;
+      const revoked = await tx
+        .update(schema.deviceMcpConnectionsTable)
+        .set({
+          revokedAt: new Date(),
+          tokenHash: null,
+          pairingHash: null,
+          sessionId: null,
+        })
+        .where(eq(schema.deviceMcpConnectionsTable.organizationId, params.id))
+        .returning({ id: schema.deviceMcpConnectionsTable.id });
+      if (revoked.length)
+        await tx
+          .update(schema.deviceMcpCommandsTable)
+          .set({ status: "unknown", arguments: {}, result: null })
+          .where(
+            inArray(
+              schema.deviceMcpCommandsTable.deviceId,
+              revoked.map((device) => device.id),
+            ),
+          );
+    }
     return row ?? null;
   }
 
@@ -934,6 +991,7 @@ class OrganizationModel {
       defaultMemberRole: org.defaultMemberRole ?? null,
       onboardingComplete: org.onboardingComplete,
       onlineMcpCatalogEnabled: org.onlineMcpCatalogEnabled,
+      deviceMcpEnabled: org.deviceMcpEnabled,
       defaultPersonalAgentAccessAllTools:
         org.defaultPersonalAgentAccessAllTools,
       // SPDX-SnippetBegin

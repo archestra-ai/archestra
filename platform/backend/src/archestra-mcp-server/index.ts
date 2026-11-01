@@ -28,6 +28,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType, z } from "zod";
 import config from "@/config";
 import AgentModel from "@/models/agent";
+import DeviceMcpModel from "@/models/device-mcp";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
 import {
@@ -357,6 +358,19 @@ export async function executeArchestraTool(
   args: Record<string, unknown> | undefined,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
+  // Preview boundary: a background execution must not launch another agent
+  // or invoke a platform builtin that could drop its authenticated provenance.
+  // Third-party MCP dispatch follows its own path and remains available.
+  if (
+    (context.tokenAuth?.isBackgroundExecution ||
+      context.scheduleTriggerRunId) &&
+    context.organizationId &&
+    (await DeviceMcpModel.enabled(context.organizationId))
+  ) {
+    return errorResult(
+      "Built-in tools and agent or skill delegation are unavailable to scheduled tasks while device MCP servers are enabled. Start an interactive personal session instead.",
+    );
+  }
   const runtimeProof = args?.[RUNTIME_TOOL_PROOF_ARGUMENT];
   let proofAccepted = false;
   if (runtimeProof !== undefined) {

@@ -489,6 +489,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // App backing entities are created and managed via /api/apps and run
         // in-process; they are not installable through the generic server route
         // (which would deploy/discover them).
+        if (catalogItem.serverType === "device") {
+          throw new ApiError(
+            400,
+            "Connect your device from the registry entry to use this server.",
+          );
+        }
         if (catalogItem.serverType === "app") {
           throw new ApiError(
             400,

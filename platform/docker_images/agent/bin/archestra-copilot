@@ -249,6 +249,7 @@ def run_terminal(task, session_id, home, config, entries, artifact):
     config["mcpServers"]["archestra"]["url"] = f"http://127.0.0.1:{gate.server_port}/mcp"
     events = home / "session-state" / session_id / "events.jsonl"
     offset = events.stat().st_size if events.exists() else 0
+    answered = False
     child = None
     signals = {number: signal.getsignal(number) for number in (signal.SIGINT, signal.SIGTERM)}
     try:
@@ -293,12 +294,9 @@ def run_terminal(task, session_id, home, config, entries, artifact):
                                 entries.append({"type": "tool_result", "toolCallId": data.get("toolCallId"),
                                                 "text": redact(json.dumps(data.get("result", {}))), "isError": not data.get("success", True)})
                             atomic(artifact, json.dumps({"version": 1, "provider": "copilot", "entries": entries}))
-                            if kind in ("user.message", "assistant.turn_start"):
-                                attention("clear")
-                            elif kind == "assistant.turn_end":
-                                attention("set", "Ready for a follow-up")
-                            elif kind == "session.error":
-                                attention("set", "API error: check terminal")
+                            change, answered = turn_attention(kind, data, answered)
+                            if change:
+                                attention(*change)
                 time.sleep(0.1)
             status = child.wait()
     finally:
@@ -479,6 +477,25 @@ def managed_json(path):
         if isinstance(value, dict):
             return value
     return {}
+
+
+def turn_attention(kind, data, answered):
+    """Return the attention change one native event makes, and whether the
+    latest model call answered the user.
+
+    Copilot ends a turn after every model call, also one whose tool calls run
+    next, and its idle event is not written to disk. Only a turn that ended in
+    an answer, or an aborted turn, leaves the session waiting for its user.
+    """
+    if kind == "assistant.message":
+        answered = not data.get("toolRequests")
+    if kind in ("user.message", "assistant.turn_start"):
+        return ("clear",), answered
+    if (kind == "assistant.turn_end" and answered) or kind == "abort":
+        return ("set", "Waiting for input"), answered
+    if kind == "session.error":
+        return ("set", "API error: check terminal"), answered
+    return None, answered
 
 
 def attention(action, label=""):

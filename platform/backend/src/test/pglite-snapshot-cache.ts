@@ -44,6 +44,17 @@ export function snapshotCachePath(): string {
 }
 
 /**
+ * Whether the snapshot path another project's global setup published in
+ * this run can be reused: it names the current inputs and the file is there.
+ */
+export function publishedSnapshotIsCurrent(
+  published: string | undefined,
+  current: string,
+): boolean {
+  return published === current && fs.existsSync(current);
+}
+
+/**
  * Marks a snapshot as used now, so pruning keeps the snapshots runs actually
  * use rather than the ones built last.
  */
@@ -62,21 +73,25 @@ export function pruneSnapshotCache(
   directory: string = SNAPSHOT_CACHE_DIR,
   now: number = Date.now(),
 ): void {
-  let entries: { file: string; mtimeMs: number; partial: boolean }[];
+  let names: string[];
   try {
-    entries = fs
-      .readdirSync(directory)
-      .filter((name) => name.endsWith(".tar.gz") || name.endsWith(".partial"))
-      .map((name) => {
-        const file = path.join(directory, name);
-        return {
-          file,
-          mtimeMs: fs.statSync(file).mtimeMs,
-          partial: name.endsWith(".partial"),
-        };
-      });
+    names = fs.readdirSync(directory);
   } catch {
     return;
+  }
+  const entries: { file: string; mtimeMs: number; partial: boolean }[] = [];
+  for (const name of names) {
+    if (!name.endsWith(".tar.gz") && !name.endsWith(".partial")) continue;
+    const file = path.join(directory, name);
+    try {
+      entries.push({
+        file,
+        mtimeMs: fs.statSync(file).mtimeMs,
+        partial: name.endsWith(".partial"),
+      });
+    } catch {
+      // Another run renamed or removed it since the listing: nothing to prune.
+    }
   }
   const settled = (entry: { mtimeMs: number }) =>
     now - entry.mtimeMs > IN_USE_WINDOW_MS;

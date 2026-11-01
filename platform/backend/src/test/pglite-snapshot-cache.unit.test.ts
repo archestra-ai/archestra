@@ -2,7 +2,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import { pruneSnapshotCache } from "./pglite-snapshot-cache";
+import {
+  pruneSnapshotCache,
+  publishedSnapshotIsCurrent,
+} from "./pglite-snapshot-cache";
 
 describe("pruneSnapshotCache", () => {
   let directory: string | undefined;
@@ -59,5 +62,29 @@ describe("pruneSnapshotCache", () => {
     expect(() =>
       pruneSnapshotCache(3, path.join(os.tmpdir(), "no-such-snapshot-cache")),
     ).not.toThrow();
+  });
+});
+
+describe("publishedSnapshotIsCurrent", () => {
+  let directory: string | undefined;
+  afterEach(() => {
+    if (directory) fs.rmSync(directory, { recursive: true, force: true });
+    directory = undefined;
+  });
+
+  test("reuses only a published path that names the current snapshot and still exists", () => {
+    directory = fs.mkdtempSync(path.join(os.tmpdir(), "pglite-snapshot-"));
+    const current = path.join(directory, "current.tar.gz");
+
+    // The current inputs' path, but its file was pruned or deleted.
+    expect(publishedSnapshotIsCurrent(current, current)).toBe(false);
+
+    fs.writeFileSync(current, "snapshot");
+    expect(publishedSnapshotIsCurrent(current, current)).toBe(true);
+    // A path inherited from elsewhere, or none.
+    expect(
+      publishedSnapshotIsCurrent(path.join(directory, "old.tar.gz"), current),
+    ).toBe(false);
+    expect(publishedSnapshotIsCurrent(undefined, current)).toBe(false);
   });
 });

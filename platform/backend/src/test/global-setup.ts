@@ -26,6 +26,7 @@ import { buildExtAppsInlineBundle } from "../standalone-scripts/build-ext-apps-i
 import { SNAPSHOT_PATH_ENV } from "./migrations-helper.js";
 import {
   pruneSnapshotCache,
+  publishedSnapshotIsCurrent,
   snapshotCachePath,
   touchSnapshot,
 } from "./pglite-snapshot-cache.js";
@@ -33,10 +34,12 @@ import {
 export default async function setup() {
   // Database-backed projects call this setup. Vitest initializes their global
   // setups sequentially in one process, so the first project publishes the
-  // path and the others reuse it. A path inherited from elsewhere, or for
-  // other migrations, is not reused: cached snapshots outlive the run.
+  // path and the others reuse it. A path inherited from elsewhere, for other
+  // migrations, or whose file is gone is not reused: cached snapshots outlive
+  // the run and may be pruned.
   const snapshotPath = snapshotCachePath();
-  if (process.env[SNAPSHOT_PATH_ENV] === snapshotPath) return;
+  if (publishedSnapshotIsCurrent(process.env[SNAPSHOT_PATH_ENV], snapshotPath))
+    return;
 
   // The MCP-App connector inlines this generated, gitignored bundle and the
   // connector route tests read it, so build it once if a fresh checkout (CI)

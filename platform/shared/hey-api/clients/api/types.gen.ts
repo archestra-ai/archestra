@@ -17201,6 +17201,12 @@ export type GetAgentCatalogResponses = {
                 modelPoolId: string | null;
                 identityProviderId: string | null;
                 environmentId: string | null;
+                networkPolicy?: {
+                    egressMode: 'off' | 'restricted' | 'unrestricted';
+                    domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                    allowedDomains: Array<string>;
+                    allowedCidrs: Array<string>;
+                } | null;
                 runtime: {
                     image: string;
                     command: Array<string> | null;
@@ -17584,6 +17590,12 @@ export type GetAgentsResponses = {
             modelPoolId: string | null;
             identityProviderId: string | null;
             environmentId: string | null;
+            networkPolicy?: {
+                egressMode: 'off' | 'restricted' | 'unrestricted';
+                domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                allowedDomains: Array<string>;
+                allowedCidrs: Array<string>;
+            } | null;
             runtime: {
                 image: string;
                 command: Array<string> | null;
@@ -17734,6 +17746,12 @@ export type CreateAgentData = {
         modelPoolId?: string | null;
         identityProviderId?: string | null;
         environmentId?: string | null;
+        networkPolicy?: {
+            egressMode?: 'off' | 'restricted' | 'unrestricted';
+            domainPreset?: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains?: Array<string>;
+            allowedCidrs?: Array<string>;
+        } | null;
         runtime?: {
             image: string;
             command: Array<string> | null;
@@ -17996,6 +18014,12 @@ export type CreateAgentResponses = {
         modelPoolId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -19248,6 +19272,12 @@ export type GetDefaultMcpGatewayResponses = {
         modelPoolId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -19550,6 +19580,12 @@ export type ImportAgentResponses = {
             modelPoolId: string | null;
             identityProviderId: string | null;
             environmentId: string | null;
+            networkPolicy?: {
+                egressMode: 'off' | 'restricted' | 'unrestricted';
+                domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                allowedDomains: Array<string>;
+                allowedCidrs: Array<string>;
+            } | null;
             runtime: {
                 image: string;
                 command: Array<string> | null;
@@ -19861,6 +19897,12 @@ export type GetAgentResponses = {
         modelPoolId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -19993,6 +20035,12 @@ export type UpdateAgentData = {
         modelPoolId?: string | null;
         identityProviderId?: string | null;
         environmentId?: string | null;
+        networkPolicy?: {
+            egressMode?: 'off' | 'restricted' | 'unrestricted';
+            domainPreset?: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains?: Array<string>;
+            allowedCidrs?: Array<string>;
+        } | null;
         runtime?: {
             image: string;
             command: Array<string> | null;
@@ -20164,6 +20212,12 @@ export type UpdateAgentResponses = {
         modelPoolId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -20741,6 +20795,12 @@ export type RestoreAgentVersionResponses = {
         modelPoolId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -20981,6 +21041,12 @@ export type CloneAgentResponses = {
         modelPoolId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -23460,6 +23526,12 @@ export type RestoreAgentResponses = {
         modelPoolId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -42813,6 +42885,12 @@ export type GetNewChatBootstrapResponses = {
                 modelPoolId: string | null;
                 identityProviderId: string | null;
                 environmentId: string | null;
+                networkPolicy?: {
+                    egressMode: 'off' | 'restricted' | 'unrestricted';
+                    domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                    allowedDomains: Array<string>;
+                    allowedCidrs: Array<string>;
+                } | null;
                 runtime: {
                     image: string;
                     command: Array<string> | null;
@@ -43386,6 +43464,12 @@ export type GetConversationBootstrapResponses = {
                     modelPoolId: string | null;
                     identityProviderId: string | null;
                     environmentId: string | null;
+                    networkPolicy?: {
+                        egressMode: 'off' | 'restricted' | 'unrestricted';
+                        domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                        allowedDomains: Array<string>;
+                        allowedCidrs: Array<string>;
+                    } | null;
                     runtime: {
                         image: string;
                         command: Array<string> | null;

@@ -253,6 +253,7 @@ test("keeps tier L spares apart: none by default, and no pool slot taken from th
     runtime: runtime(tier),
     namespace: "test",
     defaultNamespace: null,
+    agentPolicy: null,
     environmentPolicy: null,
     defaultPolicy: null,
     agentRuntimeTiers,

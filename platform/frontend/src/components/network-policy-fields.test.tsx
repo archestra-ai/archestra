@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { NetworkPolicyFields } from "./environments-section";
+import { NetworkPolicyFields } from "./network-policy-fields";
 
 type Props = Parameters<typeof NetworkPolicyFields>[0];
 

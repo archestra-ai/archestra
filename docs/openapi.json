@@ -62804,6 +62804,47 @@
                                     "format": "uuid",
                                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                                   },
+                                  "networkPolicy": {
+                                    "nullable": true,
+                                    "type": "object",
+                                    "properties": {
+                                      "egressMode": {
+                                        "type": "string",
+                                        "enum": [
+                                          "off",
+                                          "restricted",
+                                          "unrestricted"
+                                        ]
+                                      },
+                                      "domainPreset": {
+                                        "type": "string",
+                                        "enum": [
+                                          "none",
+                                          "common_dependencies",
+                                          "package_managers"
+                                        ]
+                                      },
+                                      "allowedDomains": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "allowedCidrs": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "egressMode",
+                                      "domainPreset",
+                                      "allowedDomains",
+                                      "allowedCidrs"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "runtime": {
                                     "nullable": true,
                                     "type": "object",
@@ -64529,6 +64570,47 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
+                          "networkPolicy": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "egressMode": {
+                                "type": "string",
+                                "enum": [
+                                  "off",
+                                  "restricted",
+                                  "unrestricted"
+                                ]
+                              },
+                              "domainPreset": {
+                                "type": "string",
+                                "enum": [
+                                  "none",
+                                  "common_dependencies",
+                                  "package_managers"
+                                ]
+                              },
+                              "allowedDomains": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "allowedCidrs": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "egressMode",
+                              "domainPreset",
+                              "allowedDomains",
+                              "allowedCidrs"
+                            ],
+                            "additionalProperties": false
+                          },
                           "runtime": {
                             "nullable": true,
                             "type": "object",
@@ -65609,6 +65691,45 @@
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
+                  "networkPolicy": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "egressMode": {
+                        "type": "string",
+                        "enum": [
+                          "off",
+                          "restricted",
+                          "unrestricted"
+                        ]
+                      },
+                      "domainPreset": {
+                        "type": "string",
+                        "enum": [
+                          "none",
+                          "common_dependencies",
+                          "package_managers"
+                        ]
+                      },
+                      "allowedDomains": {
+                        "maxItems": 500,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 253,
+                          "pattern": "^(\\*\\.)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+                        }
+                      },
+                      "allowedCidrs": {
+                        "maxItems": 500,
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
                   "runtime": {
                     "nullable": true,
                     "type": "object",
@@ -66400,6 +66521,47 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "networkPolicy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "egressMode": {
+                          "type": "string",
+                          "enum": [
+                            "off",
+                            "restricted",
+                            "unrestricted"
+                          ]
+                        },
+                        "domainPreset": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "common_dependencies",
+                            "package_managers"
+                          ]
+                        },
+                        "allowedDomains": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "allowedCidrs": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "egressMode",
+                        "domainPreset",
+                        "allowedDomains",
+                        "allowedCidrs"
+                      ],
+                      "additionalProperties": false
                     },
                     "runtime": {
                       "nullable": true,
@@ -71622,6 +71784,47 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "networkPolicy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "egressMode": {
+                          "type": "string",
+                          "enum": [
+                            "off",
+                            "restricted",
+                            "unrestricted"
+                          ]
+                        },
+                        "domainPreset": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "common_dependencies",
+                            "package_managers"
+                          ]
+                        },
+                        "allowedDomains": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "allowedCidrs": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "egressMode",
+                        "domainPreset",
+                        "allowedDomains",
+                        "allowedCidrs"
+                      ],
+                      "additionalProperties": false
+                    },
                     "runtime": {
                       "nullable": true,
                       "type": "object",
@@ -73036,6 +73239,47 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "networkPolicy": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "egressMode": {
+                              "type": "string",
+                              "enum": [
+                                "off",
+                                "restricted",
+                                "unrestricted"
+                              ]
+                            },
+                            "domainPreset": {
+                              "type": "string",
+                              "enum": [
+                                "none",
+                                "common_dependencies",
+                                "package_managers"
+                              ]
+                            },
+                            "allowedDomains": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "allowedCidrs": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "egressMode",
+                            "domainPreset",
+                            "allowedDomains",
+                            "allowedCidrs"
+                          ],
+                          "additionalProperties": false
+                        },
                         "runtime": {
                           "nullable": true,
                           "type": "object",
@@ -74123,6 +74367,47 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "networkPolicy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "egressMode": {
+                          "type": "string",
+                          "enum": [
+                            "off",
+                            "restricted",
+                            "unrestricted"
+                          ]
+                        },
+                        "domainPreset": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "common_dependencies",
+                            "package_managers"
+                          ]
+                        },
+                        "allowedDomains": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "allowedCidrs": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "egressMode",
+                        "domainPreset",
+                        "allowedDomains",
+                        "allowedCidrs"
+                      ],
+                      "additionalProperties": false
+                    },
                     "runtime": {
                       "nullable": true,
                       "type": "object",
@@ -75135,6 +75420,45 @@
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
+                  "networkPolicy": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "egressMode": {
+                        "type": "string",
+                        "enum": [
+                          "off",
+                          "restricted",
+                          "unrestricted"
+                        ]
+                      },
+                      "domainPreset": {
+                        "type": "string",
+                        "enum": [
+                          "none",
+                          "common_dependencies",
+                          "package_managers"
+                        ]
+                      },
+                      "allowedDomains": {
+                        "maxItems": 500,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 253,
+                          "pattern": "^(\\*\\.)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+                        }
+                      },
+                      "allowedCidrs": {
+                        "maxItems": 500,
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
                   "runtime": {
                     "nullable": true,
                     "type": "object",
@@ -75661,6 +75985,47 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "networkPolicy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "egressMode": {
+                          "type": "string",
+                          "enum": [
+                            "off",
+                            "restricted",
+                            "unrestricted"
+                          ]
+                        },
+                        "domainPreset": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "common_dependencies",
+                            "package_managers"
+                          ]
+                        },
+                        "allowedDomains": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "allowedCidrs": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "egressMode",
+                        "domainPreset",
+                        "allowedDomains",
+                        "allowedCidrs"
+                      ],
+                      "additionalProperties": false
                     },
                     "runtime": {
                       "nullable": true,
@@ -78342,6 +78707,47 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "networkPolicy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "egressMode": {
+                          "type": "string",
+                          "enum": [
+                            "off",
+                            "restricted",
+                            "unrestricted"
+                          ]
+                        },
+                        "domainPreset": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "common_dependencies",
+                            "package_managers"
+                          ]
+                        },
+                        "allowedDomains": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "allowedCidrs": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "egressMode",
+                        "domainPreset",
+                        "allowedDomains",
+                        "allowedCidrs"
+                      ],
+                      "additionalProperties": false
+                    },
                     "runtime": {
                       "nullable": true,
                       "type": "object",
@@ -79545,6 +79951,47 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "networkPolicy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "egressMode": {
+                          "type": "string",
+                          "enum": [
+                            "off",
+                            "restricted",
+                            "unrestricted"
+                          ]
+                        },
+                        "domainPreset": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "common_dependencies",
+                            "package_managers"
+                          ]
+                        },
+                        "allowedDomains": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "allowedCidrs": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "egressMode",
+                        "domainPreset",
+                        "allowedDomains",
+                        "allowedCidrs"
+                      ],
+                      "additionalProperties": false
                     },
                     "runtime": {
                       "nullable": true,
@@ -87560,6 +88007,47 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "networkPolicy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "egressMode": {
+                          "type": "string",
+                          "enum": [
+                            "off",
+                            "restricted",
+                            "unrestricted"
+                          ]
+                        },
+                        "domainPreset": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "common_dependencies",
+                            "package_managers"
+                          ]
+                        },
+                        "allowedDomains": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "allowedCidrs": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "egressMode",
+                        "domainPreset",
+                        "allowedDomains",
+                        "allowedCidrs"
+                      ],
+                      "additionalProperties": false
                     },
                     "runtime": {
                       "nullable": true,
@@ -159593,6 +160081,47 @@
                               "format": "uuid",
                               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                             },
+                            "networkPolicy": {
+                              "nullable": true,
+                              "type": "object",
+                              "properties": {
+                                "egressMode": {
+                                  "type": "string",
+                                  "enum": [
+                                    "off",
+                                    "restricted",
+                                    "unrestricted"
+                                  ]
+                                },
+                                "domainPreset": {
+                                  "type": "string",
+                                  "enum": [
+                                    "none",
+                                    "common_dependencies",
+                                    "package_managers"
+                                  ]
+                                },
+                                "allowedDomains": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "allowedCidrs": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "egressMode",
+                                "domainPreset",
+                                "allowedDomains",
+                                "allowedCidrs"
+                              ],
+                              "additionalProperties": false
+                            },
                             "runtime": {
                               "nullable": true,
                               "type": "object",
@@ -162788,6 +163317,47 @@
                                   "type": "string",
                                   "format": "uuid",
                                   "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "networkPolicy": {
+                                  "nullable": true,
+                                  "type": "object",
+                                  "properties": {
+                                    "egressMode": {
+                                      "type": "string",
+                                      "enum": [
+                                        "off",
+                                        "restricted",
+                                        "unrestricted"
+                                      ]
+                                    },
+                                    "domainPreset": {
+                                      "type": "string",
+                                      "enum": [
+                                        "none",
+                                        "common_dependencies",
+                                        "package_managers"
+                                      ]
+                                    },
+                                    "allowedDomains": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "allowedCidrs": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "egressMode",
+                                    "domainPreset",
+                                    "allowedDomains",
+                                    "allowedCidrs"
+                                  ],
+                                  "additionalProperties": false
                                 },
                                 "runtime": {
                                   "nullable": true,

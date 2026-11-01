@@ -44,7 +44,7 @@ export const layers = [
 ];
 
 /** Tests and test helpers may import any layer. */
-const TESTS = "(\\.test\\.ts$|^src/test/|/__mocks__/)";
+const TESTS = "(\\.test\\.ts$|\\.test-[a-z-]+\\.ts$|^src/test/|/__mocks__/)";
 
 /**
  * The dependency-cruiser configuration `pnpm check:layers` runs. It forbids
@@ -54,27 +54,47 @@ const TESTS = "(\\.test\\.ts$|^src/test/|/__mocks__/)";
  * layers.known-upward-imports.json.
  */
 export default {
-  forbidden: layers.slice(0, -1).map((layer, index) => ({
-    name: `${layer.name}-imports-no-higher-layer`,
-    severity: "error",
-    comment: `A ${layer.name} file may import only ${layers
-      .slice(0, index + 1)
-      .map((lower) => lower.name)
-      .join(", ")} files. Move the imported code down, the importing code up, or invert the dependency (layers.mjs).`,
-    from: { path: layer.path, pathNot: TESTS },
-    to: {
-      path: layers
-        .slice(index + 1)
-        .map((higher) => higher.path)
-        .join("|"),
-      // A file of a higher layer's directory may sit in a lower layer
-      // (e.g. utils/uuid.ts in schema): it is not above the importer.
-      pathNot: [TESTS, ...layers.slice(0, index + 1).map((lower) => lower.path)],
+  forbidden: [
+    ...layers.slice(0, -1).map((layer, index) => ({
+      name: `${layer.name}-imports-no-higher-layer`,
+      severity: "error",
+      comment: `A ${layer.name} file may import only ${layers
+        .slice(0, index + 1)
+        .map((lower) => lower.name)
+        .join(
+          ", ",
+        )} files. Move the imported code down, the importing code up, or invert the dependency (layers.mjs).`,
+      // A file belongs to the first layer whose pattern matches it.
+      from: {
+        path: layer.path,
+        pathNot: [TESTS, ...layers.slice(0, index).map((lower) => lower.path)],
+      },
+      to: {
+        path: layers
+          .slice(index + 1)
+          .map((higher) => higher.path)
+          .join("|"),
+        // A file of a higher layer's directory may sit in a lower layer
+        // (e.g. utils/uuid.ts in schema): it is not above the importer.
+        pathNot: [
+          TESTS,
+          ...layers.slice(0, index + 1).map((lower) => lower.path),
+        ],
+      },
+    })),
+    {
+      name: "source-imports-no-test-code",
+      severity: "error",
+      comment:
+        "Test helpers, mocks and tests are not part of any layer; source files may not import them.",
+      from: { pathNot: TESTS },
+      to: { path: TESTS },
     },
-  })),
+  ],
   options: {
     includeOnly: "^src/",
-    exclude: { path: TESTS },
+    // Tests are roots that nothing imports; their imports are not checked.
+    doNotFollow: { path: TESTS },
     tsConfig: { fileName: "tsconfig.json" },
     tsPreCompilationDeps: true,
     skipAnalysisNotInRules: true,

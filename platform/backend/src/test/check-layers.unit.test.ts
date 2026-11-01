@@ -4,10 +4,13 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 
-// scripts/check-layers.mjs against today's sources, with edited copies of the
-// list of known upward imports.
+// scripts/check-layers.mjs against today's sources, with an edited copy of
+// the list of known upward imports. `pnpm check:layers` covers the committed
+// list itself.
 const BACKEND_DIR = path.resolve(__dirname, "../..");
 const KNOWN = path.join(BACKEND_DIR, "layers.known-upward-imports.json");
+const GONE =
+  "src/types/gone.ts -> src/config.ts (schema-imports-no-higher-layer)";
 
 describe("check-layers", () => {
   let dir: string | undefined;
@@ -16,38 +19,35 @@ describe("check-layers", () => {
     dir = undefined;
   });
 
-  test("passes with the committed list of known upward imports", () => {
-    const result = checkLayers(KNOWN);
-    expect(result.status, result.stderr).toBe(0);
-  });
-
-  test("fails on an upward import the list does not know, and on a listed one that is gone", () => {
+  test("fails on an upward import the list does not know and on a listed one that is gone; an update only shrinks the list", () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "check-layers-"));
-    const known = JSON.parse(fs.readFileSync(KNOWN, "utf8")) as string[];
-    const [unlisted, ...rest] = known;
-    const gone =
-      "src/types/gone.ts -> src/config.ts (schema-imports-no-higher-layer)";
+    const [unlisted, ...rest] = JSON.parse(
+      fs.readFileSync(KNOWN, "utf8"),
+    ) as string[];
     const edited = path.join(dir, "known.json");
-    fs.writeFileSync(edited, JSON.stringify([...rest, gone]));
+    fs.writeFileSync(edited, JSON.stringify([...rest, GONE]));
 
-    const result = checkLayers(edited);
+    const check = checkLayers("--known", edited);
+    expect(check.status).toBe(1);
+    expect(check.stderr).toContain(
+      "1 new import(s) from a lower backend layer to a higher one",
+    );
+    expect(check.stderr).toContain(unlisted);
+    expect(check.stderr).toContain("1 listed upward import(s) no longer exist");
+    expect(check.stderr).toContain(GONE);
 
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain(
-      `1 new import(s) from a lower backend layer to a higher one`,
-    );
-    expect(result.stderr).toContain(unlisted);
-    expect(result.stderr).toContain(
-      "1 listed upward import(s) no longer exist",
-    );
-    expect(result.stderr).toContain(gone);
+    // The update refuses to list the new import, and leaves the file alone.
+    const update = checkLayers("--update", "--known", edited);
+    expect(update.status).toBe(1);
+    expect(update.stderr).toContain("the list may only shrink");
+    expect(JSON.parse(fs.readFileSync(edited, "utf8"))).toContain(GONE);
   });
 });
 
-function checkLayers(knownFile: string) {
+function checkLayers(...args: string[]) {
   return spawnSync(
     process.execPath,
-    [path.join(BACKEND_DIR, "scripts/check-layers.mjs"), knownFile],
+    [path.join(BACKEND_DIR, "scripts/check-layers.mjs"), ...args],
     { cwd: BACKEND_DIR, encoding: "utf8" },
   );
 }

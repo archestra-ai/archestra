@@ -1,73 +1,142 @@
 #!/usr/bin/env node
-// Checks the backend's layer order (layers.mjs)
-// against the imports that may still break it
-// (.dependency-cruiser-known-violations.json). Fails on a new upward import,
-// and on a listed import that no longer exists, so the list only shrinks: run
-// `pnpm check:layers:update` after a slice that removes some.
+// Checks the backend's layer order (layers.mjs) against the upward imports
+// that may still break it (layers.known-upward-imports.json). Fails on an
+// upward import the list does not know, and on a listed one that no longer
+// exists, so the list only shrinks: after a change that removes some, run
+// `pnpm check:layers:update`.
 //
-// Usage: node scripts/check-layers.mjs [--update] [known-upward-imports.json]
+// Usage: node scripts/check-layers.mjs [--update [--allow-new]] [--known <file>]
+//   --update     rewrite the list without the imports that are gone; refuses
+//                to add new ones
+//   --allow-new  with --update, also add new ones (a deliberate exception)
+//   --known      the list to compare with (tests)
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const backendDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const update = process.argv.includes("--update");
-const knownFile = path.resolve(
-  process.argv.slice(2).find((arg) => arg !== "--update") ??
-    path.join(backendDir, "layers.known-upward-imports.json"),
+const backendDir = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
 );
-const currentFile = path.join(
-  fs.mkdtempSync(path.join(os.tmpdir(), "check-layers-")),
-  "violations.json",
-);
+const options = parseArguments(process.argv.slice(2));
+const current = upwardImports();
+const known = new Set(JSON.parse(fs.readFileSync(options.known, "utf8")));
+const added = [...current].filter((entry) => !known.has(entry)).sort();
+const removed = [...known].filter((entry) => !current.has(entry)).sort();
 
-const result = spawnSync(
-  path.join(backendDir, "node_modules/.bin/depcruise"),
-  [
-    "--config",
-    "layers.mjs",
-    "src",
-    "--output-type",
-    "baseline",
-    "--output-to",
-    currentFile,
-  ],
-  { cwd: backendDir, stdio: ["ignore", "ignore", "pipe"], encoding: "utf8" },
-);
-if (result.error) throw result.error;
-if (!fs.existsSync(currentFile)) {
-  console.error(
-    `dependency-cruiser exited ${result.status} without a result:\n${result.stderr}`,
+if (options.update) {
+  if (added.length > 0 && !options.allowNew) {
+    report(added, removed);
+    console.error(
+      "Not updating: the list may only shrink. Pass --allow-new to list these deliberately.",
+    );
+    process.exit(1);
+  }
+  fs.writeFileSync(
+    options.known,
+    `${JSON.stringify([...current].sort(), null, 2)}\n`,
   );
-  process.exit(1);
-}
-
-const key = (v) => `${v.from} -> ${v.to} (${v.rule.name})`;
-const current = new Set(JSON.parse(fs.readFileSync(currentFile, "utf8")).map(key));
-fs.rmSync(path.dirname(currentFile), { recursive: true, force: true });
-if (update) {
-  fs.writeFileSync(knownFile, `${JSON.stringify([...current].sort(), null, 2)}\n`);
-  console.log(`Listed ${current.size} upward imports in ${path.relative(backendDir, knownFile)}.`);
+  console.log(
+    `Listed ${current.size} upward imports (${removed.length} removed, ${added.length} added).`,
+  );
   process.exit(0);
 }
-const known = new Set(JSON.parse(fs.readFileSync(knownFile, "utf8")));
+if (added.length > 0 || removed.length > 0) {
+  report(added, removed);
+  process.exit(1);
+}
+console.log(
+  `Layer order holds (${current.size} known upward imports left to remove).`,
+);
 
-const added = [...current].filter((v) => !known.has(v)).sort();
-const removed = [...known].filter((v) => !current.has(v)).sort();
-if (added.length > 0) {
-  console.error(
-    `${added.length} new import(s) from a lower backend layer to a higher one (layers.mjs):\n` +
-      added.map((v) => `  ${v}`).join("\n") +
-      "\nMove the imported code down, the importing code up, or invert the dependency.",
-  );
+// ===== Internal helpers =====
+
+/** Every import that breaks the layer order now, as "from -> to (rule)". */
+function upwardImports() {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "check-layers-"));
+  const output = path.join(scratch, "violations.json");
+  try {
+    const result = spawnSync(
+      path.join(backendDir, "node_modules/.bin/depcruise"),
+      [
+        "--config",
+        "layers.mjs",
+        "src",
+        "--output-type",
+        "baseline",
+        "--output-to",
+        output,
+      ],
+      {
+        cwd: backendDir,
+        stdio: ["ignore", "ignore", "pipe"],
+        encoding: "utf8",
+      },
+    );
+    if (result.error) throw result.error;
+    if (!fs.existsSync(output)) {
+      const how = result.signal
+        ? `was killed by ${result.signal}`
+        : `exited ${result.status}`;
+      console.error(
+        `dependency-cruiser ${how} without a result:\n${result.stderr}`,
+      );
+      process.exit(1);
+    }
+    return new Set(
+      JSON.parse(fs.readFileSync(output, "utf8")).map(
+        (violation) =>
+          `${violation.from} -> ${violation.to} (${violation.rule.name})`,
+      ),
+    );
+  } finally {
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
 }
-if (removed.length > 0) {
-  console.error(
-    `${removed.length} listed upward import(s) no longer exist. Shrink the list with \`pnpm check:layers:update\`:\n` +
-      removed.map((v) => `  ${v}`).join("\n"),
-  );
+
+function report(added, removed) {
+  if (added.length > 0) {
+    console.error(
+      `${added.length} new import(s) from a lower backend layer to a higher one, or from source to test code (layers.mjs):\n${added
+        .map((entry) => `  ${entry}`)
+        .join(
+          "\n",
+        )}\nMove the imported code down, the importing code up, or invert the dependency.`,
+    );
+  }
+  if (removed.length > 0) {
+    console.error(
+      `${removed.length} listed upward import(s) no longer exist. Shrink the list with \`pnpm check:layers:update\`:\n${removed
+        .map((entry) => `  ${entry}`)
+        .join("\n")}`,
+    );
+  }
 }
-if (added.length > 0 || removed.length > 0) process.exit(1);
-console.log(`Layer order holds (${current.size} known upward imports left to remove).`);
+
+function parseArguments(args) {
+  const parsed = {
+    update: false,
+    allowNew: false,
+    known: path.join(backendDir, "layers.known-upward-imports.json"),
+  };
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index];
+    if (arg === "--update") parsed.update = true;
+    else if (arg === "--allow-new") parsed.allowNew = true;
+    else if (arg === "--known" && args[index + 1]) {
+      parsed.known = path.resolve(args[++index]);
+    } else {
+      console.error(
+        `Unknown argument: ${arg}\nUsage: node scripts/check-layers.mjs [--update [--allow-new]] [--known <file>]`,
+      );
+      process.exit(2);
+    }
+  }
+  if (parsed.allowNew && !parsed.update) {
+    console.error("--allow-new only applies with --update");
+    process.exit(2);
+  }
+  return parsed;
+}

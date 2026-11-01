@@ -377,6 +377,60 @@ test.for([
   ).toHaveLength(1);
 });
 
+test.for([
+  { minutesLeft: 5, continues: false },
+  { minutesLeft: 10, continues: true },
+  { minutesLeft: 15, continues: true },
+])("a finished session with $minutesLeft min of retention left takes a new turn: $continues", async ({
+  minutesLeft,
+  continues,
+}) => {
+  const previous = await retainedRun();
+  const workspace = await AgentWorkspaceModel.findById(previous.taskId);
+  if (!workspace) throw new Error("Missing workspace fixture");
+  vi.useFakeTimers({ toFake: ["Date"] });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+  vi.setSystemTime(workspace.expiresAt.getTime() - minutesLeft * 60_000);
+  const status = await executeArchestraTool(
+    TOOL_GET_RUN_FULL_NAME,
+    { task_id: previous.taskId },
+    context,
+  );
+  expect(status.structuredContent).toMatchObject({
+    workspace: continues
+      ? { can_continue: true, continuation_error: null }
+      : {
+          can_continue: false,
+          continuation_error: expect.stringContaining(
+            "cannot take another turn",
+          ),
+        },
+  });
+  if (continues) return;
+  const continuation = vi.spyOn(backend, "continueRun");
+  const result = await executeArchestraTool(
+    TOOL_STEER_RUN_FULL_NAME,
+    { task_id: previous.taskId, message: "Review the new commits" },
+    context,
+  );
+  expect(result.isError).toBe(true);
+  expect(JSON.stringify(result.content)).toContain("cannot take another turn");
+  expect(JSON.stringify(result.content)).toContain("No new turn was started");
+  expect(continuation).not.toHaveBeenCalled();
+  expect(
+    (
+      await A2ATaskModel.listForActor({
+        actorKind: "user",
+        actorId: userId,
+        agentId: agent.id,
+        pageSize: 100,
+      })
+    ).tasks,
+  ).toHaveLength(1);
+});
+
 test("steering rejects literal NUL characters with an actionable error before delivery", async () => {
   const previous = await retainedRun();
   const steer = vi.spyOn(backend, "steer");

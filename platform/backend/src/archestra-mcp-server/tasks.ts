@@ -78,6 +78,7 @@ import {
   ApiError,
 } from "@/types";
 import { agentRunAttachmentsSchema } from "@/types/agent-run-attachments";
+import type { AgentWorkspace } from "@/types/agent-workspace";
 import {
   type RuntimeLaunchFailureReason,
   type RuntimeLaunchOutcome,
@@ -423,6 +424,12 @@ const MAX_LISTED_RUNS = 50;
 const MAX_RUN_FILE_BYTES = 40 * 1024 * 1024;
 /** Where an Agent Runtime's retained workspace is mounted in its container. */
 const RUN_WORKSPACE_ROOT = "/home/node/workspace";
+/**
+ * A new turn in a retained workspace ends at the workspace's retention
+ * deadline, which a turn never moves. With less than this left, the turn would
+ * be stopped soon after it starts, so a finished session takes no new turn.
+ */
+const MIN_CONTINUATION_MS = 10 * 60_000;
 const RunFileNameSchema = z
   .string()
   .trim()
@@ -794,23 +801,15 @@ const registry = defineArchestraTools([
           session.actorId === actor.id
             ? await AgentWorkspaceModel.findByWorkloadName(session.workloadName)
             : null;
-        const canContinue = Boolean(
-          workspace &&
-            ((workspace.state === "active" &&
-              !session?.endedAt &&
-              workspace.activeTaskId === task.row.id) ||
-              (["idle", "suspended"].includes(workspace.state) &&
-                !workspace.activeTaskId)) &&
-            workspace.expiresAt.getTime() > Date.now(),
-        );
-        const continuationError =
-          !workspace || canContinue
-            ? null
-            : workspace.expiresAt.getTime() <= Date.now()
-              ? "This session expired and cannot resume. Do not call start_run to replace it. Recover available run history and explain the blocker."
-              : workspace.state === "deleted"
-                ? "This session's workspace was removed and cannot resume. Do not call start_run to replace it. Recover available run history and explain the blocker."
-                : "This workspace is not ready for continuation. Check get_run again and use steer_run with the same session_id when available; do not start a replacement run.";
+        const { canContinue, continuationError } = workspace
+          ? workspaceContinuation({
+              workspace,
+              liveTurn:
+                workspace.state === "active" &&
+                !session?.endedAt &&
+                workspace.activeTaskId === task.row.id,
+            })
+          : { canContinue: false, continuationError: null };
         const requestTaskIds = [
           ...new Set([workspace?.id ?? task.row.id, task.row.id]),
         ];
@@ -1108,14 +1107,14 @@ const registry = defineArchestraTools([
           });
         }
         if (session.endedAt) {
-          if (
-            !workspace ||
-            workspace.expiresAt.getTime() <= Date.now() ||
-            !["idle", "suspended"].includes(workspace.state) ||
-            workspace.activeTaskId
-          ) {
+          const decision = workspace
+            ? workspaceContinuation({ workspace, liveTurn: false })
+            : null;
+          if (!workspace || !decision?.canContinue) {
             return errorResult(
-              "The existing session is unavailable, busy, or expired. No new session was started. Read get_run for its current state; do not use start_run as a retry.",
+              decision?.retentionTooShort
+                ? `${decision.continuationError} No new turn was started.`
+                : "The existing session is unavailable, busy, or expired. No new session was started. Read get_run for its current state; do not use start_run as a retry.",
             );
           }
           const continuation = await startDetachedAgentTask({
@@ -1948,13 +1947,14 @@ async function governedRunOutput(params: {
   });
   if (crossed.kind === "producer") return undefined;
   if (crossed.kind === "refused") return errorResult(crossed.reason);
-  const canContinue = Boolean(
-    (workspace.state === "active" &&
+  // The refusal reasons are host-written and name nothing the run produced.
+  const { canContinue, continuationError } = workspaceContinuation({
+    workspace,
+    liveTurn:
+      workspace.state === "active" &&
       !session.endedAt &&
-      workspace.activeTaskId === params.task.id) ||
-      (["idle", "suspended"].includes(workspace.state) &&
-        !workspace.activeTaskId),
-  );
+      workspace.activeTaskId === params.task.id,
+  });
   return structuredSuccessResult(
     {
       run: runSummary(params.task),
@@ -1966,8 +1966,8 @@ async function governedRunOutput(params: {
       workspace: {
         state: workspace.state,
         retained_until: workspace.expiresAt.toISOString(),
-        can_continue: canContinue && workspace.expiresAt.getTime() > Date.now(),
-        continuation_error: null,
+        can_continue: canContinue,
+        continuation_error: continuationError,
         connection: null,
       },
       session: {
@@ -1977,6 +1977,58 @@ async function governedRunOutput(params: {
     },
     crossed.kind === "admitted" ? crossed.value : crossed.reason,
   );
+}
+
+/**
+ * Whether a session's workspace takes a follow-up now: a steer into its live
+ * turn, or a new turn once it is idle or suspended. A new turn also needs time
+ * before the retention deadline, where it would be stopped.
+ */
+function workspaceContinuation(params: {
+  workspace: AgentWorkspace;
+  liveTurn: boolean;
+}): {
+  canContinue: boolean;
+  continuationError: string | null;
+  /** Refused only because too little retention is left for a new turn. */
+  retentionTooShort: boolean;
+} {
+  const { workspace } = params;
+  const refused = (continuationError: string, retentionTooShort = false) => ({
+    canContinue: false,
+    continuationError,
+    retentionTooShort,
+  });
+  const allowed = {
+    canContinue: true,
+    continuationError: null,
+    retentionTooShort: false,
+  };
+  if (workspace.expiresAt.getTime() <= Date.now())
+    return refused(
+      "This session expired and cannot resume. Do not call start_run to replace it. Recover available run history and explain the blocker.",
+    );
+  if (params.liveTurn) return allowed;
+  if (workspace.state === "deleted")
+    return refused(
+      "This session's workspace was removed and cannot resume. Do not call start_run to replace it. Recover available run history and explain the blocker.",
+    );
+  if (
+    !["idle", "suspended"].includes(workspace.state) ||
+    workspace.activeTaskId
+  )
+    return refused(
+      "This workspace is not ready for continuation. Check get_run again and use steer_run with the same session_id when available; do not start a replacement run.",
+    );
+  const left = workspace.expiresAt.getTime() - Date.now();
+  if (left < MIN_CONTINUATION_MS) {
+    const minutes = Math.floor(left / 60_000);
+    return refused(
+      `This session cannot take another turn: its saved files are kept only until ${workspace.expiresAt.toISOString()} (${minutes < 1 ? "less than 1" : minutes} min from now), a new turn needs at least ${MIN_CONTINUATION_MS / 60_000} min, and it would be stopped at that time. Copy any files you need with read_workspace_file or transfer_workspace_file before then, and tell the user about the deadline. Do not call start_run to replace this session unless the user asks: a new run has none of this session's files or conversation.`,
+      true,
+    );
+  }
+  return allowed;
 }
 
 function runSummary(row: {

@@ -233,8 +233,13 @@ describe("buildAgentRunLaunchSpec", () => {
       limits: resolveAgentRunLimits({ runtime: sized, tiers: TIERS }),
       runtime: {
         ...sized,
-        // Reserved: the Agent cannot claim another size.
-        environment: [{ key: "ARCHESTRA_AGENT_RUNTIME_MAX_TIER", value: "S" }],
+        // Reserved: the Agent cannot claim another size. A toolchain thread
+        // count is the Agent's to change.
+        environment: [
+          { key: "ARCHESTRA_AGENT_RUNTIME_MAX_TIER", value: "S" },
+          { key: "ARCHESTRA_AGENT_RUNTIME_POD_CPUS", value: "64" },
+          { key: "CARGO_BUILD_JOBS", value: "1" },
+        ],
       },
       taskId: crypto.randomUUID(),
       runId: crypto.randomUUID(),
@@ -254,8 +259,17 @@ describe("buildAgentRunLaunchSpec", () => {
       ARCHESTRA_AGENT_RUNTIME_TIER: "M",
       ARCHESTRA_AGENT_RUNTIME_MAX_TIER: "L",
       ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "4",
+      ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_REQUEST: "8Gi",
       ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "16Gi",
+      ARCHESTRA_AGENT_RUNTIME_POD_CPUS: "4",
+      GOMAXPROCS: "4",
+      RAYON_NUM_THREADS: "4",
+      CARGO_BUILD_JOBS: "1",
+      ARCHESTRA_AGENT_RUNTIME_SIZED_ENV: "GOMAXPROCS,RAYON_NUM_THREADS",
     });
+    expect(spec.env).not.toHaveProperty(
+      "ARCHESTRA_AGENT_RUNTIME_POD_CPU_LIMIT",
+    );
     expect(spec.resources).toEqual({
       cpuRequest: "4",
       memoryRequest: "8Gi",

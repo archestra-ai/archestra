@@ -7,6 +7,7 @@ import {
   gibFromMiB,
   memoryQuantity,
   nextLargerAgentRuntimeTier,
+  parseCpuQuantity,
   type ResolvedAgentRuntimeTiers,
   resolveAgentRuntimeTiers,
   sameAgentRuntimeTierName,
@@ -21,6 +22,15 @@ import {
   type AgentRuntimeResources,
   ApiError,
 } from "@/types";
+import {
+  AGENT_RUNTIME_CPU_LIMIT_ENV,
+  AGENT_RUNTIME_CPU_REQUEST_ENV,
+  AGENT_RUNTIME_CPUS_ENV,
+  AGENT_RUNTIME_MEMORY_LIMIT_ENV,
+  AGENT_RUNTIME_MEMORY_REQUEST_ENV,
+  AGENT_RUNTIME_SIZED_ENV,
+  AGENT_RUNTIME_TOOLCHAIN_PARALLELISM_ENVS,
+} from "./runtime-contract";
 
 /** What the tier resolution takes from the deployment. */
 export function agentRuntimeTierDefaults() {
@@ -51,6 +61,106 @@ export function tierResources(
     memoryRequest: memoryQuantity(tier.memoryRequestMiB),
     memoryLimit: memoryQuantity(tier.memoryLimitMiB),
   };
+}
+
+/**
+ * The variables that tell a run's tools the size of its Pod: the Pod's
+ * quantities, its whole CPUs, and the thread counts of common toolchains.
+ * Every variable a size can set is a key here, empty when the size has no
+ * value for it, so a run moved to another size loses what no longer applies.
+ */
+export function tierResourceEnv(resources: AgentRuntimeResources): {
+  pod: Record<string, string | undefined>;
+  toolchain: Record<string, string | undefined>;
+} {
+  const cpus = Math.max(
+    1,
+    Math.ceil(
+      parseCpuQuantity(resources.cpuLimit) ??
+        parseCpuQuantity(resources.cpuRequest) ??
+        0,
+    ),
+  );
+  const known =
+    resources.cpuLimit !== undefined || resources.cpuRequest !== undefined;
+  return {
+    pod: {
+      [AGENT_RUNTIME_CPU_REQUEST_ENV]: resources.cpuRequest,
+      [AGENT_RUNTIME_CPU_LIMIT_ENV]: resources.cpuLimit,
+      [AGENT_RUNTIME_MEMORY_REQUEST_ENV]: resources.memoryRequest,
+      [AGENT_RUNTIME_MEMORY_LIMIT_ENV]: resources.memoryLimit,
+      [AGENT_RUNTIME_CPUS_ENV]: known ? String(cpus) : undefined,
+    },
+    toolchain: Object.fromEntries(
+      AGENT_RUNTIME_TOOLCHAIN_PARALLELISM_ENVS.map((name) => [
+        name,
+        known ? String(cpus) : undefined,
+      ]),
+    ),
+  };
+}
+
+/**
+ * The size variables of a run served by a Pod of another size. The Pod's
+ * quantities follow the served size, and so do the toolchain variables the
+ * platform set (`AGENT_RUNTIME_SIZED_ENV`); a value from the Agent's
+ * environment stays, even one equal to the requested size's default.
+ */
+export function retargetTierResourceEnv(params: {
+  env: Record<string, string>;
+  served: AgentRuntimeResources;
+}): Record<string, string> {
+  const served = tierResourceEnv(params.served);
+  const env = { ...params.env };
+  for (const [name, value] of Object.entries(served.pod)) {
+    if (value === undefined) delete env[name];
+    else env[name] = value;
+  }
+  const sized = new Set(
+    (env[AGENT_RUNTIME_SIZED_ENV] ?? "").split(",").filter(Boolean),
+  );
+  for (const name of sized) {
+    const value = served.toolchain[name];
+    if (value === undefined) {
+      delete env[name];
+      sized.delete(name);
+    } else env[name] = value;
+  }
+  if (sized.size > 0) env[AGENT_RUNTIME_SIZED_ENV] = [...sized].join(",");
+  else delete env[AGENT_RUNTIME_SIZED_ENV];
+  return env;
+}
+
+/**
+ * The toolchain variables a launch sets from the run's size: those the
+ * Agent's environment leaves unset, and the list of them that a retarget
+ * may update.
+ */
+export function sizedToolchainEnv(params: {
+  resources: AgentRuntimeResources;
+  agentEnvKeys: Iterable<string>;
+}): Record<string, string> {
+  const own = new Set(params.agentEnvKeys);
+  const sized = Object.fromEntries(
+    Object.entries(
+      definedEnv(tierResourceEnv(params.resources).toolchain),
+    ).filter(([name]) => !own.has(name)),
+  );
+  const names = Object.keys(sized);
+  return names.length > 0
+    ? { ...sized, [AGENT_RUNTIME_SIZED_ENV]: names.join(",") }
+    : {};
+}
+
+/** The variables of `tierResourceEnv` that have a value. */
+export function definedEnv(
+  env: Record<string, string | undefined>,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(env).filter(
+      (entry): entry is [string, string] => entry[1] !== undefined,
+    ),
+  );
 }
 
 type SizedRuntime = Pick<AgentRuntime, "tier" | "maxTier">;

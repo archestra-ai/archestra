@@ -55,9 +55,13 @@ import {
   preflightAgentRuntimeModelCompatibility,
 } from "./model-compatibility";
 import {
+  AGENT_RUNTIME_CPU_LIMIT_ENV,
   AGENT_RUNTIME_CPU_REQUEST_ENV,
+  AGENT_RUNTIME_CPUS_ENV,
   AGENT_RUNTIME_MAX_TIER_ENV,
   AGENT_RUNTIME_MEMORY_LIMIT_ENV,
+  AGENT_RUNTIME_MEMORY_REQUEST_ENV,
+  AGENT_RUNTIME_SIZED_ENV,
   AGENT_RUNTIME_STEER_FIFO,
   AGENT_RUNTIME_SYSTEM_PROMPT_ENV,
   AGENT_RUNTIME_TIER_ENV,
@@ -67,6 +71,7 @@ import {
 import {
   agentRuntimeAllowedTiers,
   agentRuntimeMaxTier,
+  definedEnv,
   describeScaleupDisabledPrompt,
   organizationAgentRuntimeTiers,
   type RuntimeSystemPromptParts,
@@ -74,6 +79,8 @@ import {
   resolveRunWorkspaceStorageSize,
   runtimeSystemPrompt,
   runtimeTiersEnv,
+  sizedToolchainEnv,
+  tierResourceEnv,
   tierResources,
   tierWorkspaceGiB,
   tierWorkspaceStorageSize,
@@ -322,7 +329,14 @@ export async function buildAgentRunLaunchSpec(params: {
   const resources = resolveRunResources(params.limits.tier, tiers);
   const maxTier = agentRuntimeMaxTier(params.runtime, tiers);
   const allowedTiers = agentRuntimeAllowedTiers(params.runtime, tiers);
+  const sizeEnv = tierResourceEnv(resources);
   const nonSecretEnv: Record<string, string> = {
+    // Toolchain thread counts follow the run's size unless the Agent's own
+    // environment, next, sets them.
+    ...sizedToolchainEnv({
+      resources,
+      agentEnvKeys: (params.runtime.environment ?? []).map(({ key }) => key),
+    }),
     // The Agent Runtime run's own environment goes first: the addresses below must win.
     // An entry overriding ANTHROPIC_BASE_URL would be exactly the bypass the
     // platform-URL guard above exists to prevent.
@@ -373,12 +387,7 @@ export async function buildAgentRunLaunchSpec(params: {
       params.limits.tier,
       params.limits.workspaceGiB,
     ),
-    ...(resources.cpuRequest
-      ? { [AGENT_RUNTIME_CPU_REQUEST_ENV]: resources.cpuRequest }
-      : {}),
-    ...(resources.memoryLimit
-      ? { [AGENT_RUNTIME_MEMORY_LIMIT_ENV]: resources.memoryLimit }
-      : {}),
+    ...definedEnv(sizeEnv.pod),
     ARCHESTRA_LLM_PROXY_URL: proxyUrl,
     ARCHESTRA_LLM_PROXY_PROTOCOL: params.runtime.inferenceProtocol,
     // Clients that hide tools from the wire (Codex's tool search and code
@@ -564,7 +573,11 @@ const RESERVED_RUNTIME_ENV_KEYS = new Set([
   AGENT_RUNTIME_MAX_TIER_ENV,
   AGENT_RUNTIME_TIERS_ENV,
   AGENT_RUNTIME_CPU_REQUEST_ENV,
+  AGENT_RUNTIME_CPU_LIMIT_ENV,
+  AGENT_RUNTIME_MEMORY_REQUEST_ENV,
   AGENT_RUNTIME_MEMORY_LIMIT_ENV,
+  AGENT_RUNTIME_CPUS_ENV,
+  AGENT_RUNTIME_SIZED_ENV,
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_AUTH_TOKEN",
   "ANTHROPIC_BASE_URL",

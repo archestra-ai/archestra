@@ -13,8 +13,11 @@ import {
   resolveRunResources,
   resolveRunWorkspaceStorageSize,
   retargetScaleupDisabledPrompt,
+  retargetTierResourceEnv,
   runtimeSystemPrompt,
   runtimeTiersEnv,
+  sizedToolchainEnv,
+  tierResourceEnv,
   warmPoolReplicas,
   warmTierCandidates,
 } from "./runtime-tiers";
@@ -82,6 +85,79 @@ describe("runtime tiers", () => {
       cpuLimit: "750m",
       memoryRequest: "1Gi",
       memoryLimit: "1536Mi",
+    });
+  });
+
+  test("a size tells the run's tools its quantities, its whole CPUs and the toolchain thread counts", () => {
+    // No CPU limit: the request, rounded up, is the parallelism.
+    expect(
+      tierResourceEnv({
+        cpuRequest: "3500m",
+        memoryRequest: "7Gi",
+        memoryLimit: "14Gi",
+      }),
+    ).toEqual({
+      pod: {
+        ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "3500m",
+        ARCHESTRA_AGENT_RUNTIME_POD_CPU_LIMIT: undefined,
+        ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_REQUEST: "7Gi",
+        ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "14Gi",
+        ARCHESTRA_AGENT_RUNTIME_POD_CPUS: "4",
+      },
+      toolchain: {
+        GOMAXPROCS: "4",
+        CARGO_BUILD_JOBS: "4",
+        RAYON_NUM_THREADS: "4",
+      },
+    });
+    // A CPU limit caps it.
+    expect(
+      tierResourceEnv({ cpuRequest: "2", cpuLimit: "3" }).toolchain.GOMAXPROCS,
+    ).toBe("3");
+    // A size without CPU sets no thread counts.
+    expect(tierResourceEnv({ memoryLimit: "8Gi" }).toolchain).toEqual({
+      GOMAXPROCS: undefined,
+      CARGO_BUILD_JOBS: undefined,
+      RAYON_NUM_THREADS: undefined,
+    });
+    // A launch sets the thread counts the Agent's environment leaves unset,
+    // and lists them.
+    expect(
+      sizedToolchainEnv({
+        resources: { cpuRequest: "2" },
+        agentEnvKeys: ["CARGO_BUILD_JOBS", "OTHER"],
+      }),
+    ).toEqual({
+      GOMAXPROCS: "2",
+      RAYON_NUM_THREADS: "2",
+      ARCHESTRA_AGENT_RUNTIME_SIZED_ENV: "GOMAXPROCS,RAYON_NUM_THREADS",
+    });
+    // Served by a larger Pod: quantities follow it, a limit the served size
+    // lacks goes, and only the listed thread counts move. The Agent's own
+    // CARGO_BUILD_JOBS stays although it equals the requested size's default.
+    expect(
+      retargetTierResourceEnv({
+        env: {
+          ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "2",
+          ARCHESTRA_AGENT_RUNTIME_POD_CPU_LIMIT: "2",
+          ARCHESTRA_AGENT_RUNTIME_POD_CPUS: "2",
+          ARCHESTRA_AGENT_RUNTIME_SIZED_ENV: "GOMAXPROCS,RAYON_NUM_THREADS",
+          GOMAXPROCS: "2",
+          RAYON_NUM_THREADS: "2",
+          CARGO_BUILD_JOBS: "2",
+          OTHER: "kept",
+        },
+        served: { cpuRequest: "4", memoryLimit: "16Gi" },
+      }),
+    ).toEqual({
+      ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "4",
+      ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "16Gi",
+      ARCHESTRA_AGENT_RUNTIME_POD_CPUS: "4",
+      ARCHESTRA_AGENT_RUNTIME_SIZED_ENV: "GOMAXPROCS,RAYON_NUM_THREADS",
+      GOMAXPROCS: "4",
+      RAYON_NUM_THREADS: "4",
+      CARGO_BUILD_JOBS: "2",
+      OTHER: "kept",
     });
   });
 

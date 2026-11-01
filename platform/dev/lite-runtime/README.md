@@ -107,7 +107,7 @@ opened twice by a signed-in user:
 
 | Frontend production build at 2 CPUs (2026-11-01) | With source maps | Without |
 | --- | --- | --- |
-| Cold build: peak memory of the build's processes, time | 4.8–4.9 GiB, 83–92 s | 3.7 GiB, 73–82 s |
+| Cold build: peak memory of the build's processes, time | 4.8–5.0 GiB, 83–92 s | 3.7 GiB, 73–82 s |
 | `reload frontend` after an edit (build cache warm) | 1.2–2.0 GiB, 11–13 s | 1.2 GiB, 13 s |
 
 ## Build

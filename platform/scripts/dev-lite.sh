@@ -461,9 +461,10 @@ frontend_env() {
 # pages. `build` is a production build served by its standalone server, as CI
 # and the released image serve it: about 240 MB after the same pages, at the
 # cost of a build before it starts (cold, about 75 s at 2 CPUs and 3.7 GiB
-# without source maps, 4.9 GiB with them) and again after every frontend change
-# (`reload frontend`, about 13 s and 1.2 GiB from the warm build cache). `e2e` is
-# `build` with the e2e environment, for the Playwright suite. Inside an Agent
+# without source maps, 4.8 to 5.0 GiB with them) and again after every
+# frontend change (`reload frontend`, about 13 s and 1.2 GiB from the warm
+# build cache). `e2e` is `build` with the e2e environment, for the Playwright
+# suite. Inside an Agent
 # Runtime the default is `build`, elsewhere `dev`; ARCHESTRA_DEV_LITE_FRONTEND
 # chooses.
 start_frontend() {

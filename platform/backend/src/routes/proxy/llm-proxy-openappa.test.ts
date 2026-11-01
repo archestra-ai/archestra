@@ -2016,6 +2016,39 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(order).toEqual(["return:call_spawn", "turn_end"]);
     });
 
+    test("holds only the turn that answers the launch, so an agent that never reports holds nothing later", async () => {
+      const waiting = await send(launched());
+      expect(waiting.statusCode, waiting.body).toBe(200);
+      expect(events.filter((event) => event.event === "turn_end")).toEqual([]);
+
+      // The person moves on; the agent is cancelled and never reported.
+      const later = await send([
+        ...launched(),
+        {
+          type: "message",
+          role: "assistant",
+          content: [
+            {
+              type: "output_text",
+              text: "The background subagent has started; I'm waiting for its result.",
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: "Never mind it. What is 2 + 2?" },
+          ],
+        },
+      ]);
+      expect(later.statusCode, later.body).toBe(200);
+      expect(events.filter((event) => event.event === "turn_end")).toHaveLength(
+        1,
+      );
+      // The runtime keeps the started child's spawn open across that turn end.
+      expect(open.has("call_spawn")).toBe(true);
+    });
+
     test("withholds a return its spawn call no longer takes, and the session goes on", async () => {
       // A new prompt's first call settled the turn before the subagent
       // started, so the runtime closed the spawn.

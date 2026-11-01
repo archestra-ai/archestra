@@ -100,9 +100,15 @@ export async function ensureConnectionVirtualKey(params: {
     scope: "personal",
     name: connectionVirtualKeyName({ userEmail, clientId }),
   });
+  // An account the user picked for a per-user provider takes the path below,
+  // which checks and binds it. Through primary providers it would be dropped:
+  // they never map a per-user credential.
+  const picked =
+    !!selectedProviderKeyId && providerRequiresPerUserCredential(provider);
   if (
-    existingMode?.includeFutureProviders ||
-    (!existingMode && params.includeFutureProviders)
+    !picked &&
+    (existingMode?.includeFutureProviders ||
+      (!existingMode && params.includeFutureProviders))
   ) {
     const result = await ensurePrimaryProviderKey({
       organizationId,

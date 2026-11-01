@@ -236,7 +236,7 @@ console.log(outcome);
  * It reads the saved registry locally, names the saved model, and flags a
  * `COPILOT_MODEL` still set in the shell: Copilot CLI refuses to start a
  * providers.json model while that variable is set (see
- * COPILOT_LEGACY_MODEL_EXPORT_PATTERN). The former "optional" environment
+ * COPILOT_LEGACY_EXPORT_LINE_PATTERN). The former "optional" environment
  * exports are gone: providers.json takes precedence over them, and the
  * COPILOT_MODEL line they included caused exactly that refusal.
  */

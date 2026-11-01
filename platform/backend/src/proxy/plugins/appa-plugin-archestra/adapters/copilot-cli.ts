@@ -1,5 +1,6 @@
 import { isCopilotCliClientAgentId } from "@archestra/shared/interactions/client";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { COPILOT_AGENT_REPORT } from "@/openappa/child-return";
 import type { AppaSessionIdentity } from "@/openappa/wire";
 import { ApiError } from "@/types/api";
 import type { CommonToolResult } from "@/types/common-llm-format";
@@ -32,15 +33,16 @@ const CHILD_ID_KEYS = ["agent_id"] as const;
 /** The field Copilot's `ask_user` form submits; its value comes back as `User responded: <value>`. */
 const QUESTION_FIELD = "archestra_decision";
 const QUESTION_HEADER_MAX_LENGTH = 40;
-/** `prompt_cache_key` as Copilot sends it: 32 hex characters, stable per session. */
+/**
+ * The bound on a `prompt_cache_key` taken as the session's root: its characters
+ * and length. Copilot sends 32 hex characters, stable per session.
+ */
 const SESSION_KEY = /^[A-Za-z0-9_.:-]{1,512}$/;
 const BACKGROUND_LAUNCH =
   /^Agent started in background with agent_id: ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\./;
 /** Copilot opens every user message, a child's included, with the current time. */
 const OPENING_PREAMBLE =
   /^<current_datetime>[^<]*<\/current_datetime>\r?\n\r?\n/;
-/** `read_agent` reports a finished child; `running` and `cancelled` reports carry no return. */
-const AGENT_REPORT_DONE = /^Agent (?:is idle|completed|has completed)\b/;
 
 /**
  * GitHub Copilot CLI on the proxy's OpenAI Responses wire.
@@ -214,7 +216,7 @@ export class AppaCopilotCliAdapter implements AppaClientAdapter {
     return (
       name === READ_AGENT_TOOL &&
       text !== undefined &&
-      AGENT_REPORT_DONE.test(text)
+      COPILOT_AGENT_REPORT.test(text)
     );
   }
 

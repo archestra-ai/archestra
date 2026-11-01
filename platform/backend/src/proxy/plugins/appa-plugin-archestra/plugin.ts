@@ -138,6 +138,7 @@ import {
   type AppaWireFamily,
   appaTurnBoundaries,
   appaWireFamily,
+  latestResponsesToolRound,
 } from "@/openappa/wire";
 import {
   isReportingToolCall,
@@ -222,9 +223,9 @@ type AppaPluginBinding = {
   /** True when the model's response contained tool calls awaiting client execution. */
   turnOpen: boolean;
   /**
-   * Children this session launched in the background whose return has not
-   * arrived, for a client that resumes the conversation when one finishes.
-   * The turn stays open while any of them runs.
+   * Background launches this request answers whose return has not arrived,
+   * for a client that resumes the conversation when a child finishes. The
+   * turn that answers them stays open.
    */
   pendingBackgroundSpawns: number;
   /** True on internal loopback Chat requests. */
@@ -483,8 +484,18 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
     Object.assign(childResultUpdates, childReturns.updates);
     if (binding.adapter?.resumesForBackgroundReturns) {
+      // Only a launch this request answers holds the turn. A later turn does
+      // not wait on it: a running child keeps its spawn open by itself, and one
+      // that never reports must not hold the session.
+      const answered = new Set(
+        [...latestResponsesToolRound(binding.requestBody)].map(
+          withoutTrajectoryStamp,
+        ),
+      );
       binding.pendingBackgroundSpawns = [...backgroundLaunches].filter(
-        (spawnCallId) => !childReturns.settledSpawns.has(spawnCallId),
+        (spawnCallId) =>
+          answered.has(spawnCallId) &&
+          !childReturns.settledSpawns.has(spawnCallId),
       ).length;
     }
     const governed = this.governedSession(binding);
@@ -1914,9 +1925,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (binding.session.parent_id) {
       return;
     }
-    // The client comes back with a background child's return without the
-    // user. Ending the turn now would close that child's spawn call, and its
-    // return could no longer be reported (resumesForBackgroundReturns).
+    // The model answers a background launch while its child may not have
+    // started. Ending the turn now would close that child's spawn call, and
+    // its return could no longer be reported (resumesForBackgroundReturns).
     if (binding.pendingBackgroundSpawns > 0) {
       logger.debug(
         { pendingBackgroundSpawns: binding.pendingBackgroundSpawns },

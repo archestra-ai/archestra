@@ -929,6 +929,33 @@ export function appaTurnBoundaries(params: {
   };
 }
 
+/**
+ * The calls a Responses request answers in its last round: the function call
+ * outputs after its last message. The model's reply to the request answers
+ * them.
+ */
+export function latestResponsesToolRound(body: unknown): Set<string> {
+  const input = (body as { input?: unknown } | null)?.input;
+  const ids = new Set<string>();
+  if (!Array.isArray(input)) return ids;
+  for (let index = input.length - 1; index >= 0; index--) {
+    const item = input[index] as {
+      type?: unknown;
+      role?: unknown;
+      call_id?: unknown;
+    } | null;
+    if (
+      item?.type === "function_call_output" &&
+      typeof item.call_id === "string"
+    ) {
+      ids.add(item.call_id);
+      continue;
+    }
+    if (item?.type === "message" || typeof item?.role === "string") break;
+  }
+  return ids;
+}
+
 /** A declared tool as the client spells it: its name, and the Codex namespace it sits in. */
 export type DeclaredToolSpelling = { name: string; namespace?: string };
 

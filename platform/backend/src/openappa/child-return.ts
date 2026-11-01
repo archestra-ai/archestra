@@ -1020,8 +1020,13 @@ const NATIVE_COMPLETION_TOOLS = new Set([
 const NATIVE_METADATA = /^[A-Za-z0-9_.:@/-]{1,512}$/;
 /** Copilot CLI's tool that reads what a background agent returned. */
 const COPILOT_REPORT_TOOLS: ReadonlySet<string> = new Set(["read_agent"]);
-/** `read_agent`'s report of an agent that finished: idle, or completed. */
-const COPILOT_AGENT_REPORT = /^Agent (?:is idle|completed|has completed)\b/;
+/**
+ * `read_agent`'s report of an agent that finished: idle, or completed. A
+ * `running` or `cancelled` report carries no return. The Copilot CLI adapter
+ * reads its results by the same pattern.
+ */
+export const COPILOT_AGENT_REPORT =
+  /^Agent (?:is idle|completed|has completed)\b/;
 const COPILOT_REPORT_TURN = /(?:^|\r?\n\r?\n)\[Turn \d+\]\r?\n/g;
 
 function collectNativeResultCallIds(

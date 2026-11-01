@@ -263,6 +263,74 @@ describe("ensureConnectionVirtualKey", () => {
     ]);
   });
 
+  test("per-user provider: binds the picked organization plan when the key includes future providers", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    await makeLlmProviderApiKey(org.id, (await makeSecret()).id, {
+      provider: "github-copilot",
+      userId: user.id,
+    });
+    const planValue = encodeGithubAppReference({
+      ref: { organizationId: org.id, credentialId: randomUUID() },
+      installationId: "2",
+      organization: "acme",
+      githubUrl: "https://github.com",
+    });
+    const planKey = await LlmProviderApiKeyModel.create(
+      {
+        organizationId: org.id,
+        name: "GitHub Copilot (acme)",
+        provider: "github-copilot",
+        secretId: (await makeSecret({ secret: { apiKey: planValue } })).id,
+        scope: "org",
+        userId: null,
+      },
+      {
+        apiKeyValue: planValue,
+        initialPermissionGrants: [
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
+      },
+    );
+    const connect = () =>
+      ensureConnectionVirtualKey({
+        organizationId: org.id,
+        userId: user.id,
+        userEmail: user.email,
+        userTeamIds: [],
+        provider: "github-copilot",
+        clientId: "copilot-cli",
+        selectedProviderKeyId: planKey.id,
+        includeFutureProviders: true,
+      });
+
+    // Issued with future providers, and again over the existing key.
+    for (const attempt of [1, 2]) {
+      const { virtualApiKeyId } = await connect();
+      expect(
+        (await VirtualApiKeyModel.getProviderApiKeys(virtualApiKeyId)).filter(
+          (key) => key.provider === "github-copilot",
+        ),
+        `attempt ${attempt}`,
+      ).toEqual([
+        expect.objectContaining({
+          provider: "github-copilot",
+          providerApiKeyId: planKey.id,
+        }),
+      ]);
+    }
+  });
+
   test("per-user provider: refuses a picked key that is not the user's to use", async ({
     makeOrganization,
     makeUser,

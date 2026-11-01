@@ -10,6 +10,8 @@ const config: KnipConfig = {
     "src/routes/**/*.ts!",
     // Standalone scripts run via `tsx` from package.json scripts (not picked up by tsdown plugin)
     "src/standalone-scripts/**/*.ts!",
+    // The `!` script entries below are package.json scripts too, so the dev
+    // pass calls them redundant; the production pass needs them.
     // Container/Helm entrypoint; referenced outside the TypeScript module graph.
     "scripts/migrate-with-lock.mjs!",
     // Operator-run concurrent DDL, also shipped in the production image.
@@ -35,15 +37,6 @@ const config: KnipConfig = {
   // not part of the backend module graph.
   ignore: ["src/static/**"],
   ignoreDependencies: [
-    // Workspace dependency - resolved by pnpm
-    "@archestra/shared",
-    // Native CommonJS addon loaded through package exports; knip does not
-    // resolve the workspace package's generated N-API entrypoint correctly.
-    "@archestra/sandbox-rs",
-    "@archestra/app-runtime-rs",
-    "@archestra/image-rs",
-    "@archestra/openappa-rs",
-    "@archestra/router-rs",
     // Provides tsc, which scripts/type-check.ts runs for `pnpm type-check`.
     "typescript-7",
   ],
@@ -51,7 +44,21 @@ const config: KnipConfig = {
     // biome and concurrently are in root package.json
     "biome",
     "concurrently",
+    // System tools that tests run where the machine has them.
+    "kubectl",
+    "unshare",
+    "pwsh",
+    "flock",
   ],
+  // An export its own file names in a type (a schema behind a z.infer, a type
+  // in a public signature) is not dead, as knip 5 judged it. Exports used in
+  // their own file only at runtime are still reported.
+  ignoreExportsUsedInFile: { type: true, interface: true },
+  rules: {
+    // knip runs per workspace, outside the root that holds pnpm's catalog,
+    // so it cannot resolve `catalog:`; pnpm install already fails on a bad one.
+    catalogReferences: "off",
+  },
 };
 
 export default config;

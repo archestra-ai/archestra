@@ -1,7 +1,71 @@
 import { describe, expect, test } from "vitest";
-import { scoringContext } from "./scoring-context";
+import { scoringContext, scoringContextFingerprint } from "./scoring-context";
 
 describe("scoringContext", () => {
+  test.each([
+    "messages",
+    "input",
+  ])("opening context ignores later instructions in %s", (field) => {
+    const opening = [
+      { role: "system", content: "Review migrations." },
+      { role: "developer", content: "Check locking." },
+      { role: "user", content: "Review this change." },
+    ];
+    const before = { [field]: opening, tools: [{ name: "read_file" }] };
+    const after = {
+      ...before,
+      [field]: [
+        ...opening,
+        { role: "assistant", content: "Checking." },
+        { role: "system", content: "Compaction note." },
+        { role: "developer", content: "Focus on the new diff." },
+        { role: "user", content: "Continue." },
+      ],
+    };
+    const context = scoringContext(after, { openingOnly: true });
+    expect(context.systemPrompt).toBe("Review migrations.\n\nCheck locking.");
+    expect(scoringContextFingerprint(context)).toBe(
+      scoringContextFingerprint(scoringContext(before, { openingOnly: true })),
+    );
+    // Scorer context is still the complete context actually sent on this request.
+    expect(scoringContext(after).systemPrompt).toContain("Compaction note.");
+  });
+  test("fingerprints instructions and the complete tool-name set, independent of ordering and cache metadata", () => {
+    const first = scoringContext({
+      system: "Review migrations.",
+      tools: [
+        { name: "read_file", description: "Read files." },
+        { name: "inspect_schema" },
+      ],
+    });
+    const rewritten = scoringContext({
+      system: [
+        {
+          type: "text",
+          text: "Review migrations.",
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+      tools: [
+        { name: "inspect_schema" },
+        {
+          name: "read_file",
+          description: "Updated description.",
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+    });
+    expect(scoringContextFingerprint(first)).toBe(
+      scoringContextFingerprint(rewritten),
+    );
+    expect(scoringContextFingerprint(first)).not.toBe(
+      scoringContextFingerprint({ ...first, systemPrompt: "Translate text." }),
+    );
+    expect(scoringContextFingerprint(first)).not.toBe(
+      scoringContextFingerprint({ ...first, tools: [{ name: "read_file" }] }),
+    );
+    expect(scoringContextFingerprint({})).toBeUndefined();
+  });
   test("extracts chat system/developer instructions and function metadata, not schemas or conversation text", () => {
     expect(
       scoringContext({
@@ -28,7 +92,7 @@ describe("scoringContext", () => {
       }),
     ).toEqual({
       systemPrompt: "You review database migrations.\n\nCheck locking.",
-      tools: [{ name: "read_file", description: "Read a repository file." }],
+      tools: [{ name: "read_file" }],
     });
   });
 
@@ -55,9 +119,7 @@ describe("scoringContext", () => {
     ).toEqual({
       systemPrompt:
         "Plan safe deployments.\nAsk before changing infrastructure.",
-      tools: [
-        { name: "inspect_deployment", description: "Read deployment status." },
-      ],
+      tools: [{ name: "inspect_deployment" }],
     });
   });
 
@@ -81,10 +143,7 @@ describe("scoringContext", () => {
       }),
     ).toEqual({
       systemPrompt: "Find supporting evidence.\n\nCite primary sources.",
-      tools: [
-        { name: "search_docs", description: "Search documentation." },
-        { name: "web_search" },
-      ],
+      tools: [{ name: "search_docs" }, { name: "web_search" }],
     });
   });
 
@@ -148,7 +207,7 @@ describe("scoringContext", () => {
       }),
     ).toEqual({
       systemPrompt: "",
-      tools: [{ name: "parse_sql", description: "Parse a SQL statement." }],
+      tools: [{ name: "parse_sql" }],
     });
   });
 

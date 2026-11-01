@@ -769,6 +769,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetInteraction]: {
     log: ["read"],
   },
+  [RouteId.GetInteractionAutoRouting]: {
+    log: ["read"],
+  },
   [RouteId.GetUniqueExternalAgentIds]: {
     log: ["read"],
   },

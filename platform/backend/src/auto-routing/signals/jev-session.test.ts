@@ -2,6 +2,7 @@ import { delay, HttpResponse, http } from "msw";
 import config from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
+import { scoringContext } from "../scoring-context";
 import { JevSessionSource } from "./jev-session";
 import { JEV_SESSION_SPEC } from "./spec";
 import { SignalSourceError } from "./types";
@@ -222,11 +223,13 @@ describe("JevSessionSource", () => {
     await source.read(
       {
         ...INPUT,
-        systemPrompt: `Use ${secret}. ${"instruction ".repeat(1000)} End of instructions.`,
-        tools: Array.from({ length: 100 }, (_, index) => ({
-          name: `tool_${index}`,
-          description: `Use ${secret}. ${"description ".repeat(1000)}`,
-        })),
+        ...scoringContext({
+          system: `Use ${secret}. ${"instruction ".repeat(1000)} End of instructions.`,
+          tools: Array.from({ length: 100 }, (_, index) => ({
+            name: `tool_${index}`,
+            description: `Use ${secret}. ${"description ".repeat(1000)}`,
+          })),
+        }),
       },
       ctx(),
     );
@@ -236,16 +239,19 @@ describe("JevSessionSource", () => {
     expect(state.system_prompt).toContain("chars omitted");
     expect(state.system_prompt).toMatch(/End of instructions\.$/);
     expect(state.system_prompt.length).toBeLessThan(2100);
-    expect(state.tools).toContain(
-      "Available tools: 100\ntool_0: Use <redacted>.",
+    expect(state.tools).toBe(
+      `Available tools: 100\n${Array.from(
+        { length: 100 },
+        (_, index) => `tool_${index}`,
+      )
+        .sort()
+        .join("\n")}`,
     );
-    expect(state.tools).toContain("omitted");
-    expect(state.tools).not.toContain("tool_20:");
-    expect(state.tools.length).toBeLessThan(2150);
+    expect(state.tools).not.toContain("description");
     expect(JSON.stringify(state)).not.toContain(secret);
   });
 
-  test("does not duplicate a long tool summary when truncating without a tail", async () => {
+  test("sends all tool names in a stable order without descriptions", async () => {
     let state: Record<string, string> = {};
     server.use(
       http.post(TYPESAFE_ENDPOINT, async ({ request }) => {
@@ -257,12 +263,56 @@ describe("JevSessionSource", () => {
     await source.read(
       {
         ...INPUT,
-        tools: [{ name: "lookup", description: `${"word ".repeat(100)}END` }],
+        ...scoringContext({
+          tools: [
+            { name: "z_lookup", description: `${"word ".repeat(100)}END` },
+            { name: "a_search" },
+          ],
+        }),
       },
       ctx(),
     );
-    expect(state.tools).toContain("lookup: word");
-    expect(state.tools).not.toContain("END");
-    expect(state.tools.length).toBeLessThan(250);
+    expect(state.tools).toBe("Available tools: 2\na_search\nz_lookup");
+  });
+
+  test("preserves long namespaced tool identifiers while redacting recognizable credentials", async () => {
+    let state: Record<string, string> = {};
+    server.use(
+      http.post(TYPESAFE_ENDPOINT, async ({ request }) => {
+        state = ((await request.json()) as { state: Record<string, string> })
+          .state;
+        return HttpResponse.json(ANSWERS);
+      }),
+    );
+    const name =
+      "mcp__example__inspect_database_migration_execution_permissions";
+    await source.read(
+      { ...INPUT, tools: [{ name }, { name: `sk-${"b".repeat(30)}` }] },
+      ctx(),
+    );
+    expect(state.tools).toBe(`Available tools: 2\n<redacted>\n${name}`);
+  });
+
+  test("rejects oversized name lists before the scorer call instead of silently taking a prefix", async () => {
+    let calls = 0;
+    server.use(
+      http.post(TYPESAFE_ENDPOINT, () => {
+        calls += 1;
+        return HttpResponse.json(ANSWERS);
+      }),
+    );
+    await expectSourceError(
+      source.read(
+        {
+          ...INPUT,
+          tools: Array.from({ length: 10_000 }, (_, index) => ({
+            name: `tool_${index}`,
+          })),
+        },
+        ctx(),
+      ),
+      "input_too_large",
+    );
+    expect(calls).toBe(0);
   });
 });

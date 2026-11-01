@@ -202,6 +202,21 @@ describe("RoutingDecisionModel", () => {
       expect(key(virtualKeyId, "a")).not.toBe(key(virtualKeyId, "b"));
     });
 
+    test("context separates unnamed sessions but never overrides explicit session IDs", () => {
+      const key = (sessionId: string | null, contextFingerprint: string) =>
+        RoutingDecisionModel.sessionKey({
+          sessionId,
+          virtualKeyId,
+          firstUserMessage: "Review this",
+          contextFingerprint,
+        });
+      expect(key(null, "context-a")).not.toBe(key(null, "context-b"));
+      expect(key(null, "context-a")).toBe(key(null, "context-a"));
+      expect(key("explicit-session", "context-a")).toBe(
+        key("explicit-session", "context-b"),
+      );
+    });
+
     test("nothing to stick to yields no key", () => {
       expect(
         RoutingDecisionModel.sessionKey({

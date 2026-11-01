@@ -105,6 +105,96 @@ describe("POST /api/auto-routing/preview", () => {
     });
   });
 
+  test.each([
+    {
+      messages: [
+        { role: "system", content: "Review migration locking." },
+        { role: "user", content: "Review this change." },
+      ],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "inspect_schema",
+            description: "Read table metadata.",
+            parameters: { private: "not scored" },
+          },
+        },
+      ],
+    },
+    {
+      input: [
+        {
+          role: "developer",
+          content: [{ type: "input_text", text: "Review migration locking." }],
+        },
+        {
+          role: "user",
+          content: [{ type: "input_text", text: "Review this change." }],
+        },
+      ],
+      tools: [
+        {
+          type: "function",
+          name: "inspect_schema",
+          description: "Read table metadata.",
+          parameters: null,
+        },
+      ],
+    },
+    {
+      system: [{ type: "text", text: "Review migration locking." }],
+      messages: [{ role: "user", content: "Review this change." }],
+      tools: [
+        {
+          name: "inspect_schema",
+          description: "Read table metadata.",
+          input_schema: {},
+        },
+      ],
+    },
+  ])("scores request context through the live extractor without saving a decision (shape %#)", async (request) => {
+    await configureAutoRouting(ctx.organizationId);
+
+    const response = await preview({ request });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(jevStates).toEqual([
+      {
+        prompt: "Review this change.",
+        system_prompt: "Review migration locking.",
+        tools: "Available tools: 1\ninspect_schema",
+      },
+    ]);
+    expect(await db.$count(schema.routingDecisionsTable)).toBe(0);
+    expect(await db.$count(schema.routingUsageTable)).toBe(0);
+  });
+
+  test.each([
+    {
+      request: {
+        instructions: "System instructions alone are not a user task.",
+      },
+    },
+    { text: "Task", request: { input: "Ambiguous task" } },
+    { request: [] },
+    { request: { input: "Task" }, client: "   " },
+  ])("rejects invalid request previews before scoring (case %#)", async (payload) => {
+    await configureAutoRouting(ctx.organizationId);
+    const response = await preview(payload);
+    expect(response.statusCode, response.body).toBe(400);
+    expect(jevStates).toEqual([]);
+  });
+
+  test("rejects request previews above the body limit before scoring", async () => {
+    await configureAutoRouting(ctx.organizationId);
+    const response = await preview({
+      request: { input: "x".repeat(256 * 1024) },
+    });
+    expect(response.statusCode, response.body).toBe(413);
+    expect(jevStates).toEqual([]);
+  });
+
   test("without a plan, reports the cold-start normal tier", async () => {
     const trio = await configureAutoRouting(ctx.organizationId);
 
@@ -144,6 +234,20 @@ describe("POST /api/auto-routing/preview", () => {
     const response = await preview({ text: "x".repeat(20_001) });
 
     expect(response.statusCode).toBe(400);
+    expect(jevStates).toEqual([]);
+  });
+
+  test("rejects oversized tool-name context instead of silently scoring only some tools", async () => {
+    await configureAutoRouting(ctx.organizationId);
+    const response = await preview({
+      request: {
+        input: "Review this change.",
+        tools: Array.from({ length: 10_000 }, (_, index) => ({
+          name: `tool_${index}`,
+        })),
+      },
+    });
+    expect(response.statusCode, response.body).toBe(400);
     expect(jevStates).toEqual([]);
   });
 

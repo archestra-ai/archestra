@@ -196,8 +196,8 @@ describe("Model Router auto model", () => {
           );
         expect(state.tools).toBe(
           ingress === "chat"
-            ? "Available tools: 2\nread_file: Read a repository file.\nparse_sql: Parse a SQL statement."
-            : "Available tools: 2\nread_file: Read a repository file.\nlookup",
+            ? "Available tools: 2\nparse_sql\nread_file"
+            : "Available tools: 2\nlookup\nread_file",
         );
         expect(state.tools).not.toContain("parameters");
       });
@@ -556,6 +556,105 @@ describe("Model Router auto model", () => {
     expect(rows).toEqual([
       { sessionId: decision.sessionKey, sessionSource: "auto_routing" },
     ]);
+  });
+
+  test("unnamed conversations separate scoring contexts while tool ordering preserves the decision", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await setupOrganization({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    await publishPlan(org);
+    const request = (system: string, names: string[]) =>
+      send(org, {
+        ingress: "chat",
+        path: "chat/completions",
+        session: null,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: PROMPT },
+        ],
+        extra: {
+          tools: names.map((name) => ({
+            type: "function",
+            function: { name, parameters: { type: "object", properties: {} } },
+          })),
+        },
+      });
+    for (const response of [
+      await request("Review migrations.", ["read_file", "inspect_schema"]),
+      await request("Review migrations.", ["inspect_schema", "read_file"]),
+      await request("Review security.", ["read_file", "inspect_schema"]),
+      await request("Review migrations.", ["read_file"]),
+    ])
+      expect(response.statusCode, response.body).toBe(200);
+    expect(jevCalls).toBe(3);
+    expect(await decisions(org.organizationId)).toHaveLength(3);
+  });
+
+  test.each(
+    ENDPOINTS,
+  )("$ingress unnamed conversations keep their decision after later system/developer messages", async ({
+    ingress,
+    path,
+  }, { makeOrganization, makeSecret, makeLlmProviderApiKey }) => {
+    const org = await setupOrganization({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    await publishPlan(org);
+    const opening = [
+      { role: "system", content: "Review migrations." },
+      { role: "user", content: PROMPT },
+    ];
+    const extra = {
+      tools: [
+        ingress === "chat"
+          ? {
+              type: "function",
+              function: {
+                name: "read_file",
+                parameters: { type: "object", properties: {} },
+              },
+            }
+          : {
+              type: "function",
+              name: "read_file",
+              parameters: { type: "object", properties: {} },
+            },
+      ],
+    };
+    const first = await send(org, {
+      ingress,
+      path,
+      session: null,
+      messages: opening,
+      extra,
+    });
+    expect(first.statusCode, first.body).toBe(200);
+    const [initial] = await decisions(org.organizationId);
+    const next = await send(org, {
+      ingress,
+      path,
+      session: null,
+      extra,
+      messages: [
+        ...opening,
+        { role: "assistant", content: "Checking the migration." },
+        { role: "system", content: "Compaction note." },
+        { role: "developer", content: "Focus on the new diff." },
+        { role: "user", content: "Continue." },
+      ],
+    });
+    expect(next.statusCode, next.body).toBe(200);
+    expect(jevCalls).toBe(1);
+    expect(await decisions(org.organizationId)).toEqual([initial]);
+    expect(upstreamModels).toEqual([org.trio[2].modelId, org.trio[2].modelId]);
   });
 
   test("a Responses continuation without a session id is refused before routing", async ({
@@ -1141,7 +1240,7 @@ describe("Model Router auto model", () => {
       expect(state).toMatchObject({
         prompt: PROMPT,
         system_prompt: "Review migration locking.",
-        tools: "Available tools: 1\ninspect_schema: Read table metadata.",
+        tools: "Available tools: 1\ninspect_schema",
       });
       const [decision] = await decisions(org.organizationId);
       expect(decision).toMatchObject({ tierIndex: 2, modelId: org.trio[2].id });

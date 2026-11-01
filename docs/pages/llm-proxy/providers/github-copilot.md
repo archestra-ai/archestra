@@ -2,7 +2,7 @@
 title: GitHub Copilot
 description: Connect models from a personal GitHub Copilot seat or share an organization enterprise plan.
 order: 7
-lastUpdated: 2026-10-30
+lastUpdated: 2026-11-01
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -26,7 +26,7 @@ Bring your individual Copilot subscription into Archestra for personal chats, co
 
 On **Model Providers**, connect **GitHub Copilot** under **Personal subscriptions** and authorize Archestra on GitHub with the one-time device code.
 
-Your sign-in belongs only to you and is never shared across your organization. If you set up the Copilot CLI with [Connect](/docs/get-started/connect), Archestra connects your account automatically.
+Your sign-in belongs only to you and is never shared across your organization. If you set up Copilot CLI with [Connect](/docs/get-started/connect), you can sign in there: **Model routing** in **Setup options** offers the same two choices, personal sign-in and enterprise plan. With both connected, you pick the account the setup bills.
 
 ## Enterprise Plans
 

@@ -31,7 +31,7 @@ export function authModuleMock() {
     getAgentTypePermissionChecker,
     // A full checker answers every list question, so lists follow whatever
     // checker a test configures unless the test overrides this one.
-    getAgentTypeListPermissionChecker: vi.fn((...args: unknown[]) =>
+    getAgentTypeListPermissionChecker: vi.fn<MockFunction>((...args) =>
       getAgentTypePermissionChecker(...args),
     ),
     hasAnyAgentTypeAdminPermission: vi.fn<MockFunction>(),

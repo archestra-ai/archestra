@@ -111,11 +111,11 @@ Limits protect your cluster and budget by capping runtime duration, idle time, s
 | **Maximum duration** | Stops the run after this time, even mid-task, and deletes its files. Follow-ups do not extend it. |
 | **Metered LLM budget** | Blocks metered model calls once the run reaches this spend. Subscription usage does not count. |
 | **Default tier** | Sets the container size for standard runs from your organization's [runtime tiers](/docs/agents/runtime/setup#runtime-tiers). |
-| **Scaleup tier** | Sets the largest tier a run can request. Choose **Fix at &lt;tier&gt;** to disable scaling up. |
+| **Scaleup tier** | Sets the largest tier a run can request. Choose **Disable autoscaling** to disable scaling up. |
 
 When starting a run through [`start_agent_run`](/docs/reference/archestra-mcp-server#start_agent_run) or [`POST /api/agents/{id}/runs`](/docs/reference/api#/Agents/startAgentRun), you can pass custom `limits`. You can request stricter limits or a different tier, either by name or by minimum compute (`min_cpu` and `min_memory_gib`). A tier chosen by minimum compute never has a smaller workspace than the agent's default tier. Requests exceeding the agent's configured limits fail with the allowed tiers named.
 
-A run that needs more compute starts a new run of the same agent at a larger tier and hands over its workspace. Setting **Scaleup tier** to **Fix at &lt;tier&gt;** disables scaling up. The agent runtime instance receives instructions that scaling is disabled, and scaleup attempts fail with a non-retriable error.
+A run that needs more compute starts a new run of the same agent at a larger tier and hands over its workspace. Setting **Scaleup tier** to **Disable autoscaling** disables scaling up. The agent runtime instance receives instructions that scaling is disabled, and scaleup attempts fail with a non-retriable error.
 
 Inside a container, `ARCHESTRA_AGENT_RUNTIME_TIERS` lists the allowed tiers with their CPU, memory, and workspace size. When the requested tier has no ready warm container, Archestra serves the run from the next larger tier within the scaleup limit, unless that tier has a smaller workspace. Runs never start below their requested tier.
 

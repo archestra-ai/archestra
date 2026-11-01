@@ -180,6 +180,22 @@ async function launchDelegatedTask(params: {
         ),
       );
     }
+    let currentTier = context.agentRuntimeTier;
+    if (!currentTier && context.runId) {
+      let currentRun = await AgentRunModel.findByTaskId(context.runId);
+      if (!currentRun) {
+        const currentTaskId = await AgentRunModel.findCurrentTurnTaskId({
+          runId: context.runId,
+          organizationId: actor.organizationId,
+        });
+        if (currentTaskId) {
+          currentRun = await AgentRunModel.findByTaskId(currentTaskId);
+        }
+      }
+      if (currentRun?.agentId === agent.id) {
+        currentTier = currentRun.runtimeLimits?.tier ?? undefined;
+      }
+    }
     // Refuse a limit above the Agent's before a task exists: the caller hears
     // the maximum and can ask again within it.
     let limits: AgentRunLimits;
@@ -187,6 +203,7 @@ async function launchDelegatedTask(params: {
       limits = resolveAgentRunLimits({
         runtime,
         requested: params.limits,
+        currentTier,
         tiers: await organizationAgentRuntimeTiers(actor.organizationId),
       });
     } catch (error) {

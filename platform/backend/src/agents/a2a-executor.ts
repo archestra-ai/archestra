@@ -193,6 +193,8 @@ interface A2AExecuteParamsBase {
   chatOpsPinnedAgentId?: string;
   /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
+  /** The calling agent run's task ID or run ID, when dispatched from a runtime container or chat. */
+  runId?: string;
 
   /**
    * History of UI messages needed for persistance at new UIMessage generation
@@ -411,6 +413,7 @@ export async function executeA2AMessage(
       isolationKey,
       abortSignal,
       scheduleTriggerRunId,
+      runId: params.runId,
       // Forward the same bridge so a nested delegation's tool calls surface too,
       // attributed to the nested delegation call (recursion through the chain).
       subagentToolStream,

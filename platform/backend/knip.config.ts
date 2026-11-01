@@ -31,15 +31,6 @@ const config: KnipConfig = {
   // not part of the backend module graph.
   ignore: ["src/static/**"],
   ignoreDependencies: [
-    // Workspace dependency - resolved by pnpm
-    "@archestra/shared",
-    // Native CommonJS addon loaded through package exports; knip does not
-    // resolve the workspace package's generated N-API entrypoint correctly.
-    "@archestra/sandbox-rs",
-    "@archestra/app-runtime-rs",
-    "@archestra/image-rs",
-    "@archestra/openappa-rs",
-    "@archestra/router-rs",
     // Provides tsc, which scripts/type-check.ts runs for `pnpm type-check`.
     "typescript-7",
   ],
@@ -47,7 +38,20 @@ const config: KnipConfig = {
     // biome and concurrently are in root package.json
     "biome",
     "concurrently",
+    // System tools that tests run where the machine has them.
+    "kubectl",
+    "unshare",
+    "pwsh",
+    "flock",
   ],
+  // Exports used in their own file (a schema built from others, a type a
+  // public signature names) are not dead, as knip 5 judged them.
+  ignoreExportsUsedInFile: true,
+  rules: {
+    // knip runs per workspace, outside the root that holds pnpm's catalog,
+    // so it cannot resolve `catalog:`; pnpm install already fails on a bad one.
+    catalogReferences: "off",
+  },
 };
 
 export default config;

@@ -13,6 +13,7 @@ import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
 import { ApiError } from "@/types";
 import type { OpenAppaSession } from "./service";
+import { toolCallArgumentsText } from "./tool-call-arguments";
 import type { DeclaredToolSpelling } from "./wire";
 
 export const YellArgumentsSchema = z.strictObject({
@@ -65,7 +66,7 @@ export function isReportingToolCall(params: {
   const { call, resolution, nativeQuestion } = params;
   if (typeof call.arguments === "string") {
     try {
-      JSON.parse(call.arguments);
+      JSON.parse(toolCallArgumentsText(call.arguments));
     } catch {
       return false;
     }

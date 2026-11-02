@@ -24,8 +24,8 @@ test("an oversized tool label still permits inspection but cannot approve an inc
   expect(approve).toBe(false);
   expect(card.callPreview?.length).toBeLessThanOrEqual(2000);
   expect(card.options.map((option) => option.label)).toEqual([
-    "Deny",
     "Inspect",
+    "Deny",
   ]);
   expect(renderHitlReviewText(review)).toContain(
     "All conditions must remain visible",

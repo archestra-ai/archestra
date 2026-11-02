@@ -221,6 +221,12 @@ if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
   args+=(--session "$(cat "${session_file}")")
 fi
 
+# The client's shell commands take the highest OOM score; the client and this
+# launcher keep the container's (archestra-command-oom-score.sh). Set last, so
+# nothing the launcher started before gets it. An earlier BASH_ENV still runs.
+export ARCHESTRA_AGENT_RUNTIME_BASH_ENV="${ARCHESTRA_AGENT_RUNTIME_BASH_ENV-${BASH_ENV:-}}"
+export BASH_ENV="${script_dir}/archestra-command-oom-score.sh"
+
 case "${runtime_mode}" in
   interactive)
     exec "${script_dir}/archestra-kimi-tui-start" kimi "${args[@]}"

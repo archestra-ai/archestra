@@ -5,6 +5,7 @@ import {
   TOOL_ASK_USER_SHORT_NAME,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
+import { STARTUP_GUARD_INSTALL } from "@archestra/shared/consts";
 import { CODEX_GUARD_CLIENT } from "../guard/clients";
 import { starterPrompt } from "../steps/ending";
 import { describeMarketplaceContents } from "../steps/marketplace-copy";
@@ -359,8 +360,22 @@ function codexEnding(ctx: SetupScriptContext): AgentEnding {
         : [],
     signIn: ctx.mcp
       ? {
-          command: ["codex", "mcp", "login", ctx.mcp.serverName],
-          howTo: `Run codex mcp login ${ctx.mcp.serverName} and finish the sign-in in your browser.`,
+          // On Windows the setup's helper runs codex mcp login. While the
+          // ChatGPT desktop app runs Codex in WSL, it saves the sign-in where
+          // Codex in WSL can read it.
+          command:
+            ctx.platform === "windows"
+              ? [
+                  "node",
+                  `~/${STARTUP_GUARD_INSTALL.codex.psScriptRelpath}.handoff.cjs`,
+                  "--sign-in",
+                  ctx.mcp.serverName,
+                ]
+              : ["codex", "mcp", "login", ctx.mcp.serverName],
+          howTo:
+            ctx.platform === "windows"
+              ? `Run node "$HOME\\${STARTUP_GUARD_INSTALL.codex.psScriptRelpath.replaceAll("/", "\\")}.handoff.cjs" --sign-in ${ctx.mcp.serverName} and finish the sign-in in your browser.`
+              : `Run codex mcp login ${ctx.mcp.serverName} and finish the sign-in in your browser.`,
         }
       : null,
     launch: ["codex", starterPrompt(ctx)],

@@ -2,7 +2,7 @@
 title: ChatGPT
 description: Bring your gateway and skills into ChatGPT, and check the desktop app's tool calls with Guardrails
 order: 4
-lastUpdated: 2026-11-01
+lastUpdated: 2026-11-02
 ---
 
 Download one plugin from Archestra to bring your gateway's MCP tools and portable skills into ChatGPT. On your computer, the desktop app's Work and Codex tabs can also send their model requests through Archestra, so [Guardrails](/docs/agents/guardrails) check each tool call they make.
@@ -36,7 +36,7 @@ The desktop app's Work and Codex tabs run on your computer and read the Codex se
 4. Restart ChatGPT and start a Work task. In the [logs](/docs/admin/logs), its requests show the ChatGPT client.
 
 - The setup needs the `codex` CLI on your `PATH`. It changes `~/.codex/config.toml`, so Codex CLI on the same computer uses the same settings. See [Connect Your Agents](/docs/get-started/connect#before-you-start) for the other prerequisites.
-- On Windows, ChatGPT can run Codex in WSL. While it does, the Windows command stops before it changes anything, because Codex in WSL cannot open the Windows paths it would write. Run the macOS / Linux command in WSL instead. Before you run it, set `CODEX_HOME` to your Windows Codex folder, for example `export CODEX_HOME=/mnt/c/Users/you/.codex`. If you later stop running Codex in WSL, the Linux paths stay in the settings. Change them to Windows paths before you run the Windows command.
+- On Windows, use the Windows command also when ChatGPT runs Codex in WSL. Codex in WSL cannot read Windows Credential Manager. So while ChatGPT runs Codex in WSL, the setup saves the gateway sign-in in your Codex folder (`.credentials.json`), where both Codex for Windows and Codex in WSL can read it.
 - Chats and dots run on OpenAI's servers and do not read these settings. Guardrails do not check them. The plugin brings your tools and skills there.
 
 For package format and upload requirements, see OpenAI's [plugin packaging guide](https://developers.openai.com/plugins/build/plugins). OAuth approval and workspace policy remain in ChatGPT.

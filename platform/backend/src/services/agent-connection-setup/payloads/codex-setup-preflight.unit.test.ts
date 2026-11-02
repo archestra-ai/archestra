@@ -5,6 +5,7 @@ import {
   mkdtemp,
   readdir,
   readFile,
+  rename,
   rm,
   stat,
   writeFile,
@@ -16,7 +17,7 @@ import { runInNewContext } from "node:vm";
 import { expect, test } from "vitest";
 import { renderSetupScript, type SetupScriptContext } from "../index";
 import { SETUP_STOPPED_EXIT_CODE } from "../types";
-import { CODEX_WSL_SETUP_HINT } from "./codex-handoff";
+import { CODEX_HANDOFF_HELPER, CODEX_WSL_SETUP_HINT } from "./codex-handoff";
 
 const exec = promisify(execFile);
 const ctx: SetupScriptContext = {
@@ -68,8 +69,9 @@ const args = process.argv.slice(2); const home = process.env.CODEX_HOME;
 fs.appendFileSync(path.join(process.env.HOME, 'calls'), args.join(' ') + '\\n');
 if (args[0] === '--version') { console.log('codex-cli test-version'); process.exit(0); }
 // Like Codex: a model_catalog_json file it cannot open stops every command.
+// A relative path is relative to the Codex folder.
 const catalog = /^model_catalog_json = "(.*)"$/m.exec(fs.existsSync(path.join(home, 'config.toml')) ? fs.readFileSync(path.join(home, 'config.toml'), 'utf8') : '')?.[1];
-if (catalog && !fs.existsSync(catalog)) {
+if (catalog && !fs.existsSync(path.resolve(home, catalog))) {
   console.error('Error: failed to load configuration\\n\\nCaused by:\\n    No such file or directory (os error 2)');
   process.exit(1);
 }
@@ -340,16 +342,11 @@ const WSL_MODE = "[desktop]\nrunCodexInWindowsSubsystemForLinux = true\n";
 
 test.each([
   {
+    // The desktop app writes WSL paths itself while it runs Codex in WSL.
     name: "a desktop app that runs Codex in WSL",
     home: "C:\\Users\\me\\.codex",
-    config: `model_catalog_json = "/mnt/c/Users/me/.codex/catalog.json"\n${WSL_MODE}`,
-    hint: "Run the macOS / Linux setup command in WSL. Enter this command first:\n  export CODEX_HOME=/mnt/c/Users/me/.codex",
-  },
-  {
-    name: "a WSL path inside a table, with WSL on",
-    home: "D:\\codex\\",
-    config: `[mcp_servers.repl]\ncommand = "/mnt/d/tools/repl.exe"\n${WSL_MODE}`,
-    hint: "export CODEX_HOME=/mnt/d/codex",
+    config: `[mcp_servers.repl]\ncommand = "/mnt/c/tools/repl.exe"\n${WSL_MODE}`,
+    hint: null,
   },
   {
     // The paths stay behind after the desktop app stops running Codex in WSL.
@@ -360,19 +357,18 @@ test.each([
     hint: "Change them to Windows paths, for example /mnt/c/Users/me/.codex to C:\\Users\\me\\.codex.",
   },
   {
-    // Codex for Windows may still load it, but Codex in WSL cannot open the
-    // Windows paths a Windows setup would add.
-    name: "Windows paths only, with WSL on",
-    home: "C:\\Users\\me\\.codex",
-    config: `model_catalog_json = "C:\\\\Users\\\\me\\\\catalog.json"\n${WSL_MODE}`,
-    hint: "export CODEX_HOME=/mnt/c/Users/me/.codex",
-  },
-  {
     name: "a WSL path in an array, with WSL off",
     home: "C:\\Users\\me\\.codex",
     config:
       '[mcp_servers.repl]\ncommand = "node"\nargs = ["/mnt/c/tools/repl.js"]\n',
     hint: "Change them to Windows paths, for example /mnt/c/Users/me/.codex to C:\\Users\\me\\.codex.",
+  },
+  {
+    name: "the WSL switch outside the [desktop] table",
+    home: "D:\\codex\\",
+    config:
+      '[features]\nrunCodexInWindowsSubsystemForLinux = true\n[mcp_servers.repl]\ncommand = "/mnt/d/tools/repl.exe"\n',
+    hint: "Change them to Windows paths, for example /mnt/d/codex to D:\\codex.",
   },
   {
     name: "Windows paths only",
@@ -387,15 +383,9 @@ test.each([
     hint: null,
   },
   {
-    name: "the WSL switch outside the [desktop] table",
-    home: "C:\\Users\\me\\.codex",
-    config: "[features]\nrunCodexInWindowsSubsystemForLinux = true\n",
-    hint: null,
-  },
-  {
     name: "a Linux Codex home",
     home: "/home/me/.codex",
-    config: `model_catalog_json = "/mnt/c/Users/me/.codex/catalog.json"\n${WSL_MODE}`,
+    config: 'model_catalog_json = "/mnt/c/Users/me/.codex/catalog.json"\n',
     hint: null,
   },
 ])("the WSL setup hint for $name", ({ home, config, hint }) => {
@@ -409,53 +399,37 @@ test.each([
 
 test.each([
   {
-    name: "a space",
-    home: "C:\\Users\\Jane Doe\\.codex",
-    linuxHome: "/mnt/c/Users/Jane Doe/.codex",
-  },
-  {
-    name: "a quote and a dollar sign",
-    home: "C:\\Users\\O'Brien $HOME\\.codex",
-    linuxHome: "/mnt/c/Users/O'Brien $HOME/.codex",
-  },
-])("the WSL export command keeps a Codex home with $name as one value", async ({
-  home,
-  linuxHome,
-}) => {
-  const message: string = runInNewContext(
-    `${CODEX_WSL_SETUP_HINT}\nwslSetupHint(home, config)`,
-    { home, config: WSL_MODE },
-  );
-  const command = message.split("\n").at(-1)?.trim() ?? "";
-  expect(command).toMatch(/^export CODEX_HOME=/);
-  const { stdout } = await exec("sh", [
-    "-c",
-    `${command}; printf %s "$CODEX_HOME"`,
-  ]);
-  expect(stdout).toBe(linuxHome);
-});
-
-test.each([
-  { platform: "win32", config: WSL_MODE, stops: true },
-  {
+    name: "Windows, while the desktop app runs Codex in WSL",
     platform: "win32",
-    config: `[desktop]\nrunCodexInWindowsSubsystemForLinux = false\n`,
-    stops: false,
+    config: WSL_MODE,
+    args: ["-c", "mcp_oauth_credentials_store=file", "mcp", "login", "gw"],
   },
-  // In WSL the setup is the one the hint asks for.
-  { platform: "linux", config: WSL_MODE, stops: false },
-])("a $platform setup with config $config stops: $stops", ({
-  platform,
-  config,
-  stops,
-}) => {
-  const message = runInNewContext(
-    `${CODEX_WSL_SETUP_HINT}\nwindowsWslConflict(platform, home, config)`,
-    { platform, home: "C:\\Users\\me\\.codex", config },
-  );
-  if (stops)
-    expect(message).toContain("Run the macOS / Linux setup command in WSL");
-  else expect(message).toBe("");
+  {
+    name: "Windows",
+    platform: "win32",
+    config: "[desktop]\nrunCodexInWindowsSubsystemForLinux = false\n",
+    args: ["mcp", "login", "gw"],
+  },
+  {
+    name: "Windows, with the WSL switch outside the [desktop] table",
+    platform: "win32",
+    config: "[features]\nrunCodexInWindowsSubsystemForLinux = true\n",
+    args: ["mcp", "login", "gw"],
+  },
+  // Codex in WSL has no Windows keyring to miss.
+  {
+    name: "WSL",
+    platform: "linux",
+    config: WSL_MODE,
+    args: ["mcp", "login", "gw"],
+  },
+])("the gateway sign-in on $name", ({ platform, config, args }) => {
+  expect(
+    runInNewContext(
+      `${CODEX_WSL_SETUP_HINT}\nsignInArgs(platform, config, "gw")`,
+      { platform, config },
+    ),
+  ).toEqual(args);
 });
 
 test.each<{
@@ -567,6 +541,50 @@ test("a sign-in that Codex renews during preflight lets setup continue", async (
     const calls = await readFile(path.join(f.home, "calls"), "utf8");
     expect(calls.match(/app-server/g)).toHaveLength(1);
     expect(calls).toContain("mcp add");
+  } finally {
+    await rm(f.home, { recursive: true, force: true });
+  }
+});
+
+// Codex for Windows and the ChatGPT desktop app's Codex in WSL reach one folder
+// by two paths, C:\\Users\\me\\.codex and /mnt/c/Users/me/.codex.
+test("setup writes the model catalog path relative to the Codex folder, so Codex loads it from another path to that folder", async () => {
+  const f = await fixture();
+  try {
+    await exec("bash", [f.script], { env: f.env });
+    expect(await readFile(f.config, "utf8")).toContain(
+      'model_catalog_json = "archestra-direct-model-catalog.json"',
+    );
+    const moved = path.join(f.home, "same codex home");
+    await rename(f.codexHome, moved);
+    const result = await exec(path.join(f.home, "codex"), ["mcp", "list"], {
+      env: { ...f.env, CODEX_HOME: moved },
+      cwd: tmpdir(),
+    }).catch((error) => error);
+    expect(result.stderr).not.toContain("failed to load configuration");
+    expect(result.code ?? 0).toBe(0);
+  } finally {
+    await rm(f.home, { recursive: true, force: true });
+  }
+});
+
+test("the sign-in helper runs codex mcp login and refuses a server name that is not plain", async () => {
+  const f = await fixture();
+  try {
+    const helper = path.join(f.home, "handoff.cjs");
+    await writeFile(helper, CODEX_HANDOFF_HELPER);
+    await exec(process.execPath, [helper, "--sign-in", "test_gateway"], {
+      env: f.env,
+    });
+    const refused = await exec(
+      process.execPath,
+      [helper, "--sign-in", "gw & calc"],
+      { env: f.env },
+    ).catch((error) => error);
+    expect(refused.code).toBe(1);
+    expect(await readFile(path.join(f.home, "calls"), "utf8")).toBe(
+      "mcp login test_gateway\n",
+    );
   } finally {
     await rm(f.home, { recursive: true, force: true });
   }

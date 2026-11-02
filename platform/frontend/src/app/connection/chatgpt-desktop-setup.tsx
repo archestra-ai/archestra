@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { CONNECT_CLIENTS } from "./clients";
 import type { ConnectPageData } from "./connect-page-data";
 import { OneOf, ScriptBlock, TextButton, useCopy } from "./connect-page-parts";
-import { detectPlatform } from "./platform.utils";
 
 /**
  * The ChatGPT desktop app's Work and Codex tabs run Codex's app server and
@@ -21,10 +19,6 @@ export function ChatgptDesktopSetup({
   includeSkills: boolean;
 }) {
   const { copied, copy } = useCopy();
-  // The browser's OS, not the command toggle: a Windows user who runs Codex
-  // in WSL switches to the macOS / Linux command and still needs the note.
-  const [windowsComputer, setWindowsComputer] = useState(false);
-  useEffect(() => setWindowsComputer(detectPlatform() === "windows"), []);
   const codex = CONNECT_CLIENTS.find((client) => client.id === "codex");
   const command = codex
     ? data.installerCommand(
@@ -67,17 +61,6 @@ export function ChatgptDesktopSetup({
           </OneOf>
         </TextButton>
       </div>
-      {windowsComputer && (
-        <p className="max-w-prose px-1 text-xs leading-5 text-muted-foreground">
-          Does ChatGPT run Codex in WSL? Then run the macOS / Linux command in
-          WSL. Before you run it, set CODEX_HOME to your Windows Codex folder,
-          for example:
-          {/* One line like the command above; it scrolls on narrow screens. */}
-          <code className="mt-1 block w-fit max-w-full overflow-x-auto whitespace-nowrap font-mono">
-            export CODEX_HOME=/mnt/c/Users/you/.codex
-          </code>
-        </p>
-      )}
     </div>
   );
 }

@@ -1,11 +1,10 @@
 import { SETUP_STOPPED_EXIT_CODE } from "../types";
 
 /**
- * The ChatGPT desktop app can run Codex in WSL. It then writes Linux paths into
- * the shared config.toml, and Codex in WSL cannot open the Windows paths that a
- * Windows setup writes. While that mode is on, setup belongs in WSL, with
- * CODEX_HOME set to the same folder. After it is turned off, the Linux paths
- * stay behind, and Codex for Windows cannot load them.
+ * The ChatGPT desktop app can run Codex in WSL, with the same config.toml as
+ * Codex for Windows. Setup writes its paths relative to that folder, so both
+ * load the config. Codex in WSL cannot read the Windows keyring, so while that
+ * mode is on, the gateway sign-in is saved in the folder too.
  *
  * @public — asserted by the preflight unit tests, which knip --production ignores.
  */
@@ -20,25 +19,20 @@ function runsCodexInWsl(config) {
   }
   return false;
 }
-// One shell word: quoted when the path has a space or a shell character.
-function shellWord(value) {
-  return /^[\w\/.,:@%+=-]+$/.test(value) ? value : "'" + value.replace(/'/g, "'\\''") + "'";
-}
+// While the desktop app runs Codex in WSL, it writes WSL paths itself. After
+// that mode is turned off, they stay behind.
 function wslSetupHint(home, config) {
   const drive = /^([A-Za-z]):[\\/](.*)$/.exec(home);
-  if (!drive) return '';
+  if (!drive || runsCodexInWsl(config) || !/^[^#\r\n]*["']\/mnt\/[a-z]\//m.test(config)) return '';
   const windowsHome = home.replace(/[\\/]+$/, '');
   const linuxHome = '/mnt/' + drive[1].toLowerCase() + '/' + drive[2].replace(/\\/g, '/').replace(/\/+$/, '');
-  if (runsCodexInWsl(config)) {
-    return '\nThe desktop app is set to run Codex in WSL (runCodexInWindowsSubsystemForLinux = true), and Codex in WSL cannot open the Windows paths that this setup writes. Run the macOS / Linux setup command in WSL. Enter this command first:\n  export CODEX_HOME=' + shellWord(linuxHome);
-  }
-  if (!/^[^#\r\n]*["']\/mnt\/[a-z]\//m.test(config)) return '';
   return '\nThis config has WSL paths from a time when Codex ran in WSL. Codex for Windows cannot open these paths. Change them to Windows paths, for example ' + linuxHome + ' to ' + windowsHome + '.';
 }
-// A Windows setup stops while the desktop app runs Codex in WSL, even when
-// Codex for Windows can still load the config.
-function windowsWslConflict(platform, home, config) {
-  return platform === 'win32' && runsCodexInWsl(config) ? wslSetupHint(home, config) : '';
+// Codex in WSL cannot read the Windows keyring. While the desktop app runs
+// Codex in WSL, a Windows sign-in is saved in the Codex folder. Codex for
+// Windows reads it there too when its keyring has no sign-in for the server.
+function signInArgs(platform, config, server) {
+  return [...(platform === 'win32' && runsCodexInWsl(config) ? ['-c', 'mcp_oauth_credentials_store=file'] : []), 'mcp', 'login', server];
 }`;
 
 /** Local helper installed beside the guard. Prepares direct mode and reads native config. */
@@ -223,8 +217,6 @@ function assertConfigLoads(executable) {
   const file = path.join(home, 'config.toml');
   if (!existsSync(file)) return;
   const config = readFileSync(file, 'utf8');
-  const conflict = windowsWslConflict(process.platform, home, config);
-  if (conflict) throw new Error('Codex for Windows cannot set up ' + file + '.' + conflict);
   if (!executable) return;
   const { command, args } = codexEntry(executable);
   // A neutral working directory, so no project's .codex/config.toml is layered in.
@@ -443,8 +435,10 @@ function updateDirectConfig(home, filename) {
   const inlineFeatures = rootAssignments.find(assignment => assignment.key === 'features');
   const dottedFeatures = rootAssignments.some(assignment => assignment.key.startsWith('features\0'));
   const hasFeaturesTable = existingTables.some(table => table.name === 'features');
+  // Relative to the Codex folder: Codex for Windows and the desktop app's Codex
+  // in WSL share this file, and neither can open the other's absolute path.
   const sections = [
-    { name: '', values: { web_search: '"disabled"', model_catalog_json: JSON.stringify(filename),
+    { name: '', values: { web_search: '"disabled"', model_catalog_json: JSON.stringify(path.basename(filename)),
       ...(inlineFeatures ? { features: disableInlineCodeMode(inlineFeatures.value) } : {}),
       ...(dottedFeatures && !hasFeaturesTable ? { 'features.code_mode_host': 'false' } : {}) }, marker: 'root' },
     ...(!inlineFeatures && (!dottedFeatures || hasFeaturesTable) ? [{ name: 'features', values: { code_mode_host: 'false' }, marker: 'features' }] : []),
@@ -497,7 +491,7 @@ if (process.argv[2] === '--setup-only' || process.argv[2] === '--preflight') {
     if (existsSync(configFile)) updateDirectConfig(home);
     const catalog = path.join(home, 'archestra-direct-model-catalog.json');
     const config = existsSync(configFile) ? readFileSync(configFile, 'utf8') : '';
-    if (!config.includes(catalog) && !config.includes(JSON.stringify(catalog))) rmSync(catalog, { force: true });
+    if (![catalog, JSON.stringify(catalog), JSON.stringify(path.basename(catalog))].some(value => config.includes(value))) rmSync(catalog, { force: true });
   } catch (error) {
     process.stderr.write('Codex direct tool mode could not be removed: ' + error.message + '\n');
     process.exitCode = 1;
@@ -515,6 +509,16 @@ if (process.argv[2] === '--setup-only' || process.argv[2] === '--preflight') {
     process.stderr.write('Codex direct tool mode could not be prepared: ' + withNextStep(error, 'start Codex again') + '\n');
     process.exitCode = 1;
   }
+} else if (process.argv[2] === '--sign-in') {
+  const server = process.argv[3] || '';
+  const file = path.join(process.env.CODEX_HOME || path.join(os.homedir(), '.codex'), 'config.toml');
+  const config = existsSync(file) ? readFileSync(file, 'utf8') : '';
+  // A plain name, because on Windows cmd.exe runs the command line and finds codex.cmd too.
+  const args = signInArgs(process.platform, config, server);
+  const result = !/^[\w-]+$/.test(server) ? { status: 1 }
+    : process.platform === 'win32' ? spawnSync(['codex', ...args].join(' '), { stdio: 'inherit', shell: true })
+    : spawnSync('codex', args, { stdio: 'inherit' });
+  process.exitCode = result.error ? 1 : (result.status ?? 1);
 } else if (process.argv[2] === '--launch') {
   // PowerShell 5.1 passes a quoted TOML override through npm's .cmd shim as
   // multiple words. Bypass the shell/shim and give the CLI its exact argv.

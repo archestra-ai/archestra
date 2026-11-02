@@ -77,37 +77,3 @@ it("switches to the Windows command and keeps left-out parts out", async () => {
     { gatewayId: null, pluginIds: null },
   );
 });
-
-it.each([
-  { platform: "Win32", shown: true },
-  { platform: "MacIntel", shown: false },
-])("tells a $platform computer about WSL: $shown", async ({
-  platform,
-  shown,
-}) => {
-  vi.spyOn(navigator, "platform", "get").mockReturnValue(platform);
-  const installerCommand = vi.fn(
-    (client, _choices, windows: boolean) =>
-      `${windows ? "irm" : "curl"} --client ${client.id}`,
-  ) as unknown as ConnectPageData["installerCommand"];
-  render(<Harness installerCommand={installerCommand} />);
-  const note = /Does ChatGPT run Codex in WSL\?/;
-
-  if (!shown) {
-    expect(screen.queryByText(note)).toBeNull();
-    return;
-  }
-  expect(await screen.findByText(note)).toBeVisible();
-  expect(
-    screen.getByText("export CODEX_HOME=/mnt/c/Users/you/.codex"),
-  ).toBeVisible();
-  // The note stays when the user picks the command to run in WSL.
-  await userEvent.click(
-    screen.getByRole("button", { name: /Use the Windows command/ }),
-  );
-  await userEvent.click(
-    screen.getByRole("button", { name: /Use the macOS \/ Linux command/ }),
-  );
-  expect(screen.getByText("curl --client codex")).toBeVisible();
-  expect(screen.getByText(note)).toBeVisible();
-});

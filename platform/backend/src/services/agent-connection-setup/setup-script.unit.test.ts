@@ -3084,8 +3084,9 @@ if (process.argv[2] === 'debug') {
       expect(parsed.tools).toEqual({ web_search: true });
       expect(parsed.features).toEqual({ code_mode_host: false });
       expect(parsed.web_search).toBe("disabled");
+      // Relative to the Codex folder, which another system reaches by another path.
       expect(parsed.model_catalog_json).toBe(
-        path.join(codexHome, "archestra-direct-model-catalog.json"),
+        "archestra-direct-model-catalog.json",
       );
       expect(parsed.model_providers).toMatchObject({
         default_proxy: {
@@ -4204,6 +4205,36 @@ describe("ending", () => {
       command: ["claude", STARTER_PROMPT],
       text: `claude '${STARTER_PROMPT}'`,
     });
+  });
+
+  // Codex in WSL cannot read the Windows keyring, so on Windows the sign-in
+  // goes through the setup's helper, which knows where the desktop app runs Codex.
+  test.each([
+    {
+      platform: "windows" as const,
+      command: [
+        "node",
+        "~/.archestra/codex-startup-guard.ps1.handoff.cjs",
+        "--sign-in",
+        MCP.serverName,
+      ],
+      text: `node "$HOME\\.archestra\\codex-startup-guard.ps1.handoff.cjs" --sign-in ${MCP.serverName}`,
+    },
+    {
+      platform: "macos" as const,
+      command: ["codex", "mcp", "login", MCP.serverName],
+      text: `codex mcp login ${MCP.serverName}`,
+    },
+  ])("signs Codex in to the gateway on $platform", ({
+    platform,
+    command,
+    text,
+  }) => {
+    const script = renderSetupScript(fullContext("codex", platform));
+    const marker = script.match(/^# archestra-ending: (\S+)$/m)?.[1];
+    const ending = JSON.parse(Buffer.from(marker ?? "", "base64").toString());
+    expect(ending.signIn.command).toEqual(command);
+    expect(ending.signIn.text).toBe(text);
   });
 });
 

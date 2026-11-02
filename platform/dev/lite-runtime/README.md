@@ -58,7 +58,10 @@ minutes at 16 CPUs, longer at 2 or 4).
 In a checkout inside the runtime:
 
 ```bash
-archestra-dev-lite up            # PostgreSQL, migrations, backend :9000, frontend :3000
+archestra-dev-lite prepare       # dependencies, prebuilt addons, PostgreSQL, migrations; no build, no server (a pod's bootstrap runs this)
+archestra-dev-lite up            # also builds the backend and frontend, one after the other, then serves :9000 and :3000
+archestra-dev-lite pause         # stop the backend and frontend servers, keep PostgreSQL and the builds
+archestra-dev-lite resume        # start them again from their builds
 archestra-dev-lite status        # processes with RSS, cgroup memory, disk, URLs
 archestra-dev-lite logs backend  # or db, migrate, frontend, wiremock, a2a, keycloak
 archestra-dev-lite up --e2e      # also WireMock :9092 and the A2A fixture :9191; frontend as a production build
@@ -67,6 +70,16 @@ archestra-dev-lite e2e           # Playwright chromium + api projects against th
 archestra-dev-lite restart       # down, then up
 archestra-dev-lite down          # stop; data and caches stay
 ```
+
+The builds run one after the other and before either server starts: a cold
+frontend build holds about 3.5 GiB, and the backend's build or server next to
+it took a 4 GiB pod past its limit. A server that is already running stops for
+them, and comes back if `up` fails. Native addons without a prebuilt binary
+for the checkout's `archestra-rs` tree are built the same way, one crate at a
+time. In an Agent Runtime the bootstrap only prepares; the first `up` builds
+and starts. `pause` hands the servers'
+memory (about 0.8 GiB after use) to one command that cannot fit beside them;
+`resume`, or the next `up`, serves the same builds again without rebuilding.
 
 `platform/scripts/dev-lite.sh --help` lists every option. Each component runs
 in its own tmux session (`tmux -L archestra-dev-lite ls`), so a shell tool's

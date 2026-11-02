@@ -285,18 +285,19 @@ export class OpenAIEmbeddingStreamAdapter
 // =============================================================================
 
 // Exported for reuse by OpenAI-compatible providers (Mistral, etc.)
-export class OpenAIRequestAdapter
-  implements LLMRequestAdapter<OpenAiRequest, OpenAiMessages>
+export class OpenAIRequestAdapter<
+  TRequest extends Omit<OpenAiRequest, "response_format"> = OpenAiRequest,
+> implements LLMRequestAdapter<TRequest, OpenAiMessages>
 {
   readonly provider: SupportedProvider;
-  private request: OpenAiRequest;
+  private request: TRequest;
   private modifiedModel: string | null = null;
   private toolResultUpdates: Record<string, string> = {};
 
   // `provider` overrides which provider this adapter attributes to (logs,
   // metrics, interactions). OpenAI-compatible providers (DeepSeek, GitHub
   // Copilot, …) reuse this adapter via createOpenAiCompatibleAdapterFactory.
-  constructor(request: OpenAiRequest, provider: SupportedProvider = "openai") {
+  constructor(request: TRequest, provider: SupportedProvider = "openai") {
     this.request = request;
     this.provider = provider;
   }
@@ -376,7 +377,7 @@ export class OpenAIRequestAdapter
     return this.request.messages;
   }
 
-  getOriginalRequest(): OpenAiRequest {
+  getOriginalRequest(): TRequest {
     return this.request;
   }
 
@@ -514,7 +515,7 @@ export class OpenAIRequestAdapter
   // Build Modified Request
   // ---------------------------------------------------------------------------
 
-  toProviderRequest(): OpenAiRequest {
+  toProviderRequest(): TRequest {
     let messages = this.request.messages;
 
     if (Object.keys(this.toolResultUpdates).length > 0) {

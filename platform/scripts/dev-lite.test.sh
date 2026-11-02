@@ -264,6 +264,15 @@ check "a failed frontend build on reload brings the backend back" grep -q "^serv
 failing_backend_start() { (frontend_mode() { echo build; }; start_backend() { return 1; }; LIFE_ALIVE=" frontend" lifecycle cmd_reload backend) || true; }
 out="$(failing_backend_start)"
 check "a backend that does not start on reload brings the frontend back" grep -q "^server frontend" <<<"$out"
+up_beside_frontend() { (frontend_mode() { echo build; }; LIFE_ALIVE=" frontend" lifecycle cmd_start 1); }
+out="$(up_beside_frontend)"
+check "up stops a running frontend before the backend builds" test "$(order_of "$out" "^stop_session frontend")" -lt "$(order_of "$out" "^build_backend")"
+failing_up_build() { (build_frontend() { echo "build_frontend failed"; return 1; }; LIFE_ALIVE=" backend" lifecycle cmd_start 1) || true; }
+out="$(failing_up_build)"
+check "a failed frontend build on up brings the backend back" grep -q "^server backend" <<<"$out"
+failing_reload_restart() { (frontend_mode() { echo build; }; start_backend() { return 1; }; LIFE_ALIVE=" backend" lifecycle cmd_reload frontend) || true; }
+out="$(failing_reload_restart)"
+check "a frontend reload whose backend does not start again brings the frontend back" grep -q "^server frontend" <<<"$out"
 gone="$ARCHESTRA_DEV_LITE_STATE_DIR/removed-checkout"
 echo "$gone" > "$SERVERS_FILE"
 check "pause refuses when the stack's checkout is gone" grep -q "has no scripts/dev-lite.sh any more" <<<"$( (lifecycle cmd_pause) 2>&1 || true)"

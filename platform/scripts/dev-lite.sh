@@ -827,18 +827,32 @@ cmd_start() {
     paused=1
     [ "$(paused_value frontend)" = "$frontend" ] && keep_frontend=1
   fi
+  # Each build runs alone: a server already running stops for it, and comes
+  # back from its build if the build fails.
+  local stopped_backend=0 stopped_frontend=""
   if [ "$frontend" != dev ] && ! session_alive frontend \
     && { [ "$keep_frontend" = 0 ] || [ ! -f "$STANDALONE_DIR/server.js" ]; }; then
-    # A running backend would hold its memory next to the build.
     if session_alive backend; then
       log "stopping the backend while the frontend builds"
       stop_session backend
+      stopped_backend=1
     fi
-    build_frontend
+    if ! (build_frontend); then
+      if [ "$stopped_backend" = 1 ]; then start_backend; fi
+      die "frontend build failed; see $LOG_DIR/frontend-build.log"
+    fi
   fi
   if ! backend_watch && ! session_alive backend \
     && { [ "$paused" = 0 ] || [ ! -f "$PLATFORM_DIR/backend/dist/server.mjs" ]; }; then
-    build_backend
+    if session_alive frontend; then
+      stopped_frontend="$(frontend_mode)"
+      log "stopping the frontend while the backend builds"
+      stop_session frontend
+    fi
+    if ! (build_backend); then
+      if [ -n "$stopped_frontend" ]; then start_frontend "$stopped_frontend" keep; fi
+      die "backend build failed; see $LOG_DIR/backend-build.log"
+    fi
   fi
   rm -f "$PAUSED_FILE"
   start_backend
@@ -1133,7 +1147,10 @@ cmd_reload() {
         if [ "$restart_backend" = 1 ]; then start_backend; fi
         die "frontend build failed; see $LOG_DIR/frontend-build.log"
       fi
-      if [ "$restart_backend" = 1 ]; then start_backend; fi
+      if [ "$restart_backend" = 1 ] && ! start_backend; then
+        start_frontend "$mode" keep
+        die "the backend did not start again; see $LOG_DIR/backend.log"
+      fi
       start_frontend "$mode" keep
       ;;
     *) die "reload: expected backend or frontend" ;;

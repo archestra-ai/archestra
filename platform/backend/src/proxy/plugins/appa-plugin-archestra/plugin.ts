@@ -889,6 +889,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             nativeQuestionToolName: nativeQuestion,
             nativeQuestionMaxOptions:
               binding.adapter?.nativeQuestion?.maxOptions,
+            gatewayQuestionUsesNativeForm:
+              binding.adapter?.nativeQuestion?.requiresNativeForm,
           }),
           onContinue: binding.threadContinue ? "skip" : undefined,
         });
@@ -2174,8 +2176,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   }
 
   /**
-   * Converts a server-held review to the client's declared native question
-   * tool. Ordinary questions keep the selected gateway transport.
+   * Converts reviews to the client's declared native question tool.
+   * Ordinary questions use it only when the client has no MCP form.
    * Preserves the original tool call ID. With no native declaration, the
    * gateway can use MCP elicitation or fail closed without a deadlock.
    */
@@ -2187,7 +2189,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   ): LlmProxyToolCallsContext["toolCalls"][number] {
     const native = binding.adapter?.nativeQuestion;
     if (
-      !review ||
+      (!review && native?.requiresNativeForm !== true) ||
       !native?.fromAskUser ||
       !isSpecialToolMember(binding, call, "askUser") ||
       native.isAvailable?.(binding.requestHeaders, binding.requestBody) ===
@@ -2213,7 +2215,21 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // An explicit empty namespace tells Responses rewrites not to inherit
       // the gateway namespace from the ask_user call this local tool replaces.
       namespace: "",
-      arguments: JSON.stringify(native.fromAskUser(parsed)),
+      arguments: JSON.stringify(
+        native.fromAskUser(
+          review
+            ? parsed
+            : {
+                question: parsed.question,
+                header: parsed.header,
+                allowMultiple: parsed.allowMultiple,
+                options: parsed.options.map(({ label, description }) => ({
+                  label,
+                  description,
+                })),
+              },
+        ),
+      ),
     };
   }
 

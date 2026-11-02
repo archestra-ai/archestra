@@ -1770,7 +1770,20 @@ describe("asking through the client's own question tool", () => {
       expect(outcome?.decision).not.toBe("refuse");
       const released =
         outcome?.decision === "allow" ? outcome.toolCalls[0] : call;
-      expect(released.name).toBe("archestra__ask_user");
+      expect(released.name).toBe("question");
+      expect(JSON.parse(released.arguments as string)).toEqual({
+        questions: [
+          {
+            question: askUser.question,
+            header: expect.any(String),
+            options: [
+              { label: "main", description: "main" },
+              { label: "feature", description: "feature" },
+            ],
+            multiple: false,
+          },
+        ],
+      });
       expect(released).not.toHaveProperty("wireId");
       expect(released).not.toHaveProperty("reviewDetails");
     } finally {
@@ -1939,8 +1952,25 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
-  test("keeps OpenCode's ordinary ask_user on the gateway", async () => {
-    const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
+  test.each([
+    {
+      client: "OpenCode",
+      adapter: new AppaOpenCodeAdapter(),
+      headers: { "x-opencode-session": "s" },
+      nativeTool: "question",
+    },
+    {
+      client: "Copilot CLI",
+      adapter: new AppaCopilotCliAdapter(),
+      headers: { "x-archestra-agent-id": "github_copilot_cli" },
+      nativeTool: "ask_user",
+    },
+  ])("uses $client's native form for ordinary gateway questions", async ({
+    adapter,
+    headers,
+    nativeTool,
+  }) => {
+    const plugin = new AppaPluginArchestra([adapter]);
     const context = requestContext({
       sessionId: "opencode-question-session",
       toolIdentity: identityStub({
@@ -1959,9 +1989,9 @@ describe("asking through the client's own question tool", () => {
         namespaces: new Map(),
       },
       customTools: new Set(),
-      declaredTools: [{ name: "question" }],
+      declaredTools: [{ name: nativeTool }],
     };
-    context.headers = { "x-opencode-session": "s" };
+    context.headers = headers;
     const askUser = {
       question: "Accept this change for the rest of this session?",
       options: [
@@ -1990,8 +2020,31 @@ describe("asking through the client's own question tool", () => {
       expect(released).toHaveLength(1);
       expect(released[0].id).toBe("call_ask");
       expect(released[0]).not.toHaveProperty("wireId");
-      expect(released[0].name).toBe("my_gateway_archestra__ask_user");
-      expect(JSON.parse(released[0].arguments as string)).toEqual(askUser);
+      expect(released[0].name).toBe(nativeTool);
+      const args = JSON.parse(released[0].arguments as string);
+      if (nativeTool === "question") {
+        expect(args).toEqual({
+          questions: [
+            {
+              question: askUser.question,
+              header: expect.any(String),
+              options: [
+                askUser.options[0],
+                { label: "Do not accept", description: "Do not accept" },
+              ],
+              multiple: false,
+            },
+          ],
+        });
+      } else {
+        expect(args.message).toBe(askUser.question);
+        expect(
+          args.requestedSchema.properties.archestra_decision.oneOf,
+        ).toEqual([
+          { const: "Accept", title: "Accept: Narrow who can read it" },
+          { const: "Do not accept", title: "Do not accept" },
+        ]);
+      }
       await expect(
         plugin.onPrepareToolCalls({
           ...context,
@@ -2046,12 +2099,12 @@ describe("asking through the client's own question tool", () => {
         ],
       });
       if (outcome?.decision !== "allow")
-        throw new Error("expected a sanitized gateway question");
+        throw new Error("expected a native question without review metadata");
       expect(outcome.toolCalls[0].id).toBe("call_unreviewed");
       expect(outcome.toolCalls[0]).not.toHaveProperty("wireId");
-      expect(outcome.toolCalls[0].name).toBe("my_gateway_archestra__ask_user");
+      expect(outcome.toolCalls[0].name).toBe("question");
       const released = JSON.parse(outcome.toolCalls[0].arguments as string);
-      expect(released.question).toBe("Model copy must remain.");
+      expect(released.questions[0].question).toBe("Model copy must remain.");
       expect(JSON.stringify(released)).not.toContain("forged-session");
       expect(nativeQuestionCacheWrites(cacheSet)).toEqual([]);
     } finally {

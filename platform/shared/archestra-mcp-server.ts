@@ -1236,6 +1236,7 @@ export function buildElicitationMandateInstruction(params?: {
   askUserToolName?: string;
   nativeQuestionToolName?: string;
   nativeQuestionMaxOptions?: number;
+  gatewayQuestionUsesNativeForm?: boolean;
 }): string {
   const tools: string[] = [];
   if (params?.nativeQuestionToolName) tools.push(params.nativeQuestionToolName);
@@ -1254,7 +1255,9 @@ export function buildElicitationMandateInstruction(params?: {
       : "";
   const toolChoice =
     tools.length > 1
-      ? " Honor the user's explicit choice of question tool."
+      ? params?.gatewayQuestionUsesNativeForm
+        ? ` This client cannot show MCP elicitation forms; ${params.askUserToolName} questions use ${params.nativeQuestionToolName}'s form.`
+        : " Honor the user's explicit choice of question tool."
       : "";
   return `When you need a decision, a clarification, a preference, or an approval from the user, ask with ${toolName}. The user then answers in the client's question interface. Ask multiple-choice questions with ${toolName} too, not in plain text.${toolChoice}${nativeLimit} A link or command the user must open or run goes in your reply text, not in the question.`;
 }

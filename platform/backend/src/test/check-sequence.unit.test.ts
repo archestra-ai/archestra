@@ -252,6 +252,11 @@ test.each([
     '{"name":"@archestra/shared"}',
   );
   const source = path.resolve(__dirname, "../../..");
+  fs.symlinkSync(
+    path.join(source, "node_modules"),
+    path.join(platform, "node_modules"),
+    "junction",
+  );
   for (const file of [
     "check-workspace.mjs",
     "check-workspace.ts",
@@ -276,7 +281,11 @@ test.each([
   }
   const result = spawnSync(
     process.execPath,
-    [path.join(scripts, "check-workspace.mjs"), "commit"],
+    [
+      ...(process.features.typescript ? ["--no-experimental-strip-types"] : []),
+      path.join(scripts, "check-workspace.mjs"),
+      "commit",
+    ],
     {
       cwd: shared,
       encoding: "utf8",

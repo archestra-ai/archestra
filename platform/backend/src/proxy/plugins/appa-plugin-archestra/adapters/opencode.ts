@@ -48,6 +48,7 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
   // own `question` tool renders one.
   readonly nativeQuestion = {
     toolName: "question",
+    requiresNativeForm: true,
     fromAskUser: (args: AskUserArguments) => ({
       questions: [
         {

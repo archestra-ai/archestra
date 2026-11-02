@@ -4753,13 +4753,19 @@ describe("createAgentServer tools/list", () => {
     expect(result.resultType).toBe("input_required");
   });
 
-  test("ask_user does not hang elicitation/create when the client never declared elicitation", async ({
+  test.for([
+    false,
+    true,
+  ])("ask_user reports an unavailable form when the client never declared elicitation (MRTR=%s)", async (mrtrEnabled, {
     makeAgent,
     makeOrganization,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
-    const { server } = await createAgentServer({ agentId: agent.id });
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      mrtr: { enabled: mrtrEnabled, clientCapabilities: {} },
+    });
     const callToolHandler = (
       server.server as unknown as {
         _requestHandlers: Map<string, TestCallToolHandler>;

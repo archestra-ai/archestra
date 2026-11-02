@@ -469,6 +469,7 @@ const layerTable = [
       "src/routes/proxy/adapters/vllm.ts",
       "src/routes/proxy/adapters/xai.ts",
       "src/routes/proxy/adapters/zhipuai.ts",
+      "src/routes/proxy/translated-response-format.ts",
     ],
     project: "tsconfig.provider-adapters.json",
   },

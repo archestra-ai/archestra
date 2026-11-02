@@ -142,8 +142,9 @@ type JsonToken = { start: number; end: number; text?: string; edits: Edit[] };
 
 // Walks a span already known to be valid JSON. A credential sits under a
 // header-named key, in the `value` beside a `name`, `key` or `header` naming
-// one, or second in a `[name, value]` pair. Past `MAX_JSON_DEPTH` a
-// container only gets the text pass, so deep nesting cannot overflow the stack.
+// one, or second in a `[name, value]` pair. A container past `MAX_JSON_DEPTH`
+// is shown as `"[redacted]"`, so deep nesting cannot overflow the stack or
+// show what it holds.
 function walkJson(json: string, at: number, depth = 0): JsonToken {
   const start = skipSpace(json, at);
   const opener = json[start];
@@ -157,13 +158,8 @@ function walkJson(json: string, at: number, depth = 0): JsonToken {
   }
   if ((opener === "{" || opener === "[") && depth > MAX_JSON_DEPTH) {
     const end = containerEnd(json, start);
-    const text = json.slice(start, end);
-    const shown = redactText(text);
-    return {
-      start,
-      end,
-      edits: shown === text ? [] : [{ start, end, text: shown }],
-    };
+    const text = JSON.stringify(REDACTED_CREDENTIAL);
+    return { start, end, edits: [{ start, end, text }] };
   }
   if (opener !== "{" && opener !== "[") {
     let end = start;

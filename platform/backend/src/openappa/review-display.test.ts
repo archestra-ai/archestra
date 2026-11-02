@@ -310,12 +310,26 @@ describe("redactCredentials", () => {
     ).toBe('{"id":9007199254740993,"headers":{"X-Api-Key":"[redacted]"}}');
   });
 
-  test("redacts deeply nested JSON without overflowing the stack", () => {
-    const deep = `${"[".repeat(20_000)}"Authorization: Bearer tok"${"]".repeat(20_000)}`;
-    const json = (key: string, inner: string) =>
-      `{"headers":{"X-Api-Key":"${key}"},"deep":${inner}}`;
-    expect(redactCredentials(json("tok", deep))).toBe(
-      json("[redacted]", deep.replace("Bearer tok", "Bearer [redacted]")),
-    );
+  const nested = (levels: number, inner: string) =>
+    `${"[".repeat(levels)}${inner}${"]".repeat(levels)}`;
+
+  test("shows JSON nested past the depth cap as redacted, without overflowing the stack", () => {
+    const json = (key: string, deep: string) =>
+      `{"headers":{"X-Api-Key":"${key}"},"deep":${deep}}`;
+    expect(
+      redactCredentials(
+        json("tok", nested(20_000, '"Authorization: Bearer tok"')),
+      ),
+    ).toBe(json("[redacted]", nested(100, '"[redacted]"')));
+  });
+
+  test.each([
+    '{"name":"Authorization","value":"sekret"}',
+    '["X-Api-Key","sekret"]',
+    String.raw`{"X-Api-Key":"sek\"ret"}`,
+  ])("shows no credential nested past the depth cap: %s", (inner) => {
+    const shown = redactCredentials(nested(150, inner));
+    expect(shown).toBe(nested(101, '"[redacted]"'));
+    expect(JSON.parse(shown)).toBeInstanceOf(Array);
   });
 });

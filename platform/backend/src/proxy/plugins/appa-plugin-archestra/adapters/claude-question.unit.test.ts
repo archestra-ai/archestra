@@ -83,7 +83,7 @@ describe("Claude Desktop gateway question groups", () => {
   });
 
   test.each([
-    5, 12,
+    4, 5, 12,
   ])("returns the last of %i choices and removes group skips", (count) => {
     const asked = question(count);
     const lastGroup = claudeDesktopQuestion(asked).questions.length - 1;

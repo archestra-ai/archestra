@@ -141,10 +141,11 @@ export function claudeDesktopGroupedAnswer(
   if (!values) return invalidAnswer("The native answer could not be read.");
   const selected: string[] = [];
   const typed: string[] = [];
+  const groupSize = asked.options.length > 4 ? OPTIONS_PER_GROUP : 4;
   for (const [index, value] of values.entries()) {
     const options = questions[index].options;
     const original = asked.options
-      .slice(index * OPTIONS_PER_GROUP, (index + 1) * OPTIONS_PER_GROUP)
+      .slice(index * groupSize, (index + 1) * groupSize)
       .map((option) => option.label);
     const rawValues = Array.isArray(value) ? value : [value];
     if (!rawValues.every((item) => typeof item === "string"))

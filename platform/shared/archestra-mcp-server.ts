@@ -1241,6 +1241,8 @@ export function buildElicitationMandateInstruction(params?: {
   gatewayQuestionUsesNativeForm?: boolean;
 }): string {
   const nativeOnly = params?.gatewayQuestionUsesNativeForm === true;
+  const convertedGateway =
+    nativeOnly && params?.gatewayQuestionMaxOptions !== undefined;
   const reviews =
     nativeOnly && params?.askUserToolName
       ? ` For guardrail reviews, use ${params.askUserToolName} with the offer IDs. Keep the call blocked if no review form is available.`
@@ -1251,7 +1253,7 @@ export function buildElicitationMandateInstruction(params?: {
   const tools: string[] = [];
   if (params?.nativeQuestionToolName) tools.push(params.nativeQuestionToolName);
   if (
-    !nativeOnly &&
+    (!nativeOnly || convertedGateway) &&
     params?.askUserToolName &&
     !tools.includes(params.askUserToolName)
   ) {
@@ -1281,7 +1283,10 @@ export function buildElicitationMandateInstruction(params?: {
     tools.length > 1
       ? " Honor the user's explicit choice of question tool."
       : "";
-  return `When you need a decision, a clarification, a preference, or an approval from the user, ask with ${toolName}. The user then answers in the client's question interface. Ask multiple-choice questions with ${toolName} too, not in plain text.${toolChoice}${nativeLimit}${singleSelection}${reviews} A link or command the user must open or run goes in your reply text, not in the question.`;
+  const presentation = convertedGateway
+    ? " Archestra renders gateway questions through the client's native question UI. The native tool name in history identifies the renderer; it does not establish which tool the model originally requested. Use archestra_presentation in the result, when present, to describe the original call."
+    : "";
+  return `When you need a decision, a clarification, a preference, or an approval from the user, ask with ${toolName}. The user then answers in the client's question interface. Ask multiple-choice questions with ${toolName} too, not in plain text.${toolChoice}${nativeLimit}${singleSelection}${reviews}${presentation} A link or command the user must open or run goes in your reply text, not in the question.`;
 }
 
 /**

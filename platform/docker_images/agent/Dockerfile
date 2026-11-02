@@ -109,6 +109,19 @@ RUN uv venv --python /usr/bin/python3 /opt/agent-tools \
 
 ENV PNPM_HOME=/usr/local/share/pnpm
 ENV PATH=$PNPM_HOME/bin:$PNPM_HOME:$PATH
+# pnpm runs through corepack, so a repository that pins pnpm
+# (`packageManager`) gets that version in one Node process. A global pnpm of
+# another version starts the pinned one as a second process: about 0.11 GiB
+# of anonymous memory more per pnpm call, measured in an Agent Runtime, and a
+# check chain nests several. Repositories without a pin get 11.28.7.
+# COREPACK_HOME is shared and writable by the agent's user: a pinned version
+# is downloaded, signature-checked, on first use. Corepack never writes a pin
+# into a repository's package.json, and a newer version some repository pins
+# never becomes the default for the others.
+ENV COREPACK_HOME=/usr/local/share/corepack \
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+    COREPACK_ENABLE_AUTO_PIN=0 \
+    COREPACK_DEFAULT_TO_LATEST=0
 RUN corepack disable \
  && rm -rf /usr/local/lib/node_modules/corepack /usr/local/lib/node_modules/npm \
  && curl -fsSL https://registry.npmjs.org/npm/-/npm-11.21.1.tgz -o /tmp/npm.tgz \
@@ -120,9 +133,16 @@ RUN corepack disable \
  && rm -rf /usr/local/lib/node_modules/npm/node_modules/undici \
  && mkdir -p /usr/local/lib/node_modules/npm/node_modules/undici \
  && tar -xzf /tmp/undici.tgz --strip-components=1 -C /usr/local/lib/node_modules/npm/node_modules/undici \
- && rm /tmp/npm.tgz /tmp/undici.tgz \
- && npm install --global --ignore-scripts pnpm@11.28.7 \
- && node --version && npm --version && pnpm --version
+ && curl -fsSL https://registry.npmjs.org/corepack/-/corepack-0.36.0.tgz -o /tmp/corepack.tgz \
+ && echo '9128cfe26aee0c99f4fc68c15c6b8b12309a68be0de2c012cdfea2a463cb722f  /tmp/corepack.tgz' | sha256sum -c - \
+ && mkdir -p /usr/local/lib/node_modules/corepack \
+ && tar -xzf /tmp/corepack.tgz --strip-components=1 -C /usr/local/lib/node_modules/corepack \
+ && ln -sf ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack \
+ && rm /tmp/npm.tgz /tmp/undici.tgz /tmp/corepack.tgz \
+ && corepack enable --install-directory /usr/local/bin pnpm \
+ && corepack install --global pnpm@11.28.7 \
+ && chown -R 1000:1000 "$COREPACK_HOME" \
+ && node --version && npm --version && corepack --version && pnpm --version
 
 COPY docker_images/agent/bin /usr/local/bin
 # The maintained launchers append this description of the machine to the

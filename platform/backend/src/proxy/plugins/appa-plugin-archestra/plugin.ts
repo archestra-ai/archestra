@@ -2967,6 +2967,12 @@ async function approveChildReturnCarriers(params: {
     completion: AppaChildReturnCompletion;
     record: AppaChildReturnRecord & { rank: number };
   }> = [];
+  // Copilot re-reads the same finished turns with a new read_agent call.
+  // Reuse a match only for that same child/turn in a different envelope,
+  // with identical bytes and lineage. No client coordinate authorizes a
+  // crossing: its first occurrence must still match the retained records
+  // uniquely, and distinct children/turns still consume distinct records.
+  const replays = new Map<string, (typeof matched)[number]>();
   for (const completion of completions) {
     // Display-only echoes never consume a child's crossing.
     if (completion.assistantOrigin) continue;
@@ -2988,6 +2994,32 @@ async function approveChildReturnCarriers(params: {
           directSpawnResults.has(withoutTrajectoryStamp(completion.envelopeId))
         ? withoutTrajectoryStamp(completion.envelopeId)
         : undefined;
+    const replayKey = completion.replayIdentity
+      ? JSON.stringify([
+          completion.replayIdentity.childId,
+          completion.replayIdentity.turn,
+        ])
+      : undefined;
+    const replay = replayKey ? replays.get(replayKey) : undefined;
+    if (replay) {
+      if (
+        completion.value !== replay.completion.value ||
+        completion.childNativeId !== replay.completion.childNativeId ||
+        completion.spawnCallId !== replay.completion.spawnCallId ||
+        (completion.envelopeId !== undefined &&
+          replay.completion.envelopeId !== undefined &&
+          withoutTrajectoryStamp(completion.envelopeId) ===
+            withoutTrajectoryStamp(replay.completion.envelopeId))
+      ) {
+        throw childReturnRefusal({
+          ...unrecorded,
+          callId: completion.envelopeId,
+          childNativeId: completion.childNativeId,
+        });
+      }
+      matched.push({ completion, record: replay.record });
+      continue;
+    }
     const candidates = available.flatMap((record, index) =>
       record.value === completion.value ? [{ record, index }] : [],
     );
@@ -3059,7 +3091,9 @@ async function approveChildReturnCarriers(params: {
     }
     const hit = eligible[0].index;
     const [record] = available.splice(hit, 1);
-    matched.push({ completion, record });
+    const match = { completion, record };
+    matched.push(match);
+    if (replayKey) replays.set(replayKey, match);
   }
   // The newest return each child carries into this request, by spawn call.
   const arrived = new Map<
@@ -3216,6 +3250,39 @@ async function approveChildReturnCarriers(params: {
       verified.some((record) => withheldChildren.has(record.childSessionId))
     ) {
       updates[result.id] = LATE_BACKGROUND_RETURN;
+      continue;
+    }
+    // Copilot reports several turns of one child, whose native id is absent
+    // from the retained crossings. A status object keyed by that absent id
+    // would overwrite earlier turns. Rebuild the report from verified bytes
+    // and bounded turn coordinates, without the client's unsigned header.
+    const reportTurns = [
+      ...matched
+        .filter(
+          ({ completion }) =>
+            completion.envelopeId !== undefined &&
+            withoutTrajectoryStamp(completion.envelopeId) === envelopeId,
+        )
+        .map(({ completion, record }) => ({
+          identity: completion.replayIdentity,
+          value: record.value,
+        })),
+      ...emptyHere.map((completion) => ({
+        identity: completion.replayIdentity,
+        value: "",
+      })),
+    ].flatMap(({ identity, value }) =>
+      identity ? [{ turn: identity.turn, value }] : [],
+    );
+    if (
+      reportTurns.length > 1 &&
+      reportTurns.length === verified.length + emptyHere.length &&
+      ignoredHere.length === 0
+    ) {
+      updates[result.id] = reportTurns
+        .sort((a, b) => a.turn - b.turn)
+        .map((turn) => `[Turn ${turn.turn}]\n${turn.value}`)
+        .join("\n\n");
       continue;
     }
     // A return OpenAPPA ignores stays beside the crossed ones, as it came. A

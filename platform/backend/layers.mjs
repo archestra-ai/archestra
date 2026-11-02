@@ -246,7 +246,26 @@ const layerTable = [
     ],
     project: "tsconfig.models-upper.json",
   },
-  { name: "runtime", path: "^src/(k8s|sandbox-runtime|skills-sandbox)/", project: APP },
+  {
+    name: "runtime",
+    path: "^src/(k8s|sandbox-runtime|skills-sandbox)/",
+    files: [
+      // Runtime-neutral contracts, failure vocabulary, sizing and placement.
+      "src/services/agent-runtime/backends/types.ts",
+      "src/services/agent-runtime/failure-reason.ts",
+      "src/services/agent-runtime/run-failure.ts",
+      "src/services/agent-runtime/runtime-tiers.ts",
+      // Credential resolution and network policy are shared runtime inputs.
+      "src/services/credentials.ts",
+      "src/services/credential-access.ts",
+      "src/services/github-user-connection.ts",
+      "src/services/environments/network-policy.ts",
+      "src/services/environments/network-policy-domains.ts",
+      // Active-use tracking belongs with the MCP runtime that owns hibernation.
+      "src/services/mcp-active-use.ee.ts",
+    ],
+    project: "tsconfig.runtime.json",
+  },
   { name: "kb", path: "^src/knowledge-base/", project: APP },
   {
     name: "policy",

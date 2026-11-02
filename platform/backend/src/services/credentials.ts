@@ -1,8 +1,6 @@
 import { resolveInstallationCredential } from "@/integrations/github/app-auth";
-import {
-  RuntimeCredentialConnectionModel,
-  RuntimeCredentialDefinitionModel,
-} from "@/models";
+import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
+import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import { CredentialAccess } from "@/services/credential-access";
 import { githubUserConnectionManager } from "@/services/github-user-connection";
 import {

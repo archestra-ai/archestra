@@ -35,6 +35,9 @@ const BINDINGS: PortBindings = {
     return { signUpEmail: (params) => auth.api.signUpEmail(params) };
   },
   jwksSigningKey: () => import("@/auth/jwks-signing-key-guard"),
+  mcpInstallationEvents: () => import("@/websocket"),
+  mountedSkillsReadability: () =>
+    import("@/skills/assert-mounted-skills-readable"),
 };
 
 bindPorts(BINDINGS);

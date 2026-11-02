@@ -20,6 +20,7 @@
     { "path": "./tsconfig.models.json" },
     { "path": "./tsconfig.models-agents.json" },
     { "path": "./tsconfig.models-upper.json" },
+    { "path": "./tsconfig.runtime.json" },
     { "path": "./tsconfig.app.json" }
   ]
 }

@@ -1,6 +1,8 @@
 import {
   ADMIN_ROLE_NAME,
   BUILT_IN_AGENT_IDS,
+  buildAgentCatalogRuntime,
+  buildCustomAgentRuntime,
   MEMBER_ROLE_NAME,
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
@@ -26,6 +28,96 @@ import agentCatalogRoutes from "./agent-catalog.routes";
 
 describe("GET /api/agent-catalog", () => {
   const ctx = useRouteTestApp(agentCatalogRoutes);
+
+  test("filters runtimes before pagination and combines runtime with name and access", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+    makeOrganization,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: MEMBER_ROLE_NAME,
+    });
+    const other = await makeUser();
+    await makeMember(other.id, ctx.organizationId);
+    const runtime = buildAgentCatalogRuntime({
+      id: "claude-code",
+      image: "registry.test/custom:old",
+    });
+    const create = (name: string, options = {}) =>
+      makeAgent({
+        organizationId: ctx.organizationId,
+        agentType: "agent",
+        authorId: ctx.user.id,
+        name,
+        runtime,
+        ...options,
+      });
+    const alpha = await create("Alpha helper");
+    const beta = await create("Beta helper");
+    await create("Private helper", { authorId: other.id, access: "personal" });
+    const foreign = await makeOrganization();
+    await create("Foreign helper", { organizationId: foreign.id });
+    await create("Codex helper", {
+      runtime: buildAgentCatalogRuntime({
+        id: "codex",
+        image: "registry.test/claude-code:latest",
+      }),
+    });
+    const chat = await create("Chat helper", { runtime: null });
+    const custom = await create("Custom helper", {
+      runtime: buildCustomAgentRuntime({
+        image: "registry.test/custom:latest",
+      }),
+    });
+    await createA2aRemoteAgent({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      input: {
+        name: "Remote helper",
+        source: { type: "inline_card", agentCard: makeAgentCard("none") },
+        auth: { type: "none" },
+        ...accessGrants("org"),
+      },
+    });
+    const list = async (query: string) => {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: `/api/agent-catalog?sortBy=name&sortDirection=asc&${query}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      return response.json();
+    };
+    expect(await list("runtime=claude-code&limit=1&offset=1")).toMatchObject({
+      data: [{ value: { id: beta.id } }],
+      pagination: { total: 2, hasNext: false, hasPrev: true },
+      totals: { agents: 2, externalAgents: 0 },
+    });
+    expect(
+      await list("runtime=claude-code&name=Alpha&access=mine"),
+    ).toMatchObject({
+      data: [{ value: { id: alpha.id } }],
+      pagination: { total: 1 },
+    });
+    expect(await list("runtime=claude-code&name=Codex")).toMatchObject({
+      data: [],
+      pagination: { total: 0 },
+    });
+    expect(await list("runtime=chat")).toMatchObject({
+      data: [{ value: { id: chat.id } }],
+      pagination: { total: 1 },
+    });
+    expect(await list("runtime=custom")).toMatchObject({
+      data: [{ value: { id: custom.id } }],
+      pagination: { total: 1 },
+    });
+    expect((await list("name=helper")).pagination.total).toBe(6);
+    const invalid = await ctx.app.inject({
+      method: "GET",
+      url: "/api/agent-catalog?runtime=unknown",
+    });
+    expect(invalid.statusCode).toBe(400);
+  });
 
   test("globally sorts and paginates internal and external agents", async ({
     makeAgent,

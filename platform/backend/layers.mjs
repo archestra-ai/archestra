@@ -264,6 +264,7 @@ const layerTable = [
       "src/clients/openrouter-reported-cost.ts",
       "src/services/azure-model-capabilities.ts",
       "src/services/billable-usage.ts",
+      "src/services/fireworks-model.ts",
       "src/routes/proxy/utils/cost-optimization.ts",
       "src/routes/chat/normalization/apply-prompt-cache.ts",
     ],

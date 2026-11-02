@@ -7,6 +7,59 @@ import LimitModel from "./limit";
 import LlmThroughputModel from "./llm-throughput";
 
 describe("shared LLM throughput admission", () => {
+  test("verified aliases share one request and minute spend allowance", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const canonical = "accounts/fireworks/models/glm-5p3-flash";
+    const alias = "glm-5p3-flash";
+    const entities = [
+      { entityType: "organization" as const, entityId: org.id },
+    ];
+    const request = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "requests",
+      cleanupInterval: "calendar_day",
+      limitValue: 1,
+      model: [alias, canonical],
+    });
+    const spend = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "token_cost",
+      cleanupInterval: "minute",
+      limitValue: 1,
+      model: [alias],
+    });
+    const call = new LlmThroughput({
+      entities,
+      model: canonical,
+      modelAliases: [alias],
+      rules: [request],
+      attemptSpendRules: [spend],
+    });
+    await call.admit();
+    await call.admitSpendForModel(canonical, false, [alias]);
+    await call.settleSpend(2, "metered");
+    const usage = await LlmThroughputModel.usage([request, spend]);
+    expect(usage.get(request.id)?.currentUsage).toBe(1);
+    expect(usage.get(spend.id)?.currentUsage).toBeCloseTo(2, 1);
+    for (const model of [canonical, alias]) {
+      await expect(
+        new LlmThroughput({
+          entities,
+          model,
+          modelAliases: [alias],
+          rules: [request],
+        }).admit(),
+      ).rejects.toMatchObject({ status: 429 });
+      await expect(
+        call.admitSpendForModel(model, false, [alias]),
+      ).rejects.toMatchObject({ status: 402 });
+    }
+  });
+
   test("settles pool member spend independently while charging one logical request", async ({
     makeOrganization,
   }) => {

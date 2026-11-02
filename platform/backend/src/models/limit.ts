@@ -129,6 +129,8 @@ type LimitPrefetch = {
 type LimitModelApplicability = {
   /** Normalized selected model; omitted when the operation has no model. */
   model?: string;
+  /** Aliases verified by the selected provider endpoint for this request. */
+  modelAliases?: string[];
   /** Routing is pending; check aggregate caps now and scoped caps after selection. */
   deferModelScopedLimits?: boolean;
 };
@@ -517,7 +519,13 @@ class LimitModel {
 
     const receipt = schema.interactionBillingTable;
     const componentMatches = params.models?.length
-      ? inArray(sql`component->>'model'`, params.models)
+      ? or(
+          inArray(sql`component->>'model'`, params.models),
+          sql`jsonb_exists_any(component->'modelAliases', ARRAY[${sql.join(
+            params.models.map((model) => sql`${model}`),
+            sql`, `,
+          )}]::text[])`,
+        )
       : sql`true`;
     const settled = await db
       .select({
@@ -1066,30 +1074,22 @@ class LimitModel {
     const settledRows: (typeof schema.limitBillingUsageTable.$inferInsert)[] =
       [];
     const grouped = new Map(
-      models.map((model) => {
-        const components = usage.components.filter(
-          (item) => item.model === model,
-        );
-        return [
-          model,
-          {
-            input: components.reduce((sum, item) => sum + item.inputTokens, 0),
-            output: components.reduce(
-              (sum, item) => sum + item.outputTokens,
-              0,
-            ),
-            cost: sumMoney(components.map((item) => item.cost)),
-          },
-        ];
-      }),
+      models.map((model) => [
+        model,
+        usage.components.filter((item) => item.model === model),
+      ]),
     );
     for (const limit of limits) {
-      const matched = models.filter(
-        (model) => !limit.model?.length || limit.model.includes(model),
-      );
-      for (const model of matched) {
-        const total = grouped.get(model);
-        if (!total) continue;
+      for (const [model, components] of grouped) {
+        const matched = components.filter((component) =>
+          limitAppliesToModel({ ...component, models: limit.model }),
+        );
+        if (!matched.length) continue;
+        const total = {
+          input: matched.reduce((sum, item) => sum + item.inputTokens, 0),
+          output: matched.reduce((sum, item) => sum + item.outputTokens, 0),
+          cost: sumMoney(matched.map((item) => item.cost)),
+        };
         legacyRows.push({
           limitId: limit.id,
           model,
@@ -1668,6 +1668,7 @@ export class LimitValidationService {
    */
   static async checkLimitsBeforeRequest(params: {
     model?: string;
+    modelAliases?: string[];
     deferModelScopedLimits?: boolean;
     /** Refuse applicable budgets when this media model cannot be priced. */
     unpricedMediaModel?: string;
@@ -1876,6 +1877,7 @@ export class LimitValidationService {
         limits,
       );
       prefetch.model = params.model;
+      prefetch.modelAliases = params.modelAliases;
       prefetch.deferModelScopedLimits = params.deferModelScopedLimits;
 
       if (params.unpricedMediaModel || params.unmeteredOperation) {
@@ -1987,6 +1989,7 @@ export class LimitValidationService {
                 prefetch.limitsByEntity.get(`user:${userId}`) ?? [],
               defaultLimit: defaultUserLimit,
               model: params.model,
+              modelAliases: params.modelAliases,
               deferModelScopedLimits: params.deferModelScopedLimits,
             });
           if (defaultUserLimitViolation) {
@@ -2255,6 +2258,7 @@ export class LimitValidationService {
 
   private static async checkDefaultUserLimit(params: {
     model?: string;
+    modelAliases?: string[];
     deferModelScopedLimits?: boolean;
     organizationId: string;
     userId: string;
@@ -2692,7 +2696,13 @@ async function getDefaultUserLimitUsage(params: {
 
   const receipt = schema.interactionBillingTable;
   const componentMatches = params.models?.length
-    ? inArray(sql`component->>'model'`, params.models)
+    ? or(
+        inArray(sql`component->>'model'`, params.models),
+        sql`jsonb_exists_any(component->'modelAliases', ARRAY[${sql.join(
+          params.models.map((model) => sql`${model}`),
+          sql`, `,
+        )}]::text[])`,
+      )
     : sql`true`;
   const [settled] = await db
     .select({
@@ -3019,7 +3029,11 @@ function limitAppliesToModel(
   params: LimitModelApplicability & { models?: string[] | null },
 ): boolean {
   if (!params.models?.length) return true;
-  if (params.model) return params.models.includes(params.model);
+  if (params.model)
+    return (
+      params.models.includes(params.model) ||
+      !!params.modelAliases?.some((alias) => params.models?.includes(alias))
+    );
   return !params.deferModelScopedLimits;
 }
 

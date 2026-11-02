@@ -295,6 +295,8 @@ class GeminiOpenaiStreamAdapter
     kind: "text" | "tools",
   ): string | null {
     const parts = chunk.candidates?.[0]?.content?.parts ?? [];
+    // The inner processChunk appends one call per functionCall part. Subtract
+    // this chunk's count to recover its first index in the accumulated calls.
     let toolIndex =
       this.state.toolCalls.length -
       parts.filter((part) => part.functionCall).length;

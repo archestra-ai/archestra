@@ -1743,7 +1743,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         const waiver = waiverFor({
           decision,
           settings: await breakTheGlass,
-          unattended: isUnattendedRequest(binding.requestHeaders),
+          unattended: isUnattendedRequest({
+            headers: binding.requestHeaders,
+            agentRuntimeRun:
+              getTrustedContext(context.resources)?.agentRuntimeRun === true,
+          }),
         });
         if (
           waiver &&

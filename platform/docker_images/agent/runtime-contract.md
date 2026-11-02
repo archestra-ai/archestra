@@ -176,7 +176,6 @@ Send these headers on every LLM proxy and MCP gateway request. The maintained ca
 | `X-Archestra-Session-Id` | `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` | Groups the whole conversation, follow-ups included, in one log session. |
 | `X-Appa-Session-ID` | `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` | Names the OpenAPPA session that holds the conversation's trust restrictions and pending calls. |
 | `X-Archestra-Runtime-Binding` | `ARCHESTRA_AGENT_RUNTIME_BINDING` | Authenticates the workspace and current run independently of the virtual key. Required with Guardrails v2. |
-| `X-Archestra-Unattended` | `1` | Says no person answers approvals for the run. Guardrails' Break the glass settings can then let calls waiting for human approval through, with a yell. Needed on LLM proxy requests only. |
 
 The workspace ID stays the same for follow-ups, so a resumed conversation keeps its log session and its OpenAPPA restrictions. Send the same value in both session headers.
 

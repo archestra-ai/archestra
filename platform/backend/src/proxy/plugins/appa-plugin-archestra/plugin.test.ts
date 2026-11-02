@@ -5777,7 +5777,7 @@ describe("rendering runtime text for this client", () => {
     }
   });
 
-  test("Break the glass runs a denied call in an unattended session and records a yell, while an attended session still waits", async ({
+  test("Break the glass runs a denied call in an unattended session or Agent Runtime run and records a yell, while an attended session still waits", async ({
     makeOrganization,
   }) => {
     config.openappa.enabled = true;
@@ -5814,10 +5814,22 @@ describe("rendering runtime text for this client", () => {
     const cancelCalls = vi
       .spyOn(appaService, "cancelCalls")
       .mockResolvedValue(undefined);
-    const run = async (sessionId: string, unattended: boolean) => {
+    const run = async (
+      sessionId: string,
+      how: "header" | "runtime" | "attended",
+    ) => {
       const plugin = new AppaPluginArchestra([]);
       const context = requestContext({ sessionId, organizationId });
-      if (unattended) context.headers = { "x-archestra-unattended": "1" };
+      if (how === "header") context.headers = { "x-archestra-unattended": "1" };
+      // An Agent Runtime run is known from its credential, whatever its
+      // image sends.
+      if (how === "runtime")
+        (
+          context.resources.get(APPA_PLUGIN_TRUSTED_CONTEXT) as Record<
+            string,
+            unknown
+          >
+        ).agentRuntimeRun = true;
       (
         context.resources.get(APPA_PLUGIN_TRUSTED_CONTEXT) as Record<
           string,
@@ -5850,10 +5862,11 @@ describe("rendering runtime text for this client", () => {
     };
     try {
       // Nothing to rewrite: both calls go to the client as the model wrote them.
-      expect(await run("unattended-run", true)).toBeUndefined();
+      expect(await run("unattended-run", "header")).toBeUndefined();
+      expect(await run("runtime-run", "runtime")).toBeUndefined();
       // In an attended session the approval waits behind its notice; only
       // the call no remedy can lift runs.
-      expect(await run("attended-run", false)).toMatchObject({
+      expect(await run("attended-run", "attended")).toMatchObject({
         decision: "allow",
         toolCalls: [
           { id: "post", name: "archestra__get_remedy_plans" },
@@ -5873,6 +5886,8 @@ describe("rendering runtime text for this client", () => {
           ),
       ).toEqual([
         { sessionId: "attended-run", kind: "block_waived" },
+        { sessionId: "runtime-run", kind: "approval_waived" },
+        { sessionId: "runtime-run", kind: "block_waived" },
         { sessionId: "unattended-run", kind: "approval_waived" },
         { sessionId: "unattended-run", kind: "block_waived" },
       ]);

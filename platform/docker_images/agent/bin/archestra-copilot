@@ -443,8 +443,7 @@ def runtime_headers():
     env = os.environ
     session = env.get("ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID") or env["ARCHESTRA_AGENT_RUNTIME_TASK_ID"]
     headers = {"X-Archestra-Run-Id": env["ARCHESTRA_AGENT_RUNTIME_TASK_ID"],
-               "X-Archestra-Session-Id": session, "X-Appa-Session-ID": session,
-               "X-Archestra-Unattended": "1"}
+               "X-Archestra-Session-Id": session, "X-Appa-Session-ID": session}
     if env.get("ARCHESTRA_AGENT_RUNTIME_BINDING"):
         headers["X-Archestra-Runtime-Binding"] = env["ARCHESTRA_AGENT_RUNTIME_BINDING"]
     return headers

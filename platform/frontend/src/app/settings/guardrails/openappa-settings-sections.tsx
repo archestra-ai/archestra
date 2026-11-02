@@ -109,7 +109,8 @@ export function OpenAppaBreakTheGlassSettings() {
           {
             value: "unattended",
             label: "Allow and record a yell in unattended sessions",
-            description: "Sessions sent with x-archestra-unattended: 1.",
+            description:
+              "Agent Runtimes, Scheduled tasks, and clients sending x-archestra-unattended: 1.",
           },
           { value: "everywhere", label: "Allow and record a yell everywhere" },
         ]}

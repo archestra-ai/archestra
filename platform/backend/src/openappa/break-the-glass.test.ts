@@ -83,10 +83,25 @@ describe("waiverFor", () => {
   });
 });
 
-test("isUnattendedRequest reads the header the clients send", () => {
-  expect(isUnattendedRequest({ "x-archestra-unattended": "1" })).toBe(true);
-  expect(isUnattendedRequest({ "x-archestra-unattended": "0" })).toBe(false);
-  expect(isUnattendedRequest({})).toBe(false);
+test("an Agent Runtime run is unattended whatever its image sends; other clients opt in with the header", () => {
+  expect(isUnattendedRequest({ headers: {}, agentRuntimeRun: true })).toBe(
+    true,
+  );
+  expect(
+    isUnattendedRequest({
+      headers: { "x-archestra-unattended": "1" },
+      agentRuntimeRun: false,
+    }),
+  ).toBe(true);
+  expect(
+    isUnattendedRequest({
+      headers: { "x-archestra-unattended": "0" },
+      agentRuntimeRun: false,
+    }),
+  ).toBe(false);
+  expect(isUnattendedRequest({ headers: {}, agentRuntimeRun: false })).toBe(
+    false,
+  );
 });
 
 test("a waived call is hidden from the runtime and repeats merge into one yell", async ({

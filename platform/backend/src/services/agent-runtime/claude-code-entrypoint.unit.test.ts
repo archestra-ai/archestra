@@ -180,7 +180,7 @@ Path(os.environ["ARCHESTRA_AGENT_RUNTIME_DIR"], "captured-env").write_text(json.
       }
       // Without a workspace, the task names the session.
       expect(captured.ANTHROPIC_CUSTOM_HEADERS).toBe(
-        "X-Archestra-Virtual-Key: example-passthrough-token\nX-Archestra-Session-Id: test-task\nX-Appa-Session-ID: test-task\nX-Archestra-Unattended: 1",
+        "X-Archestra-Virtual-Key: example-passthrough-token\nX-Archestra-Session-Id: test-task\nX-Appa-Session-ID: test-task",
       );
     } finally {
       await rm(root, { recursive: true, force: true });

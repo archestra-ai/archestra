@@ -82,7 +82,7 @@ describe("Grok Build image entrypoint", () => {
       expect(config).toContain("context_window = 2000000");
       expect(config).toContain("max_completion_tokens = 65536");
       expect(config).toContain(
-        'extra_headers = { "X-Archestra-Run-Id" = "task-1", "X-Archestra-Session-Id" = "workspace-1", "X-Appa-Session-ID" = "workspace-1", "X-Archestra-Unattended" = "1" }',
+        'extra_headers = { "X-Archestra-Run-Id" = "task-1", "X-Archestra-Session-Id" = "workspace-1", "X-Appa-Session-ID" = "workspace-1" }',
       );
       expect(config).toContain(
         'env_http_headers = { "X-Archestra-Runtime-Binding" = "ARCHESTRA_AGENT_RUNTIME_BINDING" }',

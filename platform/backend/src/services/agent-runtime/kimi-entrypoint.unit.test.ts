@@ -77,7 +77,6 @@ describe("Kimi Code image entrypoint", () => {
               "X-Archestra-Run-Id": "task-1",
               "X-Archestra-Session-Id": "workspace-1",
               "X-Appa-Session-ID": "workspace-1",
-              "X-Archestra-Unattended": "1",
             },
           },
         },

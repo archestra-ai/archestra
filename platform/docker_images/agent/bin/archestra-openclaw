@@ -393,8 +393,7 @@ jq -n \
           headers:({
             "X-Archestra-Run-Id":$task_id,
             "X-Archestra-Session-Id":$session,
-            "X-Appa-Session-ID":$session,
-            "X-Archestra-Unattended":"1"
+            "X-Appa-Session-ID":$session
           } + (if $binding == "" then {} else {"X-Archestra-Runtime-Binding":$binding} end)),
           models:[{id:$model,name:$model}]
         }

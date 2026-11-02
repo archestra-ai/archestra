@@ -75,7 +75,6 @@ tracing = {
     "X-Archestra-Run-Id": env["ARCHESTRA_AGENT_RUNTIME_TASK_ID"],
     "X-Archestra-Session-Id": session,
     "X-Appa-Session-ID": session,
-    "X-Archestra-Unattended": "1",
 }
 # Kimi refuses a model without a context size. When the platform does not know
 # it, assume 128K tokens.

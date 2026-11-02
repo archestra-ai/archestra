@@ -50,9 +50,19 @@ export function waiverFor(params: {
   return null;
 }
 
-/** Whether the request says no person is there to answer: `X-Archestra-Unattended: 1`. */
-export function isUnattendedRequest(headers: IncomingHttpHeaders): boolean {
-  return headers[UNATTENDED_HEADER.toLowerCase()] === "1";
+/**
+ * Whether no person is there to answer the request's approvals: an Agent
+ * Runtime run, known from its authenticated runtime credential whatever image
+ * it runs, or a client that sends `X-Archestra-Unattended: 1`.
+ */
+export function isUnattendedRequest(params: {
+  headers: IncomingHttpHeaders;
+  agentRuntimeRun: boolean;
+}): boolean {
+  return (
+    params.agentRuntimeRun ||
+    params.headers[UNATTENDED_HEADER.toLowerCase()] === "1"
+  );
 }
 
 /**

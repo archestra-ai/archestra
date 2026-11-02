@@ -22,7 +22,7 @@ The endpoint is inferred from your deployment, like other clients. Administrator
 
 ## Skills and Updates
 
-The archive is a snapshot of readable standalone skills. Templated and agent-bound skills require Archestra activation and are omitted with a notice. Re-download and upload a new archive after changing skills. Removing the uploaded plugin removes its bundled skills; remove its connection from any dot that uses it too.
+The archive is a snapshot of readable standalone skills. Templated and agent-bound skills require Archestra activation and are omitted with a notice. A skill is also omitted with a notice when its name is not a portable skill name: up to 64 lowercase letters and digits, with single hyphens between words. Rename it to include it. Re-download and upload a new archive after changing skills. Removing the uploaded plugin removes its bundled skills; remove its connection from any dot that uses it too.
 
 <a id="local-work-inference"></a>
 

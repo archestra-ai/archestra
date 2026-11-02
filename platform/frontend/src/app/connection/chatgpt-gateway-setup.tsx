@@ -179,6 +179,21 @@ export function ChatgptGatewaySetup({
               </InlineNoticeText>
             </InlineNotice>
           )}
+          {downloaded &&
+            download.data &&
+            download.data.unportable.length > 0 && (
+              <InlineNotice variant="info">
+                <Info />
+                <span className="font-medium">
+                  Some skill names are not portable
+                </span>
+                <InlineNoticeText>
+                  Rename these skills to include them. A name can have up to 64
+                  lowercase letters and digits, with single hyphens between
+                  words: {download.data.unportable.join(", ")}
+                </InlineNoticeText>
+              </InlineNotice>
+            )}
         </>
       ) : (
         <InlineNotice>

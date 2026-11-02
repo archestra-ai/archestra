@@ -34,7 +34,7 @@ export function useDownloadChatgptPlugin() {
       }
       return buildChatgptPlugin({ ...params, skills });
     },
-    onSuccess: ({ bytes, filename, skillCount, omitted }) => {
+    onSuccess: ({ bytes, filename, skillCount, omitted, unportable }) => {
       const url = URL.createObjectURL(
         new Blob([bytes.slice().buffer], { type: "application/zip" }),
       );
@@ -43,10 +43,16 @@ export function useDownloadChatgptPlugin() {
       link.download = filename;
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      toast.success(`Plugin downloaded with ${skillCount} skills.`);
+      toast.success(
+        `Plugin downloaded with ${skillCount} ${skillCount === 1 ? "skill" : "skills"}.`,
+      );
       if (omitted.length)
         toast.info(
           `${omitted.length} templated or agent skills were left out because they require platform activation.`,
+        );
+      if (unportable.length)
+        toast.info(
+          `${unportable.length === 1 ? "1 skill was" : `${unportable.length} skills were`} left out because of ${unportable.length === 1 ? "its name" : "their names"}. Rename ${unportable.length === 1 ? "it" : "them"} to include ${unportable.length === 1 ? "it" : "them"}.`,
         );
     },
     onError: (error) => toast.error(error.message),

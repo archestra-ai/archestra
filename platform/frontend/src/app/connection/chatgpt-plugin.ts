@@ -86,6 +86,7 @@ export async function buildChatgptPlugin({
   );
   const names = new Set<string>();
   const omitted: string[] = [];
+  const unportable: string[] = [];
   let byteCount = 0;
   for (const skill of skills) {
     // These require Archestra activation semantics, not a portable SKILL.md.
@@ -93,10 +94,14 @@ export async function buildChatgptPlugin({
       omitted.push(skill.name);
       continue;
     }
-    if (!isSpecCompliantSkillName(skill.name) || names.has(skill.name)) {
-      throw new Error(
-        `Skill names must be unique portable names: ${skill.name}`,
-      );
+    // Archestra accepts any name; a SKILL.md name must be portable. The skills
+    // marketplace leaves these skills out too.
+    if (!isSpecCompliantSkillName(skill.name)) {
+      unportable.push(skill.name);
+      continue;
+    }
+    if (names.has(skill.name)) {
+      throw new Error(`Skill names must be unique: ${skill.name}`);
     }
     if (!isSpecCompliantSkillDescription(skill.description)) {
       throw new Error(
@@ -158,6 +163,7 @@ export async function buildChatgptPlugin({
     filename: `${name}.zip`,
     skillCount: names.size,
     omitted,
+    unportable,
   };
 }
 

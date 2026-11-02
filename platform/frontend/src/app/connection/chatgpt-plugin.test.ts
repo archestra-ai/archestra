@@ -166,6 +166,25 @@ describe("ChatGPT plugin archive", () => {
     expect(other.filename).not.toBe(first.filename);
   });
 
+  it("leaves out skills whose names are not portable and packages the rest", async () => {
+    const portable = makeSkillDetail("portable-skill");
+    const named = makeSkillDetail("named");
+    const result = await buildChatgptPlugin({
+      ...params,
+      skills: [
+        { ...named, name: "Remote Agents Handoff" },
+        { ...portable, name: "portable-skill" },
+      ],
+    });
+    expect(result.unportable).toEqual(["Remote Agents Handoff"]);
+    expect(result.skillCount).toBe(1);
+    const zip = await JSZip.loadAsync(result.bytes);
+    expect(zip.file("skills/portable-skill/SKILL.md")).not.toBeNull();
+    expect(
+      Object.keys(zip.files).filter((name) => name.includes("Remote")),
+    ).toEqual([]);
+  });
+
   it("reports skills that require platform activation instead of shipping broken templates", async () => {
     const skill = makeSkillDetail("example");
     const result = await buildChatgptPlugin({

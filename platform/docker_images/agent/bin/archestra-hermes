@@ -346,6 +346,9 @@ jq -n \
     }},
     mcp_servers:{archestra:{
       url:$mcp_url,
+      # The persistent gateway connects before constructing its first agent.
+      # Bound that stage by the same startup budget as discovery.
+      connect_timeout:30,
       headers:({
         Authorization:("Bearer " + $gateway_token),
         "X-Archestra-Run-Id":$task_id,

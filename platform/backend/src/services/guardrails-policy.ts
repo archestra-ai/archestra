@@ -3,6 +3,7 @@ import {
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
 } from "@archestra/shared";
+import ipaddr from "ipaddr.js";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
@@ -329,25 +330,31 @@ function hash(content: string) {
 
 /**
  * The deployment's statement that its own host is first-party, as a TOML line. A
- * loopback or unparseable frontend URL names no host the organization runs, so the
- * policy then states nothing.
+ * frontend URL that is not HTTP(S), names no host, or names a loopback or
+ * unspecified address names no host the organization runs, so the policy then
+ * states nothing.
  */
 function deploymentHintLine(): string {
-  const host = URL.parse(config.frontendBaseUrl)?.host;
-  if (host === undefined || isLoopbackHost(host)) return "";
-  const hint = `\`${host}\` is this organization's own Archestra deployment: a call to it, such as fetching a link one of its tools returned, reaches the organization's own platform.`;
+  const url = URL.canParse(config.frontendBaseUrl)
+    ? new URL(config.frontendBaseUrl)
+    : null;
+  if (
+    url === null ||
+    (url.protocol !== "http:" && url.protocol !== "https:") ||
+    url.hostname === "" ||
+    isLocalHostname(url.hostname)
+  )
+    return "";
+  const hint = `\`${url.host}\` is this organization's own Archestra deployment: a call to it, such as fetching a link one of its tools returned, reaches the organization's own platform.`;
   return `hint = ${JSON.stringify(hint)}`;
 }
 
-function isLoopbackHost(host: string): boolean {
-  const hostname = host.replace(/:\d+$/, "").replace(/^\[|\]$/g, "");
-  return (
-    hostname === "localhost" ||
-    hostname.endsWith(".localhost") ||
-    hostname === "::1" ||
-    hostname === "0.0.0.0" ||
-    /^127\.\d+\.\d+\.\d+$/.test(hostname)
-  );
+function isLocalHostname(hostname: string): boolean {
+  const name = hostname.replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  if (name === "localhost" || name.endsWith(".localhost")) return true;
+  if (!ipaddr.isValid(name)) return false;
+  const range = ipaddr.process(name).range();
+  return range === "loopback" || range === "unspecified";
 }
 
 /**

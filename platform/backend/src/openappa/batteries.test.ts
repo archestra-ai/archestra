@@ -680,6 +680,10 @@ describe("validating against this deployment", () => {
       ["a loopback host", "http://localhost:3000", false],
       ["a loopback address", "http://127.0.0.1:9000", false],
       ["an unparseable URL", "not-a-url", false],
+      ["a file URL", "file:///tmp/x", false],
+      ["an IPv4-mapped loopback", "http://[::ffff:127.0.0.1]:3000", false],
+      ["the IPv6 unspecified address", "http://[::]:3000", false],
+      ["a private address", "http://10.0.0.5:3000", true],
     ] as const)("under %s, the starter composes and names the host only when the organization runs it", async ([
       ,
       url,

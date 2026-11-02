@@ -34,6 +34,7 @@ import {
   type OpenAi,
   type OpenAiCodexPassthrough,
 } from "@/types";
+import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { resolveCodexSession } from "./openai-codex-session";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
@@ -117,7 +118,7 @@ class OpenAiCodexResponsesClient {
         credential,
         providerApiKeyId: options.llmProviderApiKeyId,
         sessionId: session.sessionId,
-        innerFetch,
+        innerFetch: fetchWithAbortSignal(innerFetch, options.abortSignal),
       }),
     });
   }
@@ -169,7 +170,7 @@ class OpenAiCodexPassthroughResponsesClient {
       baseURL: config.llm.openai.codex.apiBaseUrl,
       fetch: createOpenAiCodexPassthroughFetch({
         credential,
-        innerFetch,
+        innerFetch: fetchWithAbortSignal(innerFetch, options.abortSignal),
         onResponseHeaders: options.onResponseHeaders,
       }),
     });

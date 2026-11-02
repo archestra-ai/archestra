@@ -1,3 +1,4 @@
+import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 /**
  * OpenRouter LLM Proxy Adapter - OpenAI-compatible
  *
@@ -360,7 +361,7 @@ export const openrouterAdapterFactory: LLMProvider<
       maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey: rawApiKey,
       baseURL: options.baseUrl ?? config.llm.openrouter.baseUrl,
-      fetch: customFetch,
+      fetch: fetchWithAbortSignal(customFetch, options.abortSignal),
       defaultHeaders: openRouterAttributionHeaders(options.defaultHeaders),
     });
   },

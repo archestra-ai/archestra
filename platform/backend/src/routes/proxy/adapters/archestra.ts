@@ -12,6 +12,7 @@ import OpenAIProvider from "openai";
 import config from "@/config";
 import { metrics } from "@/observability";
 import type { CreateClientOptions } from "@/types";
+import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { createOpenAiCompatibleAdapterFactory } from "./openai-compatible-adapter";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
@@ -35,7 +36,7 @@ export const archestraAdapterFactory = createOpenAiCompatibleAdapterFactory({
       maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey,
       baseURL: options.baseUrl ?? config.llm.archestra.baseUrl,
-      fetch: customFetch,
+      fetch: fetchWithAbortSignal(customFetch, options.abortSignal),
       defaultHeaders: options.defaultHeaders,
     });
   },

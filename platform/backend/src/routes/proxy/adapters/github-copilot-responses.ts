@@ -26,6 +26,7 @@ import config from "@/config";
 import { metrics } from "@/observability";
 import { createGithubCopilotFetch } from "@/services/github-copilot-token";
 import type { CreateClientOptions, GithubCopilot, LLMProvider } from "@/types";
+import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { openAiResponsesAdapterFactory } from "./openai-responses";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
@@ -85,7 +86,7 @@ export const githubCopilotResponsesAdapterFactory: LLMProvider<
       fetch: createGithubCopilotFetch({
         githubToken: apiKey,
         providerApiKeyId: options.llmProviderApiKeyId,
-        innerFetch: observableFetch,
+        innerFetch: fetchWithAbortSignal(observableFetch, options.abortSignal),
       }),
       defaultHeaders: options.defaultHeaders,
     });

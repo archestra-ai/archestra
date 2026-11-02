@@ -1,3 +1,4 @@
+import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 /**
  * xAI LLM Proxy Adapter - OpenAI-compatible
  *
@@ -252,9 +253,14 @@ export const xaiAdapterFactory: LLMProvider<
       throw new Error("API key required for xAI");
     }
 
-    const customFetch = options.agent
+    const observableFetch = options.agent
       ? metrics.llm.getObservableFetch("xai", options.agent, options.source)
       : undefined;
+
+    const customFetch = fetchWithAbortSignal(
+      observableFetch,
+      options.abortSignal,
+    );
 
     // "SuperGrok" subscription auth mode: the resolved credential is
     // an encoded xAI OAuth credential, not a console key. Session traffic uses

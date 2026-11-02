@@ -1969,17 +1969,8 @@ async function handleObservedLLMProxy<
       });
     }
 
-    // Create client with observability (each provider handles metrics internally)
-    // A guardrail caller disconnects once it stops waiting for the answer,
-    // so its upstream call stops too instead of running on and being billed.
-    const abortSignal =
-      provider.cancelOnDisconnect ||
-      providerName === "microsoft-365-copilot" ||
-      providerName === "azure" ||
-      provider.interactionType === "azure:realtime" ||
-      proof.guardrail
-        ? clientDisconnectSignal({ request, reply })
-        : undefined;
+    // Every request owns its upstream work, including retries and pool members.
+    const abortSignal = clientDisconnectSignal({ request, reply });
     const createUpstreamClient = (target: {
       adapter: Pick<typeof provider, "createClient" | "provider">;
       apiKey: string | undefined;
@@ -3308,6 +3299,13 @@ async function handleStreaming<
         }
       },
     });
+
+    // Some SDK iterators end quietly on abort. They must still take the failure
+    // cleanup path, preserving partial usage and discarding held tool calls.
+    if (reply.raw.destroyed && !providerTerminalSeen) {
+      clientGone = true;
+      throw new ApiError(499, "Client disconnected during inference");
+    }
 
     // Anthropic requires message_stop; its beta usage arrives before that frame.
     upstreamFinished = providerName !== "anthropic" || providerTerminalSeen;

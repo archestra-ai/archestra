@@ -2,7 +2,7 @@
 title: OpenAI-compatible Servers
 description: Connect vLLM, llama.cpp, LM Studio, or another OpenAI-compatible server
 order: 5
-lastUpdated: 2026-10-27
+lastUpdated: 2026-11-02
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -33,3 +33,11 @@ The API key variable alone does not create a provider key at startup: the Base U
 OpenAI-compatible servers manage their own prompt or prefix caches, and support depends on the server and model. The `/v1/vllm` endpoint currently does not forward explicit `prompt_cache_key`, `prompt_cache_retention`, `prompt_cache_options`, or content-block `prompt_cache_breakpoint` fields; the native OpenAI endpoint has separate request validation.
 
 Archestra does not configure the server's cache, insert cache breakpoints, or guarantee cache hits. Check your server's documentation for automatic prefix caching and the usage fields it reports.
+
+## Request Cancellation
+
+When a client cancels its HTTP request, Archestra aborts the upstream model connection. This includes pressing Esc in a coding agent that disconnects from the proxy. A client that only hides its output without disconnecting does not cancel the request.
+
+- The provider decides when generation stops and what it bills. Cancellation does not refund input already processed or output already generated.
+- Cancelled streams keep the usage received before cancellation. If the provider sends usage only at completion, the log may have no token usage; this does not mean the provider charged nothing.
+- Disconnecting does not cancel a provider's separately scheduled background job. Those jobs require the provider's own cancellation API.

@@ -51,15 +51,26 @@ export function buildTeamsManifest(params: {
               {
                 title: "/select-agent",
                 description: "Change which agent handles this conversation",
+                type: "prompt",
+                prompt: "/select-agent",
               },
               {
                 title: "/status",
                 description: "Show current agent for this conversation",
+                type: "prompt",
+                prompt: "/status",
               },
-              { title: "/help", description: "Show available commands" },
+              {
+                title: "/help",
+                description: "Show available commands",
+                type: "prompt",
+                prompt: "/help",
+              },
               {
                 title: "/sign-out",
                 description: "Stop the bot reading your group-chat files",
+                type: "prompt",
+                prompt: "/sign-out",
               },
             ],
           },

@@ -25,7 +25,8 @@ interface ModelTrioTiers {
   smartModelId: string | null;
 }
 
-type ForkTier = Exclude<SubagentModelTier, "normal">;
+/** A tier a fork can run on other than its parent's own (`normal`). */
+export type ForkTier = Exclude<SubagentModelTier, "normal">;
 
 const ORGANIZATION_TIER_FIELD = {
   fast: "defaultFastModelId",

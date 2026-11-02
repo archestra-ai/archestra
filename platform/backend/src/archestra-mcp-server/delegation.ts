@@ -2,7 +2,6 @@ import {
   AGENT_TOOL_PREFIX,
   type ModelSelection,
   SELF_FORK_TOOL_NAME,
-  type SubagentModelTier,
   SubagentModelTierSchema,
   slugify,
 } from "@archestra/shared";
@@ -11,7 +10,7 @@ import { convertToModelMessages, type ModelMessage } from "ai";
 import { z } from "zod";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { DelegationLoopError } from "@/agents/errors";
-import { availableSubagentTiers } from "@/agents/subagent-tiers";
+import { availableSubagentTiers, type ForkTier } from "@/agents/subagent-tiers";
 import { startDelegatedTask } from "@/archestra-mcp-server/tasks";
 import type { RequestLookups } from "@/auth/request-lookups";
 import logger from "@/logging";
@@ -73,9 +72,7 @@ export const selfForkToolArgsSchema = delegationToolArgsSchema.extend({
  * The fork's input schema. `tier` is advertised only with the tiers that would
  * move the copy to another model; with none it is left out entirely.
  */
-function selfForkInputSchema(
-  tiers: Exclude<SubagentModelTier, "normal">[],
-): Tool["inputSchema"] {
+function selfForkInputSchema(tiers: ForkTier[]): Tool["inputSchema"] {
   if (tiers.length === 0) return DELEGATION_INPUT_JSON_SCHEMA;
   const descriptions = {
     smart:
@@ -938,7 +935,7 @@ async function forkTiers(params: {
   organizationId: string;
   userId?: string;
   parentLlm?: ModelSelection;
-}): Promise<Exclude<SubagentModelTier, "normal">[]> {
+}): Promise<ForkTier[]> {
   const { caller, organizationId, userId, parentLlm } = params;
   if (!userId) return [];
   const parent = await resolveForkParentSelection({
@@ -966,9 +963,7 @@ const SELF_FORK_TIER_USES = {
 };
 
 /** The fork's description, naming what each advertised tier is for. */
-function selfForkDescription(
-  tiers: Exclude<SubagentModelTier, "normal">[],
-): string {
+function selfForkDescription(tiers: ForkTier[]): string {
   return [
     "Run a self-contained task in a fresh copy of yourself: same tools and instructions, none of this conversation. Use it to keep long tool output, searches, or exploration out of your context when only the conclusion matters.",
     ...tiers.map((tier) => SELF_FORK_TIER_USES[tier]),

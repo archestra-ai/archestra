@@ -7,8 +7,11 @@ import {
   APP_DATA_MAX_VALUE_BYTES,
 } from "@/types/app";
 
-/** A single App Data Store entry as surfaced to callers. */
-interface AppDataEntry {
+/**
+ * A single App Data Store entry as surfaced to callers.
+ * @public — the test fixtures return it, so their emitted declarations name it.
+ */
+export interface AppDataEntry {
   key: string;
   value: unknown;
   revision: number;

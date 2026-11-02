@@ -1,0 +1,22 @@
+{
+  // Tests of the other routes whose names start with a.
+  "extends": "./tsconfig.test-project.json",
+  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-routes-rest-a.tsbuildinfo" },
+  "include": [
+    "src/ambient/*.d.ts",
+    "src/routes/a*.test.ts",
+    "src/routes/a*/**/*.test.ts"
+  ],
+  "references": [
+    { "path": "../shared/tsconfig.lib.json" },
+    { "path": "../tools/drizzle-migration-linter/tsconfig.lib.json" },
+    { "path": "./tsconfig.schema.json" },
+    { "path": "./tsconfig.core.json" },
+    { "path": "./tsconfig.models.json" },
+    { "path": "./tsconfig.models-agents.json" },
+    { "path": "./tsconfig.models-upper.json" },
+    { "path": "./tsconfig.runtime.json" },
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.test-support.json" }
+  ]
+}

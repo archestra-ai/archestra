@@ -10,13 +10,13 @@ import {
   SkillSandboxReplayEventModel,
   SkillVersionModel,
 } from "@/models";
+import { port } from "@/models/ports";
 import * as metrics from "@/observability/metrics";
 import {
   SandboxRuntimeError,
   type SandboxRuntimeStatus,
   sandboxRuntimeService,
 } from "@/sandbox-runtime/sandbox-runtime-service";
-import { assertMountedSkillsReadable } from "@/skills/assert-mounted-skills-readable";
 import { SKILL_MANIFEST_FILENAME } from "@/skills/parser";
 import type { SkillSandbox } from "@/types";
 import { asSandboxId, type SandboxId } from "@/types";
@@ -643,13 +643,16 @@ class SkillSandboxRuntimeService {
   /**
    * Fail-closed before materializing: every mounted skill must still be readable
    * by the caller and allowed by the current agent policy. A revoked, blocked,
-   * or deleted skill stops the run before any bytes execute (see
-   * {@link assertMountedSkillsReadable}).
+   * or deleted skill stops the run before any bytes execute. The readability
+   * port keeps policy evaluation out of the runtime layer.
    */
   private async assertMountsReadable(
     sandboxId: SandboxId,
     caller: SandboxCaller,
   ): Promise<void> {
+    const { assertMountedSkillsReadable } = await port(
+      "mountedSkillsReadability",
+    );
     const result = await assertMountedSkillsReadable({
       sandboxId,
       userId: caller.userId,

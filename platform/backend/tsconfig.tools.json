@@ -1,0 +1,23 @@
+{
+  // The tool configurations and the storage benchmark, which lives outside
+  // src/ but imports backend modules.
+  "extends": "./tsconfig.test-project.json",
+  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tools.tsbuildinfo" },
+  "include": [
+    "src/ambient/*.d.ts",
+    "*.config.ts",
+    "../benchmarks/session-storage.test.ts"
+  ],
+  "references": [
+    { "path": "../shared/tsconfig.lib.json" },
+    { "path": "../tools/drizzle-migration-linter/tsconfig.lib.json" },
+    { "path": "./tsconfig.schema.json" },
+    { "path": "./tsconfig.core.json" },
+    { "path": "./tsconfig.models.json" },
+    { "path": "./tsconfig.models-agents.json" },
+    { "path": "./tsconfig.models-upper.json" },
+    { "path": "./tsconfig.runtime.json" },
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.test-support.json" }
+  ]
+}

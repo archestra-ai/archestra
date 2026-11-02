@@ -4,7 +4,7 @@ import {
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { CredentialBillingSchema } from "./credential-billing";
 import { LabelWithDetailsSchema } from "./label";
 import { ResourceVisibilityScopeSchema } from "./visibility";

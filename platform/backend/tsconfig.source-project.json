@@ -1,0 +1,13 @@
+{
+  // What a source project adds to the base: it emits declarations, which the
+  // projects that reference it read instead of its sources, and declaration
+  // maps, which take an editor's go-to-definition back to the source.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declarationMap": true,
+    "rootDir": "./src"
+  }
+}

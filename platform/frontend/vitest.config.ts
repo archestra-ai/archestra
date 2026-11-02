@@ -5,6 +5,7 @@ import { defineConfig } from "vitest/config";
 import {
   detectResourceEnvelope,
   frontendVitestResourceLimits,
+  reportMemoryKillsAtExit,
 } from "../vitest.resources";
 import { vitestLogPolicy } from "../vitest.shared";
 
@@ -20,6 +21,15 @@ const { maxWorkers, maxOldSpaceMb } =
   isCI && !envelope.constrained
     ? { maxWorkers: undefined, maxOldSpaceMb: 8192 }
     : frontendVitestResourceLimits(envelope);
+// A worker the kernel killed for memory shows up only as a worker that exited
+// unexpectedly; a failed run says so when the container's counters moved.
+reportMemoryKillsAtExit({
+  tool: "vitest",
+  subject: "the tests",
+  steps: [
+    `Run fewer test workers: add --maxWorkers=1${maxWorkers === undefined ? "" : ` (this run allowed ${maxWorkers})`}, or run one test file at a time.`,
+  ],
+});
 
 export default defineConfig({
   plugins: [tsconfigPaths()],

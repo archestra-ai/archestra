@@ -1,0 +1,22 @@
+{
+  // Tests of the rest of the LLM proxy, but its adapters and utils.
+  "extends": "./tsconfig.test-project.json",
+  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-routes-proxy-b.tsbuildinfo" },
+  "include": [
+    "src/ambient/*.d.ts",
+    "src/routes/proxy/**/*.test.ts"
+  ],
+  "exclude": ["src/routes/proxy/routes/**", "src/routes/proxy/adapters/**", "src/routes/proxy/utils/**"],
+  "references": [
+    { "path": "../shared/tsconfig.lib.json" },
+    { "path": "../tools/drizzle-migration-linter/tsconfig.lib.json" },
+    { "path": "./tsconfig.schema.json" },
+    { "path": "./tsconfig.core.json" },
+    { "path": "./tsconfig.models.json" },
+    { "path": "./tsconfig.models-agents.json" },
+    { "path": "./tsconfig.models-upper.json" },
+    { "path": "./tsconfig.runtime.json" },
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.test-support.json" }
+  ]
+}

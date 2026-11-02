@@ -1,0 +1,73 @@
+{
+  // The core layer (layers.mjs): configuration, logging, the database client,
+  // observability and the helpers below the models, and the few files from
+  // other directories the layer pins (`files`).
+  "extends": "./tsconfig.source-project.json",
+  "compilerOptions": {
+    "outDir": "./.tsbuild/core",
+    "tsBuildInfoFile": "./.tsbuild/core.tsbuildinfo"
+  },
+  "files": [
+    "src/routes/route-paths.ts",
+    "src/archestra-mcp-server/branding.ts",
+    "src/models/cache-entry.ts",
+    "src/models/content-encryption-state.ee.ts",
+    "src/models/encryption-key-canary.ts",
+    "src/models/secret.ts",
+    "src/plugins/bounded-response.ts",
+    "src/skills-sandbox/file-path.ts",
+    "src/clients/bedrock-client.ts",
+    "src/clients/bedrock-credentials.ts",
+    "src/clients/llm-upstream-dispatcher.ts",
+    "src/clients/llm-upstream-fetch.ts",
+    "src/routes/proxy/adapters/responses-usage.ts"
+  ],
+  "include": [
+    "src/ambient/*.d.ts",
+    "src/config.ts",
+    "src/app-version.ts",
+    "src/cache-manager.ts",
+    "src/in-memory-lru-cache.ts",
+    "src/process-local-cache-registry.ts",
+    "src/constants.ts",
+    "src/templating.ts",
+    "src/utils/**/*.ts",
+    "src/logging/**/*.ts",
+    "src/database/**/*.ts",
+    "src/log-content/**/*.ts",
+    "src/content-encryption/**/*.ts",
+    "src/secrets-manager/**/*.ts",
+    "src/observability/**/*.ts",
+    "src/integrations/**/*.ts",
+    "src/tokenizers/**/*.ts",
+    "src/git-hosts/**/*.ts"
+  ],
+  "exclude": [
+    // The schema project's files in these directories.
+    "src/database/schemas/**",
+    "src/database/schema.ts",
+    "src/utils/billable-usage.ts",
+    "src/utils/network.ts",
+    "src/utils/sanitize-svg.ts",
+    "src/utils/schedule-trigger.ts",
+    "src/utils/uuid.ts",
+    // Files of these directories that layers.mjs pins to a higher layer.
+    "src/observability/index.ts",
+    "src/observability/metrics/active-users.ts",
+    "src/observability/metrics/agent-runtime-health.ts",
+    "src/observability/previous-termination-report.ts",
+    "src/utils/llm-api-key-resolution.ts",
+    "src/utils/provider-key-mappings.ts",
+    "src/utils/llm-resolution.ts",
+    "src/git-hosts/git-access.ts",
+    // Tests and test helpers.
+    "src/**/*.test.ts",
+    "src/**/*.test-*.ts",
+    "src/**/__mocks__/**",
+    "src/test/**"
+  ],
+  "references": [
+    { "path": "../shared/tsconfig.lib.json" },
+    { "path": "./tsconfig.schema.json" }
+  ]
+}

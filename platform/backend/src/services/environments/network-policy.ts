@@ -1,4 +1,4 @@
-import { EnvironmentModel } from "@/models";
+import EnvironmentModel from "@/models/environment";
 import {
   ApiError,
   type EffectiveNetworkPolicy,

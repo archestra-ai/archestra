@@ -1,7 +1,7 @@
 import { SupportedProvidersSchema } from "@archestra/shared";
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 
 export const SelectModelPoolMemberSchema = createSelectSchema(
   schema.modelPoolMembersTable,

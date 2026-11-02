@@ -12,6 +12,7 @@ import {
   mediaTariffCovers,
   priceOpenAiRealtime,
 } from "@/services/media-pricing";
+import { assertModelAvailable } from "@/services/model-availability";
 import { ApiError, type GatewayAgent, type UsageView } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
 import type { BillingAttribution } from "@/utils/billable-usage";
@@ -144,6 +145,10 @@ async function admit(request: IncomingMessage, socket: Duplex, head: Buffer) {
       400,
       `Provider "${resolution.provider}" does not support the Model Router realtime endpoint.`,
     );
+  await assertModelAvailable({
+    provider: "openai",
+    modelId: resolution.modelId,
+  });
   const credential = await selectModelRouterCredential({ auth, resolution });
   if (credential.kind === "denied") throw credential.error;
   if (!credential.apiKey)
@@ -220,6 +225,10 @@ async function admit(request: IncomingMessage, socket: Duplex, head: Buffer) {
     // Fresh reads each time: a settled response may have spent the budget.
     budgetRefusal: async () => {
       try {
+        await assertModelAvailable({
+          provider: "openai",
+          modelId: resolution.modelId,
+        });
         const spent = await LimitValidationService.checkLimitsBeforeRequest({
           unpricedMediaModel: priced ? undefined : resolution.modelId,
           agentId: agent.id,

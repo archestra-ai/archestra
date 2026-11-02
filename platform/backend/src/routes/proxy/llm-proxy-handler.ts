@@ -6,6 +6,7 @@ import {
   isFireworksEndpoint,
   resolveFireworksModel,
 } from "@/services/fireworks-model";
+import { assertModelAvailable } from "@/services/model-availability";
 import type { BillingAttribution } from "@/utils/billable-usage";
 import { primaryBillingUsage } from "@/utils/billable-usage";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
@@ -1603,6 +1604,15 @@ async function handleObservedLLMProxy<
       );
     }
 
+    // A pool name is not a provider model. Its selected member is checked at
+    // dispatch; direct and automatically routed calls already have an identity.
+    if (!modelPoolPlan) {
+      await assertModelAvailable({
+        provider: autoRoutedMember?.provider ?? providerName,
+        modelId: autoRoutedMember?.modelId ?? actualModel,
+      });
+    }
+
     // The catalog identity and independent metadata were read together after
     // authentication. A first sighting still creates/enriches the model here.
     // A pool's name is not a provider model; each member's own model is priced
@@ -2683,10 +2693,8 @@ function assertVerificationResponse(value: unknown): void {
   }
 }
 
-// =============================================================================
-// STREAMING HANDLER
-// =============================================================================
-
+// ======================================================================// STREAMING HANDLER
+// ======================================================================
 async function handleStreaming<
   TRequest,
   TResponse,
@@ -3123,6 +3131,7 @@ async function handleStreaming<
         };
         const stream = await openUpstream({
           ctx,
+          providerName,
           transport: ownTransport(provider, client, onAccepted),
           onAccepted,
           open: async (transport) => {
@@ -3832,10 +3841,8 @@ async function handleStreaming<
   }
 }
 
-// =============================================================================
-// NON-STREAMING HANDLER
-// =============================================================================
-
+// ======================================================================// NON-STREAMING HANDLER
+// ======================================================================
 async function handleNonStreaming<
   TRequest,
   TResponse,
@@ -3944,6 +3951,7 @@ async function handleNonStreaming<
         }
         result = await openUpstream({
           ctx,
+          providerName,
           transport: ownTransport(provider, client),
           open: async (transport) =>
             (await llmProxyTiming.upstream(reply, () =>
@@ -4925,6 +4933,7 @@ function planDispatchRewrites(params: {
  * `ctx.providerApiKeyId`.
  */
 async function openUpstream<TRequest, T>(params: {
+  providerName: SupportedProvider;
   ctx: LLMProxyContext<TRequest>;
   transport: MemberTransport;
   /** Bound to a routed tier's stream the way `transport` binds its own. */
@@ -4940,11 +4949,29 @@ async function openUpstream<TRequest, T>(params: {
     error: unknown;
   }) => void;
 }): Promise<T> {
-  const { ctx, transport, onAccepted, open, memberTimeoutMs, ...retry } =
-    params;
+  const {
+    ctx,
+    providerName,
+    transport,
+    onAccepted,
+    open,
+    memberTimeoutMs,
+    ...retry
+  } = params;
   ctx.getUpstreamStreamUsage = undefined;
   let dispatched = false;
   const authorizedOpen = async (attemptTransport: MemberTransport) => {
+    try {
+      await assertModelAvailable({
+        provider: ctx.upstreamAttempt.provider ?? providerName,
+        modelId: ctx.upstreamAttempt.modelId ?? ctx.actualModel,
+      });
+    } catch (error) {
+      // A queued request can become unavailable after admission. It never
+      // reached the provider, so release its reservation before recording it.
+      if (!dispatched) await ctx.throughput?.cancelBeforeSend();
+      throw error;
+    }
     await ctx.authorizeA2AOAuthAttempt?.();
     dispatched = true;
     // Replace on every attempt so a failed member cannot leak usage to its sibling.

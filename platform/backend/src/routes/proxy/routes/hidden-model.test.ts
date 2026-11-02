@@ -10,6 +10,7 @@ import {
   VirtualApiKeyModel,
 } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { accessGrants, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
@@ -31,7 +32,8 @@ const availabilityTest = test.extend<{
     setHidden: (hidden: boolean) => Promise<unknown>;
     hits: Array<{ model: string; authorization: string | null }>;
     agentId: string;
-    pool: () => Promise<void>;
+    pool: (fallback?: boolean) => Promise<void>;
+    onRequest: (hook: (model: string) => Promise<Response | undefined>) => void;
     restrict: () => Promise<void>;
     list: () => Promise<string>;
   };
@@ -87,6 +89,9 @@ const availabilityTest = test.extend<{
       tokens[role] = personal.value;
     }
     const hits: Array<{ model: string; authorization: string | null }> = [];
+    let beforeResponse:
+      | ((model: string) => Promise<Response | undefined>)
+      | undefined;
     server.use(
       http.post(
         "http://availability.example.test/v1/chat/completions",
@@ -99,6 +104,8 @@ const availabilityTest = test.extend<{
             model: body.model,
             authorization: request.headers.get("authorization"),
           });
+          const replacement = await beforeResponse?.(body.model);
+          if (replacement) return replacement;
           const common = {
             id: "synthetic-completion",
             object: "chat.completion",
@@ -130,6 +137,9 @@ const availabilityTest = test.extend<{
     try {
       await use({
         agentId: agent.id,
+        onRequest: (hook) => {
+          beforeResponse = hook;
+        },
         hits,
         setHidden: (ignored) => ModelModel.update(model.id, { ignored }),
         ask: ({
@@ -169,7 +179,16 @@ const availabilityTest = test.extend<{
             grants: [],
           });
         },
-        pool: async () => {
+        pool: async (fallback) => {
+          if (fallback)
+            await ModelModel.create({
+              provider: "openai",
+              modelId: "hidden-fallback",
+              externalId: "openai/hidden-fallback",
+              inputModalities: ["text"],
+              outputModalities: ["text"],
+              ignored: true,
+            });
           config.llmProxy.modelPoolsEnabled = true;
           const pool = await ModelPoolModel.create({
             organizationId: org.id,
@@ -183,6 +202,17 @@ const availabilityTest = test.extend<{
                   priority: 0,
                   weight: 1,
                 },
+                ...(fallback
+                  ? [
+                      {
+                        providerApiKeyId: key.id,
+                        modelId: "hidden-fallback",
+                        enabled: true,
+                        priority: 1,
+                        weight: 1,
+                      },
+                    ]
+                  : []),
               ],
             },
           });
@@ -314,5 +344,78 @@ availabilityTest(
     const restricted = await gateway.ask({ caller: "member" });
     expect(restricted.statusCode, restricted.body).toBe(403);
     expect(gateway.hits).toHaveLength(1);
+  },
+);
+
+availabilityTest(
+  "hiding does not cancel an already-started call, but blocks the next",
+  async ({ gateway }) => {
+    let release!: () => void;
+    let reached!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    gateway.onRequest(async () => {
+      reached();
+      await waiting;
+      return undefined;
+    });
+    const ongoing = gateway.ask();
+    await started;
+    await gateway.setHidden(true);
+    release();
+    expect((await ongoing).statusCode).toBe(200);
+    const next = await gateway.ask();
+    expect(next.statusCode, next.body).toBe(403);
+    expect(gateway.hits).toHaveLength(1);
+  },
+);
+
+availabilityTest(
+  "failover cannot start a hidden fallback member",
+  async ({ gateway }) => {
+    await gateway.pool(true);
+    gateway.onRequest(async () =>
+      HttpResponse.json(
+        { error: { message: "Synthetic outage" } },
+        { status: 503 },
+      ),
+    );
+    const response = await gateway.ask({
+      model: "availability-pool",
+      route: "model-router",
+    });
+    expect(response.statusCode, response.body).toBe(403);
+    expect(JSON.parse(response.body).error.internal_code).toBe("model_hidden");
+    expect(gateway.hits.map((hit) => hit.model)).toEqual([
+      "availability-model",
+    ]);
+  },
+);
+
+// The plugin lifecycle runs after admission and before dispatch. A hide during
+// this interval must be observed by the final availability check.
+availabilityTest.for([false, true])(
+  "rechecks availability after admission (stream=%s)",
+  async (stream, { gateway }) => {
+    const unregister = registerLlmProxyPlugin({
+      id: `availability-${crypto.randomUUID()}`,
+      async onBeforeModel() {
+        await gateway.setHidden(true);
+      },
+    });
+    try {
+      const response = await gateway.ask({ stream });
+      expect(response.statusCode, response.body).toBe(403);
+      expect(JSON.parse(response.body).error.internal_code).toBe(
+        "model_hidden",
+      );
+      expect(gateway.hits).toHaveLength(0);
+    } finally {
+      unregister();
+    }
   },
 );

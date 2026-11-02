@@ -9,18 +9,23 @@ import { ApiError } from "@/types";
 export async function assertModelAvailable(params: {
   provider: SupportedProvider;
   modelId: string;
+  /** Equivalent spellings supplied only by a trusted endpoint resolver. */
+  aliases?: string[];
 }): Promise<void> {
   const modelId = stripClaudeContextVariantSuffix(params.modelId);
   // Read current state, not a cached catalog or the request's admission snapshot:
   // a request may have waited for throughput or for another pool member.
-  const model = await ModelModel.findByProviderAndModelId(
-    params.provider,
-    modelId,
+  const models = await ModelModel.findByProviderModelIds(
+    [...new Set([modelId, ...(params.aliases ?? [])])].map((id) => ({
+      provider: params.provider,
+      modelId: id,
+    })),
   );
-  if (model?.ignored) {
+  const hidden = [...models.values()].find((model) => model.ignored);
+  if (hidden) {
     throw new ApiError(
       403,
-      `Model ${modelId} is hidden and cannot be used. Show the model in the model catalog to enable it.`,
+      `Model ${hidden.modelId} is hidden and cannot be used. Show the model in the model catalog to enable it.`,
       "model_hidden",
     );
   }

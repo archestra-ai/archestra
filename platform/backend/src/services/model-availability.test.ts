@@ -8,6 +8,8 @@ describe("resolved model availability", () => {
       provider: "anthropic",
       modelId: "claude-sonnet-4-6",
       externalId: "anthropic/claude-sonnet-4-6",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
       ignored: true,
     });
     await expect(

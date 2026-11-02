@@ -1610,6 +1610,7 @@ async function handleObservedLLMProxy<
       await assertModelAvailable({
         provider: autoRoutedMember?.provider ?? providerName,
         modelId: autoRoutedMember?.modelId ?? actualModel,
+        aliases: autoRoutedMember ? undefined : modelAliases,
       });
     }
 
@@ -2693,8 +2694,10 @@ function assertVerificationResponse(value: unknown): void {
   }
 }
 
-// ======================================================================// STREAMING HANDLER
-// ======================================================================
+// =============================================================================
+// STREAMING HANDLER
+// =============================================================================
+
 async function handleStreaming<
   TRequest,
   TResponse,
@@ -3841,8 +3844,10 @@ async function handleStreaming<
   }
 }
 
-// ======================================================================// NON-STREAMING HANDLER
-// ======================================================================
+// =============================================================================
+// NON-STREAMING HANDLER
+// =============================================================================
+
 async function handleNonStreaming<
   TRequest,
   TResponse,
@@ -4965,6 +4970,13 @@ async function openUpstream<TRequest, T>(params: {
       await assertModelAvailable({
         provider: ctx.upstreamAttempt.provider ?? providerName,
         modelId: ctx.upstreamAttempt.modelId ?? ctx.actualModel,
+        aliases:
+          (ctx.upstreamAttempt.billingEndpoint ?? ctx.billingEndpoint) ===
+          "fireworks"
+            ? fireworksModelAliases(
+                ctx.upstreamAttempt.modelId ?? ctx.actualModel,
+              )
+            : undefined,
       });
     } catch (error) {
       // A queued request can become unavailable after admission. It never

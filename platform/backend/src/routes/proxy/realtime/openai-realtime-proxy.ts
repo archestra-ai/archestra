@@ -225,10 +225,6 @@ async function admit(request: IncomingMessage, socket: Duplex, head: Buffer) {
     // Fresh reads each time: a settled response may have spent the budget.
     budgetRefusal: async () => {
       try {
-        await assertModelAvailable({
-          provider: "openai",
-          modelId: resolution.modelId,
-        });
         const spent = await LimitValidationService.checkLimitsBeforeRequest({
           unpricedMediaModel: priced ? undefined : resolution.modelId,
           agentId: agent.id,

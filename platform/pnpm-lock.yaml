@@ -317,8 +317,8 @@ importers:
         specifier: ^43.8.0
         version: 43.8.0
       '@google/genai':
-        specifier: ^2.16.0
-        version: 2.16.0(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))
+        specifier: ^1.44.0
+        version: 1.45.0(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))
       '@keyv/postgres':
         specifier: ^2.2.3
         version: 2.2.3(keyv@5.6.0)
@@ -2207,8 +2207,8 @@ packages:
     resolution: {integrity: sha512-xxqsNsUXaFang9b2e/NTIgqUeuUlifA2Opy1mOVqTDuJZZNIOTgUNyziwBJoleBhMC0XuvY3JNVMWthufcVjRw==}
     engines: {node: '>=18.20.0'}
 
-  '@google/genai@2.16.0':
-    resolution: {integrity: sha512-K+1C1sqR0u7NJ5xpKJCQBws0QXpfuklo3WTNuUIMvtbQfNW2O5OohX0BYT2V+PXzsUzQEwGCXPWQxttLyGQ6xw==}
+  '@google/genai@1.45.0':
+    resolution: {integrity: sha512-+sNRWhKiRibVgc4OKi7aBJJ0A7RcoVD8tGG+eFkqxAWRjASDW+ktS9lLwTDnAxZICzCVoeAdu8dYLJVTX60N9w==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       '@modelcontextprotocol/sdk': ^1.25.2
@@ -12740,7 +12740,7 @@ snapshots:
       '@gitbeaker/core': 43.8.0
       '@gitbeaker/requester-utils': 43.8.0
 
-  '@google/genai@2.16.0(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))':
+  '@google/genai@1.45.0(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))':
     dependencies:
       google-auth-library: 10.5.0
       p-retry: 4.6.2

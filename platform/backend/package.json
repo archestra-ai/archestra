@@ -111,7 +111,7 @@
     "@fastify/otel": "^0.17.1",
     "@fastify/swagger": "^9.7.0",
     "@gitbeaker/rest": "^43.8.0",
-    "@google/genai": "^2.16.0",
+    "@google/genai": "^1.44.0",
     "@keyv/postgres": "^2.2.3",
     "@kubernetes/client-node": "^1.4.0",
     "@kubiks/otel-drizzle": "^2.1.0",

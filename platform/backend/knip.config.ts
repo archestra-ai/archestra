@@ -29,8 +29,9 @@ const config: KnipConfig = {
     // Loaded by `vitest run --config` for the opt-in session storage benchmark.
     "vitest.benchmark.config.ts",
     // `pnpm check:layers` and the layer table it checks (also its
-    // dependency-cruiser configuration).
+    // dependency-cruiser configuration), and `pnpm check:projects`.
     "scripts/check-layers.mjs!",
+    "scripts/check-projects.mjs!",
     "layers.mjs!",
   ],
   // Browser-side static assets read at runtime via readFileSync (server.ts) —

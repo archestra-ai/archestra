@@ -171,6 +171,44 @@ export const TYPE_CHECK_PEAK_BYTES: Readonly<Record<string, number>> = {
 };
 
 /**
+ * The peak of each project's check in a package whose tsconfig.json is a
+ * solution (`scripts/type-check-solution.ts`), by project config relative to
+ * the package: the compiler's measured peak at one checker on 2 CPUs, plus
+ * 0.2 GiB for the runner. A project without an entry declares none and never
+ * pauses the servers.
+ */
+export const TYPE_CHECK_PROJECT_PEAK_BYTES: Readonly<
+  Record<string, Readonly<Record<string, number>>>
+> = {
+  backend: {
+    "../shared/tsconfig.lib.json": 1.0 * 1024 ** 3,
+    "../tools/drizzle-migration-linter/tsconfig.lib.json": 0.3 * 1024 ** 3,
+    "tsconfig.schema.json": 1.5 * 1024 ** 3,
+    "tsconfig.app.json": 4.8 * 1024 ** 3,
+    "tsconfig.test-support.json": 1.5 * 1024 ** 3,
+    "tsconfig.tests-database.json": 1.1 * 1024 ** 3,
+    "tsconfig.tests-core.json": 1.6 * 1024 ** 3,
+    "tsconfig.tests-models-a.json": 1.3 * 1024 ** 3,
+    "tsconfig.tests-models-b.json": 1.6 * 1024 ** 3,
+    "tsconfig.tests-models-c.json": 1.0 * 1024 ** 3,
+    "tsconfig.tests-models-d.json": 1.4 * 1024 ** 3,
+    "tsconfig.tests-services.json": 1.5 * 1024 ** 3,
+    "tsconfig.tests-domain-a.json": 1.2 * 1024 ** 3,
+    "tsconfig.tests-domain-b.json": 1.5 * 1024 ** 3,
+    "tsconfig.tests-domain-c.json": 1.4 * 1024 ** 3,
+    "tsconfig.tests-other.json": 1.6 * 1024 ** 3,
+    "tsconfig.tests-routes-proxy-a.json": 1.3 * 1024 ** 3,
+    "tsconfig.tests-routes-proxy-b.json": 1.5 * 1024 ** 3,
+    "tsconfig.tests-routes-proxy-c.json": 1.3 * 1024 ** 3,
+    "tsconfig.tests-routes-chat.json": 1.2 * 1024 ** 3,
+    "tsconfig.tests-routes-rest-a.json": 1.4 * 1024 ** 3,
+    "tsconfig.tests-routes-rest-b.json": 1.6 * 1024 ** 3,
+    "tsconfig.tests-routes-rest-c.json": 1.6 * 1024 ** 3,
+    "tsconfig.tools.json": 0.9 * 1024 ** 3,
+  },
+};
+
+/**
  * Whether memory-heavy commands take turns (`scripts/heavy-lane.ts`): in a
  * container below 16 GiB, where two of them side by side can take the
  * container past its limit.
@@ -220,6 +258,12 @@ export function pausesServers(
 export interface CgroupMemory {
   /** Processes of the cgroup an OOM killer killed (`memory.events` oom_kill). */
   oomKills: number;
+  /**
+   * Agent commands the image's memory warden stopped just before the limit
+   * (`archestra-memory-warden`, one line each in its log), so the kernel would
+   * not stop every process in the container.
+   */
+  wardenStops: number;
   /** Times the cgroup reached its memory limit (`memory.events` oom). */
   limitHits: number;
   /** The highest usage seen (`memory.peak`), when the kernel gives it. */
@@ -234,6 +278,7 @@ export interface CgroupMemory {
  */
 export function readCgroupMemory(
   dir: string = ownCgroupDirectory(),
+  wardenLog: string = MEMORY_WARDEN_LOG,
 ): CgroupMemory | null {
   const events = readText(path.join(dir, "memory.events"));
   if (events === null) return null;
@@ -244,8 +289,10 @@ export function readCgroupMemory(
   }
   const oomKills = counters.get("oom_kill");
   if (oomKills === undefined) return null;
+  const stops = readText(wardenLog);
   return {
     oomKills,
+    wardenStops: stops ? stops.split("\n").filter(Boolean).length : 0,
     limitHits: counters.get("oom") ?? 0,
     peakBytes: readBytes(path.join(dir, "memory.peak")),
     limitBytes: readBytes(path.join(dir, "memory.max")),
@@ -273,8 +320,33 @@ export function describeToolMemoryKill(params: {
   env?: NodeJS.ProcessEnv;
 }): string | null {
   const { before, after } = params;
-  if (!before || !after || after.oomKills <= before.oomKills) return null;
+  if (!before || !after) return null;
   const env = params.env ?? process.env;
+  // The warden stopped the command (or another) before the kernel had to.
+  if (
+    after.oomKills <= before.oomKills &&
+    (after.wardenStops ?? 0) > (before.wardenStops ?? 0)
+  ) {
+    const tier = env.ARCHESTRA_AGENT_RUNTIME_TIER?.trim();
+    const near =
+      after.limitBytes !== null
+        ? `this container neared its memory limit of ${formatLimitGibibytes(after.limitBytes)}${tier ? ` at tier ${tier}` : ""}`
+        : "this container neared its memory limit";
+    const what = params.subjectKilled
+      ? `${params.subject} was stopped for memory`
+      : `the memory warden stopped a command in this container while ${params.subject} ran`;
+    const steps = [
+      "Run type checks, test suites and builds one at a time, not side by side.",
+      ...params.steps,
+      largerTierStep(env),
+    ];
+    return [
+      `${params.tool}: ${what}: ${near}, and its memory warden stops the largest command before the kernel stops every process.`,
+      "To fit in memory:",
+      ...steps.map((step) => `  - ${step}`),
+    ].join("\n");
+  }
+  if (after.oomKills <= before.oomKills) return null;
   const killed = after.oomKills - before.oomKills;
   const atLimit = after.limitHits > before.limitHits;
   const tier = env.ARCHESTRA_AGENT_RUNTIME_TIER?.trim();
@@ -424,6 +496,8 @@ function largerTierStep(env: NodeJS.ProcessEnv): string {
 }
 
 const MEMORY_KILL_REPORT = Symbol.for("archestra.memoryKillReport");
+/** Where `archestra-memory-warden` records each command it stopped. */
+const MEMORY_WARDEN_LOG = "/var/run/archestra/memory-warden.log";
 const BYTES_PER_MIB = 1024 ** 2;
 const BYTES_PER_GIB = 1024 ** 3;
 const TYPESCRIPT_DEFAULT_CHECKERS = 4;

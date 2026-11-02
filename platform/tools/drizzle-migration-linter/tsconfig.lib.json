@@ -1,0 +1,16 @@
+{
+  // The linter as a referenced project: the backend's migration lint script
+  // reads its declarations instead of compiling its sources. The package's
+  // own check stays `tsconfig.json`.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declarationMap": true,
+    "rootDir": "./src",
+    "outDir": "./.tsbuild/lib",
+    "tsBuildInfoFile": "./.tsbuild/lib.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"]
+}

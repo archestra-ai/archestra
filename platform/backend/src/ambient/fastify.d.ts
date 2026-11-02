@@ -1,10 +1,10 @@
-import type { User } from "./user";
-import type { AuditableRouteConfig } from "./audit-route-config";
-import type { AuditEventName } from "./audit-log";
+import type { User } from "@/types/user";
+import type { AuditableRouteConfig } from "@/types/audit-route-config";
+import type { AuditEventName } from "@/types/audit-log";
 import type {
   SelectServiceAccount,
   SelectServiceAccountToken,
-} from "./service-account";
+} from "@/types/service-account";
 
 declare module "fastify" {
   interface FastifyRequest {

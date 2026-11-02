@@ -159,6 +159,7 @@ RUN --network=none \
  && python3 /tmp/agent-image-tests/interactive-resume.py \
  && python3 /tmp/agent-image-tests/tui-exec.py \
  && python3 /tmp/agent-image-tests/development-tools.py \
+ && python3 /tmp/agent-image-tests/memory-warden.py \
  && node /tmp/agent-image-tests/npm-http.cjs
 
 FROM agent-base AS agent-claude-code

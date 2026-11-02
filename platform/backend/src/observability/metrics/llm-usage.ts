@@ -15,7 +15,7 @@ export function anthropicUsageTokens(usage: Anthropic.Types.Usage) {
   };
 }
 
-export function cohereUsageTokens(usage: Cohere.Types.Usage) {
+export function cohereUsageTokens(usage: Cohere.Types.Usage | undefined) {
   return {
     input:
       usage?.tokens?.input_tokens ?? usage?.billed_units?.input_tokens ?? 0,

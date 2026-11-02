@@ -945,10 +945,6 @@ class ZhipuaiStreamAdapter
 // ADAPTER FACTORY
 // =============================================================================
 
-// =============================================================================
-// USAGE TOKEN HELPERS
-// =============================================================================
-
 export const zhipuaiAdapterFactory: LLMProvider<
   ZhipuaiRequest,
   ZhipuaiResponse,

@@ -124,7 +124,7 @@ const PINNED = layerTable
  *
  * @type {{ name: string; path: string; project: string }[]}
  */
-export const layers = layerTable.map((layer) => ({
+const layers = layerTable.map((layer) => ({
   name: layer.name,
   project: layer.project,
   path: [
@@ -137,12 +137,18 @@ export const layers = layerTable.map((layer) => ({
 
 /** The layer of a source file, or undefined for tests and files in no layer. */
 export function layerOf(file) {
-  if (new RegExp(TESTS).test(file)) return undefined;
-  return layers.find((layer) => new RegExp(layer.path).test(file));
+  if (TEST_FILE.test(file)) return undefined;
+  return LAYER_MATCHERS.find(({ regex }) => regex.test(file))?.layer;
 }
 
 /** Tests and test helpers may import any layer. */
-export const TESTS = "(\\.test\\.ts$|\\.test-[a-z-]+\\.ts$|^src/test/|/__mocks__/)";
+const TESTS = "(\\.test\\.ts$|\\.test-[a-z-]+\\.ts$|^src/test/|/__mocks__/)";
+
+const TEST_FILE = new RegExp(TESTS);
+const LAYER_MATCHERS = layers.map((layer) => ({
+  layer,
+  regex: new RegExp(layer.path),
+}));
 
 /**
  * The dependency-cruiser configuration `pnpm check:layers` runs. It forbids

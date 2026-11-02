@@ -4,6 +4,7 @@ import { get } from "lodash-es";
 import config from "@/config";
 import logger from "@/logging";
 import { metrics } from "@/observability";
+import { cohereUsageTokens } from "@/observability/metrics/llm-usage";
 import type {
   ChunkProcessingResult,
   Cohere,
@@ -315,13 +316,8 @@ class CohereResponseAdapter implements LLMResponseAdapter<CohereResponse> {
   }
 
   getUsage(): UsageView {
-    const usage = this.response.usage;
-    return {
-      inputTokens:
-        usage?.tokens?.input_tokens ?? usage?.billed_units?.input_tokens ?? 0,
-      outputTokens:
-        usage?.tokens?.output_tokens ?? usage?.billed_units?.output_tokens ?? 0,
-    };
+    const { input, output } = cohereUsageTokens(this.response.usage);
+    return { inputTokens: input, outputTokens: output };
   }
 
   getFinishReasons(): string[] {

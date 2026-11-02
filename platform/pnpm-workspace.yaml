@@ -287,6 +287,10 @@ patchedDependencies:
   # without discovery and verified private GitHub email lookup in SSO;
   # re-run backend/src/auth/github-sso.ee.test.ts and real GitHub sign-in.
   '@better-auth/sso@1.6.22': patches/ee/@better-auth__sso@1.6.22.patch
+  # The SDK subscribes after async request preparation; an earlier abort must
+  # also abort its derived fetch signal. Remove after an SDK upgrade passes
+  # backend/src/clients/gemini-cancellation.unit.test.ts without this patch.
+  '@google/genai@1.45.0': patches/@google__genai@1.45.0.patch
   # Keep the SDK's string-keyed semantic-action records under Zod 4.
   '@microsoft/agents-activity@1.9.1': patches/@microsoft__agents-activity@1.9.1.patch
   # Compile fixed redaction paths once and skip nested traversal for primitives.

@@ -3,11 +3,21 @@ import { createServer, type Server, type ServerResponse } from "node:http";
 import type { FastifyInstance } from "fastify";
 import { vi } from "vitest";
 import config from "@/config";
+import db, { schema } from "@/database";
 import { createFastifyInstance } from "@/fastify-instance";
-import { InteractionModel } from "@/models";
+import {
+  AgentModel,
+  InteractionModel,
+  ModelModel,
+  ModelPoolModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import InteractionBillingModel from "@/models/interaction-billing";
+import LimitModel, { LimitValidationService } from "@/models/limit";
+import LlmThroughputModel from "@/models/llm-throughput";
 import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import anthropicProxyRoutes from "./routes/anthropic";
 import geminiProxyRoutes from "./routes/gemini";
@@ -39,10 +49,12 @@ for (const provider of [
     let baseUrl: string;
     let token: string;
     let providerFinished: ReturnType<typeof deferred>;
+    let handlerFinished: ReturnType<typeof deferred>;
     let clientDisconnected: boolean;
     let finalizationGate: ReturnType<typeof deferred> | undefined;
     let unregister: (() => void) | undefined;
     let failures: number;
+    let failure: unknown;
     let cleanups: number;
     let completions: number;
     let mode: "headers" | "stream" | "tool-stream" | "complete";
@@ -168,9 +180,11 @@ for (const provider of [
 
     beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
       providerFinished = deferred();
+      handlerFinished = deferred();
       clientDisconnected = false;
       finalizationGate = undefined;
       failures = 0;
+      failure = undefined;
       cleanups = 0;
       completions = 0;
       unregister = registerLlmProxyPlugin({
@@ -180,7 +194,8 @@ for (const provider of [
           await finalizationGate?.promise;
           return undefined;
         },
-        onError: async () => {
+        onError: async ({ error }) => {
+          failure = error;
           failures++;
         },
         onCleanup: async () => {
@@ -227,6 +242,18 @@ for (const provider of [
         ownerId: user.id,
       });
       app = createFastifyInstance();
+      app.addHook("onRoute", (route) => {
+        if (route.method !== "POST" || !route.url.endsWith("/chat/completions"))
+          return;
+        const handler = route.handler;
+        route.handler = async function (request, reply) {
+          try {
+            return await handler.call(this, request, reply);
+          } finally {
+            handlerFinished.resolve();
+          }
+        };
+      });
       app.addHook("onRequest", async (_request, reply) => {
         reply.raw.on("close", () => {
           if (!reply.raw.writableEnded) clientDisconnected = true;
@@ -285,6 +312,150 @@ for (const provider of [
                   : { messages: [{ role: "user", content: "Count slowly" }] }),
               },
         ),
+      });
+    }
+
+    if (provider === "openai") {
+      describe("model-pool budget refusal", () => {
+        setupTestCacheManager();
+
+        for (const stream of [true, false]) {
+          test(`does not record an unsent member when its budget refusal races with disconnect (stream=${stream})`, async ({
+            makeSecret,
+            makeLlmProviderApiKey,
+          }) => {
+            config.llmProxy.modelPoolsEnabled = true;
+            const agent = await AgentModel.findById(agentId);
+            if (!agent) throw new Error("Expected proxy agent");
+            const key = await makeLlmProviderApiKey(
+              agent.organizationId,
+              (await makeSecret({ secret: { apiKey: "synthetic-key" } })).id,
+              { provider: "openai" },
+            );
+            const { virtualKey, value: poolToken } =
+              await VirtualApiKeyModel.create({
+                organizationId: agent.organizationId,
+                name: "budget-disconnect-key",
+                providerApiKeys: [
+                  { provider: "openai", providerApiKeyId: key.id },
+                ],
+              });
+            await ModelModel.create({
+              externalId: `openai/${model}`,
+              provider: "openai",
+              modelId: model,
+              inputModalities: ["text"],
+              outputModalities: ["text"],
+              customPricePerMillionInput: "1",
+              customPricePerMillionOutput: "1",
+            });
+            await ModelPoolModel.create({
+              organizationId: agent.organizationId,
+              input: {
+                name: "budget-disconnect-pool",
+                members: [
+                  {
+                    providerApiKeyId: key.id,
+                    modelId: model,
+                    priority: 1,
+                    weight: 1,
+                    enabled: true,
+                  },
+                ],
+              },
+            });
+            const budget = await LimitModel.create({
+              entityType: "virtual_key",
+              entityId: virtualKey.id,
+              limitType: "token_cost",
+              limitValue: 0,
+              model: [model],
+              lastCleanup: new Date(),
+            });
+            const rpm = await LimitModel.create({
+              entityType: "organization",
+              entityId: agent.organizationId,
+              limitType: "requests_per_minute",
+              limitValue: 1,
+            });
+            const originalSpend = await LimitModel.getTokenCostTotals([
+              budget.id,
+            ]);
+            const decisionReady = deferred();
+            const releaseDecision = deferred();
+            const checkLimits =
+              LimitValidationService.checkLimitsBeforeRequest.bind(
+                LimitValidationService,
+              );
+            // Run the real stored-budget check, delaying only delivery of its
+            // result so the TCP disconnect deterministically wins this race.
+            const check = vi
+              .spyOn(LimitValidationService, "checkLimitsBeforeRequest")
+              .mockImplementation(async (params) => {
+                const violation = await checkLimits(params);
+                if (
+                  params.model === model &&
+                  !params.deferModelScopedLimits &&
+                  violation
+                ) {
+                  decisionReady.resolve();
+                  await releaseDecision.promise;
+                }
+                return violation;
+              });
+            const controller = new AbortController();
+            const response = fetch(
+              `${baseUrl}/v1/openai/${agentId}/chat/completions`,
+              {
+                method: "POST",
+                signal: controller.signal,
+                headers: {
+                  "content-type": "application/json",
+                  authorization: `Bearer ${poolToken}`,
+                },
+                body: JSON.stringify({
+                  model: "budget-disconnect-pool",
+                  stream,
+                  messages: [{ role: "user", content: "Hello" }],
+                }),
+              },
+            ).catch((error: Error) => error);
+            try {
+              await decisionReady.promise;
+              controller.abort();
+              expect(await response).toBeInstanceOf(Error);
+              await vi.waitFor(() => expect(clientDisconnected).toBe(true));
+              releaseDecision.resolve();
+              // Cleanup plugins run before persistence; wait for the entire
+              // real route handler before asserting the absence of writes.
+              await handlerFinished.promise;
+              expect(requests).toBe(0);
+              expect
+                .soft(
+                  await InteractionModel.getAllInteractionsForProfile(agentId),
+                )
+                .toEqual([]);
+              expect
+                .soft(await db.select().from(schema.interactionBillingTable))
+                .toEqual([]);
+              expect(await LimitModel.getTokenCostTotals([budget.id])).toEqual(
+                originalSpend,
+              );
+              expect(
+                (await LlmThroughputModel.usage([rpm])).get(rpm.id)
+                  ?.currentUsage,
+              ).toBeCloseTo(0);
+              expect(failures).toBe(1);
+              expect(failure).toMatchObject({ statusCode: 402 });
+              expect(cleanups).toBe(1);
+              expect(completions).toBe(0);
+            } finally {
+              releaseDecision.resolve();
+              controller.abort();
+              check.mockRestore();
+            }
+          });
+        }
       });
     }
 

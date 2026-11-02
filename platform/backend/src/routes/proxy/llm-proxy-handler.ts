@@ -3583,7 +3583,11 @@ async function handleStreaming<
   } catch (error) {
     // A disconnect after the provider's terminal must preserve final usage.
     // Before it, both quiet EOF and throwing aborts are client cancellations.
-    const clientDisconnected = reply.raw.destroyed && !providerTerminalSeen;
+    // An unsent member's budget refusal must keep its own accounting cleanup.
+    const clientDisconnected =
+      reply.raw.destroyed &&
+      !providerTerminalSeen &&
+      !(error instanceof ModelBudgetExceededError);
     const lifecycleError = clientDisconnected
       ? new ApiError(499, "Client disconnected during inference")
       : error;

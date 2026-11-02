@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.17](https://github.com/archestra-ai/archestra/compare/platform-v1.4.16...platform-v1.4.17) (2026-11-02)
+
+
+### Bug Fixes
+
+* **mcp:** skip delegation expansion for compact gateways (1.4) ([#10114](https://github.com/archestra-ai/archestra/issues/10114)) ([6e40f27](https://github.com/archestra-ai/archestra/commit/6e40f27daa778d8849577663eac98f6883a31757))
+* **oauth:** validate root metadata for origin resource discovery (backport release/1.4) ([#10105](https://github.com/archestra-ai/archestra/issues/10105)) ([5752a91](https://github.com/archestra-ai/archestra/commit/5752a91b71dad04773eae747060d00e5ab96a617))
+* **proxy:** preserve chat structured output constraints (backport release/1.4) ([#10094](https://github.com/archestra-ai/archestra/issues/10094)) ([3d7b6ec](https://github.com/archestra-ai/archestra/commit/3d7b6ecd879cfa85d5dc6a6542a8aa8da9553021))
+* **proxy:** preserve Responses output formats in chat fallbacks (backport release/1.4) ([#10115](https://github.com/archestra-ai/archestra/issues/10115)) ([f5b1460](https://github.com/archestra-ai/archestra/commit/f5b1460901f4aa4db9a1e60108c2547ffcf7b5f1))
+* **proxy:** preserve translated output constraints (backport release/1.4) ([#10108](https://github.com/archestra-ai/archestra/issues/10108)) ([a4ac2d1](https://github.com/archestra-ai/archestra/commit/a4ac2d18e083e0900952957de21ef66a89272893))
+* **server:** classify graceful drain refusals as expected (1.4) ([#10110](https://github.com/archestra-ai/archestra/issues/10110)) ([832b61b](https://github.com/archestra-ai/archestra/commit/832b61b3d7f5a64272f5b3a3af038fd0d0fa32b8))
+
 ## [1.4.16](https://github.com/archestra-ai/archestra/compare/platform-v1.4.15...platform-v1.4.16) (2026-11-02)
 
 

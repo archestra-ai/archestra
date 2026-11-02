@@ -366,7 +366,9 @@ describe("shared K8s utilities", () => {
 
   describe("ensureStringIsRfc1123Compliant", () => {
     async function getEnsureStringIsRfc1123Compliant() {
-      const { ensureStringIsRfc1123Compliant } = await import("./shared");
+      const { ensureStringIsRfc1123Compliant } = await import(
+        "./deployment-names"
+      );
       return ensureStringIsRfc1123Compliant;
     }
 

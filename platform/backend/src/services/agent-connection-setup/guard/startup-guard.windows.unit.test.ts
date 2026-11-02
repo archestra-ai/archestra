@@ -1,9 +1,21 @@
+import { execFile, spawnSync } from "node:child_process";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
 import {
   CLAUDE_CODE_PROXY_ENV_KEYS,
   STARTUP_GUARD_FORMAT_VERSION,
   STARTUP_GUARD_INSTALL,
 } from "@archestra/shared/consts";
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import {
   CLAUDE_CODE_GUARD_CLIENT,
   CODEX_GUARD_CLIENT,
@@ -43,6 +55,7 @@ const CTX: StartupGuardContext = {
   },
   mcp: {
     serverName: "prod_gateway",
+    toolPrefix: "archestra__",
     url: "https://archestra.example.com/v1/mcp/prod-gateway",
     ref: "prod-gateway",
   },
@@ -465,6 +478,64 @@ describe("buildWindowsStartupGuardInstallSection (Claude Code)", () => {
     );
   });
 
+  test("the Copilot wrapper launches without Copilot's provider variables while the proxy is connected; Claude Code's does not", () => {
+    const copilot = buildWindowsStartupGuardInstallSection(
+      CTX,
+      COPILOT_GUARD_CLIENT,
+    );
+    // every documented COPILOT_PROVIDER_* variable plus COPILOT_MODEL
+    expect(copilot).toContain(
+      "foreach ($archName in @('COPILOT_MODEL', 'COPILOT_PROVIDER_BASE_URL', 'COPILOT_PROVIDER_TYPE', 'COPILOT_PROVIDER_API_KEY', 'COPILOT_PROVIDER_API_KEY_COMMAND', 'COPILOT_PROVIDER_BEARER_TOKEN', 'COPILOT_PROVIDER_WIRE_API', 'COPILOT_PROVIDER_TRANSPORT', 'COPILOT_PROVIDER_AZURE_API_VERSION', 'COPILOT_PROVIDER_HEADERS', 'COPILOT_PROVIDER_MODEL_ID', 'COPILOT_PROVIDER_WIRE_MODEL', 'COPILOT_PROVIDER_MAX_PROMPT_TOKENS', 'COPILOT_PROVIDER_MAX_OUTPUT_TOKENS'))",
+    );
+    // dropped only while the proxy remote is still connected, restored after
+    expect(copilot).toContain(
+      "$archCopilotSkippedProxy = 'proxy' -in @(Get-Content -Path (Join-Path $env:USERPROFILE '.archestra/copilot-startup-guard.skip')",
+    );
+    expect(copilot).toContain(
+      "Remove-Item -Path ('Env:' + $archName) -ErrorAction SilentlyContinue",
+    );
+    expect(copilot).toContain(
+      "[Environment]::SetEnvironmentVariable($archName, $archCopilotSaved[$archName], 'Process')",
+    );
+    // the guard is told, so it does not report the same variables again
+    expect(copilot).toContain("$env:ARCHESTRA_COPILOT_ENV_HANDLED = '1'");
+    // the notice agrees with the number of variables it names
+    expect(copilot).toContain(
+      "$archThose = if ($archCopilotSaved.Count -eq 1) { @('that variable', 'it') } else { @('those variables', 'them') }",
+    );
+    expect(copilot).toContain(
+      "' for this launch: the LLM proxy connection is active, and Copilot CLI would use ' + $archThose[0] + ' instead of providers.json. Remove ' + $archThose[1] + ' to silence this notice.'",
+    );
+    expect(
+      buildWindowsStartupGuardInstallSection(CTX, CLAUDE_CODE_GUARD_CLIENT),
+    ).not.toContain("archCopilotSaved");
+    // without a proxy there is nothing to strip
+    expect(
+      buildWindowsStartupGuardInstallSection(
+        { ...CTX, proxy: null },
+        COPILOT_GUARD_CLIENT,
+      ),
+    ).not.toContain("archCopilotSaved");
+  });
+
+  test("the refreshed Copilot guard repairs provider variables itself, for wrappers installed before the strip", () => {
+    const guard = renderStartupGuardPowerShell(CTX, COPILOT_GUARD_CLIENT);
+    expect(guard).toContain("function Repair-ArchCopilotEnv");
+    // values an earlier setup persisted are recognised by what it wrote
+    expect(guard).toContain("-like '*/v1/connection-setup/*'");
+    expect(guard).toContain("-like '*X-Archestra-*'");
+    expect(guard).toContain("-like 'arch_*'");
+    expect(guard).toContain("-like 'archestra/*'");
+    // a new wrapper already drops them for the launch
+    expect(guard).toContain(
+      "if ($env:ARCHESTRA_COPILOT_ENV_HANDLED -eq '1') { return }",
+    );
+    expect(guard).toContain("try { Repair-ArchCopilotEnv } catch { }");
+    expect(
+      renderStartupGuardPowerShell(CTX, CLAUDE_CODE_GUARD_CLIENT),
+    ).not.toContain("Repair-ArchCopilotEnv");
+  });
+
   test("detects a pre-feature guard (no version stamp) and upgrades it without prompting", () => {
     const section = buildWindowsStartupGuardInstallSection(
       CTX,
@@ -638,3 +709,133 @@ test("Codex Windows launcher applies direct tool mode only while the LLM proxy i
     expect(install).toContain("& $archReal.Source @args");
   }
 });
+
+const execFileAsync = promisify(execFile);
+const powershellAvailable =
+  spawnSync("pwsh", ["-NoProfile", "-Command", "exit 0"]).status === 0;
+
+describe.skipIf(!powershellAvailable)(
+  "Copilot PowerShell wrapper and guard repair (requires pwsh)",
+  () => {
+    const copilotCtx: StartupGuardContext = { ...CTX, mcp: null, skills: null };
+    const roots: string[] = [];
+    afterEach(async () => {
+      await Promise.all(
+        roots
+          .splice(0)
+          .map((root) => rm(root, { recursive: true, force: true })),
+      );
+    });
+    async function sandbox() {
+      const root = await mkdtemp(path.join(tmpdir(), "archestra-copilot-ps-"));
+      roots.push(root);
+      const home = path.join(root, "home");
+      const bin = path.join(root, "bin");
+      await mkdir(path.join(home, ".archestra"), { recursive: true });
+      await mkdir(bin);
+      const fake = path.join(bin, "copilot");
+      await writeFile(
+        fake,
+        `#!/bin/sh\nprintf 'model=%s base=%s args=%s\\n' "\${COPILOT_MODEL-unset}" "\${COPILOT_PROVIDER_BASE_URL-unset}" "$*"\n`,
+      );
+      await chmod(fake, 0o755);
+      const run = async (script: string, env: Record<string, string>) => {
+        const file = path.join(root, "run.ps1");
+        await writeFile(file, script);
+        const { stdout, stderr } = await execFileAsync(
+          "pwsh",
+          ["-NoProfile", "-NonInteractive", "-File", file],
+          {
+            env: {
+              ...process.env,
+              USERPROFILE: home,
+              HOME: home,
+              PATH: `${bin}:${process.env.PATH}`,
+              ...env,
+            },
+          },
+        );
+        return `${stdout}\n${stderr}`;
+      };
+      return { home, run };
+    }
+
+    test("the wrapper launches without Copilot's provider variables, restores them, and tells the guard", async () => {
+      const { home, run } = await sandbox();
+      const section = buildWindowsStartupGuardInstallSection(
+        copilotCtx,
+        COPILOT_GUARD_CLIENT,
+      );
+      // the end marker also appears earlier, in the installer's strip pattern
+      const functionStart = section.indexOf("function copilot {");
+      const block = section.slice(
+        functionStart,
+        section.indexOf(COPILOT_GUARD_CLIENT.markerEnd, functionStart),
+      );
+      expect(block).toContain("$archCopilotSaved = @{}");
+      await writeFile(
+        path.join(home, ".archestra", "copilot-startup-guard.ps1"),
+        "Add-Content -Path (Join-Path $env:USERPROFILE 'guard-saw.txt') -Value ('handled=' + $env:ARCHESTRA_COPILOT_ENV_HANDLED)\n",
+      );
+      const script = `${block}\ncopilot -p hi\nWrite-Output ('after=' + $env:COPILOT_MODEL)\n`;
+      const legacy = {
+        COPILOT_MODEL: "gpt-4o",
+        COPILOT_PROVIDER_BASE_URL: "http://localhost:11434/v1",
+      };
+      const stripped = await run(script, legacy);
+      expect(stripped).toContain("model=unset base=unset args=-p hi");
+      expect(stripped).toContain("after=gpt-4o");
+      expect(stripped).toContain(
+        "Ignoring COPILOT_MODEL, COPILOT_PROVIDER_BASE_URL for this launch",
+      );
+      expect(await readFile(path.join(home, "guard-saw.txt"), "utf8")).toBe(
+        "handled=1\n",
+      );
+      // a disconnected proxy leaves Copilot's variables to Copilot
+      await writeFile(
+        path.join(home, COPILOT_GUARD_CLIENT.skipRelpath),
+        "proxy\n",
+      );
+      const kept = await run(script, legacy);
+      expect(kept).toContain(
+        "model=gpt-4o base=http://localhost:11434/v1 args=-p hi",
+      );
+      expect(kept).not.toContain("Ignoring");
+    });
+
+    test("the guard repair drops the session's variables for an older wrapper and leaves them to a new one", async () => {
+      const { run } = await sandbox();
+      const guard = renderStartupGuardPowerShell(
+        copilotCtx,
+        COPILOT_GUARD_CLIENT,
+      );
+      const fn = guard.slice(
+        guard.indexOf("function Repair-ArchCopilotEnv {"),
+        guard.indexOf("try { Repair-ArchCopilotEnv } catch { }"),
+      );
+      const script = `$ArchDisconnectAll = $false
+$DisconnectedKinds = @()
+$AppName = 'Archestra'
+${fn}
+$env:COPILOT_MODEL = 'gpt-4o'
+Repair-ArchCopilotEnv
+Write-Output ('old-wrapper=' + $env:COPILOT_MODEL)
+$env:COPILOT_MODEL = 'gpt-4o'
+$env:ARCHESTRA_COPILOT_ENV_HANDLED = '1'
+Repair-ArchCopilotEnv
+Write-Output ('new-wrapper=' + $env:COPILOT_MODEL)
+$DisconnectedKinds = @('proxy')
+Remove-Item Env:ARCHESTRA_COPILOT_ENV_HANDLED
+Repair-ArchCopilotEnv
+Write-Output ('disconnected=' + $env:COPILOT_MODEL)
+`;
+      const out = await run(script, {});
+      expect(out).toContain("old-wrapper=\n");
+      expect(out).toContain(
+        "Archestra: ignoring COPILOT_MODEL for this session.",
+      );
+      expect(out).toContain("new-wrapper=gpt-4o");
+      expect(out).toContain("disconnected=gpt-4o");
+    });
+  },
+);

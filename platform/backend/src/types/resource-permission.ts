@@ -8,7 +8,7 @@ import {
 } from "@archestra/shared";
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 
 export const ResourcePermissionPolicySchema = createSelectSchema(
   schema.resourcePermissionPoliciesTable,

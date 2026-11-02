@@ -1,3 +1,5 @@
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
 import { pathToFileURL } from "node:url";
 import {
   ADMIN_ROLE_NAME,
@@ -7,11 +9,6 @@ import {
 import { getTableName, sql } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
 import db, { initializeDatabase, schema } from "@/database";
-import {
-  seedArchestraCatalogAndTools,
-  seedDefaultUserAndOrg,
-  syncBuiltInAgents,
-} from "@/database/seed";
 import logger from "@/logging";
 import {
   AgentLabelModel,
@@ -21,6 +18,12 @@ import {
   TeamModel,
 } from "@/models";
 import AgentUsageModel from "@/models/agent-usage";
+import { assertPortsBound } from "@/models/ports";
+import {
+  seedArchestraCatalogAndTools,
+  seedDefaultUserAndOrg,
+  syncBuiltInAgents,
+} from "@/services/seed";
 import type { TeamMemberRole } from "@/types/team-role";
 import { isUniqueConstraintError } from "@/utils/db";
 import {
@@ -29,6 +32,10 @@ import {
   generateMockTools,
   type MockAgentWithTeams,
 } from "./mocks";
+
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
+assertPortsBound();
 
 // Set to true to create tools and interactions
 // Don't delete this const for development convenience

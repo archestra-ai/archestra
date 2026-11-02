@@ -65,11 +65,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          version="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["info"]["version"])' docs/openapi.json)"
-          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "::error::docs/openapi.json does not name a platform release: $version"
-            exit 1
-          fi
+          version="$(python3 platform/scripts/terraform-provider/release_version.py docs/openapi.json)"
           # Release Please tags first and publishes the GitHub release after the
           # images. Until then provider CI cannot pull the image, so skip and let
           # a later run propose the release. A draft is not found with this token.

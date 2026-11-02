@@ -1,0 +1,28 @@
+{
+  // Tests of the models whose files start with d to i.
+  "extends": "./tsconfig.test-project.json",
+  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-models-b.tsbuildinfo" },
+  "include": [
+    "src/ambient/*.d.ts",
+    "src/models/d*.test.ts",
+    "src/models/d*/**/*.test.ts",
+    "src/models/e*.test.ts",
+    "src/models/e*/**/*.test.ts",
+    "src/models/f*.test.ts",
+    "src/models/f*/**/*.test.ts",
+    "src/models/g*.test.ts",
+    "src/models/g*/**/*.test.ts",
+    "src/models/h*.test.ts",
+    "src/models/h*/**/*.test.ts",
+    "src/models/i*.test.ts",
+    "src/models/i*/**/*.test.ts"
+  ],
+  "references": [
+    { "path": "../shared/tsconfig.lib.json" },
+    { "path": "../tools/drizzle-migration-linter/tsconfig.lib.json" },
+    { "path": "./tsconfig.schema.json" },
+    { "path": "./tsconfig.core.json" },
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.test-support.json" }
+  ]
+}

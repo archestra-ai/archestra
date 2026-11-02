@@ -940,6 +940,56 @@ describe("model-facing runtime tools", () => {
     expect(JSON.stringify(result)).not.toContain("x".repeat(40));
   });
 
+  test("a parent learns why a finished run near its retention deadline takes no new turn", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    const run = await AgentRunModel.findByTaskId(seeded.task.id);
+    if (!run) throw new Error("Missing run fixture");
+    await AgentRunModel.close({ id: run.id });
+    await AgentWorkspaceModel.release({
+      workloadName: run.workloadName,
+      taskId: seeded.task.id,
+    });
+    await db
+      .update(schema.agentWorkspacesTable)
+      .set({ expiresAt: new Date(Date.now() + 5 * 60_000) })
+      .where(eq(schema.agentWorkspacesTable.id, seeded.task.id));
+    vi.spyOn(openappa, "loadChildReturns").mockResolvedValue([
+      {
+        childSessionId: seeded.child.session_id,
+        operationId: `runtime-return:${seeded.task.id}:done`,
+        value: "ADMITTED",
+      },
+    ]);
+
+    const result = await executeArchestraTool(
+      TOOL_GET_AGENT_RUN_FULL_NAME,
+      { run_id: seeded.task.id },
+      seeded.context,
+    );
+
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      output: "ADMITTED",
+      workspace: {
+        state: "idle",
+        can_continue: false,
+        continuation_error: expect.stringContaining("cannot take another turn"),
+      },
+    });
+  });
+
   test("a different session of the same user does not receive raw output", async ({
     makeAgent,
     makeMember,

@@ -35,6 +35,7 @@ import {
 } from "@/agents/openai-reasoning-summary";
 import { createStepContextGuard } from "@/agents/step-context-guard";
 import { subagentRunTracker } from "@/agents/subagent-run-tracker";
+import { resolveSubagentTierSelection } from "@/agents/subagent-tiers";
 import { canUseAgent } from "@/auth/permission-gated";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
@@ -74,10 +75,8 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import type { ChatMessage } from "@/types";
-import {
-  resolveForkParentSelection,
-  resolveSubagentTierSelection,
-} from "@/utils/llm-resolution";
+import type { A2AAttachment } from "@/types/a2a-attachment";
+import { resolveForkParentSelection } from "@/utils/llm-resolution";
 import {
   stripThinkingBlocks,
   THINKING_ONLY_NOTICE,
@@ -86,20 +85,6 @@ import {
   type StageResult,
   stageAttachmentsIntoSandbox,
 } from "./a2a/stage-attachments";
-
-/**
- * Source-agnostic attachment for A2A execution.
- * Callers (email, Slack, Teams, etc.) should transform their provider-specific
- * attachment types into this format before passing to executeA2AMessage.
- */
-export interface A2AAttachment {
-  /** MIME content type (e.g., 'image/png', 'application/pdf') */
-  contentType: string;
-  /** Base64-encoded content */
-  contentBase64: string;
-  /** Optional filename for context */
-  name?: string;
-}
 
 /**
  * Longest delegation chain (root agent + delegated descendants) allowed before
@@ -193,6 +178,8 @@ interface A2AExecuteParamsBase {
   chatOpsPinnedAgentId?: string;
   /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
+  /** The calling agent run's task ID or run ID, when dispatched from a runtime container or chat. */
+  runId?: string;
 
   /**
    * History of UI messages needed for persistance at new UIMessage generation
@@ -411,6 +398,7 @@ export async function executeA2AMessage(
       isolationKey,
       abortSignal,
       scheduleTriggerRunId,
+      runId: params.runId,
       // Forward the same bridge so a nested delegation's tool calls surface too,
       // attributed to the nested delegation call (recursion through the chain).
       subagentToolStream,

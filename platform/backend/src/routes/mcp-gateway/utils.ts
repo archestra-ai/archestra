@@ -1157,6 +1157,7 @@ export async function createAgentServer(params: {
                     : tokenAuth?.userId,
                   organizationId: tokenAuth?.organizationId,
                   tokenAuth,
+                  ...(runId ? { runId } : {}),
                   mrtr: {
                     enabled: mrtrEnabled,
                     inputResponses: mrtr?.inputResponses,

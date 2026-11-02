@@ -111,20 +111,44 @@ vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/hooks/use-app-name");
 
-const { availableKeysMock, createKeyMock, modelsByProviderMock } = vi.hoisted(
-  () => ({
-    availableKeysMock: vi.fn(),
-    createKeyMock: vi.fn(),
-    modelsByProviderMock: vi.fn(),
-  }),
-);
+const {
+  availableKeysMock,
+  createKeyMock,
+  modelsByProviderMock,
+  syncModelsMock,
+  syncModelsStateMock,
+} = vi.hoisted(() => ({
+  availableKeysMock: vi.fn(),
+  createKeyMock: vi.fn(),
+  modelsByProviderMock: vi.fn(),
+  syncModelsMock: vi.fn(),
+  // The refresh mutation's state, as the panel reads it after a sync.
+  syncModelsStateMock: vi.fn(),
+}));
 
 vi.mock("@/lib/llm-models.query", () => ({
   useLlmModels: () => ({ data: [] }),
   useLlmModelsByProvider: (params: unknown) => ({
     modelsByProvider: modelsByProviderMock(params),
   }),
+  useSyncLlmModels: () => ({
+    mutate: syncModelsMock,
+    isPending: false,
+    isError: false,
+    isSuccess: false,
+    data: undefined,
+    ...(syncModelsStateMock() ?? {}),
+  }),
 }));
+
+// The enterprise plan wizard has its own tests; the panel only opens it.
+vi.mock(
+  "@/app/llm/model-providers/_parts/copilot-organization-connect-dialog",
+  () => ({
+    CopilotOrganizationConnectDialog: ({ open }: { open: boolean }) =>
+      open ? <div data-testid="copilot-plan-dialog" /> : null,
+  }),
+);
 
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useAvailableLlmProviderApiKeys: () => availableKeysMock(),
@@ -1839,7 +1863,8 @@ describe("ConnectCommandPanel", () => {
         : undefined,
       isPending: false,
     }));
-    renderPanel({ client: findClient(clientId) });
+    // Copilot CLI starts on GitHub Copilot, which needs an account first.
+    renderPanel({ client: findClient(clientId), urlProvider: "openai" });
 
     await waitFor(() =>
       expect(createSetupMock).toHaveBeenLastCalledWith(
@@ -2349,7 +2374,7 @@ describe("ConnectCommandPanel", () => {
           data: [{ id: "primary-openai", provider: "openai", isPrimary: true }],
         });
       const user = userEvent.setup();
-      renderPanel({ client: findClient(clientId) });
+      renderPanel({ client: findClient(clientId), urlProvider: "openai" });
       await waitFor(() =>
         expect(createSetupMock).toHaveBeenLastCalledWith(
           expect.objectContaining({ model: "openai:gpt-6.1-sol" }),
@@ -2413,9 +2438,9 @@ describe("ConnectCommandPanel", () => {
       modelsByProviderMock.mockReturnValue({
         openai: [{ id: "gpt-5.5" }, { id: "gpt-6.1-sol" }],
       });
-      renderPanel({ client: findClient("copilot-cli") });
+      renderPanel({ client: findClient("copilot-cli"), urlProvider: "openai" });
 
-      // first supported provider (OpenAI) → its default model is preselected
+      // the chosen provider's default model is preselected
       expect(await screen.findByText("gpt-6.1-sol")).toBeInTheDocument();
       expect(screen.getByTestId("connect-change-model")).toBeInTheDocument();
       await waitFor(() =>
@@ -2430,7 +2455,7 @@ describe("ConnectCommandPanel", () => {
 
     it("regenerates the command with an edited model", async () => {
       const user = userEvent.setup();
-      renderPanel({ client: findClient("copilot-cli") });
+      renderPanel({ client: findClient("copilot-cli"), urlProvider: "openai" });
       await screen.findByText(COMMAND);
 
       await user.click(screen.getByTestId("connect-change-model"));
@@ -2502,7 +2527,7 @@ describe("ConnectCommandPanel", () => {
         ],
       });
       const user = userEvent.setup();
-      renderPanel({ client: findClient("copilot-cli") });
+      renderPanel({ client: findClient("copilot-cli"), urlProvider: "openai" });
       await screen.findByText(COMMAND);
 
       await user.click(screen.getByTestId("connect-change-model"));
@@ -2545,15 +2570,25 @@ describe("ConnectCommandPanel", () => {
   });
 
   describe("per-user provider (GitHub Copilot)", () => {
-    it("shows a connect gate instead of the command when the user has no Copilot key", async () => {
+    it("opens the account cards in the proxy editor instead of the command when the user has no Copilot key", async () => {
       availableKeysMock.mockReturnValue({ data: [] });
       renderPanel({
         client: findClient("copilot-cli"),
         urlProvider: "github-copilot",
       });
 
+      // The cards sit under the provider, in the editor that opened itself.
       expect(
         await screen.findByRole("button", { name: /Sign in with GitHub/i }),
+      ).toBeInTheDocument();
+      expect(screen.getByText("Accounts")).toBeInTheDocument();
+      expect(
+        screen.getByRole("combobox", { name: "Provider" }),
+      ).toHaveTextContent("GitHub Copilot");
+      expect(
+        screen.getByText(
+          /Connect a GitHub Copilot account in the setup review above/,
+        ),
       ).toBeInTheDocument();
       // No command is generated until the user connects their own account.
       expect(createSetupMock).not.toHaveBeenCalled();
@@ -2586,43 +2621,40 @@ describe("ConnectCommandPanel", () => {
       expect(createKeyMock.mock.calls[0][0]).not.toHaveProperty("shared");
     });
 
-    it("keeps provider selection available after picking GitHub Copilot", async () => {
-      // Copilot forces virtual-key auth, but only while it is selected. It
-      // must not overwrite the stored auth mode — that would filter every
+    it("starts Copilot CLI on GitHub Copilot and keeps the other providers on offer", async () => {
+      // The client's own provider comes first without a URL choice. Picking
+      // it must not overwrite the stored auth mode — that would filter every
       // keyless provider out of the tabs until the next page load.
       availableKeysMock.mockReturnValue({ data: [] });
       const copilotCli = findClient("copilot-cli");
-      const { rerender } = renderPanel({ client: copilotCli });
-
-      const user = userEvent.setup();
-      await user.click(screen.getByTestId("connect-change-proxy"));
-      fireEvent.keyDown(screen.getByRole("combobox", { name: "Provider" }), {
-        key: "ArrowDown",
+      const onProviderSelect = vi.fn();
+      const { rerender } = renderPanel({
+        client: copilotCli,
+        onProviderSelect,
       });
-      expect(screen.getByRole("option", { name: "OpenAI" })).toBeVisible();
-      await user.click(screen.getByRole("option", { name: "GitHub Copilot" }));
 
-      // Picking Copilot lands in the URL provider prop.
+      // No account yet: the sign-in gate, and no command.
+      await screen.findByRole("button", { name: /Sign in with GitHub/i });
+      expect(createSetupMock).not.toHaveBeenCalled();
+      const user = userEvent.setup();
+      // The proxy editor opened by itself, with the account cards.
+      const picker = screen.getByRole("combobox", { name: "Provider" });
+      expect(picker).toHaveTextContent("GitHub Copilot");
+      // The other providers stay offered so the user can switch.
+      fireEvent.keyDown(picker, { key: "ArrowDown" });
+      expect(screen.getByRole("option", { name: "OpenAI" })).toBeVisible();
+      await user.click(screen.getByRole("option", { name: "OpenAI" }));
+      expect(onProviderSelect).toHaveBeenCalledWith("openai");
+
+      // The pick lands in the URL provider prop; switching generates a
+      // passthrough command.
       rerender(
         <ConnectCommandPanel
           {...renderPanelProps({
             client: copilotCli,
-            urlProvider: "github-copilot",
+            urlProvider: "openai",
+            onProviderSelect,
           })}
-        />,
-      );
-      await screen.findByRole("button", { name: /Sign in with GitHub/i });
-      // The other providers stay offered so the user can switch back.
-      fireEvent.keyDown(screen.getByRole("combobox", { name: "Provider" }), {
-        key: "ArrowDown",
-      });
-      expect(screen.getByRole("option", { name: "OpenAI" })).toBeVisible();
-      await user.click(screen.getByRole("option", { name: "OpenAI" }));
-
-      // Switching back generates a passthrough command again.
-      rerender(
-        <ConnectCommandPanel
-          {...renderPanelProps({ client: copilotCli, urlProvider: "openai" })}
         />,
       );
       await waitFor(() =>
@@ -2630,6 +2662,22 @@ describe("ConnectCommandPanel", () => {
           expect.objectContaining({
             provider: "openai",
             proxyAuth: "provider-key",
+          }),
+        ),
+      );
+    });
+
+    it("keeps a key an admin mapped for Copilot CLI ahead of GitHub Copilot", async () => {
+      mapClientProviderKeys({ "copilot-cli": ["openai"] });
+      availableKeysMock.mockReturnValue({
+        data: [{ id: "openai-org-key", provider: "openai" }],
+      });
+      renderPanel({ client: findClient("copilot-cli") });
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            provider: "openai",
+            proxyAuth: "virtual-key",
           }),
         ),
       );
@@ -2659,7 +2707,7 @@ describe("ConnectCommandPanel", () => {
   });
 });
 
-describe("a setup over a delivery limit on the approval page", () => {
+describe("setup choices on the approval page", () => {
   const PLUGIN_LIMIT_MESSAGE =
     "556 plugins are selected, but one setup can install at most 555. Choose 555 or fewer in Setup options, or turn plugins off.";
 
@@ -2739,6 +2787,608 @@ describe("a setup over a delivery limit on the approval page", () => {
     }
   });
 
+  it("opens Setup options as required while a model is missing, and keeps them open once one is chosen", async () => {
+    // A key exists but its catalog has not synced: the model is typed.
+    availableKeysMock.mockReturnValue({ data: [{ provider: "openai" }] });
+    modelsByProviderMock.mockReturnValue({});
+    const user = userEvent.setup();
+    const { finish } = renderApproval({
+      client: findClient("copilot-cli"),
+      urlProvider: "openai",
+    });
+    try {
+      await screen.findByText("ABCD-1234");
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Choose a model served by your provider",
+      );
+      // Open without a click, and not called optional.
+      const trigger = screen.getByRole("button", { name: /Setup options/ });
+      expect(trigger).toHaveTextContent("required — choose below to approve");
+      expect(trigger).not.toHaveTextContent("optional");
+      const model = screen.getByPlaceholderText("Model id");
+      // A click on the header does not hide a required choice.
+      await user.click(trigger);
+      expect(model).toBeVisible();
+
+      await user.type(model, "gpt-5.5");
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ provider: "openai", model: "gpt-5.5" }),
+        ),
+      );
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(
+        screen.getByRole("button", { name: /Setup options/ }),
+      ).toHaveTextContent("optional");
+      expect(screen.getByPlaceholderText("Model id")).toBeVisible();
+    } finally {
+      finish();
+    }
+  });
+
+  it("keeps Setup options collapsed and optional when the defaults work", async () => {
+    const { finish } = renderApproval({
+      client: findClient("copilot-cli"),
+      urlProvider: "openai",
+    });
+    try {
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenCalledWith(
+          expect.objectContaining({ provider: "openai", model: "gpt-5.5" }),
+        ),
+      );
+      expect(
+        screen.getByRole("button", { name: /Setup options/ }),
+      ).toHaveTextContent("optional");
+      expect(screen.queryByPlaceholderText("Model id")).toBeNull();
+    } finally {
+      finish();
+    }
+  });
+
+  it("keeps the model list off until a GitHub Copilot account is connected", async () => {
+    availableKeysMock.mockReturnValue({ data: [] });
+    const { finish } = renderApproval({ client: findClient("copilot-cli") });
+    try {
+      // Copilot CLI starts on GitHub Copilot: Setup options open by themselves
+      // with the account cards under the provider.
+      await screen.findByTestId("copilot-account-card-personal");
+      expect(createSetupMock).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole("button", { name: /Setup options/ }),
+      ).toHaveTextContent("required");
+      expect(
+        screen.getByRole("combobox", { name: "Provider" }),
+      ).toHaveTextContent("GitHub Copilot");
+      expect(screen.getByRole("combobox", { name: "Model" })).toBeDisabled();
+      expect(
+        screen.getByText(
+          "Connect your GitHub Copilot account above to list the models it serves.",
+        ),
+      ).toBeVisible();
+    } finally {
+      finish();
+    }
+  });
+
+  it("turns the model field off for a provider without a key or catalog, and offers to add one", async () => {
+    availableKeysMock.mockReturnValue({ data: [] });
+    modelsByProviderMock.mockReturnValue({});
+    const user = userEvent.setup();
+    const { finish } = renderApproval({
+      client: findClient("copilot-cli"),
+      urlProvider: "openai",
+    });
+    try {
+      await screen.findByText("ABCD-1234");
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Add an OpenAI key to list the models Copilot CLI can run, or choose a provider with one in Setup options.",
+      );
+      expect(
+        screen.getByRole("button", { name: /Setup options/ }),
+      ).toHaveTextContent("required — choose below to approve");
+      expect(screen.getByRole("combobox", { name: "Model" })).toBeDisabled();
+      expect(screen.queryByPlaceholderText("Model id")).toBeNull();
+      await user.click(screen.getByTestId("connect-model-add-provider-key"));
+      expect(screen.getByTestId("add-provider-key-dialog")).toBeInTheDocument();
+    } finally {
+      finish();
+    }
+  });
+
+  it("lets the user pick their own Copilot sign-in or an enterprise plan, and names which one is used", async () => {
+    availableKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "copilot-own",
+          provider: "github-copilot",
+          name: "GitHub Copilot",
+          isPrimary: true,
+          isGithubAppKey: false,
+          githubOrganization: null,
+        },
+        {
+          id: "copilot-plan",
+          provider: "github-copilot",
+          name: "GitHub Copilot (acme)",
+          isPrimary: false,
+          isGithubAppKey: true,
+          githubOrganization: "acme",
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    const { finish } = renderApproval({
+      client: findClient("copilot-cli"),
+      urlProvider: "github-copilot",
+    });
+    try {
+      // Nothing picked binds the user's own sign-in, as the server does.
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            provider: "github-copilot",
+            proxyAuth: "virtual-key",
+            providerApiKeyId: undefined,
+          }),
+        ),
+      );
+      await user.click(screen.getByRole("button", { name: /Setup options/ }));
+      expect(
+        screen.getByText("GitHub Copilot · Personal subscription"),
+      ).toBeInTheDocument();
+
+      fireEvent.keyDown(
+        screen.getByRole("combobox", { name: "GitHub Copilot account" }),
+        { key: "ArrowDown" },
+      );
+      expect(
+        screen.getByRole("option", { name: /Personal subscription/ }),
+      ).toHaveTextContent("Your own GitHub Copilot sign-in");
+      const plan = screen.getByRole("option", {
+        name: /Enterprise plan · acme/,
+      });
+      expect(plan).toHaveTextContent("Billed to acme on GitHub");
+      await user.click(plan);
+
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            provider: "github-copilot",
+            providerApiKeyId: "copilot-plan",
+          }),
+        ),
+      );
+      expect(
+        screen.getByText("GitHub Copilot · Enterprise plan · acme"),
+      ).toBeInTheDocument();
+    } finally {
+      finish();
+    }
+  });
+
+  it("binds an enterprise plan when the user has no Copilot sign-in of their own", async () => {
+    availableKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "copilot-plan",
+          provider: "github-copilot",
+          name: "GitHub Copilot (acme)",
+          isPrimary: false,
+          isGithubAppKey: true,
+          githubOrganization: "acme",
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    const { finish } = renderApproval({
+      client: findClient("copilot-cli"),
+      urlProvider: "github-copilot",
+    });
+    try {
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            provider: "github-copilot",
+            providerApiKeyId: "copilot-plan",
+          }),
+        ),
+      );
+      await user.click(screen.getByRole("button", { name: /Setup options/ }));
+      expect(
+        screen.getByText("GitHub Copilot · Enterprise plan · acme"),
+      ).toBeInTheDocument();
+      // One account is no choice.
+      expect(
+        screen.queryByRole("combobox", { name: "GitHub Copilot account" }),
+      ).toBeNull();
+    } finally {
+      finish();
+    }
+  });
+
+  it("offers Copilot CLI only GitHub Copilot models served through the Responses API", async () => {
+    availableKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "copilot-own",
+          provider: "github-copilot",
+          name: "GitHub Copilot",
+          isPrimary: true,
+          isGithubAppKey: false,
+        },
+      ],
+    });
+    modelsByProviderMock.mockReturnValue({
+      "github-copilot": [
+        {
+          id: "claude-sonnet-5.5",
+          capabilities: { supportedEndpoints: ["/chat/completions"] },
+        },
+        {
+          id: "gpt-5.6-sol",
+          capabilities: { supportedEndpoints: ["/responses"] },
+        },
+        {
+          id: "gpt-5.3-codex",
+          capabilities: { supportedEndpoints: ["/responses"] },
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    const { finish } = renderApproval({
+      client: findClient("copilot-cli"),
+      urlProvider: "github-copilot",
+    });
+    try {
+      // The default comes from the models the setup can reach.
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            provider: "github-copilot",
+            model: "gpt-5.6-sol",
+          }),
+        ),
+      );
+      await user.click(screen.getByRole("button", { name: /Setup options/ }));
+      expect(
+        screen.getByText(
+          /Models served only through Chat Completions are not listed: Copilot CLI connects through the Responses API\./,
+        ),
+      ).toBeInTheDocument();
+      await user.click(screen.getByRole("combobox", { name: "Model" }));
+      expect(
+        screen.getByRole("option", { name: "gpt-5.3-codex" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("option", { name: "claude-sonnet-5.5" }),
+      ).toBeNull();
+    } finally {
+      finish();
+    }
+  });
+
+  it("explains an account whose Copilot models all serve only Chat Completions, with no model to type", async () => {
+    availableKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "copilot-own",
+          provider: "github-copilot",
+          name: "GitHub Copilot",
+          isPrimary: true,
+          isGithubAppKey: false,
+        },
+      ],
+    });
+    // The account's catalog is synced, but nothing in it answers the
+    // Responses API, so there is nothing to select and nothing to type.
+    modelsByProviderMock.mockReturnValue({
+      "github-copilot": [
+        {
+          id: "claude-sonnet-5.5",
+          capabilities: { supportedEndpoints: ["/chat/completions"] },
+        },
+      ],
+    });
+    const { finish } = renderApproval({
+      client: findClient("copilot-cli"),
+      urlProvider: "github-copilot",
+    });
+    try {
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "None of the models your Personal subscription serves is available through the Responses API, which Copilot CLI connects through. Choose another account.",
+      );
+      expect(screen.queryByPlaceholderText("Model id")).toBeNull();
+      expect(syncModelsMock).not.toHaveBeenCalled();
+      expect(createSetupMock).not.toHaveBeenCalled();
+    } finally {
+      finish();
+    }
+  });
+
+  it("offers both GitHub Copilot accounts before any is connected, and opens the enterprise plan wizard", async () => {
+    availableKeysMock.mockReturnValue({ data: [] });
+    const user = userEvent.setup();
+    const { finish } = renderApproval({
+      client: findClient("copilot-cli"),
+      urlProvider: "github-copilot",
+    });
+    try {
+      const personal = await screen.findByTestId(
+        "copilot-account-card-personal",
+      );
+      expect(personal).toHaveTextContent("Personal subscription");
+      expect(
+        within(personal).getByRole("button", { name: /Sign in with GitHub/i }),
+      ).toBeInTheDocument();
+      const enterprise = screen.getByTestId("copilot-account-card-enterprise");
+      expect(enterprise).toHaveTextContent("Enterprise plan");
+      // Setup options opened as required, and approval waits for the account.
+      expect(
+        screen.getByRole("button", { name: /Setup options/ }),
+      ).toHaveTextContent("required");
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Connect a GitHub Copilot account in Setup options to approve.",
+      );
+      expect(
+        screen.getByRole("button", { name: /Approve connection/ }),
+      ).toBeDisabled();
+      expect(screen.queryByTestId("copilot-plan-dialog")).toBeNull();
+      await user.click(
+        within(enterprise).getByRole("button", { name: "Connect" }),
+      );
+      expect(screen.getByTestId("copilot-plan-dialog")).toBeInTheDocument();
+      expect(createSetupMock).not.toHaveBeenCalled();
+    } finally {
+      finish();
+    }
+  });
+
+  it("keeps the account not connected yet on offer next to the one in use, and none once both are", async () => {
+    const own = {
+      id: "copilot-own",
+      provider: "github-copilot",
+      name: "GitHub Copilot",
+      isPrimary: true,
+      isGithubAppKey: false,
+      githubOrganization: null,
+    };
+    const plan = {
+      id: "copilot-plan",
+      provider: "github-copilot",
+      name: "GitHub Copilot (acme)",
+      isPrimary: false,
+      isGithubAppKey: true,
+      githubOrganization: "acme",
+    };
+    const user = userEvent.setup();
+    for (const [keys, personalCard, enterpriseCard] of [
+      [[own], false, true],
+      [[plan], true, false],
+      [[own, plan], false, false],
+    ] as const) {
+      availableKeysMock.mockReturnValue({ data: [...keys] });
+      const { finish } = renderApproval({
+        client: findClient("copilot-cli"),
+        urlProvider: "github-copilot",
+      });
+      try {
+        await waitFor(() =>
+          expect(createSetupMock).toHaveBeenCalledWith(
+            expect.objectContaining({ provider: "github-copilot" }),
+          ),
+        );
+        await user.click(screen.getByRole("button", { name: /Setup options/ }));
+        expect(!!screen.queryByTestId("copilot-account-card-personal")).toBe(
+          personalCard,
+        );
+        expect(!!screen.queryByTestId("copilot-account-card-enterprise")).toBe(
+          enterpriseCard,
+        );
+      } finally {
+        finish();
+        cleanup();
+        createSetupMock.mockClear();
+      }
+    }
+  });
+
+  it("names the other account to connect in the Model routing editor of the command page", async () => {
+    availableKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "copilot-plan",
+          provider: "github-copilot",
+          name: "GitHub Copilot (acme)",
+          isPrimary: false,
+          isGithubAppKey: true,
+          githubOrganization: "acme",
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    renderPanel({
+      client: findClient("copilot-cli"),
+      urlProvider: "github-copilot",
+    });
+    await screen.findByText(COMMAND);
+    await user.click(screen.getByTestId("connect-change-proxy"));
+    expect(screen.getByText("Other accounts")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("copilot-account-card-personal"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("copilot-account-card-enterprise")).toBeNull();
+  });
+
+  it("lists the models of the account the setup binds, and defaults from that list", async () => {
+    availableKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "copilot-own",
+          provider: "github-copilot",
+          name: "GitHub Copilot",
+          isPrimary: true,
+          isGithubAppKey: false,
+          githubOrganization: null,
+        },
+        {
+          id: "copilot-plan",
+          provider: "github-copilot",
+          name: "GitHub Copilot (acme)",
+          isPrimary: false,
+          isGithubAppKey: true,
+          githubOrganization: "acme",
+        },
+      ],
+    });
+    modelsByProviderMock.mockImplementation(
+      (params: { apiKeyId?: string }) => ({
+        "github-copilot":
+          params.apiKeyId === "copilot-plan"
+            ? [
+                {
+                  id: "gpt-5.3-codex",
+                  capabilities: { supportedEndpoints: ["/responses"] },
+                },
+                {
+                  id: "gpt-6.1-terra",
+                  capabilities: { supportedEndpoints: ["/responses"] },
+                },
+              ]
+            : [
+                {
+                  id: "gpt-5.3-codex",
+                  capabilities: { supportedEndpoints: ["/responses"] },
+                },
+              ],
+      }),
+    );
+    const user = userEvent.setup();
+    const { finish } = renderApproval({
+      client: findClient("copilot-cli"),
+      urlProvider: "github-copilot",
+    });
+    try {
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            provider: "github-copilot",
+            model: "gpt-5.3-codex",
+          }),
+        ),
+      );
+      expect(modelsByProviderMock).toHaveBeenCalledWith(
+        expect.objectContaining({ apiKeyId: "copilot-own" }),
+      );
+      await user.click(screen.getByRole("button", { name: /Setup options/ }));
+      fireEvent.keyDown(
+        screen.getByRole("combobox", { name: "GitHub Copilot account" }),
+        { key: "ArrowDown" },
+      );
+      await user.click(
+        screen.getByRole("option", { name: /Enterprise plan · acme/ }),
+      );
+      // The plan's own list, and the newest GPT line as its default.
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            providerApiKeyId: "copilot-plan",
+            model: "gpt-6.1-terra",
+          }),
+        ),
+      );
+      expect(
+        screen.getByText(/Saved as Copilot CLI's model by the setup script/),
+      ).toHaveTextContent("the models your Enterprise plan · acme serves.");
+      expect(screen.queryByPlaceholderText("Model id")).toBeNull();
+    } finally {
+      finish();
+    }
+  });
+
+  it("waits for an account whose catalog is empty and refreshes it once, with nothing to type", async () => {
+    availableKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "copilot-own",
+          provider: "github-copilot",
+          name: "GitHub Copilot",
+          isPrimary: true,
+          isGithubAppKey: false,
+        },
+      ],
+    });
+    modelsByProviderMock.mockReturnValue({});
+    const user = userEvent.setup();
+    const { finish } = renderApproval({
+      client: findClient("copilot-cli"),
+      urlProvider: "github-copilot",
+    });
+    try {
+      await waitFor(() => expect(syncModelsMock).toHaveBeenCalledTimes(1));
+      expect(screen.getByTestId("connect-command-status")).toHaveTextContent(
+        "Loading the models your account serves",
+      );
+      expect(screen.queryByRole("alert")).toBeNull();
+      const trigger = screen.getByRole("button", { name: /Setup options/ });
+      expect(trigger).toHaveTextContent("optional");
+      await user.click(trigger);
+      expect(screen.getByTestId("connect-model-loading")).toHaveTextContent(
+        "Loading the models your Personal subscription serves",
+      );
+      expect(screen.queryByPlaceholderText("Model id")).toBeNull();
+      expect(createSetupMock).not.toHaveBeenCalled();
+    } finally {
+      finish();
+    }
+  });
+
+  it("reports a refresh that left the account without models, and retries on request", async () => {
+    availableKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "copilot-own",
+          provider: "github-copilot",
+          name: "GitHub Copilot",
+          isPrimary: true,
+          isGithubAppKey: false,
+        },
+      ],
+    });
+    modelsByProviderMock.mockReturnValue({});
+    syncModelsStateMock.mockReturnValue({
+      isSuccess: true,
+      data: {
+        success: false,
+        failures: [
+          {
+            apiKeyId: "copilot-own",
+            name: "GitHub Copilot",
+            provider: "github-copilot",
+            requiresReauthentication: false,
+          },
+        ],
+      },
+    });
+    const user = userEvent.setup();
+    const { finish } = renderApproval({
+      client: findClient("copilot-cli"),
+      urlProvider: "github-copilot",
+    });
+    try {
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "GitHub Copilot did not answer the model request for your Personal subscription. Retry the refresh in Setup options.",
+      );
+      await waitFor(() => expect(syncModelsMock).toHaveBeenCalledTimes(1));
+      await user.click(screen.getByTestId("connect-model-retry"));
+      expect(syncModelsMock).toHaveBeenCalledTimes(2);
+      expect(screen.queryByPlaceholderText("Model id")).toBeNull();
+      expect(createSetupMock).not.toHaveBeenCalled();
+    } finally {
+      finish();
+    }
+  });
+
   it("shows the backend's reason when it refuses the setup", async () => {
     createSetupMock.mockImplementationOnce(async (body: object) => {
       setupHookOptions.onRefused?.(
@@ -2774,11 +3424,11 @@ describe("a setup over a delivery limit on the approval page", () => {
     }
   });
 
-  function renderApproval() {
+  function renderApproval(props?: Parameters<typeof renderPanelProps>[0]) {
     const server = setupServer(
       http.get("http://localhost:9000/api/client-connections/demo", () =>
         HttpResponse.json({
-          clientId: "claude-code",
+          clientId: props?.client?.id ?? "claude-code",
           platform: "macos",
           userCode: "ABCD-1234",
           expiresAt: "2099-01-01T00:00:00Z",
@@ -2797,7 +3447,7 @@ describe("a setup over a delivery limit on the approval page", () => {
     });
     const view = render(
       <QueryClientProvider client={queryClient}>
-        <ConnectCommandPanel {...renderPanelProps()} />
+        <ConnectCommandPanel {...renderPanelProps(props)} />
       </QueryClientProvider>,
     );
     return {
@@ -3080,6 +3730,7 @@ describe("first approval setup, as the server seed prepares it", () => {
       provider: body.provider ?? null,
       proxyAuth: body.proxyAuth ?? null,
       primaryKeyIds: null,
+      providerKeyId: body.providerApiKeyId ?? null,
       model: body.model ?? null,
       skillIds: body.skills?.skillIds ?? null,
       pluginIds: body.pluginIds ?? null,
@@ -3152,6 +3803,7 @@ function keyFields(body: {
   llmProxyId?: string;
   provider?: string;
   proxyAuth?: string;
+  providerApiKeyId?: string;
   model?: string;
   skills?: { skillIds?: string[] };
   pluginIds?: string[];
@@ -3163,6 +3815,7 @@ function keyFields(body: {
     gatewayId: body.mcpGatewayId ?? null,
     proxyId: body.llmProxyId ?? null,
     proxyAuth: (body.proxyAuth ?? null) as ConnectionSetupInputs["proxyAuth"],
+    providerKeyId: body.providerApiKeyId ?? null,
     model: body.model ?? null,
     skillIds: body.skills?.skillIds ?? null,
     pluginIds: body.pluginIds ?? null,

@@ -1,4 +1,7 @@
-import { resolveAgentRuntimeTiers } from "@archestra/shared";
+import {
+  type AgentRuntimeTierSize,
+  resolveAgentRuntimeTiers,
+} from "@archestra/shared";
 import { afterEach, describe, expect, test } from "vitest";
 import config from "@/config";
 import {
@@ -9,8 +12,12 @@ import {
   resolveAgentRunLimits,
   resolveRunResources,
   resolveRunWorkspaceStorageSize,
+  retargetScaleupDisabledPrompt,
+  retargetTierResourceEnv,
   runtimeSystemPrompt,
   runtimeTiersEnv,
+  sizedToolchainEnv,
+  tierResourceEnv,
   warmPoolReplicas,
   warmTierCandidates,
 } from "./runtime-tiers";
@@ -81,6 +88,79 @@ describe("runtime tiers", () => {
     });
   });
 
+  test("a size tells the run's tools its quantities, its whole CPUs and the toolchain thread counts", () => {
+    // No CPU limit: the request, rounded up, is the parallelism.
+    expect(
+      tierResourceEnv({
+        cpuRequest: "3500m",
+        memoryRequest: "7Gi",
+        memoryLimit: "14Gi",
+      }),
+    ).toEqual({
+      pod: {
+        ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "3500m",
+        ARCHESTRA_AGENT_RUNTIME_POD_CPU_LIMIT: undefined,
+        ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_REQUEST: "7Gi",
+        ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "14Gi",
+        ARCHESTRA_AGENT_RUNTIME_POD_CPUS: "4",
+      },
+      toolchain: {
+        GOMAXPROCS: "4",
+        CARGO_BUILD_JOBS: "4",
+        RAYON_NUM_THREADS: "4",
+      },
+    });
+    // A CPU limit caps it.
+    expect(
+      tierResourceEnv({ cpuRequest: "2", cpuLimit: "3" }).toolchain.GOMAXPROCS,
+    ).toBe("3");
+    // A size without CPU sets no thread counts.
+    expect(tierResourceEnv({ memoryLimit: "8Gi" }).toolchain).toEqual({
+      GOMAXPROCS: undefined,
+      CARGO_BUILD_JOBS: undefined,
+      RAYON_NUM_THREADS: undefined,
+    });
+    // A launch sets the thread counts the Agent's environment leaves unset,
+    // and lists them.
+    expect(
+      sizedToolchainEnv({
+        resources: { cpuRequest: "2" },
+        agentEnvKeys: ["CARGO_BUILD_JOBS", "OTHER"],
+      }),
+    ).toEqual({
+      GOMAXPROCS: "2",
+      RAYON_NUM_THREADS: "2",
+      ARCHESTRA_AGENT_RUNTIME_SIZED_ENV: "GOMAXPROCS,RAYON_NUM_THREADS",
+    });
+    // Served by a larger Pod: quantities follow it, a limit the served size
+    // lacks goes, and only the listed thread counts move. The Agent's own
+    // CARGO_BUILD_JOBS stays although it equals the requested size's default.
+    expect(
+      retargetTierResourceEnv({
+        env: {
+          ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "2",
+          ARCHESTRA_AGENT_RUNTIME_POD_CPU_LIMIT: "2",
+          ARCHESTRA_AGENT_RUNTIME_POD_CPUS: "2",
+          ARCHESTRA_AGENT_RUNTIME_SIZED_ENV: "GOMAXPROCS,RAYON_NUM_THREADS",
+          GOMAXPROCS: "2",
+          RAYON_NUM_THREADS: "2",
+          CARGO_BUILD_JOBS: "2",
+          OTHER: "kept",
+        },
+        served: { cpuRequest: "4", memoryLimit: "16Gi" },
+      }),
+    ).toEqual({
+      ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "4",
+      ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "16Gi",
+      ARCHESTRA_AGENT_RUNTIME_POD_CPUS: "4",
+      ARCHESTRA_AGENT_RUNTIME_SIZED_ENV: "GOMAXPROCS,RAYON_NUM_THREADS",
+      GOMAXPROCS: "4",
+      RAYON_NUM_THREADS: "4",
+      CARGO_BUILD_JOBS: "2",
+      OTHER: "kept",
+    });
+  });
+
   test("a run may ask for any tier up to the Agent's scaleup tier, which never falls below the default tier", () => {
     // A lite worker: runs start at M, and a run can move its work to S or L.
     const worker = { ...DEFAULTS, tier: "M", maxTier: "L" };
@@ -105,8 +185,20 @@ describe("runtime tiers", () => {
         requested: { tier: "s" },
       }).tier,
     ).toBe("S");
-    // Without a scaleup tier the Agent's own tier is the ceiling.
+    // Without a scaleup tier the Agent's own tier is the ceiling. A run of
+    // the Agent asking for more is told it cannot scale up; a caller outside
+    // any run hears the tiers it may use.
     expect(agentRuntimeMaxTier({ ...DEFAULTS, tier: "S" }, TIERS)).toBe("S");
+    expect(() =>
+      resolveAgentRunLimits({
+        runtime: { ...DEFAULTS, tier: "S" },
+        tiers: TIERS,
+        currentTier: "S",
+        requested: { tier: "M" },
+      }),
+    ).toThrow(
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
+    );
     expect(() =>
       resolveAgentRunLimits({
         runtime: { ...DEFAULTS, tier: "S" },
@@ -114,7 +206,7 @@ describe("runtime tiers", () => {
         requested: { tier: "M" },
       }),
     ).toThrow(
-      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
+      "Tier M (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace) is above this Agent's scaleup tier S. Tiers this Agent's runs may use: S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace).",
     );
     // When scaling up is allowed, requesting above the scaleup tier names the allowed tiers.
     expect(() =>
@@ -141,6 +233,67 @@ describe("runtime tiers", () => {
         TIERS,
       ),
     ).toBeNull();
+    // A fixed M agent starting at S cannot scale up to M.
+    const fixedM = { ...DEFAULTS, tier: "M", maxTier: "M" };
+    expect(
+      resolveAgentRunLimits({
+        runtime: fixedM,
+        tiers: TIERS,
+        requested: { tier: "S" },
+      }).tier,
+    ).toBe("S");
+    expect(() =>
+      resolveAgentRunLimits({
+        runtime: fixedM,
+        tiers: TIERS,
+        currentTier: "S",
+        requested: { tier: "M" },
+      }),
+    ).toThrow(
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
+    );
+    expect(() =>
+      resolveAgentRunLimits({
+        runtime: fixedM,
+        tiers: TIERS,
+        currentTier: "S",
+        requested: { minCpu: 4 },
+      }),
+    ).toThrow(
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
+    );
+    // The prompt uses the resolved run tier for fixed-tier runs.
+    expect(describeScaleupDisabledPrompt(fixedM, TIERS, "S")).toBe(
+      "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). You cannot scale up this instance; do not attempt to start a run at a larger tier.",
+    );
+    // When scaling is enabled, an omitted-size request from an L caller uses the Agent's default M.
+    const scalingWorker = { ...DEFAULTS, tier: "M", maxTier: "L" };
+    expect(
+      resolveAgentRunLimits({
+        runtime: scalingWorker,
+        tiers: TIERS,
+        currentTier: "L",
+        requested: {},
+      }).tier,
+    ).toBe("M");
+    expect(
+      resolveAgentRunLimits({
+        runtime: scalingWorker,
+        tiers: TIERS,
+        currentTier: "L",
+        requested: { maxDurationHours: 2 },
+      }).tier,
+    ).toBe("M");
+    // When an administrator reduces the Agent to S, an active M caller requesting without limits gets S.
+    const reducedToS = { ...DEFAULTS, tier: "S", maxTier: "S" };
+    expect(
+      resolveAgentRunLimits({
+        runtime: reducedToS,
+        tiers: TIERS,
+        currentTier: "M",
+        requested: {},
+      }).tier,
+    ).toBe("S");
     // A name the organization has no tier for.
     expect(() =>
       resolveAgentRunLimits({
@@ -149,6 +302,131 @@ describe("runtime tiers", () => {
         requested: { tier: "XL" },
       }),
     ).toThrow("There is no tier named XL.");
+  });
+
+  test("a caller outside any run gets refusals that code-review-action retries at the Agent's own size", () => {
+    // code-review-action starts a review with a size request (a CPU or
+    // memory floor, a shorter duration) and, when the Agent refuses it,
+    // starts the run again without one. It recognizes the
+    // refusal by this wording (src/archestra/client.ts, `refusedLimits`); a
+    // refusal it does not recognize fails every review on that Agent.
+    const RETRIED_AT_OWN_SIZE =
+      /is above this Agent's|sizes its runs with explicit resources|No tier this Agent's runs may use|There is no tier named|has less than the/i;
+    const fixedS = { ...DEFAULTS, tier: "S", maxTier: "S" };
+    const refusal = (requested: {
+      tier?: string;
+      minCpu?: number;
+      minMemoryGib?: number;
+      maxDurationHours?: number;
+    }) => {
+      try {
+        resolveAgentRunLimits({ runtime: fixedS, tiers: TIERS, requested });
+      } catch (error) {
+        return (error as Error).message;
+      }
+      throw new Error("expected a refusal");
+    };
+    for (const requested of [
+      { minMemoryGib: 7 },
+      { minCpu: 3 },
+      { tier: "M" },
+      { tier: "S", minMemoryGib: 7 },
+      { maxDurationHours: 9999 },
+    ]) {
+      expect(refusal(requested)).toMatch(RETRIED_AT_OWN_SIZE);
+      expect(refusal(requested)).not.toContain("not retriable");
+    }
+    // Without the request the same Agent starts at its own tier.
+    expect(resolveAgentRunLimits({ runtime: fixedS, tiers: TIERS }).tier).toBe(
+      "S",
+    );
+  });
+
+  test("retargets fixed-tier system instruction to served tier", () => {
+    const allowed = TIERS.tiers;
+    const tiersEnv = runtimeTiersEnv(allowed, "S", 20);
+    const originalPrompt =
+      "System prompt header.\n\n" +
+      "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). You cannot scale up this instance; do not attempt to start a run at a larger tier.\n\n" +
+      "System prompt footer.";
+    const retargeted = retargetScaleupDisabledPrompt(
+      originalPrompt,
+      tiersEnv,
+      "M",
+    );
+    expect(retargeted).toBe(
+      "System prompt header.\n\n" +
+        "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to M (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace). You cannot scale up this instance; do not attempt to start a run at a larger tier.\n\n" +
+        "System prompt footer.",
+    );
+    // When prompt has no fixed-tier instruction, it is returned unchanged.
+    expect(
+      retargetScaleupDisabledPrompt("Standard prompt", tiersEnv, "M"),
+    ).toBe("Standard prompt");
+    // Does not interpret special replacement tokens like $& or $` in custom tier names
+    const tokenTiers: AgentRuntimeTierSize[] = [
+      {
+        name: "M $&",
+        cpuRequest: 4,
+        cpuLimit: null,
+        memoryRequestMiB: 8192,
+        memoryLimitMiB: 16384,
+        warmSpares: 0,
+        pooled: false,
+        workspaceGiB: null,
+      },
+    ];
+    const tokenTiersEnv = runtimeTiersEnv(tokenTiers, "M $&", 20);
+    const tokenRetargeted = retargetScaleupDisabledPrompt(
+      originalPrompt,
+      tokenTiersEnv,
+      "M $&",
+    );
+    expect(tokenRetargeted).toBe(
+      "System prompt header.\n\n" +
+        "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to M $& (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace). You cannot scale up this instance; do not attempt to start a run at a larger tier.\n\n" +
+        "System prompt footer.",
+    );
+    // Retargets cleanly when tier name contains a period and the closing clause
+    const clauseTierName =
+      "M. You cannot scale up this instance; do not attempt to start a run at a larger tier.";
+    const clauseTiers: AgentRuntimeTierSize[] = [
+      {
+        name: clauseTierName,
+        cpuRequest: 2,
+        cpuLimit: null,
+        memoryRequestMiB: 4096,
+        memoryLimitMiB: 8192,
+        warmSpares: 0,
+        pooled: false,
+        workspaceGiB: null,
+      },
+      {
+        name: "L",
+        cpuRequest: 8,
+        cpuLimit: null,
+        memoryRequestMiB: 16384,
+        memoryLimitMiB: 32768,
+        warmSpares: 0,
+        pooled: false,
+        workspaceGiB: null,
+      },
+    ];
+    const clausePrompt =
+      "System prompt header.\n\n" +
+      `Scaling up this agent runtime instance is disabled: the runtime tier is fixed to ${clauseTierName} (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). You cannot scale up this instance; do not attempt to start a run at a larger tier.\n\n` +
+      "System prompt footer.";
+    const clauseTiersEnv = runtimeTiersEnv(clauseTiers, clauseTierName, 20);
+    const clauseRetargeted = retargetScaleupDisabledPrompt(
+      clausePrompt,
+      clauseTiersEnv,
+      "L",
+    );
+    expect(clauseRetargeted).toBe(
+      "System prompt header.\n\n" +
+        "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to L (8 CPU, 16 GiB (32 GiB limit), 20 GiB workspace). You cannot scale up this instance; do not attempt to start a run at a larger tier.\n\n" +
+        "System prompt footer.",
+    );
   });
 
   test("a run may ask by size: the smallest allowed tier with that much CPU and memory", () => {
@@ -184,7 +462,19 @@ describe("runtime tiers", () => {
     ).toThrow(
       "No tier this Agent's runs may use has 4 CPU. Tiers this Agent's runs may use: Small (1 CPU, 2 GiB (4 GiB limit), 20 GiB workspace), Medium (3 CPU, 6 GiB (12 GiB limit), 20 GiB workspace).",
     );
-    // When scaling up is disabled, asking for more size than the fixed tier fails with a non-retriable error.
+    // When scaling up is disabled, a run asking for more size than the fixed
+    // tier fails with a non-retriable error; a caller outside any run hears
+    // the tiers it may use.
+    expect(() =>
+      resolveAgentRunLimits({
+        runtime: { ...DEFAULTS, tier: "Small", maxTier: "Small" },
+        tiers: CUSTOM,
+        currentTier: "Small",
+        requested: { minCpu: 4 },
+      }),
+    ).toThrow(
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to Small (1 CPU, 2 GiB (4 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
+    );
     expect(() =>
       resolveAgentRunLimits({
         runtime: { ...DEFAULTS, tier: "Small", maxTier: "Small" },
@@ -192,7 +482,7 @@ describe("runtime tiers", () => {
         requested: { minCpu: 4 },
       }),
     ).toThrow(
-      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to Small (1 CPU, 2 GiB (4 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
+      "No tier this Agent's runs may use has 4 CPU. Tiers this Agent's runs may use: Small (1 CPU, 2 GiB (4 GiB limit), 20 GiB workspace).",
     );
     // A named tier must also have the size asked for.
     expect(() =>
@@ -363,9 +653,10 @@ describe("runtime tiers", () => {
         requested: { minCpu: 5 },
       }),
     ).toMatchObject({ tier: "Big", workspaceGiB: 20 });
-    // Scaleup fixed at Tilt: the disk rule still keeps Small out, and work
-    // that needs more than Tilt meets the fixed-scaleup refusal, not the disk
-    // message: only a larger tier would fit, and that is disabled.
+    // Scaleup fixed at Tilt: the disk rule still keeps Small out, and a run
+    // whose work needs more than Tilt meets the fixed-scaleup refusal, not
+    // the disk message: only a larger tier would fit, and that is disabled.
+    // A caller outside any run hears that no tier has the CPU.
     const fixedAtTilt = { ...DEFAULTS, tier: "Tilt", maxTier: "Tilt" };
     expect(
       resolveAgentRunLimits({
@@ -378,10 +669,20 @@ describe("runtime tiers", () => {
       resolveAgentRunLimits({
         runtime: fixedAtTilt,
         tiers,
+        currentTier: "Tilt",
         requested: { minCpu: 5 },
       }),
     ).toThrow(
       "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to Tilt (4 CPU, 8 GiB (16 GiB limit), 60 GiB workspace). This call is not retriable; calling it again will fail.",
+    );
+    expect(() =>
+      resolveAgentRunLimits({
+        runtime: fixedAtTilt,
+        tiers,
+        requested: { minCpu: 5 },
+      }),
+    ).toThrow(
+      "No tier this Agent's runs may use has 5 CPU. Tiers this Agent's runs may use: Small (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace), Tilt (4 CPU, 8 GiB (16 GiB limit), 60 GiB workspace).",
     );
     // No tier with the CPU and the disk: the refusal says which is missing.
     expect(() =>

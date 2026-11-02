@@ -1,9 +1,17 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, test } from "vitest";
 import {
+  describeToolMemoryKill,
   frontendVitestResourceLimits,
   parseCpuQuantity,
   parseMemoryQuantity,
+  readCgroupMemory,
   resourceEnvelope,
+  typeScriptCheckers,
+  typeScriptMemorySettings,
+  wholeProgramGoMemoryLimits,
 } from "../../../vitest.resources";
 import { calculateVitestResourceLimits } from "./vitest-resource-limits";
 
@@ -164,5 +172,318 @@ describe("sizing inside an Agent Runtime pod", () => {
       maxWorkers: 16,
       maxOldSpaceMb: 8192,
     });
+  });
+});
+
+describe("typeScriptCheckers", () => {
+  const envelope = (memoryGiB: number, cpus: number) => ({
+    availableParallelism: cpus,
+    totalMemoryBytes: memoryGiB * GIB,
+    constrained: true,
+  });
+
+  test("runs one checker in a pod of tier S and two in tier M", () => {
+    // Staging tiers: S 2 CPU / 8Gi, M 3.5 CPU / 14Gi, L 6 CPU / 24Gi.
+    expect(typeScriptCheckers(envelope(8, 2))).toBe(1);
+    expect(typeScriptCheckers(envelope(14, 4))).toBe(2);
+    expect(typeScriptCheckers(envelope(24, 6))).toBeNull();
+  });
+
+  test("keeps the compiler's default on a machine with the memory for it", () => {
+    expect(typeScriptCheckers(envelope(16, 4))).toBeNull();
+    expect(typeScriptCheckers(envelope(62, 32))).toBeNull();
+  });
+
+  test("runs no more checkers than CPUs", () => {
+    expect(typeScriptCheckers(envelope(62, 1))).toBe(1);
+    expect(typeScriptCheckers(envelope(62, 2))).toBe(2);
+  });
+});
+
+describe("typeScriptMemorySettings", () => {
+  const envelope = (memoryGiB: number) => ({
+    availableParallelism: 2,
+    totalMemoryBytes: memoryGiB * GIB,
+    constrained: true,
+  });
+
+  test("caps the heap in tier S and drops the build state the one checker would add", () => {
+    // The backend's live data at one checker is about 5 GB: a limit at or
+    // above it costs no time, one below it makes Go collect in a loop.
+    expect(typeScriptMemorySettings(envelope(8))).toEqual({
+      goMemoryLimitBytes: 5 * GIB,
+      incremental: false,
+    });
+  });
+
+  test("keeps incremental builds where two checkers fit, as on a 16 GB laptop", () => {
+    // Such a laptop reports a little under 16 GiB.
+    expect(typeScriptMemorySettings(envelope(15.5))).toEqual({
+      goMemoryLimitBytes: 15.5 * GIB * (5 / 8),
+      incremental: true,
+    });
+  });
+
+  test("keeps Go's defaults on a machine with the memory for four checkers", () => {
+    expect(typeScriptMemorySettings(envelope(16))).toBeNull();
+    expect(typeScriptMemorySettings(envelope(62))).toBeNull();
+  });
+});
+
+describe("readCgroupMemory", () => {
+  test("reads the kill counters, the peak and the limit of a cgroup", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "cgroup-"));
+    try {
+      writeFileSync(
+        path.join(dir, "memory.events"),
+        "low 0\nhigh 0\nmax 14021\noom 3\noom_kill 2\noom_group_kill 0\n",
+      );
+      writeFileSync(path.join(dir, "memory.peak"), `${8 * GIB}\n`);
+      writeFileSync(path.join(dir, "memory.max"), "max\n");
+      expect(readCgroupMemory(dir, path.join(dir, "no-warden.log"))).toEqual({
+        oomKills: 2,
+        wardenStops: 0,
+        limitHits: 3,
+        peakBytes: 8 * GIB,
+        // "max" is no limit.
+        limitBytes: null,
+      });
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  test("counts the commands the memory warden stopped", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "cgroup-"));
+    try {
+      writeFileSync(path.join(dir, "memory.events"), "oom 0\noom_kill 0\n");
+      const log = path.join(dir, "memory-warden.log");
+      writeFileSync(log, '{"reason":"limit"}\n{"reason":"pressure"}\n');
+      expect(readCgroupMemory(dir, log)).toMatchObject({
+        oomKills: 0,
+        wardenStops: 2,
+      });
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  test("is null where there is no cgroup v2 memory controller", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "cgroup-"));
+    try {
+      expect(readCgroupMemory(dir)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+});
+
+describe("describeToolMemoryKill", () => {
+  const before = {
+    oomKills: 0,
+    wardenStops: 0,
+    limitHits: 10,
+    peakBytes: 5 * GIB,
+    limitBytes: 8 * GIB,
+  };
+  const atLimit = {
+    oomKills: 1,
+    wardenStops: 0,
+    limitHits: 11,
+    peakBytes: 8 * GIB,
+    limitBytes: 8 * GIB,
+  };
+  // What a pod of tier S sees: its tier and the tiers it may move to.
+  const env = {
+    ARCHESTRA_AGENT_RUNTIME_TIER: "S",
+    ARCHESTRA_AGENT_RUNTIME_TIERS: JSON.stringify([
+      { name: "S", cpu: 2, memory_gib: 4, memory_limit_gib: 8, current: true },
+      { name: "M", cpu: 3.5, memory_gib: 7, memory_limit_gib: 14 },
+    ]),
+  };
+  const typeCheck = {
+    tool: "type-check",
+    subject: "tsc",
+    steps: ["Give the compiler one checker: add --checkers 1."],
+    env,
+  };
+
+  test("says the memory warden stopped the command near the limit", () => {
+    const report = describeToolMemoryKill({
+      ...typeCheck,
+      subjectKilled: true,
+      before,
+      after: { ...before, wardenStops: 1, peakBytes: 7.8 * GIB },
+    });
+    expect(report).toContain(
+      "type-check: tsc was stopped for memory: this container neared its memory limit of 8 GiB at tier S, and its memory warden stops the largest command before the kernel stops every process.",
+    );
+    expect(report).toContain(
+      "  - Give the compiler one checker: add --checkers 1.",
+    );
+  });
+
+  test("names the killed command, the limit, the tier, the peak and what to change", () => {
+    expect(
+      describeToolMemoryKill({
+        ...typeCheck,
+        subjectKilled: true,
+        before,
+        after: atLimit,
+      }),
+    ).toBe(
+      [
+        "type-check: tsc was killed for memory: this container reached its memory limit of 8 GiB at tier S (peak usage 8 GiB).",
+        "To fit in memory:",
+        "  - Run type checks, test suites and builds one at a time, not side by side.",
+        "  - Give the compiler one checker: add --checkers 1.",
+        "  - Or move the work to a larger tier: start a run of this agent at M, which has a memory limit of 14 GiB, and hand over the branch.",
+      ].join("\n"),
+    );
+  });
+
+  test("says another process was killed when the command itself was not", () => {
+    expect(
+      describeToolMemoryKill({
+        ...typeCheck,
+        subjectKilled: false,
+        before,
+        after: { ...atLimit, oomKills: 2 },
+      })?.split("\n")[0],
+    ).toBe(
+      "type-check: the kernel killed 2 processes in this container for memory while tsc ran: this container reached its memory limit of 8 GiB at tier S (peak usage 8 GiB).",
+    );
+  });
+
+  test("rounds the limit down, never up", () => {
+    // A container limited to 8G: 8,000,000,000 bytes, 7.45 GiB.
+    const decimal = { ...atLimit, limitBytes: 8_000_000_000 };
+    expect(
+      describeToolMemoryKill({
+        ...typeCheck,
+        subjectKilled: true,
+        before: { ...before, limitBytes: 8_000_000_000 },
+        after: decimal,
+      })?.split("\n")[0],
+    ).toContain("memory limit of 7.4 GiB at tier S");
+  });
+
+  test("blames the machine, not the container, when the limit was not reached", () => {
+    expect(
+      describeToolMemoryKill({
+        ...typeCheck,
+        subjectKilled: true,
+        before,
+        after: { ...before, oomKills: 1, peakBytes: 3 * GIB },
+      }),
+    ).toBe(
+      "type-check: tsc was killed for memory: the machine ran out of memory; this container stayed under its 8 GiB limit (peak usage 3 GiB). Run it again.",
+    );
+  });
+
+  test("offers only a tier with more memory, none at the largest, and more memory outside a runtime", () => {
+    const largest = describeToolMemoryKill({
+      ...typeCheck,
+      subjectKilled: true,
+      before,
+      after: atLimit,
+      env: {
+        ARCHESTRA_AGENT_RUNTIME_TIER: "M",
+        ARCHESTRA_AGENT_RUNTIME_TIERS: JSON.stringify([
+          { name: "S", memory_limit_gib: 8 },
+          { name: "M", memory_limit_gib: 14, current: true },
+        ]),
+      },
+    });
+    expect(largest?.split("\n").at(-1)).toBe(
+      "  - This run is at M, and no tier this agent may use has more memory.",
+    );
+    // A next tier with more CPU and the same memory would be killed the same way.
+    const sameMemory = describeToolMemoryKill({
+      ...typeCheck,
+      subjectKilled: true,
+      before,
+      after: atLimit,
+      env: {
+        ARCHESTRA_AGENT_RUNTIME_TIERS: JSON.stringify([
+          { name: "S", memory_limit_gib: 8, current: true },
+          { name: "S-fast", memory_limit_gib: 8 },
+          { name: "L", memory_limit_gib: 24 },
+        ]),
+      },
+    });
+    expect(sameMemory?.split("\n").at(-1)).toBe(
+      "  - Or move the work to a larger tier: start a run of this agent at L, which has a memory limit of 24 GiB, and hand over the branch.",
+    );
+    const elsewhere = describeToolMemoryKill({
+      ...typeCheck,
+      subjectKilled: true,
+      before,
+      after: atLimit,
+      env: {},
+    });
+    expect(elsewhere?.split("\n")[0]).toBe(
+      "type-check: tsc was killed for memory: this container reached its memory limit of 8 GiB (peak usage 8 GiB).",
+    );
+    expect(elsewhere?.split("\n").at(-1)).toBe("  - Or give it more memory.");
+  });
+
+  test("says nothing when nothing was killed or the counters cannot be read", () => {
+    expect(
+      describeToolMemoryKill({
+        ...typeCheck,
+        subjectKilled: true,
+        before,
+        after: before,
+      }),
+    ).toBeNull();
+    expect(
+      describeToolMemoryKill({
+        ...typeCheck,
+        subjectKilled: true,
+        before: null,
+        after: atLimit,
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("wholeProgramGoMemoryLimits", () => {
+  const pod = (gib: number) =>
+    resourceEnvelope({ ...NODE, constrainedMemoryBytes: gib * GIB });
+
+  test("in a 4 GiB pod the frontend gets the room left with the servers stopped, less the compiler's own", () => {
+    // 2.68 GiB with the servers stopped, less 0.5 GiB outside Go's heap.
+    const limits = wholeProgramGoMemoryLimits(pod(4), 1.9 * GIB);
+    expect((limits?.serversPausedBytes ?? 0) / GIB).toBeCloseTo(2.18, 2);
+  });
+
+  test("beside the servers, and in any pod, never below the program's live data", () => {
+    // 1.83 GiB beside the servers, less 0.5, is below the frontend's 1.9 GiB.
+    expect(
+      wholeProgramGoMemoryLimits(pod(4), 1.9 * GIB)?.besideServersBytes,
+    ).toBe(Math.ceil(1.9 * GIB));
+    expect(
+      wholeProgramGoMemoryLimits(pod(3), 1.9 * GIB)?.serversPausedBytes,
+    ).toBe(Math.ceil(1.9 * GIB));
+  });
+
+  test("gives Go whole bytes, as GOMEMLIMIT needs", () => {
+    for (const gib of [3, 4, 6, 8, 12]) {
+      const limits = wholeProgramGoMemoryLimits(pod(gib), 1.9 * GIB);
+      expect(Number.isInteger(limits?.besideServersBytes)).toBe(true);
+      expect(Number.isInteger(limits?.serversPausedBytes)).toBe(true);
+    }
+  });
+
+  test("a small program gets the room beside the servers", () => {
+    expect(
+      (wholeProgramGoMemoryLimits(pod(4), 0.4 * GIB)?.besideServersBytes ?? 0) /
+        GIB,
+    ).toBeCloseTo(1.33, 2);
+  });
+
+  test("sets nothing where the lane is off", () => {
+    expect(wholeProgramGoMemoryLimits(pod(24), 1.9 * GIB)).toBeNull();
   });
 });

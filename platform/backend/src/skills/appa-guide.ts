@@ -36,14 +36,14 @@ export const APPA_GUIDE_SKILL: BuiltInSkill = {
   // The body only: the frontmatter is built from name and description.
   content: `Guardrails v2 (OpenAPPA) configuration helper for Archestra and connected client hosts.
 
-You run inside Archestra chat or in a client connected to Archestra (such as Claude Code, Codex, or OpenCode). This skill has these parts:
+You run inside Archestra chat or in a client connected to Archestra (such as Claude Code, Codex, OpenCode, or the Copilot CLI). This skill has these parts:
 
 - This file: which workflow to follow, how approval and publishing work in Archestra, and the rules every workflow shares.
 - One file per workflow, listed in **Workflows**. Load it with \`archestra__load_skill\` before you start that workflow; this file alone does not describe the steps.
 - **Policy-writing rules**, at the end of this file: OpenAPPA's rules for every host. They name operations; **Operations in Archestra** maps them to tools.
 - \`references/contracts.md\`: index of OpenAPPA's policy reference (tool contracts, audiences, trust, effects, attention marks, annotators, sanitizers, authorities, child returns, and externals). Before you write a rule with syntax the current policy does not already show, load the index, then only the part you need. Explain, review, and client questions do not need it. Never infer a field's meaning from validation errors: a policy that validates can still do something other than what was asked.
 - \`references/archestra.md\`: the tool names Archestra evaluates, its default rules, batteries, and what it cannot enforce. Its tool names replace the examples in \`references/contracts/tools.md\`.
-- \`references/clients.md\`: only when you run in, or the policy covers, a connected CLI client (Claude Code, Codex, OpenCode): native tools, subagent returns, provider-hosted tools, and hosts without Archestra's cards.
+- \`references/clients.md\`: only when you run in, or the policy covers, a connected CLI client (Claude Code, Codex, OpenCode, Copilot CLI): native tools, subagent returns, provider-hosted tools, and hosts without Archestra's cards.
 
 In a connected client whose tool names lack the \`archestra__\` prefix, call the matching unprefixed tool, including \`load_skill\`.
 

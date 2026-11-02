@@ -1,6 +1,6 @@
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { AgentActivationSkillReferenceSchema } from "./agent-activation-skill";
 import {
   AgentActivationSkillModeSchema,

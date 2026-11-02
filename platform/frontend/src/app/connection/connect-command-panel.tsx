@@ -12,6 +12,7 @@ import {
   CONNECTION_SETUP_MAX_SKILLS,
   CONNECTION_SETUP_TOKEN_TTL_MS,
   type ConnectSetupPart,
+  connectionModelServesClient,
   defaultConnectionModel,
   INSTALLER_CLIENT_KEY_PROVIDERS,
   isInstallerClientId,
@@ -45,7 +46,6 @@ import {
 import { CreditWarningNotice } from "@/components/connection/credit-warning-notice";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
-import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import { ProviderIcon } from "@/components/provider-icon";
@@ -64,9 +64,11 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
+  SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { WizardStep } from "@/components/wizard-step";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -84,12 +86,16 @@ import {
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
-import { useLlmModelsByProvider } from "@/lib/llm-models.query";
+import {
+  useLlmModelsByProvider,
+  useSyncLlmModels,
+} from "@/lib/llm-models.query";
 import {
   useAvailableLlmProviderApiKeys,
   useCreateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
+import { organizationSubscriptionSubtitle } from "@/lib/organization-subscription";
 import {
   isDeliverablePlugin,
   type PluginListItem,
@@ -117,8 +123,14 @@ import {
   connectionSetupBody,
   connectionSetupInputsKey,
   connectionSetupKeyDigest,
+  defaultPerUserKeyId,
+  initialConnectProvider,
   kimiCodeDefaultModel,
 } from "./connection-setup-payload";
+import {
+  CopilotAccountCards,
+  copilotAccountMissing,
+} from "./copilot-account-cards";
 import { GatewayLink } from "./gateway-link";
 import { GatewayServersSummary } from "./gateway-servers-summary";
 import { OsLogos } from "./os-logos";
@@ -138,6 +150,8 @@ import {
 import { TerminalBlock } from "./terminal-block";
 
 type ConnectProxyAuth = NonNullable<CreateConnectionSetupBody["proxyAuth"]>;
+/** How often an empty per-user catalog is re-read while its sync is pending. */
+const PER_USER_CATALOG_POLL_MS = 15_000;
 type EditableRow =
   | "gateway"
   | "proxy"
@@ -556,10 +570,15 @@ export function ConnectCommandPanel({
     usableOpenCodeKeys,
     adminMappedProviders,
   ]);
-  const provider =
-    urlProvider && providers.includes(urlProvider)
-      ? urlProvider
-      : (providers[0] ?? null);
+  // The provider the setup starts on: with the person's own account routing
+  // the models, the client's own comes first (Copilot CLI → GitHub Copilot);
+  // a key an admin mapped for the client keeps its place.
+  const provider = initialConnectProvider({
+    client,
+    offered: providers,
+    urlProvider,
+    ownAccountRoutes: proxyAuth === "provider-key",
+  });
 
   // GitHub Copilot is per-user: it can only run through a personal virtual key,
   // never the passthrough device flow, and the user must connect their own
@@ -572,6 +591,42 @@ export function ConnectCommandPanel({
     !!activeLlmProxyId &&
     providerIsPerUser &&
     !configuredProviders.has(provider);
+  // On the command page the accounts of a per-user provider are connected in
+  // the proxy editor, so it opens by itself while one is still to connect.
+  useEffect(() => {
+    if (needsPerUserConnect && !connectRequest) setEditing("proxy");
+  }, [needsPerUserConnect, connectRequest]);
+
+  // A per-user provider can have more than one account the user may use: their
+  // own sign-in and organization plans shared with them (GitHub Copilot paid by
+  // a GitHub organization). Nothing picked binds the user's own sign-in, as the
+  // server does; without one, the first plan.
+  const perUserKeys = useMemo(
+    () =>
+      providerIsPerUser
+        ? (availableKeys ?? []).filter((key) => key.provider === provider)
+        : [],
+    [providerIsPerUser, availableKeys, provider],
+  );
+  const [perUserKeyChoice, setPerUserKeyChoice] = useState<string | null>(null);
+  const providerKeyId =
+    perUserKeyChoice && perUserKeys.some((key) => key.id === perUserKeyChoice)
+      ? perUserKeyChoice
+      : provider
+        ? defaultPerUserKeyId(perUserKeys, provider)
+        : null;
+  const ownSignIns = perUserKeys.filter((key) => !key.isGithubAppKey);
+  const boundPerUserKey =
+    perUserKeys.find((key) => key.id === providerKeyId) ??
+    ownSignIns.find((key) => key.isPrimary) ??
+    ownSignIns[0] ??
+    null;
+  const perUserKeyLabel = (key: (typeof perUserKeys)[number]) =>
+    key.isGithubAppKey
+      ? `Enterprise plan · ${key.githubOrganization ?? key.name}`
+      : ownSignIns.length > 1
+        ? `Personal subscription · ${key.name}`
+        : "Personal subscription";
 
   // Clients that persist a model during setup surface it as a reviewable
   // choice instead of hard-wiring a default. null = the provider's default;
@@ -595,15 +650,109 @@ export function ConnectCommandPanel({
           (key) => key.provider === provider && key.isPrimary,
         )?.id)
       : undefined;
+  // A per-user provider lists the models of the account the setup binds: a
+  // person's own sign-in and an enterprise plan can serve different ones.
+  const perUserModelKeyId = providerIsPerUser
+    ? (boundPerUserKey?.id ?? null)
+    : null;
+  // While that account's catalog is empty the list is polled: the server
+  // syncs a new key's models as the key is created and again on its schedule
+  // when the provider refused that first fetch.
+  const [pollPerUserCatalog, setPollPerUserCatalog] = useState(false);
   const modelCatalog = useLlmModelsByProvider({
-    apiKeyId: piModelKeyId,
-    enabled: client.id !== "pi" || !!piModelKeyId,
+    apiKeyId: piModelKeyId ?? perUserModelKeyId ?? undefined,
+    enabled:
+      client.id === "pi"
+        ? !!piModelKeyId
+        : !providerIsPerUser || !!boundPerUserKey,
+    refetchInterval: pollPerUserCatalog ? PER_USER_CATALOG_POLL_MS : false,
   });
-  // Never seed Pi from another key's models, including previous-key placeholder data.
+  // Never seed Pi or a per-user account from another key's models, including
+  // previous-key placeholder data.
+  const boundCatalogPending =
+    client.id === "pi"
+      ? !piModelKeyId || modelCatalog.isPlaceholderData
+      : !!perUserModelKeyId &&
+        (modelCatalog.isPending || modelCatalog.isPlaceholderData);
   const modelsByProvider: Partial<typeof modelCatalog.modelsByProvider> =
-    client.id === "pi" && (!piModelKeyId || modelCatalog.isPlaceholderData)
-      ? {}
-      : modelCatalog.modelsByProvider;
+    boundCatalogPending ? {} : modelCatalog.modelsByProvider;
+  // The provider's models this client can run over the API its setup uses:
+  // Copilot CLI's Responses setups leave out models served only on Chat
+  // Completions, such as Claude on GitHub Copilot.
+  const providerModels = useMemo(
+    () =>
+      provider
+        ? (modelsByProvider[provider] ?? []).filter((model) =>
+            connectionModelServesClient({
+              clientId: client.id,
+              provider,
+              supportedEndpoints: model.capabilities?.supportedEndpoints,
+            }),
+          )
+        : [],
+    [provider, modelsByProvider, client.id],
+  );
+  const unservedModelIds = useMemo(() => {
+    const served = new Set(providerModels.map((model) => model.id));
+    return new Set(
+      (provider ? (modelsByProvider[provider] ?? []) : [])
+        .map((model) => model.id)
+        .filter((id) => !served.has(id)),
+    );
+  }, [provider, modelsByProvider, providerModels]);
+  // Where the model list comes from: a per-user provider's connected account,
+  // or a key for the provider (a synced catalog shows one exists). Without
+  // either there is nothing to choose from yet, so the model control is off.
+  const modelSourceConnected =
+    !!provider &&
+    (providerIsPerUser
+      ? !!boundPerUserKey
+      : configuredProviders.has(provider) ||
+        (modelsByProvider[provider] ?? []).length > 0);
+  // The bound account's catalog: still loading, or synced but empty. An empty
+  // one is refreshed once from here (quietly; the outcome shows inline) and
+  // polled meanwhile, so the person never types a model id by hand.
+  const perUserCatalogLoading =
+    providerIsPerUser && !!perUserModelKeyId && boundCatalogPending;
+  const perUserCatalogEmpty =
+    providerIsPerUser &&
+    !!perUserModelKeyId &&
+    !boundCatalogPending &&
+    !!provider &&
+    (modelsByProvider[provider] ?? []).length === 0;
+  const syncModels = useSyncLlmModels({ silent: true });
+  const { mutate: runModelSync, isPending: modelSyncPending } = syncModels;
+  const syncedCatalogKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    setPollPerUserCatalog(perUserCatalogEmpty);
+    if (!perUserCatalogEmpty || !perUserModelKeyId) return;
+    if (syncedCatalogKeyRef.current === perUserModelKeyId) return;
+    syncedCatalogKeyRef.current = perUserModelKeyId;
+    runModelSync();
+  }, [perUserCatalogEmpty, perUserModelKeyId, runModelSync]);
+  // Why the bound account still lists no models, once a refresh has settled;
+  // null while one is still to come or the list is being fetched again.
+  const modelSyncOutcome = (() => {
+    if (!perUserCatalogEmpty || !boundPerUserKey) return null;
+    if (modelSyncPending || modelCatalog.isFetching) return null;
+    const account = perUserKeyLabel(boundPerUserKey);
+    if (syncModels.isError) {
+      return `The model list of your ${account} could not be refreshed.`;
+    }
+    if (!syncModels.isSuccess) return null;
+    const failure = syncModels.data?.failures.find(
+      (item) => item.apiKeyId === boundPerUserKey.id,
+    );
+    if (failure?.requiresReauthentication) {
+      return `GitHub refused the sign-in of your ${account}. Reconnect it on the Model Providers page.`;
+    }
+    if (failure) {
+      return `GitHub Copilot did not answer the model request for your ${account}.`;
+    }
+    return `GitHub Copilot lists no models for your ${account}.`;
+  })();
+  const modelCatalogWaiting =
+    perUserCatalogLoading || (perUserCatalogEmpty && modelSyncOutcome === null);
   const effectiveModel =
     supportsModelChoice && provider
       ? (modelChoice ??
@@ -611,17 +760,15 @@ export function ConnectCommandPanel({
           ? "claude-haiku-4-5-20251001"
           : (defaultConnectionModel({
               provider,
-              modelIds: (modelsByProvider[provider] ?? []).map(
-                (model) => model.id,
-              ),
+              modelIds: providerModels.map((model) => model.id),
             }) ?? kimiCodeDefaultModel(client.id, provider))))
       : null;
   const modelOptions = useMemo(() => {
     if (!supportsModelChoice || !provider) return [];
-    const ids = (modelsByProvider[provider] ?? []).map((m) => m.id);
+    const ids = providerModels.map((m) => m.id);
     // the current value stays selectable even when it's not in the synced list
     return Array.from(new Set(effectiveModel ? [effectiveModel, ...ids] : ids));
-  }, [supportsModelChoice, provider, modelsByProvider, effectiveModel]);
+  }, [supportsModelChoice, provider, providerModels, effectiveModel]);
 
   // Per-user providers always use virtual-key auth (no passthrough tab). This
   // is derived rather than written back into `proxyAuth`: overwriting the
@@ -701,17 +848,39 @@ export function ConnectCommandPanel({
   // either limit is explained here instead of sent: the backend would refuse
   // it, and the approval page would wait for a setup that never arrives.
   const optionsPlace = connectRequest ? " in Setup options" : "";
+  // The approval page's reason while the person has no account for a per-user
+  // provider: the cards that connect one are in Setup options.
+  const accountProblem =
+    needsPerUserConnect && provider
+      ? `Connect ${indefiniteArticle(providerCatalog.label(provider))} ${providerCatalog.label(provider)} account${optionsPlace} to approve.`
+      : null;
   const selectionProblem =
     [
       supportsModelChoice &&
       proxyActive &&
+      // Without an account, the connect gate names the next step.
+      !needsPerUserConnect &&
+      !modelCatalogWaiting &&
       (!effectiveModel ||
         (client.id === "pi" &&
           (!provider ||
             !(modelsByProvider[provider] ?? []).some(
               (item) => item.id === effectiveModel,
             ))))
-        ? "Choose a model served by your provider, or sync its model catalog before connecting."
+        ? providerIsPerUser && boundPerUserKey
+          ? perUserCatalogEmpty
+            ? `${modelSyncOutcome} Retry the refresh in Setup options.`
+            : `None of the models your ${perUserKeyLabel(boundPerUserKey)} serves is available through the Responses API, which ${client.label} connects through. Choose another account.`
+          : provider && !modelSourceConnected
+            ? `Add ${indefiniteArticle(providerCatalog.label(provider))} ${providerCatalog.label(provider)} key to list the models ${client.label} can run, or choose a provider with one${optionsPlace}.`
+            : "Choose a model served by your provider, or sync its model catalog before connecting."
+        : null,
+      supportsModelChoice &&
+      proxyActive &&
+      provider &&
+      effectiveModel &&
+      unservedModelIds.has(effectiveModel)
+        ? `${effectiveModel} is served only through Chat Completions on ${providerCatalog.label(provider)}, and ${client.label} connects through the Responses API. Choose another model.`
         : null,
       client.id === "pi" && (!gateway || !proxyActive)
         ? "Pi requires both an MCP gateway and an LLM proxy. Keep tools and model routing enabled."
@@ -725,12 +894,28 @@ export function ConnectCommandPanel({
     ]
       .filter(Boolean)
       .join(" ") || null;
+  // What the approval page reports above the card and on the Approve button.
+  const approvalProblem = accountProblem ?? selectionProblem;
   useEffect(() => {
     // The download band prepares nothing until asked, so it stays quiet too.
     if (selectionProblem && preparationEnabled) {
       toast.error(selectionProblem, { id: SETUP_LIMIT_TOAST_ID });
     }
   }, [selectionProblem, preparationEnabled]);
+  // The approval page can't approve until the problem is fixed in Setup
+  // options, so they open by themselves and stay open once the user has
+  // something to change there; an account still to connect counts, its cards
+  // are there. Judged only after the lists that decide it load: the model
+  // default is unknown until the catalog arrives.
+  const optionsRequired =
+    !!connectRequest &&
+    (selectionProblem !== null || needsPerUserConnect) &&
+    !availableKeysPending &&
+    !modelCatalog.isLoading &&
+    !modelCatalogWaiting;
+  useEffect(() => {
+    if (optionsRequired) setCustomizing(true);
+  }, [optionsRequired]);
 
   // The setup command only registers the MCP gateway (`claude mcp add`); the
   // gateway authenticates over OAuth, so the user still finishes the handshake
@@ -788,6 +973,19 @@ export function ConnectCommandPanel({
   // Creating the personal key invalidates the available-keys query, so once the
   // user connects, `configuredProviders` updates and the command auto-generates.
   const createPerUserKey = useCreateLlmProviderApiKey();
+  const connectOwnCopilot = async (token: string) => {
+    if (!provider) return;
+    try {
+      await createPerUserKey.mutateAsync({
+        name: providerCatalog.label(provider),
+        provider,
+        apiKey: token,
+      });
+      // availableKeys invalidates → the command auto-generates.
+    } catch {
+      // handleApiError already surfaced the failure (e.g. no seat)
+    }
+  };
   // Virtual keys are minted from a provider key. When none of the client's
   // providers has one, offer to add it inline (gated on the create permission);
   // the create mutation invalidates the available-keys query, so this section
@@ -828,6 +1026,7 @@ export function ConnectCommandPanel({
           .map((key) => key.id)
           .sort()
       : null,
+    providerKeyId: proxyActive && providerIsPerUser ? providerKeyId : null,
     model: proxyActive ? effectiveModel : null,
     // Sorted so reorderings of the same selection don't regenerate.
     skillIds: includeSkills ? selectedSkills.map((s) => s.id).sort() : null,
@@ -939,6 +1138,7 @@ export function ConnectCommandPanel({
       skillsLoading ||
       pluginsLoading ||
       needsPerUserConnect ||
+      modelCatalogWaiting ||
       selectionProblem !== null ||
       (primaryRoutingBlocked && canAttribute === undefined)
     ) {
@@ -995,6 +1195,7 @@ export function ConnectCommandPanel({
     skillsLoading,
     pluginsLoading,
     needsPerUserConnect,
+    modelCatalogWaiting,
     selectionProblem,
     primaryRoutingBlocked,
     canAttribute,
@@ -1140,6 +1341,48 @@ export function ConnectCommandPanel({
     </EditorField>
   );
 
+  // Which of the user's accounts the provider bills, when there is a choice.
+  const accountPicker =
+    proxyActive && provider && perUserKeys.length > 1 && boundPerUserKey ? (
+      <Select value={boundPerUserKey.id} onValueChange={setPerUserKeyChoice}>
+        <SelectTrigger
+          aria-label={`${providerCatalog.label(provider)} account`}
+          size="sm"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {perUserKeys.map((key) => (
+            <SelectItem
+              key={key.id}
+              value={key.id}
+              description={
+                key.isGithubAppKey
+                  ? organizationSubscriptionSubtitle(key)
+                  : `Your own ${providerCatalog.label(provider)} sign-in`
+              }
+            >
+              {perUserKeyLabel(key)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    ) : null;
+  // The GitHub Copilot accounts still to connect, as on the Model Providers
+  // page: both before any is connected, then the one not in use. They have one
+  // place, under the provider, on the command page and the approval page alike.
+  const accountCards =
+    proxyActive &&
+    provider === "github-copilot" &&
+    providerIsPerUser &&
+    copilotAccountMissing(perUserKeys) ? (
+      <CopilotAccountCards
+        keys={perUserKeys}
+        pending={createPerUserKey.isPending}
+        onToken={connectOwnCopilot}
+      />
+    ) : null;
+
   const proxyEditor = !hasProxy ? null : client.id === "cursor" ? (
     cursorProxyEditor
   ) : (
@@ -1165,6 +1408,14 @@ export function ConnectCommandPanel({
               />
             </SelectContent>
           </Select>
+        </EditorField>
+      )}
+      {accountPicker && (
+        <EditorField label="Account">{accountPicker}</EditorField>
+      )}
+      {accountCards && (
+        <EditorField label={perUserKeys.length ? "Other accounts" : "Accounts"}>
+          {accountCards}
         </EditorField>
       )}
       <EditorField label="Model routing">
@@ -1196,7 +1447,7 @@ export function ConnectCommandPanel({
               )
             ) : providerIsPerUser && provider ? (
               <span>
-                {`${providerCatalog.label(provider)} runs through a personal virtual key — connect your own account below.`}
+                {`${providerCatalog.label(provider)} runs through a personal virtual key for the account you connect.`}
               </span>
             ) : providers.length === 0 ? (
               canCreateProviderKey ? (
@@ -1228,11 +1479,71 @@ export function ConnectCommandPanel({
     </div>
   );
 
+  // What gets a model list, while there is none to choose from.
+  const modelSourceHint =
+    !provider || modelSourceConnected ? null : providerIsPerUser ? (
+      <span>
+        {`Connect your ${providerCatalog.label(provider)} account above to list the models it serves.`}
+      </span>
+    ) : (
+      <>
+        <span>
+          {`Add ${indefiniteArticle(providerCatalog.label(provider))} ${providerCatalog.label(provider)} key to list the models ${client.label} can run.`}
+        </span>
+        {canCreateProviderKey ? (
+          <>
+            <span> </span>
+            <UnstyledButton
+              type="button"
+              className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+              onClick={() => setShowAddProviderKey(true)}
+              data-testid="connect-model-add-provider-key"
+            >
+              Add a key
+            </UnstyledButton>
+          </>
+        ) : (
+          <span> Ask an admin to add one.</span>
+        )}
+      </>
+    );
   const modelEditor =
     supportsModelChoice && provider ? (
       <div className="grid gap-1.5">
         <EditorField label="Model">
-          {modelOptions.length > 1 ? (
+          {modelCatalogWaiting ? (
+            <div className="grid gap-1.5" data-testid="connect-model-loading">
+              <Skeleton className="h-9 w-full" />
+              <p className="text-xs text-muted-foreground">
+                {`Loading the models your ${boundPerUserKey ? perUserKeyLabel(boundPerUserKey) : "account"} serves…`}
+              </p>
+            </div>
+          ) : perUserCatalogEmpty ? (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span>{modelSyncOutcome}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                disabled={modelSyncPending}
+                onClick={() => runModelSync()}
+                data-testid="connect-model-retry"
+              >
+                <RotateCcw />
+                <span>Retry</span>
+              </Button>
+            </div>
+          ) : modelSourceHint ? (
+            <SearchableSelect
+              value=""
+              onValueChange={() => {}}
+              items={[]}
+              ariaLabel="Model"
+              placeholder="Select model"
+              className="w-full"
+              disabled
+            />
+          ) : modelOptions.length > 1 || providerIsPerUser ? (
             <SearchableSelect
               value={effectiveModel ?? ""}
               onValueChange={setModelChoice}
@@ -1252,14 +1563,25 @@ export function ConnectCommandPanel({
           )}
         </EditorField>
         <p className="text-xs text-muted-foreground">
-          <span>
-            {client.id === "claude-desktop"
-              ? "Selected by default in Claude Desktop after setup"
-              : client.id === "pi"
-                ? "Selected by the printed Pi launch command"
-                : "Applied as COPILOT_MODEL by the setup script"}
-            {` — pick a model your ${providerCatalog.label(provider)} access serves.`}
-          </span>
+          {modelSourceHint ?? (
+            <>
+              <span>
+                {client.id === "claude-desktop"
+                  ? "Selected by default in Claude Desktop after setup"
+                  : client.id === "pi"
+                    ? "Selected by the printed Pi launch command"
+                    : "Saved as Copilot CLI's model by the setup script"}
+                {providerIsPerUser && boundPerUserKey
+                  ? ` — the models your ${perUserKeyLabel(boundPerUserKey)} serves.`
+                  : ` — pick a model your ${providerCatalog.label(provider)} access serves.`}
+              </span>
+              {unservedModelIds.size > 0 && (
+                <span>
+                  {` Models served only through Chat Completions are not listed: ${client.label} connects through the Responses API.`}
+                </span>
+              )}
+            </>
+          )}
         </p>
       </div>
     ) : null;
@@ -1356,15 +1678,17 @@ export function ConnectCommandPanel({
     ? "Loading plugins"
     : needsPerUserConnect
       ? `Connect ${provider ? providerCatalog.label(provider) : "your provider"} to generate the setup command`
-      : selectionProblem
-        ? selectionProblem
-        : failed
-          ? "Setup command generation failed"
-          : result || adoptedSetupId
-            ? "Setup command ready"
-            : hasRunnableAnything
-              ? "Generating setup command"
-              : "No setup command selected";
+      : modelCatalogWaiting
+        ? "Loading the models your account serves"
+        : selectionProblem
+          ? selectionProblem
+          : failed
+            ? "Setup command generation failed"
+            : result || adoptedSetupId
+              ? "Setup command ready"
+              : hasRunnableAnything
+                ? "Generating setup command"
+                : "No setup command selected";
 
   // The approval page's setup options: how models authenticate is shown, not
   // chosen — an admin's per-client key mapping decides it.
@@ -1504,6 +1828,9 @@ export function ConnectCommandPanel({
                     <span className="font-medium text-foreground">
                       {providerCatalog.label(provider)}
                     </span>{" "}
+                    {providerIsPerUser && boundPerUserKey && (
+                      <span>({perUserKeyLabel(boundPerUserKey)}) </span>
+                    )}
                     through{" "}
                     <ResourceLink href="/llm/proxy">the LLM Proxy</ResourceLink>{" "}
                     using{" "}
@@ -1650,8 +1977,9 @@ export function ConnectCommandPanel({
       >
         {!showSetupSummary && connectRequest && !connectRequestDecided && (
           <ConnectionConsentOptions
-            open={customizing}
-            onOpenChange={setCustomizing}
+            open={customizing || optionsRequired}
+            onOpenChange={(next) => setCustomizing(next || optionsRequired)}
+            required={optionsRequired}
             clientLabel={client.label}
             tools={
               mcpGatewayId && mcpGateways !== null
@@ -1673,10 +2001,18 @@ export function ConnectCommandPanel({
                     setInclude: setIncludeProxy,
                     mode: consentProxyMode,
                     providerLabels:
-                      effectiveProxyAuth === "provider-key" && provider
+                      (effectiveProxyAuth === "provider-key" ||
+                        providerIsPerUser) &&
+                      provider
                         ? [providerCatalog.label(provider)]
                         : providers.map((p) => providerCatalog.label(p)),
+                    accountLabel:
+                      providerIsPerUser && boundPerUserKey
+                        ? perUserKeyLabel(boundPerUserKey)
+                        : null,
                     providerPicker: consentProviderPicker,
+                    accountPicker,
+                    accountCards,
                     modelPicker: proxyActive ? modelEditor : null,
                   }
                 : null
@@ -1830,10 +2166,10 @@ export function ConnectCommandPanel({
                 />
               </div>
             ) : null)}
-          {selectionProblem ? (
+          {approvalProblem ? (
             <InlineNotice variant="error" role="alert">
               <TriangleAlert aria-hidden />
-              <InlineNoticeText>{selectionProblem}</InlineNoticeText>
+              <InlineNoticeText>{approvalProblem}</InlineNoticeText>
             </InlineNotice>
           ) : connectRequest && failureMessage ? (
             <InlineNotice variant="error" role="alert">
@@ -1863,22 +2199,9 @@ export function ConnectCommandPanel({
                 operating system. Choose another platform or add a connection
                 resource.
               </div>
-            ) : needsPerUserConnect && provider ? (
-              <PerUserConnectGate
+            ) : needsPerUserConnect && provider && !connectRequest ? (
+              <PerUserConnectNotice
                 providerLabel={providerCatalog.label(provider)}
-                pending={createPerUserKey.isPending}
-                onToken={async (token) => {
-                  try {
-                    await createPerUserKey.mutateAsync({
-                      name: providerCatalog.label(provider),
-                      provider,
-                      apiKey: token,
-                    });
-                    // availableKeys invalidates → the command auto-generates.
-                  } catch {
-                    // handleApiError already surfaced the failure (e.g. no seat)
-                  }
-                }}
               />
             ) : connectRequest ? (
               <ClientConnectionApproval
@@ -1886,7 +2209,7 @@ export function ConnectCommandPanel({
                 requestId={connectRequest}
                 setupId={result?.id ?? adoptedSetupId ?? undefined}
                 setupProblem={
-                  selectionProblem ??
+                  approvalProblem ??
                   (failureMessage
                     ? `${failureMessage} Adjust Setup options, then select Retry setup.`
                     : null)
@@ -2022,9 +2345,11 @@ export function ConnectCommandPanel({
         title={`Add ${addKeyPhrase}`}
         description={providerKeyDialogDescription}
         defaultValues={
-          supportedProviders[0]
-            ? { provider: supportedProviders[0] }
-            : undefined
+          provider && !providerIsPerUser
+            ? { provider }
+            : supportedProviders[0]
+              ? { provider: supportedProviders[0] }
+              : undefined
         }
         allowedProviders={supportedProviders}
         onSuccess={() => setShowAddProviderKey(false)}
@@ -2284,30 +2609,15 @@ function wrappedCommand(command: string): string {
 }
 
 /**
- * Shown in place of the command when a per-user provider (GitHub Copilot) is
- * selected but the user hasn't connected their own account yet. Connecting
- * creates their personal key; the command then auto-generates.
+ * Shown in place of the command while a per-user provider (GitHub Copilot) is
+ * selected and the person has no account for it yet. The accounts are
+ * connected in the setup review, under the provider; this names that step.
  */
-function PerUserConnectGate({
-  providerLabel,
-  pending,
-  onToken,
-}: {
-  providerLabel: string;
-  pending: boolean;
-  onToken: (token: string) => void | Promise<void>;
-}) {
+function PerUserConnectNotice({ providerLabel }: { providerLabel: string }) {
   return (
-    <div className="flex flex-col gap-3 px-5 py-4">
-      <p className="text-[13px] text-foreground">
-        Connect your {providerLabel} account to generate the command — it runs
-        through your own personal virtual key, so your token never leaves the
-        server.
-      </p>
-      <div>
-        <GithubCopilotSignIn disabled={pending} onToken={onToken} />
-      </div>
-    </div>
+    <p className="px-5 py-4 text-[13px] text-foreground">
+      {`Connect a ${providerLabel} account in the setup review above to generate the command. It runs through your own personal virtual key, so your token never leaves the server.`}
+    </p>
   );
 }
 

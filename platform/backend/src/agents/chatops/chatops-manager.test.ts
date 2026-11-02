@@ -3693,6 +3693,28 @@ describe("ChatOpsManager.initialize — partial config", () => {
     await manager.cleanup();
   });
 
+  test("creates no MS Teams provider for a disabled or incomplete stored config", async () => {
+    const complete = {
+      enabled: true,
+      appId: "test-app-id",
+      appSecret: "test-secret",
+      tenantId: "test-tenant",
+      graphTenantId: "test-tenant",
+      graphClientId: "test-app-id",
+      graphClientSecret: "test-secret",
+    };
+    for (const stored of [
+      { ...complete, enabled: false },
+      { ...complete, appSecret: "" },
+    ]) {
+      await ChatOpsConfigModel.saveMsTeamsConfig(stored);
+      const manager = new ChatOpsManager();
+      await manager.initialize();
+      expect(manager.getMSTeamsProvider()).toBeNull();
+      await manager.cleanup();
+    }
+  });
+
   test("handles no config in DB gracefully", async () => {
     const manager = new ChatOpsManager();
     await manager.initialize();

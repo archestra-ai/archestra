@@ -108,6 +108,7 @@ import AgentSkillModel from "./agent-skill";
 import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
+import { agentToolSurfaceChanged } from "./agent-tool-surface";
 import AgentUserModel from "./agent-user";
 import AgentVersionModel from "./agent-version";
 import CreatedByModel from "./created-by";
@@ -115,6 +116,7 @@ import { gatewayAgentSelection } from "./gateway-agent-selection";
 import { idArrayCondition } from "./id-array-condition";
 import InteractionUserActivityModel from "./interaction-user-activity";
 import OrganizationModel from "./organization";
+import { port } from "./ports";
 import ResourcePermissionPolicyModel, {
   type ObjectPolicy,
 } from "./resource-permission-policy";
@@ -715,10 +717,10 @@ class AgentModel {
   ): Promise<void> {
     if (agents.length === 0 || !userId) return;
 
-    // Lazy: the availability check reaches into the service layer, which
-    // would otherwise load with every model.
-    const { isSkillSandboxAvailableForAgent } = await import(
-      "@/skills/skill-sandbox-availability"
+    // Through a port: the availability check sits above the models and loads
+    // on first use.
+    const { isSkillSandboxAvailableForAgent } = await port(
+      "skillSandboxAvailability",
     );
     await Promise.all(
       agents.map(async (agent) => {
@@ -4257,13 +4259,8 @@ class AgentModel {
 
         // Invalidate tool cache for all parent agents so they pick up the new tool name
         const parentAgentIds = await ToolModel.getParentAgentIds(id);
-        // Lazy (here and below): the chat MCP client imports the service
-        // layer, which would otherwise load with every model.
-        const { clearChatMcpClient } = await import(
-          "@/clients/chat-mcp-client"
-        );
         for (const parentAgentId of parentAgentIds) {
-          clearChatMcpClient(parentAgentId);
+          agentToolSurfaceChanged(parentAgentId);
         }
       }
 
@@ -4277,10 +4274,7 @@ class AgentModel {
         updatedAgent.toolExposureMode !== existingAgent.toolExposureMode ||
         updatedAgent.accessAllTools !== existingAgent.accessAllTools
       ) {
-        const { clearChatMcpClient } = await import(
-          "@/clients/chat-mcp-client"
-        );
-        clearChatMcpClient(id);
+        agentToolSurfaceChanged(id);
       }
     } else {
       updatedAgent = existingAgent;

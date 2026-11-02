@@ -76,7 +76,7 @@ test("remedy tools open human review without asking for prior consent", () => {
   expect(getPlans?.description).not.toContain("use ask_user");
   expect(executePlan?.description).toContain("the result is review_required");
   expect(executePlan?.description).toContain(
-    "Ask the user with the declared ask_user tool",
+    "Call this MCP server's ask_user tool with that offer ID in remedy_offer_ids",
   );
   expect(executePlan?.description).not.toContain(
     "review it before approving the call",

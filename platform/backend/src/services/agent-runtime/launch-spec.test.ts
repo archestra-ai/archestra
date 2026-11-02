@@ -8,6 +8,7 @@ import { assert, vi } from "vitest";
 import config from "@/config";
 import {
   AgentModel,
+  AgentWorkspaceModel,
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
@@ -40,6 +41,7 @@ import {
 } from "@/types";
 import { preflightAgentRuntimeCredentials } from "./credentials";
 import { buildAgentRunLaunchSpec } from "./launch-spec";
+import { agentRunUrl } from "./run-handle";
 
 /** The default tiers, as an organization without settings has them. */
 const TIERS = resolveAgentRuntimeTiers(null, { defaultWarmSpares: 0 });
@@ -206,6 +208,77 @@ describe("buildAgentRunLaunchSpec", () => {
     }
   });
 
+  test("names the run by the id its page and the run tools use, on every turn", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "openai",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    const launch = (taskId: string, workspaceId?: string) =>
+      buildAgentRunLaunchSpec({
+        limits: resolveAgentRunLimits({
+          tiers: TIERS,
+          runtime: runtime(setup.agent, "openai_responses"),
+        }),
+        runtime: runtime(setup.agent, "openai_responses"),
+        taskId,
+        runId: crypto.randomUUID(),
+        agentId: setup.agent.id,
+        actor: {
+          id: setup.user.id,
+          kind: "user",
+          organizationId: setup.agent.organizationId,
+        },
+        organizationId: setup.agent.organizationId,
+        runtimeScope: "agent-tests",
+        effectiveNetworkPolicy: { source: "built_in", policy: null },
+        appName: "Archestra",
+        runMode: "one_shot",
+        ...(workspaceId ? { workspaceId } : {}),
+      });
+
+    const firstTaskId = crypto.randomUUID();
+    const first = await launch(firstTaskId);
+    expect(first.spec.env).toMatchObject({
+      ARCHESTRA_AGENT_RUNTIME_RUN_ID: firstTaskId,
+      ARCHESTRA_AGENT_RUNTIME_RUN_URL: agentRunUrl(firstTaskId),
+      ARCHESTRA_AGENT_RUNTIME_TASK_ID: firstTaskId,
+    });
+
+    // A follow-up is a new task in the workspace the first turn created.
+    await AgentWorkspaceModel.create({
+      id: firstTaskId,
+      organizationId: setup.agent.organizationId,
+      agentId: setup.agent.id,
+      actorKind: "user",
+      actorId: setup.user.id,
+      backend: "kubernetes",
+      runtimeScope: "agent-tests",
+      workloadName: `agent-run-test-${firstTaskId.slice(0, 8)}`,
+      state: "idle",
+      lastTaskId: firstTaskId,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const followUpTaskId = crypto.randomUUID();
+    const followUp = await launch(followUpTaskId, firstTaskId);
+    expect(followUp.spec.env).toMatchObject({
+      ARCHESTRA_AGENT_RUNTIME_RUN_ID: firstTaskId,
+      ARCHESTRA_AGENT_RUNTIME_RUN_URL: agentRunUrl(firstTaskId),
+      ARCHESTRA_AGENT_RUNTIME_TASK_ID: followUpTaskId,
+    });
+  });
+
   test("tells the run its size and the largest tier it may move to, and offers it the larger warm pool", async ({
     makeOrganization,
     makeAdmin,
@@ -233,8 +306,13 @@ describe("buildAgentRunLaunchSpec", () => {
       limits: resolveAgentRunLimits({ runtime: sized, tiers: TIERS }),
       runtime: {
         ...sized,
-        // Reserved: the Agent cannot claim another size.
-        environment: [{ key: "ARCHESTRA_AGENT_RUNTIME_MAX_TIER", value: "S" }],
+        // Reserved: the Agent cannot claim another size. A toolchain thread
+        // count is the Agent's to change.
+        environment: [
+          { key: "ARCHESTRA_AGENT_RUNTIME_MAX_TIER", value: "S" },
+          { key: "ARCHESTRA_AGENT_RUNTIME_POD_CPUS", value: "64" },
+          { key: "CARGO_BUILD_JOBS", value: "1" },
+        ],
       },
       taskId: crypto.randomUUID(),
       runId: crypto.randomUUID(),
@@ -254,8 +332,17 @@ describe("buildAgentRunLaunchSpec", () => {
       ARCHESTRA_AGENT_RUNTIME_TIER: "M",
       ARCHESTRA_AGENT_RUNTIME_MAX_TIER: "L",
       ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "4",
+      ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_REQUEST: "8Gi",
       ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "16Gi",
+      ARCHESTRA_AGENT_RUNTIME_POD_CPUS: "4",
+      GOMAXPROCS: "4",
+      RAYON_NUM_THREADS: "4",
+      CARGO_BUILD_JOBS: "1",
+      ARCHESTRA_AGENT_RUNTIME_SIZED_ENV: "GOMAXPROCS,RAYON_NUM_THREADS",
     });
+    expect(spec.env).not.toHaveProperty(
+      "ARCHESTRA_AGENT_RUNTIME_POD_CPU_LIMIT",
+    );
     expect(spec.resources).toEqual({
       cpuRequest: "4",
       memoryRequest: "8Gi",
@@ -300,6 +387,7 @@ describe("buildAgentRunLaunchSpec", () => {
     });
     const systemPrompt = "Review the repository's release instructions.";
     await AgentModel.update(setup.agent.id, { systemPrompt });
+    const taskId = crypto.randomUUID();
     const runId = crypto.randomUUID();
 
     const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
@@ -319,9 +407,13 @@ describe("buildAgentRunLaunchSpec", () => {
           { key: "OPENAI_BASE_URL", value: "https://bypass.invalid" },
           { key: "ARCHESTRA_MCP_GATEWAY_TOKEN", value: "bypass-token" },
           { key: "ARCHESTRA_AGENT_RUNTIME_RUN_ID", value: "bypass-run" },
+          {
+            key: "ARCHESTRA_AGENT_RUNTIME_RUN_URL",
+            value: "https://bypass.invalid/run",
+          },
         ],
       },
-      taskId: crypto.randomUUID(),
+      taskId,
       runId,
       agentId: setup.agent.id,
       actor: {
@@ -343,7 +435,8 @@ describe("buildAgentRunLaunchSpec", () => {
       ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "selected-model",
       ARCHESTRA_AGENT_RUNTIME_MODEL_PROVIDER: "gemini",
       ARCHESTRA_AGENT_RUNTIME_MODEL_OUTPUT_LENGTH: "16384",
-      ARCHESTRA_AGENT_RUNTIME_RUN_ID: runId,
+      ARCHESTRA_AGENT_RUNTIME_RUN_ID: taskId,
+      ARCHESTRA_AGENT_RUNTIME_RUN_URL: agentRunUrl(taskId),
       ARCHESTRA_LLM_PROXY_PROTOCOL: "openai_responses",
       ARCHESTRA_LLM_PROXY_URL: `https://platform.example.test/v1/model-router/${setup.agent.id}`,
       OPENAI_BASE_URL: `https://platform.example.test/v1/model-router/${setup.agent.id}`,
@@ -369,6 +462,9 @@ describe("buildAgentRunLaunchSpec", () => {
       "Files under /home/node persist across this conversation's turns",
     );
     expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
+      "ARCHESTRA_AGENT_RUNTIME_RUN_URL is this run's page",
+    );
+    expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
       "The user can forward ports 3000, 9000 from this workspace",
     );
     const fixedNote =
@@ -381,6 +477,33 @@ describe("buildAgentRunLaunchSpec", () => {
     expect(spec.systemPromptParts?.afterVolume).toContain(fixedNote);
     expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toMatch(
       /The workspace volume is 20 GiB in all, including any Docker data\.[\s\S]*Scaling up this agent runtime instance is disabled/,
+    );
+
+    const sRunSpec = await buildAgentRunLaunchSpec({
+      limits: resolveAgentRunLimits({
+        tiers: TIERS,
+        runtime: runtime(setup.agent, "openai_responses"),
+        requested: { tier: "S" },
+      }),
+      runtime: runtime(setup.agent, "openai_responses"),
+      taskId: crypto.randomUUID(),
+      runId: crypto.randomUUID(),
+      agentId: setup.agent.id,
+      actor: {
+        id: setup.user.id,
+        kind: "user",
+        organizationId: setup.agent.organizationId,
+      },
+      organizationId: setup.agent.organizationId,
+      runtimeScope: "agent-tests",
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      appName: "Example AI",
+      runMode: "one_shot",
+    });
+    expect(
+      sRunSpec.spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT,
+    ).toContain(
+      "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). You cannot scale up this instance; do not attempt to start a run at a larger tier.",
     );
 
     expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
@@ -827,7 +950,7 @@ describe("buildAgentRunLaunchSpec", () => {
     expect(spec.env.ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL).toBe(expectedModel);
     expect(spec.env).not.toHaveProperty("CLAUDE_CODE_OAUTH_TOKEN");
     expect(spec.env).not.toHaveProperty("CLAUDE_CONFIG_DIR");
-    expect(spec.env.ARCHESTRA_AGENT_RUNTIME_RUN_ID).toBe(runId);
+    expect(spec.env.ARCHESTRA_AGENT_RUNTIME_RUN_ID).toBe(taskId);
 
     expect(virtualApiKeyId).toBeTruthy();
     expect(

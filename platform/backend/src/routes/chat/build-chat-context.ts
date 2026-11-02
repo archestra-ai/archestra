@@ -54,6 +54,8 @@ export async function buildChatContext(params: {
   subagentToolStream: SubagentToolStreamBridge;
   taskBridge: ChatTaskBridge;
   abortSignal: AbortSignal;
+  /** The calling agent run's task ID or run ID, when dispatched from a runtime container or chat. */
+  runId?: string;
   /**
    * Encrypted chat: span content is suppressed and long calls never
    * detach into durable tasks.
@@ -114,6 +116,7 @@ export async function buildChatContext(params: {
       userId: user.id,
       enabledToolIds: hasCustomSelection ? enabledToolIds : undefined,
       conversationId,
+      runId: params.runId,
       // The exchange tools' "app" side keys off the access-verified open app;
       // external apps have no owned namespace, so only "owned" threads an id.
       openedAppId: openedApp?.kind === "owned" ? openedApp.id : undefined,

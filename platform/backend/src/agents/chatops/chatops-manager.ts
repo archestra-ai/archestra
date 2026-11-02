@@ -12,7 +12,6 @@ import {
 import type { UIMessageChunk } from "ai";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { A2AManager, type A2ASystemParams } from "@/agents/a2a/a2a-manager";
-import type { A2AAttachment } from "@/agents/a2a-executor";
 import { watchTaskCompletion } from "@/agents/task-completion-watcher";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { agentCredentialSetupUrl } from "@/archestra-mcp-server/helpers";
@@ -75,6 +74,7 @@ import type {
   IncomingChatMessage,
   SkippedAttachment,
 } from "@/types";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 import { AgentRuntimeCredentialsRequiredError } from "@/types/agent-runtime";
 import type { ChatOpsChannelBinding } from "@/types/chatops-channel-binding";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
@@ -122,7 +122,8 @@ import {
 } from "./constants";
 import { parseJiraApprovalCommand } from "./jira-message";
 import JiraProvider from "./jira-provider";
-import MSTeamsProvider from "./ms-teams-provider";
+import { isMsTeamsConfigured } from "./ms-teams-config";
+import type MSTeamsProvider from "./ms-teams-provider";
 import {
   assertRuntimeAcknowledgementSettled,
   sendRuntimeReplyWithAnchor,
@@ -634,7 +635,16 @@ export class ChatOpsManager {
     });
 
     // Create providers with their config
-    if (msTeamsConfig && !hiddenChannels.has("ms-teams")) {
+    if (
+      msTeamsConfig &&
+      isMsTeamsConfigured(msTeamsConfig) &&
+      !hiddenChannels.has("ms-teams")
+    ) {
+      // Loaded only here: the provider imports the Microsoft Graph SDKs,
+      // about 90 MB that a deployment without Teams never needs. A stored
+      // configuration that is disabled or incomplete gets no provider, as
+      // none was configured.
+      const { default: MSTeamsProvider } = await import("./ms-teams-provider");
       this.msTeamsProvider = new MSTeamsProvider(msTeamsConfig);
       this.msTeamsProvider.setEventHandler(this);
     }

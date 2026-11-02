@@ -18,11 +18,38 @@ export const AGENT_RUNTIME_MAX_TIER_ENV = "ARCHESTRA_AGENT_RUNTIME_MAX_TIER";
  * its name, CPU and memory, and `current` on the one the Pod runs at.
  */
 export const AGENT_RUNTIME_TIERS_ENV = "ARCHESTRA_AGENT_RUNTIME_TIERS";
-/** The Pod's CPU request and memory limit, so tools and models can size their work. */
+/**
+ * The Pod's size as Kubernetes quantities, so tools and models can size their
+ * work. A runtime Pod usually has no CPU limit: its CPU request is the share
+ * it can count on.
+ */
 export const AGENT_RUNTIME_CPU_REQUEST_ENV =
   "ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST";
+export const AGENT_RUNTIME_CPU_LIMIT_ENV =
+  "ARCHESTRA_AGENT_RUNTIME_POD_CPU_LIMIT";
+export const AGENT_RUNTIME_MEMORY_REQUEST_ENV =
+  "ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_REQUEST";
 export const AGENT_RUNTIME_MEMORY_LIMIT_ENV =
   "ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT";
+/** Whole CPUs to run in parallel: the CPU limit, else the request, rounded up. */
+export const AGENT_RUNTIME_CPUS_ENV = "ARCHESTRA_AGENT_RUNTIME_POD_CPUS";
+/**
+ * Thread counts of common toolchains, set to the Pod's CPUs. Without them Go
+ * programs (the TypeScript 7 compiler, gh, kubectl), Cargo and Rayon size
+ * themselves for every CPU of the node, not the Pod's share. An Agent's own
+ * environment can set them to something else.
+ */
+export const AGENT_RUNTIME_TOOLCHAIN_PARALLELISM_ENVS = [
+  "GOMAXPROCS",
+  "CARGO_BUILD_JOBS",
+  "RAYON_NUM_THREADS",
+] as const;
+/**
+ * The toolchain variables above that the platform set from the run's size,
+ * comma-separated. A run served by a Pod of another size updates only these:
+ * the rest came from the Agent's environment.
+ */
+export const AGENT_RUNTIME_SIZED_ENV = "ARCHESTRA_AGENT_RUNTIME_SIZED_ENV";
 /** Stable command that joins the interactive session from any exec client. */
 export const AGENT_RUNTIME_ATTACH_SCRIPT = `${AGENT_RUNTIME_DIR}/attach`;
 /** Startup hook used by interactive shells opened directly in an Agent Runtime pod. */

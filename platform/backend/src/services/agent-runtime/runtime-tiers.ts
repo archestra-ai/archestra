@@ -7,6 +7,7 @@ import {
   gibFromMiB,
   memoryQuantity,
   nextLargerAgentRuntimeTier,
+  parseCpuQuantity,
   type ResolvedAgentRuntimeTiers,
   resolveAgentRuntimeTiers,
   sameAgentRuntimeTierName,
@@ -21,6 +22,15 @@ import {
   type AgentRuntimeResources,
   ApiError,
 } from "@/types";
+import {
+  AGENT_RUNTIME_CPU_LIMIT_ENV,
+  AGENT_RUNTIME_CPU_REQUEST_ENV,
+  AGENT_RUNTIME_CPUS_ENV,
+  AGENT_RUNTIME_MEMORY_LIMIT_ENV,
+  AGENT_RUNTIME_MEMORY_REQUEST_ENV,
+  AGENT_RUNTIME_SIZED_ENV,
+  AGENT_RUNTIME_TOOLCHAIN_PARALLELISM_ENVS,
+} from "./runtime-contract";
 
 /** What the tier resolution takes from the deployment. */
 export function agentRuntimeTierDefaults() {
@@ -51,6 +61,106 @@ export function tierResources(
     memoryRequest: memoryQuantity(tier.memoryRequestMiB),
     memoryLimit: memoryQuantity(tier.memoryLimitMiB),
   };
+}
+
+/**
+ * The variables that tell a run's tools the size of its Pod: the Pod's
+ * quantities, its whole CPUs, and the thread counts of common toolchains.
+ * Every variable a size can set is a key here, empty when the size has no
+ * value for it, so a run moved to another size loses what no longer applies.
+ */
+export function tierResourceEnv(resources: AgentRuntimeResources): {
+  pod: Record<string, string | undefined>;
+  toolchain: Record<string, string | undefined>;
+} {
+  const cpus = Math.max(
+    1,
+    Math.ceil(
+      parseCpuQuantity(resources.cpuLimit) ??
+        parseCpuQuantity(resources.cpuRequest) ??
+        0,
+    ),
+  );
+  const known =
+    resources.cpuLimit !== undefined || resources.cpuRequest !== undefined;
+  return {
+    pod: {
+      [AGENT_RUNTIME_CPU_REQUEST_ENV]: resources.cpuRequest,
+      [AGENT_RUNTIME_CPU_LIMIT_ENV]: resources.cpuLimit,
+      [AGENT_RUNTIME_MEMORY_REQUEST_ENV]: resources.memoryRequest,
+      [AGENT_RUNTIME_MEMORY_LIMIT_ENV]: resources.memoryLimit,
+      [AGENT_RUNTIME_CPUS_ENV]: known ? String(cpus) : undefined,
+    },
+    toolchain: Object.fromEntries(
+      AGENT_RUNTIME_TOOLCHAIN_PARALLELISM_ENVS.map((name) => [
+        name,
+        known ? String(cpus) : undefined,
+      ]),
+    ),
+  };
+}
+
+/**
+ * The size variables of a run served by a Pod of another size. The Pod's
+ * quantities follow the served size, and so do the toolchain variables the
+ * platform set (`AGENT_RUNTIME_SIZED_ENV`); a value from the Agent's
+ * environment stays, even one equal to the requested size's default.
+ */
+export function retargetTierResourceEnv(params: {
+  env: Record<string, string>;
+  served: AgentRuntimeResources;
+}): Record<string, string> {
+  const served = tierResourceEnv(params.served);
+  const env = { ...params.env };
+  for (const [name, value] of Object.entries(served.pod)) {
+    if (value === undefined) delete env[name];
+    else env[name] = value;
+  }
+  const sized = new Set(
+    (env[AGENT_RUNTIME_SIZED_ENV] ?? "").split(",").filter(Boolean),
+  );
+  for (const name of sized) {
+    const value = served.toolchain[name];
+    if (value === undefined) {
+      delete env[name];
+      sized.delete(name);
+    } else env[name] = value;
+  }
+  if (sized.size > 0) env[AGENT_RUNTIME_SIZED_ENV] = [...sized].join(",");
+  else delete env[AGENT_RUNTIME_SIZED_ENV];
+  return env;
+}
+
+/**
+ * The toolchain variables a launch sets from the run's size: those the
+ * Agent's environment leaves unset, and the list of them that a retarget
+ * may update.
+ */
+export function sizedToolchainEnv(params: {
+  resources: AgentRuntimeResources;
+  agentEnvKeys: Iterable<string>;
+}): Record<string, string> {
+  const own = new Set(params.agentEnvKeys);
+  const sized = Object.fromEntries(
+    Object.entries(
+      definedEnv(tierResourceEnv(params.resources).toolchain),
+    ).filter(([name]) => !own.has(name)),
+  );
+  const names = Object.keys(sized);
+  return names.length > 0
+    ? { ...sized, [AGENT_RUNTIME_SIZED_ENV]: names.join(",") }
+    : {};
+}
+
+/** The variables of `tierResourceEnv` that have a value. */
+export function definedEnv(
+  env: Record<string, string | undefined>,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(env).filter(
+      (entry): entry is [string, string] => entry[1] !== undefined,
+    ),
+  );
 }
 
 type SizedRuntime = Pick<AgentRuntime, "tier" | "maxTier">;
@@ -288,21 +398,80 @@ export function retargetRuntimeTiersEnv(
 export function describeScaleupDisabledPrompt(
   runtime: SizedRuntime,
   tiers: ResolvedAgentRuntimeTiers,
+  resolvedTier?: string | null,
 ): string | null {
-  const currentTierName = agentRuntimeTier(runtime, tiers);
+  const defaultTierName = agentRuntimeTier(runtime, tiers);
   const maxTierName = agentRuntimeMaxTier(runtime, tiers);
   if (
     agentRuntimeTierRank(tiers.tiers, maxTierName) >
-    agentRuntimeTierRank(tiers.tiers, currentTierName)
+    agentRuntimeTierRank(tiers.tiers, defaultTierName)
   ) {
     return null;
   }
+  const currentTierName = resolvedTier ?? defaultTierName;
   const currentTier = tierSize(tiers, currentTierName);
   return (
     `Scaling up this agent runtime instance is disabled: the runtime tier is fixed to ` +
     `${currentTier.name} (${describeTier(currentTier)}). ` +
     `You cannot scale up this instance; do not attempt to start a run at a larger tier.`
   );
+}
+
+const SCALEUP_DISABLED_PATTERN =
+  /Scaling up this agent runtime instance is disabled: the runtime tier is fixed to .*\. You cannot scale up this instance; do not attempt to start a run at a larger tier\.(?=$|\r?\n)/;
+
+/**
+ * Retargets the fixed-tier system instruction in an agent's prompt to match
+ * the tier that actually served the launch (e.g. from a warm pool).
+ */
+export function retargetScaleupDisabledPrompt(
+  prompt: string,
+  tiersEnv: string,
+  targetTier: string,
+): string {
+  if (!SCALEUP_DISABLED_PATTERN.test(prompt)) return prompt;
+  let entries: unknown;
+  try {
+    entries = JSON.parse(tiersEnv);
+  } catch {
+    return prompt;
+  }
+  if (!Array.isArray(entries)) return prompt;
+  const entry = entries.find(
+    (
+      item,
+    ): item is {
+      name: string;
+      cpu: number;
+      cpu_limit?: number | null;
+      memory_gib: number;
+      memory_limit_gib: number;
+      workspace_gib?: number | null;
+    } =>
+      Boolean(
+        item &&
+          typeof item === "object" &&
+          "name" in item &&
+          typeof item.name === "string" &&
+          sameAgentRuntimeTierName(item.name, targetTier),
+      ),
+  );
+  if (!entry) return prompt;
+  const targetSize: AgentRuntimeTierSize = {
+    name: entry.name,
+    cpuRequest: entry.cpu,
+    cpuLimit: entry.cpu_limit ?? null,
+    memoryRequestMiB: Math.round(entry.memory_gib * 1024),
+    memoryLimitMiB: Math.round(entry.memory_limit_gib * 1024),
+    warmSpares: 0,
+    pooled: false,
+    workspaceGiB: entry.workspace_gib ?? null,
+  };
+  const replacement =
+    `Scaling up this agent runtime instance is disabled: the runtime tier is fixed to ` +
+    `${targetSize.name} (${describeTier(targetSize)}). ` +
+    `You cannot scale up this instance; do not attempt to start a run at a larger tier.`;
+  return prompt.replace(SCALEUP_DISABLED_PATTERN, () => replacement);
 }
 
 function allowedTiersSentence(
@@ -317,6 +486,8 @@ function allowedTiersSentence(
  * The limits one run gets from the Agent's settings (its values, else the
  * deployment defaults) and a caller's request. A request above the Agent's
  * value is refused with that value named, so the caller can retry within it.
+ * When the Agent's scaleup is disabled, only a caller that is itself a run
+ * (`currentTier` set) gets the not-retriable fixed-tier refusal instead.
  * A tier is chosen by name, or by the CPU and memory the work needs, which
  * gives the smallest tier that fits and has no smaller workspace than the
  * Agent's default tier: asking for CPU must not cost the run its disk. The
@@ -329,22 +500,42 @@ export function resolveAgentRunLimits(params: {
   >;
   tiers: ResolvedAgentRuntimeTiers;
   requested?: AgentRunLimitsRequest | null;
+  currentTier?: string | null;
 }): AgentRunLimits {
   const { runtime, tiers } = params;
   const requested = params.requested ?? {};
   const allowed = agentRuntimeAllowedTiers(runtime, tiers);
   const maxTier = agentRuntimeMaxTier(runtime, tiers);
-  let tier = agentRuntimeTier(runtime, tiers);
-  const defaultWorkspaceGiB = resolveRunWorkspaceGiB(tier, tiers);
+  const defaultTier = agentRuntimeTier(runtime, tiers);
+  const defaultWorkspaceGiB = resolveRunWorkspaceGiB(defaultTier, tiers);
   const isScaleupDisabled =
     agentRuntimeTierRank(tiers.tiers, maxTier) <=
-    agentRuntimeTierRank(tiers.tiers, tier);
-  const currentTier = tierSize(tiers, tier);
+    agentRuntimeTierRank(tiers.tiers, defaultTier);
+  const callerTierName = params.currentTier
+    ? tierSize(tiers, params.currentTier).name
+    : null;
+  const fixedCeilingName = callerTierName ?? defaultTier;
+  const fixedCeilingTier = tierSize(tiers, fixedCeilingName);
+  let tier = defaultTier;
+  if (
+    isScaleupDisabled &&
+    callerTierName &&
+    agentRuntimeTierRank(tiers.tiers, tier) >
+      agentRuntimeTierRank(tiers.tiers, callerTierName)
+  ) {
+    tier = callerTierName;
+  }
   const scaleupDisabledError = () =>
     new ApiError(
       400,
-      `Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to ${currentTier.name} (${describeTier(currentTier)}). This call is not retriable; calling it again will fail.`,
+      `Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to ${fixedCeilingTier.name} (${describeTier(fixedCeilingTier)}). This call is not retriable; calling it again will fail.`,
     );
+  // Only a run can scale itself up. A caller outside any run (a CI review, a
+  // script) starts a new run: a size above the fixed tier gets the ordinary
+  // refusal naming the tiers it may use, and the caller can start the run
+  // without the request. Callers such as code-review-action match that
+  // wording to retry at the Agent's own size.
+  const refuseAsScaleup = isScaleupDisabled && callerTierName !== null;
 
   if (requested.tier !== undefined) {
     const named = findAgentRuntimeTier(tiers.tiers, requested.tier);
@@ -354,10 +545,17 @@ export function resolveAgentRunLimits(params: {
         `There is no tier named ${requested.tier}. ${allowedTiersSentence(allowed)}`,
       );
     if (
+      refuseAsScaleup &&
+      agentRuntimeTierRank(tiers.tiers, named.name) >
+        agentRuntimeTierRank(tiers.tiers, fixedCeilingName)
+    ) {
+      throw scaleupDisabledError();
+    }
+    if (
       agentRuntimeTierRank(tiers.tiers, named.name) >
       agentRuntimeTierRank(tiers.tiers, maxTier)
     ) {
-      if (isScaleupDisabled) {
+      if (refuseAsScaleup) {
         throw scaleupDisabledError();
       }
       throw new ApiError(
@@ -384,7 +582,7 @@ export function resolveAgentRunLimits(params: {
     if (requested.tier !== undefined) {
       const named = tierSize(tiers, tier);
       if (!fits(named)) {
-        if (isScaleupDisabled) {
+        if (refuseAsScaleup) {
           throw scaleupDisabledError();
         }
         throw new ApiError(
@@ -401,8 +599,9 @@ export function resolveAgentRunLimits(params: {
       if (!smallest) {
         // With scaleup fixed, the default tier is the largest allowed and
         // always has its own disk, so nothing qualifies only when the work
-        // needs a larger tier: the fixed-scaleup refusal is the reason.
-        if (isScaleupDisabled) {
+        // needs a larger tier: for a run, the fixed-scaleup refusal is the
+        // reason.
+        if (refuseAsScaleup) {
           throw scaleupDisabledError();
         }
         throw new ApiError(
@@ -412,8 +611,36 @@ export function resolveAgentRunLimits(params: {
             : `No tier this Agent's runs may use has ${need}. ${allowedTiersSentence(allowed)}`,
         );
       }
+      if (
+        isScaleupDisabled &&
+        agentRuntimeTierRank(tiers.tiers, smallest.name) >
+          agentRuntimeTierRank(tiers.tiers, fixedCeilingName)
+      ) {
+        throw scaleupDisabledError();
+      }
       tier = smallest.name;
     }
+  }
+  if (
+    isScaleupDisabled &&
+    agentRuntimeTierRank(tiers.tiers, tier) >
+      agentRuntimeTierRank(tiers.tiers, fixedCeilingName)
+  ) {
+    throw scaleupDisabledError();
+  }
+  if (
+    !allowed.some((candidate) => candidate.name === tier) ||
+    agentRuntimeTierRank(tiers.tiers, tier) >
+      agentRuntimeTierRank(tiers.tiers, maxTier)
+  ) {
+    if (refuseAsScaleup) {
+      throw scaleupDisabledError();
+    }
+    const resolvedTier = tierSize(tiers, tier);
+    throw new ApiError(
+      400,
+      `Tier ${resolvedTier.name} (${describeAgentRuntimeTier(resolvedTier)}) is above this Agent's scaleup tier ${maxTier}. ${allowedTiersSentence(allowed)}`,
+    );
   }
   const idleTimeoutMinutes =
     runtime.idleTimeoutMinutes ?? config.agentRuntime.defaultIdleTimeoutMinutes;

@@ -1,7 +1,7 @@
 import type { AuthContext } from "@better-auth/core";
 import { createInsertSchema, createUpdateSchema } from "drizzle-zod";
 import type { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 
 export const UpdateSessionSchema = createUpdateSchema(schema.sessionsTable);
 export const InsertSessionSchema = createInsertSchema(schema.sessionsTable);

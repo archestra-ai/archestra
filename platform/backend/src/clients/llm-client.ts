@@ -63,10 +63,8 @@ import {
   getBedrockRegion,
   isBedrockIamAuthEnabled,
 } from "@/clients/bedrock-credentials";
-import {
-  isVertexAiEnabled,
-  resolveVertexLocation,
-} from "@/clients/gemini-client";
+import { resolveVertexLocation } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import {
   guardrailCallHeader,
   internalCallHeader,

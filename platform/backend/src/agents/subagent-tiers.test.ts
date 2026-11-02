@@ -6,13 +6,12 @@ import {
 } from "@/models";
 import { describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
+import type { ConversationLlmSelection } from "@/utils/llm-resolution";
 import {
   assertModelTrioTiers,
   availableSubagentTiers,
-  type ConversationLlmSelection,
-  resolveForkParentSelection,
   resolveSubagentTierSelection,
-} from "./llm-resolution";
+} from "./subagent-tiers";
 
 describe("resolveSubagentTierSelection", () => {
   async function setup(
@@ -298,49 +297,6 @@ describe("resolveSubagentTierSelection", () => {
     expect(await availableSubagentTiers({ parent, ...scope })).toEqual([
       "smart",
     ]);
-  });
-});
-
-describe("resolveForkParentSelection", () => {
-  test("a fork keeps its parent's key only while the user can still use it", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeLlmProviderApiKey,
-  }) => {
-    const org = await makeOrganization();
-    const [user, other] = await Promise.all([makeUser(), makeUser()]);
-    await makeMember(user.id, org.id);
-    const [orgKey, othersKey] = await Promise.all([
-      makeLlmProviderApiKey(org.id, null, { provider: "anthropic" }),
-      makeLlmProviderApiKey(org.id, null, {
-        provider: "anthropic",
-        userId: other.id,
-      }),
-    ]);
-    const model = await createModel("anthropic", "claude-sonnet-5-5");
-    await Promise.all(
-      [orgKey, othersKey].map((key) =>
-        LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [model.id]),
-      ),
-    );
-    const forkOn = (apiKeyId: string) =>
-      resolveForkParentSelection({
-        agent: { llmApiKeyId: null, modelId: null },
-        organizationId: org.id,
-        userId: user.id,
-        parentLlm: { modelId: model.id, apiKeyId },
-      });
-
-    expect(await forkOn(orgKey.id)).toMatchObject({
-      modelId: model.id,
-      chatApiKeyId: orgKey.id,
-    });
-    // The parent's model stays; its key is left for the fork to re-resolve.
-    expect(await forkOn(othersKey.id)).toMatchObject({
-      modelId: model.id,
-      chatApiKeyId: null,
-    });
   });
 });
 

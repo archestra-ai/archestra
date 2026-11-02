@@ -54,10 +54,15 @@ import {
   getClaudeCodeCloudProvider,
   preflightAgentRuntimeModelCompatibility,
 } from "./model-compatibility";
+import { agentRunUrl } from "./run-handle";
 import {
+  AGENT_RUNTIME_CPU_LIMIT_ENV,
   AGENT_RUNTIME_CPU_REQUEST_ENV,
+  AGENT_RUNTIME_CPUS_ENV,
   AGENT_RUNTIME_MAX_TIER_ENV,
   AGENT_RUNTIME_MEMORY_LIMIT_ENV,
+  AGENT_RUNTIME_MEMORY_REQUEST_ENV,
+  AGENT_RUNTIME_SIZED_ENV,
   AGENT_RUNTIME_STEER_FIFO,
   AGENT_RUNTIME_SYSTEM_PROMPT_ENV,
   AGENT_RUNTIME_TIER_ENV,
@@ -67,6 +72,7 @@ import {
 import {
   agentRuntimeAllowedTiers,
   agentRuntimeMaxTier,
+  definedEnv,
   describeScaleupDisabledPrompt,
   organizationAgentRuntimeTiers,
   type RuntimeSystemPromptParts,
@@ -74,6 +80,8 @@ import {
   resolveRunWorkspaceStorageSize,
   runtimeSystemPrompt,
   runtimeTiersEnv,
+  sizedToolchainEnv,
+  tierResourceEnv,
   tierResources,
   tierWorkspaceGiB,
   tierWorkspaceStorageSize,
@@ -100,7 +108,10 @@ export async function buildAgentRunLaunchSpec(params: {
   tiers?: ResolvedAgentRuntimeTiers;
   /** The A2A task this run carries; its id names the workload. */
   taskId: string;
-  /** The user-facing Agent run id used by /chat/runs/:id and telemetry. */
+  /**
+   * This turn's run record id. It names the turn's service-account token; the
+   * run's own id (`ARCHESTRA_AGENT_RUNTIME_RUN_ID`) is its workspace id.
+   */
   runId: string;
   /** Agent the task belongs to, for the proxy and gateway routes. */
   agentId: string;
@@ -322,7 +333,16 @@ export async function buildAgentRunLaunchSpec(params: {
   const resources = resolveRunResources(params.limits.tier, tiers);
   const maxTier = agentRuntimeMaxTier(params.runtime, tiers);
   const allowedTiers = agentRuntimeAllowedTiers(params.runtime, tiers);
+  const sizeEnv = tierResourceEnv(resources);
+  // The run's stable id: its page, its workspace and the run tools' run_id.
+  const stableRunId = boundWorkspace?.id ?? params.taskId;
   const nonSecretEnv: Record<string, string> = {
+    // Toolchain thread counts follow the run's size unless the Agent's own
+    // environment, next, sets them.
+    ...sizedToolchainEnv({
+      resources,
+      agentEnvKeys: (params.runtime.environment ?? []).map(({ key }) => key),
+    }),
     // The Agent Runtime run's own environment goes first: the addresses below must win.
     // An entry overriding ANTHROPIC_BASE_URL would be exactly the bypass the
     // platform-URL guard above exists to prevent.
@@ -333,7 +353,11 @@ export async function buildAgentRunLaunchSpec(params: {
     ),
     ARCHESTRA_AGENT_RUNTIME_AGENT_ID: params.runtime.agentId,
     ARCHESTRA_AGENT_RUNTIME_AGENT_NAME: agent.name,
-    ARCHESTRA_AGENT_RUNTIME_RUN_ID: params.runId,
+    // The run's id for its page (/chat/runs/:id) and the run tools' run_id:
+    // the first turn's task id, which names its workspace. Every turn keeps it.
+    ARCHESTRA_AGENT_RUNTIME_RUN_ID: stableRunId,
+    // Nothing else in the Pod names the Archestra address a person opens.
+    ARCHESTRA_AGENT_RUNTIME_RUN_URL: agentRunUrl(stableRunId),
     ARCHESTRA_AGENT_RUNTIME_TASK_ID: params.taskId,
     ARCHESTRA_AGENT_RUNTIME_MODEL: runtimeModel,
     // Native CLIs use provider-published model slugs for local metadata and
@@ -373,12 +397,7 @@ export async function buildAgentRunLaunchSpec(params: {
       params.limits.tier,
       params.limits.workspaceGiB,
     ),
-    ...(resources.cpuRequest
-      ? { [AGENT_RUNTIME_CPU_REQUEST_ENV]: resources.cpuRequest }
-      : {}),
-    ...(resources.memoryLimit
-      ? { [AGENT_RUNTIME_MEMORY_LIMIT_ENV]: resources.memoryLimit }
-      : {}),
+    ...definedEnv(sizeEnv.pod),
     ARCHESTRA_LLM_PROXY_URL: proxyUrl,
     ARCHESTRA_LLM_PROXY_PROTOCOL: params.runtime.inferenceProtocol,
     // Clients that hide tools from the wire (Codex's tool search and code
@@ -454,11 +473,17 @@ export async function buildAgentRunLaunchSpec(params: {
         "decode resources marked base64 with a shell decoder, not a text-file tool. " +
         "Paths advertised as code-sandbox mounts belong to that separate sandbox, " +
         "not this runtime's filesystem.",
+      // Static text, so the prompt stays the same for every run of the Agent.
+      "ARCHESTRA_AGENT_RUNTIME_RUN_URL is this run's page, and ARCHESTRA_AGENT_RUNTIME_RUN_ID is its id, " +
+        "which the run tools take as run_id; follow-ups keep both. " +
+        "Read a variable by name (printenv NAME): the environment also holds this run's credentials.",
     ],
     runtime: params.runtime,
     // After the workspace facts: kept as written when the volume sentence
     // is rebuilt for a served tier.
-    trail: [describeScaleupDisabledPrompt(params.runtime, tiers)],
+    trail: [
+      describeScaleupDisabledPrompt(params.runtime, tiers, params.limits.tier),
+    ],
   });
   const secretEnv: Record<string, string> = {
     ARCHESTRA_MCP_GATEWAY_TOKEN: gatewayToken,
@@ -562,7 +587,11 @@ const RESERVED_RUNTIME_ENV_KEYS = new Set([
   AGENT_RUNTIME_MAX_TIER_ENV,
   AGENT_RUNTIME_TIERS_ENV,
   AGENT_RUNTIME_CPU_REQUEST_ENV,
+  AGENT_RUNTIME_CPU_LIMIT_ENV,
+  AGENT_RUNTIME_MEMORY_REQUEST_ENV,
   AGENT_RUNTIME_MEMORY_LIMIT_ENV,
+  AGENT_RUNTIME_CPUS_ENV,
+  AGENT_RUNTIME_SIZED_ENV,
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_AUTH_TOKEN",
   "ANTHROPIC_BASE_URL",
@@ -587,6 +616,7 @@ const RESERVED_RUNTIME_ENV_KEYS = new Set([
   "ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL",
   "ARCHESTRA_AGENT_RUNTIME_OPENAPPA",
   "ARCHESTRA_AGENT_RUNTIME_RUN_ID",
+  "ARCHESTRA_AGENT_RUNTIME_RUN_URL",
   "ARCHESTRA_AGENT_RUNTIME_STEER_FIFO",
   "ARCHESTRA_AGENT_RUNTIME_TASK_ID",
   "ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT",

@@ -55,6 +55,7 @@ import {
   AppaClaudeDesktopAdapter,
 } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
+import { AppaCopilotCliAdapter } from "./adapters/copilot-cli";
 import { AppaKimiCodeAdapter } from "./adapters/kimi-code";
 import { AppaKiloAdapter, AppaOpenCodeAdapter } from "./adapters/opencode";
 import { AppaPluginArchestra } from "./plugin";
@@ -3784,9 +3785,9 @@ describe("asking through the client's own question tool", () => {
       expect(first.card.question).toContain("Call preview (");
       expect(first.card.question).not.toContain(command);
       expect(first.card.options.map((option) => option.label)).toEqual([
+        "Inspect",
         "Allow",
         "Deny",
-        "Inspect",
       ]);
       await f.answer(first.answerId, first.card.question, "Inspect");
       expect(
@@ -3961,15 +3962,17 @@ describe("asking through the client's own question tool", () => {
       const first = await askCard();
       expect(first.card.question).toBe("Run archestra__start_agent_run?");
       expect(first.card.options.map((option) => option.label)).toEqual([
+        "Inspect",
         "Allow",
         "Deny",
-        "Inspect",
       ]);
-      expect(first.card.options[0].preview).toContain("4,080 characters");
+      expect(
+        first.card.options.find((option) => option.label === "Allow")?.preview,
+      ).toContain("4,080 characters");
       expect(first.reviewDetails).toBeUndefined();
-      expect(first.card.options[0].preview).not.toContain(
-        JSON.parse(review.arguments).message,
-      );
+      expect(
+        first.card.options.find((option) => option.label === "Allow")?.preview,
+      ).not.toContain(JSON.parse(review.arguments).message);
       await answer(first.answerId, first.card.question, "Inspect");
       expect(
         await peekHitlRuling({ session: trusted.session, offerId }),
@@ -4026,16 +4029,16 @@ describe("asking through the client's own question tool", () => {
       await plugin.onSessionInit(context);
       const first = await askCard();
       expect(first.card.options.map((option) => option.label)).toEqual([
-        "Deny",
         "Inspect",
+        "Deny",
       ]);
       await answer(first.answerId, first.card.question, "Inspect");
       const inspected = await askCard();
       expect(inspected.reviewDetails).toBeDefined();
       expect(inspected.card.options.map((option) => option.label)).toEqual([
+        "Inspect",
         "Allow",
         "Deny",
-        "Inspect",
       ]);
       const approved = await answer(
         inspected.answerId,
@@ -4116,13 +4119,15 @@ describe("asking through the client's own question tool", () => {
       expect(issued.card.header).toBe("Tool call");
       expect(issued.card.multiSelect).toBe(false);
       expect(issued.card.options.map((option) => option.label)).toEqual([
+        "Inspect",
         "Allow",
         "Deny",
-        "Inspect",
       ]);
       // One bounded card: a short question, a preview within the client cap.
       expect(issued.card.question).toBe("Run Bash?");
-      const preview = issued.card.options[0]?.preview ?? "";
+      const preview =
+        issued.card.options.find((option) => option.label === "Allow")
+          ?.preview ?? "";
       expect(preview.length).toBeLessThanOrEqual(2000);
       // Plain text: the policy scope readable, no markdown markers, no JSON
       // fragment encoding, the long command left to Inspect with its size.
@@ -4211,9 +4216,9 @@ describe("asking through the client's own question tool", () => {
       expect(next.reviewDetails).toContain("### Policy review");
       expect(next.card.question).toBe(first.card.question);
       expect(next.card.options.map((option) => option.label)).toEqual([
+        "Inspect",
         "Allow",
         "Deny",
-        "Inspect",
       ]);
       const approved = await answer(next.answerId, next.card.question, "Allow");
       expect(approved.guidance).toContain("approved OpenAPPA offer IDs");
@@ -4256,9 +4261,9 @@ describe("asking through the client's own question tool", () => {
       const repeated = await askCard();
       expect(repeated.reviewDetails).toBeUndefined();
       expect(repeated.card.options.map((option) => option.label)).toEqual([
+        "Inspect",
         "Allow",
         "Deny",
-        "Inspect",
       ]);
     } finally {
       processResults.mockRestore();
@@ -4647,9 +4652,9 @@ describe("asking through the client's own question tool", () => {
         "the readers must be the public audience",
       );
       expect(first.card.options.map((option) => option.label)).toEqual([
+        "Inspect",
         "Allow",
         "Deny",
-        "Inspect",
       ]);
       expect(first.card.options.some((option) => "preview" in option)).toBe(
         false,
@@ -5150,16 +5155,16 @@ describe("asking through the client's own question tool", () => {
       const issued = await askCard();
       expect(issued.card.question).toBe("Run Bash?");
       expect(issued.card.header).toBe("Tool call");
-      const [allow, deny, inspect] = issued.card.options;
+      const [inspect, allow, deny] = issued.card.options;
       expect(allow?.preview).toBe(
         "command: ls -la\n\nAlso accepts:\n  the readers must be the public\n    audience",
       );
       expect(deny?.preview).toBe("command: ls -la");
       expect(inspect?.preview).toBe("command: ls -la");
       expect(issued.card.options.map((option) => option.label)).toEqual([
+        "Inspect",
         "Allow",
         "Deny",
-        "Inspect",
       ]);
       expect(issued.reviewDetails).toBeUndefined();
       await answer(issued.answerId, issued.card.question, "Inspect");
@@ -5765,6 +5770,76 @@ describe("rendering runtime text for this client", () => {
       expect(message).not.toContain("Alternative:");
       expect(message).not.toContain("subagent tool is available");
       expect(message).toContain("STOP this blocked action");
+    } finally {
+      cancelCalls.mockRestore();
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test("passes an annotator failure on as its own notice: no remedy note, no client failure", async ({
+    makeOrganization,
+  }) => {
+    config.openappa.enabled = true;
+    config.openappa.yellEnabled = true;
+    const organizationId = (await makeOrganization()).id;
+    // The runtime could not rule on the call (its annotator failed), so the
+    // call never ran and there is no ruling to remedy: the gateway tools would
+    // change nothing. A Copilot CLI session often sends its first request
+    // before the gateway's tools arrive; that must not turn an annotator
+    // failure into "connect the gateway", nor count as a client that cannot
+    // receive remedies.
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({
+      sessionId: "annotator-failed",
+      organizationId,
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: undefined,
+      customTools: new Set(),
+      declaredTools: [{ name: "fetch_copilot_cli_documentation" }],
+    };
+    const notice =
+      '[appa] Not checked: OpenAPPA could not rule on this call because its annotator "archestra.llm-annotator" returned an error. The call did not run. Retrying it will not help. Tell the user that Guardrails could not check this call.';
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async () => [
+        { kind: "deny" as const, feedback: notice, unanswered: true as const },
+      ]);
+    const cancelCalls = vi
+      .spyOn(appaService, "cancelCalls")
+      .mockResolvedValue(undefined);
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "call",
+            name: "fetch_copilot_cli_documentation",
+            arguments: {},
+          },
+        ],
+      });
+      expect(outcome).toMatchObject({
+        decision: "refuse",
+        refusal: {
+          reason: "openappa_unanswered_annotation",
+          blockedToolName: "fetch_copilot_cli_documentation",
+          blockedToolId: "call",
+        },
+      });
+      const message = (outcome as { refusal: { contentMessage: string } })
+        .refusal.contentMessage;
+      expect(message).toBe(notice);
+      const reports = await OpenAppaYellModel.list({
+        organizationId,
+        status: "unresolved",
+        limit: 10,
+      });
+      expect(reports.data).toHaveLength(0);
     } finally {
       cancelCalls.mockRestore();
       evaluateToolCalls.mockRestore();
@@ -10502,6 +10577,114 @@ describe("delegation markers", () => {
       expect(evaluate.mock.calls[0]?.[1][0]?.arguments).toEqual(
         agentCall().arguments,
       );
+    });
+
+    describe("Copilot CLI task model", () => {
+      const KEY = "efeab99e17779df23bb5d2437f3c8f8f";
+      const copilotContext = () => {
+        const context = clientContext({
+          interactionType: "openai:responses",
+          headers: { "x-archestra-agent-id": "github_copilot_cli" },
+          sessionId: `user:user|${KEY}`,
+          body: {
+            model: "gpt-6.1-sol",
+            prompt_cache_key: KEY,
+            input: [{ type: "message", role: "user", content: "Delegate" }],
+            tools: [
+              {
+                type: "function",
+                name: "task",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    prompt: { type: "string" },
+                    model: {
+                      type: "string",
+                      enum: ["archestra/gpt-6.1-sol", "gpt-5.6-luna"],
+                    },
+                  },
+                },
+              },
+            ],
+          },
+          tools: true,
+        });
+        context.model = "gpt-6.1-sol";
+        return context;
+      };
+      const task = (args: Record<string, unknown> = {}) => ({
+        id: "call_task",
+        name: "task",
+        arguments: { prompt: "Run pwd and report it.", ...args },
+      });
+
+      test("runs the subagent on the session's own model, and the registry accepts the rewritten call", async () => {
+        const registry = new LlmProxyPluginRegistry();
+        registry.register(
+          new AppaPluginArchestra([new AppaCopilotCliAdapter()]),
+        );
+        const context = copilotContext();
+        await registry.onSessionInit(context);
+
+        const outcome = await registry.onToolCalls({
+          ...context,
+          canRewriteToolCalls: true,
+          toolCalls: [task()],
+        });
+
+        if (outcome.decision !== "allow") throw new Error("expected the task");
+        expect(outcome.toolCalls[0]).toMatchObject({
+          id: "call_task",
+          name: "task",
+          arguments: {
+            prompt: expect.stringContaining("[appa] delegated trajectory"),
+            model: "archestra/gpt-6.1-sol",
+          },
+        });
+        // The runtime ruled on the call the model wrote.
+        expect(evaluate.mock.calls[0]?.[1][0]?.arguments).toEqual(
+          task().arguments,
+        );
+      });
+
+      test("keeps a routed model the call names, as a marker-only change", async () => {
+        const plugin = new AppaPluginArchestra([new AppaCopilotCliAdapter()]);
+        const context = copilotContext();
+        await plugin.onSessionInit(context);
+        const outcome = await plugin.onToolCalls(
+          toolCalls(context, [task({ model: "archestra/gpt-6.1-sol" })]),
+        );
+        expect(outcome).toMatchObject({
+          decision: "allow",
+          annotated: [{ id: "call_task", name: "task", field: "prompt" }],
+        });
+        expect(outcome).not.toHaveProperty("rewritten");
+      });
+
+      test("refuses a model the proxy never sees, without a ruling, and says which models keep the child governed", async () => {
+        const plugin = new AppaPluginArchestra([new AppaCopilotCliAdapter()]);
+        const context = copilotContext();
+        await plugin.onSessionInit(context);
+        const outcome = await plugin.onToolCalls(
+          toolCalls(context, [task({ model: "gpt-5.6-luna" })]),
+        );
+        expect(evaluate).not.toHaveBeenCalled();
+        expect(outcome).toMatchObject({
+          decision: "allow",
+          blocked: [
+            {
+              id: "call_task",
+              name: "task",
+              reason: expect.stringContaining(
+                'would start its subagent on "gpt-5.6-luna"',
+              ),
+            },
+          ],
+        });
+        expect(JSON.stringify(outcome)).toContain(
+          "with model set to one of: archestra/gpt-6.1-sol.",
+        );
+      });
     });
 
     test("reports the annotation it made, and nothing for a batch without spawns", async () => {

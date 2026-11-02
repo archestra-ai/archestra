@@ -55,6 +55,7 @@ const CTX: StartupGuardContext = {
   },
   mcp: {
     serverName: "prod_gateway",
+    toolPrefix: "archestra__",
     url: "https://archestra.example.com/v1/mcp/prod-gateway",
     ref: "prod-gateway",
   },
@@ -995,7 +996,7 @@ describe("Copilot-specific disconnect", () => {
   test("strips the COPILOT_PROVIDER_* export lines from the shell profiles", () => {
     const script = renderStartupGuardScript(CTX, COPILOT_GUARD_CLIENT);
     expect(script).toContain(
-      "export[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|API_KEY|HEADERS)=",
+      "export[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|WIRE_API|API_KEY|HEADERS)=",
     );
     expect(script).toContain('"$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"');
     // Copilot's non-interactive one-shot flag

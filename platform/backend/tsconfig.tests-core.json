@@ -1,0 +1,27 @@
+{
+  // Tests of the rest of the core layer.
+  "extends": "./tsconfig.test-project.json",
+  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-core.tsbuildinfo" },
+  "include": [
+    "src/ambient/*.d.ts",
+    "src/utils/**/*.test.ts",
+    "src/observability/**/*.test.ts",
+    "src/types/**/*.test.ts",
+    "src/secrets-manager/**/*.test.ts",
+    "src/logging/**/*.test.ts",
+    "src/content-encryption/**/*.test.ts",
+    "src/log-content/**/*.test.ts",
+    "src/tokenizers/**/*.test.ts",
+    "src/integrations/**/*.test.ts",
+    "src/git-hosts/**/*.test.ts",
+    "src/app-templates/**/*.test.ts"
+  ],
+  "references": [
+    { "path": "../shared/tsconfig.lib.json" },
+    { "path": "../tools/drizzle-migration-linter/tsconfig.lib.json" },
+    { "path": "./tsconfig.schema.json" },
+    { "path": "./tsconfig.core.json" },
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.test-support.json" }
+  ]
+}

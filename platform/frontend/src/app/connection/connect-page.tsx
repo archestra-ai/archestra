@@ -1088,7 +1088,7 @@ function scriptNextSteps(client: ConnectClient): string[] {
       ];
     case "copilot-cli":
       return [
-        "If you connected an LLM provider, its settings are saved in providers.json. The printed environment variables are optional.",
+        "If you connected an LLM provider, its settings are saved in providers.json and the model in settings.json. Leave COPILOT_MODEL and the COPILOT_PROVIDER_* variables unset.",
         "Press Enter when it offers to start Copilot CLI, or run the copilot command it prints in a new terminal. It opens the browser to sign in to the gateway.",
       ];
     case "opencode":
@@ -1260,7 +1260,7 @@ function ManualSteps({
 
 /**
  * Agents OpenAPPA follows natively (the Claude Code, Claude Desktop, Codex,
- * OpenCode, Kilo Code and Pi adapters in
+ * Copilot CLI, OpenCode, Kilo Code and Pi adapters in
  * backend/src/proxy/plugins/appa-plugin-archestra/session-identity.ts). Others
  * count as unsupported unless they send OpenAPPA session headers, which the
  * agents on this page don't.

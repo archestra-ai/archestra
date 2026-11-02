@@ -44,17 +44,14 @@ import type {
   AgentRunLimits,
   AgentRunRecord,
 } from "@/types";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 import { isTerminalA2ATaskState } from "@/types/a2a-task";
 import {
   type OutboundUrlRejection,
   validateOutboundUrl,
 } from "@/utils/outbound-url";
 import type { InteractionSource } from "../../../../shared";
-import {
-  type A2AAttachment,
-  type A2AExecuteResult,
-  executeA2AMessage,
-} from "../a2a-executor";
+import { type A2AExecuteResult, executeA2AMessage } from "../a2a-executor";
 import { type A2AActor, A2AError, A2AErrorKind } from "./a2a-base";
 import {
   type A2AContextCompactionEvent,
@@ -731,6 +728,7 @@ export class A2AManager {
               userId: a2aActorUserId(actor),
               oauthExecution: actor.oauthExecution,
               sessionId,
+              runId: runOpts.taskId,
               source: systemParams?.source,
               // A chat posts a paused review to the requester (see ChatOps).
               // Detached tasks a chat starts report back without a form.

@@ -21,8 +21,8 @@ export interface OpenAiStreamUsage {
    * that count cache reads separately (Anthropic, Bedrock, Gemini) must publish
    * them here, or the gross `prompt_tokens` above is indistinguishable from an
    * uncached prompt of the same size — and a consumer that recovers the split
-   * the way this codebase does (`prompt_tokens - cached_tokens`, see the openai
-   * adapter's `getUsageTokens`) attributes the whole prompt to full-price input.
+   * the way this codebase does (`prompt_tokens - cached_tokens`, see
+   * `openAIUsageTokens`) attributes the whole prompt to full-price input.
    */
   prompt_tokens_details?: {
     cached_tokens: number;

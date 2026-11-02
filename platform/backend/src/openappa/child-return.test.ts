@@ -692,6 +692,92 @@ describe("OpenAPPA child-return markers", () => {
     ]);
   });
 
+  describe("Copilot CLI agent reports", () => {
+    // Copilot reads a finished background agent with a read_agent call it
+    // makes itself, and answers with a status line and each finished turn.
+    const COPILOT_RETURN = { ...RETURN, childNativeId: undefined } as const;
+    const report = (turns: string[]) =>
+      [
+        "Agent is idle (waiting for messages). agent_id: 5ef9a71d-f2c6-47f4-abe6-3d0adb3141ef, agent_type: task, status: idle, description: Run pwd in background, elapsed: 3s, total_turns: 1",
+        ...turns.map((turn, index) => `[Turn ${index}]\n${turn}`),
+      ].join("\n\n");
+    const readAgent = (output: string) => ({
+      input: [
+        {
+          type: "message",
+          role: "user",
+          content:
+            '<system_notification>\nAgent "pwd-runner" (task) has finished processing and is now idle.\n</system_notification>',
+        },
+        {
+          type: "function_call",
+          call_id: "d2a07213-03ad-49a9-a289-6acec57aba87",
+          name: "read_agent",
+          arguments:
+            '{"agent_id":"5ef9a71d-f2c6-47f4-abe6-3d0adb3141ef","since_turn":0}',
+        },
+        {
+          type: "function_call_output",
+          call_id: "d2a07213-03ad-49a9-a289-6acec57aba87",
+          output,
+        },
+      ],
+    });
+
+    test("reads each finished turn as its own return and keeps the status line", () => {
+      const first = requiredMarker(COPILOT_RETURN);
+      const second = requiredMarker({
+        ...COPILOT_RETURN,
+        value: "second turn",
+      });
+      const body = readAgent(
+        report([carrier(first), carrier(second, "second turn")]),
+      );
+
+      const collected = collectAndStripChildReturns(body, {
+        copilotAgentReports: true,
+      });
+
+      expect(body.input[2].output).toBe(report([RETURN.value, "second turn"]));
+      expect(collected.completions).toEqual([
+        {
+          value: RETURN.value,
+          envelopeId: "d2a07213-03ad-49a9-a289-6acec57aba87",
+          assistantOrigin: false,
+        },
+        {
+          value: "second turn",
+          envelopeId: "d2a07213-03ad-49a9-a289-6acec57aba87",
+          assistantOrigin: false,
+        },
+      ]);
+    });
+
+    test("records only the turns that crossed, and leaves other clients' reports alone", () => {
+      const marker = requiredMarker(COPILOT_RETURN);
+      const unmarked = readAgent(report(["did not cross", carrier(marker)]));
+      expect(
+        collectAndStripChildReturns(unmarked, { copilotAgentReports: true })
+          .completions,
+      ).toEqual([expect.objectContaining({ value: RETURN.value })]);
+
+      const other = readAgent(report([carrier(marker)]));
+      const before = other.input[2].output;
+      expect(collectAndStripChildReturns(other).completions).toEqual([]);
+      expect(other.input[2].output).toBe(before);
+    });
+
+    test("refuses a marked report whose turns it cannot find", () => {
+      const marker = requiredMarker(COPILOT_RETURN);
+      const body = readAgent(
+        `Agent completed. agent_id: a, status: completed\n${carrier(marker)}`,
+      );
+      expect(() =>
+        collectAndStripChildReturns(body, { copilotAgentReports: true }),
+      ).toThrow("malformed agent report");
+    });
+  });
+
   test("reconstructs XML task notifications from the completion value only", () => {
     const marker = requiredMarker(RETURN);
     const body = {

@@ -1,0 +1,39 @@
+{
+  // Tests of the other routes whose names start with b to l.
+  "extends": "./tsconfig.test-project.json",
+  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-routes-rest-b.tsbuildinfo" },
+  "include": [
+    "src/ambient/*.d.ts",
+    "src/routes/b*.test.ts",
+    "src/routes/b*/**/*.test.ts",
+    "src/routes/c*.test.ts",
+    "src/routes/c*/**/*.test.ts",
+    "src/routes/d*.test.ts",
+    "src/routes/d*/**/*.test.ts",
+    "src/routes/e*.test.ts",
+    "src/routes/e*/**/*.test.ts",
+    "src/routes/f*.test.ts",
+    "src/routes/f*/**/*.test.ts",
+    "src/routes/g*.test.ts",
+    "src/routes/g*/**/*.test.ts",
+    "src/routes/h*.test.ts",
+    "src/routes/h*/**/*.test.ts",
+    "src/routes/i*.test.ts",
+    "src/routes/i*/**/*.test.ts",
+    "src/routes/j*.test.ts",
+    "src/routes/j*/**/*.test.ts",
+    "src/routes/k*.test.ts",
+    "src/routes/k*/**/*.test.ts",
+    "src/routes/l*.test.ts",
+    "src/routes/l*/**/*.test.ts"
+  ],
+  "exclude": ["src/routes/chat/**"],
+  "references": [
+    { "path": "../shared/tsconfig.lib.json" },
+    { "path": "../tools/drizzle-migration-linter/tsconfig.lib.json" },
+    { "path": "./tsconfig.schema.json" },
+    { "path": "./tsconfig.core.json" },
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.test-support.json" }
+  ]
+}

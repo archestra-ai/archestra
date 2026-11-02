@@ -23,7 +23,15 @@
  * failed: its rows are still the only record of its installs, and the log names
  * every one of them.
  */
+
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
+import { assertPortsBound } from "@/models/ports";
 import { declareExistingInstalls } from "@/openappa/declare-installs";
+
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
+assertPortsBound();
 
 async function main(): Promise<number> {
   const summary = await declareExistingInstalls();

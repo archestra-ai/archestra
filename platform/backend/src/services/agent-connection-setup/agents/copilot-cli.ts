@@ -6,10 +6,18 @@ import {
   PROVIDER_MODEL_TIERS,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
+import { copilotCliUsesResponsesWire } from "@archestra/shared/connection-setup";
 import { COPILOT_GUARD_CLIENT } from "../guard/clients";
 import {
+  COPILOT_LEGACY_ENV_PS_ARRAY,
+  COPILOT_LEGACY_EXPORT_LINE_PATTERN,
+  COPILOT_LEGACY_EXPORT_OURS_PATTERN,
+  COPILOT_MARKETPLACE_SOURCE_NODE,
   COPILOT_PROVIDER_CONFIG_NODE,
   COPILOT_PROVIDER_INSTRUCTIONS_NODE,
+  copilotLegacyEnvOursShell,
+  copilotLegacyEnvSetShell,
+  copilotStripProfileLinesBash,
 } from "../payloads/copilot-provider-config";
 import { starterPrompt } from "../steps/ending";
 import { describeMarketplaceContents } from "../steps/marketplace-copy";
@@ -46,6 +54,13 @@ function copilotProviderConfig(proxy: SetupScriptProxySection): string {
   return JSON.stringify({
     url: proxy.url,
     model: proxy.model ?? PROVIDER_MODEL_TIERS[proxy.provider].normal,
+    // Copilot names its conversation only on the Responses API, which is
+    // what lets Guardrails follow the session. Selected where the proxy
+    // serves that wire for the provider; the other providers keep Copilot's
+    // default Chat Completions.
+    ...(copilotCliUsesResponsesWire(proxy.provider)
+      ? { wireApi: "responses" }
+      : {}),
     headers: {
       [EXTERNAL_AGENT_ID_HEADER]: COPILOT_CLI_CLIENT_ID,
       ...(proxy.passthroughVirtualKey
@@ -64,7 +79,36 @@ function copilotProviderBash(proxy: SetupScriptProxySection): string {
   return `say 'Saving Copilot provider settings'
 ARCHESTRA_COPILOT_VERSION="$(cli copilot --version)" ARCHESTRA_COPILOT_ACTION=install ARCHESTRA_COPILOT_CONFIG=${sh(copilotProviderConfig(proxy))} ARCHESTRA_COPILOT_API_KEY=${key} node <<'ARCHESTRA_COPILOT_NODE'
 ${COPILOT_PROVIDER_CONFIG_NODE}
-ARCHESTRA_COPILOT_NODE`;
+ARCHESTRA_COPILOT_NODE
+${copilotStaleEnvCleanupBash()}`;
+}
+
+/**
+ * Remove the Copilot provider variables an earlier setup left behind: the
+ * export lines its instructions had people add to a shell profile, and the
+ * variables in this script's shell. Copilot CLI uses those variables instead
+ * of providers.json (and with only COPILOT_MODEL set refuses to start the
+ * saved model); the settings live in providers.json and settings.json now.
+ * Only a group an Archestra setup wrote is touched (see
+ * COPILOT_LEGACY_EXPORT_OURS_PATTERN); another is reported by the closing note.
+ */
+function copilotStaleEnvCleanupBash(): string {
+  return `archestra_copilot_legacy_lines=${sh(COPILOT_LEGACY_EXPORT_LINE_PATTERN)}
+archestra_copilot_ours_lines=${sh(COPILOT_LEGACY_EXPORT_OURS_PATTERN)}
+archestra_profile_lines_removed=0
+archestra_strip_copilot_legacy_exports() {
+  ${copilotStripProfileLinesBash("archestra_copilot_legacy_lines", "archestra_copilot_ours_lines")}
+}
+archestra_strip_copilot_legacy_exports || warn 'Could not remove the Copilot provider variables an earlier setup added to a shell profile; remove its COPILOT_PROVIDER_* and COPILOT_MODEL lines by hand.'
+if [ "$archestra_profile_lines_removed" = 1 ]; then
+  ok 'Removed the COPILOT_PROVIDER_* and COPILOT_MODEL exports an earlier setup added to your shell profile: Copilot CLI would use them instead of providers.json.'
+fi
+${copilotLegacyEnvOursShell("archestra_copilot_env_ours")}
+${copilotLegacyEnvSetShell("archestra_copilot_env_set")}
+if [ "$archestra_copilot_env_ours" = 1 ] && [ -n "$archestra_copilot_env_set" ]; then
+  warn "Copilot provider variables from an earlier setup are still set in open terminals:$archestra_copilot_env_set. Copilot CLI would use them instead of providers.json. Run: unset$archestra_copilot_env_set   (or open a new terminal)."
+  unset $archestra_copilot_env_set
+fi`;
 }
 
 function copilotProviderPowerShell(proxy: SetupScriptProxySection): string {
@@ -85,6 +129,23 @@ ${COPILOT_PROVIDER_CONFIG_NODE}
     if ($LASTEXITCODE -ne 0) { throw 'Could not update Copilot provider configuration.' }
   } finally {
     Remove-Item Env:ARCHESTRA_COPILOT_VERSION, Env:ARCHESTRA_COPILOT_ACTION, Env:ARCHESTRA_COPILOT_CONFIG, Env:ARCHESTRA_COPILOT_API_KEY -ErrorAction SilentlyContinue
+  }
+  # Copilot CLI uses its provider environment variables instead of
+  # providers.json (and with only COPILOT_MODEL set refuses to start the saved
+  # model). Remove the set an earlier setup persisted (User scope) or left in
+  # this session; another setup's values are reported by the closing note.
+  $archLegacyNames = ${COPILOT_LEGACY_ENV_PS_ARRAY}
+  foreach ($archScope in @('Process', 'User')) {
+    $archLegacyOurs = (([Environment]::GetEnvironmentVariable('COPILOT_PROVIDER_BASE_URL', $archScope)) -like '*/v1/connection-setup/*') -or (([Environment]::GetEnvironmentVariable('COPILOT_PROVIDER_HEADERS', $archScope)) -like '*X-Archestra-*') -or (([Environment]::GetEnvironmentVariable('COPILOT_PROVIDER_API_KEY', $archScope)) -like 'arch_*') -or (([Environment]::GetEnvironmentVariable('COPILOT_MODEL', $archScope)) -like 'archestra/*')
+    if (-not $archLegacyOurs) { continue }
+    $archLegacyRemoved = @()
+    foreach ($archName in $archLegacyNames) {
+      if ([Environment]::GetEnvironmentVariable($archName, $archScope)) {
+        [Environment]::SetEnvironmentVariable($archName, $null, $archScope)
+        $archLegacyRemoved += $archName
+      }
+    }
+    if ($archLegacyRemoved.Count -gt 0) { Warn ('Removed ' + ($archLegacyRemoved -join ', ') + ' (' + $archScope + ' scope) left by an earlier setup: Copilot CLI would use them instead of providers.json. Open a new terminal before launching Copilot.') }
   }`;
 }
 
@@ -395,9 +456,7 @@ cli copilot mcp get ${sh(ctx.mcp.serverName)}`);
 fi`;
     });
     sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" marketplace`)}
-if ! cli_redacted copilot plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
-  warn "Marketplace may already be registered — run 'copilot plugin marketplace browse' to inspect."
-fi
+${copilotMarketplaceBash(ctx.skills)}
 ${installs.join("\n")}`);
   }
 
@@ -447,8 +506,7 @@ if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not install plugin — run 'copilot
       })
       .join("\n");
     sections.push(`Say ${psq(`Registering the "${ctx.skills.marketplaceName}" marketplace`)}
-Invoke-ArchRedacted { copilot plugin marketplace add ${psq(ctx.skills.cloneUrl)} }
-if ($LASTEXITCODE -ne 0) { Warn "Marketplace may already be registered — run 'copilot plugin marketplace browse' to inspect." }
+${copilotMarketplacePowerShell(ctx.skills)}
 ${pluginInstalls}`);
   }
 
@@ -464,6 +522,70 @@ ${pluginInstalls}`);
   ];
 }
 
+type MarketplaceSource = { cloneUrl: string; marketplaceName: string };
+
+/**
+ * Registers the skills marketplace, or points an earlier registration at this
+ * setup's clone URL (see COPILOT_MARKETPLACE_SOURCE_NODE): `marketplace add`
+ * refuses a name Copilot already holds, which would keep an earlier setup's
+ * credential. Without Node.js, or when settings.json cannot be read, the
+ * marketplace is added as before.
+ */
+function copilotMarketplaceBash(skills: MarketplaceSource): string {
+  const name = skills.marketplaceName;
+  return `copilot_marketplace_source() {
+  command -v node >/dev/null 2>&1 || { printf '%s' unknown; return; }
+  ARCHESTRA_MARKETPLACE_NAME=${sh(name)} ARCHESTRA_MARKETPLACE_URL=${sh(skills.cloneUrl)} node <<'ARCHESTRA_COPILOT_MARKETPLACE' 2>/dev/null || printf '%s' unknown
+${COPILOT_MARKETPLACE_SOURCE_NODE}
+ARCHESTRA_COPILOT_MARKETPLACE
+}
+case "$(copilot_marketplace_source)" in
+  current)
+    ok ${sh(`Marketplace "${name}" is already registered with this setup's source.`)}
+    ;;
+  updated)
+    ok ${sh(`Pointed the "${name}" marketplace at this setup's source; plugins installed from it stay installed.`)}
+    if ! cli_redacted copilot plugin marketplace update ${sh(name)}; then
+      warn ${sh(`Could not refresh the marketplace — run 'copilot plugin marketplace update ${name}'.`)}
+    fi
+    ;;
+  *)
+    if ! cli_redacted copilot plugin marketplace add ${sh(skills.cloneUrl)}; then
+      warn "Marketplace may already be registered — run 'copilot plugin marketplace browse' to inspect."
+    fi
+    ;;
+esac`;
+}
+
+/** The PowerShell counterpart of copilotMarketplaceBash. */
+function copilotMarketplacePowerShell(skills: MarketplaceSource): string {
+  const name = skills.marketplaceName;
+  return `$archMarketplaceState = 'unknown'
+if (Get-Command node -ErrorAction SilentlyContinue) {
+  $env:ARCHESTRA_MARKETPLACE_NAME = ${psq(name)}
+  $env:ARCHESTRA_MARKETPLACE_URL = ${psq(skills.cloneUrl)}
+  try {
+    $archMarketplaceState = ((@'
+${COPILOT_MARKETPLACE_SOURCE_NODE}
+'@ | node) | Out-String).Trim()
+  } catch {
+    $archMarketplaceState = 'unknown'
+  } finally {
+    Remove-Item Env:ARCHESTRA_MARKETPLACE_NAME, Env:ARCHESTRA_MARKETPLACE_URL -ErrorAction SilentlyContinue
+  }
+}
+if ($archMarketplaceState -eq 'current') {
+  Ok ${psq(`Marketplace "${name}" is already registered with this setup's source.`)}
+} elseif ($archMarketplaceState -eq 'updated') {
+  Ok ${psq(`Pointed the "${name}" marketplace at this setup's source; plugins installed from it stay installed.`)}
+  Invoke-ArchRedacted { copilot plugin marketplace update ${psq(name)} }
+  if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not refresh the marketplace — run 'copilot plugin marketplace update ${name}'.`)} }
+} else {
+  Invoke-ArchRedacted { copilot plugin marketplace add ${psq(skills.cloneUrl)} }
+  if ($LASTEXITCODE -ne 0) { Warn "Marketplace may already be registered — run 'copilot plugin marketplace browse' to inspect." }
+}`;
+}
+
 function copilotEnding(ctx: SetupScriptContext): AgentEnding {
   const notes: string[] = [];
   const proxyDetail = ctx.proxy
@@ -476,6 +598,13 @@ function copilotEnding(ctx: SetupScriptContext): AgentEnding {
   }
   return {
     proxyDetail,
+    // Copilot installs from the marketplace only the plugins setup names;
+    // the shared skills are added from its browser (see the note above).
+    ...(ctx.skills && (ctx.skills.pluginNames ?? []).length === 0
+      ? {
+          skillsDetail: `Marketplace "${ctx.skills.marketplaceName}" registered`,
+        }
+      : {}),
     ...(ctx.proxy
       ? { optionalInstructions: COPILOT_PROVIDER_INSTRUCTIONS_NODE }
       : {}),

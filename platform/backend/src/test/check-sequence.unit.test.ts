@@ -89,9 +89,29 @@ test.each([
   { mode: "all-knip", task: "knip" },
   { mode: "all-build", task: "build" },
   { mode: "all-lint", task: "lint" },
+  {
+    mode: "all-test",
+    task: "test",
+    forwarded: ["--", "run"],
+    expected: ["--concurrency=1", "--", "run"],
+  },
+  {
+    mode: "all-build",
+    task: "build",
+    forwarded: ["--", "--profile"],
+    expected: ["--concurrency=1", "--", "--profile"],
+  },
+  {
+    mode: "all-test",
+    task: "test",
+    forwarded: ["--concurrency=2", "--", "run"],
+    expected: ["--concurrency=2", "--", "run"],
+  },
 ])("$mode works without native TypeScript support and limits workspace concurrency", ({
   mode,
   task,
+  forwarded = [],
+  expected = ["--concurrency=1"],
 }) => {
   const recorded = path.join(dir, "turbo-arguments");
   const turbo = path.join(dir, "turbo");
@@ -108,6 +128,7 @@ test.each([
       path.join(platform, "scripts/check-workspace.mjs"),
       mode,
       "--filter=@backend",
+      ...forwarded,
     ],
     {
       cwd: platform,
@@ -127,7 +148,7 @@ test.each([
   expect(JSON.parse(fs.readFileSync(recorded, "utf8"))).toEqual([
     task,
     "--filter=@backend",
-    "--concurrency=1",
+    ...expected,
   ]);
 });
 
@@ -282,9 +303,12 @@ test.each([
   fs.mkdirSync(scripts, { recursive: true });
   fs.mkdirSync(path.join(platform, "backend"));
   fs.mkdirSync(path.join(frontend, ".next", "static"), { recursive: true });
-  fs.mkdirSync(path.join(frontend, ".next", "standalone", "frontend", ".next"), {
-    recursive: true,
-  });
+  fs.mkdirSync(
+    path.join(frontend, ".next", "standalone", "frontend", ".next"),
+    {
+      recursive: true,
+    },
+  );
   fs.mkdirSync(path.join(frontend, "public"));
   fs.writeFileSync(path.join(platform, "Tiltfile"), "");
   fs.writeFileSync(path.join(platform, ".env.example"), "");

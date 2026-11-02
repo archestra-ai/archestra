@@ -35,7 +35,12 @@ export function runWorkspaceCommand(input: string[]): number {
     if (manifest.name !== "archestra-platform") {
       throw new Error("Run workspace-wide checks from platform/.");
     }
-    const chosenConcurrency = args.some(
+    // Turbo options must precede "--"; everything after it belongs to the
+    // workspace tool (for example Vitest's "run"), not Turbo.
+    const separator = args.indexOf("--");
+    const turboArgs = separator < 0 ? args : args.slice(0, separator);
+    const toolArgs = separator < 0 ? [] : args.slice(separator);
+    const chosenConcurrency = turboArgs.some(
       (arg) => arg === "--concurrency" || arg.startsWith("--concurrency="),
     );
     return runWorkspaceChecks([
@@ -44,12 +49,13 @@ export function runWorkspaceCommand(input: string[]): number {
         command: "turbo",
         args: [
           rootTask,
-          ...args,
+          ...turboArgs,
           // Each workspace has a resident runner too. In a small runtime
           // only one workspace starts tools; its heavy tools own the lane.
           ...(heavyLaneActive(detectResourceEnvelope()) && !chosenConcurrency
             ? ["--concurrency=1"]
             : []),
+          ...toolArgs,
         ],
         managesLane: mode !== "all-build",
         ...(mode === "all-build" ? { peakBytes: 3 * 1024 ** 3 } : {}),

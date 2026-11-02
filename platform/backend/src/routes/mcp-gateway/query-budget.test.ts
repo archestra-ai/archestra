@@ -1,5 +1,6 @@
 import {
   AGENT_TOOL_PREFIX,
+  SKILL_TOOL_PREFIX,
   slugify,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
@@ -40,6 +41,7 @@ describe("MCP gateway tools/list query budget", () => {
     makeUser,
     makeMember,
     makeAgent,
+    makeSkill,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
@@ -56,6 +58,12 @@ describe("MCP gateway tools/list query budget", () => {
       name: "Discoverable worker",
     });
     const name = `${AGENT_TOOL_PREFIX}${slugify(target.name)}`;
+    const skill = await makeSkill(org.id, {
+      name: "discoverable-delegated-skill",
+      agentName: target.name,
+      access: "org",
+    });
+    const skillName = `${SKILL_TOOL_PREFIX}${slugify(skill.name)}`;
     const token = await UserTokenModel.create(user.id, org.id);
     const request = (method: string, params: Record<string, unknown>) =>
       app.inject({
@@ -90,6 +98,9 @@ describe("MCP gateway tools/list query budget", () => {
     expect(JSON.stringify(compact.result.json().result.tools)).not.toContain(
       name,
     );
+    expect(JSON.stringify(compact.result.json().result.tools)).not.toContain(
+      skillName,
+    );
     expect(expanded(compact.statements)).toHaveLength(0);
     const search = await request("tools/call", {
       name: TOOL_SEARCH_TOOLS_FULL_NAME,
@@ -97,6 +108,12 @@ describe("MCP gateway tools/list query budget", () => {
     });
     expect(search.statusCode).toBe(200);
     expect(JSON.stringify(search.json().result)).toContain(name);
+    const skillSearch = await request("tools/call", {
+      name: TOOL_SEARCH_TOOLS_FULL_NAME,
+      arguments: { query: skill.name },
+    });
+    expect(skillSearch.statusCode).toBe(200);
+    expect(JSON.stringify(skillSearch.json().result)).toContain(skillName);
     await AgentModel.update(gateway.id, { toolExposureMode: "full" });
     const full = await recordQueries(list);
     expect(full.result.statusCode).toBe(200);
@@ -105,6 +122,13 @@ describe("MCP gateway tools/list query budget", () => {
         .json()
         .result.tools.map((tool: { name: string }) => tool.name),
     ).toContain(name);
+    expect(
+      full.result
+        .json()
+        .result.tools.map((tool: { name: string }) => tool.name),
+    ).toContain(skillName);
+    // This guard proves the SQL matcher still recognizes the full-mode scans;
+    // the compact zero-query assertion must never pass due to matcher drift.
     expect(expanded(full.statements).length).toBeGreaterThan(0);
   });
 

@@ -617,11 +617,10 @@
     "src/task-queue/periodic-tasks.ts",
 
     "src/knowledge-base/**",
+    // Provider clients and billing helpers are checked in tsconfig.llm-clients.json.
     "src/services/billable-usage.ts",
     "src/routes/proxy/utils/cost-optimization.ts",
     "src/routes/chat/normalization/apply-prompt-cache.ts",
-
-    // Provider clients and billing helpers are checked in tsconfig.llm-clients.json.
     "src/services/fireworks-model.ts",
     // Provider clients and billing helpers are checked in tsconfig.llm-clients.json.
     "src/clients/llm-client.ts",

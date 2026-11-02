@@ -17,9 +17,9 @@
  * them again with `resume` when it ends, however it ends short of SIGKILL. It
  * says so on stderr. A stack paused by someone else stays as it was.
  *
- * Today the type check (`scripts/type-check.ts`) and the frontend, shared and
- * e2e-tests knip runs take the lane, so a package's `check:commit` no longer
- * runs tsc and knip side by side.
+ * Today the type check (`scripts/type-check.ts`) and every package's knip run
+ * take the lane, so a package's `check:commit` no longer runs tsc and knip
+ * side by side. Package scripts start it with `tsx` (engines allow Node 20).
  *
  * A command started under the lane sees `ARCHESTRA_HEAVY_LANE=held` and runs
  * its own heavy commands directly (`check:commit` running `type-check`), so the

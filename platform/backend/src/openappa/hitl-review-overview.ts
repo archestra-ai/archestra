@@ -166,14 +166,15 @@ export function hitlReviewCard(params: {
  * literal fence or escaped for markdown — an embedded image or link is never
  * active. A runtime-format policy text is shown as its authoritative
  * coverage, without the copy of the arguments it embeds; any other shape is
- * shown verbatim in a fence. Nothing is shortened or reordered.
+ * shown verbatim in a fence. Nothing is shortened or reordered; only
+ * credential values are redacted, and approval still runs the original call.
  */
 export function renderHitlReviewText(staged: HitlInspectableReview): string {
   const review = displayedReview(staged);
   const sections: string[] = [
     [
       "## Approval review",
-      `The platform is holding this call for human review. Everything an approval would cover is below, complete and unchanged. This text appears because the reviewer chose ${HITL_INSPECT_LABEL} on the approval card.`,
+      `The platform is holding this call for human review. Everything an approval would cover is below, with credential values redacted for display; approving runs the original call. This text appears because the reviewer chose ${HITL_INSPECT_LABEL} on the approval card.`,
     ].join("\n\n"),
   ];
   if (review.tool) {

@@ -21,7 +21,7 @@ async function assertCascadeDidNotFire(spy: MockInstance): Promise<void> {
   expect(spy).not.toHaveBeenCalled();
 }
 
-import { betterAuth } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 
 /**
  * The cascade-reinstall gate skips metadata-only edits (currently just

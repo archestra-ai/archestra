@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
-import { betterAuth } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";

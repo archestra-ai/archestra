@@ -189,6 +189,25 @@ const layerTable = [
     // The Fastify server, the websocket, middleware and the entry scripts.
     name: "server",
     path: "^src/((server|fastify-instance|websocket|startup-health|metrics-registration|middleware|ngrok-tunnel-manager)\\.ts$|server/|middleware/|hooks/|entrypoints/|openapi/|standalone-scripts/)",
+    files: [
+      // The Better Auth instance and what composes it into the server: the
+      // Fastify plugin, the route registry and the routes that serve or wire
+      // the instance (the auth handler, API keys, identity providers), the SSO
+      // email reconciliation its hooks run, and the JWKS key check that reads
+      // its context. Lower layers reach sessions, sign-up and the key check
+      // through ports (models/ports.ts).
+      "src/auth/better-auth.ts",
+      "src/auth/sso-email-reconciliation.ee.ts",
+      "src/auth/jwks-signing-key-guard.ts",
+      "src/auth/fastify-plugin/index.ts",
+      "src/auth/fastify-plugin/plugin.ts",
+      "src/auth/fastify-plugin/middleware.ts",
+      "src/routes/index.ts",
+      "src/routes/index.ee.ts",
+      "src/routes/auth.ts",
+      "src/routes/api-key.ts",
+      "src/routes/identity-provider.ee.ts",
+    ],
     project: APP,
   },
 ];

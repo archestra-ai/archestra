@@ -51,12 +51,38 @@ export interface ArchestraToolCatalogPort {
   }>;
 }
 
+/** Sessions and API keys, checked by the Better Auth instance (auth/better-auth). */
+export interface AuthSessionsPort {
+  getSession: (params: {
+    headers: Headers;
+  }) => Promise<{ user: { id: string } } | null>;
+  verifyApiKey: (params: { body: { key: string } }) => Promise<{
+    valid: boolean;
+    key: { referenceId: string } | null;
+  }>;
+}
+
+/** Signs a user up with email and password (auth/better-auth). */
+export interface AuthAccountsPort {
+  signUpEmail: (params: {
+    body: { email: string; password: string; name: string };
+  }) => Promise<{ user: { id: string } }>;
+}
+
+/** Checks that the JWKS signing key still opens under the current secret (auth/jwks-signing-key-guard). */
+export interface JwksSigningKeyPort {
+  verifyJwksSigningKey: () => Promise<void>;
+}
+
 /** Every port, by name. */
 export interface Ports {
   mcpServerRuntime: McpServerRuntimePort;
   mcpToolDiscovery: McpToolDiscoveryPort;
   skillSandboxAvailability: SkillSandboxAvailabilityPort;
   archestraToolCatalog: ArchestraToolCatalogPort;
+  authSessions: AuthSessionsPort;
+  authAccounts: AuthAccountsPort;
+  jwksSigningKey: JwksSigningKeyPort;
 }
 
 /** A binding for each port: loads the implementation when the port is first used. */
@@ -108,6 +134,9 @@ const PORT_NAMES = [
   "mcpToolDiscovery",
   "skillSandboxAvailability",
   "archestraToolCatalog",
+  "authSessions",
+  "authAccounts",
+  "jwksSigningKey",
 ] as const satisfies readonly (keyof Ports)[];
 
 /** Fails to compile when a port is missing from PORT_NAMES. */

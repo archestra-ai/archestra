@@ -5,7 +5,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
-import { betterAuth } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import { InternalMcpCatalogModel, McpCatalogLabelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";

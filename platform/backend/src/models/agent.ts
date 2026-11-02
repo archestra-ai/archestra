@@ -1,5 +1,7 @@
 import type { CreatedBy } from "@archestra/shared";
 import {
+  AGENT_CATALOG_IDS,
+  type AgentCatalogId,
   type ArchestraToolShortName,
   BUILT_IN_AGENT_IDS,
   type CursorQuery,
@@ -196,6 +198,7 @@ type AgentListFilters = {
   labels?: Record<string, string[]>;
   status?: AgentRecordStatus;
   providerApiKeyId?: string;
+  runtime?: AgentCatalogId | "chat" | "custom";
   /** Caller-relative pin filter for the paginated Agents surface. */
   pinned?: boolean;
   /** False skips the count; `total` is then a lower bound. */
@@ -1802,6 +1805,7 @@ class AgentModel {
       (params.filters?.status ?? "active") === "active" &&
       !params.filters?.labels &&
       !params.filters?.providerApiKeyId &&
+      !params.filters?.runtime &&
       params.filters?.pinned !== true &&
       params.filters?.scope !== "built_in";
     const externalWhereConditions: SQL[] = [
@@ -2365,6 +2369,24 @@ class AgentModel {
       whereConditions.push(
         ilike(schema.agentsTable.name, `%${escapeLikePattern(filters.name)}%`),
       );
+    }
+    if (filters?.runtime) {
+      // Match resolveAgentCatalogId: the launcher identifies the runtime,
+      // independently of the saved image registry or tag.
+      const command = sql<string>`coalesce(${schema.agentsTable.runtime}->'command'->>0, '')`;
+      if (filters.runtime === "chat") {
+        whereConditions.push(isNull(schema.agentsTable.runtime));
+      } else if (filters.runtime === "custom") {
+        whereConditions.push(
+          isNotNull(schema.agentsTable.runtime),
+          notInArray(
+            command,
+            AGENT_CATALOG_IDS.map((id) => `archestra-${id}`),
+          ),
+        );
+      } else {
+        whereConditions.push(eq(command, `archestra-${filters.runtime}`));
+      }
     }
     if (filters?.providerApiKeyId === "organization-default") {
       whereConditions.push(

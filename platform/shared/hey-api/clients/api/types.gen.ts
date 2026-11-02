@@ -17085,6 +17085,7 @@ export type GetAgentCatalogData = {
         selectableOnly?: boolean;
         labels?: string;
         status?: 'active' | 'deleted';
+        runtime?: 'chat' | 'custom' | 'claude-code' | 'codex' | 'opencode' | 'hermes' | 'openclaw' | 'grok' | 'kimi' | 'copilot';
         providerApiKeyId?: string | 'organization-default';
         /**
          * Filter internal agents by the current user's pins. Pinned results exclude external A2A agents and are ordered by newest pin first.

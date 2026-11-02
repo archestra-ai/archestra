@@ -2,6 +2,7 @@ import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import config from "@/config";
 import { ApiError, SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE } from "@/types";
+import { ServerDrainingError } from "@/types/server-draining-error";
 import { classifyErrorForTracking } from "./error-tracking-policy";
 
 /** A generic Error whose `.name` marks it as an MCP-connectivity failure. */
@@ -17,6 +18,18 @@ function statusError(statusCode: number): Error & { statusCode: number } {
 }
 
 describe("classifyErrorForTracking", () => {
+  test("drops only the intentional shutdown refusal, preserving unrelated 503s", () => {
+    expect(classifyErrorForTracking(new ServerDrainingError())).toEqual({
+      report: false,
+    });
+    expect(
+      classifyErrorForTracking(new ApiError(503, "Server is shutting down"))
+        .report,
+    ).toBe(true);
+    expect(
+      classifyErrorForTracking(namedError("ServerDrainingError")).report,
+    ).toBe(true);
+  });
   test("reports a genuine server-side bug (generic 500) without grouping", () => {
     const decision = classifyErrorForTracking(
       new Error("undefined is not a function"),

@@ -42,6 +42,9 @@
 #                              builds, without rebuilding
 #   scripts/dev-lite.sh down                   stop everything; data and caches stay
 #   scripts/dev-lite.sh reset                  down, then delete the database and state
+#   scripts/dev-lite.sh frontend-artifact key|pack <dir>  CI: the key of the
+#                              frontend build an Agent Runtime makes, or that
+#                              build and its cache, packed for publishing
 #
 # The database is the installed PostgreSQL (postgresql-18 with pgvector in the
 # agent image), initialised under the state dir with durability settings off.
@@ -76,6 +79,10 @@
 #       a production build served by its standalone server (about 0.24 GB;
 #       `reload frontend` rebuilds it after changes). Default build inside an
 #       Agent Runtime, dev elsewhere. --e2e always builds.
+#   ARCHESTRA_DEV_FRONTEND_PREBUILT
+#       false: always build the production frontend here. By default a clean
+#       checkout of a main commit installs the build CI published for it, and
+#       a build starts from CI's build cache (scripts/frontend-prebuilt.mjs)
 #   ARCHESTRA_DEV_LITE_KUBECONFIG
 #       kubeconfig for the MCP orchestrator (default: none, orchestrator disabled)
 #   ARCHESTRA_DEV_LITE_PUBLIC_FRONTEND_URL, ARCHESTRA_DEV_LITE_PUBLIC_API_URL
@@ -575,29 +582,73 @@ in_agent_runtime() {
   [ -n "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:-}" ]
 }
 
-# `next build` with the stack's environment, then the static assets and public
-# files next to the standalone server, as the platform image lays them out.
+# Node with the arguments given, in platform/frontend and in the frontend
+# build's environment: the .env file, the build's own variables and the
+# browser-visible copies.
+frontend_build_node() {
+  local build_env
+  build_env="$(frontend_build_env)" || exit 1
+  # frontend_env quotes its values for a shell, as the session commands do.
+  (
+    cd "$PLATFORM_DIR/frontend"
+    bash -c "exec env $build_env$(frontend_env)node --env-file=$(printf '%q' "$ENV_FILE") $(printf '%q ' "$@")"
+  )
+}
+
+# The frontend CI builds for main (scripts/frontend-prebuilt.mjs): `install`
+# its standalone server, `install-cache` its build cache. Run in the build's
+# environment, which the artifacts' key covers.
+frontend_prebuilt() {
+  frontend_build_node "$SCRIPT_DIR/frontend-prebuilt.mjs" "$@"
+}
+
+# The frontend's production build, with the static assets and public files
+# next to the standalone server, as the platform image lays them out. A clean
+# checkout of a main commit installs the build CI published for it (about
+# 50 MB, seconds) instead: a cold build takes minutes and about 3.5 GiB.
+# Otherwise the build starts from CI's build cache of a commit with the same
+# configuration, when this checkout has none: about 1 to 1.5 GiB after small
+# changes. ARCHESTRA_DEV_FRONTEND_PREBUILT=false builds without either.
+#
 # Node loads the env file for a small launcher that runs the build as a child,
 # as scripts/dev.mjs does for the dev server: Next passes its own Node flags to
 # its workers, and Node refuses --env-file there. Next sizes its workers from
 # CIRCLE_NODE_TOTAL, else from every CPU of the node; here they follow the
 # CPUs this stack can count on.
 build_frontend() {
-  local started=$SECONDS cpus launcher build_env
+  local started=$SECONDS cpus launcher
+  if frontend_prebuilt install; then
+    log "frontend installed from CI's build in $((SECONDS - started)) s"
+    return 0
+  fi
+  frontend_prebuilt install-cache || true
   cpus="$(available_cpus)"
-  build_env="$(frontend_build_env)" || exit 1
   launcher='const { status } = require("node:child_process").spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build", "--turbopack"], { stdio: "inherit" }); process.exit(status ?? 1);'
   log "building the frontend (production build, as CI serves it); log in $LOG_DIR/frontend-build.log"
-  # frontend_env quotes its values for a shell, as the session commands do.
-  (
-    cd "$PLATFORM_DIR/frontend"
-    bash -c "exec env CIRCLE_NODE_TOTAL=$((cpus + 1)) $build_env$(frontend_env)node --env-file=$(printf '%q' "$ENV_FILE") -e $(printf '%q' "$launcher")"
-  ) > "$LOG_DIR/frontend-build.log" 2>&1 \
+  CIRCLE_NODE_TOTAL=$((cpus + 1)) frontend_build_node -e "$launcher" > "$LOG_DIR/frontend-build.log" 2>&1 \
     || { tail -n 30 "$LOG_DIR/frontend-build.log" >&2; die "frontend build failed"; }
   rm -rf "$STANDALONE_DIR/.next/static" "$STANDALONE_DIR/public"
   cp -R "$PLATFORM_DIR/frontend/.next/static" "$STANDALONE_DIR/.next/static"
   cp -R "$PLATFORM_DIR/frontend/public" "$STANDALONE_DIR/public"
   log "frontend built in $((SECONDS - started)) s"
+}
+
+# CI (.github/workflows/frontend-dev-cache.yml): `key` prints the key of this
+# checkout's frontend as an Agent Runtime's stack builds it, `pack <dir>`
+# builds it that way and collects the artifacts to publish.
+cmd_frontend_artifact() {
+  require_platform_dir
+  mkdir -p "$STATE_DIR" "$LOG_DIR"
+  ensure_env 0 0
+  case "${1:-}" in
+    key) frontend_prebuilt --key --explain ;;
+    pack)
+      [ -n "${2:-}" ] || die "frontend-artifact pack: expected an output directory"
+      ARCHESTRA_DEV_FRONTEND_PREBUILT=false build_frontend
+      frontend_prebuilt --pack "$(cd "$2" && pwd)"
+      ;;
+    *) die "frontend-artifact: expected key or pack <dir>" ;;
+  esac
 }
 
 start_e2e_deps() {
@@ -1176,6 +1227,7 @@ case "${1:-}" in
   status) cmd_status ;;
   logs) shift; cmd_logs "$@" ;;
   e2e) shift; cmd_e2e "$@" ;;
+  frontend-artifact) shift; cmd_frontend_artifact "$@" ;;
   down) cmd_down ;;
   reset) cmd_reset ;;
   -h|--help|help) usage 0 ;;

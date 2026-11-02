@@ -43,7 +43,7 @@
     "lint": "biome check",
     "lint:fix": "biome check --write",
     "lint:fix:unsafe": "biome check --write --unsafe",
-    "type-check": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON ../scripts/type-check.ts --noEmit",
+    "type-check": "tsx ../scripts/type-check.ts --noEmit",
     "test": "vitest",
     "codegen:api-client": "tsx hey-api/openapi-ts.ts && biome check --write ./hey-api/clients",
     "codegen:theme-css": "tsx ./themes/generate-theme-css.ts",

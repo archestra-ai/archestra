@@ -53,6 +53,26 @@ describe("waiverFor", () => {
       ).toBe(expected);
   });
 
+  test("leaves a call with a remedy the agent can run itself to the agent", () => {
+    const everywhere = { ...on, humanApprovalMode: "everywhere" as const };
+    // The ruling offers a plan the agent can run (o2) next to the review (o1).
+    expect(
+      waiverFor({
+        decision: { ...review, offers: ["o1", "o2"] },
+        settings: everywhere,
+        unattended: true,
+      }),
+    ).toBe(null);
+    // Every offer needs a person: the setting stands in for them.
+    expect(
+      waiverFor({
+        decision: { ...review, offers: ["o1"] },
+        settings: everywhere,
+        unattended: true,
+      }),
+    ).toBe("approval_waived");
+  });
+
   test("lets a call no remedy can lift through only when allowed", () => {
     expect(
       waiverFor({ decision: noRemedy, settings: on, unattended: true }),

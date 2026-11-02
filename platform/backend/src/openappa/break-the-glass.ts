@@ -55,13 +55,29 @@ export function waiverFor(params: {
   if (!settings.active || decision.recorded !== true || decision.unanswered)
     return null;
   if (HARD_BLOCK.test(decision.feedback)) return null;
-  if (decision.review?.length)
+  if (decision.review?.length) {
+    // A remedy the agent can run itself is left to the agent: the setting
+    // stands in for a person, not for the agent's own plans.
+    const reviewed = new Set(decision.review.map(offerId));
+    if ((decision.offers ?? []).some((offer) => !reviewed.has(offerId(offer))))
+      return null;
     return humanApprovalWaived(settings, params.unattended)
       ? "approval_waived"
       : null;
+  }
   if (decision.offers?.length === 0)
     return settings.unapprovableBlockMode === "allow" ? "block_waived" : null;
   return null;
+}
+
+/** An offer as the runtime lists it (its id) or as a review names it. */
+function offerId(offer: unknown): string | undefined {
+  if (typeof offer === "string") return offer;
+  if (offer && typeof offer === "object" && "offer_id" in offer) {
+    const id = (offer as { offer_id?: unknown }).offer_id;
+    return typeof id === "string" ? id : undefined;
+  }
+  return undefined;
 }
 
 /**

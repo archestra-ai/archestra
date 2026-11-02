@@ -1674,6 +1674,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const evaluatedIds = new Set(rest.map((call) => call.id));
     // Read once for the batch, by the first denial.
     let breakTheGlass: ReturnType<typeof getGuardrailsDeployment> | undefined;
+    // The denied calls Break the glass lets through, recorded once the batch
+    // is complete.
+    const waived: Omit<Parameters<typeof recordWaivedCall>[0], "session">[] =
+      [];
     // Resolved once for the batch, by the first denial that has no notice tool.
     let pendingServersTool: Promise<string | undefined> | undefined;
     const blocked: { id: string; name: string; reason: string }[] = [];
@@ -1812,12 +1816,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         continue;
       }
       // Break the glass: a denied ordinary call can run anyway, with a yell.
-      // Runtime and spawn calls need the runtime's own release, so they stay
-      // denied.
+      // Runtime, spawn and relay calls need the runtime's own release or
+      // rewrite, so they stay denied. The record is written after the loop,
+      // once the batch is known to reach the client.
       if (
         decision.kind === "deny" &&
         evaluatedIds.has(call.id) &&
         !runtimeCalls.has(call.id) &&
+        !withheldRelayDecisions.has(call.id) &&
         !(binding.adapter && isChildSpawnCall(binding.adapter, call))
       ) {
         breakTheGlass ??= getGuardrailsDeployment();
@@ -1827,17 +1833,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           settings,
           unattended: binding.unattended,
         });
-        if (
-          waiver &&
-          (await recordWaivedCall({
-            session,
+        if (waiver) {
+          waived.push({
             toolCallId: call.id,
             tool: this.policyIdentity(binding, call).name,
             kind: waiver,
             // A platform yell does what the agent's own yell does.
             superyell: breakTheGlassActiveIn(settings),
-          }))
-        ) {
+          });
           released.push(call);
           continue;
         }
@@ -2018,6 +2021,25 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       });
     }
 
+    // A waived call's marker, yell and session bypass are written only for a
+    // batch that reaches the client: a batch refused above leaves no record
+    // of a call that never ran. A record that fails keeps the batch from the
+    // client too, so no released call runs unrecorded; the resent batch is
+    // ruled again.
+    for (const waiver of waived) {
+      if (await recordWaivedCall({ session, ...waiver })) continue;
+      await cancelCalls(
+        session,
+        rest.flatMap((each) =>
+          decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
+        ),
+        policy,
+      );
+      throw new ApiError(
+        503,
+        "OpenAPPA could not record a call it let through; retry the request",
+      );
+    }
     // Keep turn open while tool calls are awaiting client execution.
     binding.turnOpen = true;
     const stamp = trajectoryStamper(binding, context);

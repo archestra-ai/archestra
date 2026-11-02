@@ -1,7 +1,7 @@
 {
   // Tests of the remaining policy, runtime and server modules, and of the
   // files directly in src/.
-  "extends": "./tsconfig.test-project.json",
+  "extends": "./tsconfig.base.json",
   "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-other.tsbuildinfo" },
   "include": [
     "src/ambient/*.d.ts",

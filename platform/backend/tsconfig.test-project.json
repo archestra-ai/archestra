@@ -1,6 +1,0 @@
-{
-  // What a test project adds to the base: it reads every source project's
-  // declarations and emits nothing; nothing imports a test.
-  "extends": "./tsconfig.base.json",
-  "compilerOptions": { "noEmit": true }
-}

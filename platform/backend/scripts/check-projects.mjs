@@ -5,11 +5,15 @@
 // be in the project its layer names (layers.mjs), and every project must
 // include the ambient declarations, which no project emits.
 //
-// Usage: node scripts/check-projects.mjs
+// Usage: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-projects.mjs
+// (the projects are the ones `pnpm type-check` builds, read by its own code;
+// Node strips that module's types, and the flag silences its note that
+// platform/ has no package type)
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
+import { solutionBuildOrder } from "../../scripts/type-check-solution.ts";
 import { layers, TESTS } from "../layers.mjs";
 
 const backendDir = path.resolve(
@@ -29,10 +33,12 @@ console.log("Every backend file is in exactly one TypeScript project.");
 
 /** The problems, one line each; none when the projects cover the backend. */
 function checkProjects(root) {
-  const projects = referencedProjects(path.join(root, "tsconfig.json")).filter(
+  const solution = solutionBuildOrder(path.join(root, "tsconfig.json"));
+  if (!solution) return ["tsconfig.json is not a solution of projects"];
+  const projects = solution
+    .map((project) => project.config)
     // Other packages' projects check their own files.
-    (config) => path.dirname(config) === root,
-  );
+    .filter((config) => path.dirname(config) === root);
   const owners = new Map();
   const problems = [];
   const ambient = backendFiles(root, "src/ambient");
@@ -80,21 +86,6 @@ function checkProjects(root) {
   return problems;
 }
 
-/** The tsconfig files a solution references, transitively, as absolute paths. */
-function referencedProjects(config, seen = new Set()) {
-  const { references = [] } = readConfig(config);
-  for (const reference of references) {
-    const target = path.resolve(path.dirname(config), reference.path);
-    const file = target.endsWith(".json")
-      ? target
-      : path.join(target, "tsconfig.json");
-    if (seen.has(file)) continue;
-    seen.add(file);
-    referencedProjects(file, seen);
-  }
-  return [...seen];
-}
-
 /** A project's input files that are inside the backend, relative to it. */
 function projectFiles(config, root) {
   const parsed = ts.getParsedCommandLineOfConfigFile(config, undefined, {
@@ -109,14 +100,6 @@ function projectFiles(config, root) {
   return parsed.fileNames
     .map((file) => path.relative(root, file).split(path.sep).join("/"))
     .filter((file) => !file.startsWith("../") && file.endsWith(".ts"));
-}
-
-function readConfig(config) {
-  const { config: parsed, error } = ts.readConfigFile(config, ts.sys.readFile);
-  if (error) {
-    throw new Error(ts.flattenDiagnosticMessageText(error.messageText, "\n"));
-  }
-  return parsed;
 }
 
 /** Every file under a backend directory, relative to the backend, sorted. */

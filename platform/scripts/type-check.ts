@@ -41,6 +41,8 @@ import {
   typeScriptMemorySettings,
 } from "../vitest.resources.ts";
 import {
+  checkerCount,
+  hasOption,
   solutionBuildOrder,
   typeCheckSolution,
 } from "./type-check-solution.ts";
@@ -58,7 +60,7 @@ if (solution) {
       // Source projects must write their declarations.
       args: argsWithout(["--noEmit"], ["--project", "-p"]),
       checkers: sized,
-      limitGoMemory: memory !== null,
+      goMemoryLimitBytes: memory?.goMemoryLimitBytes ?? null,
       takeTurns: sized !== null,
     }),
   );
@@ -158,35 +160,12 @@ function argsWithout(flags: string[], options: string[]): string[] {
   return kept;
 }
 
-/**
- * Whether the caller passed one of these options, bare or as `--name=value`.
- * The compiler reads option names in any case (`--Incremental`).
- */
+/** Whether the caller passed one of these options (`hasOption`). */
 function chosen(...names: string[]): boolean {
-  return args.some((arg) => {
-    const option = arg.toLowerCase();
-    return names.some((name) => {
-      const wanted = name.toLowerCase();
-      return option === wanted || option.startsWith(`${wanted}=`);
-    });
-  });
+  return hasOption(args, ...names);
 }
 
 function hasFlock(): boolean {
   if (process.platform !== "linux") return false;
   return spawnSync("flock", ["--version"], { stdio: "ignore" }).status === 0;
-}
-
-/** The checkers tsc ran with: its `--checkers`, one when single-threaded, else its default of four. */
-function checkerCount(tscArgs: string[]): number {
-  if (tscArgs.includes("--singleThreaded")) return 1;
-  for (const [index, arg] of tscArgs.entries()) {
-    const value = arg.startsWith("--checkers=")
-      ? arg.slice("--checkers=".length)
-      : arg === "--checkers"
-        ? tscArgs[index + 1]
-        : undefined;
-    if (value !== undefined && /^\d+$/.test(value)) return Number(value);
-  }
-  return 4;
 }

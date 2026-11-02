@@ -150,10 +150,11 @@ describe("type-check runner on a solution", () => {
   test("builds each project in a compiler of its own, references first, sized for a small pod", async () => {
     const { log, env, scratch } = fakeBuildCompiler();
     writeSolution(scratch, {
-      // A tsconfig may hold comments and trailing commas.
-      "tsconfig.json": `{
-        // b and c both reference a.
-        "files": [],
+      // A tsconfig may start with a byte order mark and hold comments and
+      // trailing commas; a reference in a comment is no reference.
+      "tsconfig.json": `\uFEFF{
+        // b and c both reference a. { "path": "./commented-out.json" },
+        /* "files": ["x.ts"], */ "files": [],
         "references": [{ "path": "./b.json" }, { "path": "./c.json" },],
       }`,
       "a.json": "{}",
@@ -193,6 +194,52 @@ describe("type-check runner on a solution", () => {
     expect(stderr).toContain(
       "not checked, because a project they reference failed: b.json",
     );
+  }, 30_000);
+
+  test("gives each checker of a project's compiler its share of the Go memory limit", async () => {
+    const { log, env, scratch } = fakeBuildCompiler();
+    writeSolution(scratch, {
+      "tsconfig.json":
+        '{ "files": [], "references": [{ "path": "./a.json" }] }',
+      "a.json": "{}",
+    });
+
+    const { status } = await runIn(scratch, env, [
+      "--noEmit",
+      "--checkers",
+      "2",
+    ]);
+
+    expect(status).toBe(0);
+    expect(starts(log)).toEqual([
+      `GOMEMLIMIT=2684354560 -b ${path.join(scratch, "a.json")} --checkers 2 --builders 1`,
+    ]);
+  }, 30_000);
+
+  test("checks a tsconfig.json it cannot read as one program, so the compiler reports it", async () => {
+    const { log, env, scratch } = fakeBuildCompiler();
+    writeSolution(scratch, { "tsconfig.json": '{ "files": [' });
+
+    const { status } = await runIn(scratch, env, ["--noEmit"]);
+
+    expect(status).toBe(0);
+    expect(starts(log)).toHaveLength(1);
+    expect(starts(log)[0]).not.toContain(" -b ");
+  }, 30_000);
+
+  test("names a referenced tsconfig it cannot read", async () => {
+    const { log, env, scratch } = fakeBuildCompiler();
+    writeSolution(scratch, {
+      "tsconfig.json":
+        '{ "files": [], "references": [{ "path": "./a.json" }] }',
+      "a.json": '{ "references": [',
+    });
+
+    const { status, stderr } = await runIn(scratch, env, ["--noEmit"]);
+
+    expect(status).not.toBe(0);
+    expect(stderr).toContain(`Cannot read ${path.join(scratch, "a.json")}`);
+    expect(starts(log)).toEqual([]);
   }, 30_000);
 
   test("refuses project references that form a cycle", async () => {

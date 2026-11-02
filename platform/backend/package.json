@@ -42,7 +42,7 @@
     "check:sandbox-base": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/check-sandbox-base-sync.ts",
     "check:layers": "node scripts/check-layers.mjs",
     "check:layers:update": "node scripts/check-layers.mjs --update",
-    "check:projects": "node scripts/check-projects.mjs",
+    "check:projects": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-projects.mjs",
     "check:test-imports": "dependency-cruiser --config .dependency-cruiser.mjs 'src/**/*.unit.test.ts' src/plugins/github-import.ts src/plugins/github-tree.ts src/plugins/plugin-tree-files.ts --output-type err && TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/check-test-fixture-imports.ts",
     "test:playwright-mcp-updater": "node --test scripts/update-playwright-mcp.test.mjs",
     "update:playwright-mcp": "node scripts/update-playwright-mcp.mjs",

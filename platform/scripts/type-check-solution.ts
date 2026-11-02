@@ -36,12 +36,19 @@ export interface SolutionProject {
 
 /**
  * The projects of a solution config in build order, references first, or
- * null when the config is not a solution (it lists or includes files).
+ * null when the config is not a solution (it lists or includes files) or
+ * cannot be read: the compiler then checks it as one program and reports
+ * what is wrong with it.
  */
 export function solutionBuildOrder(
   configPath: string,
 ): SolutionProject[] | null {
-  const solution = readConfig(path.resolve(configPath));
+  let solution: ReturnType<typeof readConfig>;
+  try {
+    solution = readConfig(path.resolve(configPath));
+  } catch {
+    return null;
+  }
   const isSolution =
     Array.isArray(solution.files) &&
     solution.files.length === 0 &&
@@ -126,24 +133,40 @@ export function typeCheckSolution(params: {
   args: string[];
   /** The checkers a compiler gets (`typeScriptCheckers`), or null for the compiler's default. */
   checkers: number | null;
-  /** Whether to set Go's soft memory limit (`typeScriptMemorySettings` applies). */
-  limitGoMemory: boolean;
+  /** The single-program check's Go memory limit (`typeScriptMemorySettings`), or null for none. */
+  goMemoryLimitBytes: number | null;
   /** Whether compilers take turns, as the single-program check does. */
   takeTurns: boolean;
 }): number {
-  const { projects, solutionDir, args, checkers, limitGoMemory, takeTurns } =
-    params;
+  const {
+    projects,
+    solutionDir,
+    args,
+    checkers,
+    goMemoryLimitBytes,
+    takeTurns,
+  } = params;
   const buildArgs = [...args];
   if (checkers !== null && !hasOption(args, "--checkers", "--singleThreaded")) {
     buildArgs.push("--checkers", String(checkers));
   }
   // Independent projects built at once would hold their memory side by side.
   if (!hasOption(args, "--builders")) buildArgs.push("--builders", "1");
-  // Below 16 GiB, each project's compiler collects garbage before it grows
-  // past what one project needs; the projects are sized to stay near it.
+  // Where the single program gets a Go memory limit, each project's compiler
+  // gets one sized for a project: it collects garbage before it grows past
+  // what one project needs per checker, as the projects are sized to.
+  const checkersUsed = checkerCount(buildArgs);
   const env =
-    limitGoMemory && !process.env.GOMEMLIMIT
-      ? { ...process.env, GOMEMLIMIT: String(PROJECT_GO_MEMORY_LIMIT_BYTES) }
+    goMemoryLimitBytes !== null && !process.env.GOMEMLIMIT
+      ? {
+          ...process.env,
+          GOMEMLIMIT: String(
+            Math.min(
+              goMemoryLimitBytes,
+              PROJECT_GO_MEMORY_LIMIT_BYTES_PER_CHECKER * checkersUsed,
+            ),
+          ),
+        }
       : process.env;
   const name = (config: string) =>
     path.relative(solutionDir, config).split(path.sep).join("/");
@@ -194,6 +217,11 @@ export function typeCheckSolution(params: {
       before: memoryBefore,
       after: readCgroupMemory(),
       steps: [
+        ...(checkersUsed > 1
+          ? [
+              `Give the compiler one checker: add --checkers 1 (this run had ${checkersUsed}). Each checker holds its own copy of the project's types.`,
+            ]
+          : []),
         `Split ${name(killedProject)} into smaller projects: each project's compiler holds the types of its own files and of the declarations it reads.`,
       ],
     });
@@ -208,10 +236,11 @@ export function typeCheckSolution(params: {
 const KILLED_STATUS = 128 + constants.signals.SIGKILL;
 
 /**
- * Go's soft memory limit for one project's compiler below 16 GiB. The
- * backend's projects check in about 1 to 1.5 GiB at one checker under it.
+ * Go's soft memory limit for one project's compiler, per checker, below
+ * 16 GiB. The backend's projects check in about 1 to 1.5 GiB at one checker
+ * under it.
  */
-const PROJECT_GO_MEMORY_LIMIT_BYTES = 1280 * 1024 * 1024;
+const PROJECT_GO_MEMORY_LIMIT_BYTES_PER_CHECKER = 1280 * 1024 * 1024;
 
 interface TsConfigFile {
   files?: unknown;
@@ -234,7 +263,8 @@ function referencesOf(config: TsConfigFile & { file: string }): string[] {
 }
 
 /** JSON with the comments and trailing commas tsconfig files allow. */
-export function parseJsonc(text: string, file = "<jsonc>"): TsConfigFile {
+function parseJsonc(source: string, file = "<jsonc>"): TsConfigFile {
+  const text = source.replace(/^\uFEFF/, "");
   let json = "";
   // Where the last comma outside a string went, until something follows it.
   let pendingComma = -1;
@@ -277,8 +307,11 @@ export function parseJsonc(text: string, file = "<jsonc>"): TsConfigFile {
   }
 }
 
-/** Whether the args set one of these options, bare or as `--name=value`, in any case. */
-function hasOption(args: string[], ...names: string[]): boolean {
+/**
+ * Whether the args set one of these options, bare or as `--name=value`. The
+ * compiler reads option names in any case (`--Incremental`).
+ */
+export function hasOption(args: string[], ...names: string[]): boolean {
   return args.some((arg) => {
     const option = arg.toLowerCase();
     return names.some((name) => {
@@ -288,6 +321,22 @@ function hasOption(args: string[], ...names: string[]): boolean {
   });
 }
 
+/** The checkers a compiler runs with these args: its `--checkers`, one when single-threaded, else its default of four. */
+export function checkerCount(args: string[]): number {
+  if (hasOption(args, "--singleThreaded")) return 1;
+  for (const [index, arg] of args.entries()) {
+    const value = arg.toLowerCase().startsWith("--checkers=")
+      ? arg.slice("--checkers=".length)
+      : arg.toLowerCase() === "--checkers"
+        ? args[index + 1]
+        : undefined;
+    if (value !== undefined && /^\d+$/.test(value)) return Number(value);
+  }
+  return 4;
+}
+
+// type-check.ts has the same check for the single program's turn; both give
+// way to the heavy-command lane (scripts/heavy-lane.ts) once it lands.
 function hasFlock(): boolean {
   if (process.platform !== "linux") return false;
   return spawnSync("flock", ["--version"], { stdio: "ignore" }).status === 0;

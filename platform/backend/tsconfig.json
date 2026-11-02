@@ -6,7 +6,7 @@
   //   shared lib, migration linter lib -> schema -> app -> test-support
   //   -> tests-*, tools
   // The options every project shares, and the `paths` alias the runtime tools
-  // read through this file, are in tsconfig.base.json. pnpm check:layers
+  // read through this file, are in tsconfig.base.json. pnpm check:projects
   // checks that every backend file is in exactly one project.
   "extends": "./tsconfig.base.json",
   "files": [],

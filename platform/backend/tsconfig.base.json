@@ -1,7 +1,8 @@
 {
   // Options every backend TypeScript project shares (tsconfig.json lists the
-  // projects). Runtime tools (tsx, tsdown, Vitest, knip) read the `paths`
-  // alias through tsconfig.json, which extends this file.
+  // projects). tsx, Vitest and knip read them and the `paths` alias through
+  // tsconfig.json, which extends this file; tsdown and the standalone scripts
+  // (standalone-scripts.tsconfig.json) read this file directly.
   "compilerOptions": {
     "isolatedModules": true,
     "resolveJsonModule": true,

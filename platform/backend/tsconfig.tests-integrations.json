@@ -1,11 +1,15 @@
 {
-  // Tests of the Archestra MCP server and the agents.
-  "extends": "./tsconfig.test-project.json",
-  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-domain-b.tsbuildinfo" },
+  // Tests of Kubernetes, clients, OpenAPPA, and proxy helpers.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./.tsbuild/tests-integrations.tsbuildinfo"
+  },
   "include": [
     "src/ambient/*.d.ts",
-    "src/archestra-mcp-server/**/*.test.ts",
-    "src/agents/**/*.test.ts"
+    "src/k8s/**/*.test.ts",
+    "src/clients/**/*.test.ts",
+    "src/openappa/**/*.test.ts",
+    "src/proxy/**/*.test.ts"
   ],
   "references": [
     { "path": "../shared/tsconfig.lib.json" },

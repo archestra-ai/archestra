@@ -1,6 +1,6 @@
 {
   // Tests of the chat and MCP gateway routes.
-  "extends": "./tsconfig.test-project.json",
+  "extends": "./tsconfig.base.json",
   "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-routes-chat.tsbuildinfo" },
   "include": [
     "src/ambient/*.d.ts",

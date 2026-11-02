@@ -149,17 +149,18 @@ const autoRoutingRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     "/api/auto-routing/preview",
     {
+      bodyLimit: 256 * 1024,
       schema: {
         operationId: RouteId.PreviewAutoRouting,
         description:
-          "Score a first message and show the tier the active plan would pick, without storing anything",
+          "Score opening text or a request body with its system/tool context and show a fresh choice under the current plan, without executing the request or storing a decision",
         tags: TAGS,
         body: AutoRoutingPreviewBodySchema,
         response: constructResponseSchema(AutoRoutingPreviewResponseSchema),
       },
     },
     async ({ organizationId, body }, reply) =>
-      reply.send(await previewAutoRouting({ organizationId, text: body.text })),
+      reply.send(await previewAutoRouting({ organizationId, ...body })),
   );
 
   fastify.post(

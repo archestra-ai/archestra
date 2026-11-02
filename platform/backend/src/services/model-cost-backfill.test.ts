@@ -716,6 +716,97 @@ describe("recomputing past costs", () => {
     ).toBeCloseTo(total, 8);
   });
 
+  test("recomputes published Copilot tiers consistently with receipts and budgets after custom prices are cleared", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    let model = await ModelModel.create({
+      externalId: "github-copilot/claude-haiku-5.5",
+      provider: "github-copilot",
+      modelId: "claude-haiku-5.5",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    const budget = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "token_cost",
+      limitValue: 100,
+      model: null,
+    });
+    const usage = {
+      inputTokens: 99_401,
+      outputTokens: 4,
+      cacheReadTokens: 500,
+      cacheWriteTokens: 100,
+    };
+    const quote = () =>
+      priceBillingUsage({
+        model: model.modelId,
+        provider: "github-copilot",
+        usage: { ...usage },
+        mode: "enforce",
+      });
+    const billingUsage = await quote();
+    expect(billingUsage.cost).toBe("0.0497980000");
+    const row = await InteractionModel.create({
+      profileId: agent.id,
+      type: "github-copilot:chatCompletions",
+      model: model.modelId,
+      ...usage,
+      cost: billingUsage.cost,
+      billingMode: "metered",
+      billingUsage,
+      billingAttribution: {
+        organizationId: org.id,
+        environmentId: agent.environmentId,
+        entities: [{ entityType: "organization", entityId: org.id }],
+      },
+      request: { model: model.modelId, messages: [] },
+      response: {
+        id: "chatcmpl-published-tier",
+        object: "chat.completion",
+        created: 1,
+        model: model.modelId,
+        choices: [],
+      },
+    });
+    for (const customInput of [null, "2", null]) {
+      model = (await ModelModel.update(model.id, {
+        customPricePerMillionInput: customInput,
+        customPricePerMillionOutput: customInput,
+      })) as Model;
+      const expected = await quote();
+      const preview = await modelCostBackfillService.getPreview({
+        model,
+        timeZone: "UTC",
+        since: new Date(0),
+      });
+      expect(preview.window?.recomputedCost).toBeCloseTo(
+        Number(expected.cost),
+        10,
+      );
+      await modelCostBackfillService.start({
+        model,
+        since: null,
+        organizationId: org.id,
+        userId: user.id,
+      });
+      await modelCostBackfillService.runNext();
+      expect((await costsOf(row.id)).cost).toBe(expected.cost);
+      const [receipt] = await InteractionBillingModel.findMany([row.id]);
+      expect(receipt.usage.cost).toBe(expected.cost);
+      const spend = (await LimitModel.getSpendUsage([budget.id])).get(
+        budget.id,
+      );
+      expect(spend?.modelUsage[0].cost).toBeCloseTo(Number(expected.cost), 10);
+    }
+  });
+
   test("a run out of time resumes from its cursor on the next run", async ({
     makeAgent,
     makeInteraction,

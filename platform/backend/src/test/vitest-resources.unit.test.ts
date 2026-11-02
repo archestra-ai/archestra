@@ -11,7 +11,7 @@ import {
   resourceEnvelope,
   typeScriptCheckers,
   typeScriptMemorySettings,
-  wholeProgramGoMemoryLimit,
+  wholeProgramGoMemoryLimits,
 } from "../../../vitest.resources";
 import { calculateVitestResourceLimits } from "./vitest-resource-limits";
 
@@ -415,41 +415,42 @@ describe("describeToolMemoryKill", () => {
   });
 });
 
-describe("wholeProgramGoMemoryLimit", () => {
+describe("wholeProgramGoMemoryLimits", () => {
   const pod = (gib: number) =>
     resourceEnvelope({ ...NODE, constrainedMemoryBytes: gib * GIB });
 
-  test("in a 4 GiB pod the frontend gets the room left with the servers paused, less the compiler's own", () => {
-    // 2.68 GiB with the servers paused, less 0.5 GiB outside Go's heap.
-    expect(
-      (wholeProgramGoMemoryLimit(pod(4), {
-        liveBytes: 1.9 * GIB,
-        peakBytes: 2.8 * GIB,
-      }) ?? 0) / GIB,
-    ).toBeCloseTo(2.18, 2);
+  test("in a 4 GiB pod the frontend gets the room left with the servers stopped, less the compiler's own", () => {
+    // 2.68 GiB with the servers stopped, less 0.5 GiB outside Go's heap.
+    const limits = wholeProgramGoMemoryLimits(pod(4), 1.9 * GIB);
+    expect((limits?.serversPausedBytes ?? 0) / GIB).toBeCloseTo(2.18, 2);
   });
 
-  test("never goes below the program's live data", () => {
+  test("beside the servers, and in any pod, never below the program's live data", () => {
+    // 1.83 GiB beside the servers, less 0.5, is below the frontend's 1.9 GiB.
     expect(
-      wholeProgramGoMemoryLimit(pod(4), {
-        liveBytes: 4.8 * GIB,
-        peakBytes: 5.6 * GIB,
-      }),
-    ).toBe(4.8 * GIB);
+      wholeProgramGoMemoryLimits(pod(4), 1.9 * GIB)?.besideServersBytes,
+    ).toBe(Math.ceil(1.9 * GIB));
+    expect(
+      wholeProgramGoMemoryLimits(pod(3), 1.9 * GIB)?.serversPausedBytes,
+    ).toBe(Math.ceil(1.9 * GIB));
   });
 
-  test("a check that fits beside the servers gets the room beside them", () => {
+  test("gives Go whole bytes, as GOMEMLIMIT needs", () => {
+    for (const gib of [3, 4, 6, 8, 12]) {
+      const limits = wholeProgramGoMemoryLimits(pod(gib), 1.9 * GIB);
+      expect(Number.isInteger(limits?.besideServersBytes)).toBe(true);
+      expect(Number.isInteger(limits?.serversPausedBytes)).toBe(true);
+    }
+  });
+
+  test("a small program gets the room beside the servers", () => {
     expect(
-      (wholeProgramGoMemoryLimit(pod(4), {
-        liveBytes: 0.4 * GIB,
-        peakBytes: 0.7 * GIB,
-      }) ?? 0) / GIB,
+      (wholeProgramGoMemoryLimits(pod(4), 0.4 * GIB)?.besideServersBytes ?? 0) /
+        GIB,
     ).toBeCloseTo(1.33, 2);
   });
 
   test("sets nothing where the lane is off", () => {
-    expect(
-      wholeProgramGoMemoryLimit(pod(24), { liveBytes: 1.9 * GIB }),
-    ).toBeNull();
+    expect(wholeProgramGoMemoryLimits(pod(24), 1.9 * GIB)).toBeNull();
   });
 });

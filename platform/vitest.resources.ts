@@ -177,29 +177,33 @@ export const TYPE_CHECK_PEAK_BYTES: Readonly<Record<string, number>> = {
  * costs time (at 1.5 GiB the frontend check took a third longer).
  */
 export const TYPE_CHECK_LIVE_BYTES: Readonly<Record<string, number>> = {
-  frontend: 1.9 * 1024 ** 3,
+  frontend: Math.round(1.9 * 1024 ** 3),
 };
 
 /**
- * Go's soft memory limit (`GOMEMLIMIT`) for a whole program's check in a small
- * container: the memory the heavy lane gives the command (beside the dev
- * stack's servers, or with them paused when its declared peak needs that),
- * less what the compiler holds outside Go's heap (about 0.5 GiB), and never
- * below the program's live data. Null where the lane is off (16 GiB and up).
+ * Go's soft memory limit (`GOMEMLIMIT`, whole bytes: Go refuses a fraction)
+ * for a whole program's check in a small container, for each room the heavy
+ * lane can give it: beside the dev stack's servers, and with them stopped.
+ * The room less what the compiler holds outside Go's heap (about 0.5 GiB),
+ * never below the program's live data. The lane applies the second only once
+ * the servers are stopped (`HeavyCommand.pausedEnv`). Null where the lane is
+ * off (16 GiB and up).
  */
-export function wholeProgramGoMemoryLimit(
+export function wholeProgramGoMemoryLimits(
   envelope: ResourceEnvelope,
-  program: { liveBytes: number; peakBytes?: number },
-): number | null {
+  liveBytes: number,
+): { besideServersBytes: number; serversPausedBytes: number } | null {
   if (!heavyLaneActive(envelope)) return null;
   const ceilings = heavyLaneCeilings(envelope);
-  const room = pausesServers(envelope, program.peakBytes)
-    ? ceilings.serversPausedBytes
-    : ceilings.besideServersBytes;
-  return Math.max(
-    program.liveBytes,
-    Math.floor(room - TYPESCRIPT_OUTSIDE_HEAP_BYTES),
-  );
+  const limit = (room: number) =>
+    Math.max(
+      Math.ceil(liveBytes),
+      Math.floor(room - TYPESCRIPT_OUTSIDE_HEAP_BYTES),
+    );
+  return {
+    besideServersBytes: limit(ceilings.besideServersBytes),
+    serversPausedBytes: limit(ceilings.serversPausedBytes),
+  };
 }
 
 /**

@@ -36,7 +36,7 @@ import {
   TYPE_CHECK_PEAK_BYTES,
   typeScriptCheckers,
   typeScriptMemorySettings,
-  wholeProgramGoMemoryLimit,
+  wholeProgramGoMemoryLimits,
 } from "../vitest.resources.ts";
 import { runHeavy } from "./heavy-lane.ts";
 
@@ -56,15 +56,15 @@ if (
 }
 const pkg = checkedPackage();
 // A whole program with a measured live size gets the room the heavy lane gives
-// it (never less than its live data); other checks keep the envelope's share.
+// it (never less than its live data): what fits beside the dev stack's
+// servers, and more only once the lane has them stopped. Other checks keep the
+// envelope's share. A GOMEMLIMIT set by hand wins.
 const liveBytes = TYPE_CHECK_LIVE_BYTES[pkg];
-const goMemoryLimit =
-  (liveBytes === undefined
+const limits =
+  liveBytes === undefined || process.env.GOMEMLIMIT
     ? null
-    : wholeProgramGoMemoryLimit(envelope, {
-        liveBytes,
-        peakBytes: TYPE_CHECK_PEAK_BYTES[pkg],
-      })) ?? memory?.goMemoryLimitBytes;
+    : wholeProgramGoMemoryLimits(envelope, liveBytes);
+const goMemoryLimit = limits?.besideServersBytes ?? memory?.goMemoryLimitBytes;
 const env =
   goMemoryLimit !== undefined && !process.env.GOMEMLIMIT
     ? { ...process.env, GOMEMLIMIT: String(goMemoryLimit) }
@@ -79,6 +79,9 @@ const result = runHeavy({
   env,
   label: `type-check (${pkg})`,
   peakBytes: TYPE_CHECK_PEAK_BYTES[pkg],
+  pausedEnv: limits
+    ? { GOMEMLIMIT: String(limits.serversPausedBytes) }
+    : undefined,
   lane: sized !== null,
 });
 if (result.error) throw result.error;

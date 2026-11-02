@@ -22,6 +22,21 @@ export HERMES_HOME="${ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR:-${runtime_dir}}/
 hermes_python=/opt/hermes/.venv/bin/python
 [[ -x "${hermes_python}" ]] || hermes_python=python3
 mkdir -p "${runtime_dir}" "${HERMES_HOME}"
+# Hermes 0.22.5 keeps its gateway alive after the TUI exits. A resumed runtime
+# has fresh gateway credentials: retire only this runtime's owner before
+# rewriting config, and respect Hermes's refusal to interrupt live work.
+if [[ -S "${HERMES_HOME}/gateway.sock" ]]; then
+  if ! hermes gateway stop </dev/null; then
+    echo "archestra: Could not retire the previous Hermes gateway. Let its active work finish, then retry." >&2
+    exit 78
+  fi
+fi
+cleanup_gateway() {
+  if [[ -S "${HERMES_HOME}/gateway.sock" ]]; then
+    hermes gateway stop </dev/null >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup_gateway EXIT
 attention_plugin_dir="${HERMES_HOME}/plugins/archestra-attention"
 mkdir -p "${attention_plugin_dir}"
 cat > "${attention_plugin_dir}/plugin.yaml" <<'PLUGIN_MANIFEST'
@@ -331,6 +346,9 @@ jq -n \
     }},
     mcp_servers:{archestra:{
       url:$mcp_url,
+      # The persistent gateway connects before constructing its first agent.
+      # Bound that stage by the same startup budget as discovery.
+      connect_timeout:30,
       headers:({
         Authorization:("Bearer " + $gateway_token),
         "X-Archestra-Run-Id":$task_id,
@@ -450,7 +468,7 @@ case "${runtime_mode}" in
     if [[ -n "${ARCHESTRA_AGENT_RUNTIME_TASK:-}" ]]; then
       prompt_args+=(--query "$(cat "${task_file}")")
     fi
-    exec hermes chat "${common_args[@]}" --tui "${prompt_args[@]}"
+    hermes chat "${common_args[@]}" --tui "${prompt_args[@]}"
     ;;
   one_shot)
     if [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" == "1" ]]; then
@@ -489,7 +507,7 @@ PYTHON
       "${runtime_dir}/turn-complete" \
       "${message_cursor}" &
 
-    exec "${script_dir}/archestra-tui-run" \
+    "${script_dir}/archestra-tui-run" \
       "${runtime_dir}/turn-complete" \
       "${runtime_dir}/final-answer.txt" \
       hermes chat \

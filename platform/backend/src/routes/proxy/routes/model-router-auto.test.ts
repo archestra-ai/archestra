@@ -20,6 +20,7 @@ import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { activeSourceVersion } from "@/auto-routing/signals";
 import { type Trio, tiersFingerprint } from "@/auto-routing/tiers";
 import { internalCallHeader } from "@/clients/internal-call";
+import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
@@ -1142,6 +1143,7 @@ describe("Model Router auto model", () => {
         internal?: boolean;
         /** The key the call names; the organization's shared key by default. */
         callKeyId?: string;
+        baseUrl?: string;
         stream?: boolean;
         extra?: Record<string, unknown>;
       },
@@ -1157,7 +1159,7 @@ describe("Model Router auto model", () => {
           authorization: "Bearer sk-openai",
           [CHAT_API_KEY_ID_HEADER]: params.callKeyId ?? org.providerApiKeyId,
           [USER_ID_HEADER]: params.userId,
-          [PROVIDER_BASE_URL_HEADER]: UPSTREAM,
+          [PROVIDER_BASE_URL_HEADER]: params.baseUrl ?? UPSTREAM,
           "x-archestra-session-id": "chat-1",
           ...(params.routable === false
             ? {}
@@ -1181,6 +1183,108 @@ describe("Model Router auto model", () => {
       const user = await makeUser();
       await makeMember(user.id, org.organizationId);
       return user.id;
+    }
+
+    for (const fallback of ["routing-disabled", "different-model"] as const) {
+      test.for([
+        "none",
+        "budget",
+        "access",
+      ] as const)(`an opaque Fireworks alias respects $0 controls after ${fallback} auto-routing fallback`, async (control, {
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+        makeUser,
+        makeMember,
+      }) => {
+        const org = await setupOrganization({
+          makeOrganization,
+          makeSecret,
+          makeLlmProviderApiKey,
+        });
+        const userId = await member(org, makeUser, makeMember);
+        const canonical = "accounts/fireworks/models/glm-5p3-flash";
+        const fireworks = "https://api.fireworks.ai/inference/v1";
+        const model = await createModel("openai", canonical);
+        const key = await makeLlmProviderApiKey(
+          org.organizationId,
+          (await makeSecret({ secret: { apiKey: "synthetic-fireworks" } })).id,
+          { provider: "openai", baseUrl: fireworks },
+        );
+        await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+          model.id,
+        ]);
+        if (fallback === "routing-disabled") {
+          await AutoRoutingSettingsModel.update(org.organizationId, {
+            enabled: false,
+          });
+        }
+        if (control === "budget") {
+          await LimitModel.create({
+            entityType: "organization",
+            entityId: org.organizationId,
+            limitType: "token_cost",
+            limitValue: 1,
+            model: [canonical],
+          });
+        }
+        if (control === "access") await grantOnly(org, model, []);
+        modelsDevClient.clearFetchCache();
+        onTestFinished(() => modelsDevClient.clearFetchCache());
+        const fireworksModels: string[] = [];
+        server.use(
+          http.get("https://models.dev/api.json", () => HttpResponse.json({})),
+          http.post(`${fireworks}/chat/completions`, async ({ request }) => {
+            const body = (await request.json()) as { model: string };
+            fireworksModels.push(body.model);
+            return HttpResponse.json(chatCompletion(canonical));
+          }),
+        );
+
+        // Valid internal proof and a member establish an auto-routing user.
+        // The real router declines the call either because routing is off or
+        // because this opaque alias differs from the organization's normal tier.
+        const response = await sendPlatformCall(org, {
+          userId,
+          callKeyId: key.id,
+          baseUrl: fireworks,
+          model: "firerouter/auto",
+        });
+
+        expect(response.statusCode, response.body).toBe(
+          control === "none" ? 200 : 400,
+        );
+        expect(fireworksModels).toEqual(
+          control === "none" ? ["firerouter/auto"] : [],
+        );
+        expect(upstreamModels).toEqual([]);
+        expect(jevCalls).toBe(0);
+        expect(await decisions(org.organizationId)).toEqual([]);
+        if (control === "none") {
+          expect(response.json().model).toBe(canonical);
+          expect(await platformCalls(org.agentId)).toEqual([
+            { model: "firerouter/auto", providerApiKeyId: key.id },
+          ]);
+        } else {
+          expect(response.json().error.message).toContain(
+            "This Fireworks alias does not identify a fixed model",
+          );
+          const rows = await db
+            .select()
+            .from(schema.interactionsTable)
+            .where(eq(schema.interactionsTable.profileId, org.agentId));
+          expect(rows).toHaveLength(1);
+          expect(rows[0]).toMatchObject({
+            inputTokens: 0,
+            outputTokens: 0,
+            response: {
+              error: expect.stringContaining(
+                "This Fireworks alias does not identify a fixed model",
+              ),
+            },
+          });
+        }
+      });
     }
 
     test("an agent inheriting the default runs on the session's routed tier while routing is on", async ({

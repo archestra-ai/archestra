@@ -2,7 +2,7 @@
 title: OpenAI-compatible Servers
 description: Connect vLLM, llama.cpp, LM Studio, or another OpenAI-compatible server
 order: 5
-lastUpdated: 2026-10-27
+lastUpdated: 2026-11-02
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -33,3 +33,11 @@ The API key variable alone does not create a provider key at startup: the Base U
 OpenAI-compatible servers manage their own prompt or prefix caches, and support depends on the server and model. The `/v1/vllm` endpoint currently does not forward explicit `prompt_cache_key`, `prompt_cache_retention`, `prompt_cache_options`, or content-block `prompt_cache_breakpoint` fields; the native OpenAI endpoint has separate request validation.
 
 Archestra does not configure the server's cache, insert cache breakpoints, or guarantee cache hits. Check your server's documentation for automatic prefix caching and the usage fields it reports.
+
+## Fireworks
+
+For Fireworks, use `https://api.fireworks.ai/inference/v1` as the Base URL. Archestra recognizes this endpoint on both OpenAI and OpenAI-compatible connections and uses Fireworks-specific catalog prices. Custom prices take precedence. Missing prices produce an incomplete, estimated cost instead of the self-hosted zero-rate fallback; this estimate counts toward spend limits. It is not a provider invoice.
+
+A pinned short name such as `glm-5p3-flash` resolves to `accounts/fireworks/models/glm-5p3-flash` when that full ID exists in the model catalog. Archestra sends the full ID upstream and uses it for model access checks, usage, and spend limits. Existing access restrictions and custom prices on the short name still apply.
+
+Dynamic aliases such as `auto` and `firerouter/auto`, and unknown short names, are refused when enforced spend limits or model access restrictions apply. Use a full, fixed model ID in these cases. A custom reverse proxy is not automatically identified as Fireworks; configure its prices explicitly.

@@ -9,14 +9,20 @@
 import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
+import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { createFastifyInstance } from "@/fastify-instance";
 import { ModelPoolModel, VirtualApiKeyModel } from "@/models";
+import LimitModel from "@/models/limit";
+import ModelModel from "@/models/model";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { accessGrants, beforeEach, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
+import { drainBackgroundWork } from "@/utils/background-work";
 import modelRouterRoutes from "./model-router";
+import vllmProxyRoutes from "./vllm";
 
 // Model pools are a beta feature; these tests run with it on.
 beforeEach(() => {
@@ -398,6 +404,334 @@ labTest(
     expect(second.hits).toBe(0);
   },
 );
+
+test.for([
+  { provider: "vllm" as const, restricted: false },
+  { provider: "vllm" as const, restricted: true },
+  { provider: "openai" as const, restricted: false },
+  { provider: "openai" as const, restricted: true },
+])("pool failover resolves and prices the selected Fireworks endpoint ($provider, restricted=$restricted)", async ({
+  provider,
+  restricted,
+}, { makeOrganization, makeAgent, makeSecret, makeLlmProviderApiKey }) => {
+  const canonical = "accounts/fireworks/models/glm-5p3-flash";
+  const short = "glm-5p3-flash";
+  const selfHosted = "https://self-hosted.example.test/v1";
+  const fireworks = "https://api.fireworks.ai/inference/v1";
+  config.llm.vllm.enabled = true;
+  config.llm[provider].baseUrl = selfHosted;
+  const org = await makeOrganization();
+  const agent = await makeAgent({
+    organizationId: org.id,
+    agentType: "agent",
+  });
+  const keys = [];
+  for (const [index, baseUrl] of [selfHosted, fireworks].entries()) {
+    keys.push(
+      await makeLlmProviderApiKey(
+        org.id,
+        (await makeSecret({ secret: { apiKey: `synthetic-pool-${index}` } }))
+          .id,
+        { provider, baseUrl },
+      ),
+    );
+  }
+  const virtual = await VirtualApiKeyModel.create({
+    organizationId: org.id,
+    name: "Fireworks pool client",
+    ...accessGrants("org"),
+    providerApiKeys: [{ provider, providerApiKeyId: keys[0].id }],
+  });
+  const pool = await ModelPoolModel.create({
+    organizationId: org.id,
+    input: {
+      name: "pooled-model",
+      members: keys.map((key, index) => ({
+        providerApiKeyId: key.id,
+        modelId: short,
+        priority: index + 1,
+        weight: 1,
+        enabled: true,
+      })),
+    },
+  });
+  await ModelPoolModel.setPoolsForVirtualApiKey({
+    organizationId: org.id,
+    virtualApiKeyId: virtual.virtualKey.id,
+    poolIds: [pool.id],
+  });
+  const model = await ModelModel.create({
+    externalId: `${provider}/${canonical}`,
+    provider,
+    modelId: canonical,
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    // A transport-wide catalog price must not replace the selected seller's.
+    promptPricePerToken: "0.00009",
+    completionPricePerToken: "0.00009",
+    cacheReadPricePerToken: "0.00009",
+  });
+  if (restricted) {
+    const policyKey = {
+      organizationId: org.id,
+      resource: "llmModel" as const,
+      scope: model.id,
+    };
+    const current = await ResourcePermissionPolicyModel.find(policyKey);
+    await ResourcePermissionPolicyModel.replace({
+      ...policyKey,
+      revision: current?.revision ?? 0,
+      grants: [],
+    });
+  }
+  modelsDevClient.clearFetchCache();
+  const calls: Array<{ endpoint: string; model: string }> = [];
+  server.use(
+    http.get("https://models.dev/api.json", () =>
+      HttpResponse.json({
+        "other-seller": {
+          id: "other-seller",
+          name: "Other seller",
+          models: {
+            [canonical]: {
+              id: canonical,
+              name: "GLM fixture",
+              cost: { input: 90, output: 90, cache_read: 90 },
+            },
+          },
+        },
+        "fireworks-ai": {
+          id: "fireworks-ai",
+          name: "Fireworks",
+          models: {
+            [canonical]: {
+              id: canonical,
+              name: "GLM fixture",
+              cost: { input: 2, output: 8, cache_read: 0.5 },
+            },
+          },
+        },
+      }),
+    ),
+    http.post(`${selfHosted}/chat/completions`, async ({ request }) => {
+      const body = (await request.json()) as { model: string };
+      calls.push({ endpoint: selfHosted, model: body.model });
+      return HttpResponse.json(
+        { error: { message: "Fixture capacity exhausted" } },
+        { status: 429, headers: { "retry-after": "10" } },
+      );
+    }),
+    http.post(`${fireworks}/chat/completions`, async ({ request }) => {
+      const body = (await request.json()) as { model: string };
+      calls.push({ endpoint: fireworks, model: body.model });
+      return HttpResponse.json({
+        id: "chatcmpl-fireworks-pool",
+        object: "chat.completion",
+        created: 1,
+        model: canonical,
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: "Fixture answer" },
+            finish_reason: "stop",
+          },
+        ],
+        usage: {
+          prompt_tokens: 1400,
+          completion_tokens: 500,
+          total_tokens: 1900,
+          prompt_tokens_details: { cached_tokens: 400 },
+        },
+      });
+    }),
+  );
+  const app = createFastifyInstance();
+  await app.register(modelRouterRoutes);
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/chat/completions`,
+      headers: { authorization: `Bearer ${virtual.value}` },
+      payload: {
+        model: "pooled-model",
+        messages: [{ role: "user", content: "Fixture request" }],
+      },
+    });
+    expect(response.statusCode, response.body).toBe(restricted ? 403 : 200);
+    expect(calls).toEqual([
+      { endpoint: selfHosted, model: short },
+      ...(restricted ? [] : [{ endpoint: fireworks, model: canonical }]),
+    ]);
+    const rows = await db.select().from(schema.interactionsTable);
+    expect(
+      rows.filter((row) => row.attemptOutcome === "answered"),
+    ).toHaveLength(restricted ? 0 : 1);
+    if (restricted) {
+      expect(response.body).toContain(canonical);
+    } else {
+      expect(response.headers["x-archestra-provider-key"]).toBe(keys[1].id);
+      expect(response.headers["x-archestra-attempts"]).toBe("2");
+      expect(
+        rows.find((row) => row.attemptOutcome === "answered"),
+      ).toMatchObject({
+        providerApiKeyId: keys[1].id,
+        model: canonical,
+        inputTokens: 1000,
+        cacheReadTokens: 400,
+        outputTokens: 500,
+        cost: "0.0062000000",
+      });
+      expect(
+        rows.find((row) => row.attemptOutcome === "failed_over"),
+      ).toMatchObject({
+        providerApiKeyId: keys[0].id,
+        model: short,
+        cost: "0.0000000000",
+      });
+    }
+  } finally {
+    await app.close();
+    modelsDevClient.clearFetchCache();
+  }
+});
+
+test("a Fireworks-first named pool applies the canonical member's spend cap", async ({
+  makeOrganization,
+  makeAgent,
+  makeSecret,
+  makeLlmProviderApiKey,
+}) => {
+  const canonical = "accounts/fireworks/models/glm-5p3-flash";
+  const fireworks = "https://api.fireworks.ai/inference/v1";
+  config.llm.vllm.enabled = true;
+  config.llm.vllm.baseUrl = fireworks;
+  const org = await makeOrganization();
+  const agent = await makeAgent({
+    organizationId: org.id,
+    agentType: "llm_proxy",
+  });
+  const key = await makeLlmProviderApiKey(
+    org.id,
+    (await makeSecret({ secret: { apiKey: "synthetic-fireworks-pool" } })).id,
+    { provider: "vllm", baseUrl: fireworks },
+  );
+  const virtual = await VirtualApiKeyModel.create({
+    organizationId: org.id,
+    name: "Capped pool client",
+    ...accessGrants("org"),
+    providerApiKeys: [{ provider: "vllm", providerApiKeyId: key.id }],
+  });
+  const pool = await ModelPoolModel.create({
+    organizationId: org.id,
+    input: {
+      name: "named-fireworks-pool",
+      members: [
+        {
+          providerApiKeyId: key.id,
+          modelId: "glm-5p3-flash",
+          priority: 1,
+          weight: 1,
+          enabled: true,
+        },
+      ],
+    },
+  });
+  await ModelPoolModel.setPoolsForVirtualApiKey({
+    organizationId: org.id,
+    virtualApiKeyId: virtual.virtualKey.id,
+    poolIds: [pool.id],
+  });
+  const cap = await LimitModel.create({
+    entityType: "organization",
+    entityId: org.id,
+    limitType: "token_cost",
+    limitValue: 1,
+    model: [canonical],
+  });
+  modelsDevClient.clearFetchCache();
+  const dispatched: string[] = [];
+  server.use(
+    http.get("https://models.dev/api.json", () =>
+      HttpResponse.json({
+        "fireworks-ai": {
+          id: "fireworks-ai",
+          name: "Fireworks",
+          models: {
+            [canonical]: {
+              id: canonical,
+              name: "GLM fixture",
+              cost: { input: 2, output: 8, cache_read: 0.5 },
+            },
+          },
+        },
+      }),
+    ),
+    http.post(`${fireworks}/chat/completions`, async ({ request }) => {
+      dispatched.push(((await request.json()) as { model: string }).model);
+      return HttpResponse.json({
+        id: "chatcmpl-capped-pool",
+        object: "chat.completion",
+        created: 1,
+        model: canonical,
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: "Fixture answer" },
+            finish_reason: "stop",
+          },
+        ],
+        usage: {
+          prompt_tokens: 1000,
+          completion_tokens: 500,
+          total_tokens: 1500,
+        },
+      });
+    }),
+  );
+  const app = createFastifyInstance();
+  await app.register(vllmProxyRoutes);
+  const ask = () =>
+    app.inject({
+      method: "POST",
+      url: `/v1/vllm/${agent.id}/chat/completions`,
+      headers: { authorization: `Bearer ${virtual.value}` },
+      payload: {
+        model: "named-fireworks-pool",
+        messages: [{ role: "user", content: "Fixture request" }],
+      },
+    });
+  try {
+    // The pool name is not a Fireworks model alias; planning must resolve its
+    // member before endpoint alias validation sees the canonical spend cap.
+    const response = await ask();
+    expect(response.statusCode, response.body).toBe(200);
+    expect(dispatched).toEqual([canonical]);
+    expect(response.headers["x-archestra-provider-key"]).toBe(key.id);
+    await drainBackgroundWork();
+    const rows = await db.select().from(schema.interactionsTable);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      model: canonical,
+      providerApiKeyId: key.id,
+      cost: "0.0060000000",
+    });
+    const usage = await LimitModel.getModelUsageBreakdowns([cap.id]);
+    expect(usage.get(cap.id)).toEqual([
+      { model: canonical, tokensIn: 1000, tokensOut: 500, cost: 0.006 },
+    ]);
+    await LimitModel.patch(cap.id, { limitValue: 0 });
+    const refused = await ask();
+    expect(refused.statusCode, refused.body).toBe(402);
+    expect(refused.json().error).toMatchObject({
+      type: "usage_limit_exceeded",
+      code: "token_cost_limit_exceeded",
+    });
+    expect(dispatched).toEqual([canonical]);
+  } finally {
+    await app.close();
+    modelsDevClient.clearFetchCache();
+  }
+});
 
 async function respond(
   deployment: Deployment,

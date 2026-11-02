@@ -33,11 +33,16 @@ import {
   A2AContextModel,
   A2AMessageModel,
   A2ATaskModel,
+  AgentExcludedSubagentModel,
+  AgentModel,
   AgentRunModel,
   AgentTeamModel,
+  AgentToolModel,
   AgentWorkspaceModel,
   ChatOpsChannelBindingModel,
+  EnvironmentModel,
   MemberModel,
+  ToolModel,
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { openappaActor } from "@/openappa/actor";
@@ -107,6 +112,113 @@ describe("run tools", () => {
 
     expect(result.isError).toBe(true);
     expect((result.content[0] as { text: string }).text).toContain(
+      "Agent not found",
+    );
+  });
+
+  test("enforces subagent restrictions and environment isolation on start_agent_run", async ({
+    makeAgent,
+    seedAndAssignArchestraTools,
+  }) => {
+    const allowedTarget = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+    });
+    const otherTarget = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+    });
+
+    // 1. Excluded subagent is refused
+    await AgentExcludedSubagentModel.replaceForAgent(callingAgent.id, [
+      otherTarget.id,
+    ]);
+    const excludedResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { agent_id: otherTarget.id, message: "Run excluded target" },
+      context,
+    );
+    expect(excludedResult.isError).toBe(true);
+    expect((excludedResult.content[0] as { text: string }).text).toContain(
+      `Agent "${otherTarget.name}" is not an allowed subagent of "${callingAgent.name}".`,
+    );
+    await AgentExcludedSubagentModel.replaceForAgent(callingAgent.id, []);
+
+    // 2. GitHub Actions MCP Gateway with accessAllSubagents=false refuses undelegated target
+    const githubGateway = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "mcp_gateway",
+      accessAllSubagents: false,
+    });
+    await AgentModel.update(githubGateway.id, {
+      githubActionsAccess: {
+        githubAppCredentialKey: "GITHUB_ACTIONS_APP_CODE_REVIEW",
+        repositories: ["example-org/*"],
+        workflows: [".github/workflows/review.yml"],
+      },
+    });
+    await seedAndAssignArchestraTools(githubGateway.id);
+    const gatewayContext: ArchestraContext = {
+      ...context,
+      agent: { id: githubGateway.id, name: githubGateway.name },
+      agentId: githubGateway.id,
+    };
+    const undelegatedGatewayResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { agent_id: otherTarget.id, message: "Run undelegated target" },
+      gatewayContext,
+    );
+    expect(undelegatedGatewayResult.isError).toBe(true);
+    expect(
+      (undelegatedGatewayResult.content[0] as { text: string }).text,
+    ).toContain(
+      `Agent "${otherTarget.name}" is not an allowed subagent of "${githubGateway.name}".`,
+    );
+
+    // 3. Explicit subagent delegation allows allowedTarget while still refusing otherTarget
+    const delegationTool = await ToolModel.findOrCreateDelegationTool(
+      allowedTarget.id,
+    );
+    await AgentToolModel.create(githubGateway.id, delegationTool.id);
+    const stillRefusedResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { agent_id: otherTarget.id, message: "Run non-allowlisted target" },
+      gatewayContext,
+    );
+    expect(stillRefusedResult.isError).toBe(true);
+    expect((stillRefusedResult.content[0] as { text: string }).text).toContain(
+      `Agent "${otherTarget.name}" is not an allowed subagent of "${githubGateway.name}".`,
+    );
+
+    // allowedTarget passes the subagent check (and hits the runtime check since it has no runtime)
+    const allowedResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { agent_id: allowedTarget.id, message: "Run allowlisted target" },
+      gatewayContext,
+    );
+    expect((allowedResult.content[0] as { text: string }).text).toContain(
+      `Agent "${allowedTarget.name}" has no Agent Runtime`,
+    );
+
+    // 4. Cross-environment target is refused with Agent not found
+    const environment = await EnvironmentModel.create({
+      organizationId,
+      name: "Isolated Env",
+      namespace: "isolated-ns",
+    });
+    await AgentModel.update(allowedTarget.id, {
+      environmentId: environment.id,
+    });
+    const crossEnvResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { agent_id: allowedTarget.id, message: "Run cross-env target" },
+      gatewayContext,
+    );
+    expect(crossEnvResult.isError).toBe(true);
+    expect((crossEnvResult.content[0] as { text: string }).text).toContain(
       "Agent not found",
     );
   });

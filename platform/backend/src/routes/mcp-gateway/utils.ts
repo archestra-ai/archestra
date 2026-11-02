@@ -110,6 +110,7 @@ import {
 import { openappaEnabled, openappaYellEnabled } from "@/openappa/service";
 import { sanitizeGeminiToolSchema } from "@/routes/proxy/adapters/gemini-schema";
 import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
+import { AGENT_RUNTIME_OAUTH_CLIENT_ID } from "@/services/agent-runtime/runtime-contract";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
 import {
   agentToolExclusionsService,
@@ -1955,14 +1956,20 @@ async function validateOAuthTokenByHash(params: {
       return null;
     }
 
+    const isAgentRuntimeRunToken =
+      accessToken.clientId === AGENT_RUNTIME_OAUTH_CLIENT_ID;
     return {
-      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
+      tokenId: isAgentRuntimeRunToken
+        ? accessToken.id
+        : `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
       teamId: null,
       isOrganizationToken: false,
       organizationId,
       isUserToken: true,
       userId,
-      oauthClientId: accessToken.clientId,
+      ...(isAgentRuntimeRunToken
+        ? {}
+        : { oauthClientId: accessToken.clientId }),
     };
   } catch (error) {
     logger.debug(

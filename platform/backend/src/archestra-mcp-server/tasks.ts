@@ -24,6 +24,7 @@ import {
   A2AArtifactModel,
   A2AMessageModel,
   A2ATaskModel,
+  AgentExcludedSubagentModel,
   AgentModel,
   AgentRunModel,
   AgentTeamModel,
@@ -168,6 +169,46 @@ async function launchDelegatedTask(params: {
       }))
     ) {
       return failedLaunch("agent_not_found", errorResult("Agent not found"));
+    }
+    if (context.agent.id !== agent.id) {
+      const callerAgent = await AgentModel.findById(context.agent.id);
+      if (callerAgent) {
+        if (callerAgent.environmentId !== agent.environmentId) {
+          return failedLaunch(
+            "agent_not_found",
+            errorResult("Agent not found"),
+          );
+        }
+        const excludedSubagentIds =
+          await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(
+            callerAgent.id,
+          );
+        if (excludedSubagentIds.includes(agent.id)) {
+          return failedLaunch(
+            "refused",
+            errorResult(
+              `Agent "${agent.name}" is not an allowed subagent of "${callerAgent.name}".`,
+            ),
+          );
+        }
+        if (!callerAgent.accessAllSubagents) {
+          const delegatedAgentIds = callerAgent.tools
+            .map((tool) => tool.delegateToAgentId)
+            .filter((id): id is string => Boolean(id));
+          if (
+            (delegatedAgentIds.length > 0 ||
+              callerAgent.githubActionsAccess !== null) &&
+            !delegatedAgentIds.includes(agent.id)
+          ) {
+            return failedLaunch(
+              "refused",
+              errorResult(
+                `Agent "${agent.name}" is not an allowed subagent of "${callerAgent.name}".`,
+              ),
+            );
+          }
+        }
+      }
     }
 
     const runtime = resolveAgentRuntime(agent);

@@ -125,7 +125,7 @@ describe("redactCredentials", () => {
     ],
     [
       String.raw`curl -H Authorization:\ Bearer\ tok_123 https://x`,
-      String.raw`curl -H Authorization:\ Bearer\ [redacted]`,
+      String.raw`curl -H Authorization:\ Bearer\ [redacted] https://x`,
     ],
     [
       String.raw`curl -H Authorization:Bearer\ tok_123`,

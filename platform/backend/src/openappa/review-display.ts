@@ -260,11 +260,12 @@ const CREDENTIAL_NAME = new RegExp(`^(?:${CREDENTIAL_NAMES})$`, "i");
 // The name, starting a word so a long word is tried once, possibly quoted,
 // `:` or `=`, a gap that may be shell-escaped, then either a value quoted
 // from its first character through the matching quote, or a bare value: after
-// `:` up to the end of the line or a quote, which may close an enclosing
+// `:` up to the first unescaped space when it is shell-escaped (`\ `), else
+// up to the end of the line or a quote, which may close an enclosing
 // argument; after `=` up to a space, quote or `&`, as in a query string.
 // Quotes may be escaped as many times as the text is nested in JSON.
 const CREDENTIAL_TEXT = new RegExp(
-  String.raw`((?<![\w-])(?:${CREDENTIAL_NAMES})(?:\\*["'])?\s*[:=](?:\\?\s)*)(?:(\\*["'])([\s\S]*?)(\2|$)|((?<=:(?:\\?\s)*)(?:\\(?![\\"'])|[^\r\n'"\\])+|[^\s'"\\&]+))`,
+  String.raw`((?<![\w-])(?:${CREDENTIAL_NAMES})(?:\\*["'])?\s*[:=](?:\\?\s)*)(?:(\\*["'])([\s\S]*?)(\2|$)|((?<=:(?:\\?\s)*)(?:(?:(?<=\\\s)|(?=(?:\\\S|[^\s'"\\])*\\\s))(?:\\\s|[^\s'"\\])+|(?:\\(?![\\"'])|[^\r\n'"\\])+)|[^\s'"\\&]+))`,
   "gi",
 );
 

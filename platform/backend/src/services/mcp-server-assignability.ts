@@ -21,7 +21,7 @@ export type PrefetchedMcpServer = {
   serverType?: "app" | "builtin" | "local" | "remote";
 };
 
-/** @public — exported for testability */
+/** Whether one MCP server connection may be assigned to this agent or app. */
 export async function isMcpServerAssignableToTarget(params: {
   mcpServer: Pick<
     PrefetchedMcpServer,

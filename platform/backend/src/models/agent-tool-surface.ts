@@ -6,11 +6,17 @@
  * the client holds no such cache.
  */
 
-/** Calls `listener` with the agent id whenever an agent's tool surface changes. */
+/**
+ * Calls `listener` with the agent id whenever an agent's tool surface changes.
+ * Returns the function that stops it.
+ */
 export function onAgentToolSurfaceChange(
   listener: (agentId: string) => void,
-): void {
+): () => void {
   listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 /** Tells every listener that this agent's tool surface changed. */

@@ -164,7 +164,6 @@
   "src/services/agent-runtime/workspace-files.ts -> src/agents/a2a/a2a-base.ts (services-imports-no-higher-layer)",
   "src/services/agent-runtime/workspace-lifecycle.ts -> src/agents/a2a/a2a-base.ts (services-imports-no-higher-layer)",
   "src/services/agent-runtime/workspace-transfers.ts -> src/agents/a2a/a2a-base.ts (services-imports-no-higher-layer)",
-  "src/services/agent-tool-exclusions.ts -> src/clients/chat-mcp-client.ts (services-imports-no-higher-layer)",
   "src/services/agent-version-restore.ts -> src/clients/chat-mcp-client.ts (services-imports-no-higher-layer)",
   "src/services/apps/app-assignable-tools.ts -> src/archestra-mcp-server/dynamic-tools.ts (services-imports-no-higher-layer)",
   "src/services/apps/app-assignable-tools.ts -> src/archestra-mcp-server/rbac.ts (services-imports-no-higher-layer)",

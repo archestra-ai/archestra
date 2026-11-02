@@ -2,7 +2,7 @@ import type { AuditEventName } from "./audit-log";
 
 /**
  * How a mutating route is audited. The Fastify route config augmentation
- * (types/fastify.d.ts) names it, so it lives with the types rather than with
+ * (ambient/fastify.d.ts) names it, so it lives with the types rather than with
  * the registry, which loads every model.
  */
 export type AuditResourceIdSource =

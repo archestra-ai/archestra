@@ -171,6 +171,44 @@ export const TYPE_CHECK_PEAK_BYTES: Readonly<Record<string, number>> = {
 };
 
 /**
+ * The peak of each project's check in a package whose tsconfig.json is a
+ * solution (`scripts/type-check-solution.ts`), by project config relative to
+ * the package: the compiler's measured peak at one checker on 2 CPUs, plus
+ * 0.2 GiB for the runner. A project without an entry declares none and never
+ * pauses the servers.
+ */
+export const TYPE_CHECK_PROJECT_PEAK_BYTES: Readonly<
+  Record<string, Readonly<Record<string, number>>>
+> = {
+  backend: {
+    "../shared/tsconfig.lib.json": 1.0 * 1024 ** 3,
+    "../tools/drizzle-migration-linter/tsconfig.lib.json": 0.3 * 1024 ** 3,
+    "tsconfig.schema.json": 1.5 * 1024 ** 3,
+    "tsconfig.app.json": 4.8 * 1024 ** 3,
+    "tsconfig.test-support.json": 1.5 * 1024 ** 3,
+    "tsconfig.tests-database.json": 1.1 * 1024 ** 3,
+    "tsconfig.tests-core.json": 1.6 * 1024 ** 3,
+    "tsconfig.tests-models-a.json": 1.3 * 1024 ** 3,
+    "tsconfig.tests-models-b.json": 1.6 * 1024 ** 3,
+    "tsconfig.tests-models-c.json": 1.0 * 1024 ** 3,
+    "tsconfig.tests-models-d.json": 1.4 * 1024 ** 3,
+    "tsconfig.tests-services.json": 1.5 * 1024 ** 3,
+    "tsconfig.tests-domain-a.json": 1.2 * 1024 ** 3,
+    "tsconfig.tests-domain-b.json": 1.5 * 1024 ** 3,
+    "tsconfig.tests-domain-c.json": 1.4 * 1024 ** 3,
+    "tsconfig.tests-other.json": 1.6 * 1024 ** 3,
+    "tsconfig.tests-routes-proxy-a.json": 1.3 * 1024 ** 3,
+    "tsconfig.tests-routes-proxy-b.json": 1.5 * 1024 ** 3,
+    "tsconfig.tests-routes-proxy-c.json": 1.3 * 1024 ** 3,
+    "tsconfig.tests-routes-chat.json": 1.2 * 1024 ** 3,
+    "tsconfig.tests-routes-rest-a.json": 1.4 * 1024 ** 3,
+    "tsconfig.tests-routes-rest-b.json": 1.6 * 1024 ** 3,
+    "tsconfig.tests-routes-rest-c.json": 1.6 * 1024 ** 3,
+    "tsconfig.tools.json": 0.9 * 1024 ** 3,
+  },
+};
+
+/**
  * Whether memory-heavy commands take turns (`scripts/heavy-lane.ts`): in a
  * container below 16 GiB, where two of them side by side can take the
  * container past its limit.

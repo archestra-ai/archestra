@@ -1,3 +1,6 @@
+/** Every layer above schema, until the split carves them into projects. */
+const APP = "tsconfig.app.json";
+
 /**
  * The layers of the backend program, lowest first. A file may import files of
  * its own layer and of layers below it, never above: the split of the backend
@@ -11,40 +14,49 @@
  * to the first layer whose pattern matches it. Tests (`*.test.ts`) and the
  * test helpers are not in a layer: they may import anything.
  *
- * @type {{ name: string; path: string }[]}
+ * `project` is the TypeScript project that checks the layer's files
+ * (tsconfig.json lists them); scripts/check-projects.mjs holds the two
+ * together. Layers share a project until a slice of the split carves theirs.
+ *
+ * @type {{ name: string; path: string; project: string }[]}
  */
 export const layers = [
   {
-    // Drizzle tables and the types and zod schemas derived from them.
+    // Drizzle tables and the types and zod schemas derived from them, and the
+    // ambient declarations every TypeScript project includes.
     name: "schema",
-    path: "^src/(types/|database/schemas/|database/schema\\.ts$|agents/a2a/a2a-protocol\\.ts$|utils/(billable-usage|network|sanitize-svg|schedule-trigger|uuid)\\.ts$)",
+    path: "^src/(ambient/|types/|database/schemas/|database/schema\\.ts$|agents/a2a/a2a-protocol\\.ts$|utils/(billable-usage|network|sanitize-svg|schedule-trigger|uuid)\\.ts$)",
+    project: "tsconfig.schema.json",
   },
   {
     // Configuration, logging, the database client and the helpers below models.
     name: "core",
     path: "^src/((config|app-version|cache-manager|in-memory-lru-cache|process-local-cache-registry|constants|templating|enterprise-tier)\\.ts$|utils/|logging/|database/|log-content/|content-encryption/|secrets-manager/|observability/|integrations/|tokenizers/|git-hosts/|app-templates/)",
+    project: APP,
   },
-  { name: "models", path: "^src/(models|auth)/" },
-  { name: "runtime", path: "^src/(k8s|sandbox-runtime|skills-sandbox)/" },
-  { name: "kb", path: "^src/knowledge-base/" },
+  { name: "models", path: "^src/(models|auth)/", project: APP },
+  { name: "runtime", path: "^src/(k8s|sandbox-runtime|skills-sandbox)/", project: APP },
+  { name: "kb", path: "^src/knowledge-base/", project: APP },
   {
     name: "policy",
     path: "^src/(openappa|proxy|auto-routing|skills|task-queue|plugins|features|data-retention)/",
+    project: APP,
   },
-  { name: "services", path: "^src/services/" },
-  { name: "mcp", path: "^src/(archestra-mcp-server|agents|clients)/" },
-  { name: "routes-proxy", path: "^src/routes/proxy/" },
-  { name: "routes-chat", path: "^src/routes/(chat|mcp-gateway)/" },
-  { name: "routes-rest", path: "^src/routes/" },
+  { name: "services", path: "^src/services/", project: APP },
+  { name: "mcp", path: "^src/(archestra-mcp-server|agents|clients)/", project: APP },
+  { name: "routes-proxy", path: "^src/routes/proxy/", project: APP },
+  { name: "routes-chat", path: "^src/routes/(chat|mcp-gateway)/", project: APP },
+  { name: "routes-rest", path: "^src/routes/", project: APP },
   {
     // The Fastify server, the websocket, middleware and the entry scripts.
     name: "server",
     path: "^src/((server|fastify-instance|websocket|startup-health|metrics-registration|middleware|ngrok-tunnel-manager)\\.ts$|server/|middleware/|hooks/|entrypoints/|openapi/|standalone-scripts/)",
+    project: APP,
   },
 ];
 
 /** Tests and test helpers may import any layer. */
-const TESTS = "(\\.test\\.ts$|\\.test-[a-z-]+\\.ts$|^src/test/|/__mocks__/)";
+export const TESTS = "(\\.test\\.ts$|\\.test-[a-z-]+\\.ts$|^src/test/|/__mocks__/)";
 
 /**
  * The dependency-cruiser configuration `pnpm check:layers` runs. It forbids

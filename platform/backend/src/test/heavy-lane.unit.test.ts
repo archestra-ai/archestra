@@ -229,6 +229,40 @@ describe("heavy lane", () => {
   );
 
   test.skipIf(!hasFlock)(
+    "the paused-servers variables reach the command, not the stack's resume",
+    async () => {
+      const { log, env, root, paused } = scratch();
+      const devLite = path.join(root, "logging-dev-lite.sh");
+      writeFileSync(
+        devLite,
+        [
+          "cmd_pause() { :; }",
+          `case "$1" in`,
+          `  pause) echo "pause \${ONLY_COMMAND:-unset}" >> ${log}; touch ${paused} ;;`,
+          `  resume) echo "resume \${ONLY_COMMAND:-unset}" >> ${log}; rm -f ${paused} ;;`,
+          "esac",
+          "",
+        ].join("\n"),
+      );
+      const result = await runCli(env, [
+        ...bigCommand(devLite).slice(0, -1),
+        "--paused-env",
+        "ONLY_COMMAND=present",
+        "--",
+        "sh",
+        "-c",
+        `echo "command \${ONLY_COMMAND:-unset}" >> ${log}`,
+      ]);
+      expect(result.status).toBe(0);
+      expect(readFileSync(log, "utf8").trim().split("\n")).toEqual([
+        "pause unset",
+        "command present",
+        "resume unset",
+      ]);
+    },
+  );
+
+  test.skipIf(!hasFlock)(
     "a process a heavy command leaves running does not keep the lane",
     async () => {
       const { log, env } = scratch();

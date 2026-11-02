@@ -152,8 +152,8 @@ const OWN_DEV_LITE_SCRIPT = path.join(
  * then on a no-op INT/TERM/HUP handler keeps this shell alive to resume while
  * the signal reaches the command (handlers, unlike ignored signals, are not
  * inherited). While the servers are stopped (the lane paused them, or someone
- * else did) the command gets the paused variables too. The dev stack starts
- * without the lane's own variables.
+ * else did) the command, and only the command, gets the paused variables too.
+ * The dev stack starts without the lane's own variables.
  */
 const HELD_SCRIPT = `
 lock="$1" holder="$2" label="$3" pause="$4" dev_lite="$5" paused_file="$6" why="$7" caller="$8" paused_env="$9"
@@ -174,10 +174,12 @@ if [ "$pause" = 1 ] && [ "$stopped" = 0 ]; then
     echo "heavy-lane: stopped the dev stack's backend and frontend while $label runs: $why. They start again when it ends; PostgreSQL keeps running." >&2
   fi
 fi
+# The paused variables reach the command alone, not the dev stack's resume.
+only_command=()
 if [ "$stopped" = 1 ] && [ -n "$paused_env" ]; then
-  while IFS= read -r variable; do export "$variable"; done <<< "$paused_env"
+  while IFS= read -r variable; do only_command+=("$variable"); done <<< "$paused_env"
 fi
-"$@" 9>&-
+env "\${only_command[@]}" "$@" 9>&-
 status=$?
 if [ "$resume" = 1 ]; then
   echo "heavy-lane: starting the dev stack's backend and frontend again" >&2

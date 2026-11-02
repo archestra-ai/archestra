@@ -83,9 +83,7 @@ test("keeps the session title, status, and actions readable in narrow panels", a
     ).toBeVisible();
     await page.keyboard.press("Escape");
     await stop.click();
-    await expect(
-      page.getByRole("dialog", { name: "Stop this run?" }),
-    ).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Stop run?" })).toBeVisible();
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
   }
 

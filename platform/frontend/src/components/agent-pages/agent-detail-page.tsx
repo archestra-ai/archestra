@@ -177,7 +177,7 @@ export function AgentDetailPage({
       title={config.singular}
       description=""
       backLink={backLink}
-      maxWidth="wizard"
+      maxWidth={pageWidth(kind)}
       minWidth="phone"
     >
       {children}
@@ -558,9 +558,7 @@ function AgentDetails({
 
   return (
     <PageLayout
-      // The wizard's column, so a record reads and edits in the same one it
-      // was created in.
-      maxWidth="wizard"
+      maxWidth={pageWidth(kind)}
       minWidth="phone"
       // A scrolling box would trap the sticky save footer, so it could not
       // pin to the bottom of the window. Only the wide sections, such as
@@ -603,20 +601,27 @@ function AgentDetails({
       documentTitle={agent.name}
       backLink={<PageBackLink href={backHref}>{backLabel}</PageBackLink>}
       description={
-        isBuiltIn && agent.description ? (
-          <>
-            {agent.description.replace(/\.?$/, ".")}{" "}
-            <ExternalDocsLink
-              href={getDocsUrl(DocsPage.PlatformBuiltInSubagents)}
-              className="underline"
-              showIcon={false}
-            >
-              Learn more
-            </ExternalDocsLink>
-          </>
-        ) : (
-          (agent.description ?? "")
-        )
+        // A description has no length limit, and the header stays on screen
+        // on every tab: it keeps to one line, two on a phone.
+        <span
+          className="line-clamp-2 sm:line-clamp-1"
+          title={agent.description ?? undefined}
+        >
+          {isBuiltIn && agent.description ? (
+            <>
+              {agent.description.replace(/\.?$/, ".")}{" "}
+              <ExternalDocsLink
+                href={getDocsUrl(DocsPage.PlatformBuiltInSubagents)}
+                className="underline"
+                showIcon={false}
+              >
+                Learn more
+              </ExternalDocsLink>
+            </>
+          ) : (
+            (agent.description ?? "")
+          )}
+        </span>
       }
       tabs={
         // A single-section page is not a tabbed one: a built-in record has
@@ -982,6 +987,15 @@ function AgentDetails({
  * reason out of reach of exactly the users it is written for. The refusal is
  * enforced by preventing the select and the click instead.
  */
+
+/**
+ * An Agent's page holds its Runs table, so it takes the list pages' width,
+ * like the Agents, Skills and MCP Registry pages. An MCP Gateway's page is a
+ * settings form, which keeps the column it was created in.
+ */
+function pageWidth(kind: AgentPageKind) {
+  return kind === "agent" ? "wide" : "wizard";
+}
 
 /**
  * What a section is called on this record's page. Connect is the exception:

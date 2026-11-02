@@ -15,6 +15,7 @@ import db, { schema } from "@/database";
 import { createFastifyInstance } from "@/fastify-instance";
 import { ModelPoolModel, VirtualApiKeyModel } from "@/models";
 import LimitModel from "@/models/limit";
+import LlmThroughputModel from "@/models/llm-throughput";
 import ModelModel from "@/models/model";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { accessGrants, beforeEach, expect, test } from "@/test";
@@ -727,6 +728,142 @@ test("a Fireworks-first named pool applies the canonical member's spend cap", as
       code: "token_cost_limit_exceeded",
     });
     expect(dispatched).toEqual([canonical]);
+  } finally {
+    await app.close();
+    modelsDevClient.clearFetchCache();
+  }
+});
+
+test.for([
+  { memberModel: "unknown-deployment", status: 400, stream: false },
+  { memberModel: "unknown-deployment", status: 400, stream: true },
+  { memberModel: "glm-5p3-flash", status: 403, stream: false },
+  { memberModel: "glm-5p3-flash", status: 403, stream: true },
+])("a first Fireworks member rejected with $status releases its unsent request allowance (stream=$stream)", async ({
+  memberModel,
+  status,
+  stream,
+}, { makeOrganization, makeAgent, makeSecret, makeLlmProviderApiKey }) => {
+  const canonical = "accounts/fireworks/models/glm-5p3-flash";
+  const fireworks = "https://api.fireworks.ai/inference/v1";
+  config.llm.vllm.enabled = true;
+  config.llm.vllm.baseUrl = fireworks;
+  const org = await makeOrganization();
+  const agent = await makeAgent({
+    organizationId: org.id,
+    agentType: "llm_proxy",
+  });
+  const key = await makeLlmProviderApiKey(
+    org.id,
+    (await makeSecret({ secret: { apiKey: "synthetic-unsent-pool" } })).id,
+    { provider: "vllm", baseUrl: fireworks },
+  );
+  const virtual = await VirtualApiKeyModel.create({
+    organizationId: org.id,
+    name: "Unsent pool client",
+    ...accessGrants("org"),
+    providerApiKeys: [{ provider: "vllm", providerApiKeyId: key.id }],
+  });
+  const pool = await ModelPoolModel.create({
+    organizationId: org.id,
+    input: {
+      name: "guarded-fireworks-pool",
+      members: [
+        {
+          providerApiKeyId: key.id,
+          modelId: memberModel,
+          priority: 1,
+          weight: 1,
+          enabled: true,
+        },
+      ],
+    },
+  });
+  await ModelPoolModel.setPoolsForVirtualApiKey({
+    organizationId: org.id,
+    virtualApiKeyId: virtual.virtualKey.id,
+    poolIds: [pool.id],
+  });
+  const requestCap = await LimitModel.create({
+    entityType: "virtual_key",
+    entityId: virtual.virtualKey.id,
+    limitType: "requests",
+    cleanupInterval: "calendar_day",
+    limitValue: 1,
+  });
+  await LimitModel.create({
+    entityType: "organization",
+    entityId: org.id,
+    limitType: "token_cost",
+    limitValue: 1,
+    model: [canonical],
+  });
+  if (status === 403) {
+    const model = await ModelModel.create({
+      externalId: `vllm/${canonical}`,
+      provider: "vllm",
+      modelId: canonical,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    const policyKey = {
+      organizationId: org.id,
+      resource: "llmModel" as const,
+      scope: model.id,
+    };
+    const current = await ResourcePermissionPolicyModel.find(policyKey);
+    await ResourcePermissionPolicyModel.replace({
+      ...policyKey,
+      revision: current?.revision ?? 0,
+      grants: [],
+    });
+  }
+  modelsDevClient.clearFetchCache();
+  let dispatched = 0;
+  server.use(
+    http.get("https://models.dev/api.json", () =>
+      HttpResponse.json({
+        "fireworks-ai": {
+          id: "fireworks-ai",
+          name: "Fireworks",
+          models: {
+            [canonical]: {
+              id: canonical,
+              name: "GLM fixture",
+              cost: { input: 2, output: 8 },
+            },
+          },
+        },
+      }),
+    ),
+    http.post(`${fireworks}/chat/completions`, () => {
+      dispatched++;
+      return HttpResponse.json(
+        { error: { message: "Unexpected dispatch" } },
+        { status: 500 },
+      );
+    }),
+  );
+  const app = createFastifyInstance();
+  await app.register(vllmProxyRoutes);
+  try {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/vllm/${agent.id}/chat/completions`,
+        headers: { authorization: `Bearer ${virtual.value}` },
+        payload: {
+          model: "guarded-fireworks-pool",
+          stream,
+          messages: [{ role: "user", content: "Fixture request" }],
+        },
+      });
+      // A leaked reservation would turn the second rejection into quota 429.
+      expect(response.statusCode, response.body).toBe(status);
+      const usage = await LlmThroughputModel.usage([requestCap]);
+      expect(usage.get(requestCap.id)?.currentUsage ?? 0).toBe(0);
+    }
+    expect(dispatched).toBe(0);
   } finally {
     await app.close();
     modelsDevClient.clearFetchCache();

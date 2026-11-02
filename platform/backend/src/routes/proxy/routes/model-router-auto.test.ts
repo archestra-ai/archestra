@@ -1185,6 +1185,112 @@ describe("Model Router auto model", () => {
       return user.id;
     }
 
+    test("a pinned Fireworks normal alias still routes and checks only the selected tier's budget", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeUser,
+      makeMember,
+    }) => {
+      const baseOrg = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      const fireworks = "https://api.fireworks.ai/inference/v1";
+      const short = "glm-5p3-flash";
+      const canonical = `accounts/fireworks/models/${short}`;
+      const normal = await createModel("openai", short, {
+        input: "3.00",
+        output: "15.00",
+      });
+      const pinned = await createModel("openai", canonical, {
+        input: "3.00",
+        output: "15.00",
+      });
+      const fast = await createModel(
+        "openai",
+        "accounts/fireworks/models/fast-fixture",
+      );
+      const smart = await createModel(
+        "openai",
+        "accounts/fireworks/models/smart-fixture",
+        { input: "15.00", output: "75.00" },
+      );
+      const org = { ...baseOrg, trio: [fast, normal, smart] as const };
+      await setOrganizationTrio(org.organizationId, { fast, normal, smart });
+      const key = await makeLlmProviderApiKey(
+        org.organizationId,
+        (await makeSecret({ secret: { apiKey: "synthetic-routed-fireworks" } }))
+          .id,
+        { provider: "openai", baseUrl: fireworks },
+      );
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+        ...org.trio.map((model) => model.id),
+        pinned.id,
+      ]);
+      await publishPlan(org);
+      const userId = await member(org, makeUser, makeMember);
+      await LimitModel.create({
+        entityType: "organization",
+        entityId: org.organizationId,
+        limitType: "token_cost",
+        limitValue: 0,
+        model: [short],
+      });
+      modelsDevClient.clearFetchCache();
+      onTestFinished(() => modelsDevClient.clearFetchCache());
+      const dispatched: string[] = [];
+      server.use(
+        http.get("https://models.dev/api.json", () => HttpResponse.json({})),
+        http.post(`${fireworks}/chat/completions`, async ({ request }) => {
+          const body = (await request.json()) as { model: string };
+          dispatched.push(body.model);
+          return HttpResponse.json(chatCompletion(body.model));
+        }),
+      );
+      const ask = () =>
+        sendPlatformCall(org, {
+          userId,
+          callKeyId: key.id,
+          baseUrl: fireworks,
+          model: short,
+        });
+
+      const response = await ask();
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(dispatched).toEqual([smart.modelId]);
+      expect(upstreamModels).toEqual([]);
+      expect(jevCalls).toBe(1);
+      expect(await platformCalls(org.agentId)).toEqual([
+        { model: smart.modelId, providerApiKeyId: key.id },
+      ]);
+      const [decision] = await decisions(org.organizationId);
+      expect(decision).toMatchObject({
+        reason: "planned",
+        tierIndex: 2,
+        modelId: smart.id,
+      });
+      expect(await usage(decision.id)).toHaveLength(1);
+
+      await LimitModel.create({
+        entityType: "organization",
+        entityId: org.organizationId,
+        limitType: "token_cost",
+        limitValue: 0,
+        model: [smart.modelId],
+      });
+      const refused = await ask();
+      expect(refused.statusCode, refused.body).toBe(402);
+      expect(refused.json().error).toMatchObject({
+        type: "usage_limit_exceeded",
+        code: "token_cost_limit_exceeded",
+      });
+      expect(dispatched).toEqual([smart.modelId]);
+      expect(await usage(decision.id)).toHaveLength(1);
+    });
+
     for (const fallback of ["routing-disabled", "different-model"] as const) {
       test.for([
         "none",

@@ -1551,7 +1551,7 @@ async function handleObservedLLMProxy<
             request,
             organizationId: resolvedAgent.organizationId,
             userId: autoRouteUser.id,
-            named: { provider: providerName, modelId: actualModel },
+            named: { provider: providerName, modelId: requestedModel },
             callApiKeyId: perKeyChatApiKeyId ?? null,
             sessionId,
             body: requestAdapter.getOriginalRequest(),
@@ -1560,7 +1560,8 @@ async function handleObservedLLMProxy<
               canReachMember(autoRouteWire, tierProvider),
           })
         : null;
-    if (!autoRoute) await assertResolvedUnderControls(endpointModel.unresolved);
+    if (autoRouteUser && !autoRoute)
+      await assertResolvedUnderControls(endpointModel.unresolved);
     const autoRoutedMember: TierMember | null = autoRoute
       ? {
           providerApiKeyId: autoRoute.providerApiKeyId,
@@ -1576,13 +1577,11 @@ async function handleObservedLLMProxy<
     }
     // Budgets scoped to a model apply to the model the call runs on: the
     // routed tier's, or the one it names when the router left it alone.
-    if (autoRouteUser) {
+    if (autoRouteUser && !autoRoutedMember) {
       const routedLimitViolation =
         await LimitValidationService.checkLimitsBeforeRequest({
           ...limitContext,
-          model: autoRoutedMember
-            ? stripClaudeContextVariantSuffix(autoRoutedMember.modelId)
-            : actualModel,
+          model: actualModel,
         });
       if (routedLimitViolation) {
         logger.info(
@@ -4958,7 +4957,8 @@ async function openUpstream<TRequest, T>(params: {
   } catch (error) {
     if (
       (error instanceof ModelBudgetExceededError ||
-        error instanceof ThroughputError) &&
+        error instanceof ThroughputError ||
+        error instanceof ApiError) &&
       !dispatched
     )
       await ctx.throughput?.cancelBeforeSend();

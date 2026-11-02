@@ -85,6 +85,7 @@ export function reportBulkOutcome({
   outcome,
   verb,
   failureVerb,
+  failureParticiple = `${failureVerb}d`,
   noun,
   plural,
 }: {
@@ -93,6 +94,8 @@ export function reportBulkOutcome({
   verb: string;
   /** Bare infinitive for the failure line, e.g. "delete". */
   failureVerb: string;
+  /** "could not be …" on a partial failure, when adding "d" is wrong: "stopped". */
+  failureParticiple?: string;
   noun: string;
   plural?: string;
 }) {
@@ -125,7 +128,7 @@ export function reportBulkOutcome({
   }
 
   toast.warning(
-    `${verb} ${count(succeededCount)} — ${count(failed.length)} could not be ${failureVerb}d`,
+    `${verb} ${count(succeededCount)} — ${count(failed.length)} could not be ${failureParticiple}`,
     { description },
   );
 }

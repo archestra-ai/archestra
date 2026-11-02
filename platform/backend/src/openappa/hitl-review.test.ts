@@ -401,6 +401,15 @@ test("wraps every line of a long command to the narrowest pane", async () => {
   expect(lines.join("\n").replace(/\n {4}/g, " ")).toBe(command);
 });
 
+test("never shows a credential header the reviewed command carries", async () => {
+  const secret = "tok_5c3f9a1e7b2d4c6a";
+  const asked = await askedAbout("credential-call", "Bash", {
+    command: `curl --header 'Authorization: Bearer ${secret}' https://example.test/api`,
+  });
+  expect(asked?.shortQuestion).toBe("Approve the Bash command?");
+  expect(JSON.stringify(asked)).not.toContain(secret);
+});
+
 test("shows a file write as the file's content", async () => {
   const content = "export const answer = 42;\n";
   const asked = await askedAbout("write-call", "Write", {

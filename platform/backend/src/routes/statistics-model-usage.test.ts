@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import { betterAuth } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import { authPlugin } from "@/auth/fastify-plugin";
 import db, { schema } from "@/database";
 import {

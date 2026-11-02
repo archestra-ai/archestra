@@ -6,7 +6,14 @@ import {
   getAgentCatalogImages,
   type SupportedProvider,
 } from "@archestra/shared";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { forwardRef, useImperativeHandle } from "react";
@@ -379,6 +386,19 @@ const {
 
 vi.mock("@/components/initial-resource-permissions", () => ({
   InitialResourcePermissions: () => null,
+}));
+
+// The per-agent network policy editor reads the cluster's policy support.
+vi.mock("@/lib/environment.query", async () => ({
+  ...(await vi.importActual("@/lib/environment.query")),
+  useK8sCapabilities: () => ({
+    data: {
+      networkPolicy: {
+        supportsFqdn: true,
+        enforcementStatus: "verified-enforced",
+      },
+    },
+  }),
 }));
 
 vi.mock("@tanstack/react-query", async () => {
@@ -4149,6 +4169,40 @@ describe("AgentForm save payload and failure handling", () => {
 
     await waitFor(() => expect(saveChannelChangesMock).toHaveBeenCalled());
     expect(updateAgent).not.toHaveBeenCalled();
+  });
+
+  it("sends the agent's own network policy once it is edited", async () => {
+    const user = userEvent.setup();
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          networkPolicy: {
+            egressMode: "restricted",
+            domainPreset: "none",
+            allowedDomains: ["api.example.com"],
+            allowedCidrs: [],
+          },
+        }}
+        sections={["advanced"]}
+      />,
+    );
+
+    const domains = await screen.findByLabelText("Allowed domains");
+    expect(domains).toHaveValue("api.example.com");
+    fireEvent.change(domains, {
+      target: { value: "api.example.com\nregistry.example.com" },
+    });
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(savedBody().networkPolicy).toEqual({
+      egressMode: "restricted",
+      domainPreset: "none",
+      allowedDomains: ["api.example.com", "registry.example.com"],
+      allowedCidrs: [],
+    });
   });
 
   it("sends the advanced step's own fields, and nothing the step does not show", async () => {

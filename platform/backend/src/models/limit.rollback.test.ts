@@ -12,6 +12,7 @@ describe("Selected model budget applicability", () => {
     name: string;
     scope: string[] | null;
     model?: string;
+    modelAliases?: string[];
     deferModelScopedLimits?: boolean;
     allowed: boolean;
   }[] = [
@@ -20,6 +21,19 @@ describe("Selected model budget applicability", () => {
       scope: ["model-a"],
       model: "model-a",
       allowed: false,
+    },
+    {
+      name: "verified alias blocks an explicit zero cap",
+      scope: ["glm-5p3-flash"],
+      model: "accounts/fireworks/models/glm-5p3-flash",
+      modelAliases: ["glm-5p3-flash"],
+      allowed: false,
+    },
+    {
+      name: "unverified similar model does not match alias cap",
+      scope: ["glm-5p3-flash"],
+      model: "accounts/fireworks/models/glm-5p3-flash",
+      allowed: true,
     },
     {
       name: "unrelated selected model",
@@ -50,7 +64,14 @@ describe("Selected model budget applicability", () => {
     },
   ];
 
-  for (const { name, scope, model, deferModelScopedLimits, allowed } of cases) {
+  for (const {
+    name,
+    scope,
+    model,
+    modelAliases,
+    deferModelScopedLimits,
+    allowed,
+  } of cases) {
     test(name, async ({ makeAgent }) => {
       const agent = await makeAgent();
       const limit = await LimitModel.create({
@@ -71,6 +92,7 @@ describe("Selected model budget applicability", () => {
       const result = await LimitValidationService.checkLimitsBeforeRequest({
         agentId: agent.id,
         model,
+        modelAliases,
         deferModelScopedLimits,
       });
 

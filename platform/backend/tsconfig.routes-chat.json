@@ -1,0 +1,93 @@
+{
+  "extends": "./tsconfig.source-project.json",
+  "compilerOptions": {
+    "outDir": "./.tsbuild/routes-chat",
+    "tsBuildInfoFile": "./.tsbuild/routes-chat.tsbuildinfo"
+  },
+  "files": [
+    "src/routes/chat/abortive-turn.ts",
+    "src/routes/chat/build-chat-context.ts",
+    "src/routes/chat/compaction/compact-messages.ts",
+    "src/routes/chat/compaction/history.ts",
+    "src/routes/chat/compaction/in-context.ts",
+    "src/routes/chat/compaction/message-text.ts",
+    "src/routes/chat/compaction/tracing.ts",
+    "src/routes/chat/context-window-breakdown.ts",
+    "src/routes/chat/heartbeat-stream.ts",
+    "src/routes/chat/inject-app-diagnostics.ts",
+    "src/routes/chat/inject-skill-activation.ts",
+    "src/routes/chat/prepare-model-messages.ts",
+    "src/routes/chat/read-opened-app-ref.ts",
+    "src/routes/chat/routes.ts",
+    "src/routes/chat/sandbox-command-turn.ts",
+    "src/routes/chat/stream-idle-timeout.ts",
+    "src/routes/chat/tool-ui-stream.ts",
+    "src/routes/chat/ui-stream-response.ts",
+    "src/routes/mcp-gateway/client-capabilities.ts",
+    "src/routes/mcp-gateway/index.ts",
+    "src/routes/mcp-gateway/legacy-sse.ts",
+    "src/routes/mcp-gateway/llm-link.ts",
+    "src/routes/mcp-gateway/pending-inbound-requests.ts",
+    "src/routes/mcp-gateway/pending-inbound-shared.ts",
+    "src/routes/mcp-gateway/subscriptions.ts"
+  ],
+  "include": [
+    "src/ambient/*.d.ts"
+  ],
+  "references": [
+    {
+      "path": "../shared/tsconfig.lib.json"
+    },
+    {
+      "path": "../tools/drizzle-migration-linter/tsconfig.lib.json"
+    },
+    {
+      "path": "./tsconfig.schema.json"
+    },
+    {
+      "path": "./tsconfig.core.json"
+    },
+    {
+      "path": "./tsconfig.models.json"
+    },
+    {
+      "path": "./tsconfig.models-agents.json"
+    },
+    {
+      "path": "./tsconfig.models-upper.json"
+    },
+    {
+      "path": "./tsconfig.llm-clients.json"
+    },
+    {
+      "path": "./tsconfig.runtime.json"
+    },
+    {
+      "path": "./tsconfig.llm-protocol.json"
+    },
+    {
+      "path": "./tsconfig.provider-adapters.json"
+    },
+    {
+      "path": "./tsconfig.kb-core.json"
+    },
+    {
+      "path": "./tsconfig.kb-connectors.json"
+    },
+    {
+      "path": "./tsconfig.kb.json"
+    },
+    {
+      "path": "./tsconfig.connections.json"
+    },
+    {
+      "path": "./tsconfig.policy-config.json"
+    },
+    {
+      "path": "./tsconfig.services-support.json"
+    },
+    {
+      "path": "./tsconfig.app.json"
+    }
+  ]
+}

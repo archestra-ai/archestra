@@ -1,17 +1,15 @@
 import { getArchestraAppResourceUri } from "@archestra/shared";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import logger from "@/logging";
-import {
-  AgentModel,
-  AgentToolModel,
-  AppAccessModel,
-  AppModel,
-  InternalMcpCatalogModel,
-  McpServerModel,
-  ToolModel,
-} from "@/models";
+import AgentModel from "@/models/agent";
+import AgentToolModel from "@/models/agent-tool";
+import AppModel from "@/models/app";
+import AppAccessModel from "@/models/app-access";
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
+import McpServerModel from "@/models/mcp-server";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import ToolModel from "@/models/tool";
 import { appLaunchToolDescription } from "@/services/apps/app-run-link";
 import { APP_LAUNCH_TOOL_NAME, type App } from "@/types/app";
 import type { ResourceVisibilityScope } from "@/types/visibility";

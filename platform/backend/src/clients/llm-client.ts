@@ -12,6 +12,8 @@ import { createXai } from "@ai-sdk/xai";
 import type { InteractionSource } from "@archestra/shared";
 import {
   APP_ID_HEADER,
+  APPA_PARENT_HEADER,
+  APPA_SESSION_HEADER,
   AUTO_ROUTABLE_HEADER,
   anthropicThinksByDefault,
   CHAT_API_KEY_ID_HEADER,
@@ -75,14 +77,10 @@ import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import { createResponseHealingFetch } from "@/clients/openrouter-response-healing";
 import config from "@/config";
 import { ENCRYPTED_CHAT_KEY_HEADER } from "@/content-encryption/encrypted-chat";
+import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import ModelModel from "@/models/model";
 import UserTokenModel from "@/models/user-token";
-import {
-  APPA_PARENT_HEADER,
-  APPA_SESSION_HEADER,
-  openappaEnabled,
-} from "@/openappa/service";
 import { APPA_SUBAGENT_BINDING_HEADER } from "@/openappa/subagent-binding";
 import {
   type AzureModelCapabilities,
@@ -275,12 +273,12 @@ export function createLLMModel(params: {
     clientHeaders[SESSION_ID_HEADER] = sessionId;
     // A platform guardrail call is filed under the chat's session for logs,
     // but must not become a turn of that chat's OpenAPPA trajectory.
-    if (openappaEnabled() && !params.internalCall)
+    if (enterpriseTier.isOpenappaActive() && !params.internalCall)
       clientHeaders[APPA_SESSION_HEADER] = sessionId;
   }
-  if (openappaEnabled() && params.appaParentId)
+  if (enterpriseTier.isOpenappaActive() && params.appaParentId)
     clientHeaders[APPA_PARENT_HEADER] = params.appaParentId;
-  if (openappaEnabled() && params.appaSubagentToken)
+  if (enterpriseTier.isOpenappaActive() && params.appaSubagentToken)
     clientHeaders[APPA_SUBAGENT_BINDING_HEADER] = params.appaSubagentToken;
   if (params.unattended) clientHeaders[UNATTENDED_HEADER] = "1";
   if (source) {

@@ -815,6 +815,42 @@ describe("OpenAPPA tool execution", () => {
     expect(extractMcpHumanRuling(result)).toBe("approve");
   });
 
+  test("chat client: the prompt hides credential headers while the ruling binds the original call", async () => {
+    const reviewedArguments = JSON.stringify({
+      command: "curl -H 'Authorization: Bearer tok_secret' https://x/api",
+    });
+    vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+      offer_id: "offer-hitl",
+      text: `Approve this call?\nArguments:\n${reviewedArguments}`,
+      session_id: "session-1",
+      tool: "mcp/shell/run",
+      arguments: reviewedArguments,
+    });
+    const executeSpy = vi
+      .spyOn(openappaService, "executeRemedyByOffer")
+      .mockResolvedValue({
+        result: { content: [{ type: "text", text: "Authorized" }] },
+        known: true,
+      });
+    const elicitSpy = vi.fn().mockResolvedValue({
+      status: "answered",
+      result: { action: "accept", content: { action: "approve" } },
+    });
+
+    await executeArchestraTool(
+      toolFullName,
+      { offer_id: "offer-hitl", trajectory: trajectory() },
+      { ...mockContext, elicitation: { elicit: elicitSpy } as any },
+    );
+
+    const prompt = elicitSpy.mock.calls[0]?.[0];
+    expect(prompt.reviewedArguments).toBeDefined();
+    expect(JSON.stringify(prompt)).not.toContain("tok_secret");
+    expect(executeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ ruling: "approve" }),
+    );
+  });
+
   test("chat client: a reviewed call that could not run is refused without asking", async () => {
     vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
       offer_id: "offer-hitl",

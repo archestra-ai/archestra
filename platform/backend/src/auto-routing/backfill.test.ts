@@ -351,7 +351,7 @@ describe("auto routing backfill", () => {
       expect(state).toEqual({
         prompt: "Review this migration",
         system_prompt: system,
-        tools: "Available tools: 1\ninspect_schema: Read table metadata.",
+        tools: "Available tools: 1\ninspect_schema",
       });
     }
   });
@@ -494,6 +494,33 @@ describe("auto routing backfill", () => {
       },
       scoreOffer: { remaining: 1 },
     });
+  });
+
+  test("oversized tool names fail terminally without spending the scorer budget", async () => {
+    await turn("oversized", "Review this oversized agent", {
+      request: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Review this oversized agent" }],
+        tools: Array.from({ length: 10_000 }, (_, index) => ({
+          type: "function" as const,
+          function: { name: `tool_${index}`, parameters: { type: "object" } },
+        })),
+      },
+    });
+    await turn("valid", "Review this valid agent");
+
+    await scanAndScore({ maxSessions: 2, maxCostUsd: 0.002 });
+
+    expect(prompts).toEqual(["Review this valid agent"]);
+    expect(await readings()).toEqual({ oversized: "failed", valid: "scored" });
+    expect((await describeBackfill(organizationId)).backfill).toMatchObject({
+      status: "done",
+      spentCostUsd: 0.001,
+      progress: { scored: 1 },
+    });
+    await runBackfill();
+    expect(prompts).toHaveLength(1);
+    expect(await readings()).toEqual({ oversized: "failed", valid: "scored" });
   });
 
   test("stops at the cost ceiling and still lets the next fit read what it scored", async () => {
@@ -965,6 +992,57 @@ describe("auto routing backfill", () => {
         (row) => row.id,
       ),
     ).toEqual([waiting?.id]);
+  });
+
+  test("score cleanup retains current, organization and active-backfill scorers across batches", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    await sessions(1);
+    await scanAndScore({});
+    const keep = (await activeSourceVersion()).id;
+    const [own, foreign, unused, anotherUnused, active] = await Promise.all(
+      Array.from({ length: 5 }, () => makeScorerVersion()),
+    );
+    const ownAgent = await makeAgent({ organizationId });
+    const foreignAgent = await makeAgent({
+      organizationId: (await makeOrganization()).id,
+    });
+    for (const [agent, scorer] of [
+      [ownAgent, own],
+      [foreignAgent, foreign],
+    ]) {
+      await db
+        .update(schema.agentsTable)
+        .set({ autoRoutingScorerVersionId: scorer.id })
+        .where(eq(schema.agentsTable.id, agent.id));
+    }
+    const [session] = await db
+      .select()
+      .from(schema.routingHistorySessionsTable);
+    await db.insert(schema.routingHistoryScoresTable).values(
+      [own, foreign, unused, anotherUnused, active].map((scorer) => ({
+        historySessionId: session.id,
+        scorerVersionId: scorer.id,
+        status: "no_text" as const,
+      })),
+    );
+    await db
+      .update(schema.routingBackfillsTable)
+      .set({ status: "scanned", scorerVersionId: active.id })
+      .where(eq(schema.routingBackfillsTable.id, session.backfillId));
+
+    expect(
+      await RoutingHistoryModel.purgeExpired({
+        windowStart: new Date(Date.now() - 35 * DAY_MS),
+        keepScorerVersionId: keep,
+        batchSize: 1,
+      }),
+    ).toEqual({ sessions: 0, scores: 3, backfills: 0 });
+    const remaining = await db.select().from(schema.routingHistoryScoresTable);
+    expect(remaining.map((score) => score.scorerVersionId).sort()).toEqual(
+      [keep, own.id, active.id].sort(),
+    );
   });
 
   test("a late settlement from a reclaimed lease counts its call once and leaves the successor's reservation", async () => {

@@ -91,6 +91,7 @@ import {
   UpdateSecuritySettingsSchema,
   UpdateSkillsSettingsSchema,
 } from "@/types";
+import { trackBackgroundWork } from "@/utils/background-work";
 
 const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -745,6 +746,14 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await daggerEnvironmentRuntimeManager.teardownOrganizationDefaultEngine(
           organization,
           currentOrganization?.defaultEnvironmentNamespace ?? null,
+        );
+        // Unbound agents with their own network policy run their engine in
+        // the default namespace too; move them along in the background, as a
+        // move waits for each old engine to stop.
+        trackBackgroundWork(
+          daggerEnvironmentRuntimeManager.reconcileAgentEngines({
+            organizationId,
+          }),
         );
       }
 

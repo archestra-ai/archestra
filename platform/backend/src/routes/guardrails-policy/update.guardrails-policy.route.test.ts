@@ -6,7 +6,7 @@ import {
   executeArchestraTool,
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
-import { betterAuth } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import { authPlugin } from "@/auth/fastify-plugin/plugin";
 import config from "@/config";
 import db, { schema } from "@/database";

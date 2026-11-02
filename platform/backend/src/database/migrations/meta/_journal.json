@@ -4324,8 +4324,15 @@
     {
       "idx": 617,
       "version": "7",
-      "when": 1793619627997,
-      "tag": "0617_cool_karnak",
+      "when": 1793648790806,
+      "tag": "0617_brown_wallop",
+      "breakpoints": true
+    },
+    {
+      "idx": 618,
+      "version": "7",
+      "when": 1793663723419,
+      "tag": "0618_lethal_lady_deathstrike",
       "breakpoints": true
     }
   ]

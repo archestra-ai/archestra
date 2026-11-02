@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  AGENT_CATALOG_IDS,
+  AGENT_CATALOG_NAMES,
   type archestraApiTypes,
   E2eTestId,
   MAX_BULK_IDS,
@@ -11,7 +13,7 @@ import type {
   RowSelectionState,
   SortingState,
 } from "@tanstack/react-table";
-import { Bot, Plus, Trash2, Upload } from "lucide-react";
+import { Bot, Code, Plus, Trash2, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   createContext,
@@ -28,6 +30,10 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { A2aRemoteAgentActions } from "@/components/a2a-remote-agent-actions";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
+import {
+  CatalogAgentIcon,
+  PlatformAgentIcon,
+} from "@/components/agent-pages/agent-catalog";
 import {
   AGENT_PAGE_CONFIGS,
   agentConfigureHref,
@@ -54,6 +60,7 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   CollectionFilters,
   FilterBar,
+  filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
 import { ImportAgentDialog } from "@/components/import-agent-dialog";
@@ -86,6 +93,13 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { PermissionButton } from "@/components/ui/permission-button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { DEFAULT_AGENT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import { getA2aRemoteAgentDeleteDescription } from "@/lib/a2a-remote-agent-delete";
 import { a2aRemoteAgentDetailHref } from "@/lib/a2a-remote-agent-route";
@@ -122,6 +136,7 @@ import {
 import { BulkRangeSelectionScope } from "@/lib/bulk-range-selection-context";
 import { FIELD_LABEL } from "@/lib/design/resource-lexicon";
 import { useEnvironments } from "@/lib/environment.query";
+import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useQueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
@@ -202,6 +217,10 @@ function Agents() {
 
   // Get pagination/filter params from URL
   const nameFilter = searchParams.get("name") || "";
+  const appName = useAppName();
+  const appIconLogo = useAppIconLogo();
+  const runtimeFromUrl = searchParams.get("runtime");
+  const runtimeFilter = runtimeOptions.find((id) => id === runtimeFromUrl);
   const sortByFromUrl = searchParams.get("sortBy") as
     | "name"
     | "createdAt"
@@ -252,6 +271,7 @@ function Agents() {
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
     providerApiKeyId: providerApiKeyIdFilter,
+    runtime: runtimeFilter,
   } satisfies CatalogFilters;
 
   const { data: personalDefaultAgentId, isLoading: isDefaultAgentLoading } =
@@ -592,7 +612,8 @@ function Agents() {
     includeBuiltIn ||
     labelsFromUrl ||
     isDeletedView ||
-    providerApiKeyIdFilter
+    providerApiKeyIdFilter ||
+    runtimeFilter
   );
 
   const clearFilters = useCallback(() => {
@@ -610,6 +631,7 @@ function Agents() {
       labels: null,
       status: null,
       providerApiKeyId: null,
+      runtime: null,
     });
   }, [updateQueryParams]);
 
@@ -1073,6 +1095,55 @@ function Agents() {
                     showLabels
                     queryParamsAdapter={queryParamsAdapter}
                   />
+                  <Select
+                    value={runtimeFilter ?? "all"}
+                    onValueChange={(runtime) =>
+                      updateQueryParams({
+                        page: "1",
+                        runtime: runtime === "all" ? null : runtime,
+                      })
+                    }
+                  >
+                    <SelectTrigger
+                      size="sm"
+                      aria-label="Filter by agent runtime"
+                      className={filterControlClass({
+                        active: !!runtimeFilter,
+                      })}
+                    >
+                      <SelectValue placeholder="All runtimes" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All runtimes</SelectItem>
+                      <SelectItem value="chat">
+                        <span className="flex items-center gap-2">
+                          <span aria-hidden="true">
+                            <PlatformAgentIcon
+                              appIconLogo={appIconLogo}
+                              size={16}
+                            />
+                          </span>
+                          <span>{appName}</span>
+                        </span>
+                      </SelectItem>
+                      {AGENT_CATALOG_IDS.map((id) => (
+                        <SelectItem key={id} value={id}>
+                          <span className="flex items-center gap-2">
+                            <span aria-hidden="true">
+                              <CatalogAgentIcon id={id} size={16} />
+                            </span>
+                            <span>{AGENT_CATALOG_NAMES[id]}</span>
+                          </span>
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="custom">
+                        <span className="flex items-center gap-2">
+                          <Code aria-hidden="true" className="size-4" />
+                          <span>Custom image</span>
+                        </span>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                   <ProviderKeyFilterSelect
                     allowOrganizationDefault
                     value={providerApiKeyIdFilter}
@@ -1350,3 +1421,5 @@ function AgentRowActionsCell({ row }: CellContext<AgentListRow, unknown>) {
     </RowClickShield>
   );
 }
+
+const runtimeOptions = ["chat", "custom", ...AGENT_CATALOG_IDS] as const;

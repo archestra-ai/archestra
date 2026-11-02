@@ -469,6 +469,21 @@ export type OpenAiChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -2190,6 +2205,21 @@ export type CerebrasChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -2831,6 +2861,21 @@ export type MistralChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -3350,6 +3395,21 @@ export type PerplexityChatCompletionRequestInput = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -3874,6 +3934,21 @@ export type GroqChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -4392,6 +4467,10 @@ export type OpenrouterChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text' | 'json_object' | 'json_schema';
+        [key: string]: unknown;
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -4413,10 +4492,6 @@ export type OpenrouterChatCompletionRequestInput = {
         include_usage?: boolean;
     } | null;
     user?: string;
-    response_format?: {
-        type: 'text' | 'json_object' | 'json_schema';
-        [key: string]: unknown;
-    };
     reasoning?: {
         enabled?: boolean;
         effort?: string;
@@ -5947,6 +6022,21 @@ export type DeepSeekChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -6467,6 +6557,21 @@ export type ArchestraChatCompletionRequestInput = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -7558,6 +7663,21 @@ export type XaiChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -8146,6 +8266,21 @@ export type OpenAiChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -9869,6 +10004,21 @@ export type CerebrasChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -10510,6 +10660,21 @@ export type MistralChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -11029,6 +11194,21 @@ export type PerplexityChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -11553,6 +11733,21 @@ export type GroqChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -12071,6 +12266,10 @@ export type OpenrouterChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text' | 'json_object' | 'json_schema';
+        [key: string]: unknown;
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -12092,10 +12291,6 @@ export type OpenrouterChatCompletionRequest = {
         include_usage?: boolean;
     } | null;
     user?: string;
-    response_format?: {
-        type: 'text' | 'json_object' | 'json_schema';
-        [key: string]: unknown;
-    };
     reasoning?: {
         enabled?: boolean;
         effort?: string;
@@ -13626,6 +13821,21 @@ export type DeepSeekChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -14146,6 +14356,21 @@ export type ArchestraChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -15235,6 +15460,21 @@ export type XaiChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -16845,6 +17085,7 @@ export type GetAgentCatalogData = {
         selectableOnly?: boolean;
         labels?: string;
         status?: 'active' | 'deleted';
+        runtime?: 'chat' | 'custom' | 'claude-code' | 'codex' | 'opencode' | 'hermes' | 'openclaw' | 'grok' | 'kimi' | 'copilot';
         providerApiKeyId?: string | 'organization-default';
         /**
          * Filter internal agents by the current user's pins. Pinned results exclude external A2A agents and are ordered by newest pin first.
@@ -16960,6 +17201,12 @@ export type GetAgentCatalogResponses = {
                 modelPoolId: string | null;
                 identityProviderId: string | null;
                 environmentId: string | null;
+                networkPolicy?: {
+                    egressMode: 'off' | 'restricted' | 'unrestricted';
+                    domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                    allowedDomains: Array<string>;
+                    allowedCidrs: Array<string>;
+                } | null;
                 runtime: {
                     image: string;
                     command: Array<string> | null;
@@ -17343,6 +17590,12 @@ export type GetAgentsResponses = {
             modelPoolId: string | null;
             identityProviderId: string | null;
             environmentId: string | null;
+            networkPolicy?: {
+                egressMode: 'off' | 'restricted' | 'unrestricted';
+                domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                allowedDomains: Array<string>;
+                allowedCidrs: Array<string>;
+            } | null;
             runtime: {
                 image: string;
                 command: Array<string> | null;
@@ -17493,6 +17746,12 @@ export type CreateAgentData = {
         modelPoolId?: string | null;
         identityProviderId?: string | null;
         environmentId?: string | null;
+        networkPolicy?: {
+            egressMode?: 'off' | 'restricted' | 'unrestricted';
+            domainPreset?: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains?: Array<string>;
+            allowedCidrs?: Array<string>;
+        } | null;
         runtime?: {
             image: string;
             command: Array<string> | null;
@@ -17755,6 +18014,12 @@ export type CreateAgentResponses = {
         modelPoolId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -19007,6 +19272,12 @@ export type GetDefaultMcpGatewayResponses = {
         modelPoolId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -19309,6 +19580,12 @@ export type ImportAgentResponses = {
             modelPoolId: string | null;
             identityProviderId: string | null;
             environmentId: string | null;
+            networkPolicy?: {
+                egressMode: 'off' | 'restricted' | 'unrestricted';
+                domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                allowedDomains: Array<string>;
+                allowedCidrs: Array<string>;
+            } | null;
             runtime: {
                 image: string;
                 command: Array<string> | null;
@@ -19620,6 +19897,12 @@ export type GetAgentResponses = {
         modelPoolId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -19752,6 +20035,12 @@ export type UpdateAgentData = {
         modelPoolId?: string | null;
         identityProviderId?: string | null;
         environmentId?: string | null;
+        networkPolicy?: {
+            egressMode?: 'off' | 'restricted' | 'unrestricted';
+            domainPreset?: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains?: Array<string>;
+            allowedCidrs?: Array<string>;
+        } | null;
         runtime?: {
             image: string;
             command: Array<string> | null;
@@ -19923,6 +20212,12 @@ export type UpdateAgentResponses = {
         modelPoolId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -20343,6 +20638,12 @@ export type GetAgentVersionResponses = {
             } | null;
             identityProviderId: string | null;
             environmentId: string | null;
+            networkPolicy: {
+                egressMode: 'off' | 'restricted' | 'unrestricted';
+                domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                allowedDomains: Array<string>;
+                allowedCidrs: Array<string>;
+            } | null;
             tools: Array<{
                 toolId: string;
                 name: string;
@@ -20500,6 +20801,12 @@ export type RestoreAgentVersionResponses = {
         modelPoolId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -20740,6 +21047,12 @@ export type CloneAgentResponses = {
         modelPoolId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -23219,6 +23532,12 @@ export type RestoreAgentResponses = {
         modelPoolId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -34006,6 +34325,14 @@ export type ReplanAutoRoutingResponse = ReplanAutoRoutingResponses[keyof ReplanA
 export type PreviewAutoRoutingData = {
     body: {
         text: string;
+    } | {
+        /**
+         * An opening Chat Completions, Responses or Anthropic Messages request body. Only its opening user text, system instructions and tool metadata are scored; the request is not executed.
+         */
+        request: {
+            [key: string]: unknown;
+        };
+        client?: string;
     };
     path?: never;
     query?: never;
@@ -36598,6 +36925,21 @@ export type AzureRealtimeTurnWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -37215,6 +37557,21 @@ export type AzureRealtimeTurnWithAgentData = {
                         syntax: 'lark' | 'regex';
                     };
                 };
+            };
+        };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
             };
         };
         temperature?: number | null;
@@ -42534,6 +42891,12 @@ export type GetNewChatBootstrapResponses = {
                 modelPoolId: string | null;
                 identityProviderId: string | null;
                 environmentId: string | null;
+                networkPolicy?: {
+                    egressMode: 'off' | 'restricted' | 'unrestricted';
+                    domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                    allowedDomains: Array<string>;
+                    allowedCidrs: Array<string>;
+                } | null;
                 runtime: {
                     image: string;
                     command: Array<string> | null;
@@ -43107,6 +43470,12 @@ export type GetConversationBootstrapResponses = {
                     modelPoolId: string | null;
                     identityProviderId: string | null;
                     environmentId: string | null;
+                    networkPolicy?: {
+                        egressMode: 'off' | 'restricted' | 'unrestricted';
+                        domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                        allowedDomains: Array<string>;
+                        allowedCidrs: Array<string>;
+                    } | null;
                     runtime: {
                         image: string;
                         command: Array<string> | null;
@@ -59285,6 +59654,21 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -59895,6 +60279,21 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                         syntax: 'lark' | 'regex';
                     };
                 };
+            };
+        };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
             };
         };
         temperature?: number | null;
@@ -66627,6 +67026,21 @@ export type GetInteractionsResponses = {
                         };
                     };
                 };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                };
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
@@ -67078,6 +67492,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -67692,6 +68121,21 @@ export type GetInteractionsResponses = {
                         };
                     };
                 };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                };
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
@@ -68143,6 +68587,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -68757,6 +69216,21 @@ export type GetInteractionsResponses = {
                         };
                     };
                 };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                };
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
@@ -69208,6 +69682,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -69822,6 +70311,21 @@ export type GetInteractionsResponses = {
                         };
                     };
                 };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                };
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
@@ -70273,6 +70777,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -71149,6 +71668,21 @@ export type GetInteractionsResponses = {
                         };
                     };
                 };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                };
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
@@ -71600,6 +72134,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -73753,6 +74302,137 @@ export type GetUniqueUserIdsResponses = {
 };
 
 export type GetUniqueUserIdsResponse = GetUniqueUserIdsResponses[keyof GetUniqueUserIdsResponses];
+
+export type GetInteractionAutoRoutingData = {
+    body?: never;
+    path: {
+        interactionId: string;
+    };
+    query?: never;
+    url: '/api/interactions/{interactionId}/auto-routing';
+};
+
+export type GetInteractionAutoRoutingErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetInteractionAutoRoutingError = GetInteractionAutoRoutingErrors[keyof GetInteractionAutoRoutingErrors];
+
+export type GetInteractionAutoRoutingResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        decision: {
+            id: string;
+            segment: number;
+            tierIndex: number;
+            modelId: string;
+            propensity: number;
+            u: number;
+            planId: string | null;
+            reason: 'planned' | 'cold_start' | 'scorer_error' | 'plan_stale';
+            scorerVersionId: string | null;
+            features: {
+                signals: {
+                    'jev-session': {
+                        version: string;
+                        tier_needed: [
+                            number,
+                            number,
+                            number
+                        ];
+                        p_long: number;
+                    };
+                };
+                client: string;
+            } | null;
+            scorerCost: string | null;
+            featuresSchemaVersion: number;
+            coreVersion: string;
+            planFormatVersion: number | null;
+            lambda: number | null;
+            expectedCostUsd: string | null;
+            createdAt: string;
+            tier: 'fast' | 'normal' | 'smart';
+            model: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            };
+            scorerVersion: {
+                id: string;
+                name: string;
+                model: string;
+                specHash: string;
+            } | null;
+        } | null;
+    };
+};
+
+export type GetInteractionAutoRoutingResponse = GetInteractionAutoRoutingResponses[keyof GetInteractionAutoRoutingResponses];
 
 export type GetInteractionData = {
     body?: never;
@@ -77656,6 +78336,21 @@ export type GetInteractionResponses = {
                     };
                 };
             };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            };
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
@@ -78107,6 +78802,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -78721,6 +79431,21 @@ export type GetInteractionResponses = {
                     };
                 };
             };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            };
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
@@ -79172,6 +79897,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -79786,6 +80526,21 @@ export type GetInteractionResponses = {
                     };
                 };
             };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            };
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
@@ -80237,6 +80992,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -80851,6 +81621,21 @@ export type GetInteractionResponses = {
                     };
                 };
             };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            };
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
@@ -81302,6 +82087,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -82178,6 +82978,21 @@ export type GetInteractionResponses = {
                     };
                 };
             };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            };
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
@@ -82629,6 +83444,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -88785,6 +89615,21 @@ export type KimiCodeChatCompletionsWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -89395,6 +90240,21 @@ export type KimiCodeChatCompletionsWithAgentData = {
                         syntax: 'lark' | 'regex';
                     };
                 };
+            };
+        };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
             };
         };
         temperature?: number | null;
@@ -90011,6 +90871,21 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -90621,6 +91496,21 @@ export type KimiChatCompletionsWithAgentData = {
                         syntax: 'lark' | 'regex';
                     };
                 };
+            };
+        };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
             };
         };
         temperature?: number | null;
@@ -106793,6 +107683,21 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -107403,6 +108308,21 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                         syntax: 'lark' | 'regex';
                     };
                 };
+            };
+        };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
             };
         };
         temperature?: number | null;
@@ -110853,6 +111773,21 @@ export type ModelRouterChatCompletionsWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -111467,6 +112402,21 @@ export type ModelRouterChatCompletionsWithAgentData = {
                         syntax: 'lark' | 'regex';
                     };
                 };
+            };
+        };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
             };
         };
         temperature?: number | null;

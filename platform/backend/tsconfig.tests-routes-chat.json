@@ -1,6 +1,6 @@
 {
   // Tests of the chat and MCP gateway routes.
-  "extends": "./tsconfig.test-project.json",
+  "extends": "./tsconfig.base.json",
   "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-routes-chat.tsbuildinfo" },
   "include": [
     "src/ambient/*.d.ts",
@@ -12,7 +12,24 @@
     { "path": "../tools/drizzle-migration-linter/tsconfig.lib.json" },
     { "path": "./tsconfig.schema.json" },
     { "path": "./tsconfig.core.json" },
+    { "path": "./tsconfig.models.json" },
+    { "path": "./tsconfig.models-agents.json" },
+    { "path": "./tsconfig.models-upper.json" },
+    { "path": "./tsconfig.runtime.json" },
+    { "path": "./tsconfig.llm-clients.json" },
+    { "path": "./tsconfig.kb-core.json" },
+    { "path": "./tsconfig.kb-connectors.json" },
+    { "path": "./tsconfig.kb.json" },
+    { "path": "./tsconfig.llm-protocol.json" },
+    { "path": "./tsconfig.provider-adapters.json" },
+    { "path": "./tsconfig.connections.json" },
+    { "path": "./tsconfig.policy-config.json" },
+    { "path": "./tsconfig.services-support.json" },
     { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.routes-proxy.json" },
+    { "path": "./tsconfig.routes-chat.json" },
+    { "path": "./tsconfig.routes-rest.json" },
+    { "path": "./tsconfig.server.json" },
     { "path": "./tsconfig.test-support.json" }
   ]
 }

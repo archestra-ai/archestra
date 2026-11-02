@@ -25,6 +25,7 @@ import type {
 } from "@/types/agent";
 import type { AgentActivationSkillMode } from "@/types/agent-activation-skill-policy";
 import type { AgentRuntime } from "@/types/agent-runtime";
+import type { NetworkPolicy } from "@/types/environment";
 import environmentsTable from "./environment";
 import identityProvidersTable from "./identity-provider";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
@@ -163,6 +164,14 @@ const agentsTable = softDeletablePgTable(
       () => environmentsTable.id,
       { onDelete: "set null" },
     ),
+
+    /**
+     * Optional egress policy for this agent's own runtimes (Agent Runtime pods,
+     * their warm pools, and its Code Sandbox engine). Null inherits the
+     * environment's policy, then the organization default. MCP servers keep
+     * following their environment.
+     */
+    networkPolicy: jsonb("network_policy").$type<NetworkPolicy>(),
 
     /**
      * Optional dedicated runtime for durable and delegated work. Invocation

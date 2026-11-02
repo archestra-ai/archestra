@@ -2,6 +2,7 @@
 
 import { Pencil, X } from "lucide-react";
 import type * as React from "react";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -9,7 +10,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils/tailwind";
-import { CatalogDocsLink } from "./catalog-docs-link";
 
 interface McpServerPillShellProps {
   /**
@@ -138,7 +138,9 @@ export function McpServerPillShell({
                 {docsUrl ? (
                   <>
                     {" "}
-                    <CatalogDocsLink url={docsUrl} />
+                    <ExternalDocsLink href={docsUrl} iconClassName="size-3.5">
+                      Docs
+                    </ExternalDocsLink>
                   </>
                 ) : null}
               </p>

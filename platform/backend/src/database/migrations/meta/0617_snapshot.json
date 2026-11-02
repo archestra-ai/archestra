@@ -1,5 +1,5 @@
 {
-  "id": "48a99a9d-596e-4915-a1dc-e78b6b374784",
+  "id": "6252ae1e-403b-43fc-a543-ee5055d143e3",
   "prevId": "b43c20bd-76e8-43da-a177-87485be2f6d7",
   "version": "7",
   "dialect": "postgresql",
@@ -4682,6 +4682,12 @@
         "environment_id": {
           "name": "environment_id",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "network_policy": {
+          "name": "network_policy",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -10879,20 +10885,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
-        },
-        "human_approval_mode": {
-          "name": "human_approval_mode",
-          "type": "varchar(16)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'unattended'"
-        },
-        "unapprovable_block_mode": {
-          "name": "unapprovable_block_mode",
-          "type": "varchar(16)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'refuse'"
         },
         "annotator_model_id": {
           "name": "annotator_model_id",
@@ -20831,20 +20823,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'agent'"
-        },
-        "count": {
-          "name": "count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
         },
         "created_at": {
           "name": "created_at",

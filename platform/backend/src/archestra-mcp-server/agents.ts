@@ -27,6 +27,8 @@ import {
 import {
   AgentScopeSchema,
   InsertAgentSchemaBase,
+  NetworkPolicyDomainPresetSchema,
+  NetworkPolicyEgressModeSchema,
   ToolExposureModeSchema,
   UpdateAgentSchemaBase,
   UuidIdSchema,
@@ -66,6 +68,34 @@ import {
 
 // === Constants ===
 
+// Plain object (no transform) so it renders as a tool JSON schema; the handler
+// validates and normalizes it with the API's own network policy schema.
+const AgentNetworkPolicyToolInputSchema = z
+  .object({
+    egressMode: NetworkPolicyEgressModeSchema.describe(
+      "unrestricted allows all outbound traffic, restricted allows only the listed destinations, off blocks all outbound traffic.",
+    ),
+    domainPreset: NetworkPolicyDomainPresetSchema.optional().describe(
+      "Restricted mode only: a built-in domain allowlist to add (none, common_dependencies, package_managers).",
+    ),
+    allowedDomains: z
+      .array(z.string())
+      .max(500)
+      .optional()
+      .describe(
+        "Restricted mode only: extra allowed domains, e.g. api.github.com or *.example.com.",
+      ),
+    allowedCidrs: z
+      .array(z.string())
+      .max(500)
+      .optional()
+      .describe("Allowed IP ranges in CIDR notation, e.g. 10.0.0.0/8."),
+  })
+  .strict()
+  .describe(
+    "The agent's own outbound network policy for its Agent Runtime and code sandbox. It replaces the policy of the agent's environment. Requires permission to update environments.",
+  );
+
 const AgentCreateToolArgsSchema = CreateBaseToolArgsSchema.extend({
   description: InsertAgentSchemaBase.shape.description
     .optional()
@@ -93,6 +123,7 @@ const AgentCreateToolArgsSchema = CreateBaseToolArgsSchema.extend({
       "Explicit tool assignments to create immediately after the agent is created.",
     ),
   runtime: AgentRuntimeToolInputSchema.optional(),
+  networkPolicy: AgentNetworkPolicyToolInputSchema.optional(),
   llmApiKeyId: AgentModelToolInputSchemas.llmApiKeyId.optional(),
   modelId: AgentModelToolInputSchemas.modelId.optional(),
 }).strict();
@@ -203,6 +234,11 @@ const EditAgentToolArgsSchema = z
           .optional()
           .describe(
             `${AgentRuntimeToolInputSchema.description} Replaces the whole runtime: pass every field to keep. Pass null to return the agent to the built-in chat harness.`,
+          ),
+        networkPolicy: AgentNetworkPolicyToolInputSchema.nullable()
+          .optional()
+          .describe(
+            `${AgentNetworkPolicyToolInputSchema.description} Replaces the whole policy. Pass null to inherit the environment's policy again.`,
           ),
         llmApiKeyId: AgentModelToolInputSchemas.llmApiKeyId
           .nullable()

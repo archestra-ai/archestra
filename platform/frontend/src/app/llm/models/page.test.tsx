@@ -112,6 +112,9 @@ let modelRequests = 0;
 const routerPush = vi.fn();
 
 const server = setupServer(
+  http.get(`${API_ORIGIN}/api/llm-provider-models/labels/keys`, () =>
+    HttpResponse.json([]),
+  ),
   http.get(`${API_ORIGIN}/api/llm-models/:modelId/cost-backfill`, () =>
     HttpResponse.json(null),
   ),
@@ -679,8 +682,11 @@ describe("ModelsPage", () => {
       }),
     );
     renderPage();
-    expect(await screen.findByText("$2.00 / $8.00")).toBeVisible();
-    expect(screen.getByText("$0.50 / -")).toBeVisible();
+    // Key discovery can refetch the table and replace a row after it is found.
+    await waitFor(() => {
+      expect(screen.getByText("$2.00 / $8.00")).toBeVisible();
+      expect(screen.getByText("$0.50 / -")).toBeVisible();
+    });
   });
 
   it("hydrates filter state from the URL query params", async () => {

@@ -91,6 +91,11 @@ class DesktopInstaller {
   }
   async ready() {
     const {proxy,mcp,skills} = this.setup;
+    const instructions = mcp && this.setup.runtimeHandoffInstructions;
+    if (instructions) {
+      if (typeof instructions !== 'string' || instructions.length > 3000) throw new Error('Claude Desktop handoff instructions must be at most 3,000 characters. Shorten them in Connection settings and retry setup. Desktop settings have not changed.');
+      this.profile.organizationInstructions = instructions;
+    }
     if (proxy) Object.assign(this.profile,{
       inferenceProvider:'gateway',inferenceCredentialKind:'static',
       inferenceGatewayBaseUrl:proxy.url,inferenceGatewayApiKey:this.credential,

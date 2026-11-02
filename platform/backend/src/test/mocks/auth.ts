@@ -39,20 +39,28 @@ export function authModuleMock() {
     isAgentTypeAdmin: vi.fn<MockFunction>(),
     requireAgentModifyPermission: vi.fn<MockFunction>(),
     requireAgentTypePermission: vi.fn<MockFunction>(),
-    // ./better-auth — only the API surface tests actually exercise
-    betterAuth: {
+    // ./utils
+    hasPermission: vi.fn<MockFunction>(),
+    isGlobalAdmin: vi.fn<MockFunction>(),
+    userHasPermission: vi.fn<MockFunction>(),
+  };
+}
+
+/**
+ * The module mock for `@/auth/better-auth` (its `__mocks__` sibling): the
+ * Better Auth instance with only the API surface tests exercise.
+ */
+export function betterAuthModuleMock() {
+  return {
+    auth: {
       api: {
+        createApiKey: vi.fn<MockFunction>(),
+        deleteApiKey: vi.fn<MockFunction>(),
         getSession: vi.fn<MockFunction>(),
         verifyApiKey: vi.fn<MockFunction>(),
         hasPermission: vi.fn<MockFunction>(),
       },
       $context: Promise.resolve({}),
     },
-    // ./fastify-plugin
-    fastifyAuthPlugin: vi.fn<MockFunction>(),
-    // ./utils
-    hasPermission: vi.fn<MockFunction>(),
-    isGlobalAdmin: vi.fn<MockFunction>(),
-    userHasPermission: vi.fn<MockFunction>(),
   };
 }

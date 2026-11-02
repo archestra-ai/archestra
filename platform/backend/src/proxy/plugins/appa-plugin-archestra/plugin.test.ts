@@ -2238,6 +2238,85 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
+  test.each([
+    { adapter: new AppaClaudeCodeAdapter(), maxOptions: 1 },
+    { adapter: new AppaClaudeCodeAdapter(), maxOptions: 2 },
+    { adapter: new AppaClaudeDesktopAdapter(), maxOptions: 1 },
+    { adapter: new AppaClaudeDesktopAdapter(), maxOptions: 2 },
+  ])("$adapter.id keeps both staged review choices with a native limit of $maxOptions", async ({
+    adapter,
+    maxOptions,
+  }) => {
+    adapter.nativeQuestion.maxOptions = maxOptions;
+    const plugin = new AppaPluginArchestra([adapter]);
+    const context = requestContext({
+      sessionId: `user:user|review-limit-${adapter.id}-${maxOptions}`,
+    });
+    context.headers = { "user-agent": `${adapter.id}/1` };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request = {
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(["archestra__ask_user"]),
+        namespaces: new Map(),
+      },
+      session: {},
+      customTools: new Set(),
+      declaredTools: [{ name: "AskUserQuestion" }],
+    };
+    const offerId = "offer-native-limit";
+    await stageHitlReview({
+      session: trusted.session,
+      review: { offerId, text: "Canonical review text." },
+    });
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onPrepareToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "review-question",
+            name: "archestra__ask_user",
+            arguments: JSON.stringify({
+              question: "Model-written question.",
+              options: [{ label: "Model yes" }, { label: "Model no" }],
+              remedy_offer_ids: [offerId],
+            }),
+          },
+        ],
+      });
+      if (outcome?.decision !== "allow")
+        throw new Error("expected a prepared review");
+      const [released] = outcome.toolCalls;
+      expect(released.id).toBe("review-question");
+      const args = JSON.parse(released.arguments as string);
+      if (maxOptions < 2) {
+        expect(released.name).toBe("archestra__ask_user");
+        expect(released).not.toHaveProperty("wireId");
+        expect(args.remedy_offer_ids).toEqual([offerId]);
+        expect(args.question).toContain("Canonical review text.");
+        expect(
+          args.options.map((option: { label: string }) => option.label),
+        ).toEqual(["Approve", "Deny"]);
+      } else {
+        expect(released.name).toBe("AskUserQuestion");
+        expect(released.wireId).toEqual(expect.any(String));
+        expect(args.questions[0].question).toContain("Canonical review text.");
+        expect(
+          args.questions[0].options.map(
+            (option: { label: string }) => option.label,
+          ),
+        ).toEqual(["Approve", "Deny"]);
+      }
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
   test("keeps ask_user on the gateway when the native tool is not declared", async () => {
     const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
     const context = requestContext({

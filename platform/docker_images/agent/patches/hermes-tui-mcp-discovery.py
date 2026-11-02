@@ -1,8 +1,9 @@
-"""Require completed gateway discovery before the Hermes TUI builds an agent.
+"""Require completed gateway discovery before Hermes builds any agent.
 
-Hermes waits for MCP discovery before it snapshots an agent's tools, but
+Hermes's TUI now uses the persistent gateway, bypassing its old TUI agent
+factory. Guard the shared AIAgent constructor before it snapshots tools. Hermes
 swallows every failure and builds the agent with whatever tools exist, and no
-config key makes a server required. Replace that wait with one bounded join
+config key makes a server required. Use one bounded join
 and a gateway connection check, so startup failure cannot silently become a
 model request without MCP tools. The build fails when upstream anchors move;
 upgrades require reviewing this patch and running the real-client startup
@@ -13,15 +14,11 @@ import importlib.util
 import sys
 from pathlib import Path
 
-ANCHOR = (
-    '    for _mod in ("hermes_cli.mcp_startup", "tui_gateway.entry"):\n'
-    "        with contextlib.suppress(Exception):\n"
-    "            importlib.import_module(_mod).wait_for_mcp_discovery()\n"
-    "    cfg = _load_cfg()\n"
-)
-# Replaces upstream's wait, which can run up to twice the discovery timeout
-# before this check would start.
+ANCHOR = '        init_kwargs = {k: v for k, v in locals().items() if k not in ("self", "tool_delay")}\n'
+# Apply the same required-gateway check to every constructor path, including
+# the persistent gateway used by the TUI from Hermes 0.22.5 onward.
 PATCH = '''    # Archestra image patch: see docker_images/agent/patches/hermes-tui-mcp-discovery.py
+    import subprocess
     from hermes_cli import mcp_startup as _archestra_mcp
     from tools.mcp_tool_discovery import get_mcp_status as _archestra_mcp_status
 
@@ -41,26 +38,27 @@ PATCH = '''    # Archestra image patch: see docker_images/agent/patches/hermes-t
     _archestra_gateway = next(
         (s for s in _archestra_mcp_status() if s.get("name") == "archestra"), None
     )
-    if not _archestra_gateway or not _archestra_gateway.get("connected"):
+    # The persistent gateway exposes its HTTP session before tools/list
+    # succeeds. A transport alone is not a usable gateway tool snapshot.
+    if not _archestra_gateway or not _archestra_gateway.get("connected") or not _archestra_gateway.get("tools"):
         _archestra_reject("Archestra MCP gateway discovery failed. Check gateway availability and access, then retry.")
-    cfg = _load_cfg()
 '''
+# The shared constructor is one level deeper than the old TUI factory.
+PATCH = ANCHOR + ''.join('    ' + line if line.strip() else line for line in PATCH.splitlines(keepends=True))
 
 # Locate without importing: importing these modules runs startup code.
-server = Path(importlib.util.find_spec("tui_gateway").origin).with_name("server.py")
-# Hermes 0.22.5 extracts agent construction into a module whose functions
-# bind to the server namespace (including subprocess and logger).
-factory = server.with_name("agent_factory.py")
+agent = Path(importlib.util.find_spec("run_agent").origin)
 mcp_startup = Path(importlib.util.find_spec("hermes_cli").origin).with_name("mcp_startup.py")
 discovery = Path(importlib.util.find_spec("tools").origin).with_name("mcp_tool_discovery.py")
-factory_source = factory.read_text()
+agent_source = agent.read_text()
 if (
-    factory_source.count(ANCHOR) != 1
-    or "\nimport subprocess\n" not in server.read_text()
+    agent_source.count(ANCHOR) != 1
+    or "# Archestra image patch: see docker_images/agent/patches/hermes-tui-mcp-discovery.py" in agent_source
+    or "def __init__(" not in agent_source
     or "def join_mcp_discovery(" not in mcp_startup.read_text()
     or "def start_background_mcp_discovery(" not in mcp_startup.read_text()
     or "def _resolve_discovery_timeout(" not in mcp_startup.read_text()
     or "def get_mcp_status(" not in discovery.read_text()
 ):
     sys.exit(f"Hermes TUI startup changed; review {Path(__file__).name}")
-factory.write_text(factory_source.replace(ANCHOR, PATCH))
+agent.write_text(agent_source.replace(ANCHOR, PATCH))

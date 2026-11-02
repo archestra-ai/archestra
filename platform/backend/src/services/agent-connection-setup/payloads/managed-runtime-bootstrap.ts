@@ -137,7 +137,6 @@ async function refresh(root) {
       const age = Date.now() - checked.attemptedAt;
       if (checked.installation === params.installation && Number.isFinite(age) && age >= 0 && age < 30000) return old;
     }
-    let updated = false;
     try {
       const url = new URL(params.source.url);
       if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0" || url.protocol !== "https:" || url.origin !== params.origin || url.username || url.password || url.hash ||
@@ -177,14 +176,13 @@ async function refresh(root) {
           if (hash(fs.readFileSync(path.join(destination, name))) !== manifest.artifacts[name].sha256) throw new Error("Modified staged managed artifact");
         }
         atomic(path.join(root, "current.json"), JSON.stringify(manifest));
-        updated = true;
       }
     } catch (error) {
       // Keep the verified cache, but do not hide a programming error in validate or write.
       console.error("Managed runtime refresh kept the verified cache:", error && error.message ? error.message : error);
     }
     atomic(checkedPath, JSON.stringify({ installation: params.installation, attemptedAt: Date.now() }));
-    return updated ? cached(root, params) : old;
+    return cached(root, params);
   });
 }
 module.exports = { refresh, verify, locked, owned, atomic };

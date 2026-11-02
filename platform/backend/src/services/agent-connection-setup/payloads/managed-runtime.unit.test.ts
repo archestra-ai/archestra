@@ -372,7 +372,16 @@ console.log(JSON.stringify({ updated: cfg.updatedGeneration, headers: output.hea
       digest(JSON.stringify(current)),
       "launcher.cjs",
     );
-    await writeFile(file, "module.exports.prepare=()=>{}", { mode: 0o600 });
+    await expect(
+      loader(
+        vi.fn().mockImplementation(async () => {
+          await writeFile(file, "module.exports.prepare=()=>{}", {
+            mode: 0o600,
+          });
+          throw Error("offline");
+        }),
+      ).refresh(files.root),
+    ).rejects.toThrow("Modified managed runtime artifact");
     await expect(loader(vi.fn()).refresh(files.root)).rejects.toThrow(
       "Modified managed runtime artifact",
     );

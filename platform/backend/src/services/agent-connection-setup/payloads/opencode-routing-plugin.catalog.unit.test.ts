@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { KILO_CLIENT } from "../opencode-family";
 import type { ManagedRuntimeCatalog } from "./opencode-primary-config";
 import { openCodePrimaryConfig } from "./opencode-primary-config";
@@ -1006,7 +1006,62 @@ describe("managed catalog plugin", () => {
     expect(result.hook["X-Archestra-Virtual-Key"]).toBe("passthrough-secret");
   });
 
-  test("V1 keeps native OpenAI sign-in methods and sends the passthrough key after mid-session ChatGPT sign-in alongside a managed OpenAI catalog entry", async () => {
+  test("V1 keeps native OpenAI sign-in methods when an OAuth credential is already stored at startup", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "catalog-plugin-v1-openai-startup-oauth-"),
+    );
+    roots.push(root);
+    process.env.XDG_DATA_HOME = path.join(root, "data");
+    process.env.HOME = root;
+    await mkdir(path.join(root, "data", "opencode"), { recursive: true });
+    await writeFile(
+      path.join(root, "data", "opencode", "auth.json"),
+      JSON.stringify({
+        openai: {
+          type: "oauth",
+          access: "native-openai-token",
+          refresh: "r",
+          accountId: "acct",
+        },
+      }),
+    );
+    const revision = path.join(root, "revision");
+    await mkdir(revision);
+    await writeFile(
+      path.join(root, "params.json"),
+      JSON.stringify({
+        routes: {},
+        headers: { "X-Archestra-Agent-Id": "opencode" },
+        routeHeaders: {
+          openai: { "X-Archestra-Virtual-Key": "passthrough-secret" },
+        },
+        clientId: "opencode",
+        origin: "https://deployment.example",
+        skipRelpath: ".archestra/skip",
+        source: { token: "cru1_test" },
+      }),
+    );
+    const file = path.join(revision, "routing.mjs");
+    await writeFile(
+      file,
+      renderOpenCodeRoutingPlugin({
+        runtime: true,
+        routes: {},
+        headers: {},
+        catalog: {
+          routes: { openai: openAiRoute },
+          managed: { openai: ["gpt-x"] },
+          passthrough: ["openai"],
+          legacy: { "archestra-openai": "openai" },
+        },
+      }),
+    );
+    const module = await import(`${pathToFileURL(file).href}?t=${Date.now()}`);
+    expect(await module.ArchestraOpenAiOAuth({ client: {} })).toEqual({});
+  });
+
+  test("V1 sends the passthrough key after mid-session ChatGPT sign-in alongside a managed OpenAI catalog entry", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "");
     const calls: Request[] = [];
     globals[directFetch] = async (
       input: RequestInfo | URL,
@@ -1085,11 +1140,6 @@ describe("managed catalog plugin", () => {
         },
       }),
     );
-
-    // OpenCode passes its plugin input ({ client, ... }) to ArchestraOpenAiOAuth;
-    // when passthrough is allowed, the plugin must not overwrite OpenCode's
-    // built-in CodexAuthPlugin.auth (/connect methods).
-    expect(await module.ArchestraOpenAiOAuth({ client: {} })).toEqual({});
 
     await hooks["chat.params"]({
       provider: { id: "openai", options: {} },

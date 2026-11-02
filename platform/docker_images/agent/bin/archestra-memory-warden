@@ -19,8 +19,7 @@ their own tmux socket, PostgreSQL) are never stopped. A whole process group is
 stopped when every member is an agent command, else the largest process.
 
 Each stop is one JSON line in /var/run/archestra/memory-warden.log, which the
-platform's memory-kill report and the repository's tool reports count next to
-the kernel's `oom_kill`; the stopped command's stderr gets a line saying why.
+platform's memory-kill report counts next to the kernel's `oom_kill`; the stopped command's stderr gets a line saying why.
 
 Environment (tests): ARCHESTRA_MEMORY_WARDEN_CGROUP (/sys/fs/cgroup),
 ARCHESTRA_MEMORY_WARDEN_LOG, ARCHESTRA_MEMORY_WARDEN_INTERVAL (0.2 s),

@@ -126,8 +126,7 @@ every member is one, and only when that frees at least the overshoot (and
 detached from the agent's terminal (a dev stack's servers on their own tmux
 socket, PostgreSQL) are never stopped. The command's stderr gets a line saying
 why (appended, without blocking); each stop is a JSON line in `/var/run/archestra/memory-warden.log`, which
-the platform's memory-kill report and the repository's type-check and test
-reports count next to the kernel's `oom_kill`. On a node with
+the platform's memory-kill report counts next to the kernel's `oom_kill`. On a node with
 `singleProcessOOMKill` the kernel's own choice backs it up.
 `tests/memory-warden.py` checks the trigger, the victim choice and one stop.
 

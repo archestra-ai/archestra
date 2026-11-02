@@ -3986,6 +3986,178 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
   });
 
+  test.each([
+    { count: 5, multiple: false, stream: false, direct: false },
+    { count: 5, multiple: false, stream: true, direct: false },
+    { count: 12, multiple: false, stream: false, direct: false },
+    { count: 12, multiple: true, stream: false, direct: false },
+    { count: 5, multiple: false, stream: false, direct: true },
+    { count: 5, multiple: false, stream: true, direct: true },
+  ])("Claude Desktop returns all-choice native answers to the provider (choices=$count, multiple=$multiple, stream=$stream, direct=$direct)", async ({
+    count,
+    multiple,
+    stream,
+    direct,
+  }) => {
+    block = false;
+    const name = "mcp__archestra__archestra__ask_user";
+    const labels = Array.from(
+      { length: count },
+      (_, index) => `Color ${index + 1}`,
+    );
+    const question = {
+      question: "Which color do you prefer?",
+      options: labels.map((label) => ({ label })),
+      allowMultiple: multiple,
+    };
+    const tool = direct
+      ? {
+          name: "AskUserQuestion",
+          input: {
+            questions: [
+              {
+                question: question.question,
+                header: "Color",
+                options: question.options,
+                multiSelect: multiple,
+              },
+            ],
+          },
+        }
+      : { name, input: question };
+    options = stream
+      ? {
+          includeToolUse: true,
+          streamingToolUse: tool,
+          streamStopReason: "tool_use",
+        }
+      : { nonStreamingToolUse: tool };
+    const body = payload(false);
+    const tools = [
+      ...body.tools.map((definition) => ({
+        ...definition,
+        description: definition.name.startsWith("archestra__")
+          ? attestToolDescription({
+              organizationId: agent.organizationId,
+              gatewayId: agent.id,
+              advertisedName: definition.name,
+              kind: "b",
+              description: definition.description,
+            })
+          : definition.description,
+      })),
+      {
+        name,
+        description: attestToolDescription({
+          organizationId: agent.organizationId,
+          gatewayId: agent.id,
+          advertisedName: "archestra__ask_user",
+          kind: "b",
+          description: "Ask the user to choose.",
+        }),
+        input_schema: { type: "object", properties: {} },
+      },
+      {
+        name: "AskUserQuestion",
+        description: "Ask a native question.",
+        input_schema: { type: "object", properties: {} },
+      },
+    ];
+    const clientHeaders = {
+      ...internalCallHeader(),
+      ...externalClientHeaders(),
+      "x-archestra-agent-id": "anthropic_claude_desktop",
+      "x-claude-code-session-id": "desktop-native-choice-session",
+    };
+    const messages = [
+      {
+        role: "user",
+        content: "Native questions are allowed. Keep every color.",
+      },
+    ];
+    const asked = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: clientHeaders,
+      payload: { ...body, tools, stream, messages },
+    });
+    expect(asked.statusCode, asked.body).toBe(200);
+    const released = noticeFrom(asked.body, stream);
+    expect(released.name).toBe("AskUserQuestion");
+    const groups = released.input.questions as Array<{
+      question: string;
+      options: { label: string }[];
+    }>;
+    expect(groups.length).toBeLessThanOrEqual(4);
+    for (const group of groups)
+      expect(group.options.length).toBeLessThanOrEqual(4);
+    expect(
+      groups.flatMap((group) =>
+        group.options
+          .map((option) => option.label)
+          .filter((label) => labels.includes(label)),
+      ),
+    ).toEqual(labels);
+    const selected = multiple ? [labels[0], labels.at(-1)] : [labels.at(-1)];
+    const answers = Object.fromEntries(
+      groups.map((group) => {
+        const picked = group.options
+          .map((option) => option.label)
+          .filter((label) => selected.includes(label));
+        return [
+          group.question,
+          picked.length > 0 ? picked : [group.options.at(-1)?.label],
+        ];
+      }),
+    );
+    options = {};
+    const history = [
+      ...messages,
+      {
+        role: "assistant",
+        content: [{ type: "tool_use", ...released }],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: released.id,
+            content: JSON.stringify({ answers }),
+          },
+        ],
+      },
+    ];
+    // A replica may read the same answer again on a retry or resumed history.
+    for (let replay = 0; replay < 2; replay++) {
+      providerRequests.length = 0;
+      const answered = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: clientHeaders,
+        payload: { ...body, tools, messages: history },
+      });
+      expect(answered.statusCode, answered.body).toBe(200);
+      const sent = providerRequests.at(-1) as {
+        messages: { content: unknown }[];
+      };
+      const forwarded = sent.messages
+        .flatMap((message) =>
+          Array.isArray(message.content) ? message.content : [],
+        )
+        .find(
+          (part) =>
+            part.type === "tool_result" && part.tool_use_id === released.id,
+        );
+      expect(JSON.parse(forwarded.content)).toEqual({
+        action: "accept",
+        selected,
+      });
+    }
+  });
+
   test("block mode governs Claude Desktop sessions, isolates headerless Chat conversations, and rejects headerless requests without a conversation identity", async () => {
     await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
     options = { includeToolUse: false, streamStopReason: "end_turn" };

@@ -31,11 +31,12 @@ crate-type = ["cdylib"]
 # context-provider answers trimmed largest first (#769), refusal detail in
 # provider errors (#770), more shell shapes for the GitHub provider (#771),
 # the consult budget in `APPA_CONSULT_TIMEOUT_MS` (#772), and context-provider
-# and deployment hints (#773).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "8885b5c749db7284f7570696c53ee9fbdd334be4", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "8885b5c749db7284f7570696c53ee9fbdd334be4" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "8885b5c749db7284f7570696c53ee9fbdd334be4", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "8885b5c749db7284f7570696c53ee9fbdd334be4" }
+# and deployment hints (#773), and the GitHub context provider answering the
+# GH_TOKEN, git config, assignment, and heredoc shapes it used to decline (#775).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "fc46b128babfeaf0f29e288d326ae3d3db12627e", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "fc46b128babfeaf0f29e288d326ae3d3db12627e" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "fc46b128babfeaf0f29e288d326ae3d3db12627e", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "fc46b128babfeaf0f29e288d326ae3d3db12627e" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

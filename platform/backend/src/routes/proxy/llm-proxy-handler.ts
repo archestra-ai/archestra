@@ -2291,8 +2291,8 @@ async function handleObservedLLMProxy<
                 baselineCost: cutOff?.cost,
                 billingMode,
               };
-              // Record usage and settle all budgets before the next member is
-              // admitted. Only mark failover once a non-hidden choice opens.
+              // Persist the attempt and settle minute spend before admitting
+              // the next member. Mark failover only when a non-hidden choice opens.
               await persistProxyInteraction({
                 record,
                 encryptedChat,

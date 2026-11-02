@@ -136,6 +136,14 @@ describe("redactCredentials", () => {
       String.raw`curl -H Authorization:\ [redacted]`,
     ],
     ["Authorization: tok_123 -X POST", "Authorization: [redacted] POST"],
+    [
+      "curl -H Authorization:'Bearer tok_secret' https://x",
+      "curl -H Authorization:'Bearer [redacted]' https://x",
+    ],
+    [
+      'curl -H X-Api-Key:"k 1" -b Cookie=sid https://x',
+      'curl -H X-Api-Key:"[redacted]" -b Cookie=[redacted] https://x',
+    ],
   ])("%s", (input, expected) => {
     expect(redactCredentials(input)).toBe(expected);
   });
@@ -173,6 +181,44 @@ describe("redactCredentials", () => {
     expect(parsed).toEqual({
       request: { headers: masked },
       encoded: JSON.stringify({ headers: masked }),
+    });
+  });
+
+  test("masks the value of a name/value header entry, nested or encoded in a string", () => {
+    expect(
+      parseReviewedArguments(
+        redactCredentials(
+          JSON.stringify({
+            headers: [{ name: "Authorization", value: "Bearer tok_secret" }],
+          }),
+        ),
+      ),
+    ).toEqual({
+      headers: [{ name: "Authorization", value: "Bearer [redacted]" }],
+    });
+
+    const headers = [
+      { key: "x-api-key", value: "s3cr3t" },
+      { header: "Cookie", value: "sid=s3cr3t" },
+      { name: "Accept", value: "application/json" },
+    ];
+    const masked = [
+      { key: "x-api-key", value: "[redacted]" },
+      { header: "Cookie", value: "[redacted]" },
+      { name: "Accept", value: "application/json" },
+    ];
+    expect(
+      parseReviewedArguments(
+        redactCredentials(
+          JSON.stringify({
+            requests: [{ headers }, { cookies: { cookie: "sid=s3cr3t" } }],
+            encoded: JSON.stringify([{ headers }]),
+          }),
+        ),
+      ),
+    ).toEqual({
+      requests: [{ headers: masked }, { cookies: { cookie: "[redacted]" } }],
+      encoded: JSON.stringify([{ headers: masked }]),
     });
   });
 });

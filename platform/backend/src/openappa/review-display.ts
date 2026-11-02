@@ -80,29 +80,77 @@ export function displayedReview<
   };
 }
 
-/** The text with credential header values replaced, for display only. */
+/**
+ * The text with credential header values replaced, for display only. JSON,
+ * including JSON encoded in its strings, is redacted by structure and stays
+ * parseable; any other text by its `Name: value` and `Name=value` pairs.
+ */
 export function redactCredentials(text: string): string {
-  return text.replace(
-    CREDENTIAL_HEADER,
-    (
-      _credential,
-      authorization: string | undefined,
-      scheme: string | undefined,
-      gap: string | undefined,
-      header: string | undefined,
-    ) =>
-      authorization === undefined
-        ? `${header}${REDACTED_CREDENTIAL}`
-        : scheme && AUTH_SCHEMES.has(scheme.toLowerCase())
-          ? `${authorization}${scheme}${gap}${REDACTED_CREDENTIAL}`
-          : `${authorization}${REDACTED_CREDENTIAL}`,
+  const json = parseJsonContainer(text);
+  if (json === undefined) return text.replace(CREDENTIAL_TEXT, redactTextPair);
+  const redacted = JSON.stringify(redactJson(json));
+  return redacted === JSON.stringify(json) ? text : redacted;
+}
+
+function parseJsonContainer(text: string): object | undefined {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return typeof parsed === "object" && parsed !== null ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// A credential sits under a header-named key, or in the `value` beside a
+// `name`, `key` or `header` naming one.
+function redactJson(value: unknown): unknown {
+  if (typeof value === "string") return redactCredentials(value);
+  if (Array.isArray(value)) return value.map(redactJson);
+  if (typeof value !== "object" || value === null) return value;
+  const entries = Object.entries(value);
+  const namesCredential = entries.some(
+    ([key, field]) =>
+      PAIR_NAME_KEYS.has(key) &&
+      typeof field === "string" &&
+      CREDENTIAL_NAME.test(field),
   );
+  return Object.fromEntries(
+    entries.map(([key, field]) => [
+      key,
+      CREDENTIAL_NAME.test(key) || (namesCredential && key === "value")
+        ? typeof field === "string"
+          ? redactSecret(field)
+          : REDACTED_CREDENTIAL
+        : redactJson(field),
+    ]),
+  );
+}
+
+function redactTextPair(
+  _pair: string,
+  prefix: string,
+  open: string | undefined,
+  quoted: string | undefined,
+  close: string | undefined,
+  bare: string | undefined,
+): string {
+  return open === undefined
+    ? `${prefix}${redactSecret(bare ?? "")}`
+    : `${prefix}${open}${redactSecret(quoted ?? "")}${close ?? ""}`;
+}
+
+// Only a known scheme stays visible: any other word before a gap may be the
+// credential itself.
+function redactSecret(value: string): string {
+  const [, scheme, gap] =
+    /^([A-Za-z][\w-]*)((?:\\*\s)+)(?=\S)/.exec(value) ?? [];
+  return scheme && gap && AUTH_SCHEMES.has(scheme.toLowerCase())
+    ? `${scheme}${gap}${REDACTED_CREDENTIAL}`
+    : REDACTED_CREDENTIAL;
 }
 
 const REDACTED_CREDENTIAL = "[redacted]";
 
-// Only a known scheme stays visible: any other word before a gap may be the
-// credential itself.
 const AUTH_SCHEMES = new Set([
   "basic",
   "bearer",
@@ -113,13 +161,20 @@ const AUTH_SCHEMES = new Set([
   "token",
 ]);
 
-// A credential header as a command or JSON string carries it: the name, an
-// optional auth scheme, then the credential up to a quote, backslash or
-// space, so a JSON payload stays parseable. A gap is whitespace, possibly
-// shell-escaped (`\ `, or `\\ ` inside a JSON string). A JSON header map's
-// key and value may be quoted, escaped as many times as the JSON is nested.
-const CREDENTIAL_HEADER =
-  /((?:proxy-)?authorization(?:\\*")?\s*:\s*(?:\\*")?(?:\\*\s)*)(?:([A-Za-z][\w-]*)((?:\\*\s)+))?[^\s'"\\]+|((?:api-key|auth-token|private-token)(?:\\*")?\s*:\s*(?:\\*")?(?:\\*\s)*)[^\s'"\\]+/gi;
+const PAIR_NAME_KEYS = new Set(["name", "key", "header"]);
+
+const CREDENTIAL_NAMES = String.raw`(?:proxy-)?authorization|[\w-]*(?:api|auth|private)[-_]?(?:key|token)|(?:set-)?cookie`;
+
+const CREDENTIAL_NAME = new RegExp(`^(?:${CREDENTIAL_NAMES})$`, "i");
+
+// The name, possibly quoted, `:` or `=`, a gap that may be shell-escaped,
+// then either a value quoted from its first character through the matching
+// quote, or a bare value up to a quote, backslash or space, which after an
+// authorization header may follow a scheme. Quotes may be escaped as many times as the text is nested in JSON.
+const CREDENTIAL_TEXT = new RegExp(
+  String.raw`((?:${CREDENTIAL_NAMES})(?:\\*["'])?\s*[:=](?:\\?\s)*)(?:(\\*["'])([\s\S]*?)(\2|$)|((?:(?<=authorization(?:\\*["'])?\s*[:=](?:\\?\s)*)[A-Za-z][\w-]*(?:\\*\s)+)?[^\s'"\\]+))`,
+  "gi",
+);
 
 /**
  * Argument values as one line each, names padded to one column, longer

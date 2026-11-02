@@ -75,6 +75,11 @@ const layerTable = [
       "src/utils/llm-api-key-resolution.ts",
       "src/utils/provider-key-mappings.ts",
       "src/utils/llm-resolution.ts",
+      // What model resolution reads besides keys: the output budget an agent
+      // gets, the team access to a model, and whether Gemini runs on Vertex AI.
+      "src/agents/agent-output-budget.ts",
+      "src/routes/proxy/utils/model-team-access.ts",
+      "src/clients/gemini-vertex-ai.ts",
       "src/clients/anthropic-keyless-auth.ts",
       "src/clients/anthropic-vertex.ts",
       "src/clients/anthropic-vertex-request.ts",

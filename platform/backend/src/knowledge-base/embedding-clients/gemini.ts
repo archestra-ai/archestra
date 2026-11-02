@@ -1,8 +1,6 @@
 import { GoogleAuth } from "google-auth-library";
-import {
-  createGoogleGenAIClient,
-  isVertexAiEnabled,
-} from "@/clients/gemini-client";
+import { createGoogleGenAIClient } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import config from "@/config";
 import logger from "@/logging";
 import { mapWithConcurrency } from "@/utils/concurrency";

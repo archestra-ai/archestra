@@ -1097,6 +1097,12 @@ test.for([
     exit: null,
   },
   {
+    name: "a failed command after the memory warden stopped a command",
+    killed: false,
+    exit: null,
+    warden: true,
+  },
+  {
     name: "a turn that ends non-zero after a memory kill",
     killed: true,
     exit: "7",
@@ -1130,6 +1136,7 @@ test.for([
   counters = true,
   polls = 2,
   nodeOom = false,
+  warden = false,
 }, { run }) => {
   let turnReads = 0;
   let memoryReads = 0;
@@ -1160,23 +1167,27 @@ test.for([
   // The counters when the turn was first seen running, then after the
   // failure: the kernel killed the run's tsc, shell and tmux server while
   // PID 1 and the pod lived on.
-  const counters_ = (kills: number) =>
+  // A warden stop (a command the agent survives) shows only in warden_stop.
+  const counters_ = (kills: number, stops = 0) =>
     counters
-      ? `low 0\nhigh 0\nmax 1203\noom ${nodeOom ? 0 : kills}\noom_kill ${kills}\noom_group_kill 0\npeak ${kills && !nodeOom ? 8 * GIB : nodeOom ? 3 * GIB : 2 * GIB}\nlimit ${8 * GIB}\n`
+      ? `low 0\nhigh 0\nmax 1203\noom ${nodeOom ? 0 : kills}\noom_kill ${kills}\noom_group_kill 0\npeak ${kills && !nodeOom ? 8 * GIB : nodeOom ? 3 * GIB : 2 * GIB}\nlimit ${8 * GIB}\nwarden_stop ${stops}\n`
       : `peak \nlimit \n`;
   vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
     const command = (args[3] as string[]).join(" ");
     if (command.includes("read-memory-events")) {
       memoryReads++;
-      args[4]?.write(counters_(killed ? 1 : 0));
+      args[4]?.write(counters_(killed ? 1 : 0, warden ? 1 : 0));
       args[8]?.({ status: "Success" });
     } else if (command.includes("read-turn-result")) {
       // No result until the last poll. Then either the turn has ended with
       // the given status, or the poll's own shell is killed.
       turnReads++;
       const kills = turnReads < polls || !killed ? 0 : 1;
+      const stops = warden && turnReads > 1 ? 1 : 0;
       if (turnReads < polls || finished) {
-        args[4]?.write(`\n${MEMORY_EVENTS_SEPARATOR}\n${counters_(kills)}`);
+        args[4]?.write(
+          `\n${MEMORY_EVENTS_SEPARATOR}\n${counters_(kills, stops)}`,
+        );
         args[8]?.({ status: "Success" });
       } else if (exit !== null) {
         // The counters are read after the result: the kill that ended the

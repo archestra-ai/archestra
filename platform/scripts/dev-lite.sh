@@ -14,11 +14,11 @@
 #                              adds Keycloak with the e2e realm, for the
 #                              identity-provider and JWKS specs
 #   scripts/dev-lite.sh start [same options]   start without waiting
-#   scripts/dev-lite.sh prepare                dependencies, native addons, PostgreSQL and
-#                              migrations only: no build and no server. An Agent
-#                              Runtime's bootstrap runs this, so a pod does not build
-#                              while its agent starts; `up` builds and starts the rest
-#                              when the stack is needed
+#   scripts/dev-lite.sh prepare                dependencies, prebuilt native addons,
+#                              PostgreSQL and migrations only: no build and no server.
+#                              An Agent Runtime's bootstrap runs this, so a pod does
+#                              not build while its agent starts; `up` builds what is
+#                              missing and starts the rest when the stack is needed
 #   scripts/dev-lite.sh wait                   wait until backend and frontend answer
 #   scripts/dev-lite.sh status                 processes, memory, disk, URLs
 #   scripts/dev-lite.sh logs <component> [n]   tail a component log (db, migrate,
@@ -386,26 +386,36 @@ install_dependencies() {
 
 # The backend lazily loads NAPI addons whose .node binaries are gitignored and
 # never built by pnpm install. Install the prebuilt ones published for main's
-# archestra-rs tree (scripts/napi-prebuilt.mjs, about a second), else build
-# them: several minutes of cargo, more on a small pod.
-ensure_native_addons() {
-  local crate filters=()
-  if (cd "$PLATFORM_DIR" && node scripts/napi-prebuilt.mjs "${CRATES[@]}") >&2; then
-    return 0
-  fi
+# archestra-rs tree (scripts/napi-prebuilt.mjs, about a second). Those still
+# missing (a changed archestra-rs tree, or none published) are built by `up`,
+# with the other builds: never by `prepare`, which runs beside the agent.
+install_native_addons() {
+  (cd "$PLATFORM_DIR" && node scripts/napi-prebuilt.mjs "${CRATES[@]}") >&2 || true
+}
+
+# The crates whose addon is not built, one per line.
+missing_native_addons() {
+  local crate
   for crate in "${CRATES[@]}"; do
-    if ! ls "$PLATFORM_DIR/archestra-rs/$crate"/*.node >/dev/null 2>&1; then
-      filters+=("--filter" "@archestra/$crate")
-    fi
+    ls "$PLATFORM_DIR/archestra-rs/$crate"/*.node >/dev/null 2>&1 || echo "$crate"
   done
+}
+
+# Several minutes of cargo, more on a small pod: one crate at a time, as the
+# other builds run.
+build_native_addons() {
+  local crate filters=()
+  while IFS= read -r crate; do
+    filters+=("--filter" "@archestra/$crate")
+  done < <(missing_native_addons)
   [ ${#filters[@]} -eq 0 ] && return 0
   command -v cargo >/dev/null 2>&1 \
     || die "Rust toolchain not found; cannot build ${filters[*]}"
-  # Parallel napi builds each ask rustup for the components in
-  # rust-toolchain.toml and race on the same download; install them once first.
+  # Each napi build asks rustup for the components in rust-toolchain.toml;
+  # install them once first.
   (cd "$PLATFORM_DIR" && rustup show > /dev/null 2>&1) || true
   log "building native addons (several minutes): ${filters[*]}"
-  (cd "$PLATFORM_DIR" && pnpm "${filters[@]}" build:dev) > "$LOG_DIR/napi-build.log" 2>&1 \
+  (cd "$PLATFORM_DIR" && pnpm --workspace-concurrency=1 "${filters[@]}" build:dev) > "$LOG_DIR/napi-build.log" 2>&1 \
     || { tail -n 40 "$LOG_DIR/napi-build.log" >&2; die "native addon build failed"; }
 }
 
@@ -521,7 +531,8 @@ start_frontend() {
       build_frontend
     fi
     start_session frontend "$STANDALONE_DIR" \
-      "exec env PORT=$FRONTEND_PORT HOSTNAME=127.0.0.1 NODE_ENV=production $(frontend_env)node --env-file=$(printf '%q' "$ENV_FILE") server.js"
+      "exec env PORT=$FRONTEND_PORT HOSTNAME=127.0.0.1 NODE_ENV=production $(frontend_env)node --env-file=$(printf '%q' "$ENV_FILE") server.js" \
+      || return 1
     echo "$mode" > "$FRONTEND_MODE_FILE"
     return 0
   fi
@@ -594,9 +605,11 @@ build_frontend() {
     bash -c "exec env CIRCLE_NODE_TOTAL=$((cpus + 1)) $build_env$(frontend_env)node --env-file=$(printf '%q' "$ENV_FILE") -e $(printf '%q' "$launcher")"
   ) > "$LOG_DIR/frontend-build.log" 2>&1 \
     || { tail -n 30 "$LOG_DIR/frontend-build.log" >&2; die "frontend build failed"; }
-  rm -rf "$STANDALONE_DIR/.next/static" "$STANDALONE_DIR/public"
-  cp -R "$PLATFORM_DIR/frontend/.next/static" "$STANDALONE_DIR/.next/static"
-  cp -R "$PLATFORM_DIR/frontend/public" "$STANDALONE_DIR/public"
+  # Checked one by one: a caller's `if` switches errexit off in here.
+  rm -rf "$STANDALONE_DIR/.next/static" "$STANDALONE_DIR/public" \
+    && cp -R "$PLATFORM_DIR/frontend/.next/static" "$STANDALONE_DIR/.next/static" \
+    && cp -R "$PLATFORM_DIR/frontend/public" "$STANDALONE_DIR/public" \
+    || die "could not copy the frontend's static and public files next to its server"
   log "frontend built in $((SECONDS - started)) s"
 }
 
@@ -765,6 +778,28 @@ wait_ready() {
 
 # --- commands --------------------------------------------------------------
 
+# The EXIT trap of `up`: when it fails after stopping servers, start again,
+# from the builds on disk, the backend and frontend that ran when it began.
+UP_RESTORE_BACKEND=0
+UP_RESTORE_FRONTEND=""
+restore_servers() {
+  local status="$1"
+  trap - EXIT
+  if [ "$status" != 0 ]; then
+    if [ "$UP_RESTORE_BACKEND" = 1 ] && ! session_alive backend \
+      && { backend_watch || [ -f "$PLATFORM_DIR/backend/dist/server.mjs" ]; }; then
+      log "up failed: starting the backend again"
+      start_backend || true
+    fi
+    if [ -n "$UP_RESTORE_FRONTEND" ] && ! session_alive frontend \
+      && { [ "$UP_RESTORE_FRONTEND" = dev ] || [ -f "$STANDALONE_DIR/server.js" ]; }; then
+      log "up failed: starting the frontend again"
+      start_frontend "$UP_RESTORE_FRONTEND" keep || true
+    fi
+  fi
+  exit "$status"
+}
+
 cmd_start() {
   local wait="$1" e2e=0 keycloak=0 mock_data=0 name frontend
   shift
@@ -789,6 +824,12 @@ cmd_start() {
     [ "$wait" = 1 ] && wait_ready
     return 0
   fi
+  # From here on `up` stops servers to restart or build: if it fails, the
+  # ones running now come back (restore_servers).
+  UP_RESTORE_BACKEND=0 UP_RESTORE_FRONTEND=""
+  if session_alive backend; then UP_RESTORE_BACKEND=1; fi
+  if session_alive frontend; then UP_RESTORE_FRONTEND="$(frontend_mode)"; fi
+  trap 'restore_servers $?' EXIT
   # The servers read .env when they start: switching a running stack to the
   # e2e environment restarts them, and e2e needs the production frontend.
   if [ "$e2e" = 1 ] && ! session_alive wiremock; then
@@ -809,7 +850,7 @@ cmd_start() {
   fi
   ensure_env "$e2e" "$keycloak"
   install_dependencies
-  ensure_native_addons
+  install_native_addons
   start_postgres
   wait_for_db
   migrate
@@ -819,46 +860,44 @@ cmd_start() {
       || { tail -n 20 "$LOG_DIR/seed-mock-data.log" >&2; die "mock data seed failed"; }
   fi
   [ "$e2e" = 1 ] && frontend=e2e
-  # Builds first, one at a time, then the servers (see build_backend). Servers
-  # that `pause` stopped come back from their builds.
-  # The paused frontend's build is reused only for the mode it served.
-  local paused=0 keep_frontend=0
+  # What needs building, decided before any server stops. Servers that `pause`
+  # stopped come back from their builds; the paused frontend's build is reused
+  # only for the mode it served.
+  local paused=0 keep_frontend=0 builds=() frontend_start="$frontend"
   if [ -f "$PAUSED_FILE" ]; then
     paused=1
     [ "$(paused_value frontend)" = "$frontend" ] && keep_frontend=1
   fi
-  # Each build runs alone: a server already running stops for it, and comes
-  # back from its build if the build fails.
-  local stopped_backend=0 stopped_frontend=""
+  if [ -n "$(missing_native_addons)" ]; then builds+=(native_addons); fi
   if [ "$frontend" != dev ] && ! session_alive frontend \
     && { [ "$keep_frontend" = 0 ] || [ ! -f "$STANDALONE_DIR/server.js" ]; }; then
-    if session_alive backend; then
-      log "stopping the backend while the frontend builds"
-      stop_session backend
-      stopped_backend=1
-    fi
-    if ! (build_frontend); then
-      if [ "$stopped_backend" = 1 ]; then start_backend; fi
-      die "frontend build failed; see $LOG_DIR/frontend-build.log"
-    fi
+    builds+=(frontend)
   fi
   if ! backend_watch && ! session_alive backend \
     && { [ "$paused" = 0 ] || [ ! -f "$PLATFORM_DIR/backend/dist/server.mjs" ]; }; then
-    if session_alive frontend; then
-      stopped_frontend="$(frontend_mode)"
-      log "stopping the frontend while the backend builds"
-      stop_session frontend
-    fi
-    if ! (build_backend); then
-      if [ -n "$stopped_frontend" ]; then start_frontend "$stopped_frontend" keep; fi
-      die "backend build failed; see $LOG_DIR/backend-build.log"
-    fi
+    builds+=(backend)
   fi
+  # A running frontend keeps its mode.
+  if session_alive frontend; then frontend_start="$(frontend_mode)"; fi
+  # The builds run one at a time and with no server beside them: a running one
+  # stops first and starts again after them (see build_backend).
+  if [ ${#builds[@]} -gt 0 ]; then
+    for name in backend frontend; do
+      if session_alive "$name"; then
+        log "stopping the $name while the builds run (${builds[*]})"
+        stop_session "$name"
+      fi
+    done
+    for name in "${builds[@]}"; do
+      "build_$name" || die "the $name build failed"
+    done
+  fi
+  start_backend || die "the backend did not start; see $LOG_DIR/backend.log"
+  start_frontend "$frontend_start" keep || die "the frontend did not start; see $LOG_DIR/frontend.log"
   rm -f "$PAUSED_FILE"
-  start_backend
-  start_frontend "$frontend" keep
   [ "$e2e" = 1 ] && start_e2e_deps
   [ "$keycloak" = 1 ] && start_keycloak
+  trap - EXIT
   log "started; logs in $LOG_DIR"
   if [ "$wait" = 1 ]; then
     wait_ready
@@ -877,7 +916,7 @@ cmd_prepare() {
   fi
   ensure_env 0 0
   install_dependencies
-  ensure_native_addons
+  install_native_addons
   start_postgres
   wait_for_db
   migrate

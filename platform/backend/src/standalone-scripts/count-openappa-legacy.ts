@@ -27,6 +27,13 @@ import {
   openappaOperationsTable,
   openappaSessionsTable,
 } from "@/database/schemas";
+import { assertPortsBound } from "@/models/ports";
+import { bindAllPorts } from "@/server/composition";
+
+// Bind the ports of the layers below before anything uses them, and stop here
+// if one is unbound (server/composition.ts).
+bindAllPorts();
+assertPortsBound();
 
 async function main() {
   await initializeDatabase();

@@ -4,12 +4,19 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { z } from "zod";
 import logger from "@/logging";
+import { assertPortsBound } from "@/models/ports";
+import { bindAllPorts } from "@/server/composition";
 import {
   APPA_CONTRACTS_PARTS,
   type AppaContractsPartSlug,
   appaContractsPartFile,
   appaContractsPartPath,
 } from "@/skills/appa-guide-contracts";
+
+// Bind the ports of the layers below before anything uses them, and stop here
+// if one is unbound (server/composition.ts).
+bindAllPorts();
+assertPortsBound();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

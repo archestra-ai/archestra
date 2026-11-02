@@ -16,8 +16,15 @@
  */
 import { writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { assertPortsBound } from "@/models/ports";
+import { bindAllPorts } from "@/server/composition";
 import { VaultClient } from "../secrets-manager/vault-client.ee";
 import { getVaultConfigFromEnv } from "../secrets-manager/vault-config";
+
+// Bind the ports of the layers below before anything uses them, and stop here
+// if one is unbound (server/composition.ts).
+bindAllPorts();
+assertPortsBound();
 
 interface SecretSpec {
   envVar: string;

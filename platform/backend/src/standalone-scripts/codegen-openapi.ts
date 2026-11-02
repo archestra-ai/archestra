@@ -3,12 +3,19 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { initializeDatabase } from "@/database";
 import logger from "@/logging";
+import { assertPortsBound } from "@/models/ports";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import {
   createFastifyInstance,
   registerApiRoutes,
   registerSwaggerPlugin,
 } from "@/server";
+import { bindAllPorts } from "@/server/composition";
+
+// Bind the ports of the layers below before anything uses them, and stop here
+// if one is unbound (server/composition.ts).
+bindAllPorts();
+assertPortsBound();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

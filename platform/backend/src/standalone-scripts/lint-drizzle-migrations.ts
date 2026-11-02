@@ -5,6 +5,13 @@ import {
   lintMigrationFile,
   summarizeIssues,
 } from "@drizzle-migration-linter";
+import { assertPortsBound } from "@/models/ports";
+import { bindAllPorts } from "@/server/composition";
+
+// Bind the ports of the layers below before anything uses them, and stop here
+// if one is unbound (server/composition.ts).
+bindAllPorts();
+assertPortsBound();
 
 const MIGRATIONS_DIR = path.resolve(process.cwd(), "src/database/migrations");
 

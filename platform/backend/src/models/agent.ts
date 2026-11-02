@@ -116,6 +116,7 @@ import { gatewayAgentSelection } from "./gateway-agent-selection";
 import { idArrayCondition } from "./id-array-condition";
 import InteractionUserActivityModel from "./interaction-user-activity";
 import OrganizationModel from "./organization";
+import { port } from "./ports";
 import ResourcePermissionPolicyModel, {
   type ObjectPolicy,
 } from "./resource-permission-policy";
@@ -716,10 +717,10 @@ class AgentModel {
   ): Promise<void> {
     if (agents.length === 0 || !userId) return;
 
-    // Lazy: the availability check reaches into the service layer, which
-    // would otherwise load with every model.
-    const { isSkillSandboxAvailableForAgent } = await import(
-      "@/skills/skill-sandbox-availability"
+    // Through a port: the availability check sits above the models and loads
+    // on first use.
+    const { isSkillSandboxAvailableForAgent } = await port(
+      "skillSandboxAvailability",
     );
     await Promise.all(
       agents.map(async (agent) => {

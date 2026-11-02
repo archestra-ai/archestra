@@ -1,6 +1,13 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { assertPortsBound } from "@/models/ports";
+import { bindAllPorts } from "@/server/composition";
+
+// Bind the ports of the layers below before anything uses them, and stop here
+// if one is unbound (server/composition.ts).
+bindAllPorts();
+assertPortsBound();
 
 // Drizzle decides which migrations to run from the journal `when` high-water
 // mark, not just the filename order. A migration appended with an older `when`

@@ -24,7 +24,14 @@
  * Needs the same DB env as the server, plus both encryption secrets.
  */
 import config from "@/config";
+import { assertPortsBound } from "@/models/ports";
 import { reencryptStoredSecrets } from "@/secrets-manager/reencrypt";
+import { bindAllPorts } from "@/server/composition";
+
+// Bind the ports of the layers below before anything uses them, and stop here
+// if one is unbound (server/composition.ts).
+bindAllPorts();
+assertPortsBound();
 
 async function main(): Promise<void> {
   const nextSecret = config.secretsManager.encryptionSecret;

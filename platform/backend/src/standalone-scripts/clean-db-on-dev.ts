@@ -3,6 +3,13 @@ import { sql } from "drizzle-orm";
 import config from "@/config";
 import db, { initializeDatabase } from "@/database";
 import logger from "@/logging";
+import { assertPortsBound } from "@/models/ports";
+import { bindAllPorts } from "@/server/composition";
+
+// Bind the ports of the layers below before anything uses them, and stop here
+// if one is unbound (server/composition.ts).
+bindAllPorts();
+assertPortsBound();
 
 /**
  * Completely clears the database by:

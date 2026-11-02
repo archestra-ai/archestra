@@ -12,6 +12,13 @@
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { assertPortsBound } from "@/models/ports";
+import { bindAllPorts } from "@/server/composition";
+
+// Bind the ports of the layers below before anything uses them, and stop here
+// if one is unbound (server/composition.ts).
+bindAllPorts();
+assertPortsBound();
 
 const PLATFORM = path.resolve(process.cwd(), "..");
 const daggerRs = readFileSync(

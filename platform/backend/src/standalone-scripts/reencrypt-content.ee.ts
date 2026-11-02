@@ -21,6 +21,13 @@ import { runContentEncryptionBackfill } from "@/content-encryption/backfill.ee";
 import { verifyContentEncryptionKey } from "@/content-encryption/guard.ee";
 import { initializeDatabase } from "@/database";
 import logger from "@/logging";
+import { assertPortsBound } from "@/models/ports";
+import { bindAllPorts } from "@/server/composition";
+
+// Bind the ports of the layers below before anything uses them, and stop here
+// if one is unbound (server/composition.ts).
+bindAllPorts();
+assertPortsBound();
 
 async function main(): Promise<void> {
   await initializeDatabase();

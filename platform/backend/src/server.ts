@@ -220,11 +220,18 @@ export {
 const SHUTDOWN_CLEANUP_TIMEOUT_MS = 3000;
 const ACTIVE_CHAT_RUN_REAPER_INTERVAL_MS = 60 * 1000;
 
+import { assertPortsBound } from "@/models/ports";
+import { bindAllPorts } from "@/server/composition";
 // Enterprise routes are always loaded. Access is gated at request time by the
 // EnterpriseTierService, which auto-enables enterprise features for teams below
 // the small-team threshold even when no enterprise license env var is set.
 // biome-ignore lint/style/noRestrictedImports: dual-licensed at request time
 import * as eeRoutes from "./routes/index.ee";
+
+// Bind the ports of the layers below before anything uses them, and stop here
+// if one is unbound (server/composition.ts).
+bindAllPorts();
+assertPortsBound();
 
 const {
   api: {

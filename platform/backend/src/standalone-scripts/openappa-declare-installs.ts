@@ -23,7 +23,15 @@
  * failed: its rows are still the only record of its installs, and the log names
  * every one of them.
  */
+
+import { assertPortsBound } from "@/models/ports";
 import { declareExistingInstalls } from "@/openappa/declare-installs";
+import { bindAllPorts } from "@/server/composition";
+
+// Bind the ports of the layers below before anything uses them, and stop here
+// if one is unbound (server/composition.ts).
+bindAllPorts();
+assertPortsBound();
 
 async function main(): Promise<number> {
   const summary = await declareExistingInstalls();

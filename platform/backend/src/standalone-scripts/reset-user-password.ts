@@ -57,9 +57,16 @@ import logger from "@/logging";
 import AccountModel from "@/models/account";
 import AuditLogModel from "@/models/audit-log";
 import MemberModel from "@/models/member";
+import { assertPortsBound } from "@/models/ports";
 import SessionModel from "@/models/session";
 import TwoFactorModel from "@/models/two-factor";
 import UserModel from "@/models/user";
+import { bindAllPorts } from "@/server/composition";
+
+// Bind the ports of the layers below before anything uses them, and stop here
+// if one is unbound (server/composition.ts).
+bindAllPorts();
+assertPortsBound();
 
 /** Better Auth's default password length bounds, enforced on sign-in forms. */
 const MIN_PASSWORD_LENGTH = 8;

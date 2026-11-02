@@ -16,6 +16,8 @@ import {
   TeamModel,
 } from "@/models";
 import AgentUsageModel from "@/models/agent-usage";
+import { assertPortsBound } from "@/models/ports";
+import { bindAllPorts } from "@/server/composition";
 import {
   seedArchestraCatalogAndTools,
   seedDefaultUserAndOrg,
@@ -29,6 +31,11 @@ import {
   generateMockTools,
   type MockAgentWithTeams,
 } from "./mocks";
+
+// Bind the ports of the layers below before anything uses them, and stop here
+// if one is unbound (server/composition.ts).
+bindAllPorts();
+assertPortsBound();
 
 // Set to true to create tools and interactions
 // Don't delete this const for development convenience

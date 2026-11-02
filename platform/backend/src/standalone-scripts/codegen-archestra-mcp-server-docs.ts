@@ -20,6 +20,13 @@ import {
 import { getAllArchestraMcpTools } from "@/archestra-mcp-server";
 import { TOOL_PERMISSIONS } from "@/archestra-mcp-server/rbac";
 import logger from "@/logging";
+import { assertPortsBound } from "@/models/ports";
+import { bindAllPorts } from "@/server/composition";
+
+// Bind the ports of the layers below before anything uses them, and stop here
+// if one is unbound (server/composition.ts).
+bindAllPorts();
+assertPortsBound();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

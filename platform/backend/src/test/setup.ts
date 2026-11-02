@@ -19,9 +19,16 @@ import { PGlite } from "@electric-sql/pglite";
 import { vector } from "@electric-sql/pglite/vector";
 import { drizzle } from "drizzle-orm/pglite";
 import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
+import { assertPortsBound } from "@/models/ports";
 // Dependency-free by design — safe to import before test files apply mocks.
 import { clearRegisteredProcessLocalCaches } from "@/process-local-cache-registry";
+import { bindAllPorts } from "@/server/composition";
 import { getMigrationsSql, SNAPSHOT_PATH_ENV } from "./migrations-helper.js";
+
+// Bind the ports of the layers below before anything uses them, and stop here
+// if one is unbound (server/composition.ts).
+bindAllPorts();
+assertPortsBound();
 
 // Disable Sentry for tests - set BEFORE any config modules are loaded
 process.env.ARCHESTRA_SENTRY_BACKEND_DSN = "";

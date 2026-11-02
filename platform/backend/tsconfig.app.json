@@ -25,7 +25,9 @@
     "src/skills/skill-catalog.generated.json"
   ],
   "exclude": [
+    // Session bindings are checked in tsconfig.models.json.
     "src/openappa/subagent-binding.ts",
+    // Provider clients are checked in tsconfig.llm-clients.json.
     "src/clients/llm-client.ts",
     "src/clients/anthropic-endpoint.ts",
     "src/clients/azure-media-language-model.ts",

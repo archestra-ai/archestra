@@ -520,9 +520,7 @@ export class OpenAIRequestAdapter<
   // Build Modified Request
   // ---------------------------------------------------------------------------
 
-  toProviderRequest(options?: {
-    preserveToolCallIds?: boolean;
-  }): TRequest {
+  toProviderRequest(options?: { preserveToolCallIds?: boolean }): TRequest {
     let messages = this.request.messages;
 
     if (Object.keys(this.toolResultUpdates).length > 0) {

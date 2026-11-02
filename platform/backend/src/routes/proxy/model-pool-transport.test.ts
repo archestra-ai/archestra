@@ -1,4 +1,9 @@
+import { EventStreamCodec } from "@smithy/eventstream-codec";
+import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
+import { HttpResponse, http } from "msw";
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { BedrockClient } from "@/clients/bedrock-client";
+import { useMswServer } from "@/test/msw";
 import {
   canReachMember,
   memberAdapter,
@@ -322,3 +327,111 @@ describe("memberTransport", () => {
     ).rejects.toThrow(/ended before it finished/);
   });
 });
+
+// biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper
+const bedrockServer = useMswServer();
+for (const inbound of ["openai-chat", "anthropic"] as const) {
+  for (const stream of [false, true]) {
+    test(`normalizes Gemini tool history for a Bedrock fallback (${inbound}, stream=${stream})`, async () => {
+      const signedId = `gemsig-${"s".repeat(100)}.call-1`;
+      const bodies: {
+        messages: { content: Record<string, { toolUseId: string }>[] }[];
+      }[] = [];
+      bedrockServer.use(
+        http.post(
+          "https://bedrock.pool.test/model/:model/:operation",
+          async ({ request }) => {
+            bodies.push((await request.json()) as (typeof bodies)[number]);
+            return stream
+              ? new HttpResponse(
+                  new EventStreamCodec(toUtf8, fromUtf8).encode({
+                    headers: {
+                      ":message-type": { type: "string", value: "event" },
+                      ":event-type": { type: "string", value: "messageStop" },
+                      ":content-type": {
+                        type: "string",
+                        value: "application/json",
+                      },
+                    },
+                    body: fromUtf8(JSON.stringify({ stopReason: "end_turn" })),
+                  }),
+                  {
+                    headers: {
+                      "content-type": "application/vnd.amazon.eventstream",
+                    },
+                  },
+                )
+              : HttpResponse.json({
+                  output: {
+                    message: { role: "assistant", content: [{ text: "done" }] },
+                  },
+                  stopReason: "end_turn",
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                });
+          },
+        ),
+      );
+      const transport = memberTransport({
+        inbound,
+        provider: "bedrock",
+        modelId: "amazon.nova-lite-v1:0",
+        client: new BedrockClient({
+          baseUrl: "https://bedrock.pool.test",
+          region: "us-east-1",
+          apiKey: "synthetic-bedrock-key",
+        }),
+      });
+      const request = {
+        model: "pool",
+        max_tokens: 16,
+        messages:
+          inbound === "openai-chat"
+            ? [
+                {
+                  role: "assistant",
+                  content: null,
+                  tool_calls: [
+                    {
+                      id: signedId,
+                      type: "function",
+                      function: { name: "read_value", arguments: "{}" },
+                    },
+                  ],
+                },
+                { role: "tool", tool_call_id: signedId, content: "done" },
+              ]
+            : [
+                {
+                  role: "assistant",
+                  content: [
+                    {
+                      type: "tool_use",
+                      id: signedId,
+                      name: "read_value",
+                      input: {},
+                    },
+                  ],
+                },
+                {
+                  role: "user",
+                  content: [
+                    {
+                      type: "tool_result",
+                      tool_use_id: signedId,
+                      content: "done",
+                    },
+                  ],
+                },
+              ],
+      };
+      if (stream) await collect(await transport.executeStream(request));
+      else await transport.execute(request);
+      expect(bodies).toHaveLength(1);
+      const use = bodies[0].messages[0].content[0].toolUse.toolUseId;
+      const result = bodies[0].messages[1].content[0].toolResult.toolUseId;
+      expect(use).toMatch(/^[a-zA-Z0-9_-]{1,64}$/);
+      expect(result).toBe(use);
+      expect(use).not.toBe(signedId);
+    });
+  }
+}

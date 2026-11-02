@@ -13,7 +13,9 @@ import { accessGrants, beforeEach, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import anthropicRoutes from "./anthropic";
+import azureRoutes from "./azure";
 import modelRouterRoutes from "./model-router";
+import openrouterRoutes from "./openrouter";
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper
 const server = useMswServer();
@@ -64,7 +66,7 @@ const poolTest = test.extend<{
     poolId: string;
     ask: (
       extra?: Record<string, unknown>,
-      wire?: "openai" | "anthropic",
+      wire?: "openai" | "anthropic" | "azure" | "openrouter",
     ) => Promise<LightMyRequestResponse>;
   };
 }>({
@@ -126,16 +128,20 @@ const poolTest = test.extend<{
     const app = createFastifyInstance();
     await app.register(modelRouterRoutes);
     await app.register(anthropicRoutes);
+    await app.register(azureRoutes);
+    await app.register(openrouterRoutes);
     const ask = (
       extra: Record<string, unknown> = {},
-      wire: "openai" | "anthropic" = "openai",
+      wire: "openai" | "anthropic" | "azure" | "openrouter" = "openai",
     ) =>
       app.inject({
         method: "POST",
         url:
           wire === "openai"
             ? `/v1/model-router/${agent.id}/chat/completions`
-            : `/v1/anthropic/${agent.id}/v1/messages`,
+            : wire === "anthropic"
+              ? `/v1/anthropic/${agent.id}/v1/messages`
+              : `/v1/${wire}/${agent.id}/chat/completions`,
         headers: {
           authorization: `Bearer ${virtual.value}`,
           "anthropic-version": "2023-06-01",
@@ -412,101 +418,106 @@ for (const stream of [false, true]) {
   );
 }
 
-for (const stream of [false, true]) {
-  poolTest(
-    `roundtrips signed tool calls through the existing Gemini translator (stream=${stream})`,
-    async ({ pool }) => {
-      const bodies: unknown[] = [];
-      server.use(
-        http.post(`${origin}/v1beta/models/:model`, async ({ request }) => {
-          bodies.push(await request.json());
-          const result =
-            bodies.length === 1
-              ? answer([
-                  {
-                    functionCall: { name: "read_value", args: { key: "a" } },
-                    thoughtSignature: "synthetic-signature",
-                  },
-                ])
-              : answer();
-          return stream ? sse([result]) : HttpResponse.json(result);
-        }),
-      );
-      const tools = [
-        {
-          type: "function",
-          function: {
-            name: "read_value",
-            description: "Read a synthetic value",
-            parameters: {
-              type: "object",
-              properties: { key: { type: "string" } },
-              required: ["key"],
+for (const wire of ["openai", "azure", "openrouter"] as const) {
+  for (const stream of [false, true]) {
+    poolTest(
+      `roundtrips signed tool calls through the existing Gemini translator (${wire}, stream=${stream})`,
+      async ({ pool }) => {
+        const bodies: unknown[] = [];
+        server.use(
+          http.post(`${origin}/v1beta/models/:model`, async ({ request }) => {
+            bodies.push(await request.json());
+            const result =
+              bodies.length === 1
+                ? answer([
+                    {
+                      functionCall: { name: "read_value", args: { key: "a" } },
+                      thoughtSignature: "synthetic-signature",
+                    },
+                  ])
+                : answer();
+            return stream ? sse([result]) : HttpResponse.json(result);
+          }),
+        );
+        const tools = [
+          {
+            type: "function",
+            function: {
+              name: "read_value",
+              description: "Read a synthetic value",
+              parameters: {
+                type: "object",
+                properties: { key: { type: "string" } },
+                required: ["key"],
+              },
             },
           },
-        },
-      ];
-      const first = await pool.ask({ stream, tools });
-      expect(first.statusCode, first.body).toBe(200);
-      const chunks = stream
-        ? first.body
-            .split("\n\n")
-            .filter((line) => line.startsWith("data: {"))
-            .map((line) => JSON.parse(line.slice(6)))
-        : [];
-      const call = stream
-        ? chunks.flatMap(
-            (chunk) => chunk.choices?.[0]?.delta?.tool_calls ?? [],
-          )[0]
-        : first.json().choices[0].message.tool_calls[0];
-      expect(call.id).toMatch(/^gemsig-/);
-      expect(call).toMatchObject({
-        function: { name: "read_value", arguments: '{"key":"a"}' },
-      });
-      expect(first.body).toContain('"finish_reason":"tool_calls"');
-      const second = await pool.ask({
-        stream,
-        tools,
-        messages: [
-          { role: "user", content: "hello" },
+        ];
+        const first = await pool.ask({ stream, tools }, wire);
+        expect(first.statusCode, first.body).toBe(200);
+        const chunks = stream
+          ? first.body
+              .split("\n\n")
+              .filter((line) => line.startsWith("data: {"))
+              .map((line) => JSON.parse(line.slice(6)))
+          : [];
+        const call = stream
+          ? chunks.flatMap(
+              (chunk) => chunk.choices?.[0]?.delta?.tool_calls ?? [],
+            )[0]
+          : first.json().choices[0].message.tool_calls[0];
+        expect(call.id).toMatch(/^gemsig-/);
+        expect(call).toMatchObject({
+          function: { name: "read_value", arguments: '{"key":"a"}' },
+        });
+        expect(first.body).toContain('"finish_reason":"tool_calls"');
+        const second = await pool.ask(
           {
-            role: "assistant",
-            content: null,
-            tool_calls: [
-              { id: call.id, type: "function", function: call.function },
-            ],
-          },
-          { role: "tool", tool_call_id: call.id, content: '{"value":1}' },
-        ],
-      });
-      expect(second.statusCode, second.body).toBe(200);
-      expect(bodies[1]).toMatchObject({
-        contents: [
-          { role: "user" },
-          {
-            role: "model",
-            parts: [
+            stream,
+            tools,
+            messages: [
+              { role: "user", content: "hello" },
               {
-                functionCall: { name: "read_value", args: { key: "a" } },
-                thoughtSignature: "synthetic-signature",
+                role: "assistant",
+                content: null,
+                tool_calls: [
+                  { id: call.id, type: "function", function: call.function },
+                ],
               },
+              { role: "tool", tool_call_id: call.id, content: '{"value":1}' },
             ],
           },
-          {
-            role: "user",
-            parts: [
-              {
-                functionResponse: {
-                  name: "read_value",
-                  response: { content: '{"value":1}' },
+          wire,
+        );
+        expect(second.statusCode, second.body).toBe(200);
+        expect(bodies[1]).toMatchObject({
+          contents: [
+            { role: "user" },
+            {
+              role: "model",
+              parts: [
+                {
+                  functionCall: { name: "read_value", args: { key: "a" } },
+                  thoughtSignature: "synthetic-signature",
                 },
-              },
-            ],
-          },
-        ],
-      });
-    },
-  );
+              ],
+            },
+            {
+              role: "user",
+              parts: [
+                {
+                  functionResponse: {
+                    name: "read_value",
+                    response: { content: '{"value":1}' },
+                  },
+                },
+              ],
+            },
+          ],
+        });
+      },
+    );
+  }
 }
 
 poolTest(

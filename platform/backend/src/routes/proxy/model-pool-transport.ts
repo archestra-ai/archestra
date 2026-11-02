@@ -42,6 +42,7 @@ import {
   anthropicResponseToOpenai,
   openaiToAnthropic,
 } from "./adapters/anthropic-openai-translator";
+import { withBedrockToolCallIds } from "./adapters/bedrock";
 import {
   converseResponseToOpenai,
   createConverseToOpenaiSseEncoder,
@@ -190,7 +191,11 @@ export function memberTransport(params: {
         request as OpenAi.Types.ChatCompletionsRequest,
       );
       return {
-        body: { ...converseBody, modelId } as Bedrock.Types.ConverseRequest,
+        body: {
+          ...converseBody,
+          modelId,
+          messages: withBedrockToolCallIds(converseBody.messages ?? []),
+        } as Bedrock.Types.ConverseRequest,
         openaiContext: { ...openaiContext, includeUsageInStream: true },
       };
     };

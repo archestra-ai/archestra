@@ -103,8 +103,10 @@ class OpenrouterRequestAdapter
   convertToolResultContent(messages: OpenrouterMessages) {
     return this.delegate.convertToolResultContent(messages);
   }
-  toProviderRequest(): OpenrouterRequest {
-    const request = this.delegate.toProviderRequest();
+  toProviderRequest(options?: {
+    preserveToolCallIds?: boolean;
+  }): OpenrouterRequest {
+    const request = this.delegate.toProviderRequest(options);
     const messages: OpenrouterMessages = request.messages;
     // A tool-result update replaces the whole content, dropping a marker that
     // sat on one of its parts; carry it over from the original message.

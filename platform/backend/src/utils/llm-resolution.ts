@@ -14,14 +14,13 @@ import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import config, { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";
-import {
-  LlmProviderApiKeyModel,
-  LlmProviderApiKeyModelLinkModel,
-  ModelModel,
-  OrganizationModel,
+import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import LlmProviderApiKeyModelLinkModel, {
   selectionKey,
-  TeamModel,
-} from "@/models";
+} from "@/models/llm-provider-api-key-model";
+import ModelModel from "@/models/model";
+import OrganizationModel from "@/models/organization";
+import TeamModel from "@/models/team";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import type { Model } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";

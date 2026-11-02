@@ -82,6 +82,10 @@ Claude Code, Codex, and OpenCode can protect native CLI subagent returns through
 
 \`[policy.deployment] context_control = true\` declares that the integration controls child context and returns. It alone does not create a return contract, an output sanitizer, or a secure client. Before proposing return protection, check the exact client and the actual policy. Confirm that the parent can choose a return contract before spawn and that the proxy can deliver it to the child before inference. If the proxy refuses a session because it cannot deliver that contract, report the limitation. Confirm the deployment can issue signed lineage and verify returns against the durable child crossing without reading or exposing signing secrets. If you cannot verify these conditions, report them as unavailable.
 
+## The deployment hint
+
+\`[policy.deployment] hint\` is the operator's statement about the deployment, which every model annotator reads. The starting policy states that this deployment's own host is first-party, so an annotator does not treat fetching a link one of its tools returned as sending data to a third party. A saved policy keeps the hint it was saved with and gains none later. When \`suggestedDeploymentHint\` from \`archestra__get_guardrails_policy\` is not null and the policy's \`[policy.deployment]\` has no \`hint\`, propose adding it as \`hint = <that text as a TOML string>\` under that table. Keep an existing hint unless the operator asks to change it, and do not add a hint that names a host the operator has not confirmed as the organization's own.
+
 This protection is for native CLI subagents. Loading a skill runs in the current session, not a child. OpenAPPA-protected Archestra Chat does not support subagent delegation. The trusted client and executor must isolate raw child transcripts and control artifacts from model tools. Proxy checks for known transcript paths are defense in depth, not a shell or filesystem sandbox. Do not propose live reads of private transcripts to test the boundary.
 
 ## Provider-hosted tools

@@ -82,7 +82,10 @@ import {
   getGuardrailsDeployment,
   turnOnForFirstPolicy,
 } from "@/services/guardrails-deployment";
-import { guardrailsPolicyService } from "@/services/guardrails-policy";
+import {
+  deploymentHint,
+  guardrailsPolicyService,
+} from "@/services/guardrails-policy";
 import {
   policyDiff,
   resolveProposedPolicy,
@@ -610,7 +613,7 @@ const registry = defineArchestraTools([
     title: "Read OpenAPPA policy",
     annotations: { readOnlyHint: true },
     description:
-      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, which open and new conversations follow at their next call; its `include` list names the batteries that compose into enforcement on top of it, `[aliases.mcp]` points each battery's namespace at the MCP servers it governs, and `effective` reports the composed result the runtime enforces: one entry per declared battery with the status it composed under, and `credentialBindings`, each battery credential variable bound with bind_guardrails_credential, outside the text. Set `composed` to also get `effective.content`, the composed policy text with every included battery's rules; it is large, so ask for it only to read those rules. The text may not name credentials: validation refuses a `[credentials]` line and a `token_env` in the policy's own externals. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. Without Git sync, `delivery.githubSyncSetupUrl` links to where the operator sets it up. Use this read to recover after a lost local publish response, without publishing again. `effective.served.kind` says what the runtime opens: `current` (the latest revision), `previous` (the latest attempt was refused and an earlier composition stays enforced; each battery's `served` is how that composition holds it, its `status` what the current text would give it), or `root_only` (nothing ever composed, so governed calls are refused). Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
+      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, which open and new conversations follow at their next call; its `include` list names the batteries that compose into enforcement on top of it, `[aliases.mcp]` points each battery's namespace at the MCP servers it governs, and `effective` reports the composed result the runtime enforces: one entry per declared battery with the status it composed under, and `credentialBindings`, each battery credential variable bound with bind_guardrails_credential, outside the text. Set `composed` to also get `effective.content`, the composed policy text with every included battery's rules; it is large, so ask for it only to read those rules. The text may not name credentials: validation refuses a `[credentials]` line and a `token_env` in the policy's own externals. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. Without Git sync, `delivery.githubSyncSetupUrl` links to where the operator sets it up. `suggestedDeploymentHint` is the `[policy.deployment] hint` the starting policy carries on this deployment, naming its own host as first-party, or null when it has none. Use this read to recover after a lost local publish response, without publishing again. `effective.served.kind` says what the runtime opens: `current` (the latest revision), `previous` (the latest attempt was refused and an earlier composition stays enforced; each battery's `served` is how that composition holds it, its `status` what the current text would give it), or `root_only` (nothing ever composed, so governed calls are refused). Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
     schema: z.strictObject({
       composed: z
         .boolean()
@@ -628,6 +631,7 @@ const registry = defineArchestraTools([
       const sync = await getAppaGithubSync(organizationId);
       return result({
         ...root,
+        suggestedDeploymentHint: deploymentHint(),
         effective,
         enforcement: await getGuardrailsDeployment(),
         delivery: sync.source?.interval

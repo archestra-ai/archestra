@@ -14,7 +14,7 @@ import {
   guardrailsPolicyService,
   initialPolicy,
 } from "@/services/guardrails-policy";
-import { beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { type ArchestraContext, executeArchestraTool } from ".";
 
 const GITHUB_TOKEN = "APPA_PROVIDER_GITHUB_TOKEN";
@@ -85,6 +85,37 @@ function call(tool: string, args: Record<string, unknown>) {
     userId: adminId,
   });
 }
+
+describe("the deployment hint a policy read suggests", () => {
+  const frontendBaseUrl = config.frontendBaseUrl;
+  afterEach(() => {
+    config.frontendBaseUrl = frontendBaseUrl;
+  });
+
+  test.for([
+    ["a public host", "https://archestra.example.com"],
+    ["a loopback host", "http://localhost:3000"],
+  ] as const)("under %s, it is the hint the starting policy carries", async ([
+    ,
+    url,
+  ]) => {
+    config.frontendBaseUrl = url;
+    const [block] = (await call("get_guardrails_policy", {})).content;
+    const read = JSON.parse(block?.type === "text" ? block.text : "null") as {
+      content: string;
+      suggestedDeploymentHint: string | null;
+    };
+    const starter = parseToml(read.content) as {
+      policy: { deployment: { hint?: string } };
+    };
+    expect(read.suggestedDeploymentHint).toBe(
+      starter.policy.deployment.hint ?? null,
+    );
+    expect(read.suggestedDeploymentHint === null).toBe(
+      url.includes("localhost"),
+    );
+  });
+});
 
 /** The starter policy with the bundled github battery included. */
 function withGithub(): string {

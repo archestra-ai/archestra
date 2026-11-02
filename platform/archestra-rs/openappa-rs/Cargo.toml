@@ -22,11 +22,12 @@ crate-type = ["cdylib"]
 # and the attestation offered only where the parent covers its rank (#713).
 # On the 1.4 line only: the `main` pin above plus plaintext receipts that hold
 # U+0000 stored under the plaintext escape (#724), cherry-picked as 9e89e007 on
-# the branch backport/archestra-release-1.4-plaintext-nul.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "9e89e00784904dfc91c1a3e3a62a0b2a25a5ef51", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "9e89e00784904dfc91c1a3e3a62a0b2a25a5ef51" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "9e89e00784904dfc91c1a3e3a62a0b2a25a5ef51", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "9e89e00784904dfc91c1a3e3a62a0b2a25a5ef51" }
+# the branch backport/archestra-release-1.4-plaintext-nul; then the ZIP 9
+# security fix (#680), backported without changing OpenAPPA 0.37.0.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "66ac46eb9e6af851d438742e2e25bebe7796cfad", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "66ac46eb9e6af851d438742e2e25bebe7796cfad" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "66ac46eb9e6af851d438742e2e25bebe7796cfad", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "66ac46eb9e6af851d438742e2e25bebe7796cfad" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

@@ -93,7 +93,7 @@ See Kubernetes [NetworkPolicy](https://kubernetes.io/docs/concepts/services-netw
 
 On EKS Auto Mode, Archestra allows DNS bootstrap traffic only to the discovered cluster resolver. If discovery fails, Auto Mode policies omit that exception; domain lookups can fail until you restore discovery or configure the resolver.
 
-The Helm chart grants `get` on the `kube-system/kube-dns` Service. Installers without permission to create that grant can set `rbac.kubeDnsServiceRead: false` and configure [`ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS`](/docs/reference/configuration#ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS).
+See [Helm DNS discovery](/docs/admin/deployment#dns-discovery) for resolver overrides and the optional Service read grant.
 
 ### The Public Internet Floor
 

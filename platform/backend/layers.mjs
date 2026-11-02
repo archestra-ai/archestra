@@ -18,11 +18,13 @@ const APP = "tsconfig.app.json";
  * of a directory that sits above the rest of it. Tests (`*.test.ts`) and the
  * test helpers are not in a layer: they may import anything.
  *
- * `project` is the TypeScript project that checks the layer's files
- * (tsconfig.json lists them); scripts/check-projects.mjs holds the two
- * together. Layers share a project until a slice of the split carves theirs.
+ * `project` is the default TypeScript project for the layer. `projectFiles`
+ * assigns its shared helpers to another compiler: routes and server entry
+ * points consume those helpers' declarations, while the semantic import
+ * order stays the same. scripts/check-projects.mjs verifies this ownership
+ * against the actual projects listed by tsconfig.json.
  *
- * @type {{ name: string; path?: string; files?: string[]; project: string }[]}
+ * @type {{ name: string; path?: string; files?: string[]; project: string; projectFiles?: {project: string; files: string[]}[] }[]}
  */
 const layerTable = [
   {
@@ -771,9 +773,73 @@ const layerTable = [
     project: APP,
   },
   { name: "mcp", path: "^src/(archestra-mcp-server|agents|clients)/", project: APP },
-  { name: "routes-proxy", path: "^src/routes/proxy/", project: APP },
-  { name: "routes-chat", path: "^src/routes/(chat|mcp-gateway)/", project: APP },
-  { name: "routes-rest", path: "^src/routes/", project: APP },
+  {
+    name: "routes-proxy",
+    path: "^src/routes/proxy/",
+    projectFiles: [
+      {
+        project: APP,
+        files: [
+          "src/routes/proxy/image-edit-handler.ts",
+          "src/routes/proxy/llm-proxy-auth.ts",
+          "src/routes/proxy/llm-proxy-handler.ts",
+          "src/routes/proxy/llm-proxy-helpers.ts",
+          "src/routes/proxy/llm-proxy-resource-auth.ts",
+          "src/routes/proxy/model-pool-failover.ts",
+          "src/routes/proxy/model-pool-transport.ts",
+          "src/routes/proxy/model-router-access.ts",
+          "src/routes/proxy/model-router-resolver.ts",
+          "src/routes/proxy/passthrough-log.ts",
+          "src/routes/proxy/provider-file-handler.ts",
+          "src/routes/proxy/realtime/openai-realtime-proxy.ts",
+          "src/routes/proxy/routes/audio.ts",
+          "src/routes/proxy/routes/model-router.ts",
+          "src/routes/proxy/stream-keepalive.ts",
+          "src/routes/proxy/upstream-connection-retry.ts",
+          "src/routes/proxy/utils/client-gateway-bindings.ts",
+          "src/routes/proxy/utils/delegation-markers.ts",
+        ],
+      },
+    ],
+    project: "tsconfig.routes-proxy.json",
+  },
+  {
+    name: "routes-chat",
+    path: "^src/routes/(chat|mcp-gateway)/",
+    projectFiles: [
+      {
+        project: APP,
+        files: [
+          "src/routes/chat/context-trimming.ts",
+          "src/routes/chat/encrypted-chat.ts",
+          "src/routes/chat/errors.ts",
+          "src/routes/chat/token-bucket-refit.ts",
+          "src/routes/mcp-gateway/mrtr.ts",
+          "src/routes/mcp-gateway/reauth-elicitation.ts",
+          "src/routes/mcp-gateway/skills.ts",
+          "src/routes/mcp-gateway/undeclared-tool-call.ts",
+          "src/routes/mcp-gateway/utils.ts",
+        ],
+      },
+    ],
+    project: "tsconfig.routes-chat.json",
+  },
+  {
+    name: "routes-rest",
+    path: "^src/routes/",
+    projectFiles: [
+      {
+        project: APP,
+        files: [
+          "src/routes/mcp-app-gateway.utils.ts",
+          "src/routes/oauth-issuer-binding.ts",
+          "src/routes/oauth-issuer-validation.ts",
+          "src/routes/oauth.ts",
+        ],
+      },
+    ],
+    project: "tsconfig.routes-rest.json",
+  },
   {
     // The Fastify server, the websocket, middleware and the entry scripts.
     name: "server",
@@ -797,7 +863,31 @@ const layerTable = [
       "src/routes/api-key.ts",
       "src/routes/identity-provider.ee.ts",
     ],
-    project: APP,
+    projectFiles: [
+      {
+        project: APP,
+        files: [
+          "src/auth/better-auth.ts",
+          "src/auth/sso-email-reconciliation.ee.ts",
+          "src/entrypoints/_shared/log-capture.ts",
+          "src/fastify-instance.ts",
+          "src/hooks/hook-dispatcher-service.ts",
+          "src/hooks/hook-run-parts.ts",
+          "src/hooks/hook-runner.ts",
+          "src/middleware/audit-log-hook.ts",
+          "src/middleware/audit-log-registry.ts",
+          "src/middleware/browser-api-document.ts",
+          "src/ngrok-tunnel-manager.ts",
+          "src/server/error-handler.ts",
+          "src/server/exception-capture.ts",
+          "src/server/llm-proxy-drain.ts",
+          "src/server/llm-proxy-timing.ts",
+          "src/server/source-maps.ts",
+          "src/websocket.ts",
+        ],
+      },
+    ],
+    project: "tsconfig.server.json",
   },
 ];
 
@@ -833,16 +923,20 @@ const layers = layerTable.map((layer) => {
 /** The layer of a source file, or undefined for tests and files in no layer. */
 export function layerOf(file) {
   if (TEST_FILE.test(file)) return undefined;
-  return LAYER_MATCHERS.find(({ regex }) => regex.test(file))?.layer;
+  const match = LAYER_MATCHERS.find(({ regex }) => regex.test(file));
+  if (!match) return undefined;
+  const project = match.projects.get(file);
+  return project ? { ...match.layer, project } : match.layer;
 }
 
 /** Tests and test helpers may import any layer. */
 const TESTS = "(\\.test\\.ts$|\\.test-[a-z-]+\\.ts$|^src/test/|/__mocks__/)";
 
 const TEST_FILE = new RegExp(TESTS);
-const LAYER_MATCHERS = layers.map((layer) => ({
+const LAYER_MATCHERS = layers.map((layer, index) => ({
   layer,
   regex: new RegExp(layer.path),
+  projects: projectPins(layerTable[index].projectFiles ?? []),
 }));
 
 /**
@@ -930,4 +1024,18 @@ export default {
 
 function escapeRegex(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Exact-file compiler ownership within one semantic layer. */
+function projectPins(groups) {
+  const projects = new Map();
+  for (const { project, files } of groups) {
+    for (const file of files) {
+      if (projects.has(file)) {
+        throw new Error(`File ${file} has two project assignments`);
+      }
+      projects.set(file, project);
+    }
+  }
+  return projects;
 }

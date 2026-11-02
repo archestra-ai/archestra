@@ -53,6 +53,10 @@
     { "path": "./tsconfig.policy-config.json" },
     { "path": "./tsconfig.services-support.json" },
     { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.routes-proxy.json" },
+    { "path": "./tsconfig.routes-chat.json" },
+    { "path": "./tsconfig.routes-rest.json" },
+    { "path": "./tsconfig.server.json" },
     { "path": "./tsconfig.test-support.json" }
   ]
 }

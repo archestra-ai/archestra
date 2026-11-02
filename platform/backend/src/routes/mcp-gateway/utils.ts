@@ -146,6 +146,7 @@ import {
   type SelectUserToken,
   type ToolExposureMode,
 } from "@/types";
+import type { A2AOAuthExecution } from "@/types/a2a-actor";
 import { ApiError } from "@/types/api";
 import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
 import { deriveAuthMethod } from "@/utils/auth-method";
@@ -1734,11 +1735,7 @@ async function validateResolvedUserToken(params: {
   };
 }
 
-export type A2AOAuthExecution = {
-  tokenId: string;
-  clientId: string;
-  serviceAccountId?: string;
-};
+export type { A2AOAuthExecution } from "@/types/a2a-actor";
 
 export async function authorizeA2AOAuthExecution(params: {
   agentId: string;

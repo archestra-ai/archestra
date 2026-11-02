@@ -87,6 +87,8 @@ import {
   type GatewayAgent,
   type InsertAgent,
   type McpServerAgentUsage,
+  type NetworkPolicy,
+  NetworkPolicyInputSchema,
   type ReadinessAgent,
   type SortingQuery,
   type UpdateAgent,
@@ -270,7 +272,13 @@ class AgentModel {
     Array<
       Pick<
         Agent,
-        "id" | "name" | "agentType" | "scope" | "authorId" | "isPersonalGateway"
+        | "id"
+        | "name"
+        | "agentType"
+        | "scope"
+        | "authorId"
+        | "isPersonalGateway"
+        | "networkPolicy"
       > & { isBuiltIn: boolean; teamIds: string[] }
     >
   > {
@@ -289,6 +297,7 @@ class AgentModel {
         createdByServiceAccountId: schema.agentsTable.createdByServiceAccountId,
         isPersonalGateway: schema.agentsTable.isPersonalGateway,
         isBuiltIn: schema.agentsTable.builtIn,
+        networkPolicy: schema.agentsTable.networkPolicy,
       })
       .from(schema.agentsTable)
       .where(
@@ -839,6 +848,10 @@ class AgentModel {
           activationSkillMode: "manual" as const,
         }),
         ...(enableAccessAllTools && { accessAllTools: false }),
+        // The insert type carries the input shape; store the normalized policy.
+        networkPolicy: agent.networkPolicy
+          ? NetworkPolicyInputSchema.parse(agent.networkPolicy)
+          : agent.networkPolicy,
         organizationId,
         ...(slug && { slug }),
         ...(authorId && { authorId }),
@@ -1419,6 +1432,7 @@ class AgentModel {
         runtime: schema.agentsTable.runtime,
         namespace: schema.environmentsTable.namespace,
         defaultNamespace: schema.organizationsTable.defaultEnvironmentNamespace,
+        agentPolicy: schema.agentsTable.networkPolicy,
         environmentPolicy: schema.environmentsTable.networkPolicy,
         defaultPolicy: schema.organizationsTable.defaultNetworkPolicy,
         agentRuntimeTiers: schema.organizationsTable.agentRuntimeTiers,
@@ -1446,6 +1460,83 @@ class AgentModel {
         ),
       )
       .orderBy(desc(recentRuns.lastRunAt), schema.agentsTable.id);
+  }
+
+  /**
+   * Agents with their own egress policy, each with the namespace its Code
+   * Sandbox engine runs in: the bound environment's namespace, or the
+   * organization's default namespace when unbound. Optionally narrowed to one
+   * organization, one environment, or one agent.
+   */
+  static async listNetworkPolicyEngineTargets(
+    filter: {
+      organizationId?: string;
+      environmentId?: string;
+      agentId?: string;
+    } = {},
+  ): Promise<
+    {
+      id: string;
+      organizationId: string;
+      environmentId: string | null;
+      networkPolicy: NetworkPolicy;
+      namespace: string | null;
+    }[]
+  > {
+    const rows = await db
+      .select({
+        id: schema.agentsTable.id,
+        organizationId: schema.agentsTable.organizationId,
+        environmentId: schema.agentsTable.environmentId,
+        networkPolicy: schema.agentsTable.networkPolicy,
+        environmentNamespace: schema.environmentsTable.namespace,
+        defaultNamespace: schema.organizationsTable.defaultEnvironmentNamespace,
+      })
+      .from(schema.agentsTable)
+      .innerJoin(
+        schema.organizationsTable,
+        eq(schema.organizationsTable.id, schema.agentsTable.organizationId),
+      )
+      .leftJoin(
+        schema.environmentsTable,
+        and(
+          eq(schema.environmentsTable.id, schema.agentsTable.environmentId),
+          eq(
+            schema.environmentsTable.organizationId,
+            schema.agentsTable.organizationId,
+          ),
+        ),
+      )
+      .where(
+        and(
+          isNotNull(schema.agentsTable.networkPolicy),
+          notDeleted(schema.agentsTable),
+          filter.organizationId
+            ? eq(schema.agentsTable.organizationId, filter.organizationId)
+            : undefined,
+          filter.environmentId
+            ? eq(schema.agentsTable.environmentId, filter.environmentId)
+            : undefined,
+          filter.agentId
+            ? eq(schema.agentsTable.id, filter.agentId)
+            : undefined,
+        ),
+      );
+    return rows.flatMap((row) =>
+      row.networkPolicy
+        ? [
+            {
+              id: row.id,
+              organizationId: row.organizationId,
+              environmentId: row.environmentId,
+              networkPolicy: row.networkPolicy,
+              namespace: row.environmentId
+                ? row.environmentNamespace
+                : row.defaultNamespace,
+            },
+          ]
+        : [],
+    );
   }
 
   /**

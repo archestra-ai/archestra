@@ -76,6 +76,79 @@ describe("agent tool execution", () => {
     );
   });
 
+  test("create_agent stores the agent's own network policy and edit_agent clears it", async () => {
+    const created = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+      {
+        name: "Locked Agent",
+        networkPolicy: {
+          egressMode: "restricted",
+          domainPreset: "package_managers",
+          allowedDomains: ["api.example.com"],
+        },
+      },
+      mockContext,
+    );
+    expect(created.isError).toBe(false);
+    const id = extractCreatedId(created);
+    expect((await AgentModel.findById(id))?.networkPolicy).toEqual({
+      egressMode: "restricted",
+      domainPreset: "package_managers",
+      allowedDomains: ["api.example.com"],
+      allowedCidrs: [],
+    });
+
+    const edited = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_EDIT_AGENT_SHORT_NAME}`,
+      { id, networkPolicy: null },
+      mockContext,
+    );
+    expect(edited.isError).toBe(false);
+    expect((await AgentModel.findById(id))?.networkPolicy).toBeNull();
+  });
+
+  test("create_agent refuses an invalid network policy", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+      {
+        name: "Bad Policy Agent",
+        networkPolicy: { egressMode: "restricted", allowedCidrs: ["nope"] },
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("Invalid networkPolicy");
+  });
+
+  test("edit_agent refuses a network policy from a member who cannot update environments", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const member = await makeUser();
+    await makeMember(member.id, mockContext.organizationId as string, {
+      role: "member",
+    });
+    const memberContext = { ...mockContext, userId: member.id };
+    const created = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+      { name: "Member Agent" },
+      memberContext,
+    );
+    expect(created.isError).toBe(false);
+    const id = extractCreatedId(created);
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_EDIT_AGENT_SHORT_NAME}`,
+      { id, networkPolicy: { egressMode: "unrestricted" } },
+      memberContext,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "requires permission to update environments",
+    );
+    expect((await AgentModel.findById(id))?.networkPolicy).toBeNull();
+  });
+
   test("create_agent defaults Manual agents to progressive loading", async () => {
     const result = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,

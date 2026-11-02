@@ -24,7 +24,12 @@
      `scripts/dev-lite.sh reload backend` (about 15 s) or
      `scripts/dev-lite.sh reload frontend` (a production build, about 45 to
      80 s). `ARCHESTRA_DEV_LITE_FRONTEND=dev` gives the Next dev server back
-     (about 3.5 GB once pages are open). MCP server installs, nested Agent
+     (about 3.5 GB once pages are open). A pod's bootstrap only runs
+     `scripts/dev-lite.sh prepare` (dependencies, PostgreSQL, migrations):
+     run `up` when you need the servers; it builds the backend and the
+     frontend one after the other, then starts them. `pause` and `resume`
+     stop and restart the two servers, keeping PostgreSQL and the builds, to
+     give one memory-heavy command their memory. MCP server installs, nested Agent
      Runtime, the code runtime, Vault, Keycloak specs and the `api-k8s`,
      `hibernation` and `vault-k8s` Playwright projects need the Tilt stack.
 4. **Documentation** - The `archestra-docs-writer` skill decides whether a change needs docs and how to write them. Read it before touching `../docs/pages`.

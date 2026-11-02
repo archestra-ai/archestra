@@ -1116,25 +1116,31 @@ function Agents() {
                     <SelectContent>
                       <SelectItem value="all">All runtimes</SelectItem>
                       <SelectItem value="chat">
-                        <span aria-hidden="true">
-                          <PlatformAgentIcon
-                            appIconLogo={appIconLogo}
-                            size={16}
-                          />
+                        <span className="flex items-center gap-2">
+                          <span aria-hidden="true">
+                            <PlatformAgentIcon
+                              appIconLogo={appIconLogo}
+                              size={16}
+                            />
+                          </span>
+                          <span>{appName}</span>
                         </span>
-                        <span>{appName}</span>
                       </SelectItem>
                       {AGENT_CATALOG_IDS.map((id) => (
                         <SelectItem key={id} value={id}>
-                          <span aria-hidden="true">
-                            <CatalogAgentIcon id={id} size={16} />
+                          <span className="flex items-center gap-2">
+                            <span aria-hidden="true">
+                              <CatalogAgentIcon id={id} size={16} />
+                            </span>
+                            <span>{AGENT_CATALOG_NAMES[id]}</span>
                           </span>
-                          <span>{AGENT_CATALOG_NAMES[id]}</span>
                         </SelectItem>
                       ))}
                       <SelectItem value="custom">
-                        <Code aria-hidden="true" className="size-4" />
-                        <span>Custom image</span>
+                        <span className="flex items-center gap-2">
+                          <Code aria-hidden="true" className="size-4" />
+                          <span>Custom image</span>
+                        </span>
                       </SelectItem>
                     </SelectContent>
                   </Select>

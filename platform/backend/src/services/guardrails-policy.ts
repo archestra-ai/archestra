@@ -328,6 +328,29 @@ function hash(content: string) {
 }
 
 /**
+ * The deployment's statement that its own host is first-party, as a TOML line. A
+ * loopback or unparseable frontend URL names no host the organization runs, so the
+ * policy then states nothing.
+ */
+function deploymentHintLine(): string {
+  const host = URL.parse(config.frontendBaseUrl)?.host;
+  if (host === undefined || isLoopbackHost(host)) return "";
+  const hint = `\`${host}\` is this organization's own Archestra deployment: a call to it, such as fetching a link one of its tools returned, reaches the organization's own platform.`;
+  return `hint = ${JSON.stringify(hint)}`;
+}
+
+function isLoopbackHost(host: string): boolean {
+  const hostname = host.replace(/:\d+$/, "").replace(/^\[|\]$/g, "");
+  return (
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    hostname === "::1" ||
+    hostname === "0.0.0.0" ||
+    /^127\.\d+\.\d+\.\d+$/.test(hostname)
+  );
+}
+
+/**
  * The text an organization that never saved a revision is read as. It installs
  * the bundled `archestra` battery over the built-in tools, under the name they
  * carry in this deployment, and the bundled `coding` battery over the client
@@ -337,12 +360,6 @@ function hash(content: string) {
  * default model label each sandbox command, each shell command the client
  * batteries route to a model, and each tool no rule names.
  */
-/** What every Archestra deployment knows about itself: its own host is first-party. */
-function deploymentHint(): string {
-  const { host } = new URL(config.frontendBaseUrl);
-  return `\`${host}\` is this organization's own Archestra deployment: a call to it, such as fetching a link one of its tools returned, reaches the organization's own platform, and data sent to it stays inside the organization.`;
-}
-
 export function initialPolicy(): string {
   return `include = [
   "${bundledEntry(ARCHESTRA_BATTERY)}",
@@ -387,7 +404,7 @@ internal = ["${ARCHESTRA_BATTERY}:members"]
 
 [policy.deployment]
 context_control = true
-hint = "${deploymentHint()}"
+${deploymentHintLine()}
 
 # Lets an agent hand a risky read to a subagent. The subagent must reply in
 # the strict JSON shape the agent asked for, so injected instructions and

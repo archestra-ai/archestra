@@ -669,6 +669,46 @@ describe("validating against this deployment", () => {
   });
   const MINIMAL = "[policy]\nversion = 2\n";
 
+  describe("the starter's deployment hint", () => {
+    const frontendBaseUrl = config.frontendBaseUrl;
+    afterEach(() => {
+      config.frontendBaseUrl = frontendBaseUrl;
+    });
+
+    test.for([
+      ["a public host", "https://archestra.example.com", true],
+      ["a loopback host", "http://localhost:3000", false],
+      ["a loopback address", "http://127.0.0.1:9000", false],
+      ["an unparseable URL", "not-a-url", false],
+    ] as const)("under %s, the starter composes and names the host only when the organization runs it", async ([
+      ,
+      url,
+      hinted,
+    ], { makeOrganization }) => {
+      config.frontendBaseUrl = url;
+      const organizationId = (await makeOrganization()).id;
+      const starter = (await guardrailsPolicyService.get(organizationId))
+        .content;
+      const resolution = await openappaDeclarations.resolve({
+        organizationId,
+        content: starter,
+      });
+      const composed = await openappaDeclarations.composeForCheck({
+        root: starter,
+        resolution,
+        deployed: await openappaBatteriesService.deployedBatteries({
+          organizationId,
+          resolution,
+        }),
+      });
+      expect(composed.errors).toEqual([]);
+      const policy = parsePolicyToml(composed.content ?? "")?.policy as {
+        deployment: { hint?: string };
+      };
+      expect(policy.deployment.hint !== undefined).toBe(hinted);
+    });
+  });
+
   test("a starter whose archestra battery has no catalog here is refused when it is new, and warned about when it is the current revision", async ({
     makeOrganization,
     makeUser,

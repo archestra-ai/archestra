@@ -378,6 +378,7 @@ async function findDelegationTargetsBySlug(params: {
     excludeAgentId: agentId,
     environmentId,
     lookups,
+    includeDetails: false,
   });
 
   const bySlug = new Map<string, { id: string; name: string }>();

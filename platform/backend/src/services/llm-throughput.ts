@@ -40,6 +40,7 @@ export class LlmThroughput {
     private readonly scope: {
       entities: Array<{ entityType: LimitEntityType; entityId: string }>;
       model: string;
+      modelAliases?: string[];
       provider?: SupportedProvider;
       subscription?: boolean;
       rules?: Limit[];
@@ -84,6 +85,7 @@ export class LlmThroughput {
   async admitSpendForModel(
     model: string,
     subscription: boolean,
+    modelAliases?: string[],
   ): Promise<void> {
     if (!this.scope.attemptSpendRules) return;
     // Failed attempts settle before the next member replaces this receipt.
@@ -92,6 +94,7 @@ export class LlmThroughput {
     const attempt = new LlmThroughput({
       ...this.scope,
       model,
+      modelAliases,
       subscription,
       rules: this.scope.attemptSpendRules,
       attemptSpendRules: undefined,

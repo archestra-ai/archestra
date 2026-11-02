@@ -27,6 +27,7 @@
     "src/openappa/plaintext-envelope.ts",
     "src/openappa/policy-test-hashes.ts",
     "src/openappa/session-token.ts",
+    "src/openappa/subagent-binding.ts",
     "src/routes/proxy/utils/headers/meta-header.ts",
     "src/routes/proxy/utils/headers/session-id.ts",
     "src/routes/request-origin.ts",

@@ -26,8 +26,8 @@ crate-type = ["cdylib"]
 # escape (#724); then v0.38.0 and the remedy's vouch spent at its claim
 # (#725), shorter block feedback (#726), the replay stand-in (#739), a
 # subagent's return declared without review or ahead of its spawn (#763), and
-# the required readers named in reviews and block reasons (#764), and zip 9
-# for the archive extraction advisories (#680).
+# the required readers named in reviews and block reasons (#764); then
+# v0.38.1 and zip 9, which fixes the archive extract advisories (#680).
 appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "8b61c1f55322c0297652fbab432ffa0e0cd1c1db", features = ["archestra"] }
 appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "8b61c1f55322c0297652fbab432ffa0e0cd1c1db" }
 appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "8b61c1f55322c0297652fbab432ffa0e0cd1c1db", features = ["postgres"] }

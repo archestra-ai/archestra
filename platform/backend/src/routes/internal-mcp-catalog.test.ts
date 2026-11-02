@@ -13,7 +13,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
-import { betterAuth } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import config from "@/config";
 import { EnvironmentModel, InternalMcpCatalogModel, ToolModel } from "@/models";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";

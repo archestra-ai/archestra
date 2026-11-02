@@ -1,10 +1,7 @@
 import { vi } from "vitest";
-import {
-  betterAuth,
-  getAgentTypePermissionChecker,
-  hasPermission,
-} from "@/auth";
+import { getAgentTypePermissionChecker, hasPermission } from "@/auth";
 import { getAgentTypePermissionChecker as realGetAgentTypePermissionChecker } from "@/auth/agent-type-permissions";
+import { auth as betterAuth } from "@/auth/better-auth";
 import { authPlugin } from "@/auth/fastify-plugin";
 import { hasPermission as realHasPermission } from "@/auth/utils";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
@@ -14,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import agentRoutes from "./agent";
 
 vi.mock("@/auth");
+vi.mock("@/auth/better-auth");
 
 describe("authenticated agent list organization scope", () => {
   let app: FastifyInstanceWithZod;

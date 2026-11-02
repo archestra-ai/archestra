@@ -1131,8 +1131,6 @@ function getBetterAuthLogLevel(
   return undefined;
 }
 
-export type BetterAuth = typeof auth;
-
 /**
  * Better Auth applies `trustedOrigins` to OIDC discovery during SSO provider
  * registration, which means custom IdP setup can fail before the provider is

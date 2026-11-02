@@ -489,7 +489,7 @@ describe("MSTeamsProvider file attachment downloads", () => {
         new Response(null, {
           status: 302,
           headers: {
-            location: "https://teams.blob.core.windows.net/files/report.pdf",
+            location: "https://download.files.1drv.com/report.pdf",
           },
         }),
       )
@@ -513,7 +513,7 @@ describe("MSTeamsProvider file attachment downloads", () => {
     );
     expect(message?.attachments).toHaveLength(1);
     expect(vi.mocked(fetch).mock.calls[2]).toEqual([
-      "https://teams.blob.core.windows.net/files/report.pdf",
+      "https://download.files.1drv.com/report.pdf",
       { headers: {}, redirect: "manual" },
     ]);
   });

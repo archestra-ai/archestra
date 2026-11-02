@@ -2620,6 +2620,7 @@ function isAllowedTeamsFileHost(
     const hostname = parsed.hostname;
     if (
       hostname.endsWith(".blob.core.windows.net") ||
+      hostname.endsWith(".files.1drv.com") ||
       hostname.endsWith(".sharepoint.com") ||
       isGraphUrl(contentUrl)
     ) {

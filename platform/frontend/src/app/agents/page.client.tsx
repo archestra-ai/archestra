@@ -13,7 +13,7 @@ import type {
   RowSelectionState,
   SortingState,
 } from "@tanstack/react-table";
-import { Bot, Plus, Trash2, Upload } from "lucide-react";
+import { Bot, Code, Plus, Trash2, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   createContext,
@@ -30,6 +30,10 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { A2aRemoteAgentActions } from "@/components/a2a-remote-agent-actions";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
+import {
+  CatalogAgentIcon,
+  PlatformAgentIcon,
+} from "@/components/agent-pages/agent-catalog";
 import {
   AGENT_PAGE_CONFIGS,
   agentConfigureHref,
@@ -132,7 +136,7 @@ import {
 import { BulkRangeSelectionScope } from "@/lib/bulk-range-selection-context";
 import { FIELD_LABEL } from "@/lib/design/resource-lexicon";
 import { useEnvironments } from "@/lib/environment.query";
-import { useAppName } from "@/lib/hooks/use-app-name";
+import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useQueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
@@ -214,6 +218,7 @@ function Agents() {
   // Get pagination/filter params from URL
   const nameFilter = searchParams.get("name") || "";
   const appName = useAppName();
+  const appIconLogo = useAppIconLogo();
   const runtimeFromUrl = searchParams.get("runtime");
   const runtimeFilter = runtimeOptions.find((id) => id === runtimeFromUrl);
   const sortByFromUrl = searchParams.get("sortBy") as
@@ -1110,13 +1115,27 @@ function Agents() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All runtimes</SelectItem>
-                      <SelectItem value="chat">{appName}</SelectItem>
+                      <SelectItem value="chat">
+                        <span aria-hidden="true">
+                          <PlatformAgentIcon
+                            appIconLogo={appIconLogo}
+                            size={16}
+                          />
+                        </span>
+                        <span>{appName}</span>
+                      </SelectItem>
                       {AGENT_CATALOG_IDS.map((id) => (
                         <SelectItem key={id} value={id}>
-                          {AGENT_CATALOG_NAMES[id]}
+                          <span aria-hidden="true">
+                            <CatalogAgentIcon id={id} size={16} />
+                          </span>
+                          <span>{AGENT_CATALOG_NAMES[id]}</span>
                         </SelectItem>
                       ))}
-                      <SelectItem value="custom">Custom image</SelectItem>
+                      <SelectItem value="custom">
+                        <Code aria-hidden="true" className="size-4" />
+                        <span>Custom image</span>
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                   <ProviderKeyFilterSelect

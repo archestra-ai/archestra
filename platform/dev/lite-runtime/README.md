@@ -252,9 +252,12 @@ production build served by its standalone server, as CI and the released image
 serve it: it compiles nothing while the specs run and holds a few hundred MB.
 After frontend edits in e2e mode, `reload frontend` rebuilds it; `restart`
 without `--e2e` starts the configured mode, a production build inside an Agent
-Runtime unless `ARCHESTRA_DEV_LITE_FRONTEND=dev`. On 2 to 4 CPUs `e2e` also runs fewer
-workers with scaled timeouts (`E2E_WORKERS`, `E2E_TIMEOUT_SCALE`), and the
-build runs one Next worker per CPU.
+Runtime unless `ARCHESTRA_DEV_LITE_FRONTEND=dev`. On 4 CPUs or fewer `e2e` also runs fewer
+workers with scaled timeouts (`E2E_WORKERS`, `E2E_TIMEOUT_SCALE`): one worker
+and timeouts ×4 at 1 CPU, two and ×3 at 2, three and ×2 at 3 or 4. It runs
+Playwright in the heavy lane, so it never overlaps a type check or a build.
+The build runs one Next worker per CPU. At 1 CPU in a 4 GiB pod, the chat and
+agents specs (23 tests) took 5.5 minutes and the container peaked at 3.3 GiB.
 
 Measured on 2026-10-30 on the same VM, held to 2 CPU and 8 GiB, on a clean
 clone:

@@ -15,8 +15,8 @@ const APP = "tsconfig.app.json";
  * lower layers need, or a helper whose imports belong higher. A file belongs to
  * the layer that pins it, else to the first layer whose `path` matches it
  * (`layerOf`). A layer without a `path` holds only the files it pins: a part
- * of a directory that sits above the rest of it. Tests (`*.test.ts`) and the test helpers are not in a layer:
- * they may import anything.
+ * of a directory that sits above the rest of it. Tests (`*.test.ts`) and the
+ * test helpers are not in a layer: they may import anything.
  *
  * `project` is the TypeScript project that checks the layer's files
  * (tsconfig.json lists them); scripts/check-projects.mjs holds the two
@@ -62,6 +62,8 @@ const layerTable = [
     project: "tsconfig.core.json",
   },
   {
+    // A new model that reads an agent model belongs in models-upper: pin it
+    // there.
     name: "models",
     path: "^src/(models|auth)/",
     project: "tsconfig.models.json",
@@ -303,16 +305,22 @@ const PINNED = layerTable
  *
  * @type {{ name: string; path: string; project: string }[]}
  */
-const layers = layerTable.map((layer) => ({
-  name: layer.name,
-  project: layer.project,
-  path: [
-    ...(layer.files?.length
-      ? [`^(?:${layer.files.map(escapeRegex).join("|")})$`]
-      : []),
-    ...(layer.path ? [`^(?!(?:${PINNED})$)(?:${layer.path})`] : []),
-  ].join("|"),
-}));
+const layers = layerTable.map((layer) => {
+  // A layer with neither would match every file.
+  if (!layer.path && !layer.files?.length) {
+    throw new Error(`Layer ${layer.name} needs a path or pinned files`);
+  }
+  return {
+    name: layer.name,
+    project: layer.project,
+    path: [
+      ...(layer.files?.length
+        ? [`^(?:${layer.files.map(escapeRegex).join("|")})$`]
+        : []),
+      ...(layer.path ? [`^(?!(?:${PINNED})$)(?:${layer.path})`] : []),
+    ].join("|"),
+  };
+});
 
 /** The layer of a source file, or undefined for tests and files in no layer. */
 export function layerOf(file) {

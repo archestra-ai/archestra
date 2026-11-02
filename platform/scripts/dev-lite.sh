@@ -1092,7 +1092,7 @@ cmd_e2e() {
 # the heavy lane (scripts/heavy-lane.ts) so it never runs beside a type check
 # or a build. It declares no peak: the servers it tests are never paused.
 run_playwright() {
-  exec node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON "$SCRIPT_DIR/heavy-lane.ts" \
+  exec "$PLATFORM_DIR/node_modules/.bin/tsx" "$SCRIPT_DIR/heavy-lane.ts" \
     --label "e2e (Playwright)" -- "$PLATFORM_DIR/e2e-tests/node_modules/.bin/playwright" test "$@"
 }
 

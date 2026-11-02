@@ -39,19 +39,20 @@
       "cache": false
     },
     "lint": {
-      "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json"]
+      "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json", "!**/.tsbuild/**"]
     },
     "lint:fix": {
-      "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json"]
+      "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json", "!**/.tsbuild/**"]
     },
     "lint:fix:unsafe": {
-      "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json"]
+      "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json", "!**/.tsbuild/**"]
     },
     "check:ci": {
       "inputs": [
         "$TURBO_DEFAULT$",
         "**/*.tsx",
         "**/*.ts",
+        "!**/.tsbuild/**",
         "./biome.json",
         "**/knip.config.ts",
         "**/package.json",
@@ -77,6 +78,7 @@
         "$TURBO_DEFAULT$",
         "**/*.tsx",
         "**/*.ts",
+        "!**/.tsbuild/**",
         "./biome.json",
         "**/knip.config.ts",
         "**/package.json",
@@ -98,12 +100,13 @@
       "dependsOn": ["^type-check"]
     },
     "knip": {
-      "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "**/knip.config.ts", "**/package.json"]
+      "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "**/knip.config.ts", "**/package.json", "!**/.tsbuild/**"]
     },
     "type-check": {
       "dependsOn": ["^type-check"],
       "inputs": [
         "$TURBO_DEFAULT$",
+        "!**/.tsbuild/**",
         "$TURBO_ROOT$/scripts/type-check.ts",
         "$TURBO_ROOT$/scripts/type-check-solution.ts",
         "$TURBO_ROOT$/scripts/backend-types-prebuilt.mjs",

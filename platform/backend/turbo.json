@@ -2,13 +2,15 @@
   "extends": ["//"],
   "tasks": {
     "type-check": {
+      "dependsOn": ["@archestra/shared#type-check", "@archestra/drizzle-migration-linter#type-check"],
       "outputs": [".tsbuild/**"]
     },
     "check:commit": {
+      "dependsOn": ["@archestra/shared#type-check", "@archestra/drizzle-migration-linter#type-check"],
       "outputs": [".tsbuild/**"]
     },
     "check:ci": {
-      "dependsOn": ["^type-check", "@archestra/app-runtime-rs#build", "@archestra/sandbox-rs#build"],
+      "dependsOn": ["@archestra/shared#type-check", "@archestra/drizzle-migration-linter#type-check", "@archestra/app-runtime-rs#build", "@archestra/sandbox-rs#build"],
       "outputs": [".tsbuild/**"]
     }
   }

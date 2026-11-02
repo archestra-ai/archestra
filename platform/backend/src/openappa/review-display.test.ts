@@ -118,14 +118,14 @@ describe("redactCredentials", () => {
       'curl -H "proxy-authorization:Basic [redacted]" -H "X-Api-Key: [redacted]"',
     ],
     ["Authorization: rawtoken", "Authorization: [redacted]"],
-    ["PRIVATE-TOKEN: glpat-1 and more", "PRIVATE-TOKEN: [redacted] and more"],
+    ["PRIVATE-TOKEN: glpat-1 and more", "PRIVATE-TOKEN: [redacted]"],
     [
       "curl https://x/api/files --output out",
       "curl https://x/api/files --output out",
     ],
     [
       String.raw`curl -H Authorization:\ Bearer\ tok_123 https://x`,
-      String.raw`curl -H Authorization:\ Bearer\ [redacted] https://x`,
+      String.raw`curl -H Authorization:\ Bearer\ [redacted]`,
     ],
     [
       String.raw`curl -H Authorization:Bearer\ tok_123`,
@@ -135,7 +135,12 @@ describe("redactCredentials", () => {
       String.raw`curl -H Authorization:\ tok_123\ -X`,
       String.raw`curl -H Authorization:\ [redacted]`,
     ],
-    ["Authorization: tok_123 -X POST", "Authorization: [redacted] POST"],
+    ["Authorization: tok_123 -X POST", "Authorization: [redacted]"],
+    ["Cookie: sid=first; session=tok_secret\nnext", "Cookie: [redacted]\nnext"],
+    [
+      'curl -H "X-Api-Key: first tok_secret" https://x/?api_key=k&page=2',
+      'curl -H "X-Api-Key: [redacted]" https://x/?api_key=[redacted]&page=2',
+    ],
     [
       "curl -H Authorization:'Bearer tok_secret' https://x",
       "curl -H Authorization:'Bearer [redacted]' https://x",
@@ -293,5 +298,15 @@ describe("redactCredentials", () => {
       `${source}{"headers":[["Authorization","Bearer [redacted]"]]}`,
       `curl -H 'Authorization: Bearer [redacted]' -d ${"a".repeat(500_000)}`,
     ]);
+  });
+
+  test("keeps every byte of JSON outside the masked strings", () => {
+    const json = `Arguments:\n    {\n      "id": 9007199254740993,\n      "note": "caf\\u00e9",\n      "headers": {"X-Api-Key": "tok"}\n    }`;
+    expect(redactCredentials(json)).toBe(json.replace('"tok"', '"[redacted]"'));
+    expect(
+      redactCredentials(
+        '{"id":9007199254740993,"headers":{"X-Api-Key":"tok"}}',
+      ),
+    ).toBe('{"id":9007199254740993,"headers":{"X-Api-Key":"[redacted]"}}');
   });
 });

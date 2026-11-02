@@ -1,0 +1,42 @@
+{
+  // Shared provider clients, below knowledge-base, policy and route code.
+  "extends": "./tsconfig.source-project.json",
+  "compilerOptions": {
+    "outDir": "./.tsbuild/llm-clients",
+    "tsBuildInfoFile": "./.tsbuild/llm-clients.tsbuildinfo"
+  },
+  "files": [
+    "src/clients/anthropic-endpoint.ts",
+    "src/clients/azure-media-language-model.ts",
+    "src/clients/gemini-client.ts",
+    "src/clients/internal-call.ts",
+    "src/clients/llm-client.ts",
+    "src/clients/openrouter-attribution.ts",
+    "src/clients/openrouter-reported-cost.ts",
+    "src/clients/openrouter-response-healing.ts",
+    "src/services/azure-model-capabilities.ts"
+  ],
+  "include": [
+    "src/ambient/*.d.ts"
+  ],
+  "references": [
+    {
+      "path": "../shared/tsconfig.lib.json"
+    },
+    {
+      "path": "./tsconfig.schema.json"
+    },
+    {
+      "path": "./tsconfig.core.json"
+    },
+    {
+      "path": "./tsconfig.models.json"
+    },
+    {
+      "path": "./tsconfig.models-agents.json"
+    },
+    {
+      "path": "./tsconfig.models-upper.json"
+    }
+  ]
+}

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Transaction } from "@/database";
 import type { ClusterLeaseGuard } from "@/models/mcp-deployment-lease";
 import McpServerModel from "@/models/mcp-server";
-import { broadcastMcpInstallationStatus } from "@/websocket";
+import { port } from "@/models/ports";
 
 export const HARD_RESET_STATUS_MARKER_PREFIX = "archestra:hard-reset:";
 
@@ -97,6 +97,10 @@ export async function writeHardResetStatuses(params: {
       const updatedIds = params.runFencedMutation
         ? await params.runFencedMutation(update)
         : await update();
+      if (updatedIds.length === 0) return updatedIds;
+      const { broadcastMcpInstallationStatus } = await port(
+        "mcpInstallationEvents",
+      );
       for (const mcpServerId of updatedIds) {
         broadcastMcpInstallationStatus(
           mcpServerId,

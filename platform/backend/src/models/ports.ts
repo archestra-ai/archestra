@@ -1,6 +1,6 @@
 /**
- * Capabilities the models layer needs from code above it, reached through
- * ports so the models import nothing from a higher layer (layers.mjs). Each
+ * Capabilities lower backend layers need from code above them, reached through
+ * ports so those layers import nothing from a higher layer (layers.mjs). Each
  * port is one narrow interface; `server/composition.ts` binds every port to
  * its implementation with the same lazy `import()` the models used to make,
  * and the compiler checks there that each implementation still fits its port.
@@ -13,6 +13,7 @@
  * call through an unbound port throws as a second line. The bindings live on
  * `globalThis`, so a test that resets the module registry keeps them.
  */
+import type { LocalMcpInstallationState } from "@archestra/shared";
 import type { CommonMcpToolDefinition, InternalMcpCatalog } from "@/types";
 
 /** Tears down an MCP server's Kubernetes deployment (k8s/mcp-server-runtime). */
@@ -74,6 +75,25 @@ export interface JwksSigningKeyPort {
   verifyJwksSigningKey: () => Promise<void>;
 }
 
+/** Publishes persisted MCP installation status to websocket subscribers. */
+export interface McpInstallationEventsPort {
+  broadcastMcpInstallationStatus: (
+    serverId: string,
+    status: LocalMcpInstallationState,
+    error: string | null,
+  ) => void;
+}
+
+/** Rechecks mounted skills before the sandbox materializes or runs them. */
+export interface MountedSkillsReadabilityPort {
+  assertMountedSkillsReadable: (params: {
+    sandboxId: string;
+    userId: string;
+    organizationId: string;
+    agentId?: string;
+  }) => Promise<{ ok: true } | { ok: false; code: string; reason: string }>;
+}
+
 /** Every port, by name. */
 export interface Ports {
   mcpServerRuntime: McpServerRuntimePort;
@@ -83,6 +103,8 @@ export interface Ports {
   authSessions: AuthSessionsPort;
   authAccounts: AuthAccountsPort;
   jwksSigningKey: JwksSigningKeyPort;
+  mcpInstallationEvents: McpInstallationEventsPort;
+  mountedSkillsReadability: MountedSkillsReadabilityPort;
 }
 
 /** A binding for each port: loads the implementation when the port is first used. */
@@ -137,6 +159,8 @@ const PORT_NAMES = [
   "authSessions",
   "authAccounts",
   "jwksSigningKey",
+  "mcpInstallationEvents",
+  "mountedSkillsReadability",
 ] as const satisfies readonly (keyof Ports)[];
 
 /** Fails to compile when a port is missing from PORT_NAMES. */

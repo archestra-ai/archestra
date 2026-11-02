@@ -35,7 +35,7 @@ import McpDeploymentLeaseModel, {
 } from "@/models/mcp-deployment-lease";
 import ServiceAccountModel from "@/models/service-account";
 import { reportAgentRuntimeSteer } from "@/observability/metrics/agent-runtime";
-import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
+import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends/types";
 import {
   agentRuntimeFailureReason,
   agentRuntimeTurnFailure,

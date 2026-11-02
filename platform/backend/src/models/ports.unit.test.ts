@@ -57,6 +57,8 @@ function bindings(overrides: Partial<PortBindings> = {}): PortBindings {
     authSessions: unused,
     authAccounts: unused,
     jwksSigningKey: unused,
+    mcpInstallationEvents: unused,
+    mountedSkillsReadability: unused,
     ...overrides,
   };
 }

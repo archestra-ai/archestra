@@ -1,6 +1,6 @@
 import { isIP } from "node:net";
 import type * as k8s from "@kubernetes/client-node";
-import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
+import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends/types";
 import {
   AGENT_RUNTIME_ATTACH_SCRIPT,
   AGENT_RUNTIME_ATTACHMENTS_DIR,

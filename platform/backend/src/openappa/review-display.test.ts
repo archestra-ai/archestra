@@ -151,4 +151,28 @@ describe("redactCredentials", () => {
     });
     expect(redacted).not.toContain("s3cr3t");
   });
+
+  test("masks a JSON header map's credential values, nested or encoded in a string", () => {
+    const headers = {
+      Authorization: "Bearer s3cr3t",
+      "X-Api-Key": "s3cr3t",
+      Accept: "application/json",
+    };
+    const masked = {
+      Authorization: "Bearer [redacted]",
+      "X-Api-Key": "[redacted]",
+      Accept: "application/json",
+    };
+    const redacted = redactCredentials(
+      JSON.stringify({
+        request: { headers },
+        encoded: JSON.stringify({ headers }),
+      }),
+    );
+    const parsed = parseReviewedArguments(redacted);
+    expect(parsed).toEqual({
+      request: { headers: masked },
+      encoded: JSON.stringify({ headers: masked }),
+    });
+  });
 });

@@ -116,9 +116,10 @@ const AUTH_SCHEMES = new Set([
 // A credential header as a command or JSON string carries it: the name, an
 // optional auth scheme, then the credential up to a quote, backslash or
 // space, so a JSON payload stays parseable. A gap is whitespace, possibly
-// shell-escaped (`\ `, or `\\ ` inside a JSON string).
+// shell-escaped (`\ `, or `\\ ` inside a JSON string). A JSON header map's
+// key and value may be quoted, escaped as many times as the JSON is nested.
 const CREDENTIAL_HEADER =
-  /((?:proxy-)?authorization\s*:(?:\\*\s)*)(?:([A-Za-z][\w-]*)((?:\\*\s)+))?[^\s'"\\]+|((?:api-key|auth-token|private-token)\s*:(?:\\*\s)*)[^\s'"\\]+/gi;
+  /((?:proxy-)?authorization(?:\\*")?\s*:\s*(?:\\*")?(?:\\*\s)*)(?:([A-Za-z][\w-]*)((?:\\*\s)+))?[^\s'"\\]+|((?:api-key|auth-token|private-token)(?:\\*")?\s*:\s*(?:\\*")?(?:\\*\s)*)[^\s'"\\]+/gi;
 
 /**
  * Argument values as one line each, names padded to one column, longer

@@ -1,11 +1,16 @@
 {
   // The tool configurations and the storage benchmark, which lives outside
   // src/ but imports backend modules.
-  "extends": "./tsconfig.test-project.json",
-  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tools.tsbuildinfo" },
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./.tsbuild/tools.tsbuildinfo",
+    // Workspace tools run directly through Node/tsx with explicit TS imports.
+    "allowImportingTsExtensions": true
+  },
   "include": [
     "src/ambient/*.d.ts",
     "*.config.ts",
+    "../scripts/check-workspace.ts",
     "../benchmarks/session-storage.test.ts"
   ],
   "references": [

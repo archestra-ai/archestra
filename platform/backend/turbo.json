@@ -1,0 +1,15 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "type-check": {
+      "outputs": [".tsbuild/**"]
+    },
+    "check:commit": {
+      "outputs": [".tsbuild/**"]
+    },
+    "check:ci": {
+      "dependsOn": ["^type-check", "@archestra/app-runtime-rs#build", "@archestra/sandbox-rs#build"],
+      "outputs": [".tsbuild/**"]
+    }
+  }
+}

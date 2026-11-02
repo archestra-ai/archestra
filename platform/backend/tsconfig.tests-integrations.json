@@ -1,10 +1,13 @@
 {
-  // Tests of the knowledge base.
-  "extends": "./tsconfig.test-project.json",
-  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-domain-a.tsbuildinfo" },
+  // Tests of k8s, the clients, OpenAPPA and the proxy helpers.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-integrations.tsbuildinfo" },
   "include": [
     "src/ambient/*.d.ts",
-    "src/knowledge-base/**/*.test.ts"
+    "src/k8s/**/*.test.ts",
+    "src/clients/**/*.test.ts",
+    "src/openappa/**/*.test.ts",
+    "src/proxy/**/*.test.ts"
   ],
   "references": [
     { "path": "../shared/tsconfig.lib.json" },

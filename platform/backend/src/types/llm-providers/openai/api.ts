@@ -75,12 +75,29 @@ const ChoiceSchema = z
     `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L311`,
   );
 
+// Declare the envelope so Fastify preserves and validates output constraints.
+// JSON Schema itself is provider-validated; keep its keywords and nested values.
+const ResponseFormatSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("text") }),
+  z.object({ type: z.literal("json_object") }),
+  z.object({
+    type: z.literal("json_schema"),
+    json_schema: z.object({
+      name: z.string(),
+      description: z.string().optional(),
+      schema: z.record(z.string(), z.unknown()).optional(),
+      strict: z.boolean().nullable().optional(),
+    }),
+  }),
+]);
+
 export const ChatCompletionRequestSchema = z
   .object({
     model: z.string(),
     messages: z.array(MessageParamSchema),
     tools: z.array(ToolSchema).optional(),
     tool_choice: ToolChoiceOptionSchema.optional(),
+    response_format: ResponseFormatSchema.optional(),
     temperature: z.number().nullable().optional(),
     max_tokens: z.number().nullable().optional(),
     // Fastify's zod validation replaces the body with the parsed value, so a

@@ -117,10 +117,12 @@ export type AppaClientAdapter = {
   /**
    * The client's own question tool. Its results need the same decision
    * guidance as ask_user. Clients without MCP forms may also provide an
-   * argument converter to receive ask_user reviews through their native tool.
+   * argument converter to receive ask_user calls through their native tool.
    */
   nativeQuestion?: {
     toolName: string;
+    /** Gateway questions need this form when the client has no MCP elicitation. */
+    requiresNativeForm?: boolean;
     isAvailable?(headers: IncomingHttpHeaders): boolean;
     supportsMultiple?: boolean;
     /** Keep questions with more choices on the gateway; never discard options. */

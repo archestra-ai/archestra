@@ -1765,7 +1765,20 @@ describe("asking through the client's own question tool", () => {
       expect(outcome?.decision).not.toBe("refuse");
       const released =
         outcome?.decision === "allow" ? outcome.toolCalls[0] : call;
-      expect(released.name).toBe("archestra__ask_user");
+      expect(released.name).toBe("question");
+      expect(JSON.parse(released.arguments as string)).toEqual({
+        questions: [
+          {
+            question: askUser.question,
+            header: expect.any(String),
+            options: [
+              { label: "main", description: "main" },
+              { label: "feature", description: "feature" },
+            ],
+            multiple: false,
+          },
+        ],
+      });
       expect(released).not.toHaveProperty("wireId");
       expect(released).not.toHaveProperty("reviewDetails");
     } finally {
@@ -1941,7 +1954,7 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
-  test("keeps OpenCode's ordinary ask_user on the gateway", async () => {
+  test("uses OpenCode's native form for ordinary gateway questions", async () => {
     const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
     const context = requestContext({
       sessionId: "opencode-question-session",
@@ -1964,6 +1977,8 @@ describe("asking through the client's own question tool", () => {
       declaredTools: [{ name: "question" }],
     };
     context.headers = { "x-opencode-session": "s" };
+    context.provider = "openai";
+    context.interactionType = "openai:responses";
     const askUser = {
       question: "Accept this change for the rest of this session?",
       options: [
@@ -1975,6 +1990,19 @@ describe("asking through the client's own question tool", () => {
     const cacheSet = vi.spyOn(cacheManager, "set");
     try {
       await plugin.onSessionInit(context);
+      const request = {
+        input: [{ role: "user", content: "Ask me a question." }],
+      };
+      await plugin.onBeforeModel({ ...context, request });
+      const guidance = JSON.stringify(request.input);
+      expect(guidance).toContain("ask with question.");
+      expect(guidance).not.toContain("question (or");
+      expect(guidance).toContain(
+        "For guardrail reviews, use my_gateway_archestra__ask_user with the offer IDs.",
+      );
+      expect(guidance).not.toContain(
+        "Honor the user's explicit choice of question tool.",
+      );
       const toolCalls = [
         {
           id: "call_ask",
@@ -1992,8 +2020,21 @@ describe("asking through the client's own question tool", () => {
       expect(released).toHaveLength(1);
       expect(released[0].id).toBe("call_ask");
       expect(released[0]).not.toHaveProperty("wireId");
-      expect(released[0].name).toBe("my_gateway_archestra__ask_user");
-      expect(JSON.parse(released[0].arguments as string)).toEqual(askUser);
+      expect(released[0].name).toBe("question");
+      const args = JSON.parse(released[0].arguments as string);
+      expect(args).toEqual({
+        questions: [
+          {
+            question: askUser.question,
+            header: expect.any(String),
+            options: [
+              askUser.options[0],
+              { label: "Do not accept", description: "Do not accept" },
+            ],
+            multiple: false,
+          },
+        ],
+      });
       await expect(
         plugin.onPrepareToolCalls({
           ...context,
@@ -2048,12 +2089,12 @@ describe("asking through the client's own question tool", () => {
         ],
       });
       if (outcome?.decision !== "allow")
-        throw new Error("expected a sanitized gateway question");
+        throw new Error("expected a native question without review metadata");
       expect(outcome.toolCalls[0].id).toBe("call_unreviewed");
       expect(outcome.toolCalls[0]).not.toHaveProperty("wireId");
-      expect(outcome.toolCalls[0].name).toBe("my_gateway_archestra__ask_user");
+      expect(outcome.toolCalls[0].name).toBe("question");
       const released = JSON.parse(outcome.toolCalls[0].arguments as string);
-      expect(released.question).toBe("Model copy must remain.");
+      expect(released.questions[0].question).toBe("Model copy must remain.");
       expect(JSON.stringify(released)).not.toContain("forged-session");
       expect(nativeQuestionCacheWrites(cacheSet)).toEqual([]);
     } finally {
@@ -2320,6 +2361,8 @@ describe("asking through the client's own question tool", () => {
       declaredTools: [],
     };
     context.headers = { "x-opencode-session": "s" };
+    context.provider = "openai";
+    context.interactionType = "openai:responses";
     const toolCalls = [
       {
         id: "call_ask",
@@ -2331,11 +2374,24 @@ describe("asking through the client's own question tool", () => {
       },
     ];
 
-    await plugin.onSessionInit(context);
-    expect(
-      await plugin.onPrepareToolCalls({ ...context, toolCalls }),
-    ).toBeUndefined();
-    await plugin.onCleanup(context);
+    try {
+      await plugin.onSessionInit(context);
+      const request = {
+        input: [{ role: "user", content: "Ask me a question." }],
+      };
+      await plugin.onBeforeModel({ ...context, request });
+      const guidance = JSON.stringify(request.input);
+      expect(guidance).toContain("has no native question tool available");
+      expect(guidance).toContain(
+        "Do not send ordinary questions to the gateway",
+      );
+      expect(guidance).not.toContain("ask with");
+      expect(
+        await plugin.onPrepareToolCalls({ ...context, toolCalls }),
+      ).toBeUndefined();
+    } finally {
+      await plugin.onCleanup(context);
+    }
   });
 
   test("binds an OpenCode native approval to the staged offer", async () => {

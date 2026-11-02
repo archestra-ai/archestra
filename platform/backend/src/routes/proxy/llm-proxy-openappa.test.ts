@@ -14112,6 +14112,114 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     "user-agent": "opencode/1.18.29",
   });
 
+  test.each(
+    ["opencode", "kilo"].flatMap((client) =>
+      [false, true].map((multiple) => ({ client, multiple })),
+    ),
+  )("returns ordinary gateway question answers through the $client native form (multiple=$multiple)", async ({
+    client,
+    multiple,
+  }) => {
+    const labels = Array.from(
+      { length: multiple ? 12 : 2 },
+      (_, i) => `Format ${i + 1}`,
+    );
+    const questionText = "Which report format?";
+    let calls = [
+      {
+        id: "call_format",
+        name: "archestra__ask_user",
+        arguments: JSON.stringify({
+          question: questionText,
+          options: labels.map((label) => ({ label })),
+          allowMultiple: multiple,
+        }),
+      },
+    ];
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(() => {
+      const provider = createOpenAiTestClient({ nonStreamingToolCalls: calls });
+      const create = provider.chat.completions.create;
+      provider.chat.completions.create = async (params) => {
+        providerBodies.push(structuredClone(params));
+        return create(params);
+      };
+      return provider as never;
+    });
+    const body = openCodePayload();
+    const tools = [
+      ...body.tools,
+      ...["archestra__ask_user", "question"].map((name) => ({
+        type: "function",
+        function: {
+          name,
+          description: name,
+          parameters: { type: "object", properties: {} },
+        },
+      })),
+    ];
+    const headers = {
+      ...internalCallHeader(),
+      ...openCodeHeaders(),
+      "user-agent": `${client}/1.18.29`,
+      "x-session-id": OPENCODE_SESSION,
+    };
+    const messages = [{ role: "user", content: "Choose a report format." }];
+    const asked = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers,
+      payload: { ...body, stream: false, tools, messages },
+    });
+    expect(asked.statusCode, asked.body).toBe(200);
+    const question = asked.json().choices[0].message.tool_calls[0];
+    expect(question.function.name).toBe("question");
+    expect(JSON.parse(question.function.arguments)).toEqual({
+      questions: [
+        {
+          question: questionText,
+          header: expect.any(String),
+          options: labels.map((label) => ({ label, description: label })),
+          multiple,
+        },
+      ],
+    });
+    const selected = multiple ? [labels[0], labels.at(-1)] : [labels.at(-1)];
+    const answer = `User has answered your questions: "${questionText}"="${selected.join(", ")}". You can now continue with the user's answers in mind.`;
+    calls = [];
+    providerBodies.length = 0;
+    const answered = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers,
+      payload: {
+        ...body,
+        stream: false,
+        tools,
+        messages: [
+          ...messages,
+          { role: "assistant", content: null, tool_calls: [question] },
+          { role: "tool", tool_call_id: question.id, content: answer },
+        ],
+      },
+    });
+    expect(answered.statusCode, answered.body).toBe(200);
+    const sent = providerBodies.at(-1) as {
+      messages: Array<{
+        role: string;
+        tool_call_id?: string;
+        content: unknown;
+      }>;
+    };
+    expect(
+      sent.messages.find(
+        (message) =>
+          message.role === "tool" && message.tool_call_id === question.id,
+      ),
+    ).toMatchObject({ content: answer });
+  });
+
   test.for(
     ["incomplete", "content_filter", "failed", "eof"].flatMap((terminal) =>
       [false, true].flatMap((stream) =>

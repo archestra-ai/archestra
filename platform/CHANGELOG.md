@@ -1,5 +1,107 @@
 # Changelog
 
+## [1.5.0-rc.20](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.19...platform-v1.5.0-rc.20) (2026-11-02)
+
+
+### Features
+
+* **agent-runs:** list an Agent's runs with bulk stop, delete and saved-file cleanup ([#9917](https://github.com/archestra-ai/archestra/issues/9917)) ([750e9b9](https://github.com/archestra-ai/archestra/commit/750e9b9147b9ecda4342b67ac790202caaaa6fad))
+* **agent-runtime:** give a run's tools its whole size and toolchain thread counts ([#10012](https://github.com/archestra-ai/archestra/issues/10012)) ([b935a31](https://github.com/archestra-ai/archestra/commit/b935a31ddc441df0de2484ffda0a20cdd22997c3))
+* **agents:** filter the agents list by runtime ([#10084](https://github.com/archestra-ai/archestra/issues/10084)) ([e54bf0a](https://github.com/archestra-ai/archestra/commit/e54bf0a74216619bdf979cc8ea574bb80404c077))
+* **agents:** let an agent set its own network egress policy ([#10101](https://github.com/archestra-ai/archestra/issues/10101)) ([6aa7162](https://github.com/archestra-ai/archestra/commit/6aa716277ed82a62c10397957651e40aaa4cdf6e))
+* **auto-routing:** align scorer context and expose decision provenance ([#10007](https://github.com/archestra-ai/archestra/issues/10007)) ([a32d3bb](https://github.com/archestra-ai/archestra/commit/a32d3bb7a7c9aa733ea29e7ceb0479d5dcb455fa))
+* **dev-lite:** install the frontend CI built for a clean main checkout, and seed builds from its cache ([#10055](https://github.com/archestra-ai/archestra/issues/10055)) ([5a33bb0](https://github.com/archestra-ai/archestra/commit/5a33bb0d82d5dc63d2bf1ee615afa3072a0f2a3a))
+* **guardrails:** follow Copilot CLI natively on the LLM proxy ([#10019](https://github.com/archestra-ai/archestra/issues/10019)) ([ea07e5d](https://github.com/archestra-ai/archestra/commit/ea07e5d28e31c5c51c754316858913cb09182fd8))
+* **openappa:** list Inspect first on review cards ([#10045](https://github.com/archestra-ai/archestra/issues/10045)) ([f51e695](https://github.com/archestra-ai/archestra/commit/f51e6956a500b3b5cfe03ee14da1389d8d8ac517))
+* **openappa:** log why a battery helper consult failed ([#10083](https://github.com/archestra-ai/archestra/issues/10083)) ([3ff41db](https://github.com/archestra-ai/archestra/commit/3ff41db89bff29bf3feda54ea3a04c1cb4f39207))
+* **openappa:** pin context and deployment hints, state the deployment's own host ([#10076](https://github.com/archestra-ai/archestra/issues/10076)) ([ab11193](https://github.com/archestra-ai/archestra/commit/ab11193e9d44f426e856b708ac3f282ba69a323f))
+* **openappa:** suggest the deployment hint to policies saved without one ([#10082](https://github.com/archestra-ai/archestra/issues/10082)) ([482477e](https://github.com/archestra-ai/archestra/commit/482477eca659f62c923b7739f86d4348bde51f89))
+
+
+### Bug Fixes
+
+* **agent-runtime:** a finished run takes no new turn minutes before its retention ends ([#10008](https://github.com/archestra-ai/archestra/issues/10008)) ([fd54272](https://github.com/archestra-ai/archestra/commit/fd542729e849ee39de5df32d1c62a71b41cc558c))
+* **agent-runtime:** address review findings for fixed tier scaleup and docs memory rule ([#10000](https://github.com/archestra-ai/archestra/issues/10000)) ([b1bf3dc](https://github.com/archestra-ai/archestra/commit/b1bf3dcdaa5e3e05f5688ca0c180c25124f962c9))
+* **agent-runtime:** give runs the id their page and the run tools use ([#10032](https://github.com/archestra-ai/archestra/issues/10032)) ([325e9b1](https://github.com/archestra-ai/archestra/commit/325e9b1246053fe662b0aea8aa3a6f4ee128676d))
+* **agent-runtime:** give runs their page URL ([#10035](https://github.com/archestra-ai/archestra/issues/10035)) ([2c0ba7a](https://github.com/archestra-ai/archestra/commit/2c0ba7aeaeb1ad26ad11d5e027118556bb2574f9))
+* **agent-runtime:** give the agent's shell commands the highest OOM score ([#10039](https://github.com/archestra-ai/archestra/issues/10039)) ([4c91b80](https://github.com/archestra-ai/archestra/commit/4c91b80865fa7d76fad221a04e289db16491c6e5))
+* **agent-runtime:** never name a larger memory limit than the container had ([#10027](https://github.com/archestra-ai/archestra/issues/10027)) ([ab67fef](https://github.com/archestra-ai/archestra/commit/ab67fefe2785e4c74b2d5e41b45269bf481e5f1e))
+* **agent-runtime:** refuse outside callers of a fixed-tier agent with the tiers it may use ([#10010](https://github.com/archestra-ai/archestra/issues/10010)) ([d0f16c2](https://github.com/archestra-ai/archestra/commit/d0f16c2ec3e1f8b2333d20bca3865279dc331998))
+* **agent-runtime:** report a Copilot CLI run as waiting only after it answers ([#10033](https://github.com/archestra-ai/archestra/issues/10033)) ([cc6e2c5](https://github.com/archestra-ai/archestra/commit/cc6e2c547ff12eab468f37125db7d87a25608725))
+* **agent-runtime:** say when a run or a command was killed for memory ([#10024](https://github.com/archestra-ai/archestra/issues/10024)) ([4a49f89](https://github.com/archestra-ai/archestra/commit/4a49f897c82cbc6aa76cf4d17d496cfa452f7c1c))
+* **agent-runtime:** stop the agent's largest command before the kernel stops the container ([#10049](https://github.com/archestra-ai/archestra/issues/10049)) ([8ea8fe6](https://github.com/archestra-ai/archestra/commit/8ea8fe6e4ea37e97ec81daf3910d83efaa9685f1))
+* **auto-routing:** back off failed history cleanup ([#10097](https://github.com/archestra-ai/archestra/issues/10097)) ([15d039a](https://github.com/archestra-ai/archestra/commit/15d039a83490d9855429472dec7bf8b99a2cead9))
+* **backend:** make every backend source file declaration-emittable ([#10036](https://github.com/archestra-ai/archestra/issues/10036)) ([4782484](https://github.com/archestra-ai/archestra/commit/478248454f5f455985237e82a44e41823d8cb997))
+* **backend:** reduce repeated credential and listing queries ([#10080](https://github.com/archestra-ai/archestra/issues/10080)) ([ebf4ab9](https://github.com/archestra-ai/archestra/commit/ebf4ab99c8208fdcb56d7138049ceea28f5ee62a))
+* **claude:** preserve Desktop choices and connection instructions ([#10100](https://github.com/archestra-ai/archestra/issues/10100)) ([0946f5a](https://github.com/archestra-ai/archestra/commit/0946f5ab98eb28c3c556a608533e2b18c14d4e07))
+* **claude:** retain original question tool provenance ([#10117](https://github.com/archestra-ai/archestra/issues/10117)) ([0d07693](https://github.com/archestra-ai/archestra/commit/0d07693faf9c4a74ff6158db881b9468356d0e47))
+* **connect:** trust Windows system/admin config owners and keep OpenAI passthrough sign-in ([#10111](https://github.com/archestra-ai/archestra/issues/10111)) ([b5ba1ff](https://github.com/archestra-ai/archestra/commit/b5ba1ffe723671ebc164fba107b19c79b3473151))
+* **credentials:** isolate Vault read failures within batches ([#10093](https://github.com/archestra-ai/archestra/issues/10093)) ([3d0987a](https://github.com/archestra-ai/archestra/commit/3d0987ae76d5c4a70f5f6b3de32ec67e7213e0e1))
+* **dev-lite:** build one thing at a time and let a pod's bootstrap only prepare ([#10042](https://github.com/archestra-ai/archestra/issues/10042)) ([eab65c2](https://github.com/archestra-ai/archestra/commit/eab65c26f753c347614e88390b6545be6f4bb6cf))
+* **dev-lite:** run Playwright with one worker at one CPU, in the heavy lane ([#10056](https://github.com/archestra-ai/archestra/issues/10056)) ([bd888b1](https://github.com/archestra-ai/archestra/commit/bd888b1ec46971e43a97d73d8d7c6836c16650b7))
+* **guardrails:** allow repeated Copilot background result reads ([#10070](https://github.com/archestra-ai/archestra/issues/10070)) ([b52bdb2](https://github.com/archestra-ai/archestra/commit/b52bdb2de22b2780b88d97fa39ae83d4119bf9ed))
+* **guardrails:** read a tool call with no argument text as an empty object ([#10044](https://github.com/archestra-ai/archestra/issues/10044)) ([f7c6bbd](https://github.com/archestra-ai/archestra/commit/f7c6bbd70cba426bf157c476279b1db674360023))
+* **mcp:** skip delegation expansion for compact gateways ([#10109](https://github.com/archestra-ai/archestra/issues/10109)) ([990326f](https://github.com/archestra-ai/archestra/commit/990326f60c3f5b9fa3c9c7f27e1f52769cf423a4))
+* normalize platform versions in provider automation ([#10009](https://github.com/archestra-ai/archestra/issues/10009)) ([9843116](https://github.com/archestra-ai/archestra/commit/9843116bbf9633739c3dc1b211ac82755be22589))
+* **oauth:** validate root metadata for origin resource discovery ([#10095](https://github.com/archestra-ai/archestra/issues/10095)) ([2ed0dce](https://github.com/archestra-ai/archestra/commit/2ed0dce73c052fe83f885c2c033377e736a9784f))
+* **openappa:** cap JSON depth in credential redaction ([#10089](https://github.com/archestra-ai/archestra/issues/10089)) ([9bcffcb](https://github.com/archestra-ai/archestra/commit/9bcffcbf8e5e1693a7bf7075e1fee68a794fa51f))
+* **openappa:** redact credential headers on HITL approval cards ([#10066](https://github.com/archestra-ai/archestra/issues/10066)) ([c3cf6c1](https://github.com/archestra-ai/archestra/commit/c3cf6c1f149c9ecc52a752a28e0d1595f9cbf007))
+* **openappa:** tell a battery helper the execution budget it has ([#10071](https://github.com/archestra-ai/archestra/issues/10071)) ([7f6995b](https://github.com/archestra-ai/archestra/commit/7f6995b15fac8abf4b3b8db7c3868a7f9e47d4c2))
+* **openappa:** wait briefly for a battery helper slot instead of refusing ([#10069](https://github.com/archestra-ai/archestra/issues/10069)) ([f7cfc50](https://github.com/archestra-ai/archestra/commit/f7cfc500e38fe92b82c7e962b1cebde5575c09ef))
+* **pricing:** apply published Copilot context rates ([#9935](https://github.com/archestra-ai/archestra/issues/9935)) ([5d03b05](https://github.com/archestra-ai/archestra/commit/5d03b0587cb0af2f219a6030dd624c395afdc752))
+* **proxy:** enforce Fireworks model identity and pricing ([#10085](https://github.com/archestra-ai/archestra/issues/10085)) ([2366fcc](https://github.com/archestra-ai/archestra/commit/2366fccf3d7d4dfe3a58c3247e7d255f64e0fd47))
+* **proxy:** preserve chat structured output constraints ([#10091](https://github.com/archestra-ai/archestra/issues/10091)) ([f7d8128](https://github.com/archestra-ai/archestra/commit/f7d8128bfe1e7b0bc5b3b0d75f8662d1f840b703))
+* **proxy:** preserve or reject translated output constraints ([#10096](https://github.com/archestra-ai/archestra/issues/10096)) ([2331889](https://github.com/archestra-ai/archestra/commit/2331889f4f5bc613cf60f8ab8adb067998ac8145))
+* **proxy:** preserve ordinary gateway question transport ([#10072](https://github.com/archestra-ai/archestra/issues/10072)) ([a8e3af1](https://github.com/archestra-ai/archestra/commit/a8e3af10cd32aa3e0090824f71e1eb0144cf4ca2))
+* **proxy:** preserve Responses output formats in chat fallbacks ([#10112](https://github.com/archestra-ai/archestra/issues/10112)) ([4f14864](https://github.com/archestra-ai/archestra/commit/4f1486463375b10999ab33e3ef67697934a0db32))
+* **proxy:** retain forms for clients without MCP elicitation ([#10086](https://github.com/archestra-ai/archestra/issues/10086)) ([8d59584](https://github.com/archestra-ai/archestra/commit/8d595840af4e1408022a60d1101a5c56eb61a85c))
+* **security:** require expat 2.10.0 in runtime images ([#10077](https://github.com/archestra-ai/archestra/issues/10077)) ([6a30f17](https://github.com/archestra-ai/archestra/commit/6a30f174535aec484d77a7d6c0ca7b9f04674467))
+* **server:** classify graceful drain refusals as expected ([#10107](https://github.com/archestra-ai/archestra/issues/10107)) ([33bea95](https://github.com/archestra-ai/archestra/commit/33bea95c99d33c5a8b767d10694a669ffc671a09))
+* **skills:** quote two shared skill descriptions so strict YAML parsers load them ([#10031](https://github.com/archestra-ai/archestra/issues/10031)) ([8bf66cb](https://github.com/archestra-ai/archestra/commit/8bf66cbd00776d188e70ec529318abae5cfcfc8e))
+* **teams:** support channel file variants and executable command menus ([#10098](https://github.com/archestra-ai/archestra/issues/10098)) ([d34c42b](https://github.com/archestra-ai/archestra/commit/d34c42bd59f6e15a4ff0766750424f060bbf16e9))
+
+
+### Performance Improvements
+
+* **agent-runtime:** run pnpm through corepack so a pinned version runs in one process ([#10058](https://github.com/archestra-ai/archestra/issues/10058)) ([3ba7763](https://github.com/archestra-ai/archestra/commit/3ba77635399900fed7a17d75fe6a2343447229a1))
+* **backend:** build the PGlite test snapshot in a child process and cache it ([#10037](https://github.com/archestra-ai/archestra/issues/10037)) ([e808977](https://github.com/archestra-ai/archestra/commit/e8089772d05198ed2ec511f4d5878b72e790fd2e))
+* **backend:** import only the Google Drive and Directory APIs ([#10011](https://github.com/archestra-ai/archestra/issues/10011)) ([eee74ed](https://github.com/archestra-ai/archestra/commit/eee74ed3c49affe518468d088a94d1cab1bce7f4))
+* **backend:** load the Microsoft Teams provider only when Teams is configured ([#10020](https://github.com/archestra-ai/archestra/issues/10020)) ([a88954c](https://github.com/archestra-ai/archestra/commit/a88954c46469f16c2d3303246c53d5c19213f6a8))
+* **backend:** ship migrations without drizzle-kit's schema snapshots ([#10015](https://github.com/archestra-ai/archestra/issues/10015)) ([d64d8ec](https://github.com/archestra-ai/archestra/commit/d64d8ec7d2e06ff02797359497a51405131b49a9))
+* **backend:** type-check the backend one project at a time ([#10050](https://github.com/archestra-ai/archestra/issues/10050)) ([6519567](https://github.com/archestra-ai/archestra/commit/6519567d0832709d9428c1a95ab9247920b92ec6))
+* **dev-lite:** build the frontend without source maps inside an Agent Runtime ([#10028](https://github.com/archestra-ai/archestra/issues/10028)) ([92586fa](https://github.com/archestra-ai/archestra/commit/92586fa676f9b354cfc29d4a703866ec9265045b))
+* **dev-lite:** serve production builds inside an Agent Runtime ([#10018](https://github.com/archestra-ai/archestra/issues/10018)) ([353cae9](https://github.com/archestra-ai/archestra/commit/353cae956380cd0186e61f1e78b85689999dede1))
+* **platform:** cap the type check's heap where memory is short ([#10025](https://github.com/archestra-ai/archestra/issues/10025)) ([8a5e20f](https://github.com/archestra-ai/archestra/commit/8a5e20f5fd361c184a408678faa9bb8c206d5d62))
+* **platform:** run one memory-heavy command at a time in a small pod ([#10043](https://github.com/archestra-ai/archestra/issues/10043)) ([fa6fc52](https://github.com/archestra-ai/archestra/commit/fa6fc52e644268ed5338fce4d6c1e0265a690352))
+* **platform:** size the frontend type check's Go memory limit from the heavy lane's room ([#10052](https://github.com/archestra-ai/archestra/issues/10052)) ([b35752b](https://github.com/archestra-ai/archestra/commit/b35752bf0309241e0d20684114634888604625b9))
+* **platform:** size the type check's checkers to the memory it has ([#10014](https://github.com/archestra-ai/archestra/issues/10014)) ([704de1e](https://github.com/archestra-ai/archestra/commit/704de1e6cfe3654ee1e455e7b5644a1525a0a80c))
+
+
+### Code Refactoring
+
+* **backend:** carve the core layer into its own TypeScript project ([#10054](https://github.com/archestra-ai/archestra/issues/10054)) ([4dcd26b](https://github.com/archestra-ai/archestra/commit/4dcd26b520dd5ff6be95ae637ce0dbeb3aa4a7fb))
+* **backend:** carve the models into three TypeScript projects ([#10065](https://github.com/archestra-ai/archestra/issues/10065)) ([2e2a4fb](https://github.com/archestra-ai/archestra/commit/2e2a4fb49e828e57ca3019753bc954fab8f99292))
+* **backend:** check runtime code in its own TypeScript project ([#10067](https://github.com/archestra-ai/archestra/issues/10067)) ([329ff21](https://github.com/archestra-ai/archestra/commit/329ff2170b645db6bf73f672207518813ccd01ad))
+* **backend:** compose Better Auth into the server layer ([#10064](https://github.com/archestra-ai/archestra/issues/10064)) ([06aff9e](https://github.com/archestra-ai/archestra/commit/06aff9e33fe73414458764d64f1d1444bc22869c))
+* **backend:** consolidate test compiler configs by domain ([#10079](https://github.com/archestra-ai/archestra/issues/10079)) ([222d63f](https://github.com/archestra-ai/archestra/commit/222d63ff02bb75b704477c376a456efd1cdd07fe))
+* **backend:** give the types layer its own schema module ([#10047](https://github.com/archestra-ai/archestra/issues/10047)) ([96acb72](https://github.com/archestra-ai/archestra/commit/96acb72dbd1b3ca474f30d09dd8b9a3af14158d8))
+* **backend:** isolate provider clients in a TypeScript project ([#10068](https://github.com/archestra-ai/archestra/issues/10068)) ([2826dd8](https://github.com/archestra-ai/archestra/commit/2826dd873b0f8f3cb51a5ca6c5ae6cac3899b46a))
+* **backend:** partition the application into bounded compiler projects ([#10074](https://github.com/archestra-ai/archestra/issues/10074)) ([08a1bfb](https://github.com/archestra-ai/archestra/commit/08a1bfb8cfb5a4ba47e4995662e6135261c7a04c))
+* **backend:** put resource permissions and the agent tool surface notice in the models layer ([#10060](https://github.com/archestra-ai/archestra/issues/10060)) ([3021eda](https://github.com/archestra-ai/archestra/commit/3021eda62404dbeec38af123d40f13a00390377b))
+* **backend:** reach the k8s runtime, MCP client, sandbox check and tool list through ports ([#10062](https://github.com/archestra-ai/archestra/issues/10062)) ([eec7b0b](https://github.com/archestra-ai/archestra/commit/eec7b0be67211f59c815cf40bc6bf7a5801503f3))
+* **backend:** sink the leaves the models call into the models layer ([#10059](https://github.com/archestra-ai/archestra/issues/10059)) ([6cb640b](https://github.com/archestra-ai/archestra/commit/6cb640b95a3c6d70113b2a1425b60190920bda32))
+* **backend:** split knowledge workflows into compiler projects ([#10073](https://github.com/archestra-ai/archestra/issues/10073)) ([ba3b875](https://github.com/archestra-ai/archestra/commit/ba3b875241de4a3a8be1d633fcadf6225630d2c5))
+* **backend:** take model resolution's last upward imports out of the models layer ([#10063](https://github.com/archestra-ai/archestra/issues/10063)) ([a0f31cc](https://github.com/archestra-ai/archestra/commit/a0f31cc5fde5c8259e886c0ff92d26e4d1bd67ce))
+* **frontend:** inline single-use catalog docs link ([#10103](https://github.com/archestra-ai/archestra/issues/10103)) ([035092c](https://github.com/archestra-ai/archestra/commit/035092cf64251e2ea648783d31eddc8d73ff7369))
+
+
+### Miscellaneous Chores
+
+* **backend:** check the backend's layer order against a shrinking list ([#10038](https://github.com/archestra-ai/archestra/issues/10038)) ([9f0e846](https://github.com/archestra-ai/archestra/commit/9f0e84622d555a3eedfed52df87a90f50400659f))
+* **openappa:** pin OpenAPPA with the GitHub context false-decline fixes ([#10113](https://github.com/archestra-ai/archestra/issues/10113)) ([af94891](https://github.com/archestra-ai/archestra/commit/af94891a262f7e5f2720953390d1b87537ba48df))
+* **platform:** move knip to 6.43 in every workspace ([#10041](https://github.com/archestra-ai/archestra/issues/10041)) ([fceca6c](https://github.com/archestra-ai/archestra/commit/fceca6c3c538f26f9ac47897302405eb43c53e8b))
+* update agent runtime CLIs ([#10023](https://github.com/archestra-ai/archestra/issues/10023)) ([7785d66](https://github.com/archestra-ai/archestra/commit/7785d6629e1c3c2e562069a46f06d9e9bf6ab133))
+
 ## [1.5.0-rc.19](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.18...platform-v1.5.0-rc.19) (2026-10-31)
 
 

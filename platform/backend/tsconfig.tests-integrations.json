@@ -1,7 +1,9 @@
 {
-  // Tests of k8s, the clients, OpenAPPA and the proxy helpers.
+  // Tests of Kubernetes, clients, OpenAPPA, and proxy helpers.
   "extends": "./tsconfig.base.json",
-  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-integrations.tsbuildinfo" },
+  "compilerOptions": {
+    "tsBuildInfoFile": "./.tsbuild/tests-integrations.tsbuildinfo"
+  },
   "include": [
     "src/ambient/*.d.ts",
     "src/k8s/**/*.test.ts",

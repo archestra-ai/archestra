@@ -256,6 +256,8 @@ export const TYPE_CHECK_PROJECT_PEAK_BYTES: Readonly<
     "tsconfig.test-support.json": 1.5 * 1024 ** 3,
     "tsconfig.tests-database.json": 1.1 * 1024 ** 3,
     "tsconfig.tests-core.json": 1.6 * 1024 ** 3,
+    // The models and proxy/REST route groups exceed a 4 GiB pod's 1.83 GiB
+    // budget beside dev servers, so the lane pauses the servers for those groups.
     "tsconfig.tests-models.json": 2.3 * 1024 ** 3,
     "tsconfig.tests-services.json": 1.5 * 1024 ** 3,
     "tsconfig.tests-knowledge-base.json": 1.2 * 1024 ** 3,

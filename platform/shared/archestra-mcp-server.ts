@@ -1235,6 +1235,7 @@ export function isRunControlArchestraToolShortName(
 export function buildElicitationMandateInstruction(params?: {
   askUserToolName?: string;
   nativeQuestionToolName?: string;
+  nativeQuestionMaxOptions?: number;
 }): string {
   const tools: string[] = [];
   if (params?.nativeQuestionToolName) tools.push(params.nativeQuestionToolName);
@@ -1245,7 +1246,17 @@ export function buildElicitationMandateInstruction(params?: {
     tools.length > 1
       ? `${tools[0]} (or ${tools[1]})`
       : (tools[0] ?? TOOL_ASK_USER_SHORT_NAME);
-  return `When you need a decision, a clarification, a preference, or an approval from the user, ask with ${toolName}. The user then answers in the client's question interface. Ask multiple-choice questions with ${toolName} too, not in plain text. A link or command the user must open or run goes in your reply text, not in the question.`;
+  const nativeLimit =
+    params?.askUserToolName &&
+    params.nativeQuestionToolName &&
+    params.nativeQuestionMaxOptions !== undefined
+      ? ` ${params.nativeQuestionToolName} accepts at most ${params.nativeQuestionMaxOptions} options. For more options, use ${params.askUserToolName} and keep all choices.`
+      : "";
+  const toolChoice =
+    tools.length > 1
+      ? " Honor the user's explicit choice of question tool."
+      : "";
+  return `When you need a decision, a clarification, a preference, or an approval from the user, ask with ${toolName}. The user then answers in the client's question interface. Ask multiple-choice questions with ${toolName} too, not in plain text.${toolChoice}${nativeLimit} A link or command the user must open or run goes in your reply text, not in the question.`;
 }
 
 /**

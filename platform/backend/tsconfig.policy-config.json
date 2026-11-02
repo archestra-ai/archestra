@@ -1,0 +1,90 @@
+{
+  "extends": "./tsconfig.source-project.json",
+  "compilerOptions": {
+    "outDir": "./.tsbuild/policy-config",
+    "tsBuildInfoFile": "./.tsbuild/policy-config.tsbuildinfo"
+  },
+  "files": [
+    "src/git-hosts/git-access.ts",
+    "src/openappa/archestra-audience.ts",
+    "src/openappa/batteries.ts",
+    "src/openappa/battery-target.ts",
+    "src/openappa/composition-view.ts",
+    "src/openappa/coverage.ts",
+    "src/openappa/declarations.ts",
+    "src/openappa/draft-helper-sources.ts",
+    "src/openappa/failure.ts",
+    "src/openappa/helper-bridge.ts",
+    "src/openappa/policy-moved.ts",
+    "src/openappa/policy-text.ts",
+    "src/openappa/replay-owner.ts",
+    "src/openappa/reporting-tool.ts",
+    "src/openappa/template.generated.ts",
+    "src/services/agent-runtime/runtime-credentials.ts",
+    "src/services/cross-provider-pricing.ts",
+    "src/services/github-app-manifest-setup.ts",
+    "src/services/github-copilot-app-setup.ts",
+    "src/services/guardrails-deployment.ts",
+    "src/services/guardrails-policy-proposal.ts",
+    "src/services/guardrails-policy.ts",
+    "src/services/integration-overrides.ts",
+    "src/services/model-sync.ts",
+    "src/services/openappa-external-consults.ts",
+    "src/services/openappa-github-access.ts",
+    "src/services/openappa-github-app-setup.ts",
+    "src/services/openappa-github-sync.ts",
+    "src/services/openappa-gitlab.ts",
+    "src/services/openappa-label-changes.ts",
+    "src/services/openappa-policy-change.ts",
+    "src/services/openappa-policy-tests.ts",
+    "src/services/openappa-validation-change.ts",
+    "src/services/openappa-yells.ts",
+    "src/services/vendor-published-pricing.ts",
+    "src/skills/github-app-token.ts",
+    "src/skills/github-source.ts"
+  ],
+  "include": [
+    "src/ambient/*.d.ts"
+  ],
+  "references": [
+    {
+      "path": "../shared/tsconfig.lib.json"
+    },
+    {
+      "path": "./tsconfig.schema.json"
+    },
+    {
+      "path": "./tsconfig.core.json"
+    },
+    {
+      "path": "./tsconfig.models.json"
+    },
+    {
+      "path": "./tsconfig.models-agents.json"
+    },
+    {
+      "path": "./tsconfig.models-upper.json"
+    },
+    {
+      "path": "./tsconfig.llm-clients.json"
+    },
+    {
+      "path": "./tsconfig.runtime.json"
+    },
+    {
+      "path": "./tsconfig.llm-protocol.json"
+    },
+    {
+      "path": "./tsconfig.provider-adapters.json"
+    },
+    {
+      "path": "./tsconfig.kb-core.json"
+    },
+    {
+      "path": "./tsconfig.kb-connectors.json"
+    },
+    {
+      "path": "./tsconfig.kb.json"
+    }
+  ]
+}

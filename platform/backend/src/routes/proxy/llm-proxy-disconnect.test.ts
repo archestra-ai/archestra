@@ -39,7 +39,7 @@ for (const provider of ["anthropic", "openai", "responses"] as const) {
     let failures: number;
     let cleanups: number;
     let completions: number;
-    let mode: "headers" | "stream" | "complete";
+    let mode: "headers" | "stream" | "tool-stream" | "complete";
     const model =
       provider === "anthropic" ? "claude-3-5-sonnet-20241022" : "gpt-4o-mini";
 
@@ -75,6 +75,46 @@ for (const provider of ["anthropic", "openai", "responses"] as const) {
       } else {
         response.write(
           `data: ${JSON.stringify({ id: "chatcmpl-cancel", object: "chat.completion.chunk", created: 1, model, choices: [{ index: 0, delta: { role: "assistant", content: "Partial" }, finish_reason: null }] })}\n\n`,
+        );
+      }
+    }
+
+    function sendHeldToolCall(response: ServerResponse) {
+      if (provider === "anthropic") {
+        response.write(
+          'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
+        );
+        response.write(
+          'event: content_block_start\ndata: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"held-call","name":"lookup","input":{}}}\n\n',
+        );
+        response.write(
+          'event: content_block_delta\ndata: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{}"}}\n\n',
+        );
+        response.write(
+          'event: content_block_stop\ndata: {"type":"content_block_stop","index":1}\n\n',
+        );
+        response.write(
+          'event: content_block_start\ndata: {"type":"content_block_start","index":2,"content_block":{"type":"text","text":""}}\n\n',
+        );
+        response.write(
+          'event: content_block_delta\ndata: {"type":"content_block_delta","index":2,"delta":{"type":"text_delta","text":"After held call"}}\n\n',
+        );
+      } else if (provider === "responses") {
+        response.write(
+          `event: response.output_item.added\ndata: ${JSON.stringify({ type: "response.output_item.added", sequence_number: 2, output_index: 1, item: { type: "function_call", id: "fc-held", call_id: "held-call", name: "lookup", arguments: "{}", status: "in_progress" } })}\n\n`,
+        );
+        response.write(
+          `event: response.in_progress\ndata: ${JSON.stringify({ type: "response.in_progress", sequence_number: 3, response: { id: "resp-cancel", object: "response", created_at: 1, status: "in_progress", model, output: [], usage: { input_tokens: 12, output_tokens: 1, total_tokens: 13 } } })}\n\n`,
+        );
+        response.write(
+          `event: response.output_text.delta\ndata: ${JSON.stringify({ type: "response.output_text.delta", sequence_number: 4, item_id: "msg-cancel", output_index: 0, content_index: 0, delta: "After held call" })}\n\n`,
+        );
+      } else {
+        response.write(
+          `data: ${JSON.stringify({ id: "chatcmpl-cancel", object: "chat.completion.chunk", created: 1, model, choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: "held-call", type: "function", function: { name: "lookup", arguments: "{}" } }] }, finish_reason: null }] })}\n\n`,
+        );
+        response.write(
+          `data: ${JSON.stringify({ id: "chatcmpl-cancel", object: "chat.completion.chunk", created: 1, model, choices: [{ index: 0, delta: { content: "After held call" }, finish_reason: null }] })}\n\n`,
         );
       }
     }
@@ -140,6 +180,7 @@ for (const provider of ["anthropic", "openai", "responses"] as const) {
             closed = true;
           });
           if (mode !== "headers") sendStart(response);
+          if (mode === "tool-stream") sendHeldToolCall(response);
           if (mode === "complete") finish(response);
           received.resolve();
         });
@@ -257,6 +298,42 @@ for (const provider of ["anthropic", "openai", "responses"] as const) {
           const receipts = await InteractionBillingModel.findMany([rows[0].id]);
           expect(receipts).toHaveLength(1);
           expect(receipts[0].usage.status).toBe("incomplete");
+          expect(receipts[0].usage.issues).toContain("partial_stream");
+        }
+      });
+    });
+
+    test("discards unreleased tool calls on disconnect while preserving partial usage", async () => {
+      mode = "tool-stream";
+      const controller = new AbortController();
+      const response = await post(controller.signal);
+      expect(response.status).toBe(200);
+      const reader = response.body?.getReader();
+      expect(reader).toBeDefined();
+      const decoder = new TextDecoder();
+      let receivedText = "";
+      while (!receivedText.includes("After held call")) {
+        const chunk = await reader?.read();
+        expect(chunk?.done).toBe(false);
+        receivedText += decoder.decode(chunk?.value, { stream: true });
+      }
+      expect(receivedText).not.toContain("held-call");
+      controller.abort();
+      await vi.waitFor(() => expect(closed).toBe(true), { timeout: 1500 });
+      await vi.waitFor(() => expect(cleanups).toBe(1));
+      expect(failures).toBe(1);
+      expect(completions).toBe(0);
+      await vi.waitFor(async () => {
+        const rows =
+          await InteractionModel.getAllInteractionsForProfile(agentId);
+        expect(rows).toHaveLength(1);
+        expect(rows[0].inputTokens).toBe(provider === "openai" ? 0 : 12);
+        expect(rows[0].outputTokens).toBe(provider === "openai" ? 0 : 1);
+        expect(JSON.stringify(rows[0].response)).not.toContain("held-call");
+        expect(JSON.stringify(rows[0].response)).not.toContain("lookup");
+        if (provider !== "openai") {
+          const receipts = await InteractionBillingModel.findMany([rows[0].id]);
+          expect(receipts).toHaveLength(1);
           expect(receipts[0].usage.issues).toContain("partial_stream");
         }
       });

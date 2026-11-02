@@ -1,4 +1,5 @@
 {
+  // Tests of the Archestra MCP server and agents.
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "tsBuildInfoFile": "./.tsbuild/tests-agents.tsbuildinfo"

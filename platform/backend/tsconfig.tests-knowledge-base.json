@@ -1,4 +1,5 @@
 {
+  // Tests of knowledge-base connectors and workflows.
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "tsBuildInfoFile": "./.tsbuild/tests-knowledge-base.tsbuildinfo"

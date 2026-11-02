@@ -1,4 +1,5 @@
 {
+  // Tests of the LLM proxy routes.
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "tsBuildInfoFile": "./.tsbuild/tests-routes-proxy.tsbuildinfo"

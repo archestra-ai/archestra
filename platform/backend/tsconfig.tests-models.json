@@ -1,4 +1,5 @@
 {
+  // Tests of models and authentication.
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "tsBuildInfoFile": "./.tsbuild/tests-models.tsbuildinfo"

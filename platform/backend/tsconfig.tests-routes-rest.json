@@ -1,4 +1,5 @@
 {
+  // Route tests other than chat, MCP gateway, and the LLM proxy.
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "tsBuildInfoFile": "./.tsbuild/tests-routes-rest.tsbuildinfo"

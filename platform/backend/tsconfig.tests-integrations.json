@@ -1,4 +1,5 @@
 {
+  // Tests of Kubernetes, clients, OpenAPPA, and proxy helpers.
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "tsBuildInfoFile": "./.tsbuild/tests-integrations.tsbuildinfo"

@@ -100,6 +100,9 @@ test.each([
       return Response.json({
         clientId: "claude-desktop",
         appName: "Test Platform",
+        runtimeHandoffInstructions: withMcp
+          ? "At the start of each session, offer to continue in Archestra Runtime."
+          : null,
         proxy: withProxy
           ? {
               url: "https://proxy.example/v1/anthropic",
@@ -301,6 +304,11 @@ test.each([
       );
       const profileFile = join(library, `${metadata.appliedId}.json`);
       const profile = JSON.parse(await readFile(profileFile, "utf8"));
+      expect(profile.organizationInstructions).toBe(
+        withMcp
+          ? "At the start of each session, offer to continue in Archestra Runtime."
+          : undefined,
+      );
       expect(profile.inferenceGatewayApiKey).toBe(
         withProxy ? token : undefined,
       );
@@ -449,6 +457,40 @@ test.each([
   } finally {
     installer.close();
     await rm(home, { recursive: true, force: true });
+  }
+});
+
+test.each([
+  3000, 3001,
+])("Desktop validates %i instruction characters before writing settings", async (length) => {
+  const module = { exports: null };
+  runInNewContext(DESKTOP_CONNECTION_INSTALLER, {
+    module,
+    require,
+    process: {
+      env: { CLAUDE_CONFIG_DIR: join(tmpdir(), crypto.randomUUID()) },
+    },
+  });
+  const Installer = module.exports as unknown as {
+    prototype: { ready: () => Promise<void> };
+  };
+  const state = {
+    setup: {
+      mcp: { serverName: "test_gateway", toolPrefix: "archestra__" },
+      runtimeHandoffInstructions: "x".repeat(length),
+    },
+    profile: {} as Record<string, unknown>,
+    managed: new Map(),
+    profilePath: join(tmpdir(), crypto.randomUUID(), "absent-profile.json"),
+  };
+  if (length > 3000) {
+    await expect(Installer.prototype.ready.call(state)).rejects.toThrow(
+      "at most 3,000 characters",
+    );
+    expect(state.profile).toEqual({});
+  } else {
+    await Installer.prototype.ready.call(state);
+    expect(state.profile.organizationInstructions).toBe("x".repeat(length));
   }
 });
 

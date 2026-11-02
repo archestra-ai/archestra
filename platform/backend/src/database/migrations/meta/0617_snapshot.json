@@ -10885,7 +10885,7 @@
           "type": "varchar(16)",
           "primaryKey": false,
           "notNull": true,
-          "default": "'block'"
+          "default": "'unattended'"
         },
         "unapprovable_block_mode": {
           "name": "unapprovable_block_mode",

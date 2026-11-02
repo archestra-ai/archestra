@@ -76,8 +76,8 @@ Open a report and click **Investigate in chat**. The agent compares the report w
 
 What to know:
 
-- The Break the glass settings in **Settings → Guardrails** can let a blocked call through and record the yell for you. **Human approval** can be waived in unattended sessions (Agent Runtimes, Scheduled tasks, or any client sending `X-Archestra-Unattended: 1`) or everywhere. **Soft block** lets through calls no approval can lift, except the `blocked` mark.
-- By default, when the agent yells itself, the yell also turns Guardrails off for that session. To keep checking, set **Yell tool** to **Record the yell only**.
+- The Break the glass settings in **Settings → Guardrails** can let a blocked call through and record the yell for you. **Human approval** is waived by default in unattended sessions (Agent Runtimes, Scheduled tasks, or any client sending `X-Archestra-Unattended: 1`), and can be kept or waived everywhere. **Soft block** lets through calls no approval can lift, except the `blocked` mark.
+- By default, when the agent yells itself, the yell also turns Guardrails off for that session. To keep checking, set **Yell tool** to **Record only**.
 - Reports stay in your deployment unless you [enable external diagnostic forwarding](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED) to the shared OpenAPPA reporting service. To turn reports off, set [`ARCHESTRA_OPENAPPA_YELL_ENABLED=false`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_YELL_ENABLED).
 
 Required permissions:

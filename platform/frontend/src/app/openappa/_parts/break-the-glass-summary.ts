@@ -24,7 +24,7 @@ export function breakTheGlassSummary(
   if (deployment.unapprovableBlockMode === "allow")
     lines.push({
       label: "Soft block:",
-      value: "blocked calls are allowed and recorded",
+      value: "waived",
     });
   if (deployment.breakTheGlassEnabled)
     lines.push({

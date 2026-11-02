@@ -123,16 +123,12 @@ export function OpenAppaBreakTheGlassSettings() {
       />
       <BreakTheGlassRow
         title="Soft block"
-        description={
-          <>
-            Blocks no approval can lift; never the <code>blocked</code> mark.
-          </>
-        }
+        description="Blocks no approval can lift."
         value={data?.unapprovableBlockMode}
         disabled={disabled}
         options={[
-          { value: "refuse", label: "Refuse the call" },
-          { value: "allow", label: "Allow and record a yell" },
+          { value: "refuse", label: "Keep the block" },
+          { value: "allow", label: "Waive the block" },
         ]}
         onChange={(unapprovableBlockMode) =>
           update.mutate({ unapprovableBlockMode })
@@ -150,11 +146,8 @@ export function OpenAppaBreakTheGlassSettings() {
         }
         disabled={disabled}
         options={[
-          { value: "record", label: "Record the yell only" },
-          {
-            value: "off",
-            label: "Record the yell and turn Guardrails off for the session",
-          },
+          { value: "record", label: "Record only" },
+          { value: "off", label: "Record and turn Guardrails off" },
         ]}
         onChange={(value) =>
           update.mutate({ breakTheGlassEnabled: value === "off" })

@@ -21,7 +21,7 @@ describe("breakTheGlassSummary", () => {
       }),
     ).toEqual([
       { label: "Human approval:", value: "waived in unattended sessions" },
-      { label: "Soft block:", value: "blocked calls are allowed and recorded" },
+      { label: "Soft block:", value: "waived" },
     ]);
     expect(
       breakTheGlassSummary({

@@ -71,7 +71,7 @@ describe("Deployment-wide Guardrails v2 switch", () => {
           enabled,
           unsupportedClientAction: "bypass",
           breakTheGlassEnabled: true,
-          humanApprovalMode: "block",
+          humanApprovalMode: "unattended",
           unapprovableBlockMode: "refuse",
           annotatorModelId: null,
           annotatorLlmApiKeyId: null,
@@ -144,14 +144,14 @@ describe("Deployment-wide Guardrails v2 switch", () => {
       method: "PUT",
       url: "/api/guardrails-deployment",
       payload: {
-        humanApprovalMode: "unattended",
+        humanApprovalMode: "everywhere",
         unapprovableBlockMode: "allow",
       },
     });
     expect(response.statusCode, response.body).toBe(200);
     expect(response.json()).toMatchObject({
       enabled: true,
-      humanApprovalMode: "unattended",
+      humanApprovalMode: "everywhere",
       unapprovableBlockMode: "allow",
     });
     await vi.waitFor(async () => {
@@ -163,11 +163,11 @@ describe("Deployment-wide Guardrails v2 switch", () => {
         expect.objectContaining({
           action: "organization.updated",
           before: expect.objectContaining({
-            humanApprovalMode: "block",
+            humanApprovalMode: "unattended",
             unapprovableBlockMode: "refuse",
           }),
           after: expect.objectContaining({
-            humanApprovalMode: "unattended",
+            humanApprovalMode: "everywhere",
             unapprovableBlockMode: "allow",
           }),
         }),

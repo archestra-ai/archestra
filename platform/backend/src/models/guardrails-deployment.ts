@@ -20,7 +20,7 @@ class GuardrailsDeploymentModel {
         enabled: false,
         unsupportedClientAction: "bypass" as const,
         breakTheGlassEnabled: true,
-        humanApprovalMode: "block" as const,
+        humanApprovalMode: "unattended" as const,
         unapprovableBlockMode: "refuse" as const,
         annotatorModelId: null,
         annotatorLlmApiKeyId: null,

@@ -345,6 +345,8 @@ describe("battery helper bridge", () => {
     expect(params?.secretEnv).toEqual([
       { name: "APPA_PROVIDER_GITHUB_TOKEN", value: CREDENTIAL_VALUE },
     ]);
+    expect(params?.timeoutSeconds).toBe(4);
+    expect(params?.command).toMatch(/^APPA_CONSULT_TIMEOUT_MS=4000 /);
     // Everything the run carries besides the secret channel: the mounted
     // battery files, the command, the envelope on stdin.
     const { secretEnv: _secret, ...rest } = params ?? {};

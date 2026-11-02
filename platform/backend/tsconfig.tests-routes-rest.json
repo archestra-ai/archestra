@@ -1,11 +1,12 @@
 {
-  // Tests of the Archestra MCP server and the agents.
-  "extends": "./tsconfig.test-project.json",
-  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-domain-b.tsbuildinfo" },
+  // Route tests other than chat, MCP gateway, and the LLM proxy.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./.tsbuild/tests-routes-rest.tsbuildinfo"
+  },
   "include": [
     "src/ambient/*.d.ts",
-    "src/archestra-mcp-server/**/*.test.ts",
-    "src/agents/**/*.test.ts"
+    "src/routes/**/*.test.ts"
   ],
   "references": [
     { "path": "../shared/tsconfig.lib.json" },
@@ -18,5 +19,10 @@
     { "path": "./tsconfig.runtime.json" },
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.test-support.json" }
+  ],
+  "exclude": [
+    "src/routes/chat/**",
+    "src/routes/mcp-gateway/**",
+    "src/routes/proxy/**"
   ]
 }

@@ -1,15 +1,15 @@
 {
-  // Tests of the models whose files start with a to c.
-  "extends": "./tsconfig.test-project.json",
-  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-models-a.tsbuildinfo" },
+  // Tests of Kubernetes, clients, OpenAPPA, and proxy helpers.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./.tsbuild/tests-integrations.tsbuildinfo"
+  },
   "include": [
     "src/ambient/*.d.ts",
-    "src/models/a*.test.ts",
-    "src/models/a*/**/*.test.ts",
-    "src/models/b*.test.ts",
-    "src/models/b*/**/*.test.ts",
-    "src/models/c*.test.ts",
-    "src/models/c*/**/*.test.ts"
+    "src/k8s/**/*.test.ts",
+    "src/clients/**/*.test.ts",
+    "src/openappa/**/*.test.ts",
+    "src/proxy/**/*.test.ts"
   ],
   "references": [
     { "path": "../shared/tsconfig.lib.json" },

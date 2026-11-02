@@ -1,10 +1,12 @@
 {
-  // Tests of the knowledge base.
-  "extends": "./tsconfig.test-project.json",
-  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-domain-a.tsbuildinfo" },
+  // Tests of the LLM proxy routes.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./.tsbuild/tests-routes-proxy.tsbuildinfo"
+  },
   "include": [
     "src/ambient/*.d.ts",
-    "src/knowledge-base/**/*.test.ts"
+    "src/routes/proxy/**/*.test.ts"
   ],
   "references": [
     { "path": "../shared/tsconfig.lib.json" },

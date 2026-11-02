@@ -12,6 +12,7 @@ import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaActor } from "@/openappa/actor";
+import { isUnattendedSession } from "@/openappa/break-the-glass";
 import {
   mintChildTrajectoryReceipt,
   stripChildTrajectoryReceipts,
@@ -6253,6 +6254,15 @@ describe("rendering runtime text for this client", () => {
         { sessionId: "unattended-run", kind: "approval_waived" },
         { sessionId: "unattended-run", kind: "block_waived" },
       ]);
+      // The gateway learns from the proxy which sessions no person answers for.
+      const unattended = async (sessionId: string) =>
+        isUnattendedSession({
+          organization_id: organizationId,
+          session_id: sessionId,
+        });
+      expect(await unattended("unattended-run")).toBe(true);
+      expect(await unattended("runtime-run")).toBe(true);
+      expect(await unattended("attended-run")).toBe(false);
     } finally {
       cancelCalls.mockRestore();
       evaluateToolCalls.mockRestore();

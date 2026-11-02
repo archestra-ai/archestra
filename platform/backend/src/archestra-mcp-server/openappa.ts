@@ -21,6 +21,11 @@ import OpenappaExternalConsultModel from "@/models/openappa-external-consult";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import {
+  humanApprovalWaived,
+  isUnattendedSession,
+  recordWaivedReview,
+} from "@/openappa/break-the-glass";
 import { compositionView } from "@/openappa/composition-view";
 import {
   coverageVisibility,
@@ -1233,6 +1238,8 @@ const registry = defineArchestraTools([
         : null;
 
       let ruling: "approve" | "deny" | undefined;
+      // The platform approved the review under Break the glass: no person did.
+      let waivedReview = false;
       let reviewOutcome: ClosedHitlReviewOutcome | undefined;
       let precheckRefusal: string | undefined;
       if (review) {
@@ -1260,6 +1267,19 @@ const registry = defineArchestraTools([
             // A none entry from before closures were stored has no reason.
             // That is not a denial, and it must not open another question.
             reviewOutcome = reviewOutcomeFromClosure(cached.closure);
+          } else if (
+            await breakTheGlassWaivesReview({
+              session: reviewSession,
+              spender,
+              review,
+            })
+          ) {
+            // No person is there to answer in an unattended session, and the
+            // Human approval setting lets such a plan through: the platform
+            // approves the review itself and records a yell, instead of
+            // staging a question nobody answers.
+            ruling = "approve";
+            waivedReview = true;
           } else if (context.mrtr || context.elicitation) {
             const stagedReview = {
               offerId: remedy.offer_id,
@@ -1419,6 +1439,19 @@ const registry = defineArchestraTools([
         (await policyPublishedSince(context.organizationId, headBeforeReview))
       )
         return supersededReview(byOffer.result);
+      if (waivedReview) {
+        // No person ruled: the receipt says so, and no human ruling is
+        // attached for the chat card to show.
+        return {
+          ...byOffer.result,
+          content: Array.isArray(byOffer.result.content)
+            ? [
+                ...byOffer.result.content,
+                { type: "text" as const, text: WAIVED_REVIEW_RECEIPT },
+              ]
+            : byOffer.result.content,
+        };
+      }
       // Display-only: the chat card displays the human ruling.
       // `_meta` does not reach the model; the model reads the ruling from result text.
       const content =
@@ -1742,6 +1775,35 @@ function unknownOfferResult() {
       },
     ],
   };
+}
+
+const WAIVED_REVIEW_RECEIPT =
+  "[appa] Break the glass receipt: this plan needed a person's approval, and no person answers in this unattended session, so the platform approved the review itself and recorded a yell in Guardrails → Yells. No human ruled. Follow the runtime outcome above. If a retry is authorized and still requested, copy its exact arguments without reconstructing or changing them.";
+
+/**
+ * Whether the Break the glass settings answer this review in place of a
+ * person, and record that they did. No person answers in an unattended
+ * session: one the proxy admitted as such (an Agent Runtime run, known from
+ * its credential, or a client sending the unattended header), or a workload
+ * spending its own offer. With Human approval waived everywhere no session
+ * waits. The record fails closed: without it the review waits for a person.
+ */
+async function breakTheGlassWaivesReview(params: {
+  session: OpenAppaSession;
+  spender: string;
+  review: { tool?: string };
+}): Promise<boolean> {
+  const settings = await getGuardrailsDeployment();
+  if (!settings.active || settings.humanApprovalMode === "block") return false;
+  const unattended =
+    parseWorkloadPrincipal(params.spender) !== null ||
+    (await isUnattendedSession(params.session));
+  if (!humanApprovalWaived(settings, unattended)) return false;
+  return recordWaivedReview({
+    session: params.session,
+    tool: params.review.tool ?? "a reviewed call",
+    superyell: breakTheGlassActiveIn(settings),
+  });
 }
 
 function nativeReviewRequiredResult(offerId: string): CallToolResult {

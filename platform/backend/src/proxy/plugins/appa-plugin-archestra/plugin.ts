@@ -40,6 +40,7 @@ import { childSessionId, clientSessionId } from "@/openappa/actor";
 import {
   isUnattendedRequest,
   recordWaivedCall,
+  rememberUnattendedSession,
   waiverFor,
 } from "@/openappa/break-the-glass";
 import {
@@ -242,6 +243,8 @@ type AppaPluginBinding = {
   chat: boolean;
   compaction: boolean;
   requestHeaders: IncomingHttpHeaders;
+  /** No person is there to answer this request's approvals. */
+  unattended: boolean;
   /** A verified user-question result needs trusted workflow continuation. */
   requiresQuestionContinuation: boolean;
   /** A remedy notice requires an immediate control-tool call. */
@@ -371,6 +374,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       compaction: trustedContext.compaction === true,
       threadContinue: trustedContext.thread === "continue",
       requestHeaders: context.headers,
+      unattended: isUnattendedRequest({
+        headers: context.headers,
+        agentRuntimeRun: trustedContext.agentRuntimeRun === true,
+      }),
       requiresQuestionContinuation: false,
       requiresRemedyContinuation: false,
       pendingHitlReviewOfferIds: [],
@@ -394,6 +401,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       issueChildTrajectoryReceipt(context, binding.session, trajectory.child);
     }
     this.bindings.set(context.resources, binding);
+    // The gateway decides a remedy plan's review without the runtime
+    // credential or the client's headers, so it learns from the proxy that no
+    // person answers for this session.
+    if (binding.unattended) await rememberUnattendedSession(binding.session);
   }
 
   async onToolResults(
@@ -1814,11 +1825,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         const waiver = waiverFor({
           decision,
           settings,
-          unattended: isUnattendedRequest({
-            headers: binding.requestHeaders,
-            agentRuntimeRun:
-              getTrustedContext(context.resources)?.agentRuntimeRun === true,
-          }),
+          unattended: binding.unattended,
         });
         if (
           waiver &&

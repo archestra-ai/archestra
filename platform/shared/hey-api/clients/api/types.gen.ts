@@ -20638,6 +20638,12 @@ export type GetAgentVersionResponses = {
             } | null;
             identityProviderId: string | null;
             environmentId: string | null;
+            networkPolicy: {
+                egressMode: 'off' | 'restricted' | 'unrestricted';
+                domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                allowedDomains: Array<string>;
+                allowedCidrs: Array<string>;
+            } | null;
             tools: Array<{
                 toolId: string;
                 name: string;

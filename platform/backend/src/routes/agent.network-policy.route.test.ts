@@ -165,4 +165,145 @@ describe("agent routes - per-agent network policy", () => {
     });
     expect(unlocked.statusCode).toBe(403);
   });
+
+  test("soft-delete, restore, and permanent delete each reconcile the agent's engine", async () => {
+    const app = await appFor(admin);
+    const reconcile = vi.spyOn(
+      daggerEnvironmentRuntimeManager,
+      "reconcileAgent",
+    );
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/agents",
+      payload: {
+        name: "Purged agent",
+        agentType: "agent",
+        networkPolicy: { egressMode: "off" },
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    const agentId = created.json().id;
+    await drainBackgroundWork();
+    reconcile.mockClear();
+
+    const softDeleted = await app.inject({
+      method: "DELETE",
+      url: `/api/agents/${agentId}`,
+    });
+    expect(softDeleted.statusCode).toBe(200);
+    await drainBackgroundWork();
+    expect(reconcile).toHaveBeenCalledTimes(1);
+    expect(reconcile).toHaveBeenCalledWith(agentId);
+
+    const restored = await app.inject({
+      method: "POST",
+      url: `/api/agents/${agentId}/restore`,
+    });
+    expect(restored.statusCode).toBe(200);
+    await drainBackgroundWork();
+    expect(reconcile).toHaveBeenCalledTimes(2);
+
+    const softDeletedAgain = await app.inject({
+      method: "DELETE",
+      url: `/api/agents/${agentId}`,
+    });
+    expect(softDeletedAgain.statusCode).toBe(200);
+    await drainBackgroundWork();
+    reconcile.mockClear();
+
+    const purged = await app.inject({
+      method: "DELETE",
+      url: `/api/agents/${agentId}/permanent`,
+    });
+    expect(purged.statusCode).toBe(200);
+    await drainBackgroundWork();
+    expect(reconcile).toHaveBeenCalledTimes(1);
+    expect(reconcile).toHaveBeenCalledWith(agentId);
+  });
+
+  test("version restore replays networkPolicy, reconciles the engine, and requires environment update permission when the policy changes", async () => {
+    const memberApp = await appFor(member);
+    const adminApp = await appFor(admin);
+    const reconcile = vi.spyOn(
+      daggerEnvironmentRuntimeManager,
+      "reconcileAgent",
+    );
+
+    // Version 1: created by member, inheriting environment policy (null)
+    const created = await memberApp.inject({
+      method: "POST",
+      url: "/api/agents",
+      payload: {
+        name: "Versioned agent",
+        description: "v1",
+        agentType: "agent",
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    const agentId = created.json().id;
+
+    // Version 2: admin sets a custom network policy
+    const v2 = await adminApp.inject({
+      method: "PUT",
+      url: `/api/agents/${agentId}`,
+      payload: {
+        description: "v2",
+        networkPolicy: {
+          egressMode: "restricted",
+          allowedDomains: ["api.example.com"],
+        },
+      },
+    });
+    expect(v2.statusCode).toBe(200);
+
+    // Version 3: admin clears the policy back to inherit
+    const v3 = await adminApp.inject({
+      method: "PUT",
+      url: `/api/agents/${agentId}`,
+      payload: {
+        description: "v3",
+        networkPolicy: null,
+      },
+    });
+    expect(v3.statusCode).toBe(200);
+    await drainBackgroundWork();
+    reconcile.mockClear();
+
+    // Member cannot restore v2 because it changes networkPolicy without environment:update
+    const memberDenied = await memberApp.inject({
+      method: "POST",
+      url: `/api/agents/${agentId}/versions/2/restore`,
+      payload: {},
+    });
+    expect(memberDenied.statusCode).toBe(403);
+
+    // Member CAN restore v1 because networkPolicy is null in both v3 and v1
+    const memberAllowed = await memberApp.inject({
+      method: "POST",
+      url: `/api/agents/${agentId}/versions/1/restore`,
+      payload: {},
+    });
+    expect(memberAllowed.statusCode).toBe(200);
+    expect(memberAllowed.json().description).toBe("v1");
+    expect(memberAllowed.json().networkPolicy).toBeNull();
+
+    // Admin restores v2, replaying the custom networkPolicy and reconciling the engine
+    const adminRestored = await adminApp.inject({
+      method: "POST",
+      url: `/api/agents/${agentId}/versions/2/restore`,
+      payload: {},
+    });
+    expect(adminRestored.statusCode).toBe(200);
+    expect(adminRestored.json().description).toBe("v2");
+    expect(adminRestored.json().networkPolicy).toEqual({
+      egressMode: "restricted",
+      domainPreset: "none",
+      allowedDomains: ["api.example.com"],
+      allowedCidrs: [],
+    });
+    await drainBackgroundWork();
+    expect(reconcile).toHaveBeenCalledTimes(1);
+    expect(reconcile).toHaveBeenCalledWith(agentId);
+  });
 });

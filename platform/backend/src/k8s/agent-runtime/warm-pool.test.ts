@@ -303,7 +303,11 @@ test("keeps tier L spares apart: none by default, and no pool slot taken from th
       return HttpResponse.json(body, { status: 201 });
     }),
   );
-  const poolOf = (tier: "M" | "L", resources: object = DEFAULT_SIZES[tier]) => {
+  const poolOf = (
+    tier: "M" | "L",
+    resources: object = DEFAULT_SIZES[tier],
+    effectiveNetworkPolicy = SPEC.effectiveNetworkPolicy,
+  ) => {
     const {
       warmPoolSize: _,
       cpuLimit: __,
@@ -318,6 +322,7 @@ test("keeps tier L spares apart: none by default, and no pool slot taken from th
       tier,
       resources: sized,
       poolScope: "org:default",
+      effectiveNetworkPolicy,
     }).name;
   };
   const replicasByPool = () =>
@@ -333,6 +338,23 @@ test("keeps tier L spares apart: none by default, and no pool slot taken from th
   config.agentRuntime.warmPoolMaxPools = 1;
   await agentWarmPoolManager.reconcile();
   expect(replicasByPool()).toEqual({ [poolOf("M")]: 2 });
+
+  // An agent with its own network policy gets a distinct warm pool from one
+  // inheriting the environment policy.
+  pools = [];
+  const offPolicy = {
+    egressMode: "off" as const,
+    domainPreset: "none" as const,
+    allowedDomains: [],
+    allowedCidrs: [],
+  };
+  vi.spyOn(AgentModel, "listWarmPoolCandidates").mockResolvedValueOnce([
+    { ...candidate("worker", "M"), agentPolicy: offPolicy },
+  ] as Awaited<ReturnType<typeof AgentModel.listWarmPoolCandidates>>);
+  await agentWarmPoolManager.reconcile();
+  expect(replicasByPool()).toEqual({
+    [poolOf("M", DEFAULT_SIZES.M, { source: "agent", policy: offPolicy })]: 2,
+  });
 
   // An administrator gives L one spare and a larger size: a small pool of
   // that size, next to M's two spares.

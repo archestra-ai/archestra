@@ -106,7 +106,7 @@ export function syncAgentNetworkRuntimes(params: {
 // === Internal helpers ===
 
 // Field-wise: a policy read back from jsonb does not keep its key order.
-function sameNetworkPolicy(
+export function sameNetworkPolicy(
   a: NetworkPolicy | null,
   b: NetworkPolicy | null,
 ): boolean {

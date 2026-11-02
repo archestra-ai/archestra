@@ -78049,6 +78049,48 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "networkPolicy": {
+                          "default": null,
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "egressMode": {
+                              "type": "string",
+                              "enum": [
+                                "off",
+                                "restricted",
+                                "unrestricted"
+                              ]
+                            },
+                            "domainPreset": {
+                              "type": "string",
+                              "enum": [
+                                "none",
+                                "common_dependencies",
+                                "package_managers"
+                              ]
+                            },
+                            "allowedDomains": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "allowedCidrs": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "egressMode",
+                            "domainPreset",
+                            "allowedDomains",
+                            "allowedCidrs"
+                          ],
+                          "additionalProperties": false
+                        },
                         "tools": {
                           "type": "array",
                           "items": {
@@ -78272,6 +78314,7 @@
                         "llmApiKey",
                         "identityProviderId",
                         "environmentId",
+                        "networkPolicy",
                         "tools",
                         "excludedTools",
                         "excludedSubagents",

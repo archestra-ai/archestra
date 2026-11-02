@@ -2679,6 +2679,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
+      if (deletedAgent?.networkPolicy) {
+        syncAgentNetworkRuntimes({ agentId: id, organizationId });
+      }
+
       return reply.send({ success: true });
     },
   );

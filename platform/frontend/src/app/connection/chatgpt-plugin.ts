@@ -13,10 +13,12 @@ type Skill = archestraApiTypes.GetSkillResponses["200"];
 export async function buildChatgptPlugin({
   appName,
   gatewayUrl,
+  frontendUrl,
   skills,
 }: {
   appName: string;
   gatewayUrl: string;
+  frontendUrl: string;
   skills: Skill[];
 }) {
   validateChatgptGatewayUrl(gatewayUrl);
@@ -40,6 +42,43 @@ export async function buildChatgptPlugin({
       .slice(0, 40)
       .replace(/-$/g, "") || "gateway"
   }-connect-${endpointId}`;
+  // Keep the onboarding skill separate from every selected shared skill.
+  const setupBase = `gateway-setup-${endpointId}`;
+  let setupName = setupBase;
+  for (
+    let suffix = 2;
+    skills.some((skill) => skill.name === setupName);
+    suffix++
+  )
+    setupName = `${setupBase}-${suffix}`;
+  const setupPath = `skills/${setupName}/SKILL.md`;
+  zip.file(
+    setupPath,
+    [
+      "---",
+      `name: ${JSON.stringify(setupName)}`,
+      'description: "Set up this gateway in ChatGPT and check local sandbox prerequisites before desktop shell commands."',
+      "---",
+      "",
+      "# Set up the gateway",
+      "",
+      "Connect the gateway account through the plugin's OAuth flow. A successful gateway sign-in does not verify the local desktop sandbox.",
+      "",
+      "For ChatGPT web chats and dots, use the remote MCP tools and bundled skills. Do not ask people to install local Linux packages for these surfaces.",
+      "",
+      "For local Work or Codex tasks in the desktop app, complete the terminal setup before running shell commands. Open the connection page below, select ChatGPT, and run its desktop setup command on the computer running the app. This checks the local sandbox before changing client configuration. On Windows, use the Windows command even when the app runs Codex in WSL. Restart ChatGPT after setup.",
+      "",
+      new URL("/connection?clientId=chatgpt", frontendUrl).href,
+      "",
+      'The Windows setup checks the default WSL distribution. If the desktop project uses another distribution, set `$env:ARCHESTRA_CODEX_WSL_DISTRIBUTION = "YourDistribution"` in PowerShell before running setup. Verify the harmless command in that desktop project afterward.',
+      "",
+      "If Linux or WSL reports that bubblewrap is unavailable, have the person install it in that Linux environment: Ubuntu/Debian: `sudo apt install bubblewrap`; Fedora: `sudo dnf install bubblewrap`. Run these in the person's terminal, then rerun desktop setup. Do not run sudo or change system packages without their approval. Native Windows and macOS do not need this Linux package.",
+      "",
+      "If bubblewrap is installed but cannot create a user namespace, follow https://learn.chatgpt.com/docs/sandboxing#prerequisites. Keep sandbox and Guardrails protections enabled; do not work around a failed sandbox by switching to full access or bypassing approvals.",
+      "",
+      "After setup, verify one harmless local command and its exit status. A Guardrails approval alone is not proof that the command executed. If execution fails, report the actual error and repair the prerequisite before retrying.",
+    ].join("\n"),
+  );
   zip.file(
     "plugin.json",
     JSON.stringify(
@@ -50,6 +89,7 @@ export async function buildChatgptPlugin({
         description: `MCP tools and skills from ${appName}`,
         extensions: {
           "com.openai": {
+            onboardingSkill: `./${setupPath}`,
             interface: {
               displayName: appName,
               shortDescription: "Your team's tools and skills",

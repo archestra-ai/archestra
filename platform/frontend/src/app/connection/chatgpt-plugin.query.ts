@@ -32,7 +32,11 @@ export function useDownloadChatgptPlugin() {
           skills.push(data);
         }
       }
-      return buildChatgptPlugin({ ...params, skills });
+      return buildChatgptPlugin({
+        ...params,
+        frontendUrl: window.location.origin,
+        skills,
+      });
     },
     onSuccess: ({ bytes, filename, skillCount, omitted, unportable }) => {
       const url = URL.createObjectURL(
@@ -44,7 +48,7 @@ export function useDownloadChatgptPlugin() {
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       toast.success(
-        `Plugin downloaded with ${skillCount} ${skillCount === 1 ? "skill" : "skills"}.`,
+        `Plugin downloaded with setup guidance and ${skillCount} shared ${skillCount === 1 ? "skill" : "skills"}.`,
       );
       if (omitted.length)
         toast.info(

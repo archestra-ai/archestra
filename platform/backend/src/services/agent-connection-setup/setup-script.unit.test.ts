@@ -965,6 +965,7 @@ describe("renderSetupScript", () => {
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 fs.appendFileSync(process.env.ARCHESTRA_TEST_COMMAND_LOG, JSON.stringify({ executable: process.argv[1], args }) + "\\n");
+if (args[0] === "sandbox" || (args[0] === "help" && args[1] === "sandbox")) process.exit(0);
 if (args[0] === "debug") {
   process.stdout.write(JSON.stringify({models:[{slug:'one',tool_mode:'code_mode_only',supports_search_tool:true},{slug:'two',tool_mode:null}]}));
   process.exit(0);
@@ -1039,7 +1040,10 @@ cat "$1" | bash
             (call) =>
               call.executable === path.join(bin, binary) &&
               (call.args[0] === "mcp" ||
-                (clientId === "codex" && call.args[0] === "debug")),
+                (clientId === "codex" &&
+                  (call.args[0] === "debug" ||
+                    call.args[0] === "sandbox" ||
+                    (call.args[0] === "help" && call.args[1] === "sandbox")))),
           ),
         ).toBe(true);
         expect(setupCalls.some((call) => call.args.includes("add"))).toBe(true);

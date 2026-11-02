@@ -862,7 +862,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         insertRequestGuidance({
           request: context.request,
           interactionType: context.interactionType,
-          guidance: EXTERNAL_REMEDY_WORKFLOW_GUIDANCE,
+          guidance: externalRemedyWorkflowGuidance(binding.request.tools),
           onContinue: binding.threadContinue ? "skip" : undefined,
         });
       }
@@ -5519,8 +5519,30 @@ const EXTERNAL_REMEDY_WORKFLOW_GUIDANCE = [
   "Put the offer ID in remedy_offer_ids, and use the header Approval and the options Approve and Deny.",
   "The platform shows the user the exact review.",
   "Retry the blocked call only after execute_remedy_plan reports that the plan is authorized.",
+  "If the latest ruling offers no remedy plan, stop that blocked action and explain the refusal. Do not reuse an earlier offer or repeat a refused remedy call.",
   "If a plan makes no sense, you keep getting blocked, the user keeps being asked to approve similar calls, or the user is frustrated, call yell.",
 ].join(" ");
+
+function externalRemedyWorkflowGuidance(
+  tools: NonNullable<AppaPluginBinding["request"]["tools"]>,
+): string {
+  // A client can connect several gateways with identical leaf names. Bind
+  // instructions to the same verified declaration that receives our stamps.
+  const member = (tool: { name: string; namespace?: string }) =>
+    JSON.stringify({
+      name: tool.name,
+      ...(tool.namespace ? { namespace: tool.namespace } : {}),
+    });
+  return [
+    EXTERNAL_REMEDY_WORKFLOW_GUIDANCE,
+    `For offers from this proxy, execute_remedy_plan is the declared tool ${member(tools.control)}. Use this exact name and namespace. A same-named tool on another MCP server cannot execute these offers.`,
+    ...(tools.askUser
+      ? [
+          `The offer-bound ask_user review tool is ${member(tools.askUser)}. Use this exact name and namespace for remedy reviews.`,
+        ]
+      : []),
+  ].join(" ");
+}
 
 const LEGACY_NATIVE_QUESTION_ID_PATTERN =
   /^(toolu|call|aq)_aq1_([A-Za-z0-9_-]{16})_([A-Za-z0-9_-]{22})$/;

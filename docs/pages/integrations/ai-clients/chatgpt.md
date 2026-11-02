@@ -14,7 +14,7 @@ Your ChatGPT account must permit plugin archive uploads and custom MCP servers. 
 1. On **Connect**, select **ChatGPT**. Use **Choose what to include** to change the gateway or leave skills out.
 2. Click **Download ChatGPT plugin**. The ZIP contains the gateway URL, OAuth settings, and copies of your accessible portable skills, including their scripts and reference files. The export adds no OAuth access tokens or client secrets.
 3. After the download finishes, click **Open ChatGPT** to open the desktop Plugins page, or **Configure on web instead** to use the browser. Choose **Upload plugin archive** and upload the ZIP. If uploads are restricted, ask your workspace administrator to upload it through the workspace's plugin controls.
-4. Review the plugin, install it, and connect your gateway account through OAuth. Start a new conversation with the plugin selected and ask which tools and skills are available.
+4. Review the plugin, install it, and connect your gateway account through OAuth. Run the plugin's setup workflow to check desktop prerequisites before local tasks. Start a new conversation with the plugin selected and ask which tools and skills are available.
 
 Use **Download again** to return to the download step. Refreshing the page starts from the download step too. The desktop action uses the app-registered `codex://plugins` route; the web link is the fallback when the desktop app is unavailable or the browser blocks an app launch.
 
@@ -22,13 +22,19 @@ The endpoint is inferred from your deployment, like other clients. Administrator
 
 ## Skills and Updates
 
-The archive is a snapshot of readable standalone skills. Templated and agent-bound skills require Archestra activation and are omitted with a notice. A skill is also omitted with a notice when its name is not a portable skill name: up to 64 lowercase letters and digits, with single hyphens between words. Rename it to include it. Re-download and upload a new archive after changing skills. Removing the uploaded plugin removes its bundled skills; remove its connection from any dot that uses it too.
+The archive includes a gateway setup workflow even when you leave shared skills out. It guides local desktop setup and sandbox repairs; web chats and dots do not need local Linux packages.
+
+Shared skills are a snapshot of readable standalone skills. Templated and agent-bound skills require Archestra activation and are omitted with a notice. A skill is also omitted with a notice when its name is not a portable skill name: up to 64 lowercase letters and digits, with single hyphens between words. Rename it to include it. Re-download and upload a new archive after changing skills. Removing the uploaded plugin removes its bundled skills; remove its connection from any dot that uses it too.
 
 <a id="local-work-inference"></a>
 
 ## Use Guardrails in the Desktop App
 
 The desktop app's Work and Codex tabs run on your computer and read the Codex settings there. Route them through the [LLM Proxy](/docs/llm-proxy), and Guardrails check every tool call, such as a shell command in a Work task.
+
+Setup checks the local sandbox before changing settings. On Linux, it runs a harmless command through Codex's sandbox. When the Windows desktop app runs Codex in WSL, it checks `bubblewrap` in WSL's default distribution. If your desktop project uses another distribution, set `$env:ARCHESTRA_CODEX_WSL_DISTRIBUTION = "YourDistribution"` in PowerShell before running setup.
+
+A failed check stops setup with repair instructions. On Ubuntu or Debian, run `sudo apt install bubblewrap` in the checked Linux environment, then rerun setup. For namespace errors, follow OpenAI's [sandbox prerequisites](https://learn.chatgpt.com/docs/sandboxing#prerequisites).
 
 1. On **Connect**, select **ChatGPT**. Keep **LLM proxy** on under **Choose what to include**.
 2. Under **Set up the desktop app**, click **Copy** and run the command in a terminal on the computer with the desktop app. The command runs the Codex setup, so the approval page names Codex.

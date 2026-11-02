@@ -188,6 +188,10 @@ fs.writeFileSync(${JSON.stringify(seen)}, JSON.stringify({home: env.CODEX_HOME, 
 process.exit(2);`,
     );
     await writeFile(helper, CODEX_HANDOFF_HELPER);
+    // A new file can be slightly ahead of Date.now() on a high-resolution
+    // filesystem. It remains recent; a substantial future timestamp does not.
+    const slightlyAhead = new Date(Date.now() + 500);
+    await utimes(catalogPath, slightlyAhead, slightlyAhead);
     for (const args of [
       ["exec", "--help"],
       ["exec", "verify the gateway"],
@@ -206,6 +210,13 @@ process.exit(2);`,
     expect(await readFile(path.join(codexHome, "config.toml"), "utf8")).toBe(
       config,
     );
+    const farAhead = new Date(Date.now() + 60_000);
+    await utimes(catalogPath, farAhead, farAhead);
+    await expect(
+      exec(process.execPath, [helper, "--direct", shim, "exec", "--help"], {
+        env: nested,
+      }),
+    ).rejects.toMatchObject({ code: 1 });
     await writeFile(
       catalogPath,
       JSON.stringify({

@@ -7,6 +7,7 @@ import { buildChatgptPlugin } from "./chatgpt-plugin";
 const params = {
   appName: "Example Platform",
   gatewayUrl: "https://gateway.example.test/v1/mcp/team",
+  frontendUrl: "http://dashboard.example.test:3000",
 };
 
 describe("ChatGPT plugin archive", () => {
@@ -83,6 +84,57 @@ describe("ChatGPT plugin archive", () => {
     ).toBe(false);
     expect(body).not.toContain(skill.organizationId);
     expect(result.skillCount).toBe(1);
+  });
+
+  it("includes a runnable onboarding skill even when no shared skills are selected", async () => {
+    const result = await buildChatgptPlugin({ ...params, skills: [] });
+    const zip = await JSZip.loadAsync(result.bytes);
+    const manifest = JSON.parse(
+      await requiredFile(zip, "plugin.json").async("string"),
+    );
+    const setupPath = manifest.extensions["com.openai"].onboardingSkill.replace(
+      /^\.\//,
+      "",
+    );
+    const setup = await requiredFile(zip, setupPath).async("string");
+    expect(setup).toContain(
+      "http://dashboard.example.test:3000/connection?clientId=chatgpt",
+    );
+    expect(setup).toContain("sudo apt install bubblewrap");
+    expect(setup).toContain(
+      "A Guardrails approval alone is not proof that the command executed",
+    );
+    expect(result.skillCount).toBe(0);
+  });
+
+  it("does not overwrite a selected skill whose name collides with onboarding", async () => {
+    const initial = await buildChatgptPlugin({ ...params, skills: [] });
+    const initialZip = await JSZip.loadAsync(initial.bytes);
+    const initialManifest = JSON.parse(
+      await requiredFile(initialZip, "plugin.json").async("string"),
+    );
+    const initialPath: string =
+      initialManifest.extensions["com.openai"].onboardingSkill;
+    const skill = {
+      ...makeSkillDetail("example"),
+      name: initialPath.split("/")[2],
+    };
+    const result = await buildChatgptPlugin({ ...params, skills: [skill] });
+    const zip = await JSZip.loadAsync(result.bytes);
+    const manifest = JSON.parse(
+      await requiredFile(zip, "plugin.json").async("string"),
+    );
+    expect(manifest.extensions["com.openai"].onboardingSkill).not.toBe(
+      initialPath,
+    );
+    expect(
+      await requiredFile(zip, initialPath.replace(/^\.\//, "")).async("string"),
+    ).toContain(skill.content);
+    expect(
+      zip.file(
+        manifest.extensions["com.openai"].onboardingSkill.replace(/^\.\//, ""),
+      ),
+    ).not.toBeNull();
   });
 
   it.each([
@@ -193,9 +245,7 @@ describe("ChatGPT plugin archive", () => {
     });
     expect(result.omitted).toEqual([skill.name]);
     const zip = await JSZip.loadAsync(result.bytes);
-    expect(
-      Object.keys(zip.files).some((name) => name.startsWith("skills/")),
-    ).toBe(false);
+    expect(zip.file(`skills/${skill.name}/SKILL.md`)).toBeNull();
   });
 
   it.each([

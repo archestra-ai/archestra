@@ -1,4 +1,52 @@
 import { SETUP_STOPPED_EXIT_CODE } from "../types";
+import { CODEX_SANDBOX_PREFLIGHT } from "./codex-sandbox-preflight";
+
+const CODEX_TOML_PARSER = String.raw`
+function tomlTables(lines) {
+  const tables = [];
+  const active = new Set();
+  let quoted = '';
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index];
+    if (!quoted) {
+      active.add(index);
+      const match = /^\s*(\[\[?)([^\]]+)\]\]?\s*(?:#.*)?$/.exec(line);
+      if (match) tables.push({ index, name: (match[1] === '[[' ? '[' : '') + tomlKey(match[2].trim()) });
+    }
+    for (let i = 0; i < line.length; i++) {
+      const next = line.slice(i, i + 3);
+      if (quoted === '"""' || quoted === "'''") {
+        if (quoted === '"""' && line[i] === '\\') { i++; continue; }
+        if (next === quoted) { quoted = ''; i += 2; }
+      } else if (quoted) {
+        if (quoted === '"' && line[i] === '\\') { i++; continue; }
+        if (line[i] === quoted) quoted = '';
+      } else if (line[i] === '#') {
+        break;
+      } else if (next === '"""' || next === "'''") {
+        quoted = next;
+        i += 2;
+      } else if (line[i] === '"' || line[i] === "'") {
+        quoted = line[i];
+      }
+    }
+    if (quoted === '"' || quoted === "'") quoted = '';
+  }
+  return { tables, active };
+}
+function tomlKey(text) {
+  // A dot inside a quoted key is not a dotted-key separator.
+  return [...text.matchAll(/"(?:[^"\\]|\\.)*"|'[^']*'|[A-Za-z0-9_-]+/g)].map(match => {
+    const key = match[0];
+    if (key.startsWith('"')) return JSON.parse(key.replace(/\\(?:U([0-9a-fA-F]{8})|.)/g, (escape, hex) => hex ? JSON.stringify(String.fromCodePoint(parseInt(hex, 16))).slice(1, -1) : escape));
+    return key.startsWith("'") ? key.slice(1, -1) : key;
+  }).join('\0');
+}
+function tomlAssignment(line) {
+  const match = /^\s*((?:[A-Za-z0-9_-]+|"(?:[^"\\]|\\.)*"|'[^']*')(?:\s*\.\s*(?:[A-Za-z0-9_-]+|"(?:[^"\\]|\\.)*"|'[^']*'))*)\s*=\s*(.*)$/.exec(line);
+  return match ? { key: tomlKey(match[1]), value: match[2] } : undefined;
+}
+`;
 
 /**
  * The ChatGPT desktop app can run Codex in WSL, with the same config.toml as
@@ -9,15 +57,48 @@ import { SETUP_STOPPED_EXIT_CODE } from "../types";
  * @public — asserted by the preflight unit tests, which knip --production ignores.
  */
 export const CODEX_WSL_SETUP_HINT = String.raw`
+${CODEX_TOML_PARSER}
 // The desktop app keeps this switch in the [desktop] table of config.toml.
 function runsCodexInWsl(config) {
+  const lines = config.split(/\r?\n/);
+  const { tables, active } = tomlTables(lines);
+  const headers = new Map(tables.map(table => [table.index, table.name]));
   let table = '';
-  for (const line of config.split(/\r?\n/)) {
-    const header = /^\s*\[\s*([^\]\s]+)\s*\]/.exec(line);
-    if (header) table = header[1];
-    else if (table === 'desktop' && /^\s*runCodexInWindowsSubsystemForLinux\s*=\s*true\b/.test(line)) return true;
+  for (let index = 0; index < lines.length; index++) {
+    if (headers.has(index)) { table = headers.get(index); continue; }
+    if (!active.has(index)) continue;
+    const assignment = tomlAssignment(lines[index]);
+    if (!assignment) continue;
+    const key = table ? table + '\0' + assignment.key : assignment.key;
+    const values = key === 'desktop' ? inlineTomlAssignments(assignment.value).map(field => ({ key: 'desktop\0' + field.key, value: field.value })) : [{ key, value: assignment.value }];
+    if (values.some(field => field.key === 'desktop\0runCodexInWindowsSubsystemForLinux' && /^true\s*(?:#.*)?$/.test(field.value))) return true;
   }
   return false;
+}
+// Inline tables are also a valid way to set the desktop switch. Split only
+// top-level fields, leaving commas in strings, arrays and nested tables alone.
+function inlineTomlAssignments(value) {
+  const text = value.trim();
+  if (!text.startsWith('{')) return [];
+  const fields = [];
+  let start = 1, depth = 1, quoted = '';
+  for (let i = 1; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (quoted === '"' && c === '\\') { i++; continue; }
+      if (c === quoted) quoted = '';
+    } else if (c === '"' || c === "'") quoted = c;
+    else if (c === '{' || c === '[') depth++;
+    else if (c === '}' || c === ']') {
+      depth--;
+      if (depth === 0) {
+        if (!/^\s*(?:#.*)?$/.test(text.slice(i + 1))) return [];
+        fields.push(text.slice(start, i));
+        return fields.map(tomlAssignment).filter(Boolean);
+      }
+    } else if (c === ',' && depth === 1) { fields.push(text.slice(start, i)); start = i + 1; }
+  }
+  return [];
 }
 // While the desktop app runs Codex in WSL, it writes WSL paths itself. After
 // that mode is turned off, they stay behind.
@@ -226,6 +307,7 @@ function assertConfigLoads(executable) {
   throw new Error('Codex could not load ' + file + '.' + codexErrorDetail(result, home, home) + wslSetupHint(home, config));
 }
 ${CODEX_WSL_SETUP_HINT}
+${CODEX_SANDBOX_PREFLIGHT}
 function modelCompatibilityError(requested, executable, catalog) {
   let version = 'version unavailable';
   if (executable) {
@@ -237,50 +319,6 @@ function modelCompatibilityError(requested, executable, catalog) {
   return new Error('Selected model is missing from the current Codex catalog: ' + JSON.stringify(requested) + ' (' + version + (executable ? '; CLI: ' + executable : '') + '). '
     + 'The desktop app and terminal CLI can expose different catalogs. Update the terminal Codex CLI to a version that supports this model, then rerun setup; or explicitly choose a model supported by that CLI. '
     + 'Catalog models: ' + available + '. Your selected model and permission settings have not been changed. This check does not test LLM proxy inference.');
-}
-function tomlTables(lines) {
-  const tables = [];
-  const active = new Set();
-  let quoted = '';
-  for (let index = 0; index < lines.length; index++) {
-    const line = lines[index];
-    if (!quoted) {
-      active.add(index);
-      const match = /^\s*(\[\[?)([^\]]+)\]\]?\s*(?:#.*)?$/.exec(line);
-      if (match) tables.push({ index, name: (match[1] === '[[' ? '[' : '') + tomlKey(match[2].trim()) });
-    }
-    for (let i = 0; i < line.length; i++) {
-      const next = line.slice(i, i + 3);
-      if (quoted === '"""' || quoted === "'''") {
-        if (quoted === '"""' && line[i] === '\\') { i++; continue; }
-        if (next === quoted) { quoted = ''; i += 2; }
-      } else if (quoted) {
-        if (quoted === '"' && line[i] === '\\') { i++; continue; }
-        if (line[i] === quoted) quoted = '';
-      } else if (line[i] === '#') {
-        break;
-      } else if (next === '"""' || next === "'''") {
-        quoted = next;
-        i += 2;
-      } else if (line[i] === '"' || line[i] === "'") {
-        quoted = line[i];
-      }
-    }
-    if (quoted === '"' || quoted === "'") quoted = '';
-  }
-  return { tables, active };
-}
-function tomlKey(text) {
-  // A dot inside a quoted key is not a dotted-key separator.
-  return [...text.matchAll(/"(?:[^"\\]|\\.)*"|'[^']*'|[A-Za-z0-9_-]+/g)].map(match => {
-    const key = match[0];
-    if (key.startsWith('"')) return JSON.parse(key.replace(/\\(?:U([0-9a-fA-F]{8})|.)/g, (escape, hex) => hex ? JSON.stringify(String.fromCodePoint(parseInt(hex, 16))).slice(1, -1) : escape));
-    return key.startsWith("'") ? key.slice(1, -1) : key;
-  }).join('\0');
-}
-function tomlAssignment(line) {
-  const match = /^\s*((?:[A-Za-z0-9_-]+|"(?:[^"\\]|\\.)*"|'[^']*')(?:\s*\.\s*(?:[A-Za-z0-9_-]+|"(?:[^"\\]|\\.)*"|'[^']*'))*)\s*=\s*(.*)$/.exec(line);
-  return match ? { key: tomlKey(match[1]), value: match[2] } : undefined;
 }
 function assertSingleLineManagedRootValues(lines, scanned) {
   const rootEnd = scanned.tables[0]?.index ?? lines.length;
@@ -386,7 +424,9 @@ function reusePreparedDirectCatalog(clientArgs) {
   const maxAgeMs = 24 * 60 * 60 * 1000;
   if (!existsSync(filename)) throw new Error('Codex did not fetch a fresh model catalog; check upstream credentials and connectivity.');
   const age = Date.now() - statSync(filename).mtimeMs;
-  if (!Number.isFinite(age) || age < 0 || age > maxAgeMs) throw new Error('Codex did not fetch a fresh model catalog; check upstream credentials and connectivity.');
+  // Filesystem timestamps have sub-millisecond precision; Date.now() does not.
+  // Match the fresh-download check's one-second clock tolerance.
+  if (!Number.isFinite(age) || age < -1000 || age > maxAgeMs) throw new Error('Codex did not fetch a fresh model catalog; check upstream credentials and connectivity.');
   const original = existsSync(path.join(home, 'config.toml')) ? readFileSync(path.join(home, 'config.toml'), 'utf8') : '';
   let catalog;
   try { catalog = JSON.parse(readFileSync(filename, 'utf8')); }
@@ -477,6 +517,7 @@ function updateDirectConfig(home, filename) {
 if (process.argv[2] === '--setup-only' || process.argv[2] === '--preflight') {
   try {
     assertConfigLoads(process.argv[3]);
+    assertSandboxReady(process.argv[3]);
     // Gateway/skills-only setup does not require model discovery.
     if (process.argv[2] === '--preflight') prepareDirectCatalog(process.argv[3], [], false);
   } catch (error) {

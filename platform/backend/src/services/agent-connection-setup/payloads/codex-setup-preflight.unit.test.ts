@@ -68,6 +68,10 @@ const fs = require('node:fs'); const path = require('node:path');
 const args = process.argv.slice(2); const home = process.env.CODEX_HOME;
 fs.appendFileSync(path.join(process.env.HOME, 'calls'), args.join(' ') + '\\n');
 if (args[0] === '--version') { console.log('codex-cli test-version'); process.exit(0); }
+if (args[0] === 'sandbox' && process.env.BROKEN_SANDBOX) {
+  console.error('bubblewrap is unavailable: no system bwrap or bundled helper was found');
+  process.exit(101);
+}
 // Like Codex: a model_catalog_json file it cannot open stops every command.
 // A relative path is relative to the Codex folder.
 const catalog = /^model_catalog_json = "(.*)"$/m.exec(fs.existsSync(path.join(home, 'config.toml')) ? fs.readFileSync(path.join(home, 'config.toml'), 'utf8') : '')?.[1];
@@ -339,6 +343,34 @@ test.each([
 });
 
 const WSL_MODE = "[desktop]\nrunCodexInWindowsSubsystemForLinux = true\n";
+
+test.each([
+  { name: "with the LLM proxy", proxy: ctx.proxy },
+  { name: "gateway-only", proxy: null },
+])("a missing sandbox stops $name setup before changing configuration or registering tools", async ({
+  proxy,
+}) => {
+  const f = await fixture();
+  try {
+    await writeFile(f.script, renderSetupScript({ ...ctx, proxy }));
+    const result = await exec("bash", [f.script], {
+      env: { ...f.env, BROKEN_SANDBOX: "1" },
+    }).catch((error) => error);
+    expect(result.code).toBe(SETUP_STOPPED_EXIT_CODE);
+    expect(result.stderr).toContain("sudo apt install bubblewrap");
+    expect(result.stderr).toContain("No client configuration was changed");
+    expect(await readFile(f.config, "utf8")).toBe(original);
+    expect(await readFile(path.join(f.home, ".zshrc"), "utf8")).toBe(
+      "# existing shell profile\n",
+    );
+    expect(await readdir(f.codexHome)).toEqual(["config.toml"]);
+    expect(await readFile(path.join(f.home, "calls"), "utf8")).not.toMatch(
+      /mcp (add|remove)|plugin|debug models/,
+    );
+  } finally {
+    await rm(f.home, { recursive: true, force: true });
+  }
+});
 
 test.each([
   {

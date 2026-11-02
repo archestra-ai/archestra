@@ -51,8 +51,10 @@ export function ChatgptDesktopSetup({
       )}
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 px-1 text-xs text-muted-foreground">
         <p className="max-w-prose leading-5">
-          The setup uses the Codex CLI, so the approval page shows Codex.
-          Restart ChatGPT when the setup is done.
+          The setup uses the Codex CLI, so the approval page shows Codex. It
+          checks the local sandbox before changing settings and stops with
+          repair instructions if a Linux or WSL prerequisite is missing. Restart
+          ChatGPT when the setup is done.
         </p>
         <TextButton onClick={() => data.setWindows(!data.windows)}>
           <OneOf inline shown={data.windows ? 0 : 1}>

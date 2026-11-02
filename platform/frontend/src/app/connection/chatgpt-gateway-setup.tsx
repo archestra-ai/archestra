@@ -141,7 +141,8 @@ export function ChatgptGatewaySetup({
                   {downloaded ? (
                     <span>
                       Choose <strong>Upload plugin archive</strong> in Plugins,
-                      then connect your account.
+                      connect your account, then run the plugin&apos;s setup
+                      workflow before local desktop tasks.
                     </span>
                   ) : (
                     <span>Save your plugin archive to continue.</span>

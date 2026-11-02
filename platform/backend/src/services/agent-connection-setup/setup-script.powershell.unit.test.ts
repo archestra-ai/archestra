@@ -252,7 +252,7 @@ describe.skipIf(!powershellAvailable)(
         await writeFile(helper, CODEX_HANDOFF_HELPER);
         await writeFile(
           cli,
-          `#!/usr/bin/env node\nif (process.env.CODEX_SANDBOX_NETWORK_DISABLED) process.exit(2); require('node:fs').writeFileSync(require('node:path').join(process.env.CODEX_HOME,'models_cache.json'),JSON.stringify({fetched_at:new Date().toISOString()})); console.log(JSON.stringify({models:[{slug:'model-a',tool_mode:'code_mode_only'}]}));`,
+          `#!/usr/bin/env node\nif (process.env.CODEX_SANDBOX_NETWORK_DISABLED && process.env.CODEX_THREAD_ID) process.exit(2); require('node:fs').writeFileSync(require('node:path').join(process.env.CODEX_HOME,'models_cache.json'),JSON.stringify({fetched_at:new Date().toISOString()})); console.log(JSON.stringify({models:[{slug:'model-a',tool_mode:'code_mode_only'}]}));`,
         );
         await chmod(cli, 0o755);
         const env = { ...process.env, USERPROFILE: home, CODEX_HOME: home };
@@ -353,6 +353,7 @@ Disconnect-ArchProxy
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 fs.appendFileSync(process.env.ARCHESTRA_TEST_COMMAND_LOG, JSON.stringify(args) + "\\n");
+if (args[0] === "sandbox" || (args[0] === "help" && args[1] === "sandbox")) process.exit(0);
 if (args[0] === "debug") {
   process.stdout.write(JSON.stringify({models:[{slug:'selected',tool_mode:'code_mode_only',supports_search_tool:true},{slug:'other',tool_mode:null}]}));
   process.exit(0);

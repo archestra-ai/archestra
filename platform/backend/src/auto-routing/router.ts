@@ -60,7 +60,7 @@ import {
   userModelRouterAuth,
 } from "./eligibility";
 import { firstUserText } from "./first-user-text";
-import { scoringContext } from "./scoring-context";
+import { scoringContext, scoringContextFingerprint } from "./scoring-context";
 import {
   activeSourceVersion,
   decisionFeatures,
@@ -155,6 +155,9 @@ export async function resolveAutoModel(params: {
     sessionId,
     virtualKeyId: auth.authMethod === "virtual_key" ? auth.virtualKeyId : null,
     firstUserMessage: text,
+    contextFingerprint: sessionId
+      ? undefined
+      : scoringContextFingerprint(scoringContext(body, { openingOnly: true })),
   });
   const decided = await sessionDecision({
     organizationId: auth.organizationId,

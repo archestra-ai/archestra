@@ -275,4 +275,23 @@ describe("redactCredentials", () => {
       ),
     );
   });
+
+  test("stays linear on large text that is not JSON", () => {
+    const source = "function f(a) { if (a) { g({ a, b: [1] }); } }\n".repeat(
+      5000,
+    );
+    const inputs = [
+      "{".repeat(200_000),
+      `${source}{"headers":[["Authorization","Bearer tok_secret"]]}`,
+      `curl -H 'Authorization: Bearer tok_secret' -d ${"a".repeat(500_000)}`,
+    ];
+    const started = performance.now();
+    const shown = inputs.map(redactCredentials);
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(shown).toEqual([
+      inputs[0],
+      `${source}{"headers":[["Authorization","Bearer [redacted]"]]}`,
+      `curl -H 'Authorization: Bearer [redacted]' -d ${"a".repeat(500_000)}`,
+    ]);
+  });
 });

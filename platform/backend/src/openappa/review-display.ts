@@ -89,41 +89,38 @@ export function displayedReview<
 export function redactCredentials(text: string): string {
   let shown = "";
   let from = 0;
-  for (let start = 0; start < text.length; start++) {
-    if (text[start] !== "{" && text[start] !== "[") continue;
-    const end = jsonSpanEnd(text, start);
-    const span = text.slice(start, end);
-    const json = end === undefined ? undefined : parseJsonContainer(span);
-    if (end === undefined || json === undefined) continue;
-    const indent = /\n([ \t]+)/.exec(span)?.[1];
-    const redacted = JSON.stringify(redactJson(json), null, indent);
-    shown += `${redactText(text.slice(from, start))}${
-      redacted === JSON.stringify(json, null, indent) ? span : redacted
-    }`;
-    from = end;
-    start = end - 1;
-  }
-  return `${shown}${redactText(text.slice(from))}`;
-}
-
-function redactText(text: string): string {
-  return text.replace(CREDENTIAL_TEXT, redactTextPair);
-}
-
-// The end of the bracketed span opening at `start`, skipping JSON strings.
-function jsonSpanEnd(text: string, start: number): number | undefined {
+  let start = 0;
   let depth = 0;
   let inString = false;
-  for (let index = start; index < text.length; index++) {
+  // One pass: each top-level bracketed span is parsed once when it closes,
+  // and skipped whole when it is not JSON.
+  for (let index = 0; index < text.length; index++) {
     const char = text[index];
     if (inString) {
       if (char === "\\") index++;
       else if (char === '"') inString = false;
-    } else if (char === '"') inString = true;
-    else if (char === "{" || char === "[") depth++;
-    else if ((char === "}" || char === "]") && --depth === 0) return index + 1;
+    } else if (char === "{" || char === "[") {
+      if (depth++ === 0) start = index;
+    } else if (depth > 0 && char === '"') inString = true;
+    else if (depth > 0 && (char === "}" || char === "]") && --depth === 0) {
+      const span = text.slice(start, index + 1);
+      const json = parseJsonContainer(span);
+      if (json === undefined) continue;
+      shown += `${redactText(text.slice(from, start))}${redactSpan(span, json)}`;
+      from = index + 1;
+    }
   }
-  return undefined;
+  return `${shown}${redactText(text.slice(from))}`;
+}
+
+function redactSpan(span: string, json: object): string {
+  const indent = /\n([ \t]+)/.exec(span)?.[1];
+  const redacted = JSON.stringify(redactJson(json), null, indent);
+  return redacted === JSON.stringify(json, null, indent) ? span : redacted;
+}
+
+function redactText(text: string): string {
+  return text.replace(CREDENTIAL_TEXT, redactTextPair);
 }
 
 function parseJsonContainer(text: string): object | undefined {
@@ -210,12 +207,13 @@ const CREDENTIAL_NAMES = String.raw`(?:proxy-)?authorization|[\w-]*(?:api|auth|p
 
 const CREDENTIAL_NAME = new RegExp(`^(?:${CREDENTIAL_NAMES})$`, "i");
 
-// The name, possibly quoted, `:` or `=`, a gap that may be shell-escaped,
-// then either a value quoted from its first character through the matching
-// quote, or a bare value up to a quote, backslash or space, which after an
-// authorization header may follow a scheme. Quotes may be escaped as many times as the text is nested in JSON.
+// The name, starting a word so a long word is tried once, possibly quoted,
+// `:` or `=`, a gap that may be shell-escaped, then either a value quoted
+// from its first character through the matching quote, or a bare value up to
+// a quote, backslash or space, which after an authorization header may follow
+// a scheme. Quotes may be escaped as many times as the text is nested in JSON.
 const CREDENTIAL_TEXT = new RegExp(
-  String.raw`((?:${CREDENTIAL_NAMES})(?:\\*["'])?\s*[:=](?:\\?\s)*)(?:(\\*["'])([\s\S]*?)(\2|$)|((?:(?<=authorization(?:\\*["'])?\s*[:=](?:\\?\s)*)[A-Za-z][\w-]*(?:\\*\s)+)?[^\s'"\\]+))`,
+  String.raw`((?<![\w-])(?:${CREDENTIAL_NAMES})(?:\\*["'])?\s*[:=](?:\\?\s)*)(?:(\\*["'])([\s\S]*?)(\2|$)|((?:(?<=authorization(?:\\*["'])?\s*[:=](?:\\?\s)*)[A-Za-z][\w-]*(?:\\*\s)+)?[^\s'"\\]+))`,
   "gi",
 );
 

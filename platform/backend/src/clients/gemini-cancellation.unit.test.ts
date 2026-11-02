@@ -79,7 +79,7 @@ const operations = [
   },
 ];
 
-// Pins the SDK dependency patch at the real HTTP boundary. An early rejection
+// Pins SDK cancellation behavior at the real HTTP boundary. An early rejection
 // alone is not enough: a canceled operation must not dispatch behind it.
 describe("Gemini SDK cancellation", () => {
   let upstream: Server | undefined;

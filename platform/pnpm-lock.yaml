@@ -118,7 +118,6 @@ patchedDependencies:
   '@ai-sdk/google@3.0.43': 7528f63c986be41787e9d94b4cc1c16d8cc0c71df8080c382e57009d512e453d
   '@ai-sdk/xai@3.0.67': abe0d8843e57fd85038638f58712bf3fa3e9a34d421089a226574951e9f42941
   '@better-auth/sso@1.6.22': f83af50d9872ec2d3740d10d7508a5d129ec740360da3d3542ef21f61e8ea177
-  '@google/genai@1.45.0': 0e44cf13bb0dfd5ee089f69411cb7ea032f86d165446eef00271697d147512e8
   '@microsoft/agents-activity@1.9.1': d03d563c339a9e5a88627a244489a2412a69dc7b414d90790736b3dd2291c7e0
   '@pinojs/redact@0.4.0': 44a00890798039521356d693d0fc19fbe301cc8fbdbd9dc54e0ec581a9f2c1a3
   better-auth@1.7.7: f93a6aa47977bbe158f926263b2eb6343c5d25704965e95b043c1c977d7b1046
@@ -318,8 +317,8 @@ importers:
         specifier: ^43.8.0
         version: 43.8.0
       '@google/genai':
-        specifier: ^1.44.0
-        version: 1.45.0(patch_hash=0e44cf13bb0dfd5ee089f69411cb7ea032f86d165446eef00271697d147512e8)(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))
+        specifier: ^2.16.0
+        version: 2.16.0(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))
       '@keyv/postgres':
         specifier: ^2.2.3
         version: 2.2.3(keyv@5.6.0)
@@ -2208,8 +2207,8 @@ packages:
     resolution: {integrity: sha512-xxqsNsUXaFang9b2e/NTIgqUeuUlifA2Opy1mOVqTDuJZZNIOTgUNyziwBJoleBhMC0XuvY3JNVMWthufcVjRw==}
     engines: {node: '>=18.20.0'}
 
-  '@google/genai@1.45.0':
-    resolution: {integrity: sha512-+sNRWhKiRibVgc4OKi7aBJJ0A7RcoVD8tGG+eFkqxAWRjASDW+ktS9lLwTDnAxZICzCVoeAdu8dYLJVTX60N9w==}
+  '@google/genai@2.16.0':
+    resolution: {integrity: sha512-K+1C1sqR0u7NJ5xpKJCQBws0QXpfuklo3WTNuUIMvtbQfNW2O5OohX0BYT2V+PXzsUzQEwGCXPWQxttLyGQ6xw==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       '@modelcontextprotocol/sdk': ^1.25.2
@@ -12741,7 +12740,7 @@ snapshots:
       '@gitbeaker/core': 43.8.0
       '@gitbeaker/requester-utils': 43.8.0
 
-  '@google/genai@1.45.0(patch_hash=0e44cf13bb0dfd5ee089f69411cb7ea032f86d165446eef00271697d147512e8)(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))':
+  '@google/genai@2.16.0(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))':
     dependencies:
       google-auth-library: 10.5.0
       p-retry: 4.6.2

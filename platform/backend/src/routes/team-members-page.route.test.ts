@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import { betterAuth } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import TeamModel from "@/models/team";
 import TeamLabelModel from "@/models/team-label";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";

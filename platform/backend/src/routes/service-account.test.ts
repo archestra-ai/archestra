@@ -541,7 +541,7 @@ describe("service account API authentication", () => {
 
   beforeEach(async () => {
     app = createFastifyInstance();
-    const { fastifyAuthPlugin } = await import("@/auth");
+    const { authPlugin: fastifyAuthPlugin } = await import("@/auth/fastify-plugin");
     const { default: serviceAccountRoutes } = await import("./service-account");
     await app.register(fastifyAuthPlugin);
     registerAuditLogHook(app);

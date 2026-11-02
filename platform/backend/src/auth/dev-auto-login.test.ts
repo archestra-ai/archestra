@@ -1,4 +1,4 @@
-import { betterAuth } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import config from "@/config";
 import { afterEach, describe, expect, test } from "@/test";
 

@@ -30,7 +30,7 @@ describe("API key route authorization", () => {
     vi.clearAllMocks();
 
     app = createFastifyInstance();
-    const { fastifyAuthPlugin } = await import("@/auth");
+    const { authPlugin: fastifyAuthPlugin } = await import("@/auth/fastify-plugin");
     const { default: apiKeyRoutes } = await import("./api-key");
     await app.register(fastifyAuthPlugin);
     await app.register(apiKeyRoutes);

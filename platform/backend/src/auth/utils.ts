@@ -8,13 +8,13 @@ import {
   type Resource,
 } from "@archestra/shared";
 import { buildForbiddenErrorMessage } from "@archestra/shared/access-control";
-import { auth as betterAuth } from "@/auth/better-auth";
 import { requestScope } from "@/auth/request-scope";
 import {
   isServiceAccountUserId,
   SERVICE_ACCOUNT_USER_ID_PREFIX,
 } from "@/auth/service-account-user-id";
 import logger from "@/logging";
+import { port } from "@/models/ports";
 import RoleCompositionModel from "@/models/role-composition";
 import ServiceAccountModel from "@/models/service-account";
 import UserModel from "@/models/user";
@@ -69,7 +69,9 @@ export const hasPermission = async (
       return await checkUserPermissions({ ...userContext, permissions });
     }
 
-    const session = await betterAuth.api.getSession({ headers });
+    const session = await (await port("authSessions")).getSession({
+      headers,
+    });
     if (!session?.user?.id) {
       throw new Error("No session");
     }
@@ -200,7 +202,7 @@ async function checkApiKeyPermissions(params: {
 
   try {
     logger.trace("[hasPermission] Verifying API key for permission check");
-    const apiKeyResult = await betterAuth.api.verifyApiKey({
+    const apiKeyResult = await (await port("authSessions")).verifyApiKey({
       body: { key: params.apiKey },
     });
     apiKeyUserId =

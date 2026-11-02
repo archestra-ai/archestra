@@ -25,4 +25,16 @@ const BINDINGS: PortBindings = {
   mcpToolDiscovery: async () => (await import("@/clients/mcp-client")).default,
   skillSandboxAvailability: () => import("@/skills/skill-sandbox-availability"),
   archestraToolCatalog: () => import("@/archestra-mcp-server"),
+  authSessions: async () => {
+    const { auth } = await import("@/auth/better-auth");
+    return {
+      getSession: (params) => auth.api.getSession(params),
+      verifyApiKey: (params) => auth.api.verifyApiKey(params),
+    };
+  },
+  authAccounts: async () => {
+    const { auth } = await import("@/auth/better-auth");
+    return { signUpEmail: (params) => auth.api.signUpEmail(params) };
+  },
+  jwksSigningKey: () => import("@/auth/jwks-signing-key-guard"),
 };

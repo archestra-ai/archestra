@@ -5,6 +5,7 @@ import {
 } from "@archestra/shared/gemini-models";
 import { ApiError } from "@archestra/shared/types";
 import type { Gemini, OpenAi, UsageView } from "@/types";
+import { assertUnstructuredResponseFormat } from "../translated-response-format";
 import { sanitizeGeminiToolSchema } from "./gemini-schema";
 import type { OpenAiStreamUsage } from "./openai-sse-chunk";
 import {
@@ -47,6 +48,7 @@ export function openaiToGemini(req: OpenAiRequest): {
   geminiBody: GeminiRequest;
   openaiContext: GeminiOpenaiContext;
 } {
+  assertUnstructuredResponseFormat(req, "the Gemini translation");
   const loose = req as OpenAiRequest & {
     stop?: string | string[] | null;
     top_p?: number | null;

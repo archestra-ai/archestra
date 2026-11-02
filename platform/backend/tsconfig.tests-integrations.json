@@ -1,10 +1,15 @@
 {
-  // Tests of the knowledge base.
-  "extends": "./tsconfig.test-project.json",
-  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-domain-a.tsbuildinfo" },
+  // Tests of Kubernetes, clients, OpenAPPA, and proxy helpers.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./.tsbuild/tests-integrations.tsbuildinfo"
+  },
   "include": [
     "src/ambient/*.d.ts",
-    "src/knowledge-base/**/*.test.ts"
+    "src/k8s/**/*.test.ts",
+    "src/clients/**/*.test.ts",
+    "src/openappa/**/*.test.ts",
+    "src/proxy/**/*.test.ts"
   ],
   "references": [
     { "path": "../shared/tsconfig.lib.json" },
@@ -15,6 +20,7 @@
     { "path": "./tsconfig.models-agents.json" },
     { "path": "./tsconfig.models-upper.json" },
     { "path": "./tsconfig.runtime.json" },
+    { "path": "./tsconfig.llm-clients.json" },
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.test-support.json" }
   ]

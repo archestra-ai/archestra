@@ -95,12 +95,11 @@ class ActiveUsersMetricCollector {
 
     try {
       const now = Date.now();
-      for (const window of ACTIVE_USER_WINDOWS) {
-        const activeUsers =
-          await InteractionModel.countDistinctActiveUsersSince(
-            new Date(now - window.ms),
-          );
-        activeUsersGauge.set({ window: window.label }, activeUsers);
+      const counts = await InteractionModel.countDistinctActiveUsersForWindows(
+        ACTIVE_USER_WINDOWS.map((window) => new Date(now - window.ms)),
+      );
+      for (const [index, window] of ACTIVE_USER_WINDOWS.entries()) {
+        activeUsersGauge.set({ window: window.label }, counts[index]);
       }
     } catch (error) {
       // A metrics refresh must never take down the process or interrupt the

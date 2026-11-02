@@ -1,11 +1,13 @@
 {
-  // Tests of the Archestra MCP server and the agents.
-  "extends": "./tsconfig.test-project.json",
-  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-domain-b.tsbuildinfo" },
+  // Tests of models and authentication.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./.tsbuild/tests-models.tsbuildinfo"
+  },
   "include": [
     "src/ambient/*.d.ts",
-    "src/archestra-mcp-server/**/*.test.ts",
-    "src/agents/**/*.test.ts"
+    "src/models/**/*.test.ts",
+    "src/auth/**/*.test.ts"
   ],
   "references": [
     { "path": "../shared/tsconfig.lib.json" },
@@ -16,6 +18,7 @@
     { "path": "./tsconfig.models-agents.json" },
     { "path": "./tsconfig.models-upper.json" },
     { "path": "./tsconfig.runtime.json" },
+    { "path": "./tsconfig.llm-clients.json" },
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.test-support.json" }
   ]

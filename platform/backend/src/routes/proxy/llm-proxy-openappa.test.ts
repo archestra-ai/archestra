@@ -4717,17 +4717,14 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     test.each([
       true,
       false,
-    ])("presents the model's own ask_user question as AskUserQuestion and returns the answer as its result (stream=%s)", async (stream) => {
+    ])("preserves the gateway question and returns its answer as the tool result (stream=%s)", async (stream) => {
       config.openappa = { ...config.openappa, offerSigningSecret: "" };
       const askUser = {
         name: "archestra__ask_user",
         input: {
           question: "Which report format?",
           header: "Format",
-          options: [
-            { label: "Short", preview: "model-written preview" },
-            { label: "Long" },
-          ],
+          options: [{ label: "Short" }, { label: "Long" }],
         },
       };
       options = {
@@ -4736,7 +4733,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         nonStreamingToolUse: askUser,
         streamingToolUse: askUser,
       };
-      const opening = [{ role: "user", content: "Write the report" }];
+      const opening = [
+        {
+          role: "user",
+          content: "Write the report. Ask me with archestra__ask_user.",
+        },
+      ];
 
       const asked = await app.inject({
         method: "POST",
@@ -4749,26 +4751,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(asked.statusCode, asked.body).toBe(200);
       expect(asked.body).not.toContain("is not loaded in this session");
       const question = noticeFrom(asked.body, stream);
-      expect(question.name).toBe("AskUserQuestion");
-      // The model wrote these options, so they carry no preview.
-      expect(question.input).toEqual({
-        questions: [
-          {
-            question: "Which report format?",
-            header: "Format",
-            options: [
-              { label: "Short", description: "Short" },
-              { label: "Long", description: "Long" },
-            ],
-            multiSelect: false,
-          },
-        ],
-      });
+      expect(question.name).toBe(askUser.name);
+      expect(question.input).toEqual(askUser.input);
 
       options = { includeToolUse: false, streamStopReason: "end_turn" };
       providerRequests.length = 0;
-      const answer =
-        'Your questions have been answered: "Which report format?"="Long". You can now continue with the user\'s answers in mind.';
+      const answer = JSON.stringify({ action: "accept", selected: ["Long"] });
       const answered = await app.inject({
         method: "POST",
         url: url(),
@@ -16246,6 +16234,114 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     "x-archestra-virtual-key": platformCredential,
     "x-archestra-user-id": userId,
     "user-agent": "opencode/1.18.29",
+  });
+
+  test.each(
+    ["opencode", "kilo"].flatMap((client) =>
+      [false, true].map((multiple) => ({ client, multiple })),
+    ),
+  )("returns ordinary gateway question answers through the $client native form (multiple=$multiple)", async ({
+    client,
+    multiple,
+  }) => {
+    const labels = Array.from(
+      { length: multiple ? 12 : 2 },
+      (_, i) => `Format ${i + 1}`,
+    );
+    const questionText = "Which report format?";
+    let calls = [
+      {
+        id: "call_format",
+        name: "archestra__ask_user",
+        arguments: JSON.stringify({
+          question: questionText,
+          options: labels.map((label) => ({ label })),
+          allowMultiple: multiple,
+        }),
+      },
+    ];
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(() => {
+      const provider = createOpenAiTestClient({ nonStreamingToolCalls: calls });
+      const create = provider.chat.completions.create;
+      provider.chat.completions.create = async (params) => {
+        providerBodies.push(structuredClone(params));
+        return create(params);
+      };
+      return provider as never;
+    });
+    const body = openCodePayload();
+    const tools = [
+      ...body.tools,
+      ...["archestra__ask_user", "question"].map((name) => ({
+        type: "function",
+        function: {
+          name,
+          description: name,
+          parameters: { type: "object", properties: {} },
+        },
+      })),
+    ];
+    const headers = {
+      ...internalCallHeader(),
+      ...openCodeHeaders(),
+      "user-agent": `${client}/1.18.29`,
+      "x-session-id": OPENCODE_SESSION,
+    };
+    const messages = [{ role: "user", content: "Choose a report format." }];
+    const asked = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers,
+      payload: { ...body, stream: false, tools, messages },
+    });
+    expect(asked.statusCode, asked.body).toBe(200);
+    const question = asked.json().choices[0].message.tool_calls[0];
+    expect(question.function.name).toBe("question");
+    expect(JSON.parse(question.function.arguments)).toEqual({
+      questions: [
+        {
+          question: questionText,
+          header: expect.any(String),
+          options: labels.map((label) => ({ label, description: label })),
+          multiple,
+        },
+      ],
+    });
+    const selected = multiple ? [labels[0], labels.at(-1)] : [labels.at(-1)];
+    const answer = `User has answered your questions: "${questionText}"="${selected.join(", ")}". You can now continue with the user's answers in mind.`;
+    calls = [];
+    providerBodies.length = 0;
+    const answered = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers,
+      payload: {
+        ...body,
+        stream: false,
+        tools,
+        messages: [
+          ...messages,
+          { role: "assistant", content: null, tool_calls: [question] },
+          { role: "tool", tool_call_id: question.id, content: answer },
+        ],
+      },
+    });
+    expect(answered.statusCode, answered.body).toBe(200);
+    const sent = providerBodies.at(-1) as {
+      messages: Array<{
+        role: string;
+        tool_call_id?: string;
+        content: unknown;
+      }>;
+    };
+    expect(
+      sent.messages.find(
+        (message) =>
+          message.role === "tool" && message.tool_call_id === question.id,
+      ),
+    ).toMatchObject({ content: answer });
   });
 
   test.for(

@@ -1,6 +1,6 @@
 {
   // Tests of the database client, migrations and seed.
-  "extends": "./tsconfig.test-project.json",
+  "extends": "./tsconfig.base.json",
   "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-database.tsbuildinfo" },
   "include": [
     "src/ambient/*.d.ts",
@@ -15,6 +15,7 @@
     { "path": "./tsconfig.models-agents.json" },
     { "path": "./tsconfig.models-upper.json" },
     { "path": "./tsconfig.runtime.json" },
+    { "path": "./tsconfig.llm-clients.json" },
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.test-support.json" }
   ]

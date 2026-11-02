@@ -1,11 +1,12 @@
 {
-  // Tests of the LLM proxy's adapters and utils.
-  "extends": "./tsconfig.test-project.json",
-  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-routes-proxy-c.tsbuildinfo" },
+  // Route tests other than chat, MCP gateway, and the LLM proxy.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./.tsbuild/tests-routes-rest.tsbuildinfo"
+  },
   "include": [
     "src/ambient/*.d.ts",
-    "src/routes/proxy/adapters/**/*.test.ts",
-    "src/routes/proxy/utils/**/*.test.ts"
+    "src/routes/**/*.test.ts"
   ],
   "references": [
     { "path": "../shared/tsconfig.lib.json" },
@@ -16,7 +17,13 @@
     { "path": "./tsconfig.models-agents.json" },
     { "path": "./tsconfig.models-upper.json" },
     { "path": "./tsconfig.runtime.json" },
+    { "path": "./tsconfig.llm-clients.json" },
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.test-support.json" }
+  ],
+  "exclude": [
+    "src/routes/chat/**",
+    "src/routes/mcp-gateway/**",
+    "src/routes/proxy/**"
   ]
 }

@@ -270,3 +270,74 @@ describe("A2AMessageModel", () => {
     });
   });
 });
+
+test("task previews return only the earliest user message with deterministic ties", async () => {
+  const context = await createContext();
+  const first = await createTask(context.id);
+  const second = await createTask(context.id);
+  const empty = await createTask(context.id);
+  const when = new Date("2026-01-01T00:00:00Z");
+  const ids = [
+    "00000000-0000-4000-8000-000000000001",
+    "00000000-0000-4000-8000-000000000002",
+  ];
+  await db.insert(schema.a2aMessagesTable).values([
+    {
+      id: ids[1],
+      contextId: context.id,
+      taskId: first.id,
+      role: A2AProtocolRole.User,
+      parts: makeTextParts("later tie"),
+      content: {},
+      createdAt: when,
+    },
+    {
+      id: ids[0],
+      contextId: context.id,
+      taskId: first.id,
+      role: A2AProtocolRole.User,
+      parts: makeTextParts("first"),
+      content: {},
+      createdAt: when,
+    },
+    {
+      contextId: context.id,
+      taskId: first.id,
+      role: A2AProtocolRole.Agent,
+      parts: makeTextParts("ignore"),
+      content: {},
+      createdAt: new Date(0),
+    },
+    {
+      contextId: context.id,
+      taskId: second.id,
+      role: A2AProtocolRole.User,
+      parts: makeTextParts("second task"),
+      content: {},
+    },
+    {
+      contextId: context.id,
+      taskId: empty.id,
+      role: A2AProtocolRole.Agent,
+      parts: makeTextParts("no user"),
+      content: {},
+    },
+  ]);
+  expect(
+    await A2AMessageModel.findFirstUserPartsByTaskIds([
+      first.id,
+      second.id,
+      empty.id,
+      first.id,
+      crypto.randomUUID(),
+    ]),
+  ).toEqual(
+    new Map([
+      [first.id, makeTextParts("first")],
+      [second.id, makeTextParts("second task")],
+    ]),
+  );
+  expect(await A2AMessageModel.findFirstUserPartsByTaskIds([])).toEqual(
+    new Map(),
+  );
+});

@@ -1,7 +1,6 @@
 [
   "src/agents/a2a-executor.ts -> src/routes/chat/errors.ts (mcp-imports-no-higher-layer)",
   "src/agents/a2a-executor.ts -> src/routes/mcp-gateway/utils.ts (mcp-imports-no-higher-layer)",
-  "src/agents/a2a/a2a-context-compaction.ts -> src/routes/mcp-gateway/utils.ts (mcp-imports-no-higher-layer)",
   "src/agents/a2a/a2a-manager.ts -> src/routes/mcp-gateway/utils.ts (mcp-imports-no-higher-layer)",
   "src/agents/a2a/oauth-model.ts -> src/routes/mcp-gateway/utils.ts (mcp-imports-no-higher-layer)",
   "src/agents/agent-run-stream.ts -> src/routes/chat/context-trimming.ts (mcp-imports-no-higher-layer)",
@@ -24,9 +23,7 @@
   "src/clients/chat-mcp-client.ts -> src/routes/mcp-gateway/utils.ts (mcp-imports-no-higher-layer)",
   "src/clients/chat-tool-builder.ts -> src/hooks/hook-dispatcher-service.ts (mcp-imports-no-higher-layer)",
   "src/clients/chat-tool-builder.ts -> src/hooks/hook-run-parts.ts (mcp-imports-no-higher-layer)",
-  "src/clients/chat-tool-builder.ts -> src/routes/mcp-gateway/utils.ts (mcp-imports-no-higher-layer)",
   "src/clients/mcp-client.ts -> src/routes/mcp-app-gateway.utils.ts (mcp-imports-no-higher-layer)",
-  "src/clients/mcp-client.ts -> src/routes/mcp-gateway/utils.ts (mcp-imports-no-higher-layer)",
   "src/clients/mcp-client.ts -> src/routes/oauth.ts (mcp-imports-no-higher-layer)",
   "src/clients/mcp-client.ts -> src/server/llm-proxy-timing.ts (mcp-imports-no-higher-layer)",
   "src/features/browser-stream/services/browser-stream.service.ts -> src/clients/chat-mcp-client.ts (policy-imports-no-higher-layer)",

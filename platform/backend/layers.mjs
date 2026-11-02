@@ -1,4 +1,4 @@
-/** The layers not yet carved into referenced source projects. */
+/** Execution code and the route and server helpers lower layers import. */
 const APP = "tsconfig.app.json";
 
 /**

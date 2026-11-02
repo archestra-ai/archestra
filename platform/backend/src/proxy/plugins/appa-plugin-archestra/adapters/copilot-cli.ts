@@ -65,6 +65,7 @@ export class AppaCopilotCliAdapter implements AppaClientAdapter {
   // attached", Copilot CLI 1.0.105), so a review has no second surface here.
   readonly nativeQuestion = {
     toolName: "ask_user",
+    requiresNativeForm: true,
     supportsMultiple: false,
     fromAskUser: (args: AskUserArguments) => ({
       message: args.question,

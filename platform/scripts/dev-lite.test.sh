@@ -234,22 +234,40 @@ out="$(reload_backend_beside_frontend)"
 check "a backend reload stops the frontend before it builds" test "$(order_of "$out" "^stop_session frontend")" -lt "$(order_of "$out" "^build_backend")"
 check "and starts it again after the backend, from its build" test "$(order_of "$out" "^server backend")" -lt "$(order_of "$out" "^server frontend")"
 check "without building the frontend" fails grep -q "^build_frontend" <<<"$out"
-# A one-server resume waits only for that server, through the real readiness check.
+# A one-server resume waits only for that server, through the real readiness
+# check, in a shell of its own with the script's error-on-exit (a check's `if`
+# would switch it off).
 real_wait_resume() {
-  (
+  bash -c '
+    source "$1/dev-lite.sh"
+    session_alive() { case " $ALIVE " in *" $1 "*) return 0 ;; esac; return 1; }
     ALIVE=""
     db_ready() { return 0; }
+    build_frontend() { echo build_frontend >&2; }
+    build_backend() { echo build_backend >&2; }
     start_backend() { ALIVE="$ALIVE backend"; }
     start_frontend() { ALIVE="$ALIVE frontend"; }
     http_ok() { return 0; }
+    log() { :; }
     ARCHESTRA_DEV_LITE_TIMEOUT_SECONDS=5 cmd_resume
-  ) > /dev/null 2>&1
+  ' real-wait "$SCRIPT_DIR" > /dev/null 2>&1
 }
 touch "$SERVERS_FILE"
 printf 'frontend=build\nbackend=0\n' > "$PAUSED_FILE"
 check "a frontend-only resume is ready without the backend" real_wait_resume
 printf 'frontend=none\nbackend=1\n' > "$PAUSED_FILE"
 check "a backend-only resume is ready without the frontend" real_wait_resume
+rm -f "$PAUSED_FILE"
+failing_frontend_reload() { (frontend_mode() { echo build; }; build_frontend() { echo "build_frontend failed"; return 1; }; LIFE_ALIVE=" backend" lifecycle cmd_reload frontend) || true; }
+out="$(failing_frontend_reload)"
+check "a failed frontend build on reload brings the backend back" grep -q "^server backend" <<<"$out"
+failing_backend_start() { (frontend_mode() { echo build; }; start_backend() { return 1; }; LIFE_ALIVE=" frontend" lifecycle cmd_reload backend) || true; }
+out="$(failing_backend_start)"
+check "a backend that does not start on reload brings the frontend back" grep -q "^server frontend" <<<"$out"
+gone="$ARCHESTRA_DEV_LITE_STATE_DIR/removed-checkout"
+echo "$gone" > "$SERVERS_FILE"
+check "pause refuses when the stack's checkout is gone" grep -q "has no scripts/dev-lite.sh any more" <<<"$( (lifecycle cmd_pause) 2>&1 || true)"
+rm -f "$SERVERS_FILE"
 other="$ARCHESTRA_DEV_LITE_STATE_DIR/other-checkout"
 mkdir -p "$other/scripts"
 printf 'echo "delegated $*"\n' > "$other/scripts/dev-lite.sh"

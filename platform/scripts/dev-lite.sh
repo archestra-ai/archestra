@@ -881,7 +881,9 @@ paused_value() {
 delegate_to_stack_checkout() {
   local recorded
   recorded="$(cat "$SERVERS_FILE" 2>/dev/null || true)"
-  if [ -n "$recorded" ] && [ "$recorded" != "$PLATFORM_DIR" ] && [ -f "$recorded/scripts/dev-lite.sh" ]; then
+  if [ -n "$recorded" ] && [ "$recorded" != "$PLATFORM_DIR" ]; then
+    [ -f "$recorded/scripts/dev-lite.sh" ] \
+      || die "the dev stack runs from $recorded, which has no scripts/dev-lite.sh any more: run 'down' and 'up' from the checkout that should serve it"
     exec bash "$recorded/scripts/dev-lite.sh" "$@"
   fi
 }
@@ -936,7 +938,9 @@ cmd_resume() {
   if [ "$frontend" != none ]; then start_frontend "$frontend" keep || die "the frontend did not start; the stack stays paused"; fi
   rm -f "$PAUSED_FILE"
   # Wait for what was resumed, not for a server pause never stopped.
-  WAIT_SERVERS="$([ "$backend" = 1 ] && echo backend) $([ "$frontend" != none ] && echo frontend)"
+  WAIT_SERVERS=""
+  if [ "$backend" = 1 ]; then WAIT_SERVERS="backend"; fi
+  if [ "$frontend" != none ]; then WAIT_SERVERS="$WAIT_SERVERS frontend"; fi
   wait_ready
 }
 
@@ -1103,12 +1107,11 @@ cmd_reload() {
           log "stopping the frontend while the backend builds"
           stop_session frontend
         fi
-        if ! (build_backend); then
-          [ -n "$frontend_was" ] && start_frontend "$frontend_was" keep
-          die "backend build failed; see $LOG_DIR/backend-build.log"
+        if ! (build_backend) || ! start_backend; then
+          if [ -n "$frontend_was" ]; then start_frontend "$frontend_was" keep; fi
+          die "the backend did not build or start; see $LOG_DIR/backend-build.log and $LOG_DIR/backend.log"
         fi
-        start_backend
-        [ -n "$frontend_was" ] && start_frontend "$frontend_was" keep
+        if [ -n "$frontend_was" ]; then start_frontend "$frontend_was" keep; fi
       else
         start_backend
       fi
@@ -1126,8 +1129,11 @@ cmd_reload() {
         stop_session backend
         restart_backend=1
       fi
-      [ "$mode" != dev ] && build_frontend
-      [ "$restart_backend" = 1 ] && start_backend
+      if [ "$mode" != dev ] && ! (build_frontend); then
+        if [ "$restart_backend" = 1 ]; then start_backend; fi
+        die "frontend build failed; see $LOG_DIR/frontend-build.log"
+      fi
+      if [ "$restart_backend" = 1 ]; then start_backend; fi
       start_frontend "$mode" keep
       ;;
     *) die "reload: expected backend or frontend" ;;

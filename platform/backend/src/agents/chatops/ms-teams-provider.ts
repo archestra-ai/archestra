@@ -1749,7 +1749,6 @@ class MSTeamsProvider implements ChatOpsProvider {
         }
 
         const response = isSharePointReference
-
           ? await this.fetchSharePointFile(attachment.contentUrl)
           : await fetchTeamsFile(
               attachment.contentUrl,

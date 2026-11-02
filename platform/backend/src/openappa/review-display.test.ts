@@ -123,15 +123,32 @@ describe("redactCredentials", () => {
       "curl https://x/api/files --output out",
       "curl https://x/api/files --output out",
     ],
+    [
+      String.raw`curl -H Authorization:\ Bearer\ tok_123 https://x`,
+      String.raw`curl -H Authorization:\ Bearer\ [redacted] https://x`,
+    ],
+    [
+      String.raw`curl -H Authorization:Bearer\ tok_123`,
+      String.raw`curl -H Authorization:Bearer\ [redacted]`,
+    ],
+    [
+      String.raw`curl -H Authorization:\ tok_123\ -X`,
+      String.raw`curl -H Authorization:\ [redacted]`,
+    ],
+    ["Authorization: tok_123 -X POST", "Authorization: [redacted] POST"],
   ])("%s", (input, expected) => {
     expect(redactCredentials(input)).toBe(expected);
   });
 
-  test("keeps a JSON payload parseable", () => {
-    const command = "curl -H 'Authorization: Bearer s3cr3t'\nnext";
+  test.each([
+    "curl -H 'Authorization: Bearer s3cr3t'\nnext",
+    String.raw`curl -H Authorization:\ Bearer\ s3cr3t`,
+    String.raw`curl -H Authorization:\ s3cr3t\ next`,
+  ])("keeps a JSON payload parseable: %s", (command) => {
     const redacted = redactCredentials(JSON.stringify({ command }));
     expect(parseReviewedArguments(redacted)).toEqual({
-      command: "curl -H 'Authorization: Bearer [redacted]'\nnext",
+      command: redactCredentials(command),
     });
+    expect(redacted).not.toContain("s3cr3t");
   });
 });

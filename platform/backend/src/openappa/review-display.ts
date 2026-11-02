@@ -80,21 +80,45 @@ export function displayedReview<
   };
 }
 
-/** @internal exported for tests */
+/** The text with credential header values replaced, for display only. */
 export function redactCredentials(text: string): string {
   return text.replace(
     CREDENTIAL_HEADER,
-    (_credential, header: string) => `${header}${REDACTED_CREDENTIAL}`,
+    (
+      _credential,
+      authorization: string | undefined,
+      scheme: string | undefined,
+      gap: string | undefined,
+      header: string | undefined,
+    ) =>
+      authorization === undefined
+        ? `${header}${REDACTED_CREDENTIAL}`
+        : scheme && AUTH_SCHEMES.has(scheme.toLowerCase())
+          ? `${authorization}${scheme}${gap}${REDACTED_CREDENTIAL}`
+          : `${authorization}${REDACTED_CREDENTIAL}`,
   );
 }
 
 const REDACTED_CREDENTIAL = "[redacted]";
 
+// Only a known scheme stays visible: any other word before a gap may be the
+// credential itself.
+const AUTH_SCHEMES = new Set([
+  "basic",
+  "bearer",
+  "bot",
+  "digest",
+  "negotiate",
+  "ntlm",
+  "token",
+]);
+
 // A credential header as a command or JSON string carries it: the name, an
-// optional auth scheme, then the credential up to a quote, backslash or space,
-// so a JSON payload stays parseable.
+// optional auth scheme, then the credential up to a quote, backslash or
+// space, so a JSON payload stays parseable. A gap is whitespace, possibly
+// shell-escaped (`\ `, or `\\ ` inside a JSON string).
 const CREDENTIAL_HEADER =
-  /((?:proxy-)?authorization\s*:\s*(?:[A-Za-z][\w-]*\s+)?|(?:api-key|auth-token|private-token)\s*:\s*)[^\s'"\\]+/gi;
+  /((?:proxy-)?authorization\s*:(?:\\*\s)*)(?:([A-Za-z][\w-]*)((?:\\*\s)+))?[^\s'"\\]+|((?:api-key|auth-token|private-token)\s*:(?:\\*\s)*)[^\s'"\\]+/gi;
 
 /**
  * Argument values as one line each, names padded to one column, longer

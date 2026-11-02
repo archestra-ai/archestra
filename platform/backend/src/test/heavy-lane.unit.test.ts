@@ -210,6 +210,40 @@ describe("heavy lane", () => {
   );
 
   test.skipIf(!hasFlock)(
+    "a waiter whose caller went away does not run its command later",
+    async () => {
+      const { log, env, root } = scratch();
+      const release = path.join(root, "release");
+      const first = runCli(env, [
+        "--label",
+        "first",
+        "--",
+        "sh",
+        "-c",
+        `echo first >> ${log}; while [ ! -e ${release} ]; do sleep 0.05; done`,
+      ]);
+      await waitFor(() => readIfExists(log).includes("first"));
+      const second = runCli(env, [
+        "--label",
+        "second",
+        "--",
+        "sh",
+        "-c",
+        `echo second >> ${log}`,
+      ]);
+      await waitFor(() => second.stderr().includes("waits for"));
+      // Only the Node process: its waiting shell is left to notice. The
+      // shell still holds the stderr pipe, so `second` settles when it exits.
+      second.kill("SIGTERM");
+      writeFileSync(release, "");
+      expect((await first).status).toBe(0);
+      await second;
+      expect(readFileSync(log, "utf8").trim()).toBe("first");
+    },
+    30_000,
+  );
+
+  test.skipIf(!hasFlock)(
     "a command already under the lane neither waits nor pauses the servers",
     async () => {
       const { log, env, devLite } = scratch();
@@ -225,11 +259,16 @@ describe("heavy lane", () => {
     },
   );
 
-  test("refuses a command line without the -- before the command", async () => {
+  test("refuses a command line without the -- before the command, or a peak it cannot read", async () => {
     const { env } = scratch();
-    const result = await runCli(env, ["pnpm", "exec", "vitest", "--", "run"]);
-    expect(result.status).toBe(64);
-    expect(result.stderr).toContain("usage:");
+    for (const args of [
+      ["pnpm", "exec", "vitest", "--", "run"],
+      ["--peak-gib", "2.8GiB", "--", "true"],
+    ]) {
+      const result = await runCli(env, args);
+      expect(result.status).toBe(64);
+      expect(result.stderr).toContain("usage:");
+    }
   });
 
   // ===== Helpers =====
@@ -311,8 +350,10 @@ describe("heavy lane", () => {
     args: string[],
   ): Promise<{ status: number | null; stderr: string }> & {
     stderr: () => string;
+    kill: (signal: NodeJS.Signals) => void;
   } {
     let stderr = "";
+    let kill: (signal: NodeJS.Signals) => void = () => {};
     const done = new Promise<{ status: number | null; stderr: string }>(
       (resolve, reject) => {
         const child = spawn(process.execPath, [...NODE_FLAGS, LANE, ...args], {
@@ -322,10 +363,14 @@ describe("heavy lane", () => {
         child.stderr.on("data", (chunk) => {
           stderr += chunk;
         });
+        kill = (signal) => child.kill(signal);
         child.on("error", reject);
         child.on("close", (status) => resolve({ status, stderr }));
       },
     );
-    return Object.assign(done, { stderr: () => stderr });
+    return Object.assign(done, {
+      stderr: () => stderr,
+      kill: (signal: NodeJS.Signals) => kill(signal),
+    });
   }
 });

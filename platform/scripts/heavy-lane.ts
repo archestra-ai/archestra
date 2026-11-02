@@ -15,7 +15,12 @@
  * (`heavyLaneCeilings`) first stops the backend and frontend with
  * `scripts/dev-lite.sh pause`, keeping PostgreSQL and the builds, and starts
  * them again with `resume` when it ends, however it ends short of SIGKILL. It
- * says so on stderr. A stack paused by someone else stays as it was.
+ * says so on stderr. A stack paused by someone else stays as it was, and a
+ * stack whose dev-lite.sh cannot pause (no `cmd_pause`) is left running.
+ *
+ * Today the type check (`scripts/type-check.ts`) and every package's knip run
+ * take the lane, so a package's `check:commit` no longer runs tsc and knip
+ * side by side. Package scripts start it with `tsx` (engines allow Node 20).
  *
  * A command started under the lane sees `ARCHESTRA_HEAVY_LANE=held` and runs
  * its own heavy commands directly (`check:commit` running `type-check`), so the
@@ -24,11 +29,7 @@
  * The ceilings (`heavyLaneCeilings` in vitest.resources.ts) are the 4 GiB
  * budget measured in staging pods.
  *
- *   node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/heavy-lane.ts \
- *     [--label <text>] [--peak-gib <n>] [--dev-lite <script>] -- <command> [args...]
- *
- * (Node 24 strips the types; the flag silences its note that platform/ has no
- * package type.)
+ *   tsx scripts/heavy-lane.ts [--label <text>] [--peak-gib <n>] [--dev-lite <script>] -- <command> [args...]
  */
 import { type SpawnSyncReturns, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -72,13 +73,14 @@ export function runHeavy(heavy: HeavyCommand): SpawnSyncReturns<Buffer> {
     (heavy.lane ?? heavyLaneActive(envelope)) &&
     env[HEAVY_LANE_HELD_ENV] !== "held" &&
     hasFlock();
-  const options = {
-    stdio: "inherit" as const,
-    cwd: heavy.cwd,
-    shell: process.platform === "win32",
-  };
   if (!lane) {
-    return spawnSync(heavy.command, heavy.args, { ...options, env });
+    // Windows finds `tsc.cmd` only through a shell; the lane never runs there.
+    return spawnSync(heavy.command, heavy.args, {
+      stdio: "inherit",
+      cwd: heavy.cwd,
+      env,
+      shell: process.platform === "win32",
+    });
   }
   const lock = path.join(tmpdir(), "archestra-heavy.lock");
   const holder = `${lock}.holder`;
@@ -104,10 +106,15 @@ export function runHeavy(heavy: HeavyCommand): SpawnSyncReturns<Buffer> {
       devLite,
       pausedFile(env),
       why,
+      String(process.pid),
       heavy.command,
       ...heavy.args,
     ],
-    { ...options, env: { ...env, [HEAVY_LANE_HELD_ENV]: "held" } },
+    {
+      stdio: "inherit",
+      cwd: heavy.cwd,
+      env: { ...env, [HEAVY_LANE_HELD_ENV]: "held" },
+    },
   );
 }
 
@@ -122,18 +129,21 @@ const OWN_DEV_LITE_SCRIPT = path.join(
 /**
  * Takes the lock on its own descriptor (9), which nothing it starts inherits:
  * a tmux server that `resume` starts would otherwise hold the lane for good.
- * Records the holder for waiters, pauses the servers when asked and they run,
- * runs the command, resumes them. The no-op INT/TERM/HUP handler, set before
- * anything else, keeps this shell alive to resume while the signal reaches
- * the command (handlers, unlike ignored signals, are not inherited). The dev
- * stack starts without the lane's own variables.
+ * A signal while it waits ends it; once it holds the lane it runs nothing for
+ * a caller that has gone. It records the holder for waiters, pauses the
+ * servers when asked and they run, runs the command and resumes them. From
+ * then on a no-op INT/TERM/HUP handler keeps this shell alive to resume while
+ * the signal reaches the command (handlers, unlike ignored signals, are not
+ * inherited). The dev stack starts without the lane's own variables.
  */
 const HELD_SCRIPT = `
-lock="$1" holder="$2" label="$3" pause="$4" dev_lite="$5" paused_file="$6" why="$7"
-shift 7
-trap ':' INT TERM HUP
+lock="$1" holder="$2" label="$3" pause="$4" dev_lite="$5" paused_file="$6" why="$7" caller="$8"
+shift 8
 exec 9>>"$lock"
 flock 9 || exit $?
+# A caller that went away while this waited no longer wants the command.
+kill -0 "$caller" 2>/dev/null || exit 143
+trap ':' INT TERM HUP
 printf '%s\\t%s\\t%s\\n' "$$" "$(date +%s)" "$label" > "$holder" 2>/dev/null || :
 stack() { env -u ARCHESTRA_HEAVY_LANE -u GOMEMLIMIT bash "$dev_lite" "$1" > /dev/null 2>&1 9>&-; }
 resume=0
@@ -239,7 +249,7 @@ if (
 ) {
   const usage = () => {
     process.stderr.write(
-      "usage: node scripts/heavy-lane.ts [--label <text>] [--peak-gib <n>] [--dev-lite <script>] -- <command> [args...]\n",
+      "usage: tsx scripts/heavy-lane.ts [--label <text>] [--peak-gib <n>] [--dev-lite <script>] -- <command> [args...]\n",
     );
     process.exit(64);
   };
@@ -260,12 +270,14 @@ if (
   const [command, ...args] = argv.slice(index + 1);
   if (index >= argv.length || !command) usage();
   const flag = (name: string) => options.get(name);
-  const peak = Number(flag("--peak-gib"));
+  const peakFlag = flag("--peak-gib");
+  const peak = Number(peakFlag);
+  if (peakFlag !== undefined && !(Number.isFinite(peak) && peak > 0)) usage();
   const result = runHeavy({
     command,
     args,
     label: flag("--label") ?? path.basename(command),
-    peakBytes: Number.isFinite(peak) && peak > 0 ? peak * GIB : undefined,
+    peakBytes: peakFlag === undefined ? undefined : peak * GIB,
     devLiteScript: flag("--dev-lite"),
   });
   if (result.error) throw result.error;

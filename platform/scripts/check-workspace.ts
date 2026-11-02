@@ -174,17 +174,23 @@ function vitestCheck(workspace: string, args: string[]): WorkspaceCheck {
 }
 
 function staticChecks(workspace: string, tests: boolean): WorkspaceCheck[] {
+  // Turbo schedules shared's type-check as a prerequisite. Direct package
+  // commands still run it here, since they have no task graph.
   const checks: WorkspaceCheck[] = [
-    {
-      ...nodeCheck(
-        workspace,
-        "type-check",
-        path.join(path.dirname(SCRIPT), "type-check.ts"),
-        ["--noEmit"],
-        { native: true },
-      ),
-      managesLane: true,
-    },
+    ...(workspace === "shared" && process.env.TURBO_HASH
+      ? []
+      : [
+          {
+            ...nodeCheck(
+              workspace,
+              "type-check",
+              path.join(path.dirname(SCRIPT), "type-check.ts"),
+              ["--noEmit"],
+              { native: true },
+            ),
+            managesLane: true,
+          },
+        ]),
     { label: `knip (${workspace})`, command: "knip", args: [] },
     ...(workspace === "backend"
       ? [

@@ -660,12 +660,18 @@ build_frontend() {
   log "building the frontend (production build, as CI serves it); log in $LOG_DIR/frontend-build.log"
   CIRCLE_NODE_TOTAL=$((cpus + 1)) frontend_build_node -e "$launcher" > "$LOG_DIR/frontend-build.log" 2>&1 \
     || { tail -n 30 "$LOG_DIR/frontend-build.log" >&2; die "frontend build failed"; }
+  prepare_frontend_standalone
+  log "frontend built in $((SECONDS - started)) s"
+}
+
+# Next's standalone output omits these assets. Refresh them after generation
+# so `resume` can serve the current build without rebuilding it.
+prepare_frontend_standalone() {
   # Checked one by one: a caller's `if` switches errexit off in here.
   rm -rf "$STANDALONE_DIR/.next/static" "$STANDALONE_DIR/public" \
     && cp -R "$PLATFORM_DIR/frontend/.next/static" "$STANDALONE_DIR/.next/static" \
     && cp -R "$PLATFORM_DIR/frontend/public" "$STANDALONE_DIR/public" \
     || die "could not copy the frontend's static and public files next to its server"
-  log "frontend built in $((SECONDS - started)) s"
 }
 
 # CI (.github/workflows/frontend-dev-cache.yml): `key` prints the key of this
@@ -682,21 +688,30 @@ cmd_frontend_artifact() {
     build)
       shift
       frontend_prebuilt install-cache || true
-      local arg mode explicit_mode=0
+      local arg mode explicit_mode=0 selected_mode="" mode_value_next=0
       for arg in "$@"; do
+        if [ "$mode_value_next" = 1 ]; then
+          selected_mode="$arg"
+          mode_value_next=0
+          continue
+        fi
         case "$arg" in
-          --experimental-build-mode | --experimental-build-mode=*) explicit_mode=1 ;;
+          --experimental-build-mode) explicit_mode=1; mode_value_next=1 ;;
+          --experimental-build-mode=*) explicit_mode=1; selected_mode="${arg#*=}" ;;
         esac
       done
       local launcher='const { status, signal } = require("node:child_process").spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build", ...process.argv.slice(1)], { stdio: "inherit" }); process.exit(status ?? (signal ? 128 + require("node:os").constants.signals[signal] : 1));'
       if [ "$explicit_mode" = 1 ]; then
-        frontend_build_node -e "$launcher" -- "$@"
+        frontend_build_node -e "$launcher" -- "$@" || return $?
       else
         # Turbopack retains its native compiler heap after compilation.
         # A new process for generation keeps it out of the page worker's budget.
         for mode in compile generate; do
           frontend_build_node -e "$launcher" -- "$@" "--experimental-build-mode=$mode" || return $?
         done
+      fi
+      if [ "$explicit_mode" = 0 ] || [ "$selected_mode" = generate ]; then
+        prepare_frontend_standalone
       fi
       ;;
     pack)

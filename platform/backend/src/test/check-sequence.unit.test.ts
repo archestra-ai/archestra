@@ -239,6 +239,62 @@ function nodeCheck(
 }
 
 test.each([
+  false,
+  true,
+])("shared checks run the compiler once with Turbo (%s)", (turbo) => {
+  const platform = path.join(dir, "shared checks");
+  const shared = path.join(platform, "shared");
+  const scripts = path.join(platform, "scripts");
+  fs.mkdirSync(shared, { recursive: true });
+  fs.mkdirSync(scripts);
+  fs.writeFileSync(
+    path.join(shared, "package.json"),
+    '{"name":"@archestra/shared"}',
+  );
+  const source = path.resolve(__dirname, "../../..");
+  for (const file of [
+    "check-workspace.mjs",
+    "check-workspace.ts",
+    "check-sequence.ts",
+    "heavy-lane.ts",
+  ]) {
+    fs.copyFileSync(
+      path.join(source, "scripts", file),
+      path.join(scripts, file),
+    );
+  }
+  fs.copyFileSync(
+    path.join(source, "vitest.resources.ts"),
+    path.join(platform, "vitest.resources.ts"),
+  );
+  const recorded = path.join(dir, "shared-tools");
+  const record = `require("node:fs").appendFileSync(${JSON.stringify(recorded)}, require("node:path").basename(process.argv[1]) + "\\n");`;
+  fs.writeFileSync(path.join(scripts, "type-check.ts"), record);
+  for (const tool of ["knip", "biome"]) {
+    fs.writeFileSync(path.join(dir, tool), `#!${process.execPath}\n${record}`);
+    fs.chmodSync(path.join(dir, tool), 0o755);
+  }
+  const result = spawnSync(
+    process.execPath,
+    [path.join(scripts, "check-workspace.mjs"), "commit"],
+    {
+      cwd: shared,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${dir}${path.delimiter}${process.env.PATH}`,
+        TURBO_HASH: turbo ? "task-hash" : "",
+        ARCHESTRA_HEAVY_LANE: "held",
+      },
+    },
+  );
+  expect(result.status, result.stderr).toBe(0);
+  expect(fs.readFileSync(recorded, "utf8").trim().split("\n")).toEqual(
+    turbo ? ["knip", "biome"] : ["type-check.ts", "knip", "biome"],
+  );
+});
+
+test.each([
   {
     command: "build",
     fail: "",
@@ -273,6 +329,13 @@ test.each([
     expected: 0,
     modes: ["cache", "generate"],
     args: ["--experimental-build-mode", "generate"],
+  },
+  {
+    command: "build",
+    fail: "",
+    expected: 0,
+    modes: ["cache", "compile"],
+    args: ["--experimental-build-mode=compile"],
   },
   {
     command: "pack",
@@ -310,6 +373,16 @@ test.each([
     },
   );
   fs.mkdirSync(path.join(frontend, "public"));
+  fs.writeFileSync(
+    path.join(frontend, ".next/static/current.js"),
+    "current js",
+  );
+  fs.writeFileSync(path.join(frontend, "public/icon.svg"), "current icon");
+  fs.mkdirSync(path.join(frontend, ".next/standalone/frontend/public"));
+  fs.writeFileSync(
+    path.join(frontend, ".next/standalone/frontend/public/obsolete.svg"),
+    "obsolete",
+  );
   fs.writeFileSync(path.join(platform, "Tiltfile"), "");
   fs.writeFileSync(path.join(platform, ".env.example"), "");
   fs.copyFileSync(
@@ -382,5 +455,19 @@ if (mode === "compile" && process.env.ARCHESTRA_TEST_NEXT_FAIL === "signal") pro
     if (command === "build") {
       expect(event.args).toContain("app/page with $literal");
     }
+  }
+  const served = path.join(frontend, ".next/standalone/frontend");
+  if (expected === 0 && modes.includes("generate")) {
+    expect(
+      fs.readFileSync(path.join(served, ".next/static/current.js"), "utf8"),
+    ).toBe("current js");
+    expect(fs.readFileSync(path.join(served, "public/icon.svg"), "utf8")).toBe(
+      "current icon",
+    );
+    expect(fs.existsSync(path.join(served, "public/obsolete.svg"))).toBe(false);
+  } else {
+    expect(fs.existsSync(path.join(served, ".next/static/current.js"))).toBe(
+      false,
+    );
   }
 });

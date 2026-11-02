@@ -40,7 +40,9 @@ describe("which members a client's wire reaches", () => {
     expect(canReachMember("anthropic", "zhipuai")).toBe(true);
     expect(canReachMember("anthropic", "bedrock")).toBe(true);
     expect(canReachMember("bedrock-converse", "zhipuai")).toBe(false);
-    expect(canReachMember("openai-chat", "gemini")).toBe(false);
+    expect(canReachMember("openai-chat", "gemini")).toBe(true);
+    expect(canReachMember("anthropic", "gemini")).toBe(true);
+    expect(canReachMember("bedrock-converse", "gemini")).toBe(false);
   });
 });
 

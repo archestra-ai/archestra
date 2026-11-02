@@ -25,6 +25,7 @@ import {
   bedrockInvokeAdapterFactory,
   cerebrasAdapterFactory,
   deepseekAdapterFactory,
+  geminiAdapterFactory,
   groqAdapterFactory,
   minimaxAdapterFactory,
   mistralAdapterFactory,
@@ -36,6 +37,7 @@ import {
   xaiAdapterFactory,
   zhipuaiAdapterFactory,
 } from "./adapters";
+import { withAnthropicToolCallIds } from "./adapters/anthropic";
 import {
   anthropicResponseToOpenai,
   openaiToAnthropic,
@@ -45,11 +47,14 @@ import {
   createConverseToOpenaiSseEncoder,
   openaiToConverse,
 } from "./adapters/bedrock-openai-translator";
+import { makeGeminiOpenaiAdapterFactory } from "./adapters/gemini-openai";
+import { openaiToGemini } from "./adapters/gemini-openai-translator";
 import {
   anthropicToOpenai,
   createOpenaiToAnthropicStreamTranslator,
   openaiResponseToAnthropic,
 } from "./adapters/openai-anthropic-translator";
+import { withOpenAiChatToolCallIds } from "./utils/tool-call-ids";
 
 /** The request formats a pool can carry a request in. */
 export type PoolWire = "openai-chat" | "anthropic" | "bedrock-converse";
@@ -122,10 +127,20 @@ export function memberTransport(params: {
   }
 
   if (target === inbound) {
-    const withModel = (request: unknown) =>
-      target === "bedrock-converse"
-        ? { ...(request as object), modelId }
-        : { ...(request as object), model: modelId };
+    const withModel = (request: unknown) => {
+      if (target === "bedrock-converse")
+        return { ...(request as object), modelId };
+      const body = request as OpenAi.Types.ChatCompletionsRequest &
+        Anthropic.Types.MessagesRequest;
+      return {
+        ...body,
+        model: modelId,
+        messages:
+          target === "anthropic"
+            ? withAnthropicToolCallIds(body.messages)
+            : withOpenAiChatToolCallIds(body.messages),
+      };
+    };
     return {
       execute: (request) => adapter.execute(client, withModel(request)),
       executeStream: (request, onAccepted) =>
@@ -142,6 +157,7 @@ export function memberTransport(params: {
         const response = await adapter.execute(client, {
           ...anthropicBody,
           model: modelId,
+          messages: withAnthropicToolCallIds(anthropicBody.messages),
         });
         return anthropicResponseToOpenai(
           response as Anthropic.Types.MessagesResponse,
@@ -154,7 +170,12 @@ export function memberTransport(params: {
         );
         const events = await adapter.executeStream(
           client,
-          { ...anthropicBody, model: modelId, stream: true },
+          {
+            ...anthropicBody,
+            model: modelId,
+            messages: withAnthropicToolCallIds(anthropicBody.messages),
+            stream: true,
+          },
           onAccepted,
         );
         const translator = anthropicEventsToOpenAiChunks(openaiContext);
@@ -193,6 +214,61 @@ export function memberTransport(params: {
               encoder.encodeBedrockEvent(event as ConverseStreamOutput),
             ),
           () => sseToChunks(encoder.formatEnd()),
+        );
+      },
+    };
+  }
+
+  if (inbound === "openai-chat" && target === "gemini") {
+    const translate = (request: unknown) => {
+      // Translation depends on the selected model's thinking capabilities.
+      const { geminiBody, openaiContext } = openaiToGemini({
+        ...(request as OpenAi.Types.ChatCompletionsRequest),
+        model: modelId,
+      });
+      return {
+        body: geminiBody,
+        adapter: makeGeminiOpenaiAdapterFactory({
+          ...openaiContext,
+          requestedModel: (request as OpenAi.Types.ChatCompletionsRequest)
+            .model,
+        }),
+      };
+    };
+    return {
+      async execute(request) {
+        const { body, adapter } = translate(request);
+        const response = await adapter.execute(client, body);
+        return adapter.createResponseAdapter(response).getOriginalResponse();
+      },
+      async executeStream(request, onAccepted) {
+        const { body, adapter } = translate(request);
+        const events = await adapter.executeStream(client, body);
+        onAccepted?.();
+        const stream = adapter.createStreamAdapter(body);
+        return mapStream(
+          events,
+          (event) => {
+            const result = stream.processChunk(
+              event as Parameters<typeof stream.processChunk>[0],
+            );
+            return sseToChunks(result.sseData);
+          },
+          () => {
+            if (!stream.state.stopReason) {
+              throw new UpstreamStreamIncompleteError(
+                "The upstream stream ended before it finished",
+              );
+            }
+            return [
+              ...(stream.state.toolCalls.length > 0
+                ? (
+                    stream.formatToolCallsSSE?.(stream.state.toolCalls) ?? []
+                  ).flatMap(sseToChunks)
+                : []),
+              ...sseToChunks(stream.formatEndSSE()),
+            ];
+          },
         );
       },
     };
@@ -285,6 +361,7 @@ const MEMBER_ADAPTERS: Record<ModelPoolProvider, unknown> = {
   azure: azureAdapterFactory,
   cerebras: cerebrasAdapterFactory,
   deepseek: deepseekAdapterFactory,
+  gemini: geminiAdapterFactory,
   groq: groqAdapterFactory,
   minimax: minimaxAdapterFactory,
   mistral: mistralAdapterFactory,
@@ -300,14 +377,17 @@ const MEMBER_ADAPTERS: Record<ModelPoolProvider, unknown> = {
 const TRANSLATED = new Set([
   "openai-chat>anthropic",
   "openai-chat>bedrock-converse",
+  "openai-chat>gemini",
   "anthropic>openai-chat",
   "anthropic>bedrock-converse",
+  "anthropic>gemini",
 ]);
 
-function wireOf(provider: SupportedProvider): PoolWire | null {
+function wireOf(provider: SupportedProvider): PoolWire | "gemini" | null {
   if (!isModelPoolProvider(provider)) return null;
   if (provider === "anthropic") return "anthropic";
   if (provider === "bedrock") return "bedrock-converse";
+  if (provider === "gemini") return "gemini";
   return "openai-chat";
 }
 
@@ -465,9 +545,9 @@ function anthropicEventsToOpenAiChunks(ctx: {
 const DECODER = new TextDecoder();
 
 /** The chunk objects in OpenAI SSE bytes; `[DONE]` carries none. */
-function sseToChunks(bytes: Uint8Array | null): unknown[] {
+function sseToChunks(bytes: Uint8Array | string | null): unknown[] {
   if (!bytes) return [];
-  return DECODER.decode(bytes)
+  return (typeof bytes === "string" ? bytes : DECODER.decode(bytes))
     .split("\n\n")
     .map((event) => event.trim())
     .filter((event) => event.startsWith("data: ") && event !== "data: [DONE]")

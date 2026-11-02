@@ -2295,7 +2295,11 @@ async function handleObservedLLMProxy<
     }
 
     // Build final request
-    const builtRequest = requestAdapter.toProviderRequest();
+    // A translated member may need data encoded in a tool-call id (Gemini's
+    // thought signature). Apply the destination's id rules in its transport.
+    const builtRequest = requestAdapter.toProviderRequest({
+      preserveToolCallIds: Boolean(modelPool || autoRoutedTier),
+    });
     governedThread?.restoreProviderRequest(builtRequest);
 
     // Repair unpaired UTF-16 surrogates before the body leaves for the
@@ -3134,7 +3138,7 @@ async function handleStreaming<
           // Gemini's SDK loses the HTTP status when an error body is cut off;
           // that is indistinguishable from a transport failure, so don't retry.
           isRetryable: (error) =>
-            providerName !== "gemini" &&
+            (ctx.upstreamAttempt.provider ?? providerName) !== "gemini" &&
             isRetryableUpstreamConnectionFailure(error),
           shouldContinue: () => !reply.raw.destroyed,
           onRetry: (event) =>
@@ -3943,7 +3947,7 @@ async function handleNonStreaming<
             ctx.modelPool?.plan.timeoutMs ?? poolResponseTimeoutMs(request),
           // See the streaming path: Gemini cannot safely classify this boundary.
           isRetryable: (error) =>
-            providerName !== "gemini" &&
+            (ctx.upstreamAttempt.provider ?? providerName) !== "gemini" &&
             isRetryableUpstreamConnectionFailure(error),
           shouldContinue: () => !reply.raw.destroyed,
           onRetry: (event) =>

@@ -149,9 +149,9 @@ describe("return-label reviews", () => {
     });
     if (!issued) throw new Error("expected a return-label review card");
     expect(issued?.card.options.map((option) => option.label)).toEqual([
+      "Inspect",
       "Allow",
       "Deny",
-      "Inspect",
     ]);
     expect(issued?.card.callPreview).toContain("4,080 characters");
     const label =
@@ -208,8 +208,8 @@ describe("return-label reviews", () => {
     });
     if (!issued) throw new Error("expected a return-label review card");
     expect(issued.card.options.map((option) => option.label)).toEqual([
-      "Deny",
       "Inspect",
+      "Deny",
     ]);
     await resolveHitlInspectableAnswer({
       session: reviewSession,
@@ -224,9 +224,9 @@ describe("return-label reviews", () => {
     });
     expect(inspected?.reviewText).toContain("Additional condition:");
     expect(inspected?.card.options.map((option) => option.label)).toEqual([
+      "Inspect",
       "Allow",
       "Deny",
-      "Inspect",
     ]);
     // A card issued before the text went out still cannot approve.
     expect(
@@ -273,7 +273,7 @@ describe("hitlReviewCard", () => {
     preview.length <= 2000 &&
     preview.split("\n").every((line) => [...line].length <= 34);
 
-  test("asks one line and shows the exact arguments, with the scope under Allow only", () => {
+  test("lists Inspect first on an approvable card, with exact arguments and scope under Allow only", () => {
     const { card, approve } = cardFor({
       tool: "mcp/archestra_pm/create_goal",
       arguments: JSON.stringify({
@@ -290,9 +290,9 @@ describe("hitlReviewCard", () => {
     expect(
       card.options.map((option) => [option.label, option.description]),
     ).toEqual([
+      ["Inspect", "Show the full review in chat."],
       ["Allow", "This exact call."],
       ["Deny", "Keep it blocked."],
-      ["Inspect", "Show the full review in chat."],
     ]);
     const values = [
       "list: sprint",
@@ -488,7 +488,7 @@ describe("hitlReviewCard", () => {
     expect(preview).toContain("\\u200b");
   });
 
-  test("offers no Allow when the policy scope does not fit", () => {
+  test("lists Inspect first without Allow when the policy scope does not fit", () => {
     const wide = `  - ${"condition ".repeat(200)}`;
     const { card, approve } = cardFor({
       tool: "Bash",
@@ -507,10 +507,12 @@ describe("hitlReviewCard", () => {
     });
     expect(approve).toBe(false);
     expect(card.options.map((option) => option.label)).toEqual([
-      "Deny",
       "Inspect",
+      "Deny",
     ]);
-    expect(card.options[1].description).toContain("Allow is not offered");
+    expect(
+      card.options.find((option) => option.label === "Inspect")?.description,
+    ).toContain("Allow is not offered");
     // The scope itself is not shortened into the card.
     expect(card.callPreview).toBe("command: ls");
   });
@@ -542,8 +544,8 @@ describe("hitlReviewCard", () => {
     const { card, approve } = cardFor({ tool: "Bash", arguments: "{}", text });
     expect(approve).toBe(false);
     expect(card.options.map((option) => option.label)).toEqual([
-      "Deny",
       "Inspect",
+      "Deny",
     ]);
     // The full text survives in the complete review text instead.
     expect(
@@ -661,12 +663,14 @@ describe("inspection state", () => {
     });
     expect(first?.reviewText).toBeUndefined();
     expect(first?.card.options.map((option) => option.label)).toEqual([
+      "Inspect",
       "Allow",
       "Deny",
-      "Inspect",
     ]);
     // The long command gives way to a pointer; the scope still shows.
-    const allow = first?.card.options[0]?.preview ?? "";
+    const allow =
+      first?.card.options.find((option) => option.label === "Allow")?.preview ??
+      "";
     expect(allow.length).toBeLessThanOrEqual(2000);
     expect(allow).toContain("see\n    Inspect)");
     expect(allow).toContain("Also accepts:");
@@ -703,9 +707,9 @@ describe("inspection state", () => {
     );
     // The same card accompanies the text.
     expect(next?.card.options.map((option) => option.label)).toEqual([
+      "Inspect",
       "Allow",
       "Deny",
-      "Inspect",
     ]);
   });
 
@@ -803,8 +807,8 @@ describe("inspection state", () => {
     });
     if (!first) throw new Error("expected an inspectable card");
     expect(first.card.options.map((option) => option.label)).toEqual([
-      "Deny",
       "Inspect",
+      "Deny",
     ]);
     await resolveHitlInspectableAnswer({
       session: reviewSession,
@@ -819,9 +823,9 @@ describe("inspection state", () => {
     });
     expect(next?.reviewText).toBeDefined();
     expect(next?.card.options.map((option) => option.label)).toEqual([
+      "Inspect",
       "Allow",
       "Deny",
-      "Inspect",
     ]);
     for (const option of next?.card.options ?? [])
       expect(option.preview?.length ?? 0).toBeLessThanOrEqual(2000);
@@ -868,9 +872,9 @@ describe("inspection state", () => {
     });
     expect(later?.reviewText).toBeUndefined();
     expect(later?.card.options.map((option) => option.label)).toEqual([
+      "Inspect",
       "Allow",
       "Deny",
-      "Inspect",
     ]);
     const approved = await resolveHitlInspectableAnswer({
       session: reviewSession,
@@ -904,8 +908,8 @@ describe("inspection state", () => {
       emit: false,
     });
     expect(read?.card.options.map((option) => option.label)).toEqual([
-      "Deny",
       "Inspect",
+      "Deny",
     ]);
     const early = await resolveHitlInspectableAnswer({
       session: reviewSession,
@@ -952,8 +956,8 @@ describe("inspection state", () => {
     });
     if (!issued) throw new Error("expected an inspectable card");
     expect(issued.card.options.map((option) => option.label)).toEqual([
-      "Deny",
       "Inspect",
+      "Deny",
     ]);
     for (const [claimDigest, carriedReviewText] of [
       [issued.digest, false],
@@ -1008,9 +1012,9 @@ describe("inspection state", () => {
     expect(issued?.card.shortQuestion).toBe("Run Bash?");
     expect(issued?.card.callPreview).toBe("command: ls -la");
     expect(issued?.card.options.map((option) => option.label)).toEqual([
+      "Inspect",
       "Allow",
       "Deny",
-      "Inspect",
     ]);
     expect(issued?.reviewText).toBeUndefined();
     const approved = await resolveHitlInspectableAnswer({

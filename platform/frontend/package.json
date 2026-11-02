@@ -131,7 +131,7 @@
     "@types/ua-parser-js": "^0.7.39",
     "highlight.js": "^11.11.1",
     "jsdom": "^29.0.0",
-    "knip": "^5.85.0",
+    "knip": "^6.43.0",
     "msw": "^2.14.6",
     "semver": "^7.7.4",
     "tailwindcss": "^4",

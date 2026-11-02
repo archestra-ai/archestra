@@ -4345,9 +4345,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           question: questionText,
           header: "Tool call",
           options: [
+            { label: "Inspect", description: "Show the full review in chat." },
             { label: "Allow", description: "This exact call." },
             { label: "Deny", description: "Keep it blocked." },
-            { label: "Inspect", description: "Show the full review in chat." },
           ],
           multiSelect: false,
         },
@@ -4474,12 +4474,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             question: 'Approve this call?\nmcp/example/write {"value":1}',
             header: "Tool call",
             options: [
-              { label: "Allow", description: "This exact call." },
-              { label: "Deny", description: "Keep it blocked." },
               {
                 label: "Inspect",
                 description: "Show the full review in chat.",
               },
+              { label: "Allow", description: "This exact call." },
+              { label: "Deny", description: "Keep it blocked." },
             ],
             multiSelect: false,
           },
@@ -4671,9 +4671,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           }
         ).questions;
         expect(question.options.map((option) => option.label)).toEqual([
+          "Inspect",
           "Allow",
           "Deny",
-          "Inspect",
         ]);
         return { body: response.body, card, question: question.question };
       };

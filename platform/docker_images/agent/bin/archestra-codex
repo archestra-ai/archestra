@@ -317,6 +317,12 @@ fi
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 failure_watch=(python3 "${script_dir}/archestra-codex-failure-watch")
+# The client's shell commands take the highest OOM score; the client and this
+# launcher keep the container's (archestra-command-oom-score.sh). Set last, so
+# nothing the launcher started before gets it. An earlier BASH_ENV still runs.
+export ARCHESTRA_AGENT_RUNTIME_BASH_ENV="${ARCHESTRA_AGENT_RUNTIME_BASH_ENV-${BASH_ENV:-}}"
+export BASH_ENV="${script_dir}/archestra-command-oom-score.sh"
+
 case "${runtime_mode}" in
   interactive)
     # No subcommand means Codex's native full-screen TUI. The positional prompt

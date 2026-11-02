@@ -35,6 +35,7 @@ import {
 } from "@/agents/openai-reasoning-summary";
 import { createStepContextGuard } from "@/agents/step-context-guard";
 import { subagentRunTracker } from "@/agents/subagent-run-tracker";
+import { resolveSubagentTierSelection } from "@/agents/subagent-tiers";
 import { canUseAgent } from "@/auth/permission-gated";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
@@ -75,10 +76,7 @@ import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availabi
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import type { ChatMessage } from "@/types";
 import type { A2AAttachment } from "@/types/a2a-attachment";
-import {
-  resolveForkParentSelection,
-  resolveSubagentTierSelection,
-} from "@/utils/llm-resolution";
+import { resolveForkParentSelection } from "@/utils/llm-resolution";
 import {
   stripThinkingBlocks,
   THINKING_ONLY_NOTICE,

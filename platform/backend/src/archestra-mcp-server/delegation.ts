@@ -11,6 +11,7 @@ import { convertToModelMessages, type ModelMessage } from "ai";
 import { z } from "zod";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { DelegationLoopError } from "@/agents/errors";
+import { availableSubagentTiers } from "@/agents/subagent-tiers";
 import { startDelegatedTask } from "@/archestra-mcp-server/tasks";
 import type { RequestLookups } from "@/auth/request-lookups";
 import logger from "@/logging";
@@ -46,10 +47,7 @@ import {
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { type Agent, ApiError } from "@/types";
-import {
-  availableSubagentTiers,
-  resolveForkParentSelection,
-} from "@/utils/llm-resolution";
+import { resolveForkParentSelection } from "@/utils/llm-resolution";
 import { errorResult, isAbortLikeError, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 

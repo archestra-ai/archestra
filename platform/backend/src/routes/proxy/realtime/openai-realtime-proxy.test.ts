@@ -1,6 +1,7 @@
 import { once } from "node:events";
 import { createServer, type Server } from "node:http";
 import { connect as connectTcp } from "node:net";
+import { SecretsManagerType } from "@archestra/shared";
 import {
   type RawData,
   type WebSocket as ServerSocket,
@@ -10,13 +11,14 @@ import {
 import config from "@/config";
 import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
-import { InteractionModel } from "@/models";
+import { InteractionModel, SecretModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import LimitModel from "@/models/limit";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
+import { secretManagerCoordinator } from "@/secrets-manager";
 import {
   accessGrants,
   afterEach,
@@ -320,6 +322,82 @@ describe("OpenAI realtime sessions through the Model Router", () => {
       socket.on("message", listener);
     });
   }
+
+  test("hiding during credential retrieval blocks the new session but keeps an open session running", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+  }) => {
+    const agent = await makeAgent({ agentType: "llm_proxy" });
+    const key = await mappedKey({
+      organizationId: agent.organizationId,
+      makeSecret: (input) =>
+        SecretModel.create({
+          name: "availability-vault",
+          ...input,
+          isVault: true,
+        }),
+      makeLlmProviderApiKey,
+    });
+    const model = await ModelModel.findByProviderAndModelId(
+      "openai",
+      "gpt-realtime-2.1",
+    );
+    if (!model) throw new Error("Missing fixture model");
+    let hideDuringRead = true;
+    let secretReads = 0;
+    // Pause at a true process boundary after route resolution: the credential
+    // comes from Vault while an operator changes availability in the real DB.
+    const vault = createServer(async (_request, response) => {
+      secretReads++;
+      if (hideDuringRead) await ModelModel.update(model.id, { ignored: true });
+      response.setHeader("content-type", "application/json");
+      response.end(
+        JSON.stringify({
+          data: {
+            data: { value: JSON.stringify({ apiKey: "sk-openai-mapped" }) },
+          },
+        }),
+      );
+    });
+    await new Promise<void>((resolve) => vault.listen(0, "127.0.0.1", resolve));
+    const address = vault.address();
+    if (!address || typeof address === "string")
+      throw new Error("Missing Vault address");
+    config.enterpriseFeatures.core = true;
+    vi.stubEnv(
+      "ARCHESTRA_HASHICORP_VAULT_ADDR",
+      `http://127.0.0.1:${address.port}`,
+    );
+    vi.stubEnv("ARCHESTRA_HASHICORP_VAULT_TOKEN", "synthetic-vault-token");
+    vi.stubEnv("ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD", "TOKEN");
+    vi.stubEnv("ARCHESTRA_HASHICORP_VAULT_KV_VERSION", "2");
+    try {
+      await secretManagerCoordinator.initialize(SecretsManagerType.Vault);
+      const url = `${origin}/v1/openai/${agent.id}/realtime?model=gpt-realtime-2.1`;
+      const hidden = await connect(url, key.value);
+      expect(hidden).toMatchObject({
+        status: 403,
+        body: expect.stringContaining("hidden"),
+      });
+      expect(secretReads).toBe(1);
+      expect(upstreamConnections).toHaveLength(0);
+      hideDuringRead = false;
+      await ModelModel.update(model.id, { ignored: false });
+      const opened = await connect(url, key.value);
+      if (!("socket" in opened)) throw new Error(`Refused: ${opened.body}`);
+      await nextEvent(opened.socket, "session.created");
+      await ModelModel.update(model.id, { ignored: true });
+      opened.socket.send(JSON.stringify({ type: "response.create" }));
+      await nextEvent(opened.socket, "response.done");
+      opened.socket.close();
+      expect(upstreamConnections).toHaveLength(1);
+    } finally {
+      await secretManagerCoordinator.initialize(SecretsManagerType.DB);
+      vi.unstubAllEnvs();
+      vault.closeAllConnections();
+      await new Promise<void>((resolve) => vault.close(() => resolve()));
+    }
+  });
 
   test("a hidden model cannot start a realtime session and showing it restores access", async ({
     makeAgent,

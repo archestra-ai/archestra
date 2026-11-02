@@ -145,10 +145,6 @@ async function admit(request: IncomingMessage, socket: Duplex, head: Buffer) {
       400,
       `Provider "${resolution.provider}" does not support the Model Router realtime endpoint.`,
     );
-  await assertModelAvailable({
-    provider: "openai",
-    modelId: resolution.modelId,
-  });
   const credential = await selectModelRouterCredential({ auth, resolution });
   if (credential.kind === "denied") throw credential.error;
   if (!credential.apiKey)
@@ -284,6 +280,11 @@ async function admit(request: IncomingMessage, socket: Duplex, head: Buffer) {
     upstreamUrl.searchParams.set(name, value);
   upstreamUrl.searchParams.set("model", resolution.modelId);
   const beta = request.headers["openai-beta"];
+  // Credential and budget reads can wait while an operator hides the model.
+  await assertModelAvailable({
+    provider: "openai",
+    modelId: resolution.modelId,
+  });
   if (clientGone) return;
   const upstream = new WebSocket(upstreamUrl, {
     headers: {

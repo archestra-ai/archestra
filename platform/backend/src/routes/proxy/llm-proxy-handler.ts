@@ -4966,6 +4966,7 @@ async function openUpstream<TRequest, T>(params: {
   ctx.getUpstreamStreamUsage = undefined;
   let dispatched = false;
   const authorizedOpen = async (attemptTransport: MemberTransport) => {
+    await ctx.authorizeA2AOAuthAttempt?.();
     try {
       await assertModelAvailable({
         provider: ctx.upstreamAttempt.provider ?? providerName,
@@ -4984,7 +4985,6 @@ async function openUpstream<TRequest, T>(params: {
       if (!dispatched) await ctx.throughput?.cancelBeforeSend();
       throw error;
     }
-    await ctx.authorizeA2AOAuthAttempt?.();
     dispatched = true;
     // Replace on every attempt so a failed member cannot leak usage to its sibling.
     ctx.getUpstreamStreamUsage = attemptTransport.getStreamUsage;

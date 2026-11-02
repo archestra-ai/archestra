@@ -1,3 +1,5 @@
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -5,7 +7,6 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { z } from "zod";
 import logger from "@/logging";
 import { assertPortsBound } from "@/models/ports";
-import { bindAllPorts } from "@/server/composition";
 import {
   APPA_CONTRACTS_PARTS,
   type AppaContractsPartSlug,
@@ -13,9 +14,8 @@ import {
   appaContractsPartPath,
 } from "@/skills/appa-guide-contracts";
 
-// Bind the ports of the layers below before anything uses them, and stop here
-// if one is unbound (server/composition.ts).
-bindAllPorts();
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
 assertPortsBound();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

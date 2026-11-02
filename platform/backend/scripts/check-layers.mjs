@@ -21,7 +21,17 @@ const backendDir = path.resolve(
   "..",
 );
 const options = parseArguments(process.argv.slice(2));
-const current = upwardImports();
+const { violations: current, missingRequired } = await checkLayers();
+// A rule every module of a kind must meet (an entry point binding the ports)
+// is never a known exception: it fails, list or no list.
+if (missingRequired.length > 0) {
+  console.error(
+    `${missingRequired.length} module(s) miss a required import (layers.mjs \`required\`):\n${missingRequired
+      .map((entry) => `  ${entry}`)
+      .join("\n")}`,
+  );
+  process.exit(1);
+}
 const known = new Set(JSON.parse(fs.readFileSync(options.known, "utf8")));
 const added = [...current].filter((entry) => !known.has(entry)).sort();
 const removed = [...known].filter((entry) => !current.has(entry)).sort();
@@ -53,8 +63,17 @@ console.log(
 
 // ===== Internal helpers =====
 
-/** Every import that breaks the layer order now, as "from -> to (rule)". */
-function upwardImports() {
+/**
+ * Every import that breaks the layer order now, as "from -> to (rule)", and
+ * every module that misses an import a `required` rule asks for.
+ */
+async function checkLayers() {
+  const { default: config } = await import(
+    path.join(backendDir, "layers.mjs")
+  );
+  const requiredRules = new Set(
+    (config.required ?? []).map((rule) => rule.name),
+  );
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "check-layers-"));
   const output = path.join(scratch, "violations.json");
   try {
@@ -85,12 +104,21 @@ function upwardImports() {
       );
       process.exit(1);
     }
-    return new Set(
-      JSON.parse(fs.readFileSync(output, "utf8")).map(
-        (violation) =>
-          `${violation.from} -> ${violation.to} (${violation.rule.name})`,
+    const all = JSON.parse(fs.readFileSync(output, "utf8"));
+    return {
+      violations: new Set(
+        all
+          .filter((violation) => !requiredRules.has(violation.rule.name))
+          .map(
+            (violation) =>
+              `${violation.from} -> ${violation.to} (${violation.rule.name})`,
+          ),
       ),
-    );
+      missingRequired: all
+        .filter((violation) => requiredRules.has(violation.rule.name))
+        .map((violation) => `${violation.from} (${violation.rule.name})`)
+        .sort(),
+    };
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
   }

@@ -43,6 +43,8 @@
  *                          (recover a user who lost their 2FA device)
  *   --help                 print usage
  */
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
 import { randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
@@ -61,11 +63,9 @@ import { assertPortsBound } from "@/models/ports";
 import SessionModel from "@/models/session";
 import TwoFactorModel from "@/models/two-factor";
 import UserModel from "@/models/user";
-import { bindAllPorts } from "@/server/composition";
 
-// Bind the ports of the layers below before anything uses them, and stop here
-// if one is unbound (server/composition.ts).
-bindAllPorts();
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
 assertPortsBound();
 
 /** Better Auth's default password length bounds, enforced on sign-in forms. */

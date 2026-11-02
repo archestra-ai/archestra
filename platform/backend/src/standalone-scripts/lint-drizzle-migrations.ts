@@ -1,3 +1,5 @@
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
 import path from "node:path";
 import {
   findChangedMigrationFiles,
@@ -6,11 +8,9 @@ import {
   summarizeIssues,
 } from "@drizzle-migration-linter";
 import { assertPortsBound } from "@/models/ports";
-import { bindAllPorts } from "@/server/composition";
 
-// Bind the ports of the layers below before anything uses them, and stop here
-// if one is unbound (server/composition.ts).
-bindAllPorts();
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
 assertPortsBound();
 
 const MIGRATIONS_DIR = path.resolve(process.cwd(), "src/database/migrations");

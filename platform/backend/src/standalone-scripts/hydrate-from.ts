@@ -25,6 +25,8 @@
  * worktree, so that precondition is satisfied by the default flow.
  */
 
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
 import { and, eq, inArray, not, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
@@ -32,12 +34,10 @@ import { withTransactionRetry } from "@/database/retry";
 import * as schema from "@/database/schemas";
 import logger from "@/logging";
 import { assertPortsBound } from "@/models/ports";
-import { bindAllPorts } from "@/server/composition";
 import { assertMatchingHydrationSchemas } from "./hydration-schema";
 
-// Bind the ports of the layers below before anything uses them, and stop here
-// if one is unbound (server/composition.ts).
-bindAllPorts();
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
 assertPortsBound();
 
 const sourceUrl = process.env.SOURCE_DATABASE_URL;

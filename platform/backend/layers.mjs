@@ -287,10 +287,10 @@ export default {
       name: "entry-point-binds-ports",
       severity: "error",
       comment:
-        "Every entry point binds the ports of the layers below (server/composition.ts) before anything uses them: import bindAllPorts and call it, then assertPortsBound().",
+        "Every entry point binds the ports of the layers below before anything uses them: import @/server/composition first, then call assertPortsBound().",
       module: {
         path: "^src/(server\\.ts|standalone-scripts/[^/]+\\.ts)$",
-        // Helper modules the scripts import, not entry points.
+        // Helper modules that scripts or the test setup import, not entry points.
         pathNot: [
           TESTS,
           "^src/standalone-scripts/(hydration-schema|rebuild-interaction-user-activity-command|build-ext-apps-inline)\\.ts$",

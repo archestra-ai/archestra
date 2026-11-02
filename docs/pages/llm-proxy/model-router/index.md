@@ -2,7 +2,7 @@
 title: Model Router
 description: Call models from multiple providers through an OpenAI-compatible endpoint
 order: 4
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -50,8 +50,56 @@ The router speaks the OpenAI API. It supports these endpoints:
 | `/responses` | All router providers except Kimi (Moonshot AI) and Kimi Code, whose thinking models need their reasoning sent back on tool-call turns, which the Responses translation does not carry |
 | `/models` | Lists only the models your credential can reach |
 | `/embeddings` | All router providers except Anthropic, Bedrock, Cohere, and GitHub Copilot |
+| `/images/generations` | OpenAI, Azure, and Gemini image models |
+| `/images/edits` | OpenAI, Azure, and Gemini image models |
+| `/audio/speech` | OpenAI and Azure speech models |
+| `/audio/transcriptions` and `/audio/translations` | OpenAI and Azure models that support the requested operation |
+| `/realtime` (WebSocket) | OpenAI realtime models |
 
 Sign in with a [standard virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) or an [OAuth client](/docs/llm-proxy/authentication#oauth-clients) token. The router does not accept a [passthrough key](/docs/llm-proxy/authentication#passthrough-virtual-keys), a [provider's own key](/docs/llm-proxy/authentication#direct-provider-api-key), or an [identity provider JWT](/docs/llm-proxy/authentication#jwks-external-identity-provider).
+
+## Images and Audio
+
+Use the same OpenAI SDK client, base URL, and virtual key for text, images, and audio. The mapped provider key must have access to the requested model.
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="https://<archestra-host>/v1/model-router", api_key="<virtual-key>")
+image = client.images.generate(model="azure:<image-deployment>", prompt="Draw a blue circle.")
+with open("speech.wav", "rb") as audio:
+    transcript = client.audio.transcriptions.create(model="openai:<transcription-model>", file=audio)
+```
+
+Image responses carry the provider's image data, and transcriptions carry a `text` field. Speech responses are the audio bytes, and streamed transcriptions are SSE events, as the provider sends them. Add `/<proxy-id>` after `/v1/model-router` to select a specific LLM proxy.
+
+Audio chat models such as `openai:gpt-audio` answer `/chat/completions` in text, or in speech when the request sets `modalities` and `audio`. Their audio tokens are priced at OpenAI's audio rates.
+
+- **Provider parameters:** OpenAI and Azure accept their native image parameters. Gemini returns one base64 image at its own size and rejects `quality`, `size`, `output_format`, and a mask on edits. Image streaming is rejected for every provider.
+- **Uploads and logs:** audio uploads are limited to 25 MiB per file. Logs keep the text spoken and the transcript. With [**Keep media in logs**](/docs/admin/logs#keep-media-in-the-logs) on, they also keep each audio clip and each image an edit uploads, up to 2 MB, so the conversation view can play or show it. A larger file is marked as not kept.
+- **Pricing:** image, speech, transcription, and translation calls are priced at the vendor's published media rates: per image token, per speech character, per minute of audio. A translation or a text-format transcript reports no usage, so Archestra reads its length from the uploaded file. A WebM upload has no readable length and records no cost. **Models** lists each media model's rates.
+- **Budgets:** a priced media call counts toward cost budgets like a chat call. A cost budget rejects a call that cannot be priced, such as a translation of a WebM file, before it reaches the provider.
+
+Azure file operations stay on the Azure provider route: a router model name cannot select a file account, and a file id cannot replace a multipart image upload.
+
+## Realtime
+
+Open a live voice session with the SDK's realtime client and the same base URL and virtual key. Archestra checks the key and its budgets, then forwards the session to OpenAI with the mapped provider key.
+
+```python
+with client.realtime.connect(model="openai:gpt-realtime") as session:
+    session.session.update(session={"output_modalities": ["audio"]})
+    session.conversation.item.create(item={"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Say hello."}]})
+    session.response.create()
+    for event in session:
+        if event.type == "response.done":
+            break
+```
+
+Each response of the session is one row under **Logs → LLM Proxy**, with its transcripts and its tokens and cost at OpenAI's realtime rates. With **Keep media in logs** on, the row also plays the spoken reply. SIP calls (`call_id`) are not served.
+
+- **Budgets:** Archestra checks the budgets again before each response, including one that starts when the user stops speaking. Once a response spends them, Archestra sends an `error` event with code `budget_exceeded` and closes the session. A budget created while a session is open is checked after each response, not before it.
+- **Refused sessions:** Archestra refuses a realtime session while Guardrails are enforced or a throughput limit applies to the caller. Neither can review a live session yet.
 
 ## Fix a Failed Request
 

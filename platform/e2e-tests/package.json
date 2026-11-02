@@ -7,13 +7,13 @@
     "lint": "biome check",
     "lint:fix": "biome check --write",
     "lint:fix:unsafe": "biome check --write --unsafe",
-    "type-check": "tsc --noEmit",
+    "type-check": "tsx ../scripts/type-check.ts --noEmit",
     "test:e2e": "pnpm exec playwright test",
     "test:e2e:ui": "pnpm exec playwright test --ui",
     "test:e2e:report": "pnpm exec playwright show-report",
     "check:ci": "concurrently --kill-others-on-fail --group --names type-check,knip,biome 'pnpm type-check' 'pnpm knip' 'biome ci'",
     "check:commit": "concurrently --kill-others-on-fail --group --names type-check,knip,biome 'pnpm type-check' 'pnpm knip' 'biome ci'",
-    "knip": "knip"
+    "knip": "tsx ../scripts/heavy-lane.ts --label \"knip (e2e-tests)\" -- knip"
   },
   "keywords": [],
   "author": "",
@@ -26,7 +26,7 @@
     "@kubernetes/client-node": "^1.4.0",
     "@playwright/test": "^1.58.2",
     "@types/node": "^25.5.0",
-    "knip": "^5.85.0",
+    "knip": "^6.43.0",
     "typescript": "catalog:",
     "typescript-7": "catalog:"
   }

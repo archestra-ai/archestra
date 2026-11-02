@@ -2,6 +2,7 @@ import {
   CLAUDE_CODE_PROXY_ENV_KEYS,
   CLAUDE_DESKTOP_CLIENT_ID,
   type ClientMark,
+  COPILOT_CLI_MARK,
   EXTERNAL_AGENT_ID_HEADER,
   KIMI_MARK,
   OPENCODE_FAMILY,
@@ -19,7 +20,6 @@ import {
 import {
   CLAUDE_MARK,
   CODEX_MARK,
-  COPILOT_MARK,
   GROK_MARK,
   HERMES_AGENT_MARK,
   OPENAI_MARK,
@@ -181,6 +181,12 @@ export type ProxySupport =
       kind: "custom";
       /** Providers this client can speak to. Others render as "not compatible". */
       supportedProviders: SupportedProvider[];
+      /**
+       * The provider selected first when the person's own account routes the
+       * models and the URL names none: the one the client is made for. Else
+       * the first of `supportedProviders`.
+       */
+      defaultProvider?: SupportedProvider;
       build: (params: ProxyBuildParams) => ProxyInstruction;
     };
 
@@ -628,9 +634,7 @@ claude`,
     id: "copilot-cli",
     label: "Copilot CLI",
     sub: "GitHub coding CLI",
-    svg: COPILOT_MARK.path,
-    iconColor: COPILOT_MARK.color,
-    tileBg: COPILOT_MARK.background,
+    ...markFields(COPILOT_CLI_MARK),
     mcp: {
       kind: "custom",
       supportedAuth: "both",
@@ -672,6 +676,7 @@ claude`,
         "cerebras",
         "github-copilot",
       ],
+      defaultProvider: "github-copilot",
       build: ({ provider, providerLabel, url, appName }) => ({
         kind: "steps",
         steps: [

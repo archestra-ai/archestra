@@ -267,3 +267,52 @@ export function approxTokens(n: number) {
   const k = n / 1000;
   return `~${k < 100 ? k.toFixed(1).replace(/\.0$/, "") : fmt(Math.round(k))}K tokens`;
 }
+
+/**
+ * The installer command on two lines after a dim prompt, in the page's own
+ * colours. Copy takes the text exactly as shown.
+ */
+export function ScriptBlock({
+  command,
+  copied,
+  disabled,
+  onCopy,
+  onSelectionCopy,
+  className,
+}: {
+  command: string;
+  copied: boolean;
+  disabled: boolean;
+  onCopy: () => void;
+  /** The command text was selected and copied by hand. */
+  onSelectionCopy?: () => void;
+  /** Size and placement only; the look stays the same everywhere. */
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "relative mt-2 rounded-2xl border bg-background shadow-sm",
+        className,
+      )}
+    >
+      <Button
+        size="xs"
+        variant="ghost"
+        onClick={onCopy}
+        disabled={disabled}
+        className="absolute top-2.5 right-2.5 text-muted-foreground"
+      >
+        {copied ? <Check /> : <Copy />}
+        {copied ? "Copied" : "Copy"}
+      </Button>
+      <pre
+        onCopy={onSelectionCopy}
+        className="overflow-x-auto py-4 pr-24 pl-5 font-mono text-sm leading-relaxed"
+      >
+        <span className="text-muted-foreground select-none">$ </span>
+        {command}
+      </pre>
+    </div>
+  );
+}

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createFastifyInstance } from "@/fastify-instance";
 
 vi.mock("fastify-metrics", () => ({
@@ -23,13 +23,21 @@ vi.mock("@/config", async () =>
   }),
 );
 
+vi.mock("@/observability/metrics/openappa", () => ({
+  collectOpenappaEngineMetrics: vi.fn(() => ""),
+}));
+
 import {
   registerMetricsPlugin,
   registerStandaloneMetricsEndpoint,
 } from "@/metrics-registration";
+import { collectOpenappaEngineMetrics } from "@/observability/metrics/openappa";
 import { HEALTH_PATH, METRICS_PATH } from "./route-paths";
 
 describe("metrics routes", () => {
+  beforeEach(() => {
+    vi.mocked(collectOpenappaEngineMetrics).mockReturnValue("");
+  });
   afterEach(() => {
     vi.clearAllMocks();
   });
@@ -77,6 +85,31 @@ describe("metrics routes", () => {
     expect(validAuthResponse.body).toContain("# HELP mock_metric");
 
     await metricsApp.close();
+  });
+
+  test("the authenticated endpoint includes embedded engine metrics", async () => {
+    vi.mocked(collectOpenappaEngineMetrics).mockReturnValue(
+      '# TYPE appa_policy_decisions_total counter\nappa_policy_decisions_total{outcome="allowed"} 3\n',
+    );
+    const app = createFastifyInstance();
+    await registerStandaloneMetricsEndpoint({
+      fastify: app,
+      enableDefaultMetrics: false,
+    });
+    const unauthorized = await app.inject({ method: "GET", url: METRICS_PATH });
+    expect(unauthorized.statusCode).toBe(401);
+    expect(collectOpenappaEngineMetrics).not.toHaveBeenCalled();
+    const response = await app.inject({
+      method: "GET",
+      url: `${METRICS_PATH}?test=1`,
+      headers: { authorization: "Bearer foo-bar" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain("mock_metric 1\n");
+    expect(response.body).toContain(
+      'appa_policy_decisions_total{outcome="allowed"} 3\n',
+    );
+    await app.close();
   });
 
   test("metrics auth does not block non-metrics endpoints", async () => {

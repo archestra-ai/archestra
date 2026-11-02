@@ -23,6 +23,7 @@ import {
   agentRuntimeNames,
 } from "./naming";
 import { buildSandboxSupervisorScript } from "./sandbox-supervisor";
+import { buildWorkspaceExitTrapScript } from "./workspace-exit";
 
 const DNS_PORTS = [
   { protocol: "UDP" as const, port: 53 },
@@ -163,6 +164,7 @@ export type KubernetesAgentRunLaunchSpec = Omit<
 function buildAgentRuntimeBootstrapScript(): string {
   return [
     "set -eu",
+    buildWorkspaceExitTrapScript(),
     `mkdir -p ${AGENT_RUNTIME_DIR}`,
     buildAgentRuntimeTerminalIntegrationScript(),
     `mkdir -p ${AGENT_RUNTIME_ATTACHMENTS_DIR}`,

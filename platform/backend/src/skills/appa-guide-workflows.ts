@@ -183,7 +183,7 @@ When the operator asks why a scheduled task run failed or was blocked, read the 
 // white-label-ok: applyBuiltInSkillBranding rebrands bundled references at reconcile
 export const CLIENTS_REFERENCE = `# Connected CLI clients
 
-This applies when the skill runs in, or the policy covers, a client connected to Archestra such as Claude Code, Codex, or OpenCode. \`references/archestra.md\` has the full tool-name, subagent, and provider-hosted reference.
+This applies when the skill runs in, or the policy covers, a client connected to Archestra such as Claude Code, Codex, OpenCode, or the Copilot CLI. \`references/archestra.md\` has the full tool-name, subagent, and provider-hosted reference.
 
 ## Running the skill from a client
 
@@ -192,7 +192,7 @@ This applies when the skill runs in, or the policy covers, a client connected to
 
 ## Native tools
 
-MCP inventory never lists native client tools. Claude Code sends \`Task\` or \`Agent\` for subagents, OpenCode lowercase \`task\`, and Codex \`spawn_agent\`; each is evaluated under the client's own name, canonical \`host/archestra/<name>\`. Names are case-sensitive: a capitalized \`Task\` rule does not match OpenCode's \`task\`. Match the evaluated name instead of copying another client's rule.
+MCP inventory never lists native client tools. Claude Code sends \`Task\` or \`Agent\` for subagents, OpenCode and the Copilot CLI lowercase \`task\`, and Codex \`spawn_agent\`; each is evaluated under the client's own name, canonical \`host/archestra/<name>\`. Names are case-sensitive: a capitalized \`Task\` rule does not match OpenCode's \`task\`. Match the evaluated name instead of copying another client's rule.
 
 ## Subagent returns
 

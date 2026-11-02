@@ -23,6 +23,8 @@ describe.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
           "printf first >> /home/node/result; printf container-state > /var/lib/docker/persistence-check; echo turn-finished",
         ],
         privileged: true,
+        tier: null,
+        warmTiers: [],
         nodeSelector: {},
         resources: { cpuRequest: "100m", memoryRequest: "128Mi" },
         env: { ARCHESTRA_AGENT_RUNTIME_TASK_ID: taskId },

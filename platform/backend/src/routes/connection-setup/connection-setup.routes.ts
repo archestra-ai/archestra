@@ -16,6 +16,8 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import {
+  CONNECTION_SETUP_TOKEN_TTL_MS,
+  connectionModelServesClient,
   defaultConnectionModel,
   INSTALLER_CLIENT_KEY_PROVIDERS,
   INSTALLER_CLIENT_LABELS,
@@ -35,6 +37,7 @@ import {
   AgentModel,
   ConnectionSetupModel,
   MemberModel,
+  ModelModel,
   OrganizationModel,
   PluginModel,
   SkillMarketplaceCredentialModel,
@@ -45,7 +48,6 @@ import {
   UserModel,
   VirtualApiKeyModel,
 } from "@/models";
-import { CONNECTION_SETUP_TOKEN_TTL_MS } from "@/models/connection-setup";
 import { pluginDeliveryBudgetError } from "@/plugins/delivery-budget";
 import {
   buildSetupCommand,
@@ -178,6 +180,13 @@ const CreateConnectionSetupBodySchema = z.object({
    */
   attributePassthrough: z.boolean().default(true),
   /**
+   * The provider key a virtual-key setup binds for a per-user provider when
+   * the user can use more than one: their own GitHub Copilot sign-in, or an
+   * organization's GitHub Copilot plan shared with them. Omitted, the setup
+   * binds the user's own sign-in.
+   */
+  providerApiKeyId: z.string().uuid().optional(),
+  /**
    * Explicit model for the Copilot CLI's provider wiring — the CLI refuses to
    * launch a BYOK provider without one, so the wizard's review step picks it.
    * The script applies it as COPILOT_MODEL. copilot-cli setups only.
@@ -291,6 +300,13 @@ const ConnectionHealthResponseSchema = z.object({
    * omits it simply skips the check.
    */
   guardVersion: z.number().int().nonnegative(),
+  /**
+   * The prefix of the gateway's built-in tool names, e.g. `archestra__`.
+   * White-labeling changes it after connect, and the startup guard moves the
+   * client's allow rules for those tools to it. Non-secret: it derives from
+   * the app name the sign-in page already shows.
+   */
+  mcpToolPrefix: z.string(),
 });
 
 const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -409,7 +425,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Health of the remotes a connected client is wired to, one request for all of them. " +
           "Public: used by the Claude Code startup guard before every launch, from machines with no session. " +
-          "Reports only ok/down per requested remote.",
+          "Reports only ok/down per requested remote, the launch check's format version, and the gateway's tool prefix.",
         tags: ["Connection Setups"],
         querystring: ConnectionHealthQuerySchema,
         response: constructResponseSchema(ConnectionHealthResponseSchema),
@@ -460,6 +476,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         mcp: statusOf(mcpExists),
         llm: statusOf(llmExists),
         guardVersion: STARTUP_GUARD_FORMAT_VERSION,
+        mcpToolPrefix: archestraMcpBranding.toolPrefix,
       };
     },
   );
@@ -485,6 +502,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         provider: requestedProvider,
         proxyAuth,
         attributePassthrough,
+        providerApiKeyId,
         model: requestedModel,
         skills,
         pluginIds: requestedPluginIds,
@@ -567,6 +585,27 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           400,
           "model is only supported for copilot-cli, claude-desktop, pi and kimi-code setups",
         );
+      }
+      // A model the catalog knows to be served elsewhere would fail every
+      // request; a model the catalog doesn't know is the user's to vouch for.
+      if (model && provider && clientId === "copilot-cli") {
+        const known = await ModelModel.findByProviderAndModelId(
+          provider,
+          model,
+        );
+        if (
+          known &&
+          !connectionModelServesClient({
+            clientId,
+            provider,
+            supportedEndpoints: known.supportedEndpoints,
+          })
+        ) {
+          throw new ApiError(
+            400,
+            `${model} is served only through Chat Completions on ${providerDisplayNames[provider] ?? provider}, and Copilot CLI connects through the Responses API. Choose another model.`,
+          );
+        }
       }
       // Kimi Code names one model in its provider entry. Without a choice,
       // use the provider's default.
@@ -657,6 +696,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 preferredProviderKeyId:
                   mappedKeys?.find((key) => key.provider === provider)
                     ?.providerApiKeyId ?? null,
+                selectedProviderKeyId: providerApiKeyId ?? null,
               }));
           }
           // Fail here, where the Connect page shows the message, rather than

@@ -1,0 +1,43 @@
+{
+  // Tests of the models whose files start with n to z, and of auth.
+  "extends": "./tsconfig.test-project.json",
+  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-models-d.tsbuildinfo" },
+  "include": [
+    "src/ambient/*.d.ts",
+    "src/models/n*.test.ts",
+    "src/models/n*/**/*.test.ts",
+    "src/models/o*.test.ts",
+    "src/models/o*/**/*.test.ts",
+    "src/models/p*.test.ts",
+    "src/models/p*/**/*.test.ts",
+    "src/models/q*.test.ts",
+    "src/models/q*/**/*.test.ts",
+    "src/models/r*.test.ts",
+    "src/models/r*/**/*.test.ts",
+    "src/models/s*.test.ts",
+    "src/models/s*/**/*.test.ts",
+    "src/models/t*.test.ts",
+    "src/models/t*/**/*.test.ts",
+    "src/models/u*.test.ts",
+    "src/models/u*/**/*.test.ts",
+    "src/models/v*.test.ts",
+    "src/models/v*/**/*.test.ts",
+    "src/models/w*.test.ts",
+    "src/models/w*/**/*.test.ts",
+    "src/models/x*.test.ts",
+    "src/models/x*/**/*.test.ts",
+    "src/models/y*.test.ts",
+    "src/models/y*/**/*.test.ts",
+    "src/models/z*.test.ts",
+    "src/models/z*/**/*.test.ts",
+    "src/auth/**/*.test.ts"
+  ],
+  "references": [
+    { "path": "../shared/tsconfig.lib.json" },
+    { "path": "../tools/drizzle-migration-linter/tsconfig.lib.json" },
+    { "path": "./tsconfig.schema.json" },
+    { "path": "./tsconfig.core.json" },
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.test-support.json" }
+  ]
+}

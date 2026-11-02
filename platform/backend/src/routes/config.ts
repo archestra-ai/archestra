@@ -10,7 +10,7 @@ import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth"
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
-import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import config from "@/config";
 import { isEncryptedChatEnabled } from "@/content-encryption/encrypted-chat";
 import { enterpriseTier } from "@/enterprise-tier";
@@ -118,11 +118,6 @@ export const ConfigResponseSchema = z.strictObject({
       defaultTtlHours: z.number(),
       defaultIdleTimeoutMinutes: z.number(),
       allowPrivileged: z.boolean(),
-      resources: z.object({
-        cpuRequest: z.string(),
-        memoryRequest: z.string(),
-        memoryLimit: z.string(),
-      }),
     }),
     plugins: z.boolean(),
     // Max size of a file the sandbox can stage. The chat composer caps
@@ -242,7 +237,6 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
         defaultIdleTimeoutMinutes:
           config.agentRuntime.defaultIdleTimeoutMinutes,
         allowPrivileged: config.agentRuntime.allowPrivileged,
-        resources: config.agentRuntime.resources,
       },
       plugins: true,
       sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,

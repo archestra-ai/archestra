@@ -1,10 +1,19 @@
+import { execFile, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
+import {
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runInNewContext } from "node:vm";
+import { promisify } from "node:util";
+import { createContext, runInContext, runInNewContext } from "node:vm";
 import { CLAUDE_DESKTOP_PROFILE_ID } from "@archestra/shared/connection-setup";
 import { expect, test } from "vitest";
 import { uuidv5 } from "@/utils/uuid";
@@ -12,6 +21,13 @@ import { DESKTOP_CONNECTION_INSTALLER } from "./connection-desktop-installer";
 
 const require = createRequire(import.meta.url);
 const token = "sk-ant-oat01-test-subscription";
+const exec = promisify(execFile);
+const powershellAvailable =
+  spawnSync("pwsh", ["-NoProfile", "-Command", "exit 0"]).status === 0;
+
+if (process.env.CI === "true" && !powershellAvailable) {
+  throw new Error("CI requires a working PowerShell runtime for these tests");
+}
 
 test.each([
   {
@@ -71,6 +87,7 @@ test.each([
   const home = await mkdtemp(join(tmpdir(), "desktop-browser-setup-"));
   const opened: string[] = [];
   const native: string[] = [];
+  const spawned: { file: string; options: { detached?: boolean } }[] = [];
   const module = { exports: null };
   let verifier: string | undefined;
   let challenge: string | null = null;
@@ -147,8 +164,13 @@ test.each([
         return { homedir: () => home, tmpdir: () => home };
       if (name === "node:child_process")
         return {
-          spawn: (file: string) => {
+          spawn: (
+            file: string,
+            _args: string[],
+            options: { detached?: boolean },
+          ) => {
             native.push(file);
+            spawned.push({ file, options });
             const child = Object.assign(new EventEmitter(), { unref() {} });
             queueMicrotask(() => child.emit("spawn"));
             return child;
@@ -267,6 +289,13 @@ test.each([
         headers: { Origin: origin },
       });
       await expect.poll(async () => (await status()).phase).toBe("restarting");
+      // A detached PowerShell exits before it runs the restart script.
+      if (targetOs === "win32") {
+        expect(spawned).toEqual([
+          { file: "powershell.exe", options: expect.anything() },
+        ]);
+        expect(spawned[0].options.detached).toBeFalsy();
+      }
       const metadata = JSON.parse(
         await readFile(join(library, "_meta.json"), "utf8"),
       );
@@ -422,6 +451,52 @@ test.each([
     await rm(home, { recursive: true, force: true });
   }
 });
+
+test.skipIf(!powershellAvailable)(
+  "the Windows restart relaunches itself hidden, or opens the failure page",
+  async () => {
+    // Only the hidden copy outlives Desktop's extension host, so every path
+    // must reach it intact, spaces and apostrophes included.
+    const context = createContext({ module: { exports: null }, require });
+    runInContext(DESKTOP_CONNECTION_INSTALLER, context);
+    const dir = await mkdtemp(join(tmpdir(), "Desktop setup O'Brien "));
+    try {
+      const script = join(dir, "restart.ps1");
+      await writeFile(script, runInContext("RESTART_WINDOWS", context));
+      const pages = {
+        SUCCESS: join(dir, "success page.html"),
+        FAILURE: join(dir, "failure page.html"),
+      };
+      const restart = async (startProcess: string) => {
+        const { stdout } = await exec(
+          "pwsh",
+          [
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            `function Start-Process { param($FilePath, $ArgumentList, $WindowStyle) ${startProcess} }
+& $env:SCRIPT -SuccessPage $env:SUCCESS -FailurePage $env:FAILURE
+"exit $LASTEXITCODE"`,
+          ],
+          { env: { ...process.env, SCRIPT: script, ...pages } },
+        );
+        return stdout.trim().split(/\r?\n/);
+      };
+
+      expect(await restart(`"$FilePath $WindowStyle $ArgumentList"`)).toEqual([
+        `powershell.exe Hidden -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${script}" -Relaunched -SuccessPage "${pages.SUCCESS}" -FailurePage "${pages.FAILURE}"`,
+        "exit 0",
+      ]);
+      expect(
+        await restart(
+          `if ($FilePath -eq 'powershell.exe') { throw 'blocked' }; "opened $FilePath"`,
+        ),
+      ).toEqual([`opened ${pages.FAILURE}`, "exit 1"]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+);
 
 test("the Desktop profile id disconnect.md names is the one the installer writes", () => {
   // The installer derives it at runtime: uuid5(NAMESPACE_URL, name).

@@ -5,6 +5,7 @@
  * and its return crosses only through the declared route.
  */
 const assert = require('node:assert/strict');
+const { execFileSync } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const { Client } = require('../../backend/node_modules/pg');
 const { test } = require('node:test');
@@ -129,6 +130,24 @@ test('a probe-declared spawn starts its child once, under the real call', { skip
     outcome: 'success',
   });
   assert.equal(result.decision, 'ack', "the crossed value is the spawn's result");
+});
+
+test('a return declared ahead, as the gateway does without an offer, releases only the next spawn', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const run = family();
+  // The proxy opens the session at the model's first tool call, before the gateway runs any.
+  assert.equal((await run.hook(run.parent, run.call('c0', 'publish'))).decision, 'allow_call');
+  await run.hook(run.parent, { event: 'tool_result', tool_call_id: 'c0', output: 'sent', outcome: 'success' });
+  const declared = await run.remedy(run.parent, 'ahead:1', { label: {} });
+  assert.equal(declared.result.isError, false, JSON.stringify(declared));
+  assert.match(declared.approved_output, /^\[appa\] Declared\./);
+
+  const call = await run.hook(run.parent, run.spawnCall('s1'));
+  assert.equal(call.decision, 'allow_call', JSON.stringify(call));
+  assert.ok(call.spawn_binding, 'the spawn starts its child under the declared return');
+
+  const next = await run.hook(run.parent, run.spawnCall('s2'));
+  assert.equal(next.decision, 'deny_call', 'a declaration covers one spawn');
 });
 
 test('an attested return schema admits only bounded leaves', { skip: !databaseUrl }, async () => {
@@ -272,6 +291,56 @@ test('a spawn call keeps the first return that the runtime approved for it', { s
   const second = await child.approve('second answer');
   assert.equal(second.decision, 'ack');
   assert.equal(second.approved_output, 'first answer', 'the later result gets the kept return');
+});
+
+test('a delivered background return remains readable after a parent turn and a process restart', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const run = family();
+  await startSpawn(run);
+  await run.hook(run.child, { event: 'session_start', spawn_call_id: 's1' });
+  const output = 'the finished background turn';
+  assert.equal((await run.hook(run.child, {
+    event: 'child_end', operation_id: 'child-end:background', spawn_call_id: 's1', output,
+  })).decision, 'ack');
+  const approve = () => run.hook(run.parent, {
+    event: 'tool_result', tool_call_id: 's1', spawned_id: run.child.session_id,
+    output, outcome: 'success',
+  });
+  const first = await approve();
+  assert.equal(first.decision, 'ack');
+  assert.equal(first.approved_output, output);
+  await run.hook(run.parent, { event: 'turn_end', operation_id: 'parent-end:background' });
+
+  // initializeOpenappa is idempotent. Use fresh processes, which cannot have
+  // the parent's in-memory state, to prove that the durable ledger suffices.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const replay = JSON.parse(execFileSync(process.execPath, ['-e', `
+      const native = require('./index.cjs');
+      const input = JSON.parse(require('node:fs').readFileSync(0, 'utf8'));
+      (async () => {
+        await native.initializeOpenappa(input.databaseUrl, 2);
+        const records = await native.loadChildReturns(input.event.organization_id, input.event.session_id);
+        const decision = JSON.parse(await native.dispatchHook(JSON.stringify(input.event), input.policy));
+        process.stdout.write(JSON.stringify({ records, decision }), () => process.exit(0));
+      })().catch(error => {
+        process.stderr.write(String(error), () => process.exit(1));
+      });
+    `], {
+      cwd: __dirname,
+      input: JSON.stringify({
+        databaseUrl,
+        policy,
+        event: {
+          ...run.parent, event: 'tool_result', tool_call_id: 's1',
+          spawned_id: run.child.session_id, output, outcome: 'success',
+        },
+      }),
+      encoding: 'utf8',
+      timeout: 15000,
+    }));
+    assert.deepEqual(replay.records.map((record) => record.value), [output]);
+    assert.deepEqual(replay.decision, first);
+  }
 });
 
 // The decision `child_return` comes from a child's event when the value that crossed differs

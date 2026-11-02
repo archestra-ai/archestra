@@ -1234,10 +1234,3 @@ export const minimaxAdapterFactory: LLMProvider<
     return "Internal server error";
   },
 };
-
-export function getUsageTokens(usage: Minimax.Types.Usage) {
-  return {
-    input: usage.prompt_tokens,
-    output: usage.completion_tokens,
-  };
-}

@@ -11,7 +11,11 @@ import { AgentModel, ModelModel } from "@/models";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import RoutingPlanModel from "@/models/routing-plan";
 import { beforeEach, describe, expect, test } from "@/test";
-import { activeFit, makeScorerVersion } from "@/test/auto-routing";
+import {
+  activeFit,
+  makeScorerVersion,
+  setOrganizationTrio,
+} from "@/test/auto-routing";
 import { seedFitHistory } from "@/test/auto-routing-fit";
 import { autoRoutingDispatcher } from "./auto-routing-dispatch-handler";
 import { handleAutoRoutingFit } from "./auto-routing-fit-handler";
@@ -372,12 +376,10 @@ async function configuredOrganization(
     await pricedModel("3.00", "15.00"),
     await pricedModel("15.00", "75.00"),
   ];
+  await setOrganizationTrio(organizationId, { fast, normal, smart });
   await AutoRoutingSettingsModel.update(organizationId, {
     enabled: true,
     budgetUsdPerDay: "25.00",
-    fastModelId: fast.id,
-    normalModelId: normal.id,
-    smartModelId: smart.id,
   });
   return { organizationId, smartModelId: smart.id };
 }

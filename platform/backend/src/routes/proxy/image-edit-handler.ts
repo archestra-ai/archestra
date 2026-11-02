@@ -5,6 +5,11 @@ import {
   type AzureImageEditRequest,
   createAzureImageEditAdapter,
 } from "./adapters/azure-image-edits";
+import {
+  createGeminiImageEditAdapter,
+  toGeminiImageEditRequest,
+} from "./adapters/gemini-images";
+import { createOpenAiImageEditAdapter } from "./adapters/openai-image-edits";
 import { PROXY_BODY_LIMIT } from "./common";
 import { handleLLMProxy } from "./llm-proxy-handler";
 import { getAzureProxyIngress } from "./utils/azure-ingress";
@@ -15,7 +20,7 @@ import {
 } from "./utils/image-edit-input";
 import { parseMediaMultipart } from "./utils/media-multipart";
 
-export interface ParsedAzureImageEdit {
+export interface ParsedImageEdit {
   body: AzureImageEditRequest;
   uploads: ValidatedImageEditUploads;
 }
@@ -45,9 +50,9 @@ export const ImageEditMultipartBodySchema = z.unknown().meta({
   required: ["model", "prompt", "image"],
 });
 
-export async function parseAzureImageEditRequest(
+export async function parseImageEditRequest(
   request: FastifyRequest,
-): Promise<ParsedAzureImageEdit> {
+): Promise<ParsedImageEdit> {
   const { fields, files } = await parseMediaMultipart(request, {
     fileFields: ["image", "mask"],
     arrayFields: ["image"],
@@ -77,17 +82,39 @@ export async function parseAzureImageEditRequest(
   };
 }
 
+/** Providers whose image edits the proxy governs. */
+export type ImageEditProvider = "azure" | "openai" | "gemini";
+
 /** The caller may install a trusted router auth override before execution. */
-export function handleAzureImageEdit(
-  parsed: ParsedAzureImageEdit,
-  request: FastifyRequest,
-  reply: FastifyReply,
-) {
+export function handleImageEdit(params: {
+  parsed: ParsedImageEdit;
+  provider: ImageEditProvider;
+  request: FastifyRequest;
+  reply: FastifyReply;
+}) {
+  const { parsed, provider, request, reply } = params;
   request.body = parsed.body;
-  return handleLLMProxy(
-    parsed.body,
-    request,
-    reply,
-    createAzureImageEditAdapter(parsed.uploads),
-  );
+  switch (provider) {
+    case "azure":
+      return handleLLMProxy(
+        parsed.body,
+        request,
+        reply,
+        createAzureImageEditAdapter(parsed.uploads),
+      );
+    case "openai":
+      return handleLLMProxy(
+        parsed.body,
+        request,
+        reply,
+        createOpenAiImageEditAdapter(parsed.uploads),
+      );
+    case "gemini":
+      return handleLLMProxy(
+        toGeminiImageEditRequest(parsed.body, parsed.uploads),
+        request,
+        reply,
+        createGeminiImageEditAdapter(parsed.uploads),
+      );
+  }
 }

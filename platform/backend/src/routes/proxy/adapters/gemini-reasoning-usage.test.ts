@@ -77,6 +77,7 @@ describe("Gemini reasoning usage reaches OpenAI clients", () => {
           .join("");
         const events = text
           .split("\n\n")
+          .map((part) => part.replace(/^event: .*\n/, ""))
           .filter((part) => part.startsWith("data: {"))
           .map((part) => JSON.parse(part.slice(6)));
         const usage =
@@ -118,6 +119,7 @@ describe("Gemini reasoning usage reaches OpenAI clients", () => {
     const wire = [...frames, adapter.formatEndSSE()].join("");
     const events = wire
       .split("\n\n")
+      .map((part) => part.replace(/^event: .*\n/, ""))
       .filter((part) => part.startsWith("data: {"))
       .map((part) => JSON.parse(part.slice(6)));
     const completions = events.filter(

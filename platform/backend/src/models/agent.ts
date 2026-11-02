@@ -108,6 +108,7 @@ import AgentSkillModel from "./agent-skill";
 import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
+import { agentToolSurfaceChanged } from "./agent-tool-surface";
 import AgentUserModel from "./agent-user";
 import AgentVersionModel from "./agent-version";
 import CreatedByModel from "./created-by";
@@ -115,6 +116,7 @@ import { gatewayAgentSelection } from "./gateway-agent-selection";
 import { idArrayCondition } from "./id-array-condition";
 import InteractionUserActivityModel from "./interaction-user-activity";
 import OrganizationModel from "./organization";
+import { port } from "./ports";
 import ResourcePermissionPolicyModel, {
   type ObjectPolicy,
 } from "./resource-permission-policy";
@@ -549,16 +551,26 @@ class AgentModel {
    * once per request scope. Outside a memoizing request this is a fresh read,
    * so a changed setting applies to the next call.
    */
-  private static findToolAccessFields(
-    id: string,
-  ): Promise<{ environmentId: string | null; accessAllTools: boolean } | null> {
+  private static findToolAccessFields(id: string): Promise<{
+    environmentId: string | null;
+    accessAllTools: boolean;
+    keepMediaInLogs: boolean | null;
+  } | null> {
     return readConfig(`agent-tool-access\0${id}`, async () => {
+      // The organization's media setting rides along so each log write learns
+      // it from the read it already makes; an organization change drops the
+      // cached entry like an agent change does.
       const [result] = await db
         .select({
           environmentId: schema.agentsTable.environmentId,
           accessAllTools: schema.agentsTable.accessAllTools,
+          keepMediaInLogs: schema.organizationsTable.keepMediaInLogs,
         })
         .from(schema.agentsTable)
+        .leftJoin(
+          schema.organizationsTable,
+          eq(schema.organizationsTable.id, schema.agentsTable.organizationId),
+        )
         .where(
           and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)),
         )
@@ -705,10 +717,10 @@ class AgentModel {
   ): Promise<void> {
     if (agents.length === 0 || !userId) return;
 
-    // Lazy: the availability check reaches into the service layer, which
-    // would otherwise load with every model.
-    const { isSkillSandboxAvailableForAgent } = await import(
-      "@/skills/skill-sandbox-availability"
+    // Through a port: the availability check sits above the models and loads
+    // on first use.
+    const { isSkillSandboxAvailableForAgent } = await port(
+      "skillSandboxAvailability",
     );
     await Promise.all(
       agents.map(async (agent) => {
@@ -1406,6 +1418,7 @@ class AgentModel {
         defaultNamespace: schema.organizationsTable.defaultEnvironmentNamespace,
         environmentPolicy: schema.environmentsTable.networkPolicy,
         defaultPolicy: schema.organizationsTable.defaultNetworkPolicy,
+        agentRuntimeTiers: schema.organizationsTable.agentRuntimeTiers,
       })
       .from(schema.agentsTable)
       .innerJoin(recentRuns, eq(recentRuns.agentId, schema.agentsTable.id))
@@ -1456,6 +1469,27 @@ class AgentModel {
           notDeleted(schema.agentsTable),
         ),
       );
+  }
+
+  /** Agents auto routing applies to: no model, key, pool or runtime of their own. */
+  static async countFollowingOrganizationRouting(
+    organizationId: string,
+  ): Promise<number> {
+    const [row] = await db
+      .select({ total: count() })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          eq(schema.agentsTable.agentType, "agent"),
+          isNull(schema.agentsTable.llmApiKeyId),
+          isNull(schema.agentsTable.modelId),
+          isNull(schema.agentsTable.modelPoolId),
+          isNull(schema.agentsTable.runtime),
+          notDeleted(schema.agentsTable),
+        ),
+      );
+    return row?.total ?? 0;
   }
 
   static async findRuntimeTargets(organizationId: string) {
@@ -2971,6 +3005,21 @@ class AgentModel {
   }
 
   /**
+   * What a log row written for this agent needs: its environment, and whether
+   * its organization keeps media in logs (null when the agent is not found).
+   */
+  static async findLogSettings(id: string): Promise<{
+    environmentId: string | null;
+    keepMediaInLogs: boolean | null;
+  }> {
+    const fields = await AgentModel.findToolAccessFields(id);
+    return {
+      environmentId: fields?.environmentId ?? null,
+      keepMediaInLogs: fields?.keepMediaInLogs ?? null,
+    };
+  }
+
+  /**
    * The two fields that decide whether a caller missing an MCP connection is
    * warned, blocked, or left alone. Kept narrow so the chat turn's pre-flight
    * check costs one indexed row read.
@@ -3358,13 +3407,7 @@ class AgentModel {
     tx?: Transaction,
   ): Promise<Pick<
     Agent,
-    | "id"
-    | "name"
-    | "agentType"
-    | "llmApiKeyId"
-    | "modelId"
-    | "fastModelId"
-    | "smartModelId"
+    "id" | "name" | "agentType" | "llmApiKeyId" | "modelId"
   > | null> {
     const [targetAgent] = await (tx ?? db)
       .select({
@@ -3373,8 +3416,6 @@ class AgentModel {
         agentType: schema.agentsTable.agentType,
         llmApiKeyId: schema.agentsTable.llmApiKeyId,
         modelId: schema.agentsTable.modelId,
-        fastModelId: schema.agentsTable.fastModelId,
-        smartModelId: schema.agentsTable.smartModelId,
       })
       .from(schema.agentsTable)
       .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
@@ -4023,6 +4064,62 @@ class AgentModel {
     return rows.length === 1;
   }
 
+  /** How many of the organization's agents name `name` as their default or scaleup tier. */
+  static async countRuntimeTierReferences(params: {
+    organizationId: string;
+    name: string;
+  }): Promise<number> {
+    const table = schema.agentsTable;
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          sql`(lower(${table.runtime}->>'tier') = lower(${params.name}) or lower(${table.runtime}->>'maxTier') = lower(${params.name}))`,
+        ),
+      );
+    return row?.count ?? 0;
+  }
+
+  /**
+   * Follow tier renames on every agent of the organization that names one of
+   * them. The whole mapping applies to each stored name once, so a save that
+   * renames S to M and M to Medium leaves the former S agents on M.
+   */
+  static async renameRuntimeTiers(params: {
+    organizationId: string;
+    renames: readonly { from: string; to: string }[];
+    tx?: Transaction;
+  }): Promise<void> {
+    if (params.renames.length === 0) return;
+    const table = schema.agentsTable;
+    const from = params.renames.map((rename) => rename.from.toLowerCase());
+    for (const field of ["tier", "maxTier"] as const) {
+      const stored = sql`lower(${table.runtime}->>${field})`;
+      const mapped = sql.join(
+        params.renames.map(
+          (rename) => sql`when ${rename.from.toLowerCase()} then ${rename.to}`,
+        ),
+        sql` `,
+      );
+      await (params.tx ?? db)
+        .update(table)
+        .set({
+          runtime: sql`jsonb_set(${table.runtime}, ${sql.raw(`'{${field}}'`)}, to_jsonb(coalesce((case ${stored} ${mapped} end), ${table.runtime}->>${field})::text))`,
+        })
+        .where(
+          and(
+            eq(table.organizationId, params.organizationId),
+            sql`${stored} in (${sql.join(
+              from.map((name) => sql`${name}`),
+              sql`, `,
+            )})`,
+          ),
+        );
+    }
+  }
+
   static async update(
     id: string,
     {
@@ -4162,13 +4259,8 @@ class AgentModel {
 
         // Invalidate tool cache for all parent agents so they pick up the new tool name
         const parentAgentIds = await ToolModel.getParentAgentIds(id);
-        // Lazy (here and below): the chat MCP client imports the service
-        // layer, which would otherwise load with every model.
-        const { clearChatMcpClient } = await import(
-          "@/clients/chat-mcp-client"
-        );
         for (const parentAgentId of parentAgentIds) {
-          clearChatMcpClient(parentAgentId);
+          agentToolSurfaceChanged(parentAgentId);
         }
       }
 
@@ -4182,10 +4274,7 @@ class AgentModel {
         updatedAgent.toolExposureMode !== existingAgent.toolExposureMode ||
         updatedAgent.accessAllTools !== existingAgent.accessAllTools
       ) {
-        const { clearChatMcpClient } = await import(
-          "@/clients/chat-mcp-client"
-        );
-        clearChatMcpClient(id);
+        agentToolSurfaceChanged(id);
       }
     } else {
       updatedAgent = existingAgent;
@@ -5487,7 +5576,8 @@ class AgentModel {
             backend: row.runtime.backend,
             steerMode: row.runtime.steerMode,
             privileged: row.runtime.privileged,
-            resources: row.runtime.resources,
+            tier: row.runtime.tier ?? null,
+            maxTier: row.runtime.maxTier ?? null,
             environmentKeys: (row.runtime.environment ?? [])
               .map((entry) => entry.key)
               .sort(),

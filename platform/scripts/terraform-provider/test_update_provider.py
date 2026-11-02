@@ -8,11 +8,13 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+sys.path.insert(0, str(Path(__file__).parent))
 spec = importlib.util.spec_from_file_location('updater', Path(__file__).with_name('update_provider.py'))
 updater = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(updater)
@@ -92,6 +94,19 @@ elif a[:1] == ['api'] and '--paginate' in a: print('[]')
             updater.prepare(args)
         self.generation_calls = generator.call_count
         return out
+
+    def test_prefixed_versions_use_normalized_acceptance_target(self):
+        for version in ('v1.4.15', 'v1.5.0-rc.19'):
+            with self.subTest(version=version):
+                self.spec.write_text(json.dumps({'info': {'version': version}}))
+                out = self.prepare()
+                result = json.loads((out/'result.json').read_text())
+                self.assertEqual(result['version'], version[1:])
+                candidate = self.root/f'candidate-{self.counter}'
+                self.assertEqual((candidate/'platform-version.txt').read_text(), version[1:] + '\n')
+                manifest = json.loads((candidate/updater.MANIFEST).read_text())
+                self.assertEqual(manifest['version'], version[1:])
+                self.assertEqual(manifest['spec_sha256'], hashlib.sha256(self.spec.read_bytes()).hexdigest())
 
     def publish(self, out):
         self.counter += 1

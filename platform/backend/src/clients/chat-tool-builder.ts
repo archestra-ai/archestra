@@ -20,6 +20,7 @@ import {
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_START_AGENT_RUN_SHORT_NAME,
 } from "@archestra/shared";
 import {
   type McpUiToolMeta,
@@ -56,7 +57,7 @@ import {
   readKbChunksFromToolResult,
 } from "@/knowledge-base/quote-verification";
 import logger from "@/logging";
-import { ToolModel } from "@/models";
+import { McpToolCallModel, ToolModel } from "@/models";
 import { metrics } from "@/observability";
 import {
   ATTR_MCP_IS_ERROR_RESULT,
@@ -111,6 +112,10 @@ export interface ChatToolContext {
   sessionId?: string;
   delegationChain?: string;
   scheduleTriggerRunId?: string;
+  /** The calling agent run's task ID or run ID, when dispatched from a runtime container or chat. */
+  runId?: string;
+  /** Explicit runtime tier of the calling instance, when available. */
+  agentRuntimeTier?: string;
   abortSignal?: AbortSignal;
   elicitation?: ChatMcpElicitationBridge;
   /** User identity for OTEL span attributes */
@@ -280,6 +285,8 @@ export function buildMcpGatewayTool(params: {
                 organizationId: ctx.organizationId,
                 sessionId: ctx.sessionId,
                 scheduleTriggerRunId: ctx.scheduleTriggerRunId,
+                runId: ctx.runId,
+                agentRuntimeTier: ctx.agentRuntimeTier,
                 abortSignal: ctx.abortSignal,
                 elicitation: ctx.elicitation,
                 // EncryptedChat: never detach into a durable task — task rows
@@ -315,6 +322,7 @@ export function buildMcpGatewayTool(params: {
                   userId: ctx.userId,
                   llmSessionId: ctx.sessionId,
                   llmToolCallId: options.toolCallId,
+                  runId: ctx.runId,
                 }),
               },
             );
@@ -340,6 +348,59 @@ export function buildMcpGatewayTool(params: {
                 mcpTool.name,
                 toolArguments,
               );
+            } else if (!ctx.runId) {
+              const targetToolName = resolveRunToolTargetName(
+                mcpTool.name,
+                toolArguments,
+              );
+              const isStartAgentRun =
+                archestraMcpBranding.getToolShortName(targetToolName) ===
+                  TOOL_START_AGENT_RUN_SHORT_NAME ||
+                targetToolName === TOOL_START_AGENT_RUN_SHORT_NAME;
+              const launchedRunId = isStartAgentRun
+                ? (
+                    archestraResponse.structuredContent as
+                      | { run?: { run_id?: unknown } }
+                      | undefined
+                  )?.run?.run_id
+                : undefined;
+              if (
+                typeof launchedRunId === "string" &&
+                launchedRunId.length > 0
+              ) {
+                ctx.runId = launchedRunId;
+                const sessionId = ctx.conversationId ?? ctx.sessionId ?? null;
+                if (sessionId) {
+                  try {
+                    await McpToolCallModel.create({
+                      agentId: ctx.agentId,
+                      mcpServerName: archestraMcpBranding.serverName,
+                      method: "tools/call",
+                      durationMs: Math.max(0, Date.now() - startTime),
+                      toolCall: {
+                        id: options.toolCallId,
+                        name: mcpTool.name,
+                        arguments: toolArguments || {},
+                      },
+                      toolResult: ctx.suppressContentLogging
+                        ? { redacted: true }
+                        : archestraResponse,
+                      userId: ctx.userId ?? null,
+                      runId: launchedRunId,
+                      sessionId,
+                      llmToolCallId: options.toolCallId ?? null,
+                      authMethod: null,
+                      oauthClientId: ctx.mcpGwToken?.oauthClientId ?? null,
+                      source: "chat",
+                    });
+                  } catch (dbError) {
+                    logger.info(
+                      { err: dbError },
+                      "Failed to persist archestra run launch tool call",
+                    );
+                  }
+                }
+              }
             }
 
             // Verifiable citations (#7161): capture the returned KB chunks
@@ -450,6 +511,8 @@ export function buildAgentDelegationTool(params: {
     chatOpsPinnedAgentId: ctx.chatOpsPinnedAgentId,
     sessionId: ctx.sessionId,
     scheduleTriggerRunId: ctx.scheduleTriggerRunId,
+    runId: ctx.runId,
+    agentRuntimeTier: ctx.agentRuntimeTier,
     delegationChain: ctx.delegationChain,
     openappaSubagent: ctx.appaSubagent,
     abortSignal: ctx.abortSignal,
@@ -457,6 +520,7 @@ export function buildAgentDelegationTool(params: {
       mcpGwToken: ctx.mcpGwToken,
       organizationId: ctx.organizationId,
       userId: ctx.userId,
+      runId: ctx.runId,
     }),
   };
 
@@ -1484,6 +1548,7 @@ function buildTokenAuthContext({
   userId,
   llmSessionId,
   llmToolCallId,
+  runId,
 }: {
   mcpGwToken: McpGatewayToken | null;
   organizationId: string;
@@ -1492,6 +1557,7 @@ function buildTokenAuthContext({
   llmSessionId?: string;
   /** The model's id for the tool call this context executes. */
   llmToolCallId?: string;
+  runId?: string;
 }): TokenAuthContext | undefined {
   if (!mcpGwToken) {
     return undefined;
@@ -1507,6 +1573,7 @@ function buildTokenAuthContext({
     serviceAccountId: mcpGwToken.serviceAccountId,
     oauthClientId: mcpGwToken.oauthClientId,
     oauthExecution: mcpGwToken.oauthExecution,
+    ...(runId && { runId }),
     ...(llmSessionId && { llmSessionId }),
     ...(llmToolCallId && { llmToolCallId }),
   };

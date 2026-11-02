@@ -1,0 +1,347 @@
+#!/usr/bin/env python3
+"""Keep an Agent Runtime container under its memory limit by stopping the
+agent's largest command before the kernel kills the whole container.
+
+With the kubelet's default on cgroup v2 (`memory.oom.group`), a container that
+reaches its memory limit loses every process: the agent client, its session,
+the dev stack, the turn. This daemon watches the memory the kernel cannot
+reclaim (anonymous and shared memory, kernel stacks, page tables, sockets,
+unreclaimable slab) and, once it comes within a reserve of the limit or memory
+pressure stalls the container, kills the agent command that holds the most
+anonymous memory. The agent sees that command fail and keeps its session.
+
+Only the agent's commands are stopped: processes with OOM score adjustment
+1000, the marker the image's launchers give the agent's shell commands
+(`archestra-command-oom-score.sh`), that run under the agent's terminal (the
+tmux server on the default socket). PID 1, the client, its launcher, tmux,
+and anything detached from the agent's terminal (a dev stack's servers on
+their own tmux socket, PostgreSQL) are never stopped. A whole process group is
+stopped when every member is an agent command, else the largest process.
+
+Each stop is one JSON line in /var/run/archestra/memory-warden.log, which the
+platform's memory-kill report and the repository's tool reports count next to
+the kernel's `oom_kill`; the stopped command's stderr gets a line saying why.
+
+Environment (tests): ARCHESTRA_MEMORY_WARDEN_CGROUP (/sys/fs/cgroup),
+ARCHESTRA_MEMORY_WARDEN_LOG, ARCHESTRA_MEMORY_WARDEN_INTERVAL (0.2 s),
+ARCHESTRA_MEMORY_WARDEN_RESERVE_BYTES, ARCHESTRA_MEMORY_WARDEN_AGENT_ROOT (a pid
+whose descendants count as the agent's terminal), ARCHESTRA_MEMORY_WARDEN_ONCE
+(one check, then exit).
+"""
+import fcntl
+import json
+import os
+import signal
+import sys
+import time
+
+GIB = 1 << 30
+COMMAND_SCORE = "1000"
+CGROUP = os.environ.get("ARCHESTRA_MEMORY_WARDEN_CGROUP", "/sys/fs/cgroup")
+LOG = os.environ.get(
+    "ARCHESTRA_MEMORY_WARDEN_LOG", "/var/run/archestra/memory-warden.log"
+)
+# Times memory was short but no agent command held enough to free.
+NOTES = os.path.splitext(LOG)[0] + ".notes.log"
+INTERVAL = float(os.environ.get("ARCHESTRA_MEMORY_WARDEN_INTERVAL", "0.2"))
+# After a stop, the kernel needs a moment to hand the memory back.
+COOLDOWN_SECONDS = 2.0
+# A command smaller than this is never worth stopping.
+MIN_VICTIM_BYTES = 64 << 20
+# Memory pressure that stalls every task this share of the last 10 s means the
+# container is thrashing on the page cache it has left.
+PRESSURE_FULL_AVG10 = 20.0
+UNRECLAIMABLE_FIELDS = (
+    "anon",
+    "shmem",
+    "kernel_stack",
+    "pagetables",
+    "sec_pagetables",
+    "percpu",
+    "sock",
+    "vmalloc",
+    "slab_unreclaimable",
+)
+
+
+def read(path):
+    try:
+        with open(path) as handle:
+            return handle.read()
+    except OSError:
+        return None
+
+
+def memory_limit(cgroup=CGROUP):
+    value = (read(os.path.join(cgroup, "memory.max")) or "").strip()
+    return int(value) if value.isdigit() else None
+
+
+def unreclaimable_bytes(stat_text):
+    """Memory the kernel cannot give back without killing: memory.stat fields."""
+    values = {}
+    for line in (stat_text or "").splitlines():
+        key, _, value = line.partition(" ")
+        if value.strip().isdigit():
+            values[key] = int(value)
+    return sum(values.get(field, 0) for field in UNRECLAIMABLE_FIELDS)
+
+
+def pressure_full_avg10(pressure_text):
+    for line in (pressure_text or "").splitlines():
+        if line.startswith("full "):
+            for part in line.split()[1:]:
+                key, _, value = part.partition("=")
+                if key == "avg10":
+                    try:
+                        return float(value)
+                    except ValueError:
+                        return 0.0
+    return 0.0
+
+
+def reserve_bytes(limit):
+    """What stays free for the page cache and slab the tools run on."""
+    override = os.environ.get("ARCHESTRA_MEMORY_WARDEN_RESERVE_BYTES", "")
+    if override.isdigit():
+        return int(override)
+    return int(min(max(0.3 * GIB, 0.075 * limit), 1 * GIB))
+
+
+def trigger(limit, used, full_avg10):
+    """Why to stop a command now ('limit' or 'pressure'), or None."""
+    if limit is None:
+        return None
+    reserve = reserve_bytes(limit)
+    if used > limit - reserve:
+        return "limit"
+    if full_avg10 > PRESSURE_FULL_AVG10 and used > limit - 2 * reserve:
+        return "pressure"
+    return None
+
+
+def processes():
+    """pid -> {ppid, pgid, comm, score, anon, cmd} for every visible process."""
+    table = {}
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit():
+            continue
+        pid = int(entry)
+        stat = read(f"/proc/{pid}/stat")
+        status = read(f"/proc/{pid}/status")
+        if not stat or not status or ")" not in stat:
+            continue
+        comm = stat[stat.index("(") + 1 : stat.rindex(")")]
+        fields = stat[stat.rindex(")") + 2 :].split()
+        anon = 0
+        for line in status.splitlines():
+            if line.startswith(("RssAnon:", "RssShmem:")):
+                anon += int(line.split()[1]) * 1024
+        table[pid] = {
+            "ppid": int(fields[1]),
+            "pgid": int(fields[2]),
+            "comm": comm,
+            "score": (read(f"/proc/{pid}/oom_score_adj") or "").strip(),
+            "anon": anon,
+            "cmd": (read(f"/proc/{pid}/cmdline") or "").replace("\0", " ").strip(),
+        }
+    return table
+
+
+def tmux_socket_names():
+    """inode -> socket file name for tmux's listening sockets."""
+    names = {}
+    for line in (read("/proc/net/unix") or "").splitlines()[1:]:
+        parts = line.split()
+        if len(parts) >= 8 and "/tmux-" in parts[7]:
+            names[parts[6]] = os.path.basename(parts[7])
+    return names
+
+
+def agent_roots(table):
+    """The processes whose descendants are the agent's terminal."""
+    override = os.environ.get("ARCHESTRA_MEMORY_WARDEN_AGENT_ROOT", "")
+    if override.isdigit():
+        return {int(override)}
+    sockets = tmux_socket_names()
+    roots = set()
+    for pid, info in table.items():
+        if not info["comm"].startswith("tmux"):
+            continue
+        try:
+            fds = os.listdir(f"/proc/{pid}/fd")
+        except OSError:
+            continue
+        for fd in fds:
+            try:
+                target = os.readlink(f"/proc/{pid}/fd/{fd}")
+            except OSError:
+                continue
+            if target.startswith("socket:[") and sockets.get(target[8:-1]) == "default":
+                roots.add(pid)
+                break
+    return roots
+
+
+def choose_victim(table, roots, own_pid):
+    """(pids to kill, description) of the agent command holding the most anonymous memory."""
+
+    def under_agent(pid):
+        seen = set()
+        while pid in table and pid not in seen:
+            seen.add(pid)
+            if pid in roots:
+                return True
+            pid = table[pid]["ppid"]
+        return False
+
+    candidates = {
+        pid
+        for pid, info in table.items()
+        if pid not in (1, own_pid)
+        and pid not in roots
+        and info["score"] == COMMAND_SCORE
+        and under_agent(pid)
+    }
+    if not candidates:
+        return None
+    groups = {}
+    for pid, info in table.items():
+        groups.setdefault(info["pgid"], set()).add(pid)
+    best = None
+    for pgid, members in groups.items():
+        if members <= candidates:
+            anon = sum(table[pid]["anon"] for pid in members)
+            if best is None or anon > best[0]:
+                best = (anon, sorted(members), pgid)
+    single = max(candidates, key=lambda pid: table[pid]["anon"])
+    if best is None or table[single]["anon"] > best[0]:
+        return [single], table[single]["anon"], table[single]["cmd"]
+    leader = best[2] if best[2] in table else best[1][0]
+    return best[1], best[0], table[leader]["cmd"]
+
+
+def stop(pids, message):
+    # Append without blocking: the command's stderr may be its log file (never
+    # truncate it) or a pipe nobody reads (never wait on it).
+    flags = os.O_WRONLY | os.O_APPEND | os.O_NONBLOCK | os.O_NOCTTY
+    for pid in pids:
+        try:
+            fd = os.open(f"/proc/{pid}/fd/2", flags)
+        except OSError:
+            continue
+        try:
+            os.write(fd, (message + "\n").encode())
+            break
+        except OSError:
+            continue
+        finally:
+            os.close(fd)
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+
+
+# The last time the warden said it had nothing worth stopping.
+_NOTHING_TO_STOP_AT = [0.0]
+
+
+def note_nothing_to_stop(used, limit, largest):
+    """Say once a minute that memory is short but no agent command holds enough to free."""
+    now = time.time()
+    if now - _NOTHING_TO_STOP_AT[0] < 60:
+        return
+    _NOTHING_TO_STOP_AT[0] = now
+    record = {
+        "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "note": "nothing to stop",
+        "used_bytes": used,
+        "limit_bytes": limit,
+        "largest_command_bytes": largest,
+    }
+    try:
+        with open(NOTES, "a") as handle:
+            handle.write(json.dumps(record) + "\n")
+    except OSError:
+        pass
+
+
+def gib(value):
+    return f"{value / GIB:.1f} GiB"
+
+
+def check(own_pid):
+    """One look at the container; True when it stopped a command."""
+    limit = memory_limit()
+    if limit is None:
+        return False
+    used = unreclaimable_bytes(read(os.path.join(CGROUP, "memory.stat")))
+    why = trigger(limit, used, pressure_full_avg10(read(os.path.join(CGROUP, "memory.pressure"))))
+    if why is None:
+        return False
+    table = processes()
+    victim = choose_victim(table, agent_roots(table), own_pid)
+    if victim is None:
+        return False
+    pids, anon, cmd = victim
+    # Stopping a command that holds less than the overshoot frees too little:
+    # the memory is held by what the warden never stops (a dev stack, tmpfs),
+    # and every small command would be killed in turn.
+    # Within the last quarter of the reserve the kernel is about to stop
+    # everything: then any command above the floor is worth stopping.
+    reserve = reserve_bytes(limit)
+    overshoot = used - (limit - reserve)
+    needed = MIN_VICTIM_BYTES if used > limit - reserve // 4 else max(MIN_VICTIM_BYTES, overshoot)
+    if anon < needed:
+        note_nothing_to_stop(used, limit, anon)
+        return False
+    message = (
+        f"archestra-memory-warden: stopped this command ({gib(anon)}): the container "
+        f"reached {gib(used)} of its {gib(limit)} memory limit, and at the limit the "
+        "kernel would have stopped every process in it. Run memory-heavy commands one "
+        "at a time and with fewer workers, or move the work to a larger tier."
+    )
+    stop(pids, message)
+    record = {
+        "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "reason": why,
+        "pids": pids,
+        "command": cmd[:300],
+        "command_bytes": anon,
+        "used_bytes": used,
+        "limit_bytes": limit,
+    }
+    try:
+        os.makedirs(os.path.dirname(LOG), exist_ok=True)
+        with open(LOG, "a") as handle:
+            handle.write(json.dumps(record) + "\n")
+    except OSError:
+        pass
+    return True
+
+
+def main():
+    if memory_limit() is None:
+        return 0
+    own_pid = os.getpid()
+    if os.environ.get("ARCHESTRA_MEMORY_WARDEN_ONCE"):
+        return 0 if check(own_pid) else 1
+    # One warden per container, however often the init runs.
+    try:
+        lock = open(LOG + ".lock", "a")
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return 0
+    while True:
+        try:
+            stopped = check(own_pid)
+        except Exception as error:  # never let one bad read end the guard
+            print(f"archestra-memory-warden: {error}", file=sys.stderr)
+            stopped = False
+        time.sleep(COOLDOWN_SECONDS if stopped else INTERVAL)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

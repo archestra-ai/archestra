@@ -39,9 +39,14 @@ import {
   decodeCursor,
   type PaginatedResult,
 } from "@/database/utils/pagination";
-import { resolveLogContentMode, withholdToolCallContent } from "@/log-content";
+import {
+  resolveLogContentMode,
+  withholdToolCallContent,
+  withoutToolCallMedia,
+} from "@/log-content";
 import type { InsertMcpToolCall, McpToolCall, SortingQuery } from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
+import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
 import AgentUsageModel from "./agent-usage";
 import {
@@ -49,6 +54,7 @@ import {
   mcpToolCallBelongsToOrganization,
 } from "./log-organization";
 import { MCP_TOOL_CALL_TOOL_NAME } from "./mcp-tool-call-name";
+import OrganizationModel from "./organization";
 
 /**
  * Builds a search condition for MCP tool calls across server name, method,
@@ -101,6 +107,14 @@ class McpToolCallModel {
     // Enforced here, the one place every MCP log row is written, so no caller
     // can store content the deployment's Log Content mode withholds.
     const withheld = resolveLogContentMode() === "metadata_only";
+    // Media is kept out here too when the organization turned off "Keep media
+    // in logs": an image a tool returned is media like one a model drew.
+    const keepMedia =
+      withheld ||
+      ((data.agentId
+        ? (await AgentModel.findLogSettings(data.agentId)).keepMediaInLogs
+        : null) ??
+        (await OrganizationModel.keepsMediaInLogs({ appId: data.appId })));
     // A withheld row holds no content to encrypt under a conversation key, so
     // it is written like the encrypted-chat fallback: unkeyed, marker in place.
     const audit = withheld ? null : (auditContext ?? null);
@@ -112,7 +126,9 @@ class McpToolCallModel {
         ...encryptMcpToolCallContent(
           withheld
             ? withholdToolCallContent(data)
-            : redactToolCallArguments({ ...data }),
+            : redactToolCallArguments(
+                keepMedia ? { ...data } : withoutToolCallMedia(data),
+              ),
           audit,
         ),
         ...toolCallOutcomeColumns(data, audit !== null),

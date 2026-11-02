@@ -10,6 +10,7 @@ import {
   AppaClaudeDesktopAdapter,
 } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
+import { AppaCopilotCliAdapter } from "./adapters/copilot-cli";
 import { AppaKimiCodeAdapter } from "./adapters/kimi-code";
 import { AppaKiloAdapter, AppaOpenCodeAdapter } from "./adapters/opencode";
 import { AppaPiAdapter } from "./adapters/pi";
@@ -36,6 +37,8 @@ export const APPA_CLIENT_ADAPTERS: readonly AppaClientAdapter[] = Object.freeze(
     // Before OpenCode: Kilo's setup also sends OpenCode's session header.
     new AppaKiloAdapter(),
     new AppaOpenCodeAdapter(),
+    // Matched on the agent id its setup sends: its User-Agent is the OpenAI SDK's.
+    new AppaCopilotCliAdapter(),
     new AppaChatAdapter(),
   ],
 );
@@ -46,7 +49,7 @@ export const APPA_CLIENT_ADAPTERS: readonly AppaClientAdapter[] = Object.freeze(
  * Precedence:
  * 1. An explicit `X-Appa-Session-ID` header.
  * 2. Native client signals (Claude Code header, Codex metadata, OpenCode
- *    headers, Kimi Code's prompt cache key).
+ *    headers, Kimi Code's and Copilot CLI's Responses prompt cache keys).
  * 3. Generic wire-family fallbacks.
  *
  * When provided, `X-Appa-Parent-ID` overrides any native parent ID.

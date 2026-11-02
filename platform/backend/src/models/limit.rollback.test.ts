@@ -316,6 +316,65 @@ describe("Selected model budget applicability", () => {
       }),
     ).rejects.toMatchObject({ statusCode: 422 });
   });
+
+  test("an unmetered operation is refused by every hard budget, whatever models it lists", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const agent = await makeAgent({ organizationId: org.id });
+    const refusal = {
+      statusCode: 422,
+      message:
+        "This pass-through operation reports no cost the gateway can count, so it cannot run while a budget applies.",
+    };
+    const budget = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 100,
+      model: ["model-a"],
+      behavior: "soft",
+      lastCleanup: new Date(),
+    });
+    const context = { agentId: agent.id, unmeteredOperation: true };
+
+    // A soft budget only reports, so the operation runs.
+    expect(
+      await LimitValidationService.checkLimitsBeforeRequest(context),
+    ).toBeNull();
+    await LimitModel.patch(budget.id, { behavior: "hard" });
+    await expect(
+      LimitValidationService.checkLimitsBeforeRequest(context),
+    ).rejects.toMatchObject(refusal);
+    // Unpriced media still answers only to budgets that list its model.
+    expect(
+      await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: agent.id,
+        unpricedMediaModel: "model-b",
+      }),
+    ).toBeNull();
+
+    // The default user limit applies too.
+    await LimitModel.delete(budget.id);
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId: org.id,
+      environmentId: null,
+      limitValue: 100,
+      model: ["model-a"],
+      cleanupInterval: "1w",
+    });
+    await expect(
+      LimitValidationService.checkLimitsBeforeRequest({
+        ...context,
+        userId: user.id,
+      }),
+    ).rejects.toMatchObject(refusal);
+  });
 });
 
 describe("CreateLimitSchema", () => {

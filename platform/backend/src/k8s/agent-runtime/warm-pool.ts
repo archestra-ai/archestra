@@ -1,4 +1,8 @@
-import { followAgentCatalogImage, TimeInMs } from "@archestra/shared";
+import {
+  followAgentCatalogImage,
+  resolveAgentRuntimeTiers,
+  TimeInMs,
+} from "@archestra/shared";
 import type { CustomObjectsApi } from "@kubernetes/client-node";
 import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import config from "@/config";
@@ -10,7 +14,24 @@ import {
 } from "@/k8s/shared";
 import logger from "@/logging";
 import { AgentModel, EnvironmentModel, OrganizationModel } from "@/models";
+import {
+  AGENT_RUNTIME_SYSTEM_PROMPT_ENV,
+  AGENT_RUNTIME_TIER_ENV,
+  AGENT_RUNTIME_TIERS_ENV,
+} from "@/services/agent-runtime/runtime-contract";
+import {
+  agentRuntimeTier,
+  agentRuntimeTierDefaults,
+  resolveRunResources,
+  resolveRunWorkspaceStorageSize,
+  retargetRuntimeTiersEnv,
+  retargetScaleupDisabledPrompt,
+  retargetTierResourceEnv,
+  runtimeSystemPrompt,
+  warmPoolReplicas,
+} from "@/services/agent-runtime/runtime-tiers";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
+import type { AgentRuntimeTier } from "@/types";
 import { usesFloatingAgentImageTag } from "./image-pull-policy";
 import {
   AGENT_SANDBOX_API,
@@ -109,6 +130,7 @@ class AgentWarmPoolManager {
           namespace: string;
           organizationId: string;
           template: ReturnType<typeof warmPoolTemplate>;
+          replicas: number;
         }
       >();
       const [environments, organizations] = await Promise.all([
@@ -147,8 +169,15 @@ class AgentWarmPoolManager {
         const namespace =
           agent.namespace ?? agent.defaultNamespace ?? clients.namespace;
         namespaces.add(namespace);
+        const tiers = resolveAgentRuntimeTiers(
+          agent.agentRuntimeTiers,
+          agentRuntimeTierDefaults(),
+        );
+        const tier = agentRuntimeTier(runtime, tiers);
+        const replicas = warmPoolReplicas(tiers, tier);
+        // A tier without spares takes no pool slot from the other Agents.
         if (
-          config.agentRuntime.warmPoolSize === 0 ||
+          replicas === 0 ||
           desired.size >= config.agentRuntime.warmPoolMaxPools
         )
           continue;
@@ -163,8 +192,10 @@ class AgentWarmPoolManager {
           namespace,
           image: runtime.image,
           privileged: runtime.privileged,
-          resources: runtime.resources ?? config.agentRuntime.resources,
-          workspaceStorageSize: config.agentRuntime.workspaceStorageSize,
+          resources: resolveRunResources(tier, tiers),
+          tier,
+          warmTiers: [],
+          workspaceStorageSize: resolveRunWorkspaceStorageSize(tier, tiers),
           workspaceStorageClass: config.agentRuntime.workspaceStorageClass,
           nodeSelector: config.agentRuntime.nodeSelector,
           imagePullSecrets: [],
@@ -183,6 +214,7 @@ class AgentWarmPoolManager {
           namespace,
           organizationId: agent.organizationId,
           template,
+          replicas,
         });
       }
       for (const namespace of namespaces) {
@@ -236,6 +268,7 @@ class AgentWarmPoolManager {
           namespace: target,
           organizationId,
           template,
+          replicas,
         } of desired.values()) {
           if (target !== namespace) continue;
           const metadata = {
@@ -288,7 +321,7 @@ class AgentWarmPoolManager {
                 kind: "SandboxWarmPool",
                 metadata,
                 spec: {
-                  replicas: config.agentRuntime.warmPoolSize,
+                  replicas,
                   sandboxTemplateRef: { name: template.name },
                   updateStrategy: { type: "Recreate" },
                 },
@@ -303,7 +336,7 @@ class AgentWarmPoolManager {
                   name: template.name,
                   body: {
                     metadata: { labels: metadata.labels },
-                    spec: { replicas: config.agentRuntime.warmPoolSize },
+                    spec: { replicas },
                   },
                 },
                 setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
@@ -316,10 +349,18 @@ class AgentWarmPoolManager {
     }
   }
 
+  /**
+   * Claim a warm Sandbox for the run. The requested tier's pool serves it
+   * while that pool has a ready Sandbox. When it is drained or missing, the
+   * next larger tier, up to the Agent's largest tier, serves it if that pool
+   * has a ready Sandbox, and the run runs at that tier; a smaller tier never
+   * does. When neither has one, the run claims from its own pool and waits for
+   * it to refill. Null means a cold start.
+   */
   async claim(params: {
     api: CustomObjectsApi;
     spec: KubernetesAgentRunLaunchSpec;
-  }): Promise<boolean> {
+  }): Promise<{ tier: AgentRuntimeTier | null } | null> {
     // A pre-started Sandbox keeps the image it pulled when capacity was
     // created. Floating tags must cold-start so every new workspace resolves
     // the current image instead of claiming stale warm capacity.
@@ -328,20 +369,51 @@ class AgentWarmPoolManager {
       !params.spec.poolScope ||
       usesFloatingAgentImageTag(params.spec.image)
     )
-      return false;
+      return null;
     const { api, spec } = params;
     const namespace = spec.namespace;
-    const template = warmPoolTemplate(spec);
-    try {
-      await api.getNamespacedCustomObject({
-        ...POOL_API,
-        namespace,
-        name: template.name,
-      });
-    } catch (error) {
-      if (isK8sNotFoundError(error)) return false;
-      throw error;
+    // Each candidate is sized as the run's organization sizes that tier.
+    const candidates = spec.warmTiers.length
+      ? spec.warmTiers.map(({ tier, resources, workspaceStorageSize }) => ({
+          tier,
+          sized:
+            tier === spec.tier
+              ? spec
+              : { ...spec, tier, resources, workspaceStorageSize },
+        }))
+      : [{ tier: spec.tier, sized: spec }];
+    let drained: string | undefined;
+    for (const { tier, sized } of candidates) {
+      const template = warmPoolTemplate(sized);
+      let pool: { status?: { readyReplicas?: number } };
+      try {
+        pool = (await api.getNamespacedCustomObject({
+          ...POOL_API,
+          namespace,
+          name: template.name,
+        })) as typeof pool;
+      } catch (error) {
+        if (isK8sNotFoundError(error)) continue;
+        throw error;
+      }
+      if ((pool.status?.readyReplicas ?? 0) > 0 || candidates.length === 1) {
+        await this.createClaim({ api, spec, templateName: template.name });
+        return { tier };
+      }
+      if (tier === spec.tier) drained = template.name;
     }
+    if (drained === undefined) return null;
+    await this.createClaim({ api, spec, templateName: drained });
+    return { tier: spec.tier };
+  }
+
+  private async createClaim(params: {
+    api: CustomObjectsApi;
+    spec: KubernetesAgentRunLaunchSpec;
+    templateName: string;
+  }): Promise<void> {
+    const { api, spec } = params;
+    const namespace = spec.namespace;
     const labels = {
       ...agentRuntimeLabels(spec),
       [AGENT_RUNTIME_WORKSPACE_LABEL]: spec.frozenName,
@@ -360,7 +432,7 @@ class AgentWarmPoolManager {
             ownerReferences: spec.ownerReferences,
           },
           spec: {
-            warmPoolRef: { name: template.name },
+            warmPoolRef: { name: params.templateName },
             additionalPodMetadata: {
               labels: Object.fromEntries(
                 Object.entries(labels).filter(([key]) => key.includes("/")),
@@ -382,7 +454,6 @@ class AgentWarmPoolManager {
       .catch((error) => {
         if (!isK8sConflictError(error)) throw error;
       });
-    return true;
   }
   private async reconcileSafely() {
     try {
@@ -403,6 +474,71 @@ class AgentWarmPoolManager {
 }
 
 export const agentWarmPoolManager = new AgentWarmPoolManager();
+
+/**
+ * The launch spec as the pod that served it is sized: a run claimed from a
+ * larger tier's pool runs at that tier, so its size variables, its volume and
+ * what its prompt says about the volume must say so.
+ */
+export function servedLaunchSpec<
+  T extends Pick<
+    KubernetesAgentRunLaunchSpec,
+    | "tier"
+    | "resources"
+    | "warmTiers"
+    | "env"
+    | "secretEnv"
+    | "systemPromptParts"
+    | "workspaceStorageSize"
+  >,
+>(spec: T, tier: AgentRuntimeTier | null): T {
+  const served = spec.warmTiers.find((candidate) => candidate.tier === tier);
+  if (!served || tier === spec.tier) return spec;
+  const requested = spec.warmTiers.find(
+    (candidate) => candidate.tier === spec.tier,
+  );
+  const tiersEnv = spec.env[AGENT_RUNTIME_TIERS_ENV];
+  const prompt = spec.secretEnv?.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT;
+  const basePrompt = spec.systemPromptParts
+    ? runtimeSystemPrompt(spec.systemPromptParts, served.workspaceGiB)
+    : prompt;
+  const nextPrompt =
+    basePrompt && tiersEnv && tier
+      ? retargetScaleupDisabledPrompt(basePrompt, tiersEnv, tier)
+      : basePrompt;
+  return {
+    ...spec,
+    tier,
+    resources: served.resources,
+    workspaceStorageSize: served.workspaceStorageSize,
+    // The prompt is rebuilt with the served volume and retargeted fixed-tier instruction.
+    secretEnv: spec.secretEnv
+      ? {
+          ...spec.secretEnv,
+          ...(nextPrompt
+            ? { [AGENT_RUNTIME_SYSTEM_PROMPT_ENV]: nextPrompt }
+            : {}),
+        }
+      : spec.secretEnv,
+    env: {
+      ...retargetTierResourceEnv({
+        env: spec.env,
+        served: served.resources,
+      }),
+      [AGENT_RUNTIME_TIER_ENV]: tier,
+      // The list the run reads to decide on a larger run marks the size it got.
+      ...(tiersEnv
+        ? {
+            [AGENT_RUNTIME_TIERS_ENV]: retargetRuntimeTiersEnv(
+              tiersEnv,
+              served,
+              requested,
+            ),
+          }
+        : {}),
+    },
+  };
+}
 
 /** Agents idle longer than this hold no spare capacity. */
 const RECENT_RUN_WINDOW_MS = 7 * TimeInMs.Day;

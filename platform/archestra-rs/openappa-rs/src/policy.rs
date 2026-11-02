@@ -1636,7 +1636,7 @@ command = ["python3", "judge.py"]
                 HookDecision::Ack
             } else {
                 HookDecision::ReplaceOutput {
-                    output: "[appa] the result was not carried; nothing was admitted".into(),
+                    output: "[appa] the tool ran, but its output is not shown: it is over the 64-byte limit".into(),
                 }
             };
             assert_eq!(

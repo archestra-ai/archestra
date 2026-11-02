@@ -48,15 +48,11 @@ export function withLatestRotatedRefreshToken(value: string): string {
     if (!credential) {
       return value;
     }
-    const latest = xaiSubscriptionTokenManager.latestKnownRefreshToken(
-      credential.refreshToken,
-    );
-    return latest === credential.refreshToken
+    const latest =
+      xaiSubscriptionTokenManager.latestKnownCredential(credential);
+    return latest === credential
       ? value
-      : encodeXaiSubscriptionCredential({
-          ...credential,
-          refreshToken: latest,
-        });
+      : encodeXaiSubscriptionCredential(latest);
   }
   return value;
 }

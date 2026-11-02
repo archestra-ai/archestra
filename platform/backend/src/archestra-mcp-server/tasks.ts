@@ -16,7 +16,6 @@ import {
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { type A2AActor, A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
-import type { A2AAttachment } from "@/agents/a2a-executor";
 import { watchTaskCompletion } from "@/agents/task-completion-watcher";
 import { userHasPermission } from "@/auth";
 import { getAppAssetBaseOrigin } from "@/config";
@@ -34,6 +33,7 @@ import {
 import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
 import { RouteCategory } from "@/observability/tracing";
 import { AGENT_WORKSPACE_TRANSFER_PREFIX } from "@/routes/route-paths";
+import { agentRunAttachmentsSchema } from "@/services/agent-runtime/agent-run-attachments";
 import {
   prepareAgentRuntimeBackendDriver,
   resolveAgentRuntimeBackendDriver,
@@ -48,6 +48,7 @@ import {
   agentRunUrl,
   submittedRunNextStep,
 } from "@/services/agent-runtime/run-handle";
+import { agentRunLlmSessionId } from "@/services/agent-runtime/runtime-contract";
 import {
   admitRuntimeSteer,
   classifyRuntimeCaller,
@@ -61,6 +62,11 @@ import {
   SPAWN_TARGET_MISMATCH,
   UNVERIFIED_RUNTIME_SESSION,
 } from "@/services/agent-runtime/runtime-crossing";
+import {
+  agentRuntimeTier,
+  organizationAgentRuntimeTiers,
+  resolveAgentRunLimits,
+} from "@/services/agent-runtime/runtime-tiers";
 import {
   cancelDetachedAgentTask,
   startDetachedAgentTask,
@@ -76,11 +82,18 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE,
   AgentRunAttentionStateSchema,
+  type AgentRunLimits,
+  type AgentRunLimitsRequest,
   AgentWorkspaceStateSchema,
   ApiError,
 } from "@/types";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 import type { A2ATaskFailure } from "@/types/a2a-task";
-import { agentRunAttachmentsSchema } from "@/types/agent-run-attachments";
+import {
+  AgentRunLimitsRequestSchema,
+  AgentRuntimeTierSchema,
+} from "@/types/agent-runtime";
+import type { AgentWorkspace } from "@/types/agent-workspace";
 import {
   type RuntimeLaunchFailureReason,
   type RuntimeLaunchOutcome,
@@ -105,6 +118,7 @@ export async function startDelegatedTask(params: {
   agentId: string;
   message: string;
   attachments?: A2AAttachment[];
+  limits?: AgentRunLimitsRequest;
   context: ArchestraContext;
 }) {
   const { result, outcome } = await launchDelegatedTask(params);
@@ -116,6 +130,7 @@ async function launchDelegatedTask(params: {
   agentId: string;
   message: string;
   attachments?: A2AAttachment[];
+  limits?: AgentRunLimitsRequest;
   context: ArchestraContext;
 }): Promise<{ result: CallToolResult; outcome?: RuntimeLaunchOutcome }> {
   const { agentId, message, context } = params;
@@ -165,6 +180,42 @@ async function launchDelegatedTask(params: {
             : `Agent "${agent.name}" has no Agent Runtime, so it cannot run in the background. Delegate to it with its agent tool instead.`,
         ),
       );
+    }
+    const tiers = await organizationAgentRuntimeTiers(actor.organizationId);
+    let currentTier = context.agentRuntimeTier;
+    if (!currentTier && context.runId) {
+      let currentRun = await AgentRunModel.findByTaskId(context.runId);
+      if (!currentRun) {
+        const currentTaskId = await AgentRunModel.findCurrentTurnTaskId({
+          runId: context.runId,
+          organizationId: actor.organizationId,
+        });
+        if (currentTaskId) {
+          currentRun = await AgentRunModel.findByTaskId(currentTaskId);
+        }
+      }
+      if (currentRun?.agentId === agent.id) {
+        // A run from before tiers were recorded is still a run of this
+        // Agent: it ran at the Agent's tier, and must hear that it cannot
+        // scale up rather than the refusal meant for outside callers.
+        currentTier =
+          currentRun.runtimeLimits?.tier ?? agentRuntimeTier(runtime, tiers);
+      }
+    }
+    // Refuse a limit above the Agent's before a task exists: the caller hears
+    // the maximum and can ask again within it.
+    let limits: AgentRunLimits;
+    try {
+      limits = resolveAgentRunLimits({
+        runtime,
+        requested: params.limits,
+        currentTier,
+        tiers,
+      });
+    } catch (error) {
+      if (error instanceof ApiError)
+        return failedLaunch("refused", errorResult(error.message));
+      throw error;
     }
     await prepareAgentRuntimeBackendDriver(runtime.backend);
     const crossing = await runtimeCrossingForStart(context);
@@ -217,6 +268,7 @@ async function launchDelegatedTask(params: {
           ? RouteCategory.CHATOPS
           : RouteCategory.A2A,
         completionTarget,
+        runtimeLimits: limits,
         ...(crossing ? { runtimeCrossing: crossing } : {}),
       },
     });
@@ -245,6 +297,7 @@ async function launchDelegatedTask(params: {
       result: structuredSuccessResult({
         run,
         run_url: agentRunUrl(taskRow.id),
+        limits: runLimitsOutput(limits),
         next_step: submittedRunNextStep({ reportsToThread }),
       }),
       outcome: {
@@ -302,17 +355,54 @@ const RunSummarySchema = z.object({
   state_changed_at: z.string().describe("ISO 8601 of the last transition."),
 });
 
+const RunLimitsSchema = z
+  .object({
+    tier: AgentRuntimeTierSchema.nullable().describe(
+      "The name of the runtime tier the run has, as the organization sizes it.",
+    ),
+    idle_timeout_minutes: z.number(),
+    max_duration_hours: z
+      .number()
+      .describe(
+        "The run and its saved files end this many hours after the start.",
+      ),
+    max_cost_usd: z.number().nullable(),
+    workspace_gib: z
+      .number()
+      .optional()
+      .describe(
+        "The size of the run's workspace volume in GiB. Absent for a workspace from before sizes were recorded.",
+      ),
+  })
+  .describe("The tier and limits the run got, within the Agent's own.");
+
+function runLimitsOutput(limits: AgentRunLimits | null) {
+  return limits
+    ? {
+        tier: limits.tier,
+        idle_timeout_minutes: limits.idleTimeoutMinutes,
+        max_duration_hours: limits.maxDurationHours,
+        max_cost_usd: limits.maxCostUsd,
+        ...(limits.workspaceGiB === undefined
+          ? {}
+          : { workspace_gib: limits.workspaceGiB }),
+      }
+    : null;
+}
+
 const StartRunOutputSchema = z.object({
   run: RunSummarySchema,
   run_url: z
     .string()
     .describe("Open the run and its workspace in the browser."),
+  limits: RunLimitsSchema.nullable(),
   next_step: z.string().describe("What to do now."),
 });
 
 const GetRunOutputSchema = z.object({
   run: RunSummarySchema,
   run_url: z.string().nullable(),
+  limits: RunLimitsSchema.nullable(),
   requests: z
     .array(z.object({ text: z.string(), truncated: z.boolean() }))
     .describe(
@@ -366,7 +456,7 @@ const ListAgentRunsOutputSchema = z.object({
           .string()
           .nullable()
           .describe(
-            "Verified LLM telemetry session key for /llm/logs/:id; URL-encode it as one path segment. Null when no readable logged session is available. This is not a task ID or runtime handle.",
+            "Verified LLM telemetry session key for /llm/logs/:id (the run's workload name); URL-encode it as one path segment. Null when no readable logged session is available. It is not a run_id: never pass it to the run tools.",
           ),
         title: z.string(),
         prompt: z.string(),
@@ -424,6 +514,12 @@ const MAX_INLINED_OUTPUT_CHARS = 20_000;
 const MAX_RUN_FILE_BYTES = 40 * 1024 * 1024;
 /** Where an Agent Runtime's retained workspace is mounted in its container. */
 const RUN_WORKSPACE_ROOT = "/home/node/workspace";
+/**
+ * A new turn in a retained workspace ends at the workspace's retention
+ * deadline, which a turn never moves. With less than this left, the turn would
+ * be stopped soon after it starts, so a finished run takes no new turn.
+ */
+const MIN_CONTINUATION_MS = 10 * 60_000;
 const RunFileNameSchema = z
   .string()
   .trim()
@@ -735,6 +831,31 @@ const registry = defineArchestraTools([
       attachments: agentRunAttachmentsSchema().describe(
         "Input files staged before the first turn. For repository work, include a patch for uncommitted changes and identify the base commit in message. Never include credentials.",
       ),
+      limits: z
+        .object({
+          // The same fields and bounds as the REST route's `limits`, in snake case.
+          tier: AgentRunLimitsRequestSchema.shape.tier.describe(
+            "The name of one of the organization's runtime tiers, at or below this Agent's scaleup tier. Choose by size, not by name: inside a run, $ARCHESTRA_AGENT_RUNTIME_TIERS lists the tiers the run may move to with their CPU, memory and workspace size; pick the smallest that covers the work. To move work to another tier, start a run of the same Agent at that tier and hand over the branch. A tier above the scaleup tier is refused with the allowed tiers and their sizes named.",
+          ),
+          min_cpu: AgentRunLimitsRequestSchema.shape.minCpu.describe(
+            "CPUs the work needs. The run gets the smallest tier this Agent may use with at least this many and no smaller workspace than the Agent's default tier; refused with the allowed tiers named when none has. Use this when the tier names are unknown.",
+          ),
+          min_memory_gib:
+            AgentRunLimitsRequestSchema.shape.minMemoryGib.describe(
+              "GiB of memory the work needs, with the same effect as min_cpu.",
+            ),
+          idle_timeout_minutes:
+            AgentRunLimitsRequestSchema.shape.idleTimeoutMinutes,
+          max_duration_hours:
+            AgentRunLimitsRequestSchema.shape.maxDurationHours.describe(
+              "Hours until the run and its saved files end. Keep it short for work that nobody continues.",
+            ),
+          max_cost_usd: AgentRunLimitsRequestSchema.shape.maxCostUsd,
+        })
+        .optional()
+        .describe(
+          "Limits for this run, each at or below the Agent's own (for the tier, its largest tier); a larger value is refused with the maximum named. Omit to take the Agent's defaults.",
+        ),
     }),
     outputSchema: StartRunOutputSchema,
     handler: ({ args, context }) =>
@@ -742,6 +863,18 @@ const registry = defineArchestraTools([
         agentId: args.agent_id,
         message: args.message,
         attachments: args.attachments,
+        ...(args.limits
+          ? {
+              limits: {
+                tier: args.limits.tier,
+                minCpu: args.limits.min_cpu,
+                minMemoryGib: args.limits.min_memory_gib,
+                idleTimeoutMinutes: args.limits.idle_timeout_minutes,
+                maxDurationHours: args.limits.max_duration_hours,
+                maxCostUsd: args.limits.max_cost_usd,
+              },
+            }
+          : {}),
         context,
       }),
   }),
@@ -797,23 +930,15 @@ const registry = defineArchestraTools([
           session.actorId === actor.id
             ? await AgentWorkspaceModel.findByWorkloadName(session.workloadName)
             : null;
-        const canContinue = Boolean(
-          workspace &&
-            ((workspace.state === "active" &&
-              !session?.endedAt &&
-              workspace.activeTaskId === task.id) ||
-              (["idle", "suspended"].includes(workspace.state) &&
-                !workspace.activeTaskId)) &&
-            workspace.expiresAt.getTime() > Date.now(),
-        );
-        const continuationError =
-          !workspace || canContinue
-            ? null
-            : workspace.expiresAt.getTime() <= Date.now()
-              ? "This run expired and cannot resume. Do not call start_agent_run to replace it. Recover available run history and explain the blocker."
-              : workspace.state === "deleted"
-                ? "This run's workspace was removed and cannot resume. Do not call start_agent_run to replace it. Recover available run history and explain the blocker."
-                : "This workspace is not ready for continuation. Check get_agent_run again and use steer_agent_run with the same run_id when available; do not start a replacement run.";
+        const { canContinue, continuationError } = workspace
+          ? workspaceContinuation({
+              workspace,
+              liveTurn:
+                workspace.state === "active" &&
+                !session?.endedAt &&
+                workspace.activeTaskId === task.id,
+            })
+          : { canContinue: false, continuationError: null };
         const requestTaskIds = [...new Set([args.run_id, task.id])];
         const requestParts =
           await A2AMessageModel.findFirstUserPartsByTaskIds(requestTaskIds);
@@ -844,6 +969,7 @@ const registry = defineArchestraTools([
             runId: args.run_id,
             narrow: await isGuardrailsV2Active(),
           }),
+          limits: runLimitsOutput(session?.runtimeLimits ?? null),
           run_url: session ? agentRunUrl(args.run_id) : null,
           requests,
           // The tail: the newest output is what a poller wants to see.
@@ -1011,11 +1137,9 @@ const registry = defineArchestraTools([
           userHasPermission(actor.id, actor.organizationId, "log", "read"),
           userHasPermission(actor.id, actor.organizationId, "log", "admin"),
         ]);
-        // Maintained runtime clients send the persisted workload name as
-        // X-Archestra-Session-Id. The OpenAPPA key adds a caller scope and is
-        // not the key stored on LLM interactions. Never substitute a task ID
-        // or a workspace row's UUID; continued turns keep this header value.
-        const sessionKeys = rows.map((row) => row.workloadName);
+        // The OpenAPPA key adds a caller scope and is not the key stored on
+        // LLM interactions; continued turns keep the same key.
+        const sessionKeys = rows.map((row) => agentRunLlmSessionId(row));
         const logged = canReadLogs
           ? await InteractionModel.findLoggedSessionIds({
               organizationId: actor.organizationId,
@@ -1142,14 +1266,14 @@ const registry = defineArchestraTools([
             }),
           });
         if (session.endedAt) {
-          if (
-            !workspace ||
-            workspace.expiresAt.getTime() <= Date.now() ||
-            !["idle", "suspended"].includes(workspace.state) ||
-            workspace.activeTaskId
-          ) {
+          const decision = workspace
+            ? workspaceContinuation({ workspace, liveTurn: false })
+            : null;
+          if (!decision?.canContinue) {
             return errorResult(
-              "The run is unavailable, busy, or expired. No new run was started. Read get_agent_run for its current state; do not use start_agent_run as a retry.",
+              decision?.retentionTooShort
+                ? `${decision.continuationError} No new turn was started.`
+                : "The run is unavailable, busy, or expired. No new run was started. Read get_agent_run for its current state; do not use start_agent_run as a retry.",
             );
           }
           const continuation = await startDetachedAgentTask({
@@ -1951,9 +2075,9 @@ async function protectedFileAccess(params: {
  * get_agent_run's governed result, or undefined when the raw output may be
  * read: Guardrails are off, or an unrecognized client reads a run no session
  * is bound to. Under a proof only a result admitted across the runtime
- * crossing is returned; a run without runtime metadata, a historical turn or
- * the run reading itself gets metadata and the run page, never the raw
- * artifact or request text.
+ * crossing is returned; a run without runtime metadata, a historical turn, an
+ * unparented run or the run reading itself gets metadata and the run page,
+ * never the raw artifact or request text.
  */
 async function governedRunOutput(params: {
   context: Parameters<typeof guardRuntimeCrossing>[0];
@@ -1971,7 +2095,9 @@ async function governedRunOutput(params: {
     // A task with no runtime has no output to govern.
     return session && workspace ? errorResult(gate.reason) : undefined;
   }
-  const withheld = () =>
+  const withheld = (
+    text = "Guardrails cannot verify this run's output for this conversation, so none was returned. A person can read it on the run page.",
+  ) =>
     structuredSuccessResult(
       {
         run: runSummary({
@@ -1980,13 +2106,14 @@ async function governedRunOutput(params: {
           narrow: true,
         }),
         run_url: session ? agentRunUrl(params.runId) : null,
+        limits: runLimitsOutput(session?.runtimeLimits ?? null),
         requests: [],
         output: "",
         output_truncated: false,
         workspace: null,
         session: null,
       },
-      "Guardrails cannot verify this run's output for this conversation, so none was returned. A person can read it on the run page.",
+      text,
     );
   if (gate.kind === "unrecognized") {
     if (!session || !workspace) return undefined;
@@ -2004,26 +2131,32 @@ async function governedRunOutput(params: {
     taskId: params.task.id,
   });
   if (crossed.kind === "producer") return withheld();
-  if (crossed.kind === "refused") return errorResult(crossed.reason);
-  const canContinue = Boolean(
-    (workspace.state === "active" &&
+  if (crossed.kind === "refused") {
+    return crossed.cause === "unparented"
+      ? withheld(crossed.reason)
+      : errorResult(crossed.reason);
+  }
+  // The refusal reasons are host-written and name nothing the run produced.
+  const { canContinue, continuationError } = workspaceContinuation({
+    workspace,
+    liveTurn:
+      workspace.state === "active" &&
       !session.endedAt &&
-      workspace.activeTaskId === params.task.id) ||
-      (["idle", "suspended"].includes(workspace.state) &&
-        !workspace.activeTaskId),
-  );
+      workspace.activeTaskId === params.task.id,
+  });
   return structuredSuccessResult(
     {
       run: runSummary({ row: params.task, runId: params.runId, narrow: true }),
       run_url: agentRunUrl(params.runId),
+      limits: runLimitsOutput(session.runtimeLimits),
       requests: [],
       output: crossed.kind === "admitted" ? crossed.value : "",
       output_truncated: false,
       workspace: {
         state: workspace.state,
         retained_until: workspace.expiresAt.toISOString(),
-        can_continue: canContinue && workspace.expiresAt.getTime() > Date.now(),
-        continuation_error: null,
+        can_continue: canContinue,
+        continuation_error: continuationError,
         connection: null,
       },
       session: {
@@ -2083,6 +2216,58 @@ function modelFacingStatusReason(
 
 const WITHHELD_STATUS_REASON =
   "Details are withheld under Guardrails; a person can read them on the run page.";
+
+/**
+ * Whether a run's workspace takes a follow-up now: a steer into its live turn,
+ * or a new turn once it is idle or suspended. A new turn also needs time
+ * before the retention deadline, where it would be stopped.
+ */
+function workspaceContinuation(params: {
+  workspace: AgentWorkspace;
+  liveTurn: boolean;
+}): {
+  canContinue: boolean;
+  continuationError: string | null;
+  /** Refused only because too little retention is left for a new turn. */
+  retentionTooShort: boolean;
+} {
+  const { workspace } = params;
+  const refused = (continuationError: string, retentionTooShort = false) => ({
+    canContinue: false,
+    continuationError,
+    retentionTooShort,
+  });
+  const allowed = {
+    canContinue: true,
+    continuationError: null,
+    retentionTooShort: false,
+  };
+  if (workspace.expiresAt.getTime() <= Date.now())
+    return refused(
+      "This run expired and cannot resume. Do not call start_agent_run to replace it. Recover available run history and explain the blocker.",
+    );
+  if (params.liveTurn) return allowed;
+  if (workspace.state === "deleted")
+    return refused(
+      "This run's workspace was removed and cannot resume. Do not call start_agent_run to replace it. Recover available run history and explain the blocker.",
+    );
+  if (
+    !["idle", "suspended"].includes(workspace.state) ||
+    workspace.activeTaskId
+  )
+    return refused(
+      "This workspace is not ready for continuation. Check get_agent_run again and use steer_agent_run with the same run_id when available; do not start a replacement run.",
+    );
+  const left = workspace.expiresAt.getTime() - Date.now();
+  if (left < MIN_CONTINUATION_MS) {
+    const minutes = Math.floor(left / 60_000);
+    return refused(
+      `This run cannot take another turn: its saved files are kept only until ${workspace.expiresAt.toISOString()} (${minutes < 1 ? "less than 1" : minutes} min from now), a new turn needs at least ${MIN_CONTINUATION_MS / 60_000} min, and it would be stopped at that time. Copy any files you need with read_workspace_file or transfer_workspace_file before then, and tell the user about the deadline. Do not call start_agent_run to replace this run unless the user asks: a new run has none of this run's files or conversation.`,
+      true,
+    );
+  }
+  return allowed;
+}
 
 function describeProtocolState(task: { status: { state?: string } }): string {
   return displayState(task.status.state);

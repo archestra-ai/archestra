@@ -4,6 +4,7 @@ import {
   type ChatErrorResponse,
   DEFAULT_APP_NAME,
   isChatErrorResponse,
+  OUTPUT_LIMIT_REACHED_MESSAGE,
   RetryableErrorCodes,
 } from "@archestra/shared";
 import {
@@ -41,6 +42,15 @@ export function getSimplifiedChatErrorMessage(
   error: ChatErrorResponse,
   appName: string,
 ): string {
+  // Allow this shared, curated variant without exposing arbitrary server or
+  // provider text. Other early stops keep the neutral IncompleteResponse copy.
+  if (
+    !error.usageLimitExceeded &&
+    error.code === ChatErrorCode.IncompleteResponse &&
+    error.message === OUTPUT_LIMIT_REACHED_MESSAGE
+  ) {
+    return branded(OUTPUT_LIMIT_REACHED_MESSAGE, appName);
+  }
   return branded(
     ChatErrorMessages[
       error.usageLimitExceeded ? ChatErrorCode.UsageLimitExceeded : error.code

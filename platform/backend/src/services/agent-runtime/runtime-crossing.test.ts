@@ -437,9 +437,58 @@ describe("model-facing runtime tools", () => {
         scenario === "no runtime metadata"
           ? null
           : expect.stringMatching(new RegExp(`/chat/runs/${task.id}$`)),
+      // The run's limits are metadata, reported even when the output is withheld.
+      limits:
+        scenario === "no runtime metadata" ? null : SEEDED_RUN_LIMITS_OUTPUT,
       output: "",
       requests: [],
       workspace: null,
+    });
+    expect(JSON.stringify(result)).not.toContain("RAW ARTIFACT");
+  });
+
+  test("a proof reading a run that has no parent gets its state and page, not its output", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+      parentId: null,
+    });
+    await db.insert(schema.a2aArtifactsTable).values({
+      taskId: seeded.task.id,
+      name: "agent-response",
+      parts: [{ text: "RAW ARTIFACT" }],
+    });
+
+    const result = await executeArchestraTool(
+      TOOL_GET_AGENT_RUN_FULL_NAME,
+      { run_id: seeded.task.id },
+      seeded.context,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({
+      run: expect.objectContaining({
+        run_id: seeded.task.id,
+        state: expect.any(String),
+      }),
+      run_url: expect.stringMatching(
+        new RegExp(`/chat/runs/${seeded.task.id}$`),
+      ),
+      limits: SEEDED_RUN_LIMITS_OUTPUT,
+      requests: [],
+      output: "",
+      output_truncated: false,
+      workspace: null,
+      session: null,
     });
     expect(JSON.stringify(result)).not.toContain("RAW ARTIFACT");
   });
@@ -850,6 +899,7 @@ describe("model-facing runtime tools", () => {
 
     expect(result.isError).not.toBe(true);
     expect(result.structuredContent).toMatchObject({
+      limits: SEEDED_RUN_LIMITS_OUTPUT,
       output: "ADMITTED",
       output_truncated: false,
       requests: [],
@@ -888,6 +938,56 @@ describe("model-facing runtime tools", () => {
 
     expect(JSON.stringify(result)).toContain("not truncated");
     expect(JSON.stringify(result)).not.toContain("x".repeat(40));
+  });
+
+  test("a parent learns why a finished run near its retention deadline takes no new turn", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    const run = await AgentRunModel.findByTaskId(seeded.task.id);
+    if (!run) throw new Error("Missing run fixture");
+    await AgentRunModel.close({ id: run.id });
+    await AgentWorkspaceModel.release({
+      workloadName: run.workloadName,
+      taskId: seeded.task.id,
+    });
+    await db
+      .update(schema.agentWorkspacesTable)
+      .set({ expiresAt: new Date(Date.now() + 5 * 60_000) })
+      .where(eq(schema.agentWorkspacesTable.id, seeded.task.id));
+    vi.spyOn(openappa, "loadChildReturns").mockResolvedValue([
+      {
+        childSessionId: seeded.child.session_id,
+        operationId: `runtime-return:${seeded.task.id}:done`,
+        value: "ADMITTED",
+      },
+    ]);
+
+    const result = await executeArchestraTool(
+      TOOL_GET_AGENT_RUN_FULL_NAME,
+      { run_id: seeded.task.id },
+      seeded.context,
+    );
+
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      output: "ADMITTED",
+      workspace: {
+        state: "idle",
+        can_continue: false,
+        continuation_error: expect.stringContaining("cannot take another turn"),
+      },
+    });
   });
 
   test("a different session of the same user does not receive raw output", async ({
@@ -1126,7 +1226,6 @@ function runtimeConfig() {
     backend: "kubernetes" as const,
     steerMode: "tmux_keys" as const,
     privileged: false,
-    resources: null,
     environment: null,
     credentials: null,
     ttlHours: 1,
@@ -1598,7 +1697,6 @@ async function runnable(params: {
     backend: "kubernetes",
     steerMode: "tmux_keys",
     privileged: false,
-    resources: null,
     environment: null,
     credentials: null,
     ttlHours: null,
@@ -1698,6 +1796,20 @@ async function bindChild(
   });
 }
 
+/** What the seeded run recorded, and how get_agent_run reports it. */
+const SEEDED_RUN_LIMITS = {
+  tier: "S" as const,
+  idleTimeoutMinutes: 10,
+  maxDurationHours: 1,
+  maxCostUsd: null,
+};
+const SEEDED_RUN_LIMITS_OUTPUT = {
+  tier: "S",
+  idle_timeout_minutes: 10,
+  max_duration_hours: 1,
+  max_cost_usd: null,
+};
+
 async function seededRun(params: {
   makeAgent: (overrides: Record<string, unknown>) => Promise<Agent>;
   makeMember: (
@@ -1743,6 +1855,7 @@ async function seededRun(params: {
     backend: "kubernetes",
     runtimeScope: scope,
     workloadName,
+    runtimeLimits: SEEDED_RUN_LIMITS,
   });
   const workspace = await AgentWorkspaceModel.create({
     id: task.id,

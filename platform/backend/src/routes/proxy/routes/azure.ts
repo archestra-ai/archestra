@@ -21,9 +21,9 @@ import {
 } from "../adapters/embeddings-wire";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import {
-  handleAzureImageEdit,
+  handleImageEdit,
   ImageEditMultipartBodySchema,
-  parseAzureImageEditRequest,
+  parseImageEditRequest,
 } from "../image-edit-handler";
 import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
@@ -97,11 +97,12 @@ const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
       async (request, reply) =>
-        handleAzureImageEdit(
-          await parseAzureImageEditRequest(request),
+        handleImageEdit({
+          parsed: await parseImageEditRequest(request),
+          provider: "azure",
           request,
           reply,
-        ),
+        }),
     );
   }
 

@@ -80,6 +80,9 @@ export interface ChildReturnRecord {
   value: string
 }
 
+/** Cumulative embedded engine samples for the host's existing Prometheus endpoint. */
+export declare function collectOpenappaMetrics(): string
+
 export interface ComposeBatteryInput {
   /** The include entry this battery answers, as the root document spells it. */
   entry: string

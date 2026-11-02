@@ -65,6 +65,7 @@ import {
   namespaceOf,
   namespacesByCallId,
   prependPrefixToResponse,
+  RESPONSES_STREAM_END,
   responsesHostedToolCalls,
   rewriteResponsesOutput,
   toSse,
@@ -1439,7 +1440,7 @@ class OpenAiResponsesStreamAdapter
   }
 
   formatEndSSE(): string {
-    return "data: [DONE]\n\n";
+    return RESPONSES_STREAM_END;
   }
 
   toProviderResponse(): OpenAiResponsesResponse {

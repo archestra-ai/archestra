@@ -54,6 +54,7 @@ import {
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import OrganizationModel from "@/models/organization";
 import { describe, expect, test } from "@/test";
+import * as connectorCredentials from "./connector-credentials";
 import { connectorSyncService } from "./connector-sync";
 import { deleteConnector } from "./knowledge-source-deletion";
 
@@ -105,6 +106,42 @@ function setupSecret(
 }
 
 describe("ConnectorSyncService", () => {
+  test("skips queued upload syncs before resolving credentials or creating a run", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      connectorType: "file_upload",
+      config: {} as never,
+    });
+    const resolveCredentials = vi.spyOn(
+      connectorCredentials,
+      "resolveConnectorCredentials",
+    );
+    try {
+      const result = await connectorSyncService.executeSync(connector.id);
+
+      const runs = await ConnectorRunModel.findByConnector({
+        connectorId: connector.id,
+      });
+      expect(result, runs[0]?.error ?? undefined).toEqual({
+        runId: "",
+        status: "skipped",
+      });
+      expect(resolveCredentials).not.toHaveBeenCalled();
+      expect(mockGetConnector).not.toHaveBeenCalled();
+      expect(runs).toEqual([]);
+      expect(await KnowledgeBaseConnectorModel.findById(connector.id)).toEqual(
+        connector,
+      );
+    } finally {
+      resolveCredentials.mockRestore();
+    }
+  });
+
   test("executeSync processes documents from connector", async ({
     makeOrganization,
     makeKnowledgeBase,

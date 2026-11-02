@@ -6,6 +6,20 @@ import {
 } from "./xai-subscription-credentials";
 
 describe("xai subscription credential codec", () => {
+  it("round-trips an access token and its absolute expiry", () => {
+    const credential = {
+      refreshToken: "rt_test",
+      userId: "test-account",
+      accessToken: "at_test",
+      accessTokenExpiresAtMs: 1234567890000,
+    };
+    expect(
+      decodeXaiSubscriptionCredential(
+        encodeXaiSubscriptionCredential(credential),
+      ),
+    ).toEqual(credential);
+  });
+
   it("round-trips a credential through encode/decode", () => {
     const encoded = encodeXaiSubscriptionCredential({
       refreshToken: "rt_secret",

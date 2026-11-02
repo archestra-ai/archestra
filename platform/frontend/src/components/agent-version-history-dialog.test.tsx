@@ -60,8 +60,6 @@ const snapshot = (
 ): AgentConfigSnapshot => ({
   agentType: "agent",
   name: "Support bot",
-  fastModel: null,
-  smartModel: null,
   description: null,
   icon: null,
   systemPrompt: "be helpful",

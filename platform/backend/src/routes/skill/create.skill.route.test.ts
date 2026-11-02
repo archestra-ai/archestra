@@ -383,7 +383,7 @@ describe("POST /api/skills", () => {
       );
     });
 
-    test("creators share a new skill with their own teams, not with other teams", async ({
+    test("creators share a new skill with teams they do not belong to", async ({
       makeTeam,
       makeTeamMember,
     }) => {
@@ -425,17 +425,13 @@ describe("POST /api/skills", () => {
           ],
         },
       });
-      // Every team would reach close to everyone, which takes Full access on
-      // every skill.
-      expect(shared.statusCode).toBe(403);
-      expect(shared.json().error.message).toBe(
-        "Only someone with Full access to every skill can share it with a team they are not in.",
+      expect(shared.statusCode, shared.body).toBe(200);
+      expect(await grantSubjects(shared.json().id)).toContain(
+        `team:${foreignTeam.id}`,
       );
     });
 
     test("rejects a team-scoped skill with an unknown team id without orphaning it", async () => {
-      // admins bypass the team-membership check, so an unknown id reaches the
-      // existence validation rather than 403-ing first.
       await MemberModel.updateRole(
         ctx.user.id,
         ctx.organizationId,

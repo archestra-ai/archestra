@@ -15,6 +15,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
+import { sanitizeOutputLimit } from "@/clients/models-dev-client";
 import db, { schema, withDbTransaction } from "@/database";
 import type { LinkedApiKey, LlmProviderApiKey, Model } from "@/types";
 import type {
@@ -29,6 +30,26 @@ import ModelModel from "./model";
  * Manages the many-to-many relationship between chat_api_keys and models.
  */
 class LlmProviderApiKeyModelLinkModel {
+  /** Resolve the selected connection's cap without borrowing another key's metadata. */
+  static async resolveOutputLength(
+    model: Model | null,
+    apiKeyId?: string | null,
+  ): Promise<number | null> {
+    if (!model) return null;
+    if (!apiKeyId) return ModelModel.resolveEffectiveOutputLength(model);
+    const links = schema.llmProviderApiKeyModelsTable;
+    const [link] = await db
+      .select({ outputLength: links.outputLength })
+      .from(links)
+      .where(and(eq(links.apiKeyId, apiKeyId), eq(links.modelId, model.id)))
+      .limit(1);
+    const endpoint = sanitizeOutputLimit(link?.outputLength);
+    if (endpoint === null)
+      return ModelModel.resolveEffectiveOutputLength(model);
+    const custom = sanitizeOutputLimit(model.customOutputLength);
+    return custom === null ? endpoint : Math.min(custom, endpoint);
+  }
+
   static async findModelForPricing(params: {
     provider: SupportedProvider;
     modelId: string;
@@ -238,6 +259,7 @@ class LlmProviderApiKeyModelLinkModel {
     models: Array<{
       id: string;
       modelId: string;
+      outputLength?: number | null;
       recommendedForAgents?: boolean | null;
       providerPricing?: ProviderModelPricing | null;
       azureCapabilities?: typeof schema.llmProviderApiKeyModelsTable.$inferInsert.azureCapabilities;
@@ -295,6 +317,7 @@ class LlmProviderApiKeyModelLinkModel {
         const values = uniqueModels.map((model) => ({
           apiKeyId,
           modelId: model.id,
+          outputLength: model.outputLength ?? null,
           isBest: model.id === bestModel?.id,
           recommendedForAgents: model.recommendedForAgents ?? null,
           syncedAt,
@@ -317,6 +340,7 @@ class LlmProviderApiKeyModelLinkModel {
               set: {
                 isBest: sql`excluded.is_best`,
                 syncedAt: sql`excluded.synced_at`,
+                outputLength: sql`excluded.output_length`,
                 providerPricing: sql`excluded.provider_pricing`,
                 azureCapabilities: sql`excluded.azure_capabilities`,
                 recommendedForAgents: options.overwriteRecommendedForAgents

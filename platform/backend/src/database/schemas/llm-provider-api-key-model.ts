@@ -2,6 +2,7 @@ import type { AzureModelEvidence } from "@archestra/shared/azure-models";
 import {
   boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   timestamp,
@@ -33,6 +34,8 @@ const llmProviderApiKeyModelsTable = pgTable(
     modelId: uuid("model_id")
       .notNull()
       .references(() => modelsTable.id, { onDelete: "cascade" }),
+    /** Output cap advertised by this connection, never by another gateway. */
+    outputLength: integer("output_length"),
     /** Whether this model is marked as the best (highest quality) for this API key */
     /** USD/token rates published by this endpoint, isolated from other instances. */
     providerPricing: jsonb("provider_pricing").$type<ProviderModelPricing>(),

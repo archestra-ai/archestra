@@ -12,6 +12,16 @@ import { useOrganization } from "@/lib/organization.query";
 import { makeOrganization } from "@/mocks/data/organization";
 import { AgentCreatePage } from "./agent-create-page";
 
+vi.mock("@/lib/agent-runtime-templates.query", () => ({
+  useRuntimeTemplateCatalog: () => ({
+    data: [],
+    isFetching: false,
+    isPending: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+  useResolveRuntimeTemplate: () => ({ isPending: false, mutate: vi.fn() }),
+}));
 vi.mock("next/navigation");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/auth/auth.query");

@@ -10,6 +10,7 @@ import {
 } from "@archestra/shared";
 import {
   CONNECTION_SETUP_MAX_SKILLS,
+  connectionModelServesClient,
   defaultConnectionModel,
   INSTALLER_CLIENT_KEY_PROVIDERS,
   type InstallerClientId,
@@ -38,6 +39,8 @@ export type ConnectionSetupInputs = {
   provider: SupportedProvider | null;
   proxyAuth: ConnectProxyAuth | null;
   primaryKeyIds: string[] | null;
+  /** The account picked for a per-user provider; null binds the user's own sign-in. */
+  providerKeyId: string | null;
   model: string | null;
   skillIds: string[] | null;
   pluginIds: string[] | null;
@@ -57,6 +60,7 @@ export function connectionSetupInputsKey(inputs: ConnectionSetupInputs) {
     provider: inputs.provider,
     proxyAuth: inputs.proxyAuth,
     primaryKeyIds: inputs.primaryKeyIds,
+    providerKeyId: inputs.providerKeyId,
     model: inputs.model,
     skillIds: inputs.skillIds,
     pluginIds: inputs.pluginIds,
@@ -81,6 +85,47 @@ export function connectionSetupKeyDigest(key: string): string {
   }
   const hex = (n: number) => (n >>> 0).toString(16).padStart(8, "0");
   return hex(a) + hex(b);
+}
+
+/**
+ * The provider a setup starts on: the URL's choice when it is offered; else,
+ * where the person's own key or subscription routes the models, the provider
+ * the client is made for (Copilot CLI → GitHub Copilot); else the first
+ * offered. A key an admin mapped for the client keeps its place at the front.
+ */
+export function initialConnectProvider(params: {
+  client: ConnectClient;
+  offered: readonly SupportedProvider[];
+  urlProvider: SupportedProvider | null;
+  /** Whether the person's own key or subscription routes the models. */
+  ownAccountRoutes: boolean;
+}): SupportedProvider | null {
+  const { client, offered, urlProvider, ownAccountRoutes } = params;
+  if (urlProvider && offered.includes(urlProvider)) return urlProvider;
+  const own =
+    ownAccountRoutes && client.proxy.kind === "custom"
+      ? client.proxy.defaultProvider
+      : undefined;
+  if (own && offered.includes(own)) return own;
+  return offered[0] ?? null;
+}
+
+/**
+ * The account a per-user provider's setup binds when the user picked none:
+ * null when they have their own sign-in (the server binds it), else the first
+ * organization plan (GitHub App key) they can use.
+ */
+export function defaultPerUserKeyId(
+  keys: readonly {
+    id: string;
+    provider: string;
+    isGithubAppKey?: boolean | null;
+  }[],
+  provider: SupportedProvider,
+): string | null {
+  const forProvider = keys.filter((key) => key.provider === provider);
+  if (forProvider.some((key) => !key.isGithubAppKey)) return null;
+  return forProvider.find((key) => key.isGithubAppKey)?.id ?? null;
 }
 
 /**
@@ -118,6 +163,7 @@ export function connectionSetupBody(
         ? undefined
         : (inputs.provider ?? undefined),
     proxyAuth: inputs.proxyAuth ?? undefined,
+    providerApiKeyId: inputs.providerKeyId ?? undefined,
     model: inputs.model ?? undefined,
     skills,
     ...(inputs.pluginIds ? { pluginIds: inputs.pluginIds } : {}),
@@ -168,7 +214,11 @@ export function firstConnectionSetupInputs(params: {
   llmProxyId: string | null;
   skillNames: { data: { id: string }[]; total: number } | null;
   plugins: PluginListItem[] | null;
-  models?: readonly { id: string; provider: SupportedProvider }[];
+  models?: readonly {
+    id: string;
+    provider: SupportedProvider;
+    capabilities?: { supportedEndpoints?: readonly string[] | null };
+  }[];
   availableKeys:
     | {
         id: string;
@@ -176,6 +226,7 @@ export function firstConnectionSetupInputs(params: {
         isPrimary: boolean;
         baseUrl?: string | null;
         requiresReauthentication?: boolean | null;
+        isGithubAppKey?: boolean | null;
       }[]
     | null;
 }): ConnectionSetupInputs | null {
@@ -321,10 +372,12 @@ export function firstConnectionSetupInputs(params: {
     );
   }
   const urlProvider = params.urlProviderId as SupportedProvider | null;
-  const provider =
-    urlProvider && providers.includes(urlProvider)
-      ? urlProvider
-      : (providers[0] ?? null);
+  const provider = initialConnectProvider({
+    client,
+    offered: providers,
+    urlProvider,
+    ownAccountRoutes: proxyAuth === "provider-key",
+  });
   const providerIsPerUser =
     !allPrimaryProviders &&
     !!provider &&
@@ -344,7 +397,15 @@ export function firstConnectionSetupInputs(params: {
         : (defaultConnectionModel({
             provider,
             modelIds: (params.models ?? [])
-              .filter((model) => model.provider === provider)
+              .filter(
+                (model) =>
+                  model.provider === provider &&
+                  connectionModelServesClient({
+                    clientId: client.id,
+                    provider,
+                    supportedEndpoints: model.capabilities?.supportedEndpoints,
+                  }),
+              )
               .map((model) => model.id),
           }) ?? kimiCodeDefaultModel(client.id, provider))
       : null;
@@ -394,6 +455,10 @@ export function firstConnectionSetupInputs(params: {
           .map((key) => key.id)
           .sort()
       : null,
+    providerKeyId:
+      proxyActive && providerIsPerUser && provider
+        ? defaultPerUserKeyId(availableKeys, provider)
+        : null,
     model: proxyActive ? effectiveModel : null,
     skillIds: includeSkills ? allSkills.map((s) => s.id).sort() : null,
     pluginIds: pluginsEnabled

@@ -100,7 +100,6 @@ describe("OAuth A2A execution", () => {
             backend: "kubernetes" as const,
             steerMode: "pipe" as const,
             privileged: false,
-            resources: null,
             environment: null,
             credentials: null,
             ttlHours: null,

@@ -20,9 +20,11 @@ import {
   Unplug,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { type ReactNode, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AgentIcon } from "@/components/agent-icon";
+import { runActionConfirmCopy } from "@/components/agent-pages/agent-run-actions-copy";
 import { AgentRunHeader } from "@/components/agent-run-header";
 import { AgentRunLiveness } from "@/components/agent-run-liveness";
 import {
@@ -51,6 +53,7 @@ import { WorkspaceRetention } from "@/components/workspace-retention";
 import {
   useCancelAgentRun,
   useContinueAgentRun,
+  useDeleteAgentRun,
   useDeleteAgentWorkspace,
   useMyAgentRun,
 } from "@/lib/agent-runtime.query";
@@ -72,6 +75,7 @@ export function AgentRunChatSession({
   initiatorName,
   detailsOpen = false,
   onDetailsOpenChange,
+  onDeleted,
 }: {
   taskId: string;
   embedded?: boolean;
@@ -80,7 +84,10 @@ export function AgentRunChatSession({
   initiatorName?: string;
   detailsOpen?: boolean;
   onDetailsOpenChange?: (open: boolean) => void;
+  /** Where to go once the run is deleted; a new chat when omitted. */
+  onDeleted?: () => void;
 }) {
+  const router = useRouter();
   const logsRef = useRef<AgentRunLogsHandle>(null);
   const [resumedRun, setResumedRun] = useState<{
     sourceId: string;
@@ -101,6 +108,8 @@ export function AgentRunChatSession({
   const deleteWorkspace = useDeleteAgentWorkspace();
   const [deleteWorkspaceDialogOpen, setDeleteWorkspaceDialogOpen] =
     useState(false);
+  const deleteRun = useDeleteAgentRun();
+  const [deleteRunDialogOpen, setDeleteRunDialogOpen] = useState(false);
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
   const [reattachedTaskId, setReattachedTaskId] = useState<string | null>(null);
   const reattached = reattachedTaskId === taskId;
@@ -115,8 +124,9 @@ export function AgentRunChatSession({
   const run = query.data;
   const now = useRuntimeClock(true);
 
-  // The run's LLM requests are logged under its session id, which only the
-  // owner is sent; `log:read` lets them open their own trace.
+  // The trace link opens the run's LLM session (`llmSessionId`). It is shown
+  // to the owner only, and `log:read` lets them open it. `sessionId` stays
+  // the workspace and log-stream identity.
   const { data: canReadLogs } = useHasPermissions({ log: ["read"] });
 
   // The server separately permits managers of the owning service account
@@ -354,9 +364,9 @@ export function AgentRunChatSession({
                     <span>View Agent</span>
                   </Link>
                 </DropdownMenuItem>
-                {canReadLogs && run.sessionId ? (
+                {canReadLogs && run.llmSessionId ? (
                   <DropdownMenuItem asChild>
-                    <Link href={llmSessionHref(run.sessionId)}>
+                    <Link href={llmSessionHref(run.llmSessionId)}>
                       <Activity className="size-4" />
                       <span>View trace</span>
                     </Link>
@@ -380,6 +390,18 @@ export function AgentRunChatSession({
                       <span>Delete saved files</span>
                     </DropdownMenuItem>
                   )}
+                {!live && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onSelect={() => setDeleteRunDialogOpen(true)}
+                    >
+                      <Trash2 className="size-4" />
+                      <span>Delete run</span>
+                    </DropdownMenuItem>
+                  </>
+                )}
               </>
             )}
           </DropdownMenuContent>
@@ -605,10 +627,8 @@ export function AgentRunChatSession({
       <DeleteConfirmDialog
         open={stopDialogOpen}
         onOpenChange={setStopDialogOpen}
-        title="Stop this run?"
-        description="The Agent process will stop. Saved files and run history will be retained so you can continue later."
+        {...runActionConfirmCopy({ action: "stop", count: 1 })}
         isPending={cancelRun.isPending}
-        confirmLabel="Stop run"
         pendingLabel="Stopping…"
         onConfirm={() =>
           cancelRun.mutate(activeTaskId, {
@@ -620,15 +640,30 @@ export function AgentRunChatSession({
       <DeleteConfirmDialog
         open={deleteWorkspaceDialogOpen}
         onOpenChange={setDeleteWorkspaceDialogOpen}
-        title="Delete saved files?"
-        description="This permanently removes this run's saved files. You cannot resume the run afterward. Run history remains available."
-        confirmLabel="Delete saved files"
+        {...runActionConfirmCopy({ action: "files", count: 1 })}
         isPending={deleteWorkspace.isPending}
         onConfirm={() =>
           deleteWorkspace.mutate(taskId, {
             onSuccess: () => setDeleteWorkspaceDialogOpen(false),
           })
         }
+      />
+      <DeleteConfirmDialog
+        open={deleteRunDialogOpen}
+        onOpenChange={setDeleteRunDialogOpen}
+        {...runActionConfirmCopy({ action: "delete", count: 1 })}
+        pendingLabel="Deleting…"
+        isPending={deleteRun.isPending}
+        onConfirm={() => {
+          if (!run) return;
+          deleteRun.mutate(run.taskId, {
+            onSuccess: () => {
+              setDeleteRunDialogOpen(false);
+              if (onDeleted) onDeleted();
+              else router.push("/chat");
+            },
+          });
+        }}
       />
       <ShareAgentRunDialog
         taskId={run?.taskId ?? activeTaskId}

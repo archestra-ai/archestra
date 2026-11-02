@@ -32,7 +32,9 @@ import {
   waitForMcpServerToolsDiscovered,
 } from "../utils";
 
-test.describe("Custom Self-hosted MCP Server - installation and static credentials management (vault disabled, prompt-on-installation disabled)", () => {
+test.describe("Custom Self-hosted MCP Server - installation and static credentials management (vault disabled, prompt-on-installation disabled)", {
+  tag: "@needs-kubernetes",
+}, () => {
   // Matrix tests
   const MATRIX: { user: "Admin" | "Member" }[] = [
     {
@@ -288,7 +290,9 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
   });
 });
 
-test("Verify Manage Credentials dialog shows correct other users credentials", async ({
+test("Verify Manage Credentials dialog shows correct other users credentials", {
+  tag: "@needs-kubernetes",
+}, async ({
   adminPage,
   editorPage,
   memberPage,
@@ -358,7 +362,9 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
   });
 });
 
-test("Verify tool calling using different static credentials", async ({
+test("Verify tool calling using different static credentials", {
+  tag: "@needs-kubernetes",
+}, async ({
   request,
   adminPage,
   editorPage,

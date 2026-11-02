@@ -49,6 +49,40 @@ describe("DbSecretsManager", () => {
     }
   });
 
+  test("a fresh read that finishes after a write does not publish the row it read", async ({
+    makeSecret,
+  }) => {
+    const secret = await makeSecret({ secret: { token: "before" } });
+    const manager = new DbSecretsManager();
+    const realFindById = SecretModel.findById.bind(SecretModel);
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    // The read queries first and returns only after the gate opens, with the
+    // write landing in between: the order a reconnect on this process takes
+    // while another request re-reads the same secret.
+    const reads = vi
+      .spyOn(SecretModel, "findById")
+      .mockImplementationOnce(async (id, tx) => {
+        const row = await realFindById(id, tx);
+        await gate;
+        return row;
+      });
+    try {
+      const inFlight = manager.getSecret(secret.id, { skipCache: true });
+      await manager.updateSecret(secret.id, { token: "after" });
+      release();
+      expect((await inFlight)?.secret).toEqual({ token: "before" });
+      expect((await manager.getSecret(secret.id))?.secret).toEqual({
+        token: "after",
+      });
+      expect(reads).toHaveBeenCalledTimes(1);
+    } finally {
+      reads.mockRestore();
+    }
+  });
+
   test("connectivity check returns the stored secret count", async () => {
     const manager = new DbSecretsManager();
     expect(await manager.checkConnectivity()).toEqual({ secretCount: 0 });

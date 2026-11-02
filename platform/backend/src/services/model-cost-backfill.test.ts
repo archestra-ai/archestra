@@ -177,6 +177,60 @@ describe("recomputing past costs", () => {
     });
   });
 
+  test("leaves media requests at the cost their media tariff recorded", async ({
+    makeAgent,
+    makeInteraction,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent();
+    const model = await ModelModel.create({
+      externalId: "openai/gpt-image-backfill",
+      provider: "openai",
+      modelId: "gpt-image-backfill",
+      inputModalities: ["text", "image"],
+      outputModalities: ["image"],
+      customPricePerMillionInput: "3",
+      customPricePerMillionOutput: "15",
+    });
+    const row = (overrides: Parameters<typeof makeInteraction>[1] = {}) =>
+      makeInteraction(agent.id, {
+        type: "openai:chatCompletions",
+        model: model.modelId,
+        createdAt: new Date(Date.now() - DAY_MS),
+        cost: "9.0000000000",
+        inputTokens: 1034,
+        outputTokens: 272,
+        ...overrides,
+      });
+    const chat = await row();
+    const images = await row({ type: "openai:images" });
+    // Gemini records an image generation under its chat type; the media
+    // marker on the response is what sets it apart.
+    const marked = await row({
+      response: {
+        __mediaUsage: { tokensAvailable: true, costAvailable: true },
+      } as unknown as NonNullable<
+        Parameters<typeof makeInteraction>[1]
+      >["response"],
+    });
+
+    const started = await modelCostBackfillService.start({
+      model,
+      since: new Date(Date.now() - 2 * DAY_MS),
+      organizationId: org.id,
+      userId: user.id,
+    });
+    expect(started.rowsEstimated).toBe(1);
+    await modelCostBackfillService.runNext();
+
+    expect((await costsOf(chat.id)).cost).not.toBe("9.0000000000");
+    expect((await costsOf(images.id)).cost).toBe("9.0000000000");
+    expect((await costsOf(marked.id)).cost).toBe("9.0000000000");
+  });
+
   test("re-prices settled requests from their receipts and corrects the budgets still holding their charge", async ({
     makeAgent,
     makeOrganization,

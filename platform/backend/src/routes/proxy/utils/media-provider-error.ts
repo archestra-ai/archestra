@@ -5,17 +5,27 @@ import { ApiError } from "@/types/api";
 export function mediaProviderError(
   error: unknown,
   operation: string,
+  provider = "Azure",
 ): ApiError {
-  const status = error instanceof OpenAI.APIError ? error.status : undefined;
+  if (error instanceof ApiError) return error;
+  // Gemini and OpenAI SDK errors both expose numeric HTTP status.
+  const status =
+    typeof error === "object" && error !== null && "status" in error
+      ? error.status
+      : undefined;
   const safe = new ApiError(
-    status && status >= 400 && status <= 599
+    typeof status === "number" &&
+      Number.isInteger(status) &&
+      status >= 400 &&
+      status <= 599
       ? status
-      : error instanceof OpenAI.APIUserAbortError
+      : error instanceof Error &&
+          ["AbortError", "APIUserAbortError"].includes(error.name)
         ? 499
         : error instanceof OpenAI.APIConnectionTimeoutError
           ? 504
           : 502,
-    `Azure ${operation} request failed.`,
+    `${provider} ${operation} request failed.`,
   );
   safe.upstream = true;
   const retry =

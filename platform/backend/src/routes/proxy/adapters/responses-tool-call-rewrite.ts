@@ -314,9 +314,26 @@ function formatCustomToolCallFrames(params: {
   ];
 }
 
+/**
+ * One Responses stream frame. OpenAI names every event on an `event:` line
+ * that repeats its `type`, and raw SSE consumers dispatch on that name, so the
+ * frame carries it as OpenAI's does.
+ */
 export function toSse(event: unknown): string {
-  return `data: ${JSON.stringify(event)}\n\n`;
+  const type =
+    typeof event === "object" && event !== null
+      ? (event as { type?: unknown }).type
+      : undefined;
+  const name = typeof type === "string" ? `event: ${type}\n` : "";
+  return `${name}data: ${JSON.stringify(event)}\n\n`;
 }
+
+/**
+ * A Responses stream ends when the connection closes. OpenAI sends no
+ * `[DONE]` sentinel after `response.completed`, and a client parsing every
+ * `data:` line as an event fails on one.
+ */
+export const RESPONSES_STREAM_END = "";
 
 /**
  * The namespace a Responses call item names, as a field to spread into the

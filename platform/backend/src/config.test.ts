@@ -12,6 +12,7 @@ import {
   vi,
 } from "vitest";
 import config, {
+  agentRuntimeWorkspaceStorage,
   betaFeatureEnabled,
   deriveOllamaNativeBaseUrl,
   getAnalyticsConfig,
@@ -2461,10 +2462,28 @@ describe("k8sMemoryQuantityToBytes", () => {
     expect(k8sMemoryQuantityToBytes("4Gi")).toBe(4 * 1024 ** 3);
     expect(k8sMemoryQuantityToBytes("512Mi")).toBe(512 * 1024 ** 2);
     expect(k8sMemoryQuantityToBytes("1536Mi")).toBe(1536 * 1024 ** 2);
+    // Every suffix the validator accepts has a byte count.
+    expect(k8sMemoryQuantityToBytes("2K")).toBe(2000);
+    expect(k8sMemoryQuantityToBytes("1Pi")).toBe(1024 ** 5);
+    expect(k8sMemoryQuantityToBytes("1E")).toBe(1000 ** 6);
     // Decimal suffixes are a different size from their binary namesakes, so
     // treating `G` as `Gi` would compare the ceiling against the wrong number.
     expect(k8sMemoryQuantityToBytes("1G")).toBe(1000 ** 3);
     expect(k8sMemoryQuantityToBytes("1048576")).toBe(1048576);
+  });
+
+  test("the default workspace volume is read once, as a quantity and in GiB", () => {
+    for (const [value, size, gib] of [
+      [undefined, "20Gi", 20],
+      ["60Gi", "60Gi", 60],
+      ["500Mi", "500Mi", 0.49],
+      ["64G", "64G", 59.6],
+      ["1T", "1T", 931.32],
+    ] as const)
+      expect(agentRuntimeWorkspaceStorage(value)).toEqual({
+        workspaceStorageSize: size,
+        workspaceStorageGiB: gib,
+      });
   });
 
   test("returns undefined for anything that is not a quantity", () => {

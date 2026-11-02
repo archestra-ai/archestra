@@ -1,5 +1,5 @@
+import type { LanguageModel } from "ai";
 import { generateText, type SystemModelMessage } from "ai";
-import type { LLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
 
 /**
@@ -27,7 +27,7 @@ export const TRUNCATION_RETRY_FACTOR = 2;
  * Returns `null` when no tagged content was produced.
  */
 export async function generateTaggedText(params: {
-  model: LLMModel;
+  model: LanguageModel;
   /** Tag the answer must be wrapped in, e.g. `description`. */
   tag: string;
   /** A message form carries provider options such as a cache breakpoint. */

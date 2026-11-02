@@ -3,6 +3,7 @@ import {
   ManagedResourceSchema,
   ResourcePermissionActionSchema,
   ResourcePermissionScopeSchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
   withoutWildcardCoveredGrants,
 } from "@archestra/shared";
@@ -24,7 +25,15 @@ const resourcePermissionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.SearchInitialPermissionSubjects,
         tags: ["Permissions"],
         params: z.object({ resource: ManagedResourceSchema }),
-        querystring: z.object({ query: z.string().max(200).default("") }),
+        querystring: z.object({
+          query: z.string().max(200).default(""),
+          exclude: ResourceSharedWithQuerySchema.refine(
+            (subjects) => !subjects || subjects.length <= 200,
+            "At most 200 recipients may be excluded",
+          ).describe(
+            "Exclude already selected recipients, using comma-separated subject keys.",
+          ),
+        }),
         response: constructResponseSchema(
           z.array(PermissionSubjectOptionSchema),
         ),
@@ -35,6 +44,7 @@ const resourcePermissionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await ResourcePermissions.searchInitialSubjects({
           ...request.params,
           query: request.query.query,
+          exclude: request.query.exclude,
           organizationId: request.organizationId,
           userId: request.user.id,
         }),
@@ -77,7 +87,15 @@ const resourcePermissionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.SearchResourcePermissionSubjects,
         tags: ["Permissions"],
         params: ParamsSchema,
-        querystring: z.object({ query: z.string().max(200).default("") }),
+        querystring: z.object({
+          query: z.string().max(200).default(""),
+          exclude: ResourceSharedWithQuerySchema.refine(
+            (subjects) => !subjects || subjects.length <= 200,
+            "At most 200 recipients may be excluded",
+          ).describe(
+            "Exclude already selected recipients, using comma-separated subject keys.",
+          ),
+        }),
         response: constructResponseSchema(
           z.array(PermissionSubjectOptionSchema),
         ),
@@ -88,6 +106,7 @@ const resourcePermissionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await ResourcePermissions.searchSubjects({
           ...request.params,
           query: request.query.query,
+          exclude: request.query.exclude,
           userId: request.user.id,
           organizationId: request.organizationId,
         }),

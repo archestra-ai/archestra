@@ -50,7 +50,10 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { type ModelWithApiKeys, useUpdateModel } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import type { ModelCostBackfillPrices } from "@/lib/model-cost-backfill.query";
-import { formatPricePerMillion } from "@/lib/model-price-format";
+import {
+  formatMediaPricing,
+  formatPricePerMillion,
+} from "@/lib/model-price-format";
 import { useOrganization } from "@/lib/organization.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { formatThousands } from "@/lib/utils/format-thousands";
@@ -566,14 +569,23 @@ export function EditModelDialog({
                 />
               ))}
             </div>
-            {(model.priceSource === "default" ||
+            {(model.mediaPricing ||
+              model.priceSource === "default" ||
               model.cachePriceSource === "derived_multiplier") && (
               <div className="space-y-1 text-xs text-muted-foreground">
-                {model.priceSource === "default" && (
+                {model.mediaPricing ? (
                   <p>
-                    Input and output prices are estimated. Set a custom price
-                    for accurate cost tracking.
+                    Image and audio calls are charged at the vendor's media
+                    rates, {formatMediaPricing(model.mediaPricing)}, not at
+                    these token prices.
                   </p>
+                ) : (
+                  model.priceSource === "default" && (
+                    <p>
+                      Input and output prices are estimated. Set a custom price
+                      for accurate cost tracking.
+                    </p>
+                  )
                 )}
                 {model.cachePriceSource === "derived_multiplier" && (
                   <p>

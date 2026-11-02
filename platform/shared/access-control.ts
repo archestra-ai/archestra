@@ -485,6 +485,20 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.OpenAiAudioTranslationsWithAgent]: {},
   [RouteId.AzureImagesWithDefaultAgent]: {},
   [RouteId.AzureImagesWithAgent]: {},
+  [RouteId.OpenAiImagesWithDefaultAgent]: {},
+  [RouteId.OpenAiImagesWithAgent]: {},
+  [RouteId.OpenAiImageEditsWithDefaultAgent]: {},
+  [RouteId.OpenAiImageEditsWithAgent]: {},
+  [RouteId.ModelRouterImagesWithDefaultAgent]: {},
+  [RouteId.ModelRouterImagesWithAgent]: {},
+  [RouteId.ModelRouterImageEditsWithDefaultAgent]: {},
+  [RouteId.ModelRouterImageEditsWithAgent]: {},
+  [RouteId.ModelRouterAudioSpeechWithDefaultAgent]: {},
+  [RouteId.ModelRouterAudioSpeechWithAgent]: {},
+  [RouteId.ModelRouterAudioTranscriptionsWithDefaultAgent]: {},
+  [RouteId.ModelRouterAudioTranscriptionsWithAgent]: {},
+  [RouteId.ModelRouterAudioTranslationsWithDefaultAgent]: {},
+  [RouteId.ModelRouterAudioTranslationsWithAgent]: {},
   [RouteId.AzureImageEditsWithDefaultAgent]: {},
   [RouteId.AzureImageEditsWithAgent]: {},
   [RouteId.AzureCreateFile]: {},
@@ -527,6 +541,14 @@ export const requiredEndpointPermissionsMap: Partial<
    * authenticated but no specific permission.
    */
   [RouteId.GetOrganization]: {},
+  // The tiers' names and sizes: the agent form shows them to anyone who may edit an agent.
+  [RouteId.GetAgentRuntimeTiers]: {},
+  [RouteId.ListAgentRuntimeTemplates]: {},
+  [RouteId.GetAgentRuntimeTemplate]: {}, // Scoped create/update check in the handler.
+  [RouteId.GetRuntimeTemplateSettings]: { organizationSettings: ["update"] },
+  [RouteId.SaveRuntimeTemplateSettings]: { organizationSettings: ["update"] },
+  /** Names the default model for every member, so "Organization default" reads the same for all. */
+  [RouteId.GetOrganizationDefaultModel]: {},
 
   // Agent Runtime belongs to Agents. Read access is enough to view
   // runs and manage one's own declared credentials; shared credential writes
@@ -573,6 +595,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DownloadAgentWorkspaceTransfer]: {},
   [RouteId.UploadAgentWorkspaceTransfer]: {},
   [RouteId.DeleteAgentRun]: {},
+  // Like the single-run routes: each run is checked against its owner.
+  [RouteId.BulkDeleteAgentRuns]: {},
+  [RouteId.BulkCancelAgentRuns]: {},
+  [RouteId.BulkDeleteAgentWorkspaces]: {},
   // Completing onboarding flips an org-wide flag, so gate it on admin-level
   // organization-settings update, like the other org-settings routes.
   [RouteId.CompleteOnboarding]: { organizationSettings: ["update"] },
@@ -1425,6 +1451,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetTeamStatistics]: {
     llmCost: ["read"],
   },
+  [RouteId.GetModelUsage]: { llmCost: ["read"] },
+  [RouteId.GetMyModelUsage]: {},
   [RouteId.GetProxyCostStatistics]: { llmCost: ["read"] },
   [RouteId.GetAgentStatistics]: {
     llmCost: ["read"],

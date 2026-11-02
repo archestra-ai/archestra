@@ -380,6 +380,53 @@ describe("resolveGatewayToolIdentity: attested", () => {
     ).toBeUndefined();
   });
 
+  test.each([
+    "without",
+    "with",
+  ] as const)("a loaded copy a server-side tool search echoes (%s a marker) is one declaration with the deferred one", async (echoMarker) => {
+    // Copilot CLI declares a gateway tool deferred in its namespace and, once
+    // the model's search loaded it, again inside the search's output item,
+    // where the provider adds `output_schema: null`. The provider echoes what
+    // this proxy forwarded, so the copy normally carries no marker. One tool,
+    // not a conflict.
+    const name = "archestra-archestra__execute_remedy_plan";
+    const tool = {
+      type: "function",
+      name,
+      description: markerOf("archestra__execute_remedy_plan"),
+      strict: false,
+      parameters: {
+        type: "object",
+        properties: { offer_id: { type: "string" } },
+      },
+      defer_loading: true,
+    };
+    const { description: _marker, ...unmarked } = tool;
+    const echoed = echoMarker === "with" ? { ...tool } : unmarked;
+    const declarations = extractGatewayToolDeclarations({
+      tools: [{ type: "namespace", name: "archestra", tools: [{ ...tool }] }],
+      input: [
+        {
+          type: "tool_search_output",
+          call_id: "ts_1",
+          execution: "server",
+          tools: [
+            {
+              type: "namespace",
+              name: "archestra",
+              tools: [{ ...echoed, output_schema: null }],
+            },
+          ],
+        },
+      ],
+    });
+    const identity = await resolve(declarations);
+    expect(identity.attestationOf(name, "archestra")?.gatewayId).toBe(GATEWAY);
+    expect(identity.canonicalize(name, "archestra")).toBe(
+      "archestra__execute_remedy_plan",
+    );
+  });
+
   test("a markerless repetition cannot hide a later conflicting gateway marker", async () => {
     const contract = "a".repeat(64);
     const name = "primary_archestra__run_tool";

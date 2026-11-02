@@ -89,7 +89,10 @@ import {
   useUpdateModel,
 } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
-import { formatPricePerMillion } from "@/lib/model-price-format";
+import {
+  formatMediaPricing,
+  formatPricePerMillion,
+} from "@/lib/model-price-format";
 import { formatContextLength } from "@/lib/utils/format-context-length";
 import { EditModelDialog } from "./_parts/edit-model-dialog";
 import {
@@ -459,8 +462,18 @@ export default function ModelsPage() {
         // lines when the column is narrow.
         header: "$/M In/Out",
         cell: ({ row }) => {
-          const { pricePerMillionInput, pricePerMillionOutput } = row.original;
+          const { pricePerMillionInput, pricePerMillionOutput, mediaPricing } =
+            row.original;
           if (hasUnknownCapabilities(row.original)) return null;
+          // A media model is charged by its media rates; the per-token price
+          // beside it would be a fallback estimate nothing is billed at.
+          if (mediaPricing) {
+            return (
+              <span className="text-sm font-mono">
+                {formatMediaPricing(mediaPricing)}
+              </span>
+            );
+          }
           if (!pricePerMillionInput && !pricePerMillionOutput) {
             return <span className="text-sm text-muted-foreground">-</span>;
           }
@@ -480,12 +493,16 @@ export default function ModelsPage() {
         size: 160,
         header: "$/M Cache R/W",
         cell: ({ row }) => {
-          const { pricePerMillionCacheRead, pricePerMillionCacheWrite } =
-            row.original;
+          const {
+            pricePerMillionCacheRead,
+            pricePerMillionCacheWrite,
+            mediaPricing,
+          } = row.original;
           if (hasUnknownCapabilities(row.original)) return null;
           if (
-            pricePerMillionCacheRead === null &&
-            pricePerMillionCacheWrite === null
+            mediaPricing ||
+            (pricePerMillionCacheRead === null &&
+              pricePerMillionCacheWrite === null)
           ) {
             return <span className="text-sm text-muted-foreground">-</span>;
           }

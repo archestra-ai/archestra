@@ -14,6 +14,7 @@ const PROVENANCE_TO_CLIENT_ID: Partial<
   "claude-desktop-header": "claude-desktop",
   "claude-desktop-metadata": "claude-desktop",
   "codex-turn-metadata": "codex",
+  "copilot-cli-prompt-cache-key": "copilot-cli",
   "pi-session-header": "pi",
   "kimi-code-cache-key": "kimi-code",
   "opencode-session-header": "opencode",

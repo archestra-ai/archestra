@@ -191,6 +191,7 @@ describe("LlmModelSearchableSelect", () => {
               pricePerMillionCacheRead: null,
               pricePerMillionCacheWrite: null,
               cachePriceSource: "default",
+              mediaPricing: null,
             },
           },
         ]}
@@ -241,6 +242,7 @@ describe("LlmModelSearchableSelect", () => {
               pricePerMillionCacheRead: null,
               pricePerMillionCacheWrite: null,
               cachePriceSource: "default",
+              mediaPricing: null,
             },
           },
         ]}

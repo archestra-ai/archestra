@@ -1,6 +1,6 @@
 import { createSelectSchema } from "drizzle-zod";
 import type { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 
 export const SelectSkillMarketplaceCredentialSchema = createSelectSchema(
   schema.skillMarketplaceCredentialsTable,

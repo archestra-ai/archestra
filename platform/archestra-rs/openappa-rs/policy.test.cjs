@@ -425,7 +425,7 @@ test('an explicit policy result cap takes precedence over the host default', { s
   try {
     await native.initializeOpenappa(databaseUrl, 2);
     const text = 'x'.repeat(100_000);
-    const withheld = '[appa] the result was not carried; nothing was admitted';
+    const withheld = limit => `[appa] the tool ran, but its output is not shown: it is over the ${limit}-byte limit`;
     const report = async (policyText, output) => {
       const session = { organization_id: `native-body-cap-${randomUUID()}`, caller_id: 'user:test', session_id: randomUUID() };
       const hook = async event => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), hosted(policyText)));
@@ -450,14 +450,14 @@ test('an explicit policy result cap takes precedence over the host default', { s
       await carried(policyText, 'x'.repeat(limit));
       const dropped = await report(policyText, 'x'.repeat(limit + 1));
       assert.equal(dropped.decision, 'replace_output');
-      assert.equal(dropped.approved_output, withheld);
+      assert.equal(dropped.approved_output, withheld(limit));
     }
     // A policy keeps its stated limit even without a published host default.
     delete process.env.APPA_ARCHESTRA_MAX_BODY_BYTES;
     const stated = `${allow}[externals]\ntimeout_ms = 2000\nmax_body_bytes = 65536\n`;
     const dropped = await report(stated, text);
     assert.equal(dropped.decision, 'replace_output');
-    assert.equal(dropped.approved_output, withheld);
+    assert.equal(dropped.approved_output, withheld(65536));
     await carried(allow, 'x'.repeat(1000));
   } finally {
     if (priorLimit === undefined) delete process.env.APPA_ARCHESTRA_MAX_BODY_BYTES;

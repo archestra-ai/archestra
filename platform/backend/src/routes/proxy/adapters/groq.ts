@@ -149,8 +149,8 @@ class GroqStreamAdapter
   readonly provider = "groq" as const;
   private delegate: OpenAIStreamAdapter;
 
-  constructor() {
-    this.delegate = new OpenAIStreamAdapter();
+  constructor(request?: GroqRequest) {
+    this.delegate = new OpenAIStreamAdapter("openai", request);
   }
 
   get state() {
@@ -212,8 +212,10 @@ export const groqAdapterFactory: LLMProvider<
     return new GroqResponseAdapter(response);
   },
 
-  createStreamAdapter(): LLMStreamAdapter<GroqStreamChunk, GroqResponse> {
-    return new GroqStreamAdapter();
+  createStreamAdapter(
+    request?: GroqRequest,
+  ): LLMStreamAdapter<GroqStreamChunk, GroqResponse> {
+    return new GroqStreamAdapter(request);
   },
 
   extractApiKey(headers: GroqHeaders): string | undefined {

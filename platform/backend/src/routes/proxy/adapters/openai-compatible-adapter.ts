@@ -100,8 +100,10 @@ export function createOpenAiCompatibleAdapterFactory(
       return new OpenAIResponseAdapter(response, provider);
     },
 
-    createStreamAdapter(): LLMStreamAdapter<StreamChunk, Response> {
-      return new OpenAIStreamAdapter(provider);
+    createStreamAdapter(
+      request?: Request,
+    ): LLMStreamAdapter<StreamChunk, Response> {
+      return new OpenAIStreamAdapter(provider, request);
     },
 
     extractApiKey(headers: Headers): string | undefined {

@@ -309,6 +309,17 @@ export function isNomicModel(model: string): boolean {
 }
 
 /**
+ * Whether an embedding model accepts the `dimensions` request parameter.
+ * Nomic models and OpenAI's ada-002 reject it ("This model does not support
+ * specifying dimensions").
+ */
+export function acceptsEmbeddingDimensionsParameter(model: string): boolean {
+  return (
+    !isNomicModel(model) && !/(?:^|\/)text-embedding-ada-002$/i.test(model)
+  );
+}
+
+/**
  * Add the appropriate Nomic task prefix to embedding input text.
  * For non-Nomic models, returns the text unchanged.
  */

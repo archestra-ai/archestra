@@ -1,0 +1,22 @@
+{
+  // The helpers tests import: src/test, the __mocks__ modules and the
+  // *.test-*.ts files beside the tests.
+  "extends": "./tsconfig.source-project.json",
+  "compilerOptions": {
+    "outDir": "./.tsbuild/test-support",
+    "tsBuildInfoFile": "./.tsbuild/test-support.tsbuildinfo"
+  },
+  "include": [
+    "src/ambient/*.d.ts",
+    "src/test/**/*.ts",
+    "src/**/__mocks__/**/*.ts",
+    "src/**/*.test-*.ts"
+  ],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [
+    { "path": "../shared/tsconfig.lib.json" },
+    { "path": "./tsconfig.schema.json" },
+    { "path": "./tsconfig.core.json" },
+    { "path": "./tsconfig.app.json" }
+  ]
+}

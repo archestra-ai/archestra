@@ -10,6 +10,7 @@ import type {
   ChatMessage,
   ChatMessageAttachment,
 } from "@microsoft/msgraph-sdk/models";
+import { isMsTeamsConfigured } from "./ms-teams-config";
 import { resolveMSTeamsUserEmail } from "./ms-teams-user";
 // Register the chats, teams, and users fluent API extensions
 import "@microsoft/msgraph-sdk-chats";
@@ -28,14 +29,12 @@ import {
   TurnContext,
   type WebResponse,
 } from "@microsoft/agents-hosting";
-import type { A2AAttachment } from "@/agents/a2a-executor";
 import { msTeamsDirectory } from "@/agents/chatops/ms-teams-directory";
 import {
   type MsTeamsOAuthClient,
   type MsTeamsSignInOutcome,
   msTeamsUserSignIn,
 } from "@/agents/chatops/ms-teams-user-sign-in";
-
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
@@ -58,6 +57,7 @@ import type {
   ThreadHistoryParams,
   UpdateApprovalRequestOptions,
 } from "@/types";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 import { detectImageType } from "@/utils/detect-image-type";
 import { stripHtmlTags } from "@/utils/strip-html";
 import { isUuid } from "@/utils/uuid";
@@ -100,11 +100,7 @@ class MSTeamsProvider implements ChatOpsProvider {
   }
 
   isConfigured(): boolean {
-    return (
-      this.config.enabled &&
-      Boolean(this.config.appId) &&
-      Boolean(this.config.appSecret)
-    );
+    return isMsTeamsConfigured(this.config);
   }
 
   /**

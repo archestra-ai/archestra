@@ -96,6 +96,8 @@ interface LlmProviderApiKeyDropdownProps {
   onSelectAllOption?: () => void;
   allowOrganizationDefault?: boolean;
   organizationDefaultSelected?: boolean;
+  /** What "Organization default" currently runs on. */
+  organizationDefaultDescription?: string;
   onSelectOrganizationDefault?: () => void;
   /** Model pools offered before the keys; a picked pool replaces the key. */
   pools?: AvailableModelPool[];
@@ -127,6 +129,7 @@ export function LlmProviderApiKeyDropdown({
   onSelectAllOption,
   allowOrganizationDefault = false,
   organizationDefaultSelected = false,
+  organizationDefaultDescription,
   onSelectOrganizationDefault,
   pools = [],
   selectedPoolId = null,
@@ -304,8 +307,8 @@ export function LlmProviderApiKeyDropdown({
                       Organization default
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      No model or key set - falls back to the organization
-                      default
+                      {organizationDefaultDescription ??
+                        "No model or key set - falls back to the organization default"}
                     </span>
                   </div>
                   {organizationDefaultSelected && (

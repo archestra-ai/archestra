@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { SEEDED_APP_RENDER_META_KEY } from "@archestra/shared";
+import client from "prom-client";
 import { vi } from "vitest";
 import {
   executeArchestraTool,
@@ -13,6 +14,7 @@ import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import MemberModel from "@/models/member";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaYellModel from "@/models/openappa-yell";
+import { initializeOpenappaMetrics } from "@/observability/metrics/openappa";
 import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/codex";
 import { anthropicAdapterFactory } from "@/routes/proxy/adapters/anthropic";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -93,6 +95,7 @@ function expectNativeRemedy(
 
 const native = vi.hoisted(() => ({
   initializeOpenappa: vi.fn(),
+  collectOpenappaMetrics: vi.fn(() => ""),
   dispatchHook: vi.fn(),
   executeRemedyByOffer: vi.fn(),
   loadChildReturns: vi.fn(),
@@ -1524,6 +1527,8 @@ describe("APPA feature boundary", () => {
         { id: "first", name: "read_file", arguments: {} },
         { id: "truncated", name: "read_file", arguments: '{"path": "/a' },
         { id: "control", name: "remedy", arguments: "{" },
+        // A call to a tool without parameters can stream no argument text.
+        { id: "empty", name: "read_file", arguments: "" },
       ],
       {
         canonicalize: (name) => name,
@@ -1534,15 +1539,19 @@ describe("APPA feature boundary", () => {
       "allow",
       "deny",
       "deny",
+      "allow",
     ]);
     // The runtime never saw these calls, so it holds no ruling for their ids.
     expect(decisions[1]).not.toHaveProperty("recorded");
     expect(decisions[2]).not.toHaveProperty("recorded");
-    expect(
-      native.dispatchHook.mock.calls.map(
-        ([raw]) => JSON.parse(raw).operation_id,
-      ),
-    ).toEqual(["call:first"]);
+    const dispatched = native.dispatchHook.mock.calls.map(([raw]) =>
+      JSON.parse(raw),
+    );
+    expect(dispatched.map((event) => event.operation_id)).toEqual([
+      "call:first",
+      "call:empty",
+    ]);
+    expect(dispatched[1].arguments).toEqual({});
   });
 
   test("fails closed when a withheld admission cannot be settled", async () => {
@@ -3652,6 +3661,16 @@ describe("a policy saved mid-conversation", () => {
   test("a call whose policy moved is retried with the policy read again", async ({
     makeUser,
   }) => {
+    initializeOpenappaMetrics();
+    const counter = client.register.getSingleMetric(
+      "openappa_hook_dispatches_total",
+    ) as client.Counter;
+    const before = (await counter.get()).values
+      .filter(
+        (v) =>
+          v.labels.hook === "tool_call" && v.labels.decision === "allow_call",
+      )
+      .reduce((sum, v) => sum + v.value, 0);
     const user = await makeUser();
     await save({ userId: user.id, tool: "before", revision: 0 });
     native.dispatchHook
@@ -3668,6 +3687,13 @@ describe("a policy saved mid-conversation", () => {
 
     expect(decisions).toEqual([{ kind: "allow" }]);
     expect(native.dispatchHook).toHaveBeenCalledTimes(2);
+    const after = (await counter.get()).values
+      .filter(
+        (v) =>
+          v.labels.hook === "tool_call" && v.labels.decision === "allow_call",
+      )
+      .reduce((sum, v) => sum + v.value, 0);
+    expect(after - before).toBe(1);
     expect(servedPolicy(0).content).toContain('"before"');
     expect(servedPolicy(1).content).toContain('"after"');
   });

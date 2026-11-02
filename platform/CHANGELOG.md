@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.4.16](https://github.com/archestra-ai/archestra/compare/platform-v1.4.15...platform-v1.4.16) (2026-11-02)
+
+
+### Bug Fixes
+
+* **agent-runtime:** a finished run takes no new turn minutes before its retention ends [1.4] ([#10016](https://github.com/archestra-ai/archestra/issues/10016)) ([4ee8bb4](https://github.com/archestra-ai/archestra/commit/4ee8bb4ff212225a9e9765e46d0fde557446748c))
+* **agent-runtime:** give runs the id their page and the run tools use (backport release/1.4) ([#10034](https://github.com/archestra-ai/archestra/issues/10034)) ([a244b88](https://github.com/archestra-ai/archestra/commit/a244b8838713ca8848bb9fdd4396d2e969970510))
+* **agent-runtime:** give runs their page URL (backport release/1.4) ([#10040](https://github.com/archestra-ai/archestra/issues/10040)) ([e5daa5a](https://github.com/archestra-ai/archestra/commit/e5daa5a00d7acf4803687ca6d8617056826401a8))
+* **agent-runtime:** give the agent's shell commands the highest OOM score [1.4] ([#10046](https://github.com/archestra-ai/archestra/issues/10046)) ([750b51a](https://github.com/archestra-ai/archestra/commit/750b51a1fccb993e648f534d6420ea10bca5a115))
+* **agent-runtime:** say when a run was killed for memory [1.4] ([#10026](https://github.com/archestra-ai/archestra/issues/10026)) ([15772b2](https://github.com/archestra-ai/archestra/commit/15772b22d6edd345da8d29f035f797348ea5276f))
+* **agent-runtime:** stop the agent's largest command before the kernel stops the container [1.4] ([#10053](https://github.com/archestra-ai/archestra/issues/10053)) ([9c13725](https://github.com/archestra-ai/archestra/commit/9c13725e404a2db7daac1d3f620aa4396dcd7fb4))
+* **guardrails:** read a tool call with no argument text as an empty object (backport release/1.4) ([#10057](https://github.com/archestra-ai/archestra/issues/10057)) ([b630c5a](https://github.com/archestra-ai/archestra/commit/b630c5a08beffc9c88beb69fac6bda3b2580b8a4))
+* **helm:** make kube-system DNS reader opt-in [1.4] ([#10075](https://github.com/archestra-ai/archestra/issues/10075)) ([ab3b1f4](https://github.com/archestra-ai/archestra/commit/ab3b1f4a37276bac523a3d83cb4081d55d117485))
+* **security:** require expat 2.10.0 in runtime images [1.4] ([#10078](https://github.com/archestra-ai/archestra/issues/10078)) ([b79ec11](https://github.com/archestra-ai/archestra/commit/b79ec1135cb91fde81041a6c9971a808687a67dc))
+
 ## [1.4.15](https://github.com/archestra-ai/archestra/compare/platform-v1.4.14...platform-v1.4.15) (2026-10-31)
 
 

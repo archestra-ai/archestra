@@ -71,6 +71,7 @@ export default class OpenAppaYellModel {
     kind: Exclude<OpenAppaYellKind, "agent">;
     tool: string;
     message: string;
+    superyell: boolean;
   }) {
     await db
       .insert(table)
@@ -83,6 +84,7 @@ export default class OpenAppaYellModel {
         message: input.message,
         withTrajectory: false,
         kind: input.kind,
+        superyell: input.superyell,
       })
       .onConflictDoUpdate({
         target: [
@@ -94,6 +96,7 @@ export default class OpenAppaYellModel {
         set: {
           count: sql`${table.count} + 1`,
           message: input.message,
+          superyell: input.superyell,
           resolvedAt: null,
           resolvedBy: null,
         },

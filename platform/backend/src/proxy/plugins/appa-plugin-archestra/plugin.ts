@@ -175,6 +175,7 @@ import {
   submittedRunNextStep,
 } from "@/services/agent-runtime/run-handle";
 import {
+  breakTheGlassActiveIn,
   getGuardrailsDeployment,
   readGuardrailsV2Activation,
 } from "@/services/guardrails-deployment";
@@ -1740,9 +1741,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         !(binding.adapter && isChildSpawnCall(binding.adapter, call))
       ) {
         breakTheGlass ??= getGuardrailsDeployment();
+        const settings = await breakTheGlass;
         const waiver = waiverFor({
           decision,
-          settings: await breakTheGlass,
+          settings,
           unattended: isUnattendedRequest({
             headers: binding.requestHeaders,
             agentRuntimeRun:
@@ -1756,6 +1758,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             toolCallId: call.id,
             tool: this.policyIdentity(binding, call).name,
             kind: waiver,
+            // A platform yell does what the agent's own yell does.
+            superyell: breakTheGlassActiveIn(settings),
           }))
         ) {
           released.push(call);

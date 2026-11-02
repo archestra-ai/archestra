@@ -136,11 +136,7 @@ export function OpenAppaBreakTheGlassSettings() {
       />
       <BreakTheGlassRow
         title="Yell tool"
-        description={
-          <>
-            When the agent calls <code>yell</code> itself.
-          </>
-        }
+        description="What a yell does to its session: the agent's own, or one for a waived call."
         value={
           data ? (data.breakTheGlassEnabled ? "off" : "record") : undefined
         }

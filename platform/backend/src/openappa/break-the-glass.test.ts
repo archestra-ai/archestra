@@ -6,7 +6,7 @@ import {
   recordWaivedCall,
   waiverFor,
 } from "./break-the-glass";
-import { findUnenforcedCalls } from "./unenforced";
+import { findUnenforcedCalls, isUnenforcedSession } from "./unenforced";
 
 const on = {
   active: true,
@@ -120,6 +120,7 @@ test("a waived call is hidden from the runtime and repeats merge into one yell",
         toolCallId,
         tool: "mcp/slack/send",
         kind: "block_waived",
+        superyell: false,
       }),
     ).toBe(true);
 
@@ -149,4 +150,32 @@ test("a waived call is hidden from the runtime and repeats merge into one yell",
       message: expect.stringContaining("mcp/slack/send"),
     }),
   ]);
+  // Without superyell the session stays under OpenAPPA.
+  expect(await isUnenforcedSession(session)).toBe(false);
+});
+
+test("a waived call turns Guardrails off for the session when the yell is a superyell, as the agent's own yell does", async ({
+  makeOrganization,
+}) => {
+  const organizationId = (await makeOrganization()).id;
+  const session = {
+    organization_id: organizationId,
+    caller_id: "user:u1",
+    session_id: "user:u1|s2",
+  };
+  expect(
+    await recordWaivedCall({
+      session,
+      toolCallId: "call-1",
+      tool: "mcp/slack/send",
+      kind: "approval_waived",
+      superyell: true,
+    }),
+  ).toBe(true);
+  expect(await isUnenforcedSession(session)).toBe(true);
+  const [yell] = await db
+    .select()
+    .from(schema.openappaYellsTable)
+    .where(eq(schema.openappaYellsTable.sessionId, session.session_id));
+  expect(yell).toMatchObject({ kind: "approval_waived", superyell: true });
 });

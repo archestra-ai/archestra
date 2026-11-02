@@ -28,7 +28,7 @@ export function breakTheGlassSummary(
     });
   if (deployment.breakTheGlassEnabled)
     lines.push({
-      label: "Agent yell:",
+      label: "Yell:",
       value: "turns Guardrails off for the session",
     });
   return lines;

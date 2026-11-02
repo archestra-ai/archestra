@@ -31,7 +31,7 @@ describe("breakTheGlassSummary", () => {
       }),
     ).toEqual([
       { label: "Human approval:", value: "waived everywhere" },
-      { label: "Agent yell:", value: "turns Guardrails off for the session" },
+      { label: "Yell:", value: "turns Guardrails off for the session" },
     ]);
   });
 });

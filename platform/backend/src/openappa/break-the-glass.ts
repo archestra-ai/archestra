@@ -8,7 +8,7 @@ import type {
 } from "@/types/guardrails-policy";
 import type { OpenAppaYellKind } from "@/types/openappa-yell";
 import { type OpenAppaSession, openappaYellEnabled } from "./service";
-import { recordUnenforcedCalls } from "./unenforced";
+import { recordUnenforcedCalls, superyellSession } from "./unenforced";
 
 export type WaiverKind = Exclude<OpenAppaYellKind, "agent">;
 
@@ -69,15 +69,18 @@ export function isUnattendedRequest(params: {
  * Records a call let through under the Break the glass settings: as a call
  * the runtime does not see, so its result reaches the model as it is, and as
  * a platform yell unless reports are off. The yell names only the tool: the
- * session's trace holds the rest. Returns false when either record fails; the call is then
- * refused as ruled, since a released call nothing recorded would have its
- * result answered with the ruling.
+ * session's trace holds the rest. A platform yell does what an agent's yell
+ * does: with `superyell` (the Yell tool setting that turns Guardrails off) it
+ * also takes the session out of OpenAPPA from its next request. Returns false
+ * when a record fails; the call is then refused as ruled, since a released
+ * call nothing recorded would have its result answered with the ruling.
  */
 export async function recordWaivedCall(params: {
   session: OpenAppaSession;
   toolCallId: string;
   tool: string;
   kind: WaiverKind;
+  superyell: boolean;
 }): Promise<boolean> {
   const { session } = params;
   try {
@@ -87,7 +90,7 @@ export async function recordWaivedCall(params: {
       toolCallIds: [params.toolCallId],
       reason: "waived",
     });
-    if (openappaYellEnabled())
+    if (openappaYellEnabled()) {
       await OpenAppaYellModel.recordWaiver({
         organizationId: session.organization_id,
         callerId: session.caller_id ?? "unknown",
@@ -95,7 +98,10 @@ export async function recordWaivedCall(params: {
         kind: params.kind,
         tool: params.tool,
         message: `${WAIVER_MESSAGE[params.kind]} ${params.tool}`,
+        superyell: params.superyell,
       });
+      if (params.superyell) await superyellSession(session);
+    }
   } catch (err) {
     logger.warn(
       { err, sessionId: session.session_id, toolCallId: params.toolCallId },
@@ -110,8 +116,11 @@ export async function recordWaivedCall(params: {
       toolCallId: params.toolCallId,
       tool: params.tool,
       kind: params.kind,
+      superyell: params.superyell,
     },
-    "OpenAPPA let a denied call through under the Break the glass settings",
+    params.superyell
+      ? "OpenAPPA let a denied call through under the Break the glass settings and turned off for the session"
+      : "OpenAPPA let a denied call through under the Break the glass settings",
   );
   return true;
 }

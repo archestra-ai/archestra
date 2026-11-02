@@ -42,6 +42,50 @@ describe("check-layers", () => {
     expect(update.stderr).toContain("the list may only shrink");
     expect(JSON.parse(fs.readFileSync(edited, "utf8"))).toContain(GONE);
   });
+
+  test("fails on a module that misses a required import, and never lists it, even with --allow-new", () => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "check-layers-"));
+    // The layer order with the composition import required of a script
+    // helper that does not make it.
+    const layers = path.join(dir, "layers.mjs");
+    fs.writeFileSync(
+      layers,
+      `import layers from ${JSON.stringify(path.join(BACKEND_DIR, "layers.mjs"))};
+export default {
+  ...layers,
+  required: layers.required.map((rule) => ({
+    ...rule,
+    module: { path: "^src/standalone-scripts/hydration-schema\\\\.ts$" },
+  })),
+};
+`,
+    );
+    const edited = path.join(dir, "known.json");
+    fs.copyFileSync(KNOWN, edited);
+    const missing =
+      "src/standalone-scripts/hydration-schema.ts (entry-point-binds-ports)";
+
+    const check = checkLayers("--layers", layers, "--known", edited);
+    expect(check.status).toBe(1);
+    expect(check.stderr).toContain(
+      "1 module(s) miss a required import (layers.mjs `required`)",
+    );
+    expect(check.stderr).toContain(missing);
+
+    const update = checkLayers(
+      "--update",
+      "--allow-new",
+      "--layers",
+      layers,
+      "--known",
+      edited,
+    );
+    expect(update.status).toBe(1);
+    expect(update.stderr).toContain(missing);
+    expect(fs.readFileSync(edited, "utf8")).toBe(
+      fs.readFileSync(KNOWN, "utf8"),
+    );
+  });
 });
 
 function checkLayers(...args: string[]) {

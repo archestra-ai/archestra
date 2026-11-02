@@ -29,8 +29,9 @@ function wslSetupHint(home, config) {
   return '\nThis config has WSL paths from a time when Codex ran in WSL. Codex for Windows cannot open these paths. Change them to Windows paths, for example ' + linuxHome + ' to ' + windowsHome + '.';
 }
 // Codex in WSL cannot read the Windows keyring. While the desktop app runs
-// Codex in WSL, a Windows sign-in is saved in the Codex folder. Codex for
-// Windows reads it there too when its keyring has no sign-in for the server.
+// Codex in WSL, a Windows sign-in uses Codex's file store, .credentials.json in
+// the Codex folder. Codex for Windows reads it there too when its keyring has
+// no sign-in for the server.
 function signInArgs(platform, config, server) {
   return [...(platform === 'win32' && runsCodexInWsl(config) ? ['-c', 'mcp_oauth_credentials_store=file'] : []), 'mcp', 'login', server];
 }`;

@@ -36,7 +36,7 @@ The desktop app's Work and Codex tabs run on your computer and read the Codex se
 4. Restart ChatGPT and start a Work task. In the [logs](/docs/admin/logs), its requests show the ChatGPT client.
 
 - The setup needs the `codex` CLI on your `PATH`. It changes `~/.codex/config.toml`, so Codex CLI on the same computer uses the same settings. See [Connect Your Agents](/docs/get-started/connect#before-you-start) for the other prerequisites.
-- On Windows, use the Windows command also when ChatGPT runs Codex in WSL. Codex in WSL cannot read Windows Credential Manager. So while ChatGPT runs Codex in WSL, the setup saves the gateway sign-in in your Codex folder (`.credentials.json`), where both Codex for Windows and Codex in WSL can read it.
+- On Windows, use the Windows command also when ChatGPT runs Codex in WSL. Codex in WSL cannot read Windows Credential Manager. So while ChatGPT runs Codex in WSL, the setup signs in to the gateway with Codex's `mcp_oauth_credentials_store=file` setting. Codex then saves the sign-in in `.credentials.json` in your Codex folder, where both Codex for Windows and Codex in WSL read it.
 - Chats and dots run on OpenAI's servers and do not read these settings. Guardrails do not check them. The plugin brings your tools and skills there.
 
 For package format and upload requirements, see OpenAI's [plugin packaging guide](https://developers.openai.com/plugins/build/plugins). OAuth approval and workspace policy remain in ChatGPT.

@@ -241,6 +241,7 @@ class AgentVersionModel {
       llmApiKey: keyRows[0] ?? null,
       identityProviderId: agent.identityProviderId ?? null,
       environmentId: agent.environmentId ?? null,
+      networkPolicy: agent.networkPolicy ?? null,
       // Names can collide, so every sort tie-breaks on the id — a name-only
       // sort would leave equal-name rows in unspecified DB order and hash the
       // same config differently across reads.
@@ -520,6 +521,9 @@ function normalizeAgentVersion(row: AgentVersion): AgentVersion {
         AgentConfigSnapshotSchema.shape.activationSkillRules.parse(
           row.snapshot.activationSkillRules,
         ),
+      networkPolicy: AgentConfigSnapshotSchema.shape.networkPolicy.parse(
+        row.snapshot.networkPolicy,
+      ),
     },
   };
 }

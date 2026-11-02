@@ -63,6 +63,8 @@ for (const stream of [false, true]) {
       const urls = [
         "/v1/model-router/chat/completions",
         `/v1/model-router/${agent.id}/chat/completions`,
+        "/v1/model-router/responses",
+        `/v1/model-router/${agent.id}/responses`,
       ];
       if (provider === "bedrock")
         urls.push(
@@ -94,8 +96,20 @@ for (const stream of [false, true]) {
               model: url.includes("model-router")
                 ? `${provider}:${modelId}`
                 : modelId,
-              messages: [{ role: "user", content: "Reply OK." }],
-              response_format: format,
+              ...(url.endsWith("/responses")
+                ? {
+                    input: "Reply OK.",
+                    text: {
+                      format:
+                        format.type === "json_schema"
+                          ? { type: "json_schema", ...format.json_schema }
+                          : format,
+                    },
+                  }
+                : {
+                    messages: [{ role: "user", content: "Reply OK." }],
+                    response_format: format,
+                  }),
               stream,
             },
           });

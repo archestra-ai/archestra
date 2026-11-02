@@ -1,5 +1,6 @@
 import type * as k8s from "@kubernetes/client-node";
 import { PatchStrategy } from "@kubernetes/client-node";
+import { eq } from "drizzle-orm";
 import { describe, expect, vi } from "vitest";
 import db, { schema } from "@/database";
 import { beforeEach, test as it } from "@/test";
@@ -56,7 +57,7 @@ import {
   loadKubeConfig,
 } from "@/k8s/shared";
 import OrganizationModel from "@/models/organization";
-import type { Environment, Organization } from "@/types";
+import type { Environment, NetworkPolicy, Organization } from "@/types";
 import { isUuid } from "@/utils/uuid";
 import { daggerEnvironmentRuntimeManager } from "./manager";
 
@@ -92,6 +93,30 @@ async function reconcilePersistedEnvironment(environment: Environment) {
     .returning();
   return daggerEnvironmentRuntimeManager.reconcileEnvironment(row);
 }
+
+// The organization model is mocked here, so agents are inserted as plain rows.
+async function insertAgent(values: {
+  environmentId?: string;
+  networkPolicy: NetworkPolicy | null;
+}) {
+  const [row] = await db
+    .insert(schema.agentsTable)
+    .values({
+      name: `Agent ${crypto.randomUUID().slice(0, 8)}`,
+      organizationId: testOrganizationId,
+      scope: "personal",
+      ...values,
+    })
+    .returning();
+  return row;
+}
+
+const OFF_POLICY: NetworkPolicy = {
+  egressMode: "off",
+  domainPreset: "none",
+  allowedDomains: [],
+  allowedCidrs: [],
+};
 
 function makeEnv(overrides: Partial<Environment> = {}): Environment {
   return {
@@ -938,6 +963,104 @@ describe("reconcileOrganizationDefault", () => {
     expect(
       clients.customObjectsApi.deleteNamespacedCustomObject,
     ).not.toHaveBeenCalled();
+  });
+
+  it("runs an agent with its own policy on its own engine in its environment's namespace, under the agent's policy", async () => {
+    const [environment] = await db
+      .insert(schema.environmentsTable)
+      .values({
+        organizationId: testOrganizationId,
+        name: "Agent engine env",
+        namespace: "env-ns",
+        networkPolicy: {
+          egressMode: "unrestricted",
+          domainPreset: "none",
+          allowedDomains: [],
+          allowedCidrs: [],
+        },
+      })
+      .returning();
+    const agent = await insertAgent({
+      environmentId: environment.id,
+      networkPolicy: OFF_POLICY,
+    });
+    const target = daggerEnvironmentRuntimeManager.agentTarget({
+      id: agent.id,
+      namespace: environment.namespace,
+    });
+
+    await daggerEnvironmentRuntimeManager.reconcileAgent(agent.id);
+
+    // A distinct, stable engine: never the environment's own engine id.
+    expect(target?.environmentId).not.toBe(environment.id);
+    expect(target?.environmentId).not.toBe(agent.id);
+    expect(isUuid(target?.environmentId ?? "")).toBe(true);
+    expect(target?.namespace).toBe("env-ns");
+    const stsCall =
+      clients.appsApi.createNamespacedStatefulSet.mock.calls[0][0];
+    expect(stsCall.namespace).toBe("env-ns");
+    expect(stsCall.body.metadata.name).toBe(
+      `dagger-engine-${target?.environmentId}`,
+    );
+    // The agent blocks all egress although its environment allows it all: no
+    // rule opens the public internet.
+    const npBody =
+      clients.networkingApi.createNamespacedNetworkPolicy.mock.calls[0][0].body;
+    const hasPublicAllow = (npBody.spec.egress ?? []).some(
+      (r: { to?: { ipBlock?: { cidr: string } }[] }) =>
+        r.to?.some((t) => t.ipBlock?.cidr === "0.0.0.0/0"),
+    );
+    expect(hasPublicAllow).toBe(false);
+  });
+
+  it("removes an agent's engine once its policy is cleared to inherit the environment's", async () => {
+    const agent = await insertAgent({ networkPolicy: OFF_POLICY });
+    await db
+      .update(schema.agentsTable)
+      .set({ networkPolicy: null })
+      .where(eq(schema.agentsTable.id, agent.id));
+
+    await daggerEnvironmentRuntimeManager.reconcileAgent(agent.id);
+
+    expect(clients.appsApi.createNamespacedStatefulSet).not.toHaveBeenCalled();
+    const engineId = daggerEnvironmentRuntimeManager.agentTarget({
+      id: agent.id,
+      namespace: null,
+    })?.environmentId;
+    expect(clients.appsApi.deleteNamespacedStatefulSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        namespace: "release-ns",
+        name: `dagger-engine-${engineId}`,
+      }),
+    );
+  });
+
+  it("runs an unbound agent's own engine in the organization's default namespace", async () => {
+    vi.mocked(OrganizationModel.getDefaultNetworkPolicy).mockResolvedValue(
+      null as never,
+    );
+    await db
+      .update(schema.organizationsTable)
+      .set({ defaultEnvironmentNamespace: "team-ns" })
+      .where(eq(schema.organizationsTable.id, testOrganizationId));
+    const agent = await insertAgent({
+      networkPolicy: {
+        egressMode: "restricted",
+        domainPreset: "none",
+        allowedDomains: ["a.dev"],
+        allowedCidrs: [],
+      },
+    });
+
+    await daggerEnvironmentRuntimeManager.reconcileAgent(agent.id);
+
+    expect(
+      clients.appsApi.createNamespacedStatefulSet.mock.calls[0][0].namespace,
+    ).toBe("team-ns");
+    // It left the release namespace, where it does not belong.
+    expect(clients.appsApi.deleteNamespacedStatefulSet).toHaveBeenCalledWith(
+      expect.objectContaining({ namespace: "release-ns" }),
+    );
   });
 });
 

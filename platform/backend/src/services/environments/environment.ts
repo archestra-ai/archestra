@@ -87,6 +87,27 @@ function teardownEnvironmentEngine(environment: Environment): void {
   );
 }
 
+/**
+ * Move or provision the engines of agents with their own network policy after
+ * the namespace they live in changed. Fire-and-forget like the environment's
+ * own engine.
+ */
+function reconcileAgentEngines(filter: {
+  organizationId: string;
+  environmentId?: string;
+}): void {
+  trackBackgroundWork(
+    daggerEnvironmentRuntimeManager
+      .reconcileAgentEngines(filter)
+      .catch((err) =>
+        logger.error(
+          { err, ...filter },
+          "[DaggerEnvRuntime] background agent engine reconcile failed",
+        ),
+      ),
+  );
+}
+
 // === Public API ===
 
 export async function listEnvironments(params: {
@@ -261,6 +282,11 @@ export async function updateEnvironment(params: {
   }
 
   reconcileEnvironmentEngine(updated);
+  // Agents with their own policy run their engine in their environment's
+  // namespace, so a namespace change moves those engines too.
+  if (data.namespace !== undefined) {
+    reconcileAgentEngines({ organizationId, environmentId: id });
+  }
   return updated;
 }
 
@@ -425,6 +451,9 @@ export async function deleteEnvironment(params: {
   }
 
   teardownEnvironmentEngine(environment);
+  // Its agents are now unbound, so their own engines move to the
+  // organization's default namespace.
+  reconcileAgentEngines({ organizationId });
 }
 
 // === Internal helpers ===

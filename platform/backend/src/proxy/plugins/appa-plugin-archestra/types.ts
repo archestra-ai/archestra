@@ -137,7 +137,16 @@ export type AppaClientAdapter = {
     supportsMultiple?: boolean;
     /** Keep questions with more choices on the gateway; never discard options. */
     maxOptions?: number;
+    /** Total gateway choices a converter can show across bounded native cards. */
+    maxConvertedOptions?: number;
     fromAskUser?(args: AskUserArguments): Record<string, unknown>;
+    /** Repairs an oversized ordinary native question before host validation. */
+    fromNativeQuestion?(args: unknown): AskUserArguments | undefined;
+    /** Reads an ordinary converted question, never an approval review. */
+    ordinaryResultFromAskUser?(
+      result: NativeQuestionResult,
+      asked: AskUserArguments,
+    ): string;
     /**
      * Approve or Deny from the tool's result. `asked` is the question the
      * platform wrote for the review; the ruling is read against it, never

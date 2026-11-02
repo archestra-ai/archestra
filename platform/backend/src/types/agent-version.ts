@@ -6,6 +6,7 @@ import {
   AgentActivationSkillModeSchema,
   AgentActivationSkillRuleDispositionSchema,
 } from "./agent-activation-skill-policy";
+import { NetworkPolicySchema } from "./environment";
 
 /**
  * Canonical, hashable payload of an agent version — the agent's *config only*.
@@ -66,6 +67,7 @@ export const AgentConfigSnapshotSchema = z.object({
     .nullable(),
   identityProviderId: z.string().nullable(),
   environmentId: z.string().nullable(),
+  networkPolicy: NetworkPolicySchema.nullable().default(null),
   tools: z.array(
     z.object({
       toolId: z.string(),

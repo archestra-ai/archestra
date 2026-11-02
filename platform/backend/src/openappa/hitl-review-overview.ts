@@ -6,7 +6,11 @@ import {
   isCommandExecutionTool,
   withoutArgumentCopies,
 } from "./command-normalization";
-import { parseReviewedArguments, reviewedToolLabel } from "./review-display";
+import {
+  displayedReview,
+  parseReviewedArguments,
+  reviewedToolLabel,
+} from "./review-display";
 
 /**
  * The native approval card for a review, and the complete review text a
@@ -105,7 +109,8 @@ export function hitlReviewCard(params: {
   /** The reviewer holds this exact payload's complete review text. */
   inspected?: boolean;
 }): { card: HitlReviewCard; approve: boolean } {
-  const { base, review } = params;
+  const { base } = params;
+  const review = displayedReview(params.review);
   const inspected = params.inspected === true;
   const card = {
     question: base.question,
@@ -161,13 +166,15 @@ export function hitlReviewCard(params: {
  * literal fence or escaped for markdown — an embedded image or link is never
  * active. A runtime-format policy text is shown as its authoritative
  * coverage, without the copy of the arguments it embeds; any other shape is
- * shown verbatim in a fence. Nothing is shortened or reordered.
+ * shown verbatim in a fence. Nothing is shortened or reordered; only
+ * credential values are redacted, and approval still runs the original call.
  */
-export function renderHitlReviewText(review: HitlInspectableReview): string {
+export function renderHitlReviewText(staged: HitlInspectableReview): string {
+  const review = displayedReview(staged);
   const sections: string[] = [
     [
       "## Approval review",
-      `The platform is holding this call for human review. Everything an approval would cover is below, complete and unchanged. This text appears because the reviewer chose ${HITL_INSPECT_LABEL} on the approval card.`,
+      `The platform is holding this call for human review. Everything an approval would cover is below, with credential values redacted for display; approving runs the original call. This text appears because the reviewer chose ${HITL_INSPECT_LABEL} on the approval card.`,
     ].join("\n\n"),
   ];
   if (review.tool) {

@@ -23,6 +23,11 @@ import {
   claudeCodeRelayArrivals,
   isClaudeCodeRelayReceipt,
 } from "./claude-code-relay";
+import {
+  claudeDesktopGroupedAnswer,
+  claudeDesktopQuestion,
+  claudeOversizedQuestion,
+} from "./claude-question";
 import { structuredQuestionRuling } from "./native-question-ruling";
 import {
   bindMintedChildTrajectory,
@@ -476,20 +481,12 @@ export class AppaClaudeDesktopAdapter extends AppaClaudeCodeAdapter {
   // submission enabled.
   override readonly nativeQuestion = {
     toolName: "AskUserQuestion",
+    requiresNativeForm: true,
     maxOptions: 4,
-    fromAskUser: (args: AskUserArguments) => ({
-      questions: [
-        {
-          question: args.question,
-          header: questionHeader(args.header, 12),
-          options: args.options.map((option) => ({
-            label: option.label,
-            description: option.description ?? option.label,
-          })),
-          multiSelect: args.allowMultiple === true,
-        },
-      ],
-    }),
+    maxConvertedOptions: 12,
+    fromAskUser: claudeDesktopQuestion,
+    fromNativeQuestion: claudeOversizedQuestion,
+    ordinaryResultFromAskUser: claudeDesktopGroupedAnswer,
     rulingFromResult: (result: NativeQuestionResult, asked: AskUserArguments) =>
       structuredQuestionRuling(result, asked.question),
     formFallback: true,

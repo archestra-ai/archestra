@@ -125,7 +125,7 @@ Inside a container, `ARCHESTRA_AGENT_RUNTIME_TIERS` lists the allowed tiers with
 
 ## Network Access
 
-Unless an administrator sets a policy, a run can reach the public internet. To limit it, set a [network egress policy](/docs/admin/environments#network-egress-policies) on the agent's [environment](/docs/admin/environments).
+Unless an administrator sets a policy, a run can reach the public internet. To limit it, set a [network egress policy](/docs/admin/environments#network-egress-policies) on the agent's [environment](/docs/admin/environments), or [give the agent its own policy](/docs/admin/environments#give-one-agent-its-own-policy).
 
 What to know:
 

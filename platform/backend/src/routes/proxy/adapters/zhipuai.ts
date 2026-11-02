@@ -6,6 +6,7 @@ import { get } from "lodash-es";
 import config from "@/config";
 import logger from "@/logging";
 import { metrics } from "@/observability";
+import { zhipuaiUsageTokens } from "@/observability/metrics/llm-usage";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -535,7 +536,7 @@ class ZhipuaiResponseAdapter implements LLMResponseAdapter<ZhipuaiResponse> {
     if (!this.response.usage) {
       return { inputTokens: 0, outputTokens: 0 };
     }
-    const { input, output } = getUsageTokens(this.response.usage);
+    const { input, output } = zhipuaiUsageTokens(this.response.usage);
     return { inputTokens: input, outputTokens: output };
   }
 
@@ -947,13 +948,6 @@ class ZhipuaiStreamAdapter
 // =============================================================================
 // USAGE TOKEN HELPERS
 // =============================================================================
-
-export function getUsageTokens(usage: Zhipuai.Types.Usage) {
-  return {
-    input: usage.prompt_tokens,
-    output: usage.completion_tokens,
-  };
-}
 
 export const zhipuaiAdapterFactory: LLMProvider<
   ZhipuaiRequest,

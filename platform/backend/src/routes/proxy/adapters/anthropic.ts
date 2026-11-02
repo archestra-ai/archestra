@@ -1412,16 +1412,6 @@ class AnthropicStreamAdapter
 // USAGE TOKEN HELPERS
 // =============================================================================
 
-export function getUsageTokens(usage: Anthropic.Types.Usage) {
-  return {
-    input: usage.input_tokens,
-    output: usage.output_tokens,
-    cacheRead: usage.cache_read_input_tokens ?? 0,
-    cacheWrite: usage.cache_creation_input_tokens ?? 0,
-    cacheWrite1h: usage.cache_creation?.ephemeral_1h_input_tokens ?? 0,
-  };
-}
-
 // Same value as the SDK default, but passing it explicitly opts out of the
 // SDK's client-side guard that throws "Streaming is required for operations
 // that may take longer than 10 minutes" on non-streaming requests with large

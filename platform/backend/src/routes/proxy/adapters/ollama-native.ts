@@ -65,26 +65,6 @@ const NDJSON_HEADERS: Record<string, string> = {
 };
 
 /**
- * Token counts for fetch-based observability.
- *
- * Unlike every OpenAI-wire provider, Ollama's native `/api/chat` has no `usage`
- * object — the counts are top-level `prompt_eval_count` / `eval_count` fields,
- * and they are `omitempty` on the wire so they are absent (not zero) on
- * non-final chunks. Ollama reports no cache tokens at all.
- */
-export function getUsageTokens(response: {
-  prompt_eval_count?: number;
-  eval_count?: number;
-}) {
-  return {
-    input: response.prompt_eval_count ?? 0,
-    output: response.eval_count ?? 0,
-    cacheRead: 0,
-    cacheWrite: 0,
-  };
-}
-
-/**
  * The upstream base URL is the Ollama root; strip any `/v1` suffix.
  *
  * Stripped against the parsed pathname, not the raw string: a base URL carrying

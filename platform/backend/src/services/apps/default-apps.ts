@@ -5,7 +5,7 @@ import config from "@/config";
 /**
  * Demo MCP Apps seeded into organizations that have never had an app, so the
  * Apps page demonstrates what apps can do instead of starting empty (see
- * `seedDefaultAppsForPristineOrgs` in `database/seed.ts`). Each app's HTML is
+ * `seedDefaultAppsForPristineOrgs` in `services/seed.ts`). Each app's HTML is
  * a plain committed document under `src/static/default-apps/` (the static dir
  * the build already copies to dist) — not a TS template literal, so authors
  * can edit real HTML and backslashes/backticks survive verbatim.

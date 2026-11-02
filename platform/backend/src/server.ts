@@ -76,7 +76,6 @@ import {
   dropContentTrgmIndexesUnderEncryption,
   dropLegacyPayloadTrgmIndexes,
 } from "@/database/index-maintenance";
-import { seedRequiredStartingData } from "@/database/seed";
 import { enterpriseTier } from "@/enterprise-tier";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -99,6 +98,7 @@ import OrganizationModel from "@/models/organization";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { initializeObservabilityMetrics, metrics } from "@/observability";
 import { classifyErrorForTracking } from "@/observability/error-tracking-policy";
+import { activeUsersMetricCollector } from "@/observability/metrics/active-users";
 import { reportAbnormalPreviousTermination } from "@/observability/previous-termination-report";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
 import { rumExporter } from "@/observability/rum/exporter.ee";
@@ -132,6 +132,7 @@ import { mcpImageUpdateChecker } from "@/services/mcp-image-update-checker";
 import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { initializeManagedPlaywrightRuntime } from "@/services/playwright-runtime";
 import { ensureScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
+import { seedRequiredStartingData } from "@/services/seed";
 import { sreAgentService } from "@/services/sre-agent";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
@@ -1004,7 +1005,7 @@ const startWebServer = async () => {
     // Only the API process collects it: the value is derived from the shared
     // database, so extra replicas would repeat the same query for the same
     // answer.
-    metrics.activeUsers.activeUsersMetricCollector.start();
+    activeUsersMetricCollector.start();
 
     // Register sandbox proxy route on the main server (single-port setup).
     // Iframe isolation comes from the sandbox attribute (no allow-same-origin → opaque origin).
@@ -1439,7 +1440,7 @@ function registerWebServerShutdown(
       // Flush any buffered RUM events before the process exits.
       await rumExporter.shutdown();
 
-      metrics.activeUsers.activeUsersMetricCollector.stop();
+      activeUsersMetricCollector.stop();
 
       const completedCleanups = new Set<
         "emailProvider" | "chatOps" | "ngrok"

@@ -1,5 +1,6 @@
 import AgentLabelModel from "@/models/agent-label";
 import * as metrics from "./metrics";
+import { initializeActiveUsersMetrics } from "./metrics/active-users";
 import { agentRuntimeHealthMetrics } from "./metrics/agent-runtime-health";
 
 export async function initializeObservabilityMetrics(params?: {
@@ -34,7 +35,7 @@ export async function initializeObservabilityMetrics(params?: {
   metrics.agentRuntime.initializeAgentRuntimeMetrics();
   agentRuntimeHealthMetrics.initialize();
   metrics.skill.initializeSkillMetrics();
-  metrics.activeUsers.initializeActiveUsersMetrics();
+  initializeActiveUsersMetrics();
 
   return labelKeys;
 }

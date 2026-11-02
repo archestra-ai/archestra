@@ -27,7 +27,6 @@ import { describeOrganizationDefaultModel } from "@/auto-routing/organization-de
 import { writeOrganizationTrio } from "@/auto-routing/settings";
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
-import { syncBuiltInSkillsForOrganization } from "@/database/seed";
 import {
   enterpriseTier,
   // SPDX-SnippetBegin
@@ -66,6 +65,7 @@ import { knowledgeSettingsService } from "@/services/knowledge-settings";
 import { removeMemberTarget } from "@/services/member-removal";
 import { reconcileManagedPlaywrightSetting } from "@/services/playwright-runtime";
 import { ResourcePermissions } from "@/services/resource-permissions";
+import { syncBuiltInSkillsForOrganization } from "@/services/seed";
 import {
   AgentRuntimeTiersResponseSchema,
   ApiError,

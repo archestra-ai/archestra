@@ -1,11 +1,23 @@
 {
-  // Every source file above the schema layer, until later slices carve it
-  // into its layers (layers.mjs).
+  // Every source file above the core layer, until later slices carve it into
+  // its layers (layers.mjs).
   "extends": "./tsconfig.source-project.json",
   "compilerOptions": {
     "outDir": "./.tsbuild/app",
     "tsBuildInfoFile": "./.tsbuild/app.tsbuildinfo"
   },
+  // Files of the core and schema directories that layers.mjs pins to a
+  // higher layer (`exclude` does not apply to `files`).
+  "files": [
+    "src/observability/index.ts",
+    "src/observability/metrics/active-users.ts",
+    "src/observability/metrics/agent-runtime-health.ts",
+    "src/observability/previous-termination-report.ts",
+    "src/utils/llm-api-key-resolution.ts",
+    "src/utils/provider-key-mappings.ts",
+    "src/utils/llm-resolution.ts",
+    "src/git-hosts/git-access.ts"
+  ],
   // JSON modules must be listed to be imported.
   "include": [
     "src/**/*.ts",
@@ -25,6 +37,37 @@
     "src/utils/sanitize-svg.ts",
     "src/utils/schedule-trigger.ts",
     "src/utils/uuid.ts",
+    // The core project's files (tsconfig.core.json).
+    "src/config.ts",
+    "src/app-version.ts",
+    "src/cache-manager.ts",
+    "src/in-memory-lru-cache.ts",
+    "src/process-local-cache-registry.ts",
+    "src/constants.ts",
+    "src/templating.ts",
+    "src/utils/**",
+    "src/logging/**",
+    "src/database/**",
+    "src/log-content/**",
+    "src/content-encryption/**",
+    "src/secrets-manager/**",
+    "src/observability/**",
+    "src/integrations/**",
+    "src/tokenizers/**",
+    "src/git-hosts/**",
+    "src/routes/route-paths.ts",
+    "src/archestra-mcp-server/branding.ts",
+    "src/models/cache-entry.ts",
+    "src/models/content-encryption-state.ee.ts",
+    "src/models/encryption-key-canary.ts",
+    "src/models/secret.ts",
+    "src/plugins/bounded-response.ts",
+    "src/skills-sandbox/file-path.ts",
+    "src/clients/bedrock-client.ts",
+    "src/clients/bedrock-credentials.ts",
+    "src/clients/llm-upstream-dispatcher.ts",
+    "src/clients/llm-upstream-fetch.ts",
+    "src/routes/proxy/adapters/responses-usage.ts",
     // Tests and test helpers (tsconfig.test-support.json, tsconfig.tests-*.json).
     "src/**/*.test.ts",
     "src/**/*.test-*.ts",
@@ -35,6 +78,7 @@
     { "path": "../shared/tsconfig.lib.json" },
     // The migration lint script imports the linter (@drizzle-migration-linter).
     { "path": "../tools/drizzle-migration-linter/tsconfig.lib.json" },
-    { "path": "./tsconfig.schema.json" }
+    { "path": "./tsconfig.schema.json" },
+    { "path": "./tsconfig.core.json" }
   ]
 }

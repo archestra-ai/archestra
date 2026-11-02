@@ -7,11 +7,6 @@ import {
 import { getTableName, sql } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
 import db, { initializeDatabase, schema } from "@/database";
-import {
-  seedArchestraCatalogAndTools,
-  seedDefaultUserAndOrg,
-  syncBuiltInAgents,
-} from "@/database/seed";
 import logger from "@/logging";
 import {
   AgentLabelModel,
@@ -21,6 +16,11 @@ import {
   TeamModel,
 } from "@/models";
 import AgentUsageModel from "@/models/agent-usage";
+import {
+  seedArchestraCatalogAndTools,
+  seedDefaultUserAndOrg,
+  syncBuiltInAgents,
+} from "@/services/seed";
 import type { TeamMemberRole } from "@/types/team-role";
 import { isUniqueConstraintError } from "@/utils/db";
 import {

@@ -5,7 +5,9 @@
 // be in the project its layer names (layers.mjs), every project must include
 // the ambient declarations, which no project emits, and every project must
 // declare its peak (TYPE_CHECK_PROJECT_PEAK_BYTES), which the heavy-command
-// lane reads to decide whether the dev stack's servers make room for it.
+// lane reads to decide whether the dev stack's servers make room for it. A
+// test project must reference every source project: the compiler would check
+// an unreferenced project's files from source inside it, without an error.
 //
 // Usage: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-projects.mjs
 // (the projects are the ones `pnpm type-check` builds, read by its own code;
@@ -17,7 +19,7 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { solutionBuildOrder } from "../../scripts/type-check-solution.ts";
 import { TYPE_CHECK_PROJECT_PEAK_BYTES } from "../../vitest.resources.ts";
-import { layers, TESTS } from "../layers.mjs";
+import { layerOf } from "../layers.mjs";
 
 const backendDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -46,6 +48,21 @@ function checkProjects(root) {
       (name) =>
         `${name} declares no peak: add its measured peak to TYPE_CHECK_PROJECT_PEAK_BYTES (vitest.resources.ts)`,
     );
+  const sourceProjects = solution
+    .map((project) => project.config)
+    .filter((config) => parseProject(config).options.composite);
+  const relative = (config) =>
+    path.relative(root, config).split(path.sep).join("/");
+  for (const project of solution) {
+    if (sourceProjects.includes(project.config)) continue;
+    for (const source of sourceProjects) {
+      if (!project.references.includes(source)) {
+        problems.push(
+          `${relative(project.config)} does not reference ${relative(source)}`,
+        );
+      }
+    }
+  }
   const projects = solution
     .map((project) => project.config)
     // Other packages' projects check their own files.
@@ -84,9 +101,7 @@ function checkProjects(root) {
       problems.push(`${file} is in ${owner.length} projects: ${owner.join(", ")}`);
       continue;
     }
-    const layer = new RegExp(TESTS).test(file)
-      ? undefined
-      : layers.find((candidate) => new RegExp(candidate.path).test(file));
+    const layer = layerOf(file);
     if (layer && owner[0] !== layer.project) {
       problems.push(
         `${file} is in ${owner[0]}, but its layer ${layer.name} is checked by ${layer.project} (layers.mjs)`,
@@ -98,6 +113,14 @@ function checkProjects(root) {
 
 /** A project's input files that are inside the backend, relative to it. */
 function projectFiles(config, root) {
+  return parseProject(config)
+    .fileNames
+    .map((file) => path.relative(root, file).split(path.sep).join("/"))
+    .filter((file) => !file.startsWith("../") && file.endsWith(".ts"));
+}
+
+/** A tsconfig as the compiler reads it: options, extends and file lists resolved. */
+function parseProject(config) {
   const parsed = ts.getParsedCommandLineOfConfigFile(config, undefined, {
     ...ts.sys,
     onUnRecoverableConfigFileDiagnostic: (diagnostic) => {
@@ -107,9 +130,7 @@ function projectFiles(config, root) {
     },
   });
   if (!parsed) throw new Error(`Cannot read ${config}`);
-  return parsed.fileNames
-    .map((file) => path.relative(root, file).split(path.sep).join("/"))
-    .filter((file) => !file.startsWith("../") && file.endsWith(".ts"));
+  return parsed;
 }
 
 /** Every file under a backend directory, relative to the backend, sorted. */

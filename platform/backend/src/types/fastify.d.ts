@@ -1,5 +1,5 @@
 import type { User } from "./user";
-import type { AuditableRouteConfig } from "../middleware/audit-log-registry";
+import type { AuditableRouteConfig } from "./audit-route-config";
 import type { AuditEventName } from "./audit-log";
 import type {
   SelectServiceAccount,

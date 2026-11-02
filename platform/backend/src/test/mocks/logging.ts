@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import type { MockFunction } from "./mock-function";
 
 /**
  * Canonical module mock for `@/logging`, for tests that ASSERT on logger
@@ -23,15 +24,15 @@ import { vi } from "vitest";
  */
 export function loggingModuleMock() {
   const logger = {
-    fatal: vi.fn(),
-    error: vi.fn(),
-    warn: vi.fn(),
-    info: vi.fn(),
-    debug: vi.fn(),
-    trace: vi.fn(),
-    silent: vi.fn(),
+    fatal: vi.fn<MockFunction>(),
+    error: vi.fn<MockFunction>(),
+    warn: vi.fn<MockFunction>(),
+    info: vi.fn<MockFunction>(),
+    debug: vi.fn<MockFunction>(),
+    trace: vi.fn<MockFunction>(),
+    silent: vi.fn<MockFunction>(),
     level: "silent",
-    child: vi.fn(),
+    child: vi.fn<MockFunction>(),
   };
   logger.child.mockReturnValue(logger);
   return { default: logger };

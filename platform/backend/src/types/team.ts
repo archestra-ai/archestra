@@ -4,7 +4,7 @@ import {
   createUpdateSchema,
 } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { LabelWithDetailsSchema } from "./label";
 import { TeamMemberRoleSchema } from "./team-role";
 

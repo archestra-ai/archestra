@@ -334,7 +334,8 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
     createInsertSchema,
     createUpdateSchema,
   } from "drizzle-zod";
-  import { schema } from "@/database";
+  // The table definitions only: "@/database" also opens the connection.
+  import { schema } from "@/database/schema";
 
   export const SelectEntitySchema = createSelectSchema(schema.entityTable);
   export const InsertEntitySchema = createInsertSchema(schema.entityTable).omit(

@@ -616,7 +616,7 @@ frontend_prebuilt() {
 # The frontend's production build, with the static assets and public files
 # next to the standalone server, as the platform image lays them out. A clean
 # checkout of a main commit installs the build CI published for it (about
-# 50 MB, seconds) instead: a cold build takes minutes and about 3.5 GiB.
+# 40 MB, seconds) instead: a cold build takes minutes and about 3.5 GiB.
 # Otherwise the build starts from CI's build cache of a commit with the same
 # configuration, when this checkout has none: about 1 to 1.5 GiB after small
 # changes. ARCHESTRA_DEV_FRONTEND_PREBUILT=false builds without either.

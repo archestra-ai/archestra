@@ -5,7 +5,7 @@
 // 4 GiB Agent Runtime. CI builds the frontend the way `scripts/dev-lite.sh`
 // builds it in an Agent Runtime, for every main commit that changes its
 // inputs, and publishes two OCI artifacts in the public registry: the
-// standalone server (`<key>`, about 50 MB) and the build's Turbopack cache
+// standalone server (`<key>`, about 40 MB) and the build's Turbopack cache
 // (`cache-<key>`, about 420 MB). A dev stack on a clean checkout whose key is
 // published installs the server instead of building it. Before a build (an
 // edited frontend, or a commit CI has not published yet) it seeds an empty
@@ -68,11 +68,18 @@ const RECIPE_PATHS = [
   ".github/workflows/frontend-dev-cache.yml",
 ];
 // The dev-lite.sh functions that run the build, read at each commit.
-const RECIPE_FUNCTIONS = ["frontend_build_env", "frontend_build_node", "build_frontend"];
+const RECIPE_FUNCTIONS = [
+  "frontend_build_env",
+  "frontend_build_node",
+  "build_frontend",
+];
 // Where the build environment reaches the output: Next inlines every
 // NEXT_PUBLIC_ variable, and next.config.ts and the shared modules it loads
 // read these. CI only quiets a plugin's build log.
-const CONFIG_ENV_SOURCES = ["platform/frontend/next.config.ts", "platform/shared"];
+const CONFIG_ENV_SOURCES = [
+  "platform/frontend/next.config.ts",
+  "platform/shared",
+];
 const IGNORED_ENV = new Set(["CI"]);
 // How far back install-cache looks for a commit with the same configuration.
 const CACHE_SEARCH_DEPTH = 30;
@@ -84,7 +91,8 @@ const nextDir = path.join(repoDir, "platform", "frontend", ".next");
 try {
   const [command, ...rest] = process.argv.slice(2);
   if (command === "--key") {
-    if (rest.includes("--explain")) console.error(environmentLines().join("\n"));
+    if (rest.includes("--explain"))
+      console.error(environmentLines().join("\n"));
     console.log(cacheKey("HEAD"));
   } else if (command === "--pack") {
     pack(rest[0]);
@@ -93,7 +101,9 @@ try {
   } else if (command === "install-cache") {
     process.exitCode = (await installCache()) ? 0 : 1;
   } else {
-    throw new Error("usage: --key [--explain] | --pack <dir> | install | install-cache");
+    throw new Error(
+      "usage: --key [--explain] | --pack <dir> | install | install-cache",
+    );
   }
 } catch (error) {
   console.error(`frontend-prebuilt: ${error.message}`);
@@ -118,16 +128,22 @@ function cacheKey(ref) {
 
 /** The configuration part of a key: a build cache is reused only between equal ones. */
 function configId(ref) {
-  return objectIds(CONFIG_PATHS.map((relative) => `${ref}:${relative}`)).join(",");
+  return objectIds(CONFIG_PATHS.map((relative) => `${ref}:${relative}`)).join(
+    ",",
+  );
 }
 
 /** Object IDs of `rev:path` names, in one git call; `missing` for an absent path. */
 function objectIds(names) {
-  return execFileSync("git", ["-C", repoDir, "cat-file", "--batch-check=%(objectname)"], {
-    input: `${names.join("\n")}\n`,
-    encoding: "utf8",
-    stdio: ["pipe", "pipe", "ignore"],
-  })
+  return execFileSync(
+    "git",
+    ["-C", repoDir, "cat-file", "--batch-check=%(objectname)"],
+    {
+      input: `${names.join("\n")}\n`,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "ignore"],
+    },
+  )
     .trim()
     .split("\n")
     .map((line) => (line.endsWith(" missing") ? "missing" : line));
@@ -137,10 +153,15 @@ function objectIds(names) {
 function recipeText(ref) {
   const script =
     ref === null
-      ? readFileSync(path.join(repoDir, "platform", "scripts", "dev-lite.sh"), "utf8")
+      ? readFileSync(
+          path.join(repoDir, "platform", "scripts", "dev-lite.sh"),
+          "utf8",
+        )
       : git("show", `${ref}:platform/scripts/dev-lite.sh`);
   return RECIPE_FUNCTIONS.map((name) => {
-    const match = new RegExp(`^${name}\\(\\) \\{\\n[\\s\\S]*?^\\}$`, "m").exec(script);
+    const match = new RegExp(`^${name}\\(\\) \\{\\n[\\s\\S]*?^\\}$`, "m").exec(
+      script,
+    );
     if (!match) throw new Error(`dev-lite.sh at ${ref} has no ${name}()`);
     return match[0];
   }).join("\n");
@@ -148,9 +169,13 @@ function recipeText(ref) {
 
 /** The variables of this process that can change the build's output. */
 function environmentLines() {
-  const names = new Set(Object.keys(process.env).filter((name) => name.startsWith("NEXT_PUBLIC_")));
+  const names = new Set(
+    Object.keys(process.env).filter((name) => name.startsWith("NEXT_PUBLIC_")),
+  );
   for (const file of typeScriptFiles(CONFIG_ENV_SOURCES)) {
-    for (const match of readFileSync(file, "utf8").matchAll(/process\.env\??\.([A-Z][A-Z0-9_]*)/g)) {
+    for (const match of readFileSync(file, "utf8").matchAll(
+      /process\.env\??\.([A-Z][A-Z0-9_]*)/g,
+    )) {
       names.add(match[1]);
     }
   }
@@ -169,7 +194,8 @@ function typeScriptFiles(relatives) {
   const visit = (file, isDirectory) => {
     if (isDirectory) {
       for (const entry of readdirSync(file, { withFileTypes: true })) {
-        if (entry.name !== "node_modules") visit(path.join(file, entry.name), entry.isDirectory());
+        if (entry.name !== "node_modules")
+          visit(path.join(file, entry.name), entry.isDirectory());
       }
     } else if (/\.tsx?$/.test(file) && !/\.test\.tsx?$/.test(file)) {
       files.push(file);
@@ -184,12 +210,12 @@ function typeScriptFiles(relatives) {
 
 /** Whether the working tree builds what the key of HEAD names. */
 function treeIsClean() {
-  const paths = [...SOURCE_PATHS, ...CONFIG_PATHS, ...RECIPE_PATHS].filter((relative) =>
-    existsSync(path.join(repoDir, relative)),
+  const paths = [...SOURCE_PATHS, ...CONFIG_PATHS, ...RECIPE_PATHS].filter(
+    (relative) => existsSync(path.join(repoDir, relative)),
   );
   return (
-    git("status", "--porcelain", "--untracked-files=all", "--", ...paths) === "" &&
-    recipeText(null) === recipeText("HEAD")
+    git("status", "--porcelain", "--untracked-files=all", "--", ...paths) ===
+      "" && recipeText(null) === recipeText("HEAD")
   );
 }
 
@@ -208,7 +234,8 @@ function sha256(text) {
 /** CI: `<dir>/build` and `<dir>/cache`, each published as one artifact. */
 function pack(outDir) {
   if (!outDir) throw new Error("usage: --pack <dir>");
-  if (!treeIsClean()) throw new Error("the frontend's inputs have local changes");
+  if (!treeIsClean())
+    throw new Error("the frontend's inputs have local changes");
   const key = cacheKey("HEAD");
   const commit = git("rev-parse", "HEAD");
   for (const [kind, source] of [
@@ -223,9 +250,15 @@ function pack(outDir) {
     mkdirSync(dir, { recursive: true });
     execFileSync("cp", ["-a", path.join(nextDir, source), dir]);
     // The public files (about 80 MB of images) are in every checkout.
-    rmSync(path.join(dir, "standalone", "frontend", "public"), { recursive: true, force: true });
+    rmSync(path.join(dir, "standalone", "frontend", "public"), {
+      recursive: true,
+      force: true,
+    });
     const manifest = { key, kind, commit, config: configId("HEAD") };
-    writeFileSync(path.join(dir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+    writeFileSync(
+      path.join(dir, "manifest.json"),
+      `${JSON.stringify(manifest, null, 2)}\n`,
+    );
   }
   console.log(key);
 }
@@ -239,11 +272,16 @@ async function install() {
   rmSync(stamp, { force: true });
   if (!usable()) return false;
   if (!treeIsClean()) {
-    console.error("frontend-prebuilt: the frontend's inputs have local changes; building");
+    console.error(
+      "frontend-prebuilt: the frontend's inputs have local changes; building",
+    );
     return false;
   }
   const key = cacheKey("HEAD");
-  if (installed === key && existsSync(path.join(nextDir, "standalone", "frontend", "server.js"))) {
+  if (
+    installed === key &&
+    existsSync(path.join(nextDir, "standalone", "frontend", "server.js"))
+  ) {
     writeFileSync(stamp, `${key}\n`);
     return true;
   }
@@ -251,14 +289,19 @@ async function install() {
   if (!artifact) return false;
   try {
     rmSync(path.join(nextDir, "standalone"), { recursive: true, force: true });
-    renameSync(path.join(artifact.dir, "standalone"), path.join(nextDir, "standalone"));
+    renameSync(
+      path.join(artifact.dir, "standalone"),
+      path.join(nextDir, "standalone"),
+    );
     execFileSync("cp", [
       "-R",
       path.join(repoDir, "platform", "frontend", "public"),
       path.join(nextDir, "standalone", "frontend", "public"),
     ]);
     writeFileSync(stamp, `${key}\n`);
-    console.error(`frontend-prebuilt: installed the frontend CI built at ${artifact.manifest.commit}`);
+    console.error(
+      `frontend-prebuilt: installed the frontend CI built at ${artifact.manifest.commit}`,
+    );
     return true;
   } finally {
     rmSync(artifact.dir, { recursive: true, force: true });
@@ -272,7 +315,11 @@ async function install() {
 async function installCache() {
   if (!usable() || existsSync(path.join(nextDir, "cache"))) return false;
   const config = configId("HEAD");
-  const commits = git("rev-list", `--max-count=${CACHE_SEARCH_DEPTH}`, "HEAD").split("\n");
+  const commits = git(
+    "rev-list",
+    `--max-count=${CACHE_SEARCH_DEPTH}`,
+    "HEAD",
+  ).split("\n");
   for (const commit of commits.filter((c) => c && configId(c) === config)) {
     let key;
     try {
@@ -284,13 +331,17 @@ async function installCache() {
     if (!artifact) continue;
     try {
       renameSync(path.join(artifact.dir, "cache"), path.join(nextDir, "cache"));
-      console.error(`frontend-prebuilt: seeded the build cache from ${commit.slice(0, 10)}`);
+      console.error(
+        `frontend-prebuilt: seeded the build cache from ${commit.slice(0, 10)}`,
+      );
       return true;
     } finally {
       rmSync(artifact.dir, { recursive: true, force: true });
     }
   }
-  console.error("frontend-prebuilt: no build cache published for this configuration");
+  console.error(
+    "frontend-prebuilt: no build cache published for this configuration",
+  );
   return false;
 }
 
@@ -304,7 +355,9 @@ function usable() {
  * may be memory). Null when it is not published or does not check out.
  */
 async function fetchArtifact(key, kind, { quiet = false } = {}) {
-  const repository = process.env.ARCHESTRA_DEV_FRONTEND_PREBUILT_REPOSITORY || DEFAULT_REPOSITORY;
+  const repository =
+    process.env.ARCHESTRA_DEV_FRONTEND_PREBUILT_REPOSITORY ||
+    DEFAULT_REPOSITORY;
   const tag = kind === "cache" ? `cache-${key}` : key;
   const dir = path.join(nextDir, `.frontend-prebuilt-${kind}`);
   rmSync(dir, { recursive: true, force: true });
@@ -312,13 +365,18 @@ async function fetchArtifact(key, kind, { quiet = false } = {}) {
     mkdirSync(dir, { recursive: true });
     const layer = path.join(dir, "layer.tar.gz");
     if (!(await downloadLayer(repository, tag, layer))) {
-      if (!quiet) console.error(`frontend-prebuilt: nothing published for ${tag}; building`);
+      if (!quiet)
+        console.error(
+          `frontend-prebuilt: nothing published for ${tag}; building`,
+        );
       rmSync(dir, { recursive: true, force: true });
       return null;
     }
     execFileSync("tar", ["-xzf", layer, "-C", dir], { stdio: "ignore" });
     rmSync(layer);
-    const manifest = JSON.parse(readFileSync(path.join(dir, "manifest.json"), "utf8"));
+    const manifest = JSON.parse(
+      readFileSync(path.join(dir, "manifest.json"), "utf8"),
+    );
     if (manifest.key !== key || manifest.kind !== kind) {
       throw new Error(`${tag} holds another artifact`);
     }
@@ -333,18 +391,29 @@ async function fetchArtifact(key, kind, { quiet = false } = {}) {
 /** Stream the artifact's single layer to `file`; false when the tag does not exist. */
 async function downloadLayer(repository, tag, file) {
   // `host/name`, or a URL with a scheme for a local test registry.
-  const url = new URL(/^https?:\/\//.test(repository) ? repository : `https://${repository}`);
+  const url = new URL(
+    /^https?:\/\//.test(repository) ? repository : `https://${repository}`,
+  );
   const name = url.pathname.replace(/^\/+|\/+$/g, "");
   const base = `${url.origin}/v2/${name}`;
   let token;
   const get = async (target, accept, timeout = 30_000) => {
     const headers = { accept };
     if (token) headers.authorization = `Bearer ${token}`;
-    let response = await fetch(target, { headers, signal: AbortSignal.timeout(timeout) });
+    let response = await fetch(target, {
+      headers,
+      signal: AbortSignal.timeout(timeout),
+    });
     if (response.status === 401 && !token) {
-      token = await anonymousToken(response.headers.get("www-authenticate"), name);
+      token = await anonymousToken(
+        response.headers.get("www-authenticate"),
+        name,
+      );
       headers.authorization = `Bearer ${token}`;
-      response = await fetch(target, { headers, signal: AbortSignal.timeout(timeout) });
+      response = await fetch(target, {
+        headers,
+        signal: AbortSignal.timeout(timeout),
+      });
     }
     return response;
   };
@@ -361,11 +430,13 @@ async function downloadLayer(repository, tag, file) {
     if (!response.ok) throw new Error(`registry answered ${response.status}`);
     manifest = await response.json();
   }
-  if (manifest.layers?.length !== 1) throw new Error(`${tag} has an unexpected layout`);
+  if (manifest.layers?.length !== 1)
+    throw new Error(`${tag} has an unexpected layout`);
   const layer = manifest.layers[0];
   // The cache layer is about 420 MB: stream it to disk, never hold it.
   response = await get(`${base}/blobs/${layer.digest}`, "*/*", 900_000);
-  if (!response.ok || !response.body) throw new Error(`registry answered ${response.status}`);
+  if (!response.ok || !response.body)
+    throw new Error(`registry answered ${response.status}`);
   const hash = createHash("sha256");
   await pipeline(
     Readable.fromWeb(response.body),
@@ -391,7 +462,8 @@ async function anonymousToken(challenge, name) {
   if (service) url.searchParams.set("service", service);
   url.searchParams.set("scope", `repository:${name}:pull`);
   const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
-  if (!response.ok) throw new Error(`token endpoint answered ${response.status}`);
+  if (!response.ok)
+    throw new Error(`token endpoint answered ${response.status}`);
   const body = await response.json();
   return body.token ?? body.access_token;
 }

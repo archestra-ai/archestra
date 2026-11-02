@@ -22,7 +22,6 @@ import {
 } from "@archestra/shared";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { verifyJwksSigningKey } from "@/auth/jwks-signing-key-guard";
 import config, {
   getProviderConfiguredBaseUrl,
   getProviderEnvApiKey,
@@ -48,6 +47,7 @@ import {
   UserModel,
 } from "@/models";
 import AgentSuggestedPromptModel from "@/models/agent-suggested-prompt";
+import { port } from "@/models/ports";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import playwrightMcpImage from "@/playwright-mcp-image.json";
 import { secretManager } from "@/secrets-manager";
@@ -1179,7 +1179,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   // Replace a JWKS signing key the current auth secret can no longer decrypt,
   // which otherwise breaks every `openid`-scoped OAuth login with an opaque
   // 500 until someone clears the table by hand.
-  await verifyJwksSigningKey();
+  await (await port("jwksSigningKey")).verifyJwksSigningKey();
   await migrateSecretsToEncrypted();
   await seedDefaultUserAndOrg();
   // Every organization gets its LLM Proxy row before internal agents seed

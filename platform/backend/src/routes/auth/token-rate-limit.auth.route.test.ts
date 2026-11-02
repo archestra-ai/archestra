@@ -1,6 +1,6 @@
 import formbody from "@fastify/formbody";
 import { afterEach, beforeEach, describe, expect, vi } from "vitest";
-import { betterAuth } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import { cacheManager } from "@/cache-manager";
 import config from "@/config";
 import {

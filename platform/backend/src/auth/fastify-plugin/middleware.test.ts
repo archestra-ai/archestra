@@ -507,7 +507,7 @@ describe("Authnz", () => {
     });
 
     test("sets authMethod=session when session auth succeeds", async () => {
-      const { betterAuth } = await import("@/auth");
+      const { auth: betterAuth } = await import("@/auth/better-auth");
       const { UserModel } = await import("@/models");
       const { requiredEndpointPermissionsMap } = await import(
         "@archestra/shared/access-control"
@@ -565,7 +565,7 @@ describe("Authnz", () => {
     });
 
     test("sets authMethod=api_key when API key auth succeeds", async () => {
-      const { betterAuth } = await import("@/auth");
+      const { auth: betterAuth } = await import("@/auth/better-auth");
       const { UserModel } = await import("@/models");
       const { requiredEndpointPermissionsMap } = await import(
         "@archestra/shared/access-control"

@@ -184,6 +184,7 @@ export const TYPE_CHECK_PROJECT_PEAK_BYTES: Readonly<
     "../shared/tsconfig.lib.json": 1.0 * 1024 ** 3,
     "../tools/drizzle-migration-linter/tsconfig.lib.json": 0.3 * 1024 ** 3,
     "tsconfig.schema.json": 1.5 * 1024 ** 3,
+    "tsconfig.core.json": 1.4 * 1024 ** 3,
     "tsconfig.app.json": 4.8 * 1024 ** 3,
     "tsconfig.test-support.json": 1.5 * 1024 ** 3,
     "tsconfig.tests-database.json": 1.1 * 1024 ** 3,

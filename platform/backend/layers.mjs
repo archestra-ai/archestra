@@ -1,4 +1,4 @@
-/** Every layer above schema, until the split carves them into projects. */
+/** Every layer above core, until the split carves them into projects. */
 const APP = "tsconfig.app.json";
 
 /**
@@ -10,17 +10,20 @@ const APP = "tsconfig.app.json";
  * imports that still break it; every slice of the split shrinks that baseline.
  * This module is also that check's dependency-cruiser configuration (below).
  *
- * Paths are dependency-cruiser regexes relative to `backend/`. A file belongs
- * to the first layer whose pattern matches it. Tests (`*.test.ts`) and the
- * test helpers are not in a layer: they may import anything.
+ * `path` is a dependency-cruiser regex relative to `backend/`. `files` pins
+ * files to a layer other than the one their path suggests: a small module that
+ * lower layers need, or a helper whose imports belong higher. A file belongs to
+ * the layer that pins it, else to the first layer whose `path` matches it
+ * (`layerOf`). Tests (`*.test.ts`) and the test helpers are not in a layer:
+ * they may import anything.
  *
  * `project` is the TypeScript project that checks the layer's files
  * (tsconfig.json lists them); scripts/check-projects.mjs holds the two
  * together. Layers share a project until a slice of the split carves theirs.
  *
- * @type {{ name: string; path: string; project: string }[]}
+ * @type {{ name: string; path: string; files?: string[]; project: string }[]}
  */
-export const layers = [
+const layerTable = [
   {
     // Drizzle tables and the types and zod schemas derived from them, and the
     // ambient declarations every TypeScript project includes.
@@ -31,18 +34,72 @@ export const layers = [
   {
     // Configuration, logging, the database client and the helpers below models.
     name: "core",
-    path: "^src/((config|app-version|cache-manager|in-memory-lru-cache|process-local-cache-registry|constants|templating|enterprise-tier)\\.ts$|utils/|logging/|database/|log-content/|content-encryption/|secrets-manager/|observability/|integrations/|tokenizers/|git-hosts/|app-templates/)",
+    path: "^src/((config|app-version|cache-manager|in-memory-lru-cache|process-local-cache-registry|constants|templating)\\.ts$|utils/|logging/|database/|log-content/|content-encryption/|secrets-manager/|observability/|integrations/|tokenizers/|git-hosts/)",
+    files: [
+      // The API route table config.ts and the request metrics read.
+      "src/routes/route-paths.ts",
+      // The app name, used in copy across every layer.
+      "src/archestra-mcp-server/branding.ts",
+      // The stores of the cache manager, content encryption and secrets.
+      "src/models/cache-entry.ts",
+      "src/models/content-encryption-state.ee.ts",
+      "src/models/encryption-key-canary.ts",
+      "src/models/secret.ts",
+      // A size-capped response reader the git host client uses.
+      "src/plugins/bounded-response.ts",
+      // The upload file name rules utils/upload-filename.ts applies.
+      "src/skills-sandbox/file-path.ts",
+      // Bedrock credentials, which the secrets manager resolves.
+      "src/clients/bedrock-client.ts",
+      "src/clients/bedrock-credentials.ts",
+      // The upstream fetch the LLM metrics wrap, and the Responses API usage
+      // reader they share with the proxy.
+      "src/clients/llm-upstream-dispatcher.ts",
+      "src/clients/llm-upstream-fetch.ts",
+      "src/routes/proxy/adapters/responses-usage.ts",
+    ],
+    project: "tsconfig.core.json",
+  },
+  {
+    name: "models",
+    path: "^src/(models|auth)/",
+    files: [
+      // Count users through the user model.
+      "src/enterprise-tier.ts",
+      // Observability setup and the metrics backed by models.
+      "src/observability/index.ts",
+      "src/observability/metrics/active-users.ts",
+      "src/observability/metrics/agent-runtime-health.ts",
+      // Provider key resolution reads keys through the models; the keyless
+      // provider credentials it falls back to come with it.
+      "src/utils/llm-api-key-resolution.ts",
+      "src/utils/provider-key-mappings.ts",
+      "src/utils/llm-resolution.ts",
+      "src/clients/anthropic-keyless-auth.ts",
+      "src/clients/anthropic-vertex.ts",
+      "src/clients/anthropic-vertex-request.ts",
+      "src/clients/anthropic-workload-identity.ts",
+      "src/clients/azure-url.ts",
+      "src/clients/azure-openai-credentials.ts",
+    ],
     project: APP,
   },
-  { name: "models", path: "^src/(models|auth)/", project: APP },
   { name: "runtime", path: "^src/(k8s|sandbox-runtime|skills-sandbox)/", project: APP },
   { name: "kb", path: "^src/knowledge-base/", project: APP },
   {
     name: "policy",
     path: "^src/(openappa|proxy|auto-routing|skills|task-queue|plugins|features|data-retention)/",
+    // Git access resolves runtime credentials for the skill and plugin imports.
+    files: ["src/git-hosts/git-access.ts"],
     project: APP,
   },
-  { name: "services", path: "^src/services/", project: APP },
+  {
+    name: "services",
+    path: "^src/(services|app-templates)/",
+    // Reads the error tracker's report of the previous container's exit.
+    files: ["src/observability/previous-termination-report.ts"],
+    project: APP,
+  },
   { name: "mcp", path: "^src/(archestra-mcp-server|agents|clients)/", project: APP },
   { name: "routes-proxy", path: "^src/routes/proxy/", project: APP },
   { name: "routes-chat", path: "^src/routes/(chat|mcp-gateway)/", project: APP },
@@ -55,8 +112,43 @@ export const layers = [
   },
 ];
 
+/** Every pinned file, as a regex alternative. */
+const PINNED = layerTable
+  .flatMap((layer) => layer.files ?? [])
+  .map(escapeRegex)
+  .join("|");
+
+/**
+ * The layers with the patterns dependency-cruiser and the checks match: a
+ * layer's pinned files, or its `path` for any file no layer pins.
+ *
+ * @type {{ name: string; path: string; project: string }[]}
+ */
+const layers = layerTable.map((layer) => ({
+  name: layer.name,
+  project: layer.project,
+  path: [
+    ...(layer.files?.length
+      ? [`^(?:${layer.files.map(escapeRegex).join("|")})$`]
+      : []),
+    `^(?!(?:${PINNED})$)(?:${layer.path})`,
+  ].join("|"),
+}));
+
+/** The layer of a source file, or undefined for tests and files in no layer. */
+export function layerOf(file) {
+  if (TEST_FILE.test(file)) return undefined;
+  return LAYER_MATCHERS.find(({ regex }) => regex.test(file))?.layer;
+}
+
 /** Tests and test helpers may import any layer. */
-export const TESTS = "(\\.test\\.ts$|\\.test-[a-z-]+\\.ts$|^src/test/|/__mocks__/)";
+const TESTS = "(\\.test\\.ts$|\\.test-[a-z-]+\\.ts$|^src/test/|/__mocks__/)";
+
+const TEST_FILE = new RegExp(TESTS);
+const LAYER_MATCHERS = layers.map((layer) => ({
+  layer,
+  regex: new RegExp(layer.path),
+}));
 
 /**
  * The dependency-cruiser configuration `pnpm check:layers` runs. It forbids
@@ -123,3 +215,7 @@ export default {
     skipAnalysisNotInRules: true,
   },
 };
+
+function escapeRegex(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}

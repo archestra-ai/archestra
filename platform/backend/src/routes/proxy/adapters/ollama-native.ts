@@ -21,6 +21,7 @@ import { get } from "lodash-es";
 import config from "@/config";
 import logger from "@/logging";
 import { metrics } from "@/observability";
+import { ollamaNativeUsageTokens } from "@/observability/metrics/llm-usage";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -63,26 +64,6 @@ const NDJSON_HEADERS: Record<string, string> = {
   "Cache-Control": "no-cache",
   Connection: "keep-alive",
 };
-
-/**
- * Token counts for fetch-based observability.
- *
- * Unlike every OpenAI-wire provider, Ollama's native `/api/chat` has no `usage`
- * object — the counts are top-level `prompt_eval_count` / `eval_count` fields,
- * and they are `omitempty` on the wire so they are absent (not zero) on
- * non-final chunks. Ollama reports no cache tokens at all.
- */
-export function getUsageTokens(response: {
-  prompt_eval_count?: number;
-  eval_count?: number;
-}) {
-  return {
-    input: response.prompt_eval_count ?? 0,
-    output: response.eval_count ?? 0,
-    cacheRead: 0,
-    cacheWrite: 0,
-  };
-}
 
 /**
  * The upstream base URL is the Ollama root; strip any `/v1` suffix.
@@ -362,12 +343,7 @@ class OllamaNativeResponseAdapter
   }
 
   getUsage(): UsageView {
-    return {
-      inputTokens: this.response.prompt_eval_count ?? 0,
-      outputTokens: this.response.eval_count ?? 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-    };
+    return usageView(ollamaNativeUsageTokens(this.response));
   }
 
   getOriginalResponse(): NativeResponse {
@@ -494,12 +470,7 @@ class OllamaNativeStreamAdapter
     // cost, surfacing later as unexplained free requests.
     if (chunk.done) {
       this.state.stopReason = chunk.done_reason ?? "stop";
-      this.state.usage = {
-        inputTokens: chunk.prompt_eval_count ?? 0,
-        outputTokens: chunk.eval_count ?? 0,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
-      };
+      this.state.usage = usageView(ollamaNativeUsageTokens(chunk));
       // The real final chunk is swallowed (formatEndSSE synthesizes its
       // replacement), so carry Ollama's own timings across or they never reach
       // the client. `ollama --verbose`, the n8n Ollama node and any tokens/sec
@@ -1017,4 +988,16 @@ function parseArgs(argumentsJson: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+/** The proxy's usage view of the token counts `ollamaNativeUsageTokens` reads. */
+function usageView(
+  tokens: ReturnType<typeof ollamaNativeUsageTokens>,
+): UsageView {
+  return {
+    inputTokens: tokens.input,
+    outputTokens: tokens.output,
+    cacheReadTokens: tokens.cacheRead,
+    cacheWriteTokens: tokens.cacheWrite,
+  };
 }

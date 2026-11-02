@@ -3,7 +3,7 @@
   // them one at a time (scripts/type-check.ts), and editors find a file's
   // project here. Source projects emit declarations into .tsbuild/, which the
   // projects above them read instead of their sources:
-  //   shared lib, migration linter lib -> schema -> app -> test-support
+  //   shared lib, migration linter lib -> schema -> core -> app -> test-support
   //   -> tests-*, tools
   // The options every project shares, and the `paths` alias the runtime tools
   // read through this file, are in tsconfig.base.json. pnpm check:projects
@@ -14,6 +14,7 @@
     { "path": "../shared/tsconfig.lib.json" },
     { "path": "../tools/drizzle-migration-linter/tsconfig.lib.json" },
     { "path": "./tsconfig.schema.json" },
+    { "path": "./tsconfig.core.json" },
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.test-support.json" },
     { "path": "./tsconfig.tests-database.json" },

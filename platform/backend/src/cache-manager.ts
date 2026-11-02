@@ -61,6 +61,8 @@ export const CacheKey = {
   ChatMcpElicitationPending: "chat-mcp-elicitation-pending",
   /** Native OpenAPPA questions issued by this proxy and not answered yet */
   OpenAppaNativeQuestion: "openappa-native-question",
+  /** Original choices behind an ordinary native question, retained for replay. */
+  NativeUserQuestion: "native-user-question",
   /** The proxy session behind a yell call it allowed, for the gateway that runs it (consume-once) */
   OpenAppaYellSession: "openappa-yell-session",
   OpenAppaYellResult: "openappa-yell-result",

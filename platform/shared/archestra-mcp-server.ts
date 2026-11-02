@@ -1236,6 +1236,7 @@ export function buildElicitationMandateInstruction(params?: {
   askUserToolName?: string;
   nativeQuestionToolName?: string;
   nativeQuestionMaxOptions?: number;
+  gatewayQuestionMaxOptions?: number;
   nativeQuestionSupportsMultiple?: boolean;
   gatewayQuestionUsesNativeForm?: boolean;
 }): string {
@@ -1264,7 +1265,13 @@ export function buildElicitationMandateInstruction(params?: {
     params?.askUserToolName &&
     params.nativeQuestionToolName &&
     params.nativeQuestionMaxOptions !== undefined
-      ? ` ${params.nativeQuestionToolName} accepts at most ${params.nativeQuestionMaxOptions} options.${nativeOnly ? " Do not discard choices to fit." : ` For more options, use ${params.askUserToolName} and keep all choices.`}`
+      ? ` ${params.nativeQuestionToolName} accepts at most ${params.nativeQuestionMaxOptions} options${params.gatewayQuestionMaxOptions !== undefined ? " per question" : ""}.${
+          nativeOnly && params.gatewayQuestionMaxOptions !== undefined
+            ? ` For more options (up to ${params.gatewayQuestionMaxOptions}), call ${params.askUserToolName} with every choice. The platform groups them into native questions; never put more than ${params.nativeQuestionMaxOptions} options in one native question.`
+            : nativeOnly
+              ? " Do not discard choices to fit."
+              : ` For more options, use ${params.askUserToolName} and keep all choices.`
+        }`
       : "";
   const singleSelection =
     nativeOnly && params?.nativeQuestionSupportsMultiple === false

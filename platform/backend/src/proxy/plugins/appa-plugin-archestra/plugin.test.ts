@@ -2234,7 +2234,7 @@ describe("asking through the client's own question tool", () => {
       adapter: new AppaClaudeDesktopAdapter(),
       count: 12,
     },
-  ])("preserves the requested gateway and all $count choices across $client retries", async ({
+  ])("preserves all $count choices on $client's supported transport across retries", async ({
     adapter,
     count,
   }) => {
@@ -2275,19 +2275,26 @@ describe("asking through the client's own question tool", () => {
           {
             role: "user",
             content:
-              "Use only archestra__ask_user to ask which choices I prefer.",
+              adapter.id === "claude-desktop"
+                ? "Native Claude questions are allowed. Keep every choice."
+                : "Use only archestra__ask_user to ask which choices I prefer.",
           },
         ],
       };
       await plugin.onBeforeModel({ ...context, request });
       const guidance = JSON.stringify(request);
       expect(guidance).toContain("AskUserQuestion accepts at most 4 options");
-      expect(guidance).toContain(
-        "For more options, use archestra__ask_user and keep all choices.",
-      );
-      expect(guidance).toContain(
-        "Honor the user's explicit choice of question tool.",
-      );
+      if (adapter.id === "claude-desktop") {
+        expect(guidance).toContain("For more options (up to 12)");
+        expect(guidance).toContain("never put more than 4 options");
+      } else {
+        expect(guidance).toContain(
+          "For more options, use archestra__ask_user and keep all choices.",
+        );
+        expect(guidance).toContain(
+          "Honor the user's explicit choice of question tool.",
+        );
+      }
       for (let attempt = 0; attempt < 2; attempt++) {
         const call = {
           id: `question-${attempt}`,
@@ -2303,9 +2310,61 @@ describe("asking through the client's own question tool", () => {
           outcome?.decision === "allow" ? outcome.toolCalls[0] : call;
         expect(released.id).toBe(`question-${attempt}`);
         const releasedArgs = JSON.parse(released.arguments as string);
-        expect(released.name).toBe("archestra__ask_user");
-        expect(releasedArgs).toMatchObject(args);
-        expect(releasedArgs.options).toHaveLength(count);
+        if (adapter.id === "claude-desktop") {
+          expect(released.name).toBe("AskUserQuestion");
+          expect(releasedArgs.questions.length).toBeLessThanOrEqual(4);
+          const groups = releasedArgs.questions as Array<{
+            question: string;
+            options: { label: string; description: string }[];
+          }>;
+          for (const group of groups)
+            expect(group.options.length).toBeLessThanOrEqual(4);
+          expect(
+            groups.flatMap((group) =>
+              group.options.filter((option) =>
+                options.some((original) => original.label === option.label),
+              ),
+            ),
+          ).toEqual(options);
+          if (count > 4) {
+            const answer = {
+              id: released.id,
+              name: released.name,
+              isError: false,
+              content: JSON.stringify({
+                answers: Object.fromEntries(
+                  groups.map((group, index) => [
+                    group.question,
+                    index === groups.length - 1
+                      ? `Choice ${count}`
+                      : group.options.at(-1)?.label,
+                  ]),
+                ),
+              }),
+            };
+            const processResults = vi
+              .spyOn(appaService, "processProxyResults")
+              .mockResolvedValue({ toolResultUpdates: {} });
+            try {
+              const result = await plugin.onToolResults({
+                ...context,
+                toolResults: [answer],
+              });
+              expect(
+                JSON.parse(result?.toolResultUpdates?.[answer.id] ?? "{}"),
+              ).toEqual({
+                action: "accept",
+                selected: [`Choice ${count}`],
+              });
+            } finally {
+              processResults.mockRestore();
+            }
+          }
+        } else {
+          expect(released.name).toBe("archestra__ask_user");
+          expect(releasedArgs).toMatchObject(args);
+          expect(releasedArgs.options).toHaveLength(count);
+        }
       }
     } finally {
       await plugin.onCleanup(context);

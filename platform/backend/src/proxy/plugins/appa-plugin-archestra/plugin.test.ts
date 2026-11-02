@@ -2268,6 +2268,7 @@ describe("asking through the client's own question tool", () => {
       options,
       allowMultiple: count === 12,
     };
+    const cachedQuestions = vi.spyOn(cacheManager, "set");
     try {
       await plugin.onSessionInit(context);
       const request = {
@@ -2287,6 +2288,10 @@ describe("asking through the client's own question tool", () => {
       if (adapter.id === "claude-desktop") {
         expect(guidance).toContain("For more options (up to 12)");
         expect(guidance).toContain("never put more than 4 options");
+        expect(guidance).toContain(
+          "Honor the user's explicit choice of question tool.",
+        );
+        expect(guidance).toContain("archestra_presentation");
       } else {
         expect(guidance).toContain(
           "For more options, use archestra__ask_user and keep all choices.",
@@ -2326,7 +2331,36 @@ describe("asking through the client's own question tool", () => {
               ),
             ),
           ).toEqual(options);
-          if (count > 4) {
+          {
+            if (count <= 4) {
+              const write = cachedQuestions.mock.calls.findLast(([key]) =>
+                key.startsWith(CacheKey.NativeUserQuestionPresentation),
+              );
+              if (!write)
+                throw new Error("expected single-card presentation data");
+              const legacyKey = write[0].replace(
+                CacheKey.NativeUserQuestionPresentation,
+                CacheKey.NativeUserQuestion,
+              ) as AllowedCacheKey;
+              // An older replica must forward the original native answer,
+              // rather than applying its grouped-only decoder to four choices.
+              expect(await cacheManager.get(legacyKey)).toBeUndefined();
+            }
+            // A request may resume on a replica that still has the previous
+            // cache format. Preserve its answer without inventing provenance.
+            const legacy = attempt === 1 && count > 4;
+            if (legacy) {
+              const write = cachedQuestions.mock.calls.findLast(([key]) =>
+                key.startsWith(CacheKey.NativeUserQuestion),
+              );
+              if (!write)
+                throw new Error("expected a cached ordinary question");
+              // The old question consumer can read new entries during rollout.
+              expect(
+                adapter.nativeQuestion.fromAskUser(write[1] as typeof args),
+              ).toEqual(releasedArgs);
+              await cacheManager.set(write[0], args);
+            }
             const answer = {
               id: released.id,
               name: released.name,
@@ -2355,6 +2389,15 @@ describe("asking through the client's own question tool", () => {
               ).toEqual({
                 action: "accept",
                 selected: [`Choice ${count}`],
+                ...(!legacy
+                  ? {
+                      archestra_presentation: {
+                        requested_tool: { name: "archestra__ask_user" },
+                        rendered_with: "AskUserQuestion",
+                        translation: "gateway_question_to_native_form",
+                      },
+                    }
+                  : {}),
               });
             } finally {
               processResults.mockRestore();
@@ -2367,6 +2410,7 @@ describe("asking through the client's own question tool", () => {
         }
       }
     } finally {
+      cachedQuestions.mockRestore();
       await plugin.onCleanup(context);
     }
   });

@@ -285,6 +285,17 @@ type NativeQuestionClaim = {
   digest?: string;
 };
 
+type OrdinaryQuestionSource = {
+  kind: "gateway" | "native";
+  name: string;
+  namespace?: string;
+};
+
+type StoredOrdinaryQuestion = AskUserArguments & {
+  /** Additive so older replicas can still decode the cached question. */
+  archestraQuestionSource?: OrdinaryQuestionSource;
+};
+
 type IssuedNativeQuestion = {
   askedQuestion?: string;
   id: string;
@@ -413,19 +424,20 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const ordinaryResultUpdates: Record<string, string> = Object.create(null);
     const ordinary = binding.adapter?.nativeQuestion?.ordinaryResultFromAskUser;
     if (ordinary) {
-      const questions = await cacheManager.getMany<AskUserArguments>(
+      const questions = await cacheManager.getMany<StoredOrdinaryQuestion>(
         toolResults
           .filter(
             (answer) =>
               releasesUserQuestion(binding, answer) &&
               nativeQuestionName(binding, answer.name),
           )
-          .map((answer) =>
-            ordinaryQuestionCacheKey({
-              session: binding.session,
-              id: answer.id,
-            }),
-          ),
+          .flatMap((answer) => {
+            const scope = { session: binding.session, id: answer.id };
+            return [
+              ordinaryQuestionPresentationCacheKey(scope),
+              ordinaryQuestionCacheKey(scope),
+            ];
+          }),
       );
       for (const answer of toolResults) {
         if (
@@ -433,15 +445,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           !nativeQuestionName(binding, answer.name)
         )
           continue;
-        const asked = questions.get(
-          ordinaryQuestionCacheKey({
-            session: binding.session,
-            id: answer.id,
-          }),
-        );
-        if (asked) {
+        const scope = { session: binding.session, id: answer.id };
+        const stored =
+          questions.get(ordinaryQuestionPresentationCacheKey(scope)) ??
+          questions.get(ordinaryQuestionCacheKey(scope));
+        if (stored) {
           const texts = outputTexts(answer.content);
-          ordinaryResultUpdates[answer.id] = ordinary(
+          const content = ordinary(
             {
               content:
                 texts.length > 0
@@ -449,7 +459,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
                   : JSON.stringify(answer.content ?? null),
               isError: answer.isError,
             },
-            asked,
+            stored,
+          );
+          ordinaryResultUpdates[answer.id] = ordinaryQuestionPresentation(
+            content,
+            stored.archestraQuestionSource,
+            binding.adapter?.nativeQuestion?.toolName,
           );
         }
       }
@@ -2275,15 +2290,24 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         description,
       })),
     };
-    if (
-      !review &&
-      native.ordinaryResultFromAskUser &&
-      native.maxOptions !== undefined &&
-      parsed.options.length > native.maxOptions
-    ) {
+    if (!review && native.ordinaryResultFromAskUser) {
+      // Keep the legacy grouped format readable across replicas. Older code
+      // must not see single-card entries: its decoder drops the fourth choice.
+      const key =
+        native.maxOptions !== undefined &&
+        parsed.options.length > native.maxOptions
+          ? ordinaryQuestionCacheKey
+          : ordinaryQuestionPresentationCacheKey;
       await cacheManager.set(
-        ordinaryQuestionCacheKey({ session: binding.session, id: call.id }),
-        ordinaryArgs,
+        key({ session: binding.session, id: call.id }),
+        {
+          ...ordinaryArgs,
+          archestraQuestionSource: {
+            kind: direct ? "native" : "gateway",
+            name: call.name,
+            ...(call.namespace ? { namespace: call.namespace } : {}),
+          },
+        } satisfies StoredOrdinaryQuestion,
         TimeInMs.Day,
       );
     }
@@ -6370,6 +6394,43 @@ function ordinaryQuestionCacheKey(
   params: Parameters<typeof nativeQuestionCacheKey>[0],
 ): AllowedCacheKey {
   return nativeQuestionCacheKey(params, CacheKey.NativeUserQuestion);
+}
+
+function ordinaryQuestionPresentationCacheKey(
+  params: Parameters<typeof nativeQuestionCacheKey>[0],
+): AllowedCacheKey {
+  return nativeQuestionCacheKey(
+    params,
+    CacheKey.NativeUserQuestionPresentation,
+  );
+}
+
+function ordinaryQuestionPresentation(
+  content: string,
+  source: OrdinaryQuestionSource | undefined,
+  renderer: string | undefined,
+): string {
+  if (!source || !renderer) return content;
+  try {
+    const result: unknown = JSON.parse(content);
+    if (!isRecord(result)) return content;
+    return JSON.stringify({
+      ...result,
+      archestra_presentation: {
+        requested_tool: {
+          name: source.name,
+          ...(source.namespace ? { namespace: source.namespace } : {}),
+        },
+        rendered_with: renderer,
+        translation:
+          source.kind === "gateway"
+            ? "gateway_question_to_native_form"
+            : "native_question_grouping",
+      },
+    });
+  } catch {
+    return content;
+  }
 }
 
 /**

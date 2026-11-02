@@ -3987,17 +3987,21 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   });
 
   test.each([
-    { count: 5, multiple: false, stream: false, direct: false },
-    { count: 5, multiple: false, stream: true, direct: false },
-    { count: 12, multiple: false, stream: false, direct: false },
-    { count: 12, multiple: true, stream: false, direct: false },
-    { count: 5, multiple: false, stream: false, direct: true },
-    { count: 5, multiple: false, stream: true, direct: true },
-  ])("Claude Desktop returns all-choice native answers to the provider (choices=$count, multiple=$multiple, stream=$stream, direct=$direct)", async ({
+    { count: 2, multiple: false, stream: false, direct: false, skip: false },
+    { count: 4, multiple: false, stream: false, direct: false, skip: false },
+    { count: 5, multiple: false, stream: false, direct: false, skip: false },
+    { count: 5, multiple: false, stream: true, direct: false, skip: false },
+    { count: 12, multiple: false, stream: false, direct: false, skip: false },
+    { count: 12, multiple: true, stream: false, direct: false, skip: false },
+    { count: 5, multiple: false, stream: false, direct: true, skip: false },
+    { count: 5, multiple: false, stream: true, direct: true, skip: false },
+    { count: 5, multiple: false, stream: false, direct: false, skip: true },
+  ])("Claude Desktop returns all-choice native answers to the provider (choices=$count, multiple=$multiple, stream=$stream, direct=$direct, skip=$skip)", async ({
     count,
     multiple,
     stream,
     direct,
+    skip,
   }) => {
     block = false;
     const name = "mcp__archestra__archestra__ask_user";
@@ -4072,7 +4076,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const messages = [
       {
         role: "user",
-        content: "Native questions are allowed. Keep every color.",
+        content: "Use only Archestra's ask_user tool. Keep every color.",
       },
     ];
     const asked = await app.inject({
@@ -4084,6 +4088,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     });
     expect(asked.statusCode, asked.body).toBe(200);
     const released = noticeFrom(asked.body, stream);
+    const initialGuidance = JSON.stringify(providerRequests.at(-1));
     expect(released.name).toBe("AskUserQuestion");
     const groups = released.input.questions as Array<{
       question: string;
@@ -4099,7 +4104,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           .filter((label) => labels.includes(label)),
       ),
     ).toEqual(labels);
-    const selected = multiple ? [labels[0], labels.at(-1)] : [labels.at(-1)];
+    const selected = skip
+      ? []
+      : multiple
+        ? [labels[0], labels.at(-1)]
+        : [labels.at(-1)];
     const answers = Object.fromEntries(
       groups.map((group) => {
         const picked = group.options
@@ -4151,11 +4160,23 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           (part) =>
             part.type === "tool_result" && part.tool_use_id === released.id,
         );
-      expect(JSON.parse(forwarded.content)).toEqual({
-        action: "accept",
+      const result = JSON.parse(forwarded.content);
+      expect(result).toMatchObject({
+        ...(skip ? { error: "unconfirmed_answer" } : { action: "accept" }),
         selected,
+        archestra_presentation: {
+          requested_tool: { name: direct ? "AskUserQuestion" : name },
+          rendered_with: "AskUserQuestion",
+          translation: direct
+            ? "native_question_grouping"
+            : "gateway_question_to_native_form",
+        },
       });
+      if (skip) expect(result).not.toHaveProperty("action", "accept");
     }
+    expect(initialGuidance).toContain(
+      "Honor the user's explicit choice of question tool.",
+    );
   });
 
   test("block mode governs Claude Desktop sessions, isolates headerless Chat conversations, and rejects headerless requests without a conversation identity", async () => {

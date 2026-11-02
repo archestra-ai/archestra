@@ -63,6 +63,8 @@ export const CacheKey = {
   OpenAppaNativeQuestion: "openappa-native-question",
   /** Original choices behind an ordinary native question, retained for replay. */
   NativeUserQuestion: "native-user-question",
+  /** Single-card choices and provenance, isolated from older grouped-only decoders. */
+  NativeUserQuestionPresentation: "native-question-presentation",
   /** The proxy session behind a yell call it allowed, for the gateway that runs it (consume-once) */
   OpenAppaYellSession: "openappa-yell-session",
   OpenAppaYellResult: "openappa-yell-result",

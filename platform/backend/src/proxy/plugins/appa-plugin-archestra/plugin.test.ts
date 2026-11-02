@@ -2141,6 +2141,105 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
+  test.each([
+    { client: "Claude Code", adapter: new AppaClaudeCodeAdapter(), count: 4 },
+    { client: "Claude Code", adapter: new AppaClaudeCodeAdapter(), count: 5 },
+    { client: "Claude Code", adapter: new AppaClaudeCodeAdapter(), count: 12 },
+    {
+      client: "Claude Desktop",
+      adapter: new AppaClaudeDesktopAdapter(),
+      count: 4,
+    },
+    {
+      client: "Claude Desktop",
+      adapter: new AppaClaudeDesktopAdapter(),
+      count: 5,
+    },
+    {
+      client: "Claude Desktop",
+      adapter: new AppaClaudeDesktopAdapter(),
+      count: 12,
+    },
+  ])("preserves all $count choices across $client question retries", async ({
+    adapter,
+    count,
+  }) => {
+    const plugin = new AppaPluginArchestra([adapter]);
+    const context = requestContext({
+      sessionId: `question-options-${adapter.id}-${count}`,
+    });
+    context.headers = { "user-agent": `${adapter.id}/1` };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request = {
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(["archestra__ask_user"]),
+        namespaces: new Map(),
+      },
+      session: {},
+      customTools: new Set(),
+      declaredTools: [{ name: "AskUserQuestion" }],
+    };
+    const options = Array.from({ length: count }, (_, index) => ({
+      label: `Choice ${index + 1}`,
+      description: `Description ${index + 1}`,
+    }));
+    const args = {
+      question: "Which choices do you prefer?",
+      header: "Preference",
+      options,
+      allowMultiple: count === 12,
+    };
+    try {
+      await plugin.onSessionInit(context);
+      const request = { messages: [{ role: "user", content: "Ask me." }] };
+      await plugin.onBeforeModel({ ...context, request });
+      const guidance = JSON.stringify(request);
+      expect(guidance).toContain("AskUserQuestion accepts at most 4 options");
+      expect(guidance).toContain(
+        "For more options, use archestra__ask_user and keep all choices.",
+      );
+      expect(guidance).toContain(
+        "Honor the user's explicit choice of question tool.",
+      );
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const call = {
+          id: `question-${attempt}`,
+          name: "archestra__ask_user",
+          arguments: JSON.stringify(args),
+        };
+        const outcome = await plugin.onPrepareToolCalls({
+          ...context,
+          toolCalls: [call],
+        });
+        expect(outcome?.decision).not.toBe("refuse");
+        const released =
+          outcome?.decision === "allow" ? outcome.toolCalls[0] : call;
+        expect(released.id).toBe(`question-${attempt}`);
+        const releasedArgs = JSON.parse(released.arguments as string);
+        if (count <= 4) {
+          expect(released.name).toBe("AskUserQuestion");
+          expect(releasedArgs.questions[0]).toEqual({
+            question: args.question,
+            header: args.header,
+            options,
+            multiSelect: args.allowMultiple,
+          });
+        } else {
+          expect(released.name).toBe("archestra__ask_user");
+          expect(releasedArgs).toMatchObject(args);
+          expect(releasedArgs.options).toHaveLength(count);
+        }
+      }
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
   test("keeps ask_user on the gateway when the native tool is not declared", async () => {
     const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
     const context = requestContext({

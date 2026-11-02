@@ -887,6 +887,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           guidance: buildElicitationMandateInstruction({
             askUserToolName: askUserTool,
             nativeQuestionToolName: nativeQuestion,
+            nativeQuestionMaxOptions:
+              binding.adapter?.nativeQuestion?.maxOptions,
           }),
           onContinue: binding.threadContinue ? "skip" : undefined,
         });
@@ -2199,6 +2201,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const parsed = parseAskUserArguments(call.arguments);
     if (!parsed) return call;
     if (parsed.allowMultiple && native.supportsMultiple === false) return call;
+    if (
+      native.maxOptions !== undefined &&
+      parsed.options.length > native.maxOptions
+    )
+      return call;
     // A preview shows only a call this server holds. Text a model put in
     // these fields of its own question could pass for a review's call.
     const {

@@ -192,35 +192,45 @@ describe("chat tool execution", () => {
     expect(text).toContain("Do not ask this as a plain-text chat question");
   });
 
-  test("ask_user returns the selected option after elicitation", async () => {
+  test.each([
+    2, 5, 12,
+  ])("ask_user returns the last of %i options after elicitation", async (count) => {
+    const options = Array.from({ length: count }, (_, index) => ({
+      label: `Choice ${index + 1}`,
+    }));
+    const selected = `Choice ${count}`;
     mockContext = {
       ...mockContext,
       elicitation: {
-        elicit: async () => ({
-          status: "answered" as const,
-          result: {
-            action: "accept" as const,
-            content: { choice: "Accept for this session" },
-          },
-        }),
+        elicit: async (params) => {
+          expect(params.requestedSchema).toMatchObject({
+            properties: {
+              choice: { enum: options.map((option) => option.label) },
+            },
+          });
+          return {
+            status: "answered" as const,
+            result: {
+              action: "accept" as const,
+              content: { choice: selected },
+            },
+          };
+        },
       },
     };
 
     const result = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
       {
-        question: "Accept this change for the rest of this session?",
-        options: [
-          { label: "Accept for this session" },
-          { label: "Do not accept" },
-        ],
+        question: "Which option do you prefer?",
+        options,
       },
       mockContext,
     );
     expect(result.isError).toBe(false);
     expect(result.structuredContent).toEqual({
       action: "accept",
-      selected: ["Accept for this session"],
+      selected: [selected],
     });
   });
 

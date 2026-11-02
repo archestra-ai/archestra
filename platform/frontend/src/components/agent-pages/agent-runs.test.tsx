@@ -274,7 +274,11 @@ describe("AgentRuns", () => {
       screen.getByRole("button", { name: "Delete saved files" }),
     );
     const dialog = screen.getByRole("dialog", { name: "Delete saved files?" });
-    expect(within(dialog).getByText(/Its history stays/)).toBeVisible();
+    expect(
+      within(dialog).getByText(
+        /^Of the 3 selected runs, 1 has saved files to delete\. .*Its history stays\.$/,
+      ),
+    ).toBeVisible();
     await user.click(
       within(dialog).getByRole("button", { name: "Delete saved files" }),
     );
@@ -353,6 +357,9 @@ describe("AgentRuns", () => {
     state.runs = [{ ...live, endedAt: "2026-09-03T20:06:00.000Z" }, done];
     await act(() => queryClient.invalidateQueries());
     const dialog = screen.getByRole("dialog", { name: "Stop run?" });
+    expect(
+      within(dialog).getByText(/^Of the 2 selected runs, 1 is still running\./),
+    ).toBeVisible();
     await user.click(within(dialog).getByRole("button", { name: "Stop run" }));
     expect(sent).toEqual([live.sessionId]);
     expect(screen.getAllByText("2 runs selected")[0]).toBeInTheDocument();
@@ -449,6 +456,116 @@ describe("AgentRuns", () => {
     } finally {
       window.innerWidth = width;
     }
+  });
+  it("explains on a phone why a bulk action does not fit the selection", async () => {
+    const width = window.innerWidth;
+    window.innerWidth = 390;
+    try {
+      state.runs = rowActionRuns();
+      renderRuns("agent-1", false, "section=runs");
+      const user = userEvent.setup();
+      await user.click(
+        await screen.findByRole("checkbox", { name: "Select Other review" }),
+      );
+      await user.click(screen.getByRole("button", { name: "Actions" }));
+      // A phone has no hover, so the reason shows under the label.
+      const stop = screen.getByRole("menuitem", { name: "Stop" });
+      expect(stop).toHaveAttribute("aria-disabled", "true");
+      expect(stop).toHaveAccessibleDescription(
+        "Select a run that is still running",
+      );
+      expect(within(stop).getByText("Select a run that is still running"));
+      await user.click(stop);
+      expect(screen.queryByRole("dialog")).toBeNull();
+      await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+      expect(screen.getByRole("dialog", { name: "Delete run?" })).toBeVisible();
+    } finally {
+      window.innerWidth = width;
+    }
+  });
+  it("keeps keyboard focus on a sort button and a checkbox while the list sorts and refreshes", async () => {
+    state.runs = rowActionRuns();
+    renderRuns("agent-1", false, "section=runs");
+    const user = userEvent.setup();
+    const refresh = () => {
+      state.runs = state.runs.map((run) => ({
+        ...run,
+        lastModelActivityAt: new Date().toISOString(),
+      }));
+      return act(() => queryClient.invalidateQueries());
+    };
+    const checkbox = await screen.findByRole("checkbox", {
+      name: "Select Other review",
+    });
+    checkbox.focus();
+    await refresh();
+    expect(
+      screen.getByRole("checkbox", { name: "Select Other review" }),
+    ).toHaveFocus();
+    screen.getByRole("button", { name: "Started" }).focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("button", { name: "Started" })).toHaveFocus();
+    await refresh();
+    expect(screen.getByRole("button", { name: "Started" })).toHaveFocus();
+  });
+  it("leaves the next dialog open when an earlier action finishes after its dialog was closed", async () => {
+    state.runs = rowActionRuns();
+    const received: string[][] = [];
+    let respond = () => {};
+    server.use(
+      http.delete(
+        "http://localhost:9000/api/agent-runs/bulk",
+        async ({ request }) => {
+          const { ids } = (await request.json()) as { ids: string[] };
+          received.push(ids);
+          await new Promise<void>((resolve) => {
+            respond = resolve;
+          });
+          return HttpResponse.json({
+            succeeded: ids.map((id) => ({ id, name: id })),
+            failed: [],
+          });
+        },
+      ),
+    );
+    renderRuns("agent-1", false, "section=runs");
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Delete run Finished review",
+      }),
+    );
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Delete run?" })).getByRole(
+        "button",
+        { name: "Delete run" },
+      ),
+    );
+    await vi.waitFor(() => expect(received).toEqual([["done-1"]]));
+    // Closed while the delete is still running, then another action opened.
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(
+      screen.getByRole("button", { name: "Stop run Live review" }),
+    );
+    await act(async () => respond());
+    await vi.waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("Deleted 1 run"),
+    );
+    expect(screen.getByRole("dialog", { name: "Stop run?" })).toBeVisible();
+  });
+  it("shows that a run needs input in its Status column", async () => {
+    state.runs = [
+      {
+        ...createRun(null),
+        attentionState: "input_required",
+        // Before its deadline, or it would read as stopping.
+        hardDeadlineAt: "2999-01-01T00:00:00.000Z",
+      },
+    ];
+    renderRuns("agent-1", false, "section=runs");
+    expect(await screen.findByText("Needs your input")).toBeVisible();
+    // On a wide table the title's line names who started it, not the status.
+    expect(screen.getByText("Started by you")).toBeVisible();
   });
   it("offers no selection to a viewer who started none of the runs", async () => {
     state.runs = [

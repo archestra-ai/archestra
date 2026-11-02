@@ -5,21 +5,28 @@
 export function runActionConfirmCopy({
   action,
   count,
-  stillRunning = 0,
+  selected = count,
 }: {
   action: RunAction;
   /** How many runs the action reaches. */
   count: number;
-  /** Selected runs that Delete leaves alone because they have not ended. */
-  stillRunning?: number;
+  /** How many runs are selected. A bulk action can reach only some of them. */
+  selected?: number;
 }): { title: string; description: string; confirmLabel: string } {
   const one = count === 1;
+  // What the dialog adds when a bulk action skips some selected runs.
+  const reach = (fits: string) =>
+    selected > count
+      ? `Of the ${selected} selected runs, ${count} ${fits}. `
+      : "";
   if (action === "stop")
     return {
       title: one ? "Stop run?" : `Stop ${count} runs?`,
-      description: one
-        ? "The run stops. Its saved files and history stay, so you can resume it later."
-        : "The runs stop. Their saved files and history stay, so you can resume them later.",
+      description:
+        reach(one ? "is still running" : "are still running") +
+        (one
+          ? "The run stops. Its saved files and history stay, so you can resume it later."
+          : "The runs stop. Their saved files and history stay, so you can resume them later."),
       confirmLabel: one ? "Stop run" : "Stop runs",
     };
   if (action === "files")
@@ -27,18 +34,22 @@ export function runActionConfirmCopy({
       title: one
         ? "Delete saved files?"
         : `Delete the saved files of ${count} runs?`,
-      description: one
-        ? "Deleting the saved files frees their storage. You cannot resume the run afterward. Its history stays."
-        : "Deleting the saved files frees their storage. You cannot resume these runs afterward. Their history stays.",
+      description:
+        reach(
+          one ? "has saved files to delete" : "have saved files to delete",
+        ) +
+        (one
+          ? "Deleting the saved files frees their storage. You cannot resume the run afterward. Its history stays."
+          : "Deleting the saved files frees their storage. You cannot resume these runs afterward. Their history stays."),
       confirmLabel: "Delete saved files",
     };
   return {
     title: one ? "Delete run?" : `Delete ${count} runs?`,
-    description: `${
-      one
+    description:
+      (one
         ? "Deleting a run permanently removes its history, output, and saved files."
-        : "Deleting these runs permanently removes their history, output, and saved files."
-    }${stillRunningNote(stillRunning)}`,
+        : "Deleting these runs permanently removes their history, output, and saved files.") +
+      stillRunningNote(selected - count),
     confirmLabel: one ? "Delete run" : "Delete runs",
   };
 }

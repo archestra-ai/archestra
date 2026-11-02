@@ -14,7 +14,15 @@ import {
   TerminalSquare,
   Trash2,
 } from "lucide-react";
-import { createContext, type ReactNode, useContext, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useId,
+  useMemo,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import {
@@ -62,6 +70,7 @@ import { copyToClipboard } from "@/lib/clipboard";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * Every run of one Agent, with the viewer's own runs selectable for Stop and
@@ -93,17 +102,12 @@ export function AgentRunList({
   const compact = useIsMobile();
   // What a dialog acts on is fixed when it opens: the list refreshes every few
   // seconds, and a run that ends meanwhile must not change what Confirm sends.
-  const [confirming, setConfirming] = useState<{
-    action: RunAction;
-    runIds: string[];
-    /** Selected runs that Delete leaves alone because they are still going. */
-    stillRunning: number;
-    /** A bulk action that reaches the whole selection clears it when done. */
-    clearsSelection: boolean;
-  } | null>(null);
+  const [confirming, setConfirming] = useState<Confirming | null>(null);
 
-  const isOwn = (run: AgentRunListItem) =>
-    !!viewerId && run.actorUserId === viewerId;
+  const isOwn = useCallback(
+    (run: AgentRunListItem) => !!viewerId && run.actorUserId === viewerId,
+    [viewerId],
+  );
   const query = search.trim().toLowerCase();
   const filtered = runs.filter(
     (run) =>
@@ -118,6 +122,7 @@ export function AgentRunList({
     setSearch("");
     setStarter(ANYONE);
     setStatus("all");
+    setPagination((current) => ({ ...current, pageIndex: 0 }));
   };
   const {
     rowSelection,
@@ -151,7 +156,7 @@ export function AgentRunList({
     setConfirming({
       action,
       runIds: [run.sessionId],
-      stillRunning: 0,
+      selected: 1,
       clearsSelection: false,
     });
   // Like the other tables, a row shows the actions that fit its run as
@@ -204,64 +209,70 @@ export function AgentRunList({
     );
   };
 
-  const columns: ColumnDef<AgentRunListItem>[] = [
-    ...(canSelectAny
-      ? [
-          createSelectColumn<AgentRunListItem>({
-            rowLabel: (run) => `Select ${run.title}`,
-            allLabel: "Select all runs on this page",
-            canSelect: isOwn,
-            disabledReason: () =>
-              "Only the person who started this run can stop or delete it",
-          }),
-        ]
-      : []),
-    {
-      id: "title",
-      accessorFn: (run) => run.title.toLowerCase(),
-      header: ({ column }) => <SortableHeader column={column} label="Run" />,
-      cell: RunTitleCell,
-    },
-    {
-      id: "status",
-      header: "Status",
-      size: 220,
-      enableSorting: false,
-      cell: RunStatusCell,
-    },
-    {
-      id: "startedAt",
-      accessorFn: (run) => run.startedAt,
-      header: ({ column }) => (
-        <SortableHeader column={column} label="Started" />
-      ),
-      // Fits the longest relative time, "less than a minute ago".
-      size: 180,
-      cell: ({ row }) => (
-        <time
-          dateTime={row.original.startedAt}
-          title={new Date(row.original.startedAt).toLocaleString()}
-          className="whitespace-nowrap text-sm text-muted-foreground"
-        >
-          {startedAgo(row.original)}
-        </time>
-      ),
-    },
-    {
-      id: "actions",
-      header: () => (
-        <span className={compact ? "sr-only" : "block text-right"}>
-          Actions
-        </span>
-      ),
-      enableHiding: false,
-      enableSorting: false,
-      // At most three buttons: Copy run ID, then Stop run, or Delete saved
-      // files and Delete run. A phone shows one menu button.
-      size: compact ? 64 : 128,
-      cell: RunActionsCell,
-    },
-  ];
+  // TanStack renders headers and cells as components: built anew on each
+  // render, they would remount every few seconds as the list refreshes, and
+  // take keyboard focus off a sort button or a checkbox.
+  const columns = useMemo<ColumnDef<AgentRunListItem>[]>(
+    () => [
+      ...(canSelectAny
+        ? [
+            createSelectColumn<AgentRunListItem>({
+              rowLabel: (run) => `Select ${run.title}`,
+              allLabel: "Select all runs on this page",
+              canSelect: isOwn,
+              disabledReason: () =>
+                "Only the person who started this run can stop or delete it",
+            }),
+          ]
+        : []),
+      {
+        id: "title",
+        accessorFn: (run) => run.title.toLowerCase(),
+        header: ({ column }) => <SortableHeader column={column} label="Run" />,
+        cell: RunTitleCell,
+      },
+      {
+        id: "status",
+        header: "Status",
+        size: 220,
+        enableSorting: false,
+        cell: RunStatusCell,
+      },
+      {
+        id: "startedAt",
+        accessorFn: (run) => run.startedAt,
+        header: ({ column }) => (
+          <SortableHeader column={column} label="Started" />
+        ),
+        // Fits the longest relative time, "less than a minute ago".
+        size: 180,
+        cell: ({ row }) => (
+          <time
+            dateTime={row.original.startedAt}
+            title={new Date(row.original.startedAt).toLocaleString()}
+            className="whitespace-nowrap text-sm text-muted-foreground"
+          >
+            {startedAgo(row.original)}
+          </time>
+        ),
+      },
+      {
+        id: "actions",
+        header: () => (
+          <span className={compact ? "sr-only" : "block text-right"}>
+            Actions
+          </span>
+        ),
+        enableHiding: false,
+        enableSorting: false,
+        // At most three buttons: Copy run ID, then Stop run, or Delete saved
+        // files and Delete run. A phone shows one menu button.
+        size: compact ? 64 : 128,
+        cell: RunActionsCell,
+      },
+    ],
+    [canSelectAny, compact, isOwn],
+  );
 
   // Each bulk action reaches only the selected runs it fits; its dialog
   // names how many, and Delete says which runs it leaves running.
@@ -274,26 +285,19 @@ export function AgentRunList({
     setConfirming({
       action,
       runIds: targets[action].map((run) => run.sessionId),
-      stillRunning: action === "delete" ? active.length : 0,
+      selected: selected.length,
       clearsSelection: targets[action].length === selected.length,
     });
   const runIds = confirming?.runIds ?? [];
-  // Runs the action leaves alone stay selected for the next one.
-  const finish = (outcome: { failed: unknown[] }) => {
-    if (confirming?.clearsSelection && outcome.failed.length === 0)
-      clearSelection();
-    setConfirming(null);
+  // Runs the action leaves alone stay selected for the next one. A dialog
+  // closed while its action ran must not close the one opened after it.
+  const finish = (dialog: Confirming) => (outcome: { failed: unknown[] }) => {
+    if (dialog.clearsSelection && outcome.failed.length === 0) clearSelection();
+    setConfirming((current) => (current === dialog ? null : current));
   };
   // Every bulk action shows while runs are selected, like the row's buttons;
   // one that fits none of them stays disabled and says what to select.
-  const actions: {
-    key: RunAction;
-    label: string;
-    icon: LucideIcon;
-    iconClassName?: string;
-    destructive?: boolean;
-    disabledReason: string | null;
-  }[] = [
+  const actions: BulkAction[] = [
     {
       key: "stop",
       label: "Stop",
@@ -324,7 +328,7 @@ export function AgentRunList({
     ? runActionConfirmCopy({
         action: confirming.action,
         count: runIds.length,
-        stillRunning: confirming.stillRunning,
+        selected: confirming.selected,
       })
     : null;
   const mutations = {
@@ -404,15 +408,11 @@ export function AgentRunList({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 {actions.map((action) => (
-                  <DropdownMenuItem
+                  <BulkMenuItem
                     key={action.key}
-                    variant={action.destructive ? "destructive" : "default"}
-                    disabled={!!action.disabledReason}
+                    action={action}
                     onSelect={() => confirmBulk(action.key)}
-                  >
-                    <action.icon className={action.iconClassName} />
-                    <span>{action.label}</span>
-                  </DropdownMenuItem>
+                  />
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
@@ -473,7 +473,9 @@ export function AgentRunList({
             }
             isPending={mutations[confirming.action].isPending}
             onConfirm={() =>
-              mutations[confirming.action].mutate(runIds, { onSuccess: finish })
+              mutations[confirming.action].mutate(runIds, {
+                onSuccess: finish(confirming),
+              })
             }
           />
         )}
@@ -560,18 +562,75 @@ function RunActionsCell({ row }: CellContext<AgentRunListItem, unknown>) {
 }
 
 function RunStatus({ run }: { run: AgentRunListItem }) {
+  // The whole run, as the narrow title cell passes it, so both show the same
+  // status, attention included.
+  return <AgentRunState {...run} />;
+}
+
+/**
+ * A bulk action in the phone's Actions menu. One that fits none of the
+ * selected runs stays in the menu with its reason under the label: a phone
+ * has no hover for a tooltip. `aria-disabled` rather than Radix's `disabled`,
+ * which would take the item, and its reason, out of keyboard reach.
+ */
+function BulkMenuItem({
+  action,
+  onSelect,
+}: {
+  action: BulkAction;
+  onSelect: () => void;
+}) {
+  const reasonId = useId();
+  const disabled = !!action.disabledReason;
   return (
-    <AgentRunState
-      state={run.state}
-      statusReason={run.statusReason}
-      startedAt={run.startedAt}
-      endedAt={run.endedAt}
-      hardDeadlineAt={run.hardDeadlineAt}
-      lastModelActivityAt={run.lastModelActivityAt}
-      workspace={run.workspace}
-    />
+    <DropdownMenuItem
+      aria-disabled={disabled || undefined}
+      aria-describedby={disabled ? reasonId : undefined}
+      variant={action.destructive ? "destructive" : "default"}
+      className={disabled ? "cursor-not-allowed items-start" : undefined}
+      onSelect={(event) => {
+        if (disabled) event.preventDefault();
+        else onSelect();
+      }}
+    >
+      <action.icon
+        className={cn(action.iconClassName, disabled && "mt-0.5 opacity-50")}
+      />
+      <span className="flex flex-col">
+        <span className={disabled ? "opacity-50" : undefined}>
+          {action.label}
+        </span>
+        {disabled && (
+          <span
+            id={reasonId}
+            aria-hidden="true"
+            className="text-xs text-muted-foreground"
+          >
+            {action.disabledReason}
+          </span>
+        )}
+      </span>
+    </DropdownMenuItem>
   );
 }
+
+type Confirming = {
+  action: RunAction;
+  runIds: string[];
+  /** How many runs were selected. The action can reach only some of them. */
+  selected: number;
+  /** A bulk action that reaches the whole selection clears it when done. */
+  clearsSelection: boolean;
+};
+
+type BulkAction = {
+  key: RunAction;
+  label: string;
+  icon: LucideIcon;
+  iconClassName?: string;
+  destructive?: boolean;
+  disabledReason: string | null;
+};
 
 const ANYONE = "anyone";
 

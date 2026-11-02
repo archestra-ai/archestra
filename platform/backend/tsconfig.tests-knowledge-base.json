@@ -1,12 +1,13 @@
 {
-  // Tests of the rest of the LLM proxy, but its adapters and utils.
-  "extends": "./tsconfig.test-project.json",
-  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-routes-proxy-b.tsbuildinfo" },
+  // Tests of knowledge-base connectors and workflows.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./.tsbuild/tests-knowledge-base.tsbuildinfo"
+  },
   "include": [
     "src/ambient/*.d.ts",
-    "src/routes/proxy/**/*.test.ts"
+    "src/knowledge-base/**/*.test.ts"
   ],
-  "exclude": ["src/routes/proxy/routes/**", "src/routes/proxy/adapters/**", "src/routes/proxy/utils/**"],
   "references": [
     { "path": "../shared/tsconfig.lib.json" },
     { "path": "../tools/drizzle-migration-linter/tsconfig.lib.json" },

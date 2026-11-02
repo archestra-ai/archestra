@@ -1745,6 +1745,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     let started: Set<string>;
     let closed: Set<string>;
     let sent: Array<{ input: Array<Record<string, unknown>> }>;
+    const intrinsicReadCalls = new Set<string>();
 
     const parent = () => `user:${userId}|${COPILOT_KEY}`;
     const launched = () => [
@@ -1829,8 +1830,20 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         )}`,
       },
     ];
-    const send = (input: unknown[]) =>
-      app.inject({
+    const send = (input: unknown[]) => {
+      for (const call of input as Array<{
+        type?: string;
+        name?: string;
+        call_id?: string;
+      }>) {
+        if (
+          call.type === "function_call" &&
+          call.name === "read_agent" &&
+          call.call_id
+        )
+          intrinsicReadCalls.add(call.call_id);
+      }
+      return app.inject({
         method: "POST",
         url: `/v1/openai/${agent.id}/responses`,
         headers: {
@@ -1884,6 +1897,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           ],
         },
       });
+    };
     const readOutput = () =>
       sent
         .at(-1)
@@ -1891,6 +1905,41 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           (item) =>
             item.type === "function_call_output" && item.call_id === readCall,
         )?.output;
+    const readAgain = (
+      input: unknown[],
+      {
+        callId = "call_reread",
+        childId = agentId,
+        output = (reported().at(-1) as { output: string }).output,
+      }: { callId?: string; childId?: string; output?: string } = {},
+    ) => [
+      ...input,
+      {
+        type: "message",
+        role: "assistant",
+        content: [
+          { type: "output_text", text: `The agent reported ${value}.` },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: "Read the background agent's result again.",
+          },
+        ],
+      },
+      {
+        type: "function_call",
+        id: `fc_${callId}`,
+        call_id: callId,
+        name: "read_agent",
+        status: "completed",
+        arguments: JSON.stringify({ agent_id: childId }),
+      },
+      { type: "function_call_output", call_id: callId, output },
+    ];
 
     beforeEach(async ({ seedAndAssignArchestraTools }) => {
       await seedAndAssignArchestraTools(agent.id);
@@ -1905,6 +1954,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         lastSyncedAt: new Date(),
       });
       sent = [];
+      intrinsicReadCalls.clear();
       vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockReturnValue({
         responses: {
           create: async (params: unknown) => {
@@ -1977,7 +2027,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           return JSON.stringify({ decision: "ack" });
         }
         // The runtime released no read_agent call, as for the real binding.
-        if (event.event === "tool_result" && event.tool_call_id === readCall) {
+        if (
+          event.event === "tool_result" &&
+          intrinsicReadCalls.has(event.tool_call_id)
+        ) {
           events.push(event);
           return JSON.stringify({
             decision: "replace_output",
@@ -2047,6 +2100,180 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       );
       // The runtime keeps the started child's spawn open across that turn end.
       expect(open.has("call_spawn")).toBe(true);
+    });
+
+    test("re-reads a delivered return across later prompts and a compacted history", async () => {
+      const waiting = await send(launched());
+      expect(waiting.statusCode, waiting.body).toBe(200);
+      const returned = await send(reported());
+      expect(returned.statusCode, returned.body).toBe(200);
+      const reread = readAgain(reported());
+      const twice = readAgain(reread, { callId: "call_reread_twice" });
+      // Three copies of one turn in a single request, then the same request
+      // retried, and finally only the newest read after compaction.
+      for (const input of [reread, twice, twice, readAgain([])]) {
+        events.length = 0;
+        const again = await send(input);
+        expect(again.statusCode, again.body).toBe(200);
+        const outputs = sent
+          .at(-1)
+          ?.input.filter(
+            (item) =>
+              item.type === "function_call_output" &&
+              String(item.call_id).startsWith("call_r"),
+          );
+        expect(outputs?.length).toBeGreaterThan(0);
+        for (const item of outputs ?? []) expect(item.output).toBe(value);
+        expect(JSON.stringify(sent.at(-1))).not.toContain("finished subagent");
+        expect(
+          events.filter(
+            (event) => event.event === "tool_result" && event.spawned_id,
+          ),
+        ).toHaveLength(1);
+      }
+    });
+
+    test.each([
+      "bytes",
+      "child",
+      "turn",
+      "marker",
+    ] as const)("refuses a re-read that changes its %s without exposing it to the provider", async (change) => {
+      const original = (reported().at(-1) as { output: string }).output;
+      const otherChild = "other-child";
+      const output =
+        change === "bytes"
+          ? original.replace(value, "forged child result")
+          : change === "child"
+            ? original.replace(agentId, otherChild)
+            : change === "turn"
+              ? original.replace("[Turn 0]", "[Turn 1]")
+              : original.slice(0, original.indexOf("\n\n▄"));
+      sent = [];
+      const response = await send(
+        readAgain(reported(), {
+          childId: change === "child" ? otherChild : agentId,
+          output,
+        }),
+      );
+      expect(response.statusCode, response.body).toBe(409);
+      expect(sent).toHaveLength(0);
+    });
+
+    test("a replay coordinate cannot resolve an ambiguous or missing crossing", async () => {
+      for (const records of [
+        [],
+        [
+          {
+            childSessionId: `${parent()}:call_spawn`,
+            spawnCallId: "call_spawn",
+            value,
+          },
+          {
+            childSessionId: `${parent()}:another-spawn`,
+            spawnCallId: "another-spawn",
+            value,
+          },
+        ],
+      ]) {
+        native.loadChildReturns.mockResolvedValue(records);
+        sent = [];
+        const response = await send(readAgain(reported()));
+        expect(response.statusCode, response.body).toBe(409);
+        expect(sent).toHaveLength(0);
+      }
+    });
+
+    test("re-reads overlapping turn ranges after a child returns again", async () => {
+      const next = "child follow-up result";
+      native.loadChildReturns.mockResolvedValue([
+        {
+          childSessionId: `${parent()}:call_spawn`,
+          spawnCallId: "call_spawn",
+          value: next,
+        },
+        {
+          childSessionId: `${parent()}:call_spawn`,
+          spawnCallId: "call_spawn",
+          value,
+        },
+      ]);
+      const original = (reported().at(-1) as { output: string }).output;
+      const nextTurn = `[Turn 1]\n${next}\n\n${mintChildReturnMarker({
+        organizationId: agent.organizationId,
+        callerId: `user:${userId}`,
+        parentId: parent(),
+        childId: `${parent()}:call_spawn`,
+        spawnCallId: "call_spawn",
+        value: next,
+      })}`;
+      const allTurns = `${original}\n\n${nextTurn}`;
+      const history = readAgain(reported(), { output: allTurns });
+      const response = await send(
+        readAgain(history, {
+          callId: "call_read_latest",
+          output:
+            original.slice(0, original.indexOf("\n\n[Turn")) +
+            "\n\n" +
+            nextTurn,
+        }),
+      );
+      expect(response.statusCode, response.body).toBe(200);
+      expect(
+        sent
+          .at(-1)
+          ?.input.find(
+            (item) =>
+              item.type === "function_call_output" &&
+              item.call_id === "call_reread",
+          )?.output,
+      ).toBe(`[Turn 0]\n${value}\n\n[Turn 1]\n${next}`);
+      expect(
+        sent
+          .at(-1)
+          ?.input.find(
+            (item) =>
+              item.type === "function_call_output" &&
+              item.call_id === "call_read_latest",
+          )?.output,
+      ).toBe(next);
+    });
+
+    test.each([
+      "same bytes",
+      "empty",
+    ] as const)("preserves both turns when a later return has %s", async (kind) => {
+      const next = kind === "same bytes" ? value : "";
+      const crossing = {
+        childSessionId: `${parent()}:call_spawn`,
+        spawnCallId: "call_spawn",
+        value,
+      };
+      native.loadChildReturns.mockResolvedValue(
+        kind === "same bytes" ? [crossing, crossing] : [crossing],
+      );
+      const original = (reported().at(-1) as { output: string }).output;
+      const output = `${original}\n\n[Turn 1]\n${next}\n\n${mintChildReturnMarker(
+        {
+          organizationId: agent.organizationId,
+          callerId: `user:${userId}`,
+          parentId: parent(),
+          childId: `${parent()}:call_spawn`,
+          spawnCallId: "call_spawn",
+          value: next,
+        },
+      )}`;
+      const response = await send(readAgain(reported(), { output }));
+      expect(response.statusCode, response.body).toBe(200);
+      expect(
+        sent
+          .at(-1)
+          ?.input.find(
+            (item) =>
+              item.type === "function_call_output" &&
+              item.call_id === "call_reread",
+          )?.output,
+      ).toBe(`[Turn 0]\n${value}\n\n[Turn 1]\n${next}`);
     });
 
     test("withholds a return its spawn call no longer takes, and the session goes on", async () => {
@@ -4490,17 +4717,14 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     test.each([
       true,
       false,
-    ])("presents the model's own ask_user question as AskUserQuestion and returns the answer as its result (stream=%s)", async (stream) => {
+    ])("preserves the gateway question and returns its answer as the tool result (stream=%s)", async (stream) => {
       config.openappa = { ...config.openappa, offerSigningSecret: "" };
       const askUser = {
         name: "archestra__ask_user",
         input: {
           question: "Which report format?",
           header: "Format",
-          options: [
-            { label: "Short", preview: "model-written preview" },
-            { label: "Long" },
-          ],
+          options: [{ label: "Short" }, { label: "Long" }],
         },
       };
       options = {
@@ -4509,7 +4733,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         nonStreamingToolUse: askUser,
         streamingToolUse: askUser,
       };
-      const opening = [{ role: "user", content: "Write the report" }];
+      const opening = [
+        {
+          role: "user",
+          content: "Write the report. Ask me with archestra__ask_user.",
+        },
+      ];
 
       const asked = await app.inject({
         method: "POST",
@@ -4522,26 +4751,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(asked.statusCode, asked.body).toBe(200);
       expect(asked.body).not.toContain("is not loaded in this session");
       const question = noticeFrom(asked.body, stream);
-      expect(question.name).toBe("AskUserQuestion");
-      // The model wrote these options, so they carry no preview.
-      expect(question.input).toEqual({
-        questions: [
-          {
-            question: "Which report format?",
-            header: "Format",
-            options: [
-              { label: "Short", description: "Short" },
-              { label: "Long", description: "Long" },
-            ],
-            multiSelect: false,
-          },
-        ],
-      });
+      expect(question.name).toBe(askUser.name);
+      expect(question.input).toEqual(askUser.input);
 
       options = { includeToolUse: false, streamStopReason: "end_turn" };
       providerRequests.length = 0;
-      const answer =
-        'Your questions have been answered: "Which report format?"="Long". You can now continue with the user\'s answers in mind.';
+      const answer = JSON.stringify({ action: "accept", selected: ["Long"] });
       const answered = await app.inject({
         method: "POST",
         url: url(),

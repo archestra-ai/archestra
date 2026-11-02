@@ -1,11 +1,13 @@
 {
-  // Tests of the other routes whose names start with a.
-  "extends": "./tsconfig.test-project.json",
-  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-routes-rest-a.tsbuildinfo" },
+  // Tests of models and authentication.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./.tsbuild/tests-models.tsbuildinfo"
+  },
   "include": [
     "src/ambient/*.d.ts",
-    "src/routes/a*.test.ts",
-    "src/routes/a*/**/*.test.ts"
+    "src/models/**/*.test.ts",
+    "src/auth/**/*.test.ts"
   ],
   "references": [
     { "path": "../shared/tsconfig.lib.json" },

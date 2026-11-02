@@ -1,7 +1,7 @@
 {
   // The tool configurations and the storage benchmark, which lives outside
   // src/ but imports backend modules.
-  "extends": "./tsconfig.test-project.json",
+  "extends": "./tsconfig.base.json",
   "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tools.tsbuildinfo" },
   "include": [
     "src/ambient/*.d.ts",

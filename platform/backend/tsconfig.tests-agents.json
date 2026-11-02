@@ -1,10 +1,13 @@
 {
-  // Tests of the LLM proxy's routes directory.
-  "extends": "./tsconfig.test-project.json",
-  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-routes-proxy-a.tsbuildinfo" },
+  // Tests of the Archestra MCP server and agents.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./.tsbuild/tests-agents.tsbuildinfo"
+  },
   "include": [
     "src/ambient/*.d.ts",
-    "src/routes/proxy/routes/**/*.test.ts"
+    "src/archestra-mcp-server/**/*.test.ts",
+    "src/agents/**/*.test.ts"
   ],
   "references": [
     { "path": "../shared/tsconfig.lib.json" },

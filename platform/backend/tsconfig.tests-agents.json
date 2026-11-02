@@ -1,7 +1,9 @@
 {
-  // Tests of the Archestra MCP server and the agents.
-  "extends": "./tsconfig.test-project.json",
-  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-domain-b.tsbuildinfo" },
+  // Tests of the Archestra MCP server and agents.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./.tsbuild/tests-agents.tsbuildinfo"
+  },
   "include": [
     "src/ambient/*.d.ts",
     "src/archestra-mcp-server/**/*.test.ts",
@@ -12,6 +14,11 @@
     { "path": "../tools/drizzle-migration-linter/tsconfig.lib.json" },
     { "path": "./tsconfig.schema.json" },
     { "path": "./tsconfig.core.json" },
+    { "path": "./tsconfig.models.json" },
+    { "path": "./tsconfig.models-agents.json" },
+    { "path": "./tsconfig.models-upper.json" },
+    { "path": "./tsconfig.runtime.json" },
+    { "path": "./tsconfig.llm-clients.json" },
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.test-support.json" }
   ]

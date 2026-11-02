@@ -269,6 +269,25 @@ describe("battery helper bridge", () => {
     expect(response.statusCode).toBe(502);
   });
 
+  test("a failed consult reports why it failed and with which exit status", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const install = await installBoundGithub(makeInternalMcpCatalog);
+    stubSandbox({ exitCode: 3, stdout: "", stderr: "traceback" });
+
+    const outcome = await openappaHelperBridge.consult({
+      installId: install.id,
+      externalName: "github.repository-visibility",
+      request: JSON.stringify(envelope),
+    });
+
+    expect(outcome).toMatchObject({
+      kind: "failed",
+      reason: "the helper exited with status 3",
+      exitStatus: 3,
+    });
+  });
+
   test("the last line a helper wrote to stderr is passed through as X-Appa-Diagnostics", async ({
     makeInternalMcpCatalog,
   }) => {
@@ -525,7 +544,7 @@ describe("battery helper bridge", () => {
     expect((await openappaHelperBridge.consult(params)).kind).toBe("failed");
   });
 
-  test("sandbox executions retain their concurrency cap and release capacity on completion", async ({
+  test("sandbox executions retain their concurrency cap, hand a freed slot to a waiting consult, and release capacity on completion", async ({
     makeInternalMcpCatalog,
   }) => {
     const install = await installBoundGithub(makeInternalMcpCatalog);
@@ -558,17 +577,27 @@ describe("battery helper bridge", () => {
     const pool = config.daggerRuntime.maxConcurrent;
     config.daggerRuntime.maxConcurrent = 1;
     const first = openappaHelperBridge.consult(params);
+    let waiting: ReturnType<typeof openappaHelperBridge.consult> | undefined;
     try {
       await entered;
+      // No slot frees up while it may wait: the consult is turned away.
       expect((await openappaHelperBridge.consult(params)).kind).toBe("busy");
+      // A slot that frees up while a consult waits is handed to it.
+      waiting = openappaHelperBridge.consult(params);
+      await new Promise((resolve) => setTimeout(resolve, 200));
       expect(run).toHaveBeenCalledTimes(1);
+      release(result);
+      await first;
+      expect((await waiting)?.kind).toBe("answered");
+      expect(run).toHaveBeenCalledTimes(2);
     } finally {
       release(result);
       await first;
+      await waiting;
       config.daggerRuntime.maxConcurrent = pool;
     }
     expect((await openappaHelperBridge.consult(params)).kind).toBe("answered");
-    expect(run).toHaveBeenCalledTimes(2);
+    expect(run).toHaveBeenCalledTimes(3);
   });
 
   test.skipIf(!config.daggerRuntime.enabled)(

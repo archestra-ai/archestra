@@ -47,15 +47,16 @@ export async function loadTrio(
  * at one threshold, so unequal non-null thresholds cannot be represented.
  */
 export function sharedLongContextThreshold(
-  models: readonly Pick<Model, "longContextThreshold">[],
+  models: readonly Parameters<typeof ModelModel.getLongContextThreshold>[0][],
 ):
   | { kind: "ok"; threshold: number | null }
   | { kind: "mismatched"; thresholds: number[] } {
   const thresholds = [
     ...new Set(
-      models.flatMap((model) =>
-        model.longContextThreshold === null ? [] : [model.longContextThreshold],
-      ),
+      models.flatMap((model) => {
+        const threshold = ModelModel.getLongContextThreshold(model);
+        return threshold === null ? [] : [threshold];
+      }),
     ),
   ];
   switch (thresholds.length) {
@@ -87,14 +88,14 @@ export function tiersFingerprint(trio: Trio): RouterTierSet {
   if (shared.kind === "mismatched")
     throw new TierThresholdMismatchError(shared.thresholds);
   return {
-    tiers: trio.map((model) => ({
-      model_id: model.id,
-      short: prices(model),
-      long:
-        model.longContextThreshold === null
-          ? null
-          : prices(model, model.longContextThreshold + 1),
-    })),
+    tiers: trio.map((model) => {
+      const threshold = ModelModel.getLongContextThreshold(model);
+      return {
+        model_id: model.id,
+        short: prices(model),
+        long: threshold === null ? null : prices(model, threshold + 1),
+      };
+    }),
     long_context_threshold: shared.threshold,
   };
 }

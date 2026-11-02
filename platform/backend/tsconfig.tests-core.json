@@ -1,6 +1,6 @@
 {
   // Tests of the rest of the core layer.
-  "extends": "./tsconfig.test-project.json",
+  "extends": "./tsconfig.base.json",
   "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-core.tsbuildinfo" },
   "include": [
     "src/ambient/*.d.ts",
@@ -21,6 +21,11 @@
     { "path": "../tools/drizzle-migration-linter/tsconfig.lib.json" },
     { "path": "./tsconfig.schema.json" },
     { "path": "./tsconfig.core.json" },
+    { "path": "./tsconfig.models.json" },
+    { "path": "./tsconfig.models-agents.json" },
+    { "path": "./tsconfig.models-upper.json" },
+    { "path": "./tsconfig.runtime.json" },
+    { "path": "./tsconfig.llm-clients.json" },
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.test-support.json" }
   ]

@@ -499,7 +499,7 @@ function pricingFor(params: {
   );
   // Long-context prices are the model's own, the same for every key, so they
   // apply as the proxy applies them; resolved just past the threshold.
-  const threshold = model.longContextThreshold;
+  const threshold = ModelModel.getLongContextThreshold(priced);
   const longContext =
     threshold === null
       ? null

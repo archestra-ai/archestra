@@ -181,7 +181,7 @@ Each component uses these fields differently:
 |---|---|---|---|
 | `authority` | `hint`, `permits` | `tool`, `arguments`, `requirements` | `ruling`, optional `reason` |
 | `sanitizer` | `hint`, `on`, `permits`; `parameters` for input rewrites | `tool` when known, `body` | `body` |
-| `annotation` | `hint`, `inputs`, `trust_ranks`, `audiences`, `attention_marks`, `effects` | `args`, `context` | `delta`, optional `forwards`, `requires`, `emits` |
+| `annotation` | `hint`, optional `deployment_hint` and `context_hints`, `inputs`, `trust_ranks`, `audiences`, `attention_marks`, `effects` | `args`, `context` | `delta`, optional `forwards`, `requires`, `emits` |
 | `audience` | `templates` | `selector` or `member` | `members` or `principal` |
 | `context` | empty | `tool`, `arguments`, optional `cwd` | any JSON value, or `null` |
 

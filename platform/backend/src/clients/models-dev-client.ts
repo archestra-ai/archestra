@@ -6,7 +6,7 @@ import {
 import { z } from "zod";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
-import { ModelModel } from "@/models";
+import ModelModel from "@/models/model";
 import {
   type CreateModel,
   type ModelInputModality,

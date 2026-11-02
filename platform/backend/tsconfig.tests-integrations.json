@@ -1,7 +1,9 @@
 {
-  // Tests of k8s, the clients, OpenAPPA and the proxy helpers.
-  "extends": "./tsconfig.test-project.json",
-  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-domain-c.tsbuildinfo" },
+  // Tests of Kubernetes, clients, OpenAPPA, and proxy helpers.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./.tsbuild/tests-integrations.tsbuildinfo"
+  },
   "include": [
     "src/ambient/*.d.ts",
     "src/k8s/**/*.test.ts",
@@ -14,6 +16,11 @@
     { "path": "../tools/drizzle-migration-linter/tsconfig.lib.json" },
     { "path": "./tsconfig.schema.json" },
     { "path": "./tsconfig.core.json" },
+    { "path": "./tsconfig.models.json" },
+    { "path": "./tsconfig.models-agents.json" },
+    { "path": "./tsconfig.models-upper.json" },
+    { "path": "./tsconfig.runtime.json" },
+    { "path": "./tsconfig.llm-clients.json" },
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.test-support.json" }
   ]

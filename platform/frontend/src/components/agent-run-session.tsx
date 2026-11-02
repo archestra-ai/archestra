@@ -24,6 +24,7 @@ import { useRouter } from "next/navigation";
 import { type ReactNode, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AgentIcon } from "@/components/agent-icon";
+import { runActionConfirmCopy } from "@/components/agent-pages/agent-run-actions-copy";
 import { AgentRunHeader } from "@/components/agent-run-header";
 import { AgentRunLiveness } from "@/components/agent-run-liveness";
 import {
@@ -625,10 +626,8 @@ export function AgentRunChatSession({
       <DeleteConfirmDialog
         open={stopDialogOpen}
         onOpenChange={setStopDialogOpen}
-        title="Stop this run?"
-        description="The Agent process will stop. Saved files and run history will be retained so you can continue later."
+        {...runActionConfirmCopy({ action: "stop", count: 1 })}
         isPending={cancelRun.isPending}
-        confirmLabel="Stop run"
         pendingLabel="Stopping…"
         onConfirm={() =>
           cancelRun.mutate(activeTaskId, {
@@ -640,9 +639,7 @@ export function AgentRunChatSession({
       <DeleteConfirmDialog
         open={deleteWorkspaceDialogOpen}
         onOpenChange={setDeleteWorkspaceDialogOpen}
-        title="Delete saved files?"
-        description="This permanently removes this run's saved files. You cannot resume the run afterward. Run history remains available."
-        confirmLabel="Delete saved files"
+        {...runActionConfirmCopy({ action: "files", count: 1 })}
         isPending={deleteWorkspace.isPending}
         onConfirm={() =>
           deleteWorkspace.mutate(taskId, {
@@ -653,9 +650,7 @@ export function AgentRunChatSession({
       <DeleteConfirmDialog
         open={deleteRunDialogOpen}
         onOpenChange={setDeleteRunDialogOpen}
-        title="Delete run?"
-        description="This removes the session, its retained output, and its saved files. This action cannot be undone."
-        confirmLabel="Delete run"
+        {...runActionConfirmCopy({ action: "delete", count: 1 })}
         pendingLabel="Deleting…"
         isPending={deleteRun.isPending}
         onConfirm={() => {

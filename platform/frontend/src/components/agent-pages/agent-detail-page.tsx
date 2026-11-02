@@ -177,7 +177,6 @@ export function AgentDetailPage({
       title={config.singular}
       description=""
       backLink={backLink}
-      maxWidth="wizard"
       minWidth="phone"
     >
       {children}
@@ -558,9 +557,8 @@ function AgentDetails({
 
   return (
     <PageLayout
-      // The wizard's column, so a record reads and edits in the same one it
-      // was created in.
-      maxWidth="wizard"
+      // The list pages' column, so the Agent's page and its Runs table share
+      // the width and margins of the Agents, Skills and MCP Registry pages.
       minWidth="phone"
       // A scrolling box would trap the sticky save footer, so it could not
       // pin to the bottom of the window. Only the wide sections, such as

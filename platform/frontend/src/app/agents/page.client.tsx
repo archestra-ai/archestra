@@ -7,19 +7,11 @@ import {
 } from "@archestra/shared";
 import type {
   CellContext,
-  Column,
   ColumnDef,
   RowSelectionState,
   SortingState,
 } from "@tanstack/react-table";
-import {
-  Bot,
-  ChevronDown,
-  ChevronUp,
-  Plus,
-  Trash2,
-  Upload,
-} from "lucide-react";
+import { Bot, Plus, Trash2, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   createContext,
@@ -82,6 +74,7 @@ import {
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
+import { SortableHeader } from "@/components/sortable-header";
 import {
   EmptyTableSection,
   TableSectionHeading,
@@ -188,31 +181,6 @@ export default function AgentsPage() {
       <ErrorBoundary>
         <Agents />
       </ErrorBoundary>
-    </div>
-  );
-}
-
-function SortIcon({
-  isSorted,
-}: {
-  isSorted:
-    | NonNullable<
-        archestraApiTypes.GetAgentCatalogData["query"]
-      >["sortDirection"]
-    | false;
-}) {
-  const upArrow = <ChevronUp className="h-3 w-3" />;
-  const downArrow = <ChevronDown className="h-3 w-3" />;
-  if (isSorted === "asc") {
-    return upArrow;
-  }
-  if (isSorted === "desc") {
-    return downArrow;
-  }
-  return (
-    <div className="text-muted-foreground flex flex-col items-center">
-      {upArrow}
-      <span className="mt-[-4px]">{downArrow}</span>
     </div>
   );
 }
@@ -1362,25 +1330,6 @@ function DeleteAgentDialog({
       confirmLabel="Delete Agent"
       pendingLabel="Deleting..."
     />
-  );
-}
-
-function SortableHeader({
-  column,
-  label,
-}: {
-  column: Column<AgentListRow>;
-  label: string;
-}) {
-  return (
-    <Button
-      variant="ghost"
-      className="h-auto !p-0 font-medium whitespace-nowrap hover:bg-transparent"
-      onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-    >
-      <span>{label}</span>
-      <SortIcon isSorted={column.getIsSorted()} />
-    </Button>
   );
 }
 

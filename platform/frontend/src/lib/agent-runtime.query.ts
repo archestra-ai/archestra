@@ -279,7 +279,7 @@ export function useDeleteAgentWorkspace() {
       return data;
     },
     onSuccess: async () => {
-      toast.success("Workspace deleted. Run history is still available.");
+      toast.success("Deleted the run's saved files");
       await queryClient.invalidateQueries({ queryKey: ["agent-runs"] });
     },
   });

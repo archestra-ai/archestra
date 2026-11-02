@@ -62,7 +62,9 @@ test("lists an Agent's runs and opens one from its row", async ({
   await expect(
     table.getByRole("link", { name: runs[0].title, exact: true }),
   ).toBeVisible({ timeout: 60_000 });
-  await expect(table.getByText("Priya Raman", { exact: true })).toBeVisible();
+  await expect(
+    table.getByText("Started by Priya Raman", { exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("checkbox", { name: `Select ${runs[3].title}` }),
   ).toBeDisabled();
@@ -89,6 +91,13 @@ test("keeps the runs list and its bulk actions inside a phone viewport", async (
   await page.goto(`/agents/${agent.id}?section=runs`);
   const title = page.getByRole("link", { name: runs[0].title, exact: true });
   await expect(title).toBeVisible({ timeout: 60_000 });
+  // Each row keeps its own actions beside the title.
+  const rowMenu = page.getByRole("button", {
+    name: `More actions ${runs[0].title}`,
+    exact: true,
+  });
+  await expect(rowMenu).toBeVisible();
+  await expectInsideViewport(rowMenu, 390);
   await page
     .getByRole("checkbox", { name: "Select all runs on this page" })
     .click();
@@ -99,7 +108,7 @@ test("keeps the runs list and its bulk actions inside a phone viewport", async (
     await expectInsideViewport(control, 390);
   }
   await menu.click();
-  for (const name of ["Stop 1", "Delete saved files 2", "Delete 2"]) {
+  for (const name of ["Stop", "Delete saved files", "Delete"]) {
     const item = page.getByRole("menuitem", { name, exact: true });
     await expect(item).toBeVisible();
     await expectInsideViewport(item, 390);
@@ -130,10 +139,10 @@ test("deletes only the viewer's finished runs in one request", async ({
   await page
     .getByRole("checkbox", { name: "Select all runs on this page" })
     .click();
-  await page.getByRole("button", { name: "Delete 2", exact: true }).click();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Delete 2 runs?" });
   await expect(
-    dialog.getByText(/The run that is still running is not deleted/),
+    dialog.getByText(/The run that is still running stays/),
   ).toBeVisible();
   const sent = page.waitForRequest(
     (sentRequest) =>

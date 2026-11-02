@@ -61,7 +61,15 @@ export function AgentRuns({ agentId }: { agentId: string }) {
     return `${pathname}?${params}`;
   };
   if (isPending)
-    return <div className="h-48 animate-pulse rounded-lg border bg-muted/30" />;
+    return (
+      <AgentRunList
+        runs={[]}
+        viewerId={session?.user.id}
+        runHref={runHref}
+        onOpen={() => {}}
+        isLoading
+      />
+    );
   if (isError)
     return (
       <QueryLoadError

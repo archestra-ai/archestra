@@ -130,9 +130,9 @@ describe("AgentRuns", () => {
       "href",
       `/agents/agent-1?section=runs&run=${state.runs[0].taskId}`,
     );
-    expect(screen.getByText("You")).toBeVisible();
+    expect(screen.getByText("Started by you")).toBeVisible();
     expect(screen.queryByText("Live terminal")).toBeNull();
-    await user.click(screen.getByText("Sam Chen"));
+    await user.click(screen.getByText("Started by Sam Chen"));
     expect(
       await screen.findByRole("heading", { name: "Shared review" }),
     ).toBeVisible();
@@ -200,12 +200,12 @@ describe("AgentRuns", () => {
       screen.getByRole("checkbox", { name: "Select all runs on this page" }),
     );
     expect(screen.getAllByText("3 runs selected")[0]).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Delete 2" }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
     const confirmDelete = screen.getByRole("dialog", {
       name: "Delete 2 runs?",
     });
     expect(
-      within(confirmDelete).getByText(/run that is still running is not/),
+      within(confirmDelete).getByText(/run that is still running stays/),
     ).toBeVisible();
     await user.click(
       within(confirmDelete).getByRole("button", { name: "Delete runs" }),
@@ -260,17 +260,21 @@ describe("AgentRuns", () => {
     await user.click(
       screen.getByRole("checkbox", { name: "Select all runs on this page" }),
     );
+    // Stop shows for a selection of finished runs, refused with what to select.
+    const stop = screen.getByRole("button", { name: "Stop" });
+    expect(stop).toHaveAttribute("aria-disabled", "true");
+    expect(stop).toHaveAccessibleDescription(
+      "Select a run that is still running",
+    );
+    await user.click(stop);
+    expect(screen.queryByRole("dialog")).toBeNull();
     // Delete reaches every selected run; the files action only one of them.
     expect(screen.getByRole("button", { name: "Delete" })).toBeVisible();
     await user.click(
-      screen.getByRole("button", { name: /Delete saved files 1/ }),
+      screen.getByRole("button", { name: "Delete saved files" }),
     );
-    const dialog = screen.getByRole("dialog", {
-      name: "Delete saved files of 1 run?",
-    });
-    expect(
-      within(dialog).getByText(/Run history remains available/),
-    ).toBeVisible();
+    const dialog = screen.getByRole("dialog", { name: "Delete saved files?" });
+    expect(within(dialog).getByText(/Its history stays/)).toBeVisible();
     await user.click(
       within(dialog).getByRole("button", { name: "Delete saved files" }),
     );
@@ -344,14 +348,107 @@ describe("AgentRuns", () => {
         name: "Select all runs on this page",
       }),
     );
-    await user.click(screen.getByRole("button", { name: "Stop 1" }));
+    await user.click(screen.getByRole("button", { name: "Stop" }));
     // The run ends while the dialog is open.
     state.runs = [{ ...live, endedAt: "2026-09-03T20:06:00.000Z" }, done];
     await act(() => queryClient.invalidateQueries());
-    const dialog = screen.getByRole("dialog", { name: "Stop 1 run?" });
+    const dialog = screen.getByRole("dialog", { name: "Stop run?" });
     await user.click(within(dialog).getByRole("button", { name: "Stop run" }));
     expect(sent).toEqual([live.sessionId]);
     expect(screen.getAllByText("2 runs selected")[0]).toBeInTheDocument();
+  });
+  it("shows the actions that fit each run as buttons on its row, and leaves out the rest", async () => {
+    state.runs = rowActionRuns();
+    const requests = recordBulkRequests();
+    renderRuns("agent-1", false, "section=runs");
+    const user = userEvent.setup();
+    // A selection made before a row action stays for the bulk bar.
+    await user.click(
+      await screen.findByRole("checkbox", { name: "Select Other review" }),
+    );
+    const button = (label: string, title: string) =>
+      screen.getByRole("button", { name: `${label} ${title}` });
+    const actionsOf = (title: string) =>
+      [
+        "Copy run ID",
+        "Stop run",
+        "Delete saved files",
+        "Delete run",
+        "More actions",
+      ].filter(
+        (label) =>
+          screen.queryByRole("button", { name: `${label} ${title}` }) !== null,
+      );
+    expect(actionsOf("Live review")).toEqual(["Copy run ID", "Stop run"]);
+    expect(actionsOf("Finished review")).toEqual([
+      "Copy run ID",
+      "Delete saved files",
+      "Delete run",
+    ]);
+    expect(actionsOf("Other review")).toEqual(["Copy run ID", "Delete run"]);
+    expect(actionsOf("Colleague review")).toEqual(["Copy run ID"]);
+    await user.click(button("Copy run ID", "Colleague review"));
+    expect(copyToClipboard).toHaveBeenCalledWith("colleague-run");
+    expect(toast.success).toHaveBeenCalledWith("Run ID copied");
+    await user.click(button("Delete run", "Finished review"));
+    const confirmDelete = screen.getByRole("dialog", { name: "Delete run?" });
+    await user.click(
+      within(confirmDelete).getByRole("button", { name: "Delete run" }),
+    );
+    expect(toast.success).toHaveBeenCalledWith("Deleted 1 run");
+    await user.click(button("Stop run", "Live review"));
+    const confirmStop = screen.getByRole("dialog", { name: "Stop run?" });
+    await user.click(
+      within(confirmStop).getByRole("button", { name: "Stop run" }),
+    );
+    expect(requests).toEqual([
+      { action: "delete", ids: ["done-1"] },
+      { action: "stop", ids: ["live-run"] },
+    ]);
+    expect(url.search).toBe("section=runs");
+    expect(screen.getAllByText("1 run selected")[0]).toBeInTheDocument();
+  });
+  it("folds a row's actions into one menu on a phone, kept open while the list refreshes", async () => {
+    const width = window.innerWidth;
+    window.innerWidth = 390;
+    try {
+      state.runs = rowActionRuns();
+      const requests = recordBulkRequests();
+      renderRuns("agent-1", false, "section=runs");
+      const user = userEvent.setup();
+      const menuOf = async (title: string) => {
+        await user.click(
+          await screen.findByRole("button", { name: `More actions ${title}` }),
+        );
+        return screen.getAllByRole("menuitem").map((item) => item.textContent);
+      };
+      expect(await menuOf("Colleague review")).toEqual(["Copy run ID"]);
+      await user.keyboard("{Escape}");
+      expect(await menuOf("Live review")).toEqual(["Copy run ID", "Stop run"]);
+      await user.keyboard("{Escape}");
+      expect(await menuOf("Finished review")).toEqual([
+        "Copy run ID",
+        "Delete saved files",
+        "Delete run",
+      ]);
+      // The list refreshes every few seconds; an open row menu stays open.
+      state.runs = state.runs.map((run) =>
+        run.taskId === "live-run"
+          ? { ...run, lastModelActivityAt: "2026-09-03T20:09:00.000Z" }
+          : run,
+      );
+      await act(() => queryClient.invalidateQueries());
+      await user.click(screen.getByRole("menuitem", { name: "Delete run" }));
+      await user.click(
+        within(screen.getByRole("dialog", { name: "Delete run?" })).getByRole(
+          "button",
+          { name: "Delete run" },
+        ),
+      );
+      expect(requests).toEqual([{ action: "delete", ids: ["done-1"] }]);
+    } finally {
+      window.innerWidth = width;
+    }
   });
   it("offers no selection to a viewer who started none of the runs", async () => {
     state.runs = [
@@ -363,7 +460,7 @@ describe("AgentRuns", () => {
       },
     ];
     renderRuns("agent-1", false, "section=runs");
-    expect(await screen.findByText("Sam Chen")).toBeVisible();
+    expect(await screen.findByText("Started by Sam Chen")).toBeVisible();
     expect(screen.queryByRole("checkbox")).toBeNull();
   });
   it("returns to the list after deleting the open run", async () => {
@@ -723,4 +820,54 @@ function GlobalSearchHarness() {
   return isOpen ? (
     <div role="dialog" aria-label="Search conversations" />
   ) : null;
+}
+
+/** The viewer's live, ended-with-files and ended runs, and a colleague's. */
+function rowActionRuns(): AgentRunListItem[] {
+  const own = (taskId: string, title: string, endedAt: string | null) => ({
+    ...createRun(endedAt),
+    taskId,
+    sessionId: taskId,
+    title,
+  });
+  return [
+    own("live-run", "Live review", null),
+    {
+      ...own("done-1", "Finished review", "2026-09-03T20:05:00.000Z"),
+      workspace: { state: "suspended", expiresAt: "2026-09-06T20:00:00Z" },
+    },
+    own("done-2", "Other review", "2026-09-03T20:06:00.000Z"),
+    {
+      ...createRun(null),
+      taskId: "colleague-run",
+      sessionId: "colleague-run",
+      actorId: "user-2",
+      actorUserId: "user-2",
+      initiatorName: "Sam Chen",
+      title: "Colleague review",
+    },
+  ];
+}
+
+/** Answers the bulk stop and delete routes, recording what each was sent. */
+function recordBulkRequests() {
+  const requests: { action: string; ids: string[] }[] = [];
+  const record =
+    (action: string) =>
+    async ({ request }: { request: Request }) => {
+      const { ids } = (await request.json()) as { ids: string[] };
+      requests.push({ action, ids });
+      return HttpResponse.json({
+        succeeded: ids.map((id) => ({ id, name: id })),
+        failed: [],
+      });
+    };
+  server.use(
+    http.post(
+      "http://localhost:9000/api/agent-runs/bulk-cancel",
+      record("stop"),
+    ),
+    http.delete("http://localhost:9000/api/agent-runs/bulk", record("delete")),
+  );
+  return requests;
 }

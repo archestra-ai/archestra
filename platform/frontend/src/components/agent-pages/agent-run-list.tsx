@@ -1,16 +1,26 @@
 "use client";
 
-import type { ColumnDef } from "@tanstack/react-table";
+import type {
+  CellContext,
+  ColumnDef,
+  SortingState,
+} from "@tanstack/react-table";
 import {
   ChevronDown,
+  Copy,
   FolderX,
   type LucideIcon,
   Square,
   TerminalSquare,
   Trash2,
 } from "lucide-react";
-import Link from "next/link";
-import { useState } from "react";
+import { createContext, type ReactNode, useContext, useState } from "react";
+import { toast } from "sonner";
+import { AgentNameCell } from "@/components/agent-name-cell";
+import {
+  type RunAction,
+  runActionConfirmCopy,
+} from "@/components/agent-pages/agent-run-actions-copy";
 import {
   openRowOnPlainClick,
   RowClickShield,
@@ -24,6 +34,11 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { SearchInput } from "@/components/search-input";
+import { SortableHeader } from "@/components/sortable-header";
+import {
+  type TableRowAction,
+  TableRowActions,
+} from "@/components/table-row-actions";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
@@ -35,13 +50,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PermissionButton } from "@/components/ui/permission-button";
+import { runStatusMarks } from "@/lib/agent-run-status-marks";
 import {
   type AgentRunListItem,
   useBulkCancelAgentRuns,
   useBulkDeleteAgentRuns,
   useBulkDeleteAgentWorkspaces,
 } from "@/lib/agent-runtime.query";
+import { copyToClipboard } from "@/lib/clipboard";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 
 /**
@@ -53,25 +72,34 @@ export function AgentRunList({
   viewerId,
   runHref,
   onOpen,
+  isLoading = false,
 }: {
   runs: AgentRunListItem[];
   viewerId: string | undefined;
   runHref: (runId: string) => string;
   onOpen: (runId: string) => void;
+  isLoading?: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [starter, setStarter] = useState(ANYONE);
   const [status, setStatus] = useState<StatusFilter>("all");
-  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
+  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "startedAt", desc: true },
+  ]);
   const bulkCancel = useBulkCancelAgentRuns();
   const bulkDelete = useBulkDeleteAgentRuns();
   const bulkDeleteFiles = useBulkDeleteAgentWorkspaces();
+  const compact = useIsMobile();
   // What a dialog acts on is fixed when it opens: the list refreshes every few
   // seconds, and a run that ends meanwhile must not change what Confirm sends.
   const [confirming, setConfirming] = useState<{
-    action: BulkRunAction;
+    action: RunAction;
     runIds: string[];
-    selectedCount: number;
+    /** Selected runs that Delete leaves alone because they are still going. */
+    stillRunning: number;
+    /** A bulk action that reaches the whole selection clears it when done. */
+    clearsSelection: boolean;
   } | null>(null);
 
   const isOwn = (run: AgentRunListItem) =>
@@ -105,14 +133,9 @@ export function AgentRunList({
     filterSignature: JSON.stringify({ query, starter, status }),
     matchDescription: hasActiveFilters ? "match the filters" : "exist",
   });
-  const active = selected.filter((run) => run.endedAt === null);
-  const ended = selected.filter((run) => run.endedAt !== null);
-  // The run page offers "Delete saved files" in the same workspace states.
-  const withFiles = ended.filter(
-    (run) =>
-      run.workspace &&
-      ["idle", "suspended", "deleting"].includes(run.workspace.state),
-  );
+  const active = selected.filter(isLive);
+  const ended = selected.filter((run) => !isLive(run));
+  const withFiles = ended.filter(hasSavedFiles);
   // Only runs the viewer started can be stopped or deleted, so a viewer who
   // started none of these gets no selection column at all.
   const canSelectAny = runs.some(isOwn);
@@ -123,6 +146,63 @@ export function AgentRunList({
     value: key,
     label: isOwn(run) ? "Started by me" : `Started by ${initiatorLabel(run)}`,
   }));
+
+  const confirmRow = (action: RunAction, run: AgentRunListItem) =>
+    setConfirming({
+      action,
+      runIds: [run.sessionId],
+      stillRunning: 0,
+      clearsSelection: false,
+    });
+  // Like the other tables, a row shows the actions that fit its run as
+  // buttons and leaves out the rest: Stop while the run is live, and Delete
+  // saved files and Delete run after it ends, for the person who started it.
+  const rowActions = (run: AgentRunListItem) => {
+    const own = isOwn(run);
+    const live = isLive(run);
+    const actions: TableRowAction[] = [
+      {
+        icon: <Copy className="h-4 w-4" />,
+        label: "Copy run ID",
+        onClick: () => {
+          void copyToClipboard(run.sessionId).then(
+            () => toast.success("Run ID copied"),
+            () => toast.error("Could not copy run ID"),
+          );
+        },
+      },
+    ];
+    if (own && live)
+      actions.push({
+        icon: <Square className="h-4 w-4 fill-current" />,
+        label: "Stop run",
+        onClick: () => confirmRow("stop", run),
+      });
+    if (own && !live && hasSavedFiles(run))
+      actions.push({
+        icon: <FolderX className="h-4 w-4" />,
+        label: "Delete saved files",
+        onClick: () => confirmRow("files", run),
+      });
+    if (own && !live)
+      actions.push({
+        icon: <Trash2 className="h-4 w-4" />,
+        label: "Delete run",
+        variant: "destructive",
+        onClick: () => confirmRow("delete", run),
+      });
+    // A phone keeps the row's width for the title, so the buttons fold into
+    // one menu there.
+    return compact ? (
+      <TableRowActions
+        itemName={run.title}
+        actions={[]}
+        dropdownActions={actions}
+      />
+    ) : (
+      <TableRowActions itemName={run.title} actions={actions} />
+    );
+  };
 
   const columns: ColumnDef<AgentRunListItem>[] = [
     ...(canSelectAny
@@ -138,215 +218,183 @@ export function AgentRunList({
       : []),
     {
       id: "title",
-      header: "Run",
-      enableSorting: false,
-      cell: ({ row, table }) => {
-        const run = row.original;
-        // A narrow table drops its columns; what they held moves under the
-        // title so each row still says how the run went and who started it.
-        const hidden = (id: string) =>
-          table.getColumn(id)?.getIsVisible() === false;
-        const meta = [
-          hidden("startedBy")
-            ? isOwn(run)
-              ? "You"
-              : initiatorLabel(run)
-            : null,
-          hidden("startedAt") ? startedAgo(run) : null,
-        ].filter(Boolean);
-        return (
-          <div className="min-w-0">
-            <RowClickShield className="min-w-0">
-              <Link
-                href={runHref(run.sessionId)}
-                className="block truncate font-medium hover:underline"
-              >
-                {run.title}
-              </Link>
-            </RowClickShield>
-            {(hidden("status") || meta.length > 0) && (
-              <div className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                {hidden("status") && (
-                  <RowClickShield className="inline-flex shrink-0">
-                    <RunStatus run={run} />
-                  </RowClickShield>
-                )}
-                {meta.length > 0 && (
-                  <span className="truncate">{meta.join(", ")}</span>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      },
+      accessorFn: (run) => run.title.toLowerCase(),
+      header: ({ column }) => <SortableHeader column={column} label="Run" />,
+      cell: RunTitleCell,
     },
     {
       id: "status",
       header: "Status",
-      size: 200,
+      size: 220,
       enableSorting: false,
-      cell: ({ row }) => (
-        <RowClickShield className="inline-flex">
-          <RunStatus run={row.original} />
-        </RowClickShield>
-      ),
-    },
-    {
-      id: "startedBy",
-      header: "Started by",
-      size: 160,
-      enableSorting: false,
-      cell: ({ row }) => (
-        <span className="block truncate text-muted-foreground">
-          {isOwn(row.original) ? "You" : initiatorLabel(row.original)}
-        </span>
-      ),
+      cell: RunStatusCell,
     },
     {
       id: "startedAt",
-      header: () => <span className="block text-right">Started</span>,
-      size: 140,
-      enableSorting: false,
+      accessorFn: (run) => run.startedAt,
+      header: ({ column }) => (
+        <SortableHeader column={column} label="Started" />
+      ),
+      // Fits the longest relative time, "less than a minute ago".
+      size: 180,
       cell: ({ row }) => (
         <time
           dateTime={row.original.startedAt}
           title={new Date(row.original.startedAt).toLocaleString()}
-          className="block whitespace-nowrap text-right tabular-nums text-muted-foreground"
+          className="whitespace-nowrap text-sm text-muted-foreground"
         >
           {startedAgo(row.original)}
         </time>
       ),
     },
+    {
+      id: "actions",
+      header: () => (
+        <span className={compact ? "sr-only" : "block text-right"}>
+          Actions
+        </span>
+      ),
+      enableHiding: false,
+      enableSorting: false,
+      // At most three buttons: Copy run ID, then Stop run, or Delete saved
+      // files and Delete run. A phone shows one menu button.
+      size: compact ? 64 : 128,
+      cell: RunActionsCell,
+    },
   ];
 
-  const deleteCount = ended.length;
-  const stopCount = active.length;
-  const filesCount = withFiles.length;
-  const targets: Record<BulkRunAction, AgentRunListItem[]> = {
+  // Each bulk action reaches only the selected runs it fits; its dialog
+  // names how many, and Delete says which runs it leaves running.
+  const targets: Record<RunAction, AgentRunListItem[]> = {
     stop: active,
     files: withFiles,
     delete: ended,
   };
-  const confirm = (action: BulkRunAction) =>
+  const confirmBulk = (action: RunAction) =>
     setConfirming({
       action,
       runIds: targets[action].map((run) => run.sessionId),
-      selectedCount: selected.length,
+      stillRunning: action === "delete" ? active.length : 0,
+      clearsSelection: targets[action].length === selected.length,
     });
   const runIds = confirming?.runIds ?? [];
-  const count = runIds.length;
   // Runs the action leaves alone stay selected for the next one.
   const finish = (outcome: { failed: unknown[] }) => {
-    if (
-      outcome.failed.length === 0 &&
-      count === (confirming?.selectedCount ?? 0)
-    )
+    if (confirming?.clearsSelection && outcome.failed.length === 0)
       clearSelection();
     setConfirming(null);
   };
-  // An action that reaches only part of the selection says how many it
-  // reaches, so Delete never looks like it will take the runs still going.
-  const reach = (count: number) => (count < selected.length ? ` ${count}` : "");
+  // Every bulk action shows while runs are selected, like the row's buttons;
+  // one that fits none of them stays disabled and says what to select.
   const actions: {
-    key: BulkRunAction;
+    key: RunAction;
     label: string;
     icon: LucideIcon;
     iconClassName?: string;
     destructive?: boolean;
+    disabledReason: string | null;
   }[] = [
-    ...(stopCount > 0
-      ? [
-          {
-            key: "stop" as const,
-            label: `Stop${reach(stopCount)}`,
-            icon: Square,
-            // Filled, so it reads as stop beside the selection checkboxes.
-            iconClassName: "fill-current",
-          },
-        ]
-      : []),
-    ...(filesCount > 0
-      ? [
-          {
-            key: "files" as const,
-            label: `Delete saved files${reach(filesCount)}`,
-            icon: FolderX,
-          },
-        ]
-      : []),
-    ...(deleteCount > 0
-      ? [
-          {
-            key: "delete" as const,
-            label: `Delete${reach(deleteCount)}`,
-            icon: Trash2,
-            destructive: true,
-          },
-        ]
-      : []),
+    {
+      key: "stop",
+      label: "Stop",
+      icon: Square,
+      // Filled, so it reads as stop beside the selection checkboxes.
+      iconClassName: "fill-current",
+      disabledReason: active.length
+        ? null
+        : "Select a run that is still running",
+    },
+    {
+      key: "files",
+      label: "Delete saved files",
+      icon: FolderX,
+      disabledReason: withFiles.length
+        ? null
+        : "Select a finished run that has saved files",
+    },
+    {
+      key: "delete",
+      label: "Delete",
+      icon: Trash2,
+      destructive: true,
+      disabledReason: ended.length ? null : "Select a finished run",
+    },
   ];
+  const confirmCopy = confirming
+    ? runActionConfirmCopy({
+        action: confirming.action,
+        count: runIds.length,
+        stillRunning: confirming.stillRunning,
+      })
+    : null;
+  const mutations = {
+    stop: bulkCancel,
+    files: bulkDeleteFiles,
+    delete: bulkDelete,
+  };
 
   return (
-    <BulkActionsScope>
-      <CollectionFilters>
-        <FilterBar
-          onClearFilters={hasActiveFilters ? clearFilters : undefined}
-          search={
-            <SearchInput
-              objectNamePlural="runs"
-              searchFields={["title", "ID"]}
-              value={search}
-              onSearchChange={(value) => {
-                setSearch(value);
-                setPagination((current) => ({ ...current, pageIndex: 0 }));
-              }}
-              syncQueryParams={false}
-              className={filterSearchClass}
-            />
-          }
-        >
-          <FilterSelect
-            value={status}
-            onValueChange={(value) => {
-              setStatus(value as StatusFilter);
-              setPagination((current) => ({ ...current, pageIndex: 0 }));
-            }}
-            placeholder="Filter by status"
-            inactiveValue="all"
-            items={STATUS_ITEMS}
-          />
-          {starters.length > 1 && (
+    <RunListContext.Provider value={{ isOwn, runHref, rowActions }}>
+      <BulkActionsScope>
+        <CollectionFilters>
+          <FilterBar
+            leading
+            onClearFilters={hasActiveFilters ? clearFilters : undefined}
+            search={
+              <SearchInput
+                objectNamePlural="runs"
+                searchFields={["title", "ID"]}
+                value={search}
+                onSearchChange={(value) => {
+                  setSearch(value);
+                  setPagination((current) => ({ ...current, pageIndex: 0 }));
+                }}
+                syncQueryParams={false}
+                className={filterSearchClass}
+              />
+            }
+          >
             <FilterSelect
-              value={starter}
+              value={status}
               onValueChange={(value) => {
-                setStarter(value);
+                setStatus(value as StatusFilter);
                 setPagination((current) => ({ ...current, pageIndex: 0 }));
               }}
-              placeholder="Filter by who started it"
-              inactiveValue={ANYONE}
-              items={[
-                { value: ANYONE, label: "Started by anyone" },
-                ...starters,
-              ]}
+              placeholder="Filter by status"
+              inactiveValue="all"
+              items={STATUS_ITEMS}
             />
-          )}
-        </FilterBar>
-      </CollectionFilters>
+            {starters.length > 1 && (
+              <FilterSelect
+                value={starter}
+                onValueChange={(value) => {
+                  setStarter(value);
+                  setPagination((current) => ({ ...current, pageIndex: 0 }));
+                }}
+                placeholder="Filter by who started it"
+                inactiveValue={ANYONE}
+                items={[
+                  { value: ANYONE, label: "Started by anyone" },
+                  ...starters,
+                ]}
+              />
+            )}
+          </FilterBar>
+        </CollectionFilters>
 
-      {canSelectAny && (
-        <BulkActions
-          count={selected.length}
-          noun="run"
-          onClear={clearSelection}
-          selectAllMatching={selectAllMatching}
-          busy={
-            bulkCancel.isPending ||
-            bulkDelete.isPending ||
-            bulkDeleteFiles.isPending
-          }
-        >
-          {/* A phone has room for one action; more fold into a menu. */}
-          {actions.length > 1 && (
+        {canSelectAny && (
+          <BulkActions
+            count={selected.length}
+            noun="run"
+            onClear={clearSelection}
+            selectAllMatching={selectAllMatching}
+            busy={
+              bulkCancel.isPending ||
+              bulkDelete.isPending ||
+              bulkDeleteFiles.isPending
+            }
+          >
+            {/* A phone has room for one action; the three fold into a menu. */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="sm:hidden">
@@ -359,7 +407,8 @@ export function AgentRunList({
                   <DropdownMenuItem
                     key={action.key}
                     variant={action.destructive ? "destructive" : "default"}
-                    onSelect={() => confirm(action.key)}
+                    disabled={!!action.disabledReason}
+                    onSelect={() => confirmBulk(action.key)}
                   >
                     <action.icon className={action.iconClassName} />
                     <span>{action.label}</span>
@@ -367,89 +416,69 @@ export function AgentRunList({
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
-          )}
-          {actions.map((action) => (
-            <Button
-              key={action.key}
-              variant={action.destructive ? "destructive" : "outline"}
-              size="sm"
-              className={actions.length > 1 ? "max-sm:hidden" : undefined}
-              onClick={() => confirm(action.key)}
-            >
-              <action.icon className={action.iconClassName} />
-              <span>{action.label}</span>
-            </Button>
-          ))}
-        </BulkActions>
-      )}
+            {actions.map((action) => (
+              <PermissionButton
+                key={action.key}
+                // Run actions are checked by who started the run, not by role.
+                permissions={{}}
+                disabled={!!action.disabledReason}
+                tooltip={action.disabledReason ?? undefined}
+                variant={action.destructive ? "destructive" : "outline"}
+                size="sm"
+                className="max-sm:hidden"
+                onClick={() => confirmBulk(action.key)}
+              >
+                <action.icon className={action.iconClassName} />
+                <span>{action.label}</span>
+              </PermissionButton>
+            ))}
+          </BulkActions>
+        )}
 
-      <DataTable
-        columns={columns}
-        data={filtered}
-        getRowId={(run) => run.sessionId}
-        rowSelection={canSelectAny ? rowSelection : undefined}
-        onRowSelectionChange={canSelectAny ? setRowSelection : undefined}
-        onPageRowIdsChange={onPageRowIdsChange}
-        hideSelectedCount
-        pagination={{ ...pagination, total: filtered.length }}
-        onPaginationChange={setPagination}
-        hidePaginationWhenSinglePage
-        onRowClick={(run, event) =>
-          openRowOnPlainClick(event, () => onOpen(run.sessionId))
-        }
-        emptyIcon={TerminalSquare}
-        emptyMessage="No runs yet"
-        hasActiveFilters={hasActiveFilters}
-        filteredEmptyMessage="No runs match your filters"
-        onClearFilters={clearFilters}
-        fixedWidthColumnIds={["status", "startedBy", "startedAt"]}
-        flexibleColumnIds={["title"]}
-        columnDropOrder={["startedBy", "startedAt", "status"]}
-      />
+        <DataTable
+          columns={columns}
+          data={filtered}
+          getRowId={(run) => run.sessionId}
+          rowSelection={canSelectAny ? rowSelection : undefined}
+          onRowSelectionChange={canSelectAny ? setRowSelection : undefined}
+          onPageRowIdsChange={onPageRowIdsChange}
+          hideSelectedCount
+          pagination={{ ...pagination, total: filtered.length }}
+          onPaginationChange={setPagination}
+          sorting={sorting}
+          onSortingChange={setSorting}
+          onRowClick={(run, event) =>
+            openRowOnPlainClick(event, () => onOpen(run.sessionId))
+          }
+          isLoading={isLoading}
+          emptyIcon={TerminalSquare}
+          emptyMessage="No runs yet"
+          hasActiveFilters={hasActiveFilters}
+          filteredEmptyMessage="No runs match your filters"
+          onClearFilters={clearFilters}
+          fixedWidthColumnIds={["status", "startedAt"]}
+          flexibleColumnIds={["title"]}
+          columnDropOrder={["startedAt", "status"]}
+        />
 
-      <DeleteConfirmDialog
-        open={confirming?.action === "stop"}
-        onOpenChange={(open) => !open && setConfirming(null)}
-        title={`Stop ${countOf(count)}?`}
-        description={`The Agent ${
-          count === 1 ? "process" : "processes"
-        } will stop. Saved files and run history will be retained so you can continue later.`}
-        confirmLabel={count === 1 ? "Stop run" : "Stop runs"}
-        pendingLabel="Stopping…"
-        isPending={bulkCancel.isPending}
-        onConfirm={() => bulkCancel.mutate(runIds, { onSuccess: finish })}
-      />
-      <DeleteConfirmDialog
-        open={confirming?.action === "delete"}
-        onOpenChange={(open) => !open && setConfirming(null)}
-        title={`Delete ${countOf(count)}?`}
-        description={`This removes ${
-          count === 1
-            ? "the session, its retained output, and its"
-            : "their sessions, retained output, and"
-        } saved files. This action cannot be undone.${runningNote(
-          (confirming?.selectedCount ?? 0) - count,
-        )}`}
-        confirmLabel={count === 1 ? "Delete run" : "Delete runs"}
-        pendingLabel="Deleting…"
-        isPending={bulkDelete.isPending}
-        onConfirm={() => bulkDelete.mutate(runIds, { onSuccess: finish })}
-      />
-      <DeleteConfirmDialog
-        open={confirming?.action === "files"}
-        onOpenChange={(open) => !open && setConfirming(null)}
-        title={`Delete saved files of ${countOf(count)}?`}
-        description={`This permanently removes ${
-          count === 1
-            ? "the run's saved files. You cannot resume the run"
-            : "their saved files. You cannot resume these runs"
-        } afterward. Run history remains available.`}
-        confirmLabel="Delete saved files"
-        pendingLabel="Deleting…"
-        isPending={bulkDeleteFiles.isPending}
-        onConfirm={() => bulkDeleteFiles.mutate(runIds, { onSuccess: finish })}
-      />
-    </BulkActionsScope>
+        {confirming && confirmCopy && (
+          <DeleteConfirmDialog
+            open
+            onOpenChange={(open) => !open && setConfirming(null)}
+            title={confirmCopy.title}
+            description={confirmCopy.description}
+            confirmLabel={confirmCopy.confirmLabel}
+            pendingLabel={
+              confirming.action === "stop" ? "Stopping…" : "Deleting…"
+            }
+            isPending={mutations[confirming.action].isPending}
+            onConfirm={() =>
+              mutations[confirming.action].mutate(runIds, { onSuccess: finish })
+            }
+          />
+        )}
+      </BulkActionsScope>
+    </RunListContext.Provider>
   );
 }
 
@@ -466,6 +495,70 @@ export function initiatorLabel(run: AgentRunListItem): string {
   return "an unknown user";
 }
 
+// TanStack renders each cell as a component, and the list refreshes every few
+// seconds: a cell defined inline would remount on each refresh and close an
+// open row menu or status popover. These keep one identity, and the context
+// hands them this render's helpers.
+const RunListContext = createContext<{
+  isOwn: (run: AgentRunListItem) => boolean;
+  runHref: (runId: string) => string;
+  rowActions: (run: AgentRunListItem) => ReactNode;
+} | null>(null);
+
+function useRunList() {
+  const context = useContext(RunListContext);
+  if (!context) throw new Error("A run list cell rendered outside its list");
+  return context;
+}
+
+function RunTitleCell({ row, table }: CellContext<AgentRunListItem, unknown>) {
+  const { isOwn, runHref } = useRunList();
+  const run = row.original;
+  const startedBy = `Started by ${isOwn(run) ? "you" : initiatorLabel(run)}`;
+  // A narrow table drops the Started and then the Status column. Their facts
+  // move into the row: its age into the subline, and its status into the
+  // subline and the icon, which turns into the run's state icon.
+  const hidden = (id: string) => table.getColumn(id)?.getIsVisible() === false;
+  const narrow = hidden("status");
+  const marks = runStatusMarks(run);
+  const subline = hidden("startedAt")
+    ? `${startedBy}, ${startedAgo(run)}`
+    : startedBy;
+  return (
+    <AgentNameCell
+      name={run.title}
+      href={runHref(run.sessionId)}
+      icon={
+        narrow ? (
+          <AgentRunState {...run} iconOnly />
+        ) : (
+          <TerminalSquare className="size-5 text-muted-foreground" />
+        )
+      }
+      description={
+        narrow ? `${marks.chip?.label ?? marks.label} · ${subline}` : subline
+      }
+    />
+  );
+}
+
+function RunStatusCell({ row }: CellContext<AgentRunListItem, unknown>) {
+  return (
+    <RowClickShield className="inline-flex">
+      <RunStatus run={row.original} />
+    </RowClickShield>
+  );
+}
+
+function RunActionsCell({ row }: CellContext<AgentRunListItem, unknown>) {
+  const { rowActions } = useRunList();
+  return (
+    <RowClickShield className="flex justify-end">
+      {rowActions(row.original)}
+    </RowClickShield>
+  );
+}
+
 function RunStatus({ run }: { run: AgentRunListItem }) {
   return (
     <AgentRunState
@@ -476,14 +569,11 @@ function RunStatus({ run }: { run: AgentRunListItem }) {
       hardDeadlineAt={run.hardDeadlineAt}
       lastModelActivityAt={run.lastModelActivityAt}
       workspace={run.workspace}
-      compact
     />
   );
 }
 
 const ANYONE = "anyone";
-
-type BulkRunAction = "stop" | "files" | "delete";
 
 type StatusFilter = "all" | "running" | "ended" | "failed";
 
@@ -506,14 +596,14 @@ function startedAgo(run: AgentRunListItem) {
   return formatRelativeTimeFromNow(run.startedAt, { strict: true });
 }
 
-/** Delete reaches only ended runs; the rest of the selection is still running. */
-function runningNote(running: number) {
-  if (running === 1) return " The run that is still running is not deleted.";
-  if (running > 1)
-    return ` The ${running} runs that are still running are not deleted.`;
-  return "";
+function isLive(run: AgentRunListItem) {
+  return run.endedAt === null;
 }
 
-function countOf(count: number) {
-  return `${count} ${count === 1 ? "run" : "runs"}`;
+/** The run page offers "Delete saved files" in the same workspace states. */
+function hasSavedFiles(run: AgentRunListItem) {
+  return (
+    !!run.workspace &&
+    ["idle", "suspended", "deleting"].includes(run.workspace.state)
+  );
 }

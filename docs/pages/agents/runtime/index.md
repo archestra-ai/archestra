@@ -82,9 +82,9 @@ Select the agent in Chat or in a [Project](/docs/chat/projects) and send a task.
 
 - **Leave and come back:** the run keeps working. Reopen it from the sidebar and send a follow-up.
 - **Past runs:** the agent's **Runs** tab lists live and finished runs. Select a run to open it, then select the **Open full view** expand icon for the larger terminal and run controls. For a retained run you started, select **Resume** to reopen it without sending a message.
-- **Stop a run:** the person who started it can select **Stop** in Chat or in the open run. Confirm with **Stop run**. Saved files and history remain available.
-- **Delete a run:** after it ends, the person who started it can select **More run actions → Delete run**. Deleting removes its history, output, and saved files, and you cannot undo it.
-- **Several runs at once:** on the **Runs** tab, tick the runs you started, then select **Stop**, **Delete saved files**, or **Delete**. Each applies only to the runs it fits: **Stop** to live runs, the others to finished ones. **Delete saved files** frees their storage and keeps their history.
+- **Stop a run:** the person who started it selects **Stop** in Chat or in the open run, or **Stop run** on its row in the **Runs** tab. Its saved files and history stay, so you can resume it later.
+- **Delete a run:** after a run ends, the person who started it selects **Delete run** on its row, or **More run actions → Delete run** in the open run. Deleting a run permanently removes its history, output, and saved files.
+- **Several runs at once:** on the **Runs** tab, select the runs you started. Then choose **Stop**, **Delete saved files**, or **Delete**. **Stop** acts on live runs. The other two act on finished runs. **Delete saved files** frees the storage of those runs and keeps their history.
 - **Copy text:** select **Select text** to copy text with the browser. Select **Type** to use the running app's controls again.
 - **Follow-ups** reach the agent between its turns. To type them into its terminal instead, set **Steering** to **Terminal input** on the **Agent Runtime** tab.
 - **Open a web app:** for a run you started, select **Open full view**, then **More run actions → View connection details** for the agent's port forwarding command.

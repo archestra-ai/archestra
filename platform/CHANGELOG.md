@@ -1,5 +1,48 @@
 # Changelog
 
+## [1.5.0-rc.20](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.19...platform-v1.5.0-rc.20) (2026-11-02)
+
+
+### Features
+
+* **agent-runtime:** give a run's tools its whole size and toolchain thread counts ([#10012](https://github.com/archestra-ai/archestra/issues/10012)) ([b935a31](https://github.com/archestra-ai/archestra/commit/b935a31ddc441df0de2484ffda0a20cdd22997c3))
+* **guardrails:** follow Copilot CLI natively on the LLM proxy ([#10019](https://github.com/archestra-ai/archestra/issues/10019)) ([ea07e5d](https://github.com/archestra-ai/archestra/commit/ea07e5d28e31c5c51c754316858913cb09182fd8))
+* **openappa:** list Inspect first on review cards ([#10045](https://github.com/archestra-ai/archestra/issues/10045)) ([f51e695](https://github.com/archestra-ai/archestra/commit/f51e6956a500b3b5cfe03ee14da1389d8d8ac517))
+
+
+### Bug Fixes
+
+* **agent-runtime:** a finished run takes no new turn minutes before its retention ends ([#10008](https://github.com/archestra-ai/archestra/issues/10008)) ([fd54272](https://github.com/archestra-ai/archestra/commit/fd542729e849ee39de5df32d1c62a71b41cc558c))
+* **agent-runtime:** address review findings for fixed tier scaleup and docs memory rule ([#10000](https://github.com/archestra-ai/archestra/issues/10000)) ([b1bf3dc](https://github.com/archestra-ai/archestra/commit/b1bf3dcdaa5e3e05f5688ca0c180c25124f962c9))
+* **agent-runtime:** give runs the id their page and the run tools use ([#10032](https://github.com/archestra-ai/archestra/issues/10032)) ([325e9b1](https://github.com/archestra-ai/archestra/commit/325e9b1246053fe662b0aea8aa3a6f4ee128676d))
+* **agent-runtime:** give runs their page URL ([#10035](https://github.com/archestra-ai/archestra/issues/10035)) ([2c0ba7a](https://github.com/archestra-ai/archestra/commit/2c0ba7aeaeb1ad26ad11d5e027118556bb2574f9))
+* **agent-runtime:** give the agent's shell commands the highest OOM score ([#10039](https://github.com/archestra-ai/archestra/issues/10039)) ([4c91b80](https://github.com/archestra-ai/archestra/commit/4c91b80865fa7d76fad221a04e289db16491c6e5))
+* **agent-runtime:** never name a larger memory limit than the container had ([#10027](https://github.com/archestra-ai/archestra/issues/10027)) ([ab67fef](https://github.com/archestra-ai/archestra/commit/ab67fefe2785e4c74b2d5e41b45269bf481e5f1e))
+* **agent-runtime:** refuse outside callers of a fixed-tier agent with the tiers it may use ([#10010](https://github.com/archestra-ai/archestra/issues/10010)) ([d0f16c2](https://github.com/archestra-ai/archestra/commit/d0f16c2ec3e1f8b2333d20bca3865279dc331998))
+* **agent-runtime:** report a Copilot CLI run as waiting only after it answers ([#10033](https://github.com/archestra-ai/archestra/issues/10033)) ([cc6e2c5](https://github.com/archestra-ai/archestra/commit/cc6e2c547ff12eab468f37125db7d87a25608725))
+* **agent-runtime:** say when a run or a command was killed for memory ([#10024](https://github.com/archestra-ai/archestra/issues/10024)) ([4a49f89](https://github.com/archestra-ai/archestra/commit/4a49f897c82cbc6aa76cf4d17d496cfa452f7c1c))
+* **backend:** make every backend source file declaration-emittable ([#10036](https://github.com/archestra-ai/archestra/issues/10036)) ([4782484](https://github.com/archestra-ai/archestra/commit/478248454f5f455985237e82a44e41823d8cb997))
+* **guardrails:** read a tool call with no argument text as an empty object ([#10044](https://github.com/archestra-ai/archestra/issues/10044)) ([f7c6bbd](https://github.com/archestra-ai/archestra/commit/f7c6bbd70cba426bf157c476279b1db674360023))
+* normalize platform versions in provider automation ([#10009](https://github.com/archestra-ai/archestra/issues/10009)) ([9843116](https://github.com/archestra-ai/archestra/commit/9843116bbf9633739c3dc1b211ac82755be22589))
+* **skills:** quote two shared skill descriptions so strict YAML parsers load them ([#10031](https://github.com/archestra-ai/archestra/issues/10031)) ([8bf66cb](https://github.com/archestra-ai/archestra/commit/8bf66cbd00776d188e70ec529318abae5cfcfc8e))
+
+
+### Performance Improvements
+
+* **backend:** import only the Google Drive and Directory APIs ([#10011](https://github.com/archestra-ai/archestra/issues/10011)) ([eee74ed](https://github.com/archestra-ai/archestra/commit/eee74ed3c49affe518468d088a94d1cab1bce7f4))
+* **backend:** load the Microsoft Teams provider only when Teams is configured ([#10020](https://github.com/archestra-ai/archestra/issues/10020)) ([a88954c](https://github.com/archestra-ai/archestra/commit/a88954c46469f16c2d3303246c53d5c19213f6a8))
+* **backend:** ship migrations without drizzle-kit's schema snapshots ([#10015](https://github.com/archestra-ai/archestra/issues/10015)) ([d64d8ec](https://github.com/archestra-ai/archestra/commit/d64d8ec7d2e06ff02797359497a51405131b49a9))
+* **dev-lite:** build the frontend without source maps inside an Agent Runtime ([#10028](https://github.com/archestra-ai/archestra/issues/10028)) ([92586fa](https://github.com/archestra-ai/archestra/commit/92586fa676f9b354cfc29d4a703866ec9265045b))
+* **dev-lite:** serve production builds inside an Agent Runtime ([#10018](https://github.com/archestra-ai/archestra/issues/10018)) ([353cae9](https://github.com/archestra-ai/archestra/commit/353cae956380cd0186e61f1e78b85689999dede1))
+* **platform:** cap the type check's heap where memory is short ([#10025](https://github.com/archestra-ai/archestra/issues/10025)) ([8a5e20f](https://github.com/archestra-ai/archestra/commit/8a5e20f5fd361c184a408678faa9bb8c206d5d62))
+* **platform:** size the type check's checkers to the memory it has ([#10014](https://github.com/archestra-ai/archestra/issues/10014)) ([704de1e](https://github.com/archestra-ai/archestra/commit/704de1e6cfe3654ee1e455e7b5644a1525a0a80c))
+
+
+### Miscellaneous Chores
+
+* **backend:** check the backend's layer order against a shrinking list ([#10038](https://github.com/archestra-ai/archestra/issues/10038)) ([9f0e846](https://github.com/archestra-ai/archestra/commit/9f0e84622d555a3eedfed52df87a90f50400659f))
+* **platform:** move knip to 6.43 in every workspace ([#10041](https://github.com/archestra-ai/archestra/issues/10041)) ([fceca6c](https://github.com/archestra-ai/archestra/commit/fceca6c3c538f26f9ac47897302405eb43c53e8b))
+
 ## [1.5.0-rc.19](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.18...platform-v1.5.0-rc.19) (2026-10-31)
 
 

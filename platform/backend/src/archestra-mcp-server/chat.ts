@@ -130,9 +130,9 @@ const AskUserExecutionSchema = AskUserSchema.extend({
   // scoped, server-held review before allowing that exception.
   question: z.string().min(1),
   // SPDX-SnippetEnd
-  // Earlier proxy versions rewrote a staged review's ask_user call with option
-  // previews for Claude Code. They are not advertised to models, and the
-  // handler uses the server-held review, so a preview is ignored here.
+  // Earlier proxy versions attached option previews to staged review calls.
+  // Bound reviews use server-held arguments; ordinary questions still use
+  // the public option schema.
   options: z
     .array(AskUserOptionSchema.extend({ preview: z.string().optional() }))
     .min(2)

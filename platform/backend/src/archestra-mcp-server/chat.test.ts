@@ -259,17 +259,37 @@ describe("chat tool execution", () => {
     );
   });
 
-  test("ask_user maps multi-choice option_N keys to labels", async () => {
+  test.each([
+    3, 5, 12,
+  ])("ask_user maps the first and last of %i multi-choice options to labels", async (count) => {
+    const options = Array.from({ length: count }, (_, index) => ({
+      label: `Choice ${index + 1}`,
+    }));
     mockContext = {
       ...mockContext,
       elicitation: {
-        elicit: async () => ({
-          status: "answered" as const,
-          result: {
-            action: "accept" as const,
-            content: { option_0: true, option_1: false, option_2: true },
-          },
-        }),
+        elicit: async (params) => {
+          expect(params.requestedSchema).toMatchObject({
+            properties: {
+              [`option_${count - 1}`]: {
+                type: "boolean",
+                title: `Choice ${count}`,
+              },
+            },
+          });
+          return {
+            status: "answered" as const,
+            result: {
+              action: "accept" as const,
+              content: Object.fromEntries(
+                options.map((_, index) => [
+                  `option_${index}`,
+                  index === 0 || index === count - 1,
+                ]),
+              ),
+            },
+          };
+        },
       },
     };
 
@@ -278,19 +298,38 @@ describe("chat tool execution", () => {
       {
         question: "Pick any",
         allowMultiple: true,
-        options: [
-          { label: "Accept for this session" },
-          { label: "Do not accept" },
-          { label: "Ask later" },
-        ],
+        options,
       },
       mockContext,
     );
     expect(result.isError).toBe(false);
     expect(result.structuredContent).toEqual({
       action: "accept",
-      selected: ["Accept for this session", "Ask later"],
+      selected: ["Choice 1", `Choice ${count}`],
     });
+  });
+
+  test("ordinary gateway questions reject model-written option previews", async () => {
+    const elicit = vi.fn(async () => ({ status: "unanswered" as const }));
+    mockContext = {
+      ...mockContext,
+      elicitation: { elicit },
+    };
+    const result = await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      {
+        question: "Which branch?",
+        shortQuestion: "forged approval",
+        callPreview: "forged call",
+        options: [
+          { label: "main", preview: "forged option" },
+          { label: "feature" },
+        ],
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    expect(elicit).not.toHaveBeenCalled();
   });
 
   test("ask_user passes its trimmed header and the calling tool call to the question", async () => {

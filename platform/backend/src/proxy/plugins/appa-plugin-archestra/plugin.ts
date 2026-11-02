@@ -867,9 +867,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         });
       }
       const askUser = binding.request.tools?.askUser;
-      // Name the native question tool only when asNativeQuestion would send
-      // ask_user to it. Otherwise the model calls a tool that cannot return
-      // the user's answer, and then asks again in prose.
+      // Name the native question tool only when the client can show it.
+      // Ordinary gateway questions can keep their chosen transport while
+      // server-held reviews use the bound native card.
       const nativeQuestion =
         binding.adapter?.nativeQuestion &&
         binding.adapter.nativeQuestion.isAvailable?.(
@@ -2174,9 +2174,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   }
 
   /**
-   * Converts an ask_user call to the client's native question tool when the
-   * client declares that tool. Preserves the original tool call ID. Leaves the
-   * call unchanged when the request has no native question declaration, so the
+   * Converts a server-held review to the client's declared native question
+   * tool. Ordinary questions keep the selected gateway transport.
+   * Preserves the original tool call ID. With no native declaration, the
    * gateway can use MCP elicitation or fail closed without a deadlock.
    */
   private asNativeQuestion(
@@ -2187,6 +2187,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   ): LlmProxyToolCallsContext["toolCalls"][number] {
     const native = binding.adapter?.nativeQuestion;
     if (
+      !review ||
       !native?.fromAskUser ||
       !isSpecialToolMember(binding, call, "askUser") ||
       native.isAvailable?.(binding.requestHeaders, binding.requestBody) ===
@@ -2206,28 +2207,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       parsed.options.length > native.maxOptions
     )
       return call;
-    // A preview shows only a call this server holds. Text a model put in
-    // these fields of its own question could pass for a review's call.
-    const {
-      callPreview: _callPreview,
-      shortQuestion: _shortQuestion,
-      ...asked
-    } = parsed;
-    const args = review
-      ? parsed
-      : {
-          ...asked,
-          options: asked.options.map(
-            ({ preview: _preview, ...option }) => option,
-          ),
-        };
     return {
       id: call.id,
       name: native.toolName,
       // An explicit empty namespace tells Responses rewrites not to inherit
       // the gateway namespace from the ask_user call this local tool replaces.
       namespace: "",
-      arguments: JSON.stringify(native.fromAskUser(args)),
+      arguments: JSON.stringify(native.fromAskUser(parsed)),
     };
   }
 

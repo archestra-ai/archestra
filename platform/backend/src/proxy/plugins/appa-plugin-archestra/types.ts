@@ -126,7 +126,7 @@ export type AppaClientAdapter = {
   /**
    * The client's own question tool. Its results need the same decision
    * guidance as ask_user. Clients without MCP forms may also provide an
-   * argument converter to receive ask_user calls through their native tool.
+   * argument converter to receive ask_user reviews through their native tool.
    */
   nativeQuestion?: {
     toolName: string;

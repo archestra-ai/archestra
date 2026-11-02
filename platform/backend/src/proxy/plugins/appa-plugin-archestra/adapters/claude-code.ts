@@ -84,6 +84,7 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   readonly childTranscriptPaths = CHILD_PATHS;
   readonly nativeQuestion = {
     toolName: "AskUserQuestion",
+    maxOptions: 4,
     // A review shows its call in each option's preview, inside the form, and
     // asks one line about it.
     fromAskUser: (args: AskUserArguments) => {

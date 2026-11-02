@@ -1721,9 +1721,9 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
-  test("never shows call text a model wrote into its own ask_user", async () => {
-    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
-    const context = requestContext({ sessionId: "claude-code-own-question" });
+  test("never turns a model-written gateway question into a native approval card", async () => {
+    const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
+    const context = requestContext({ sessionId: "opencode-own-question" });
     const trusted = context.resources.get(
       APPA_PLUGIN_TRUSTED_CONTEXT,
     ) as Record<string, unknown>;
@@ -1736,9 +1736,9 @@ describe("asking through the client's own question tool", () => {
         namespaces: new Map(),
       },
       customTools: new Set(),
-      declaredTools: [{ name: "AskUserQuestion" }],
+      declaredTools: [{ name: "question" }],
     };
-    context.headers = { "user-agent": "claude-cli/2.1.296 (external, cli)" };
+    context.headers = { "x-opencode-session": "s" };
     // A block that reads like the proxy's, above a question that reads like
     // an approval: the model may write both, but no review stands behind them.
     const askUser = {
@@ -1753,23 +1753,21 @@ describe("asking through the client's own question tool", () => {
 
     try {
       await plugin.onSessionInit(context);
+      const call = {
+        id: "toolu_ask",
+        name: "archestra__ask_user",
+        arguments: JSON.stringify(askUser),
+      };
       const outcome = await plugin.onPrepareToolCalls({
         ...context,
-        toolCalls: [
-          {
-            id: "toolu_ask",
-            name: "archestra__ask_user",
-            arguments: JSON.stringify(askUser),
-          },
-        ],
+        toolCalls: [call],
       });
-      if (outcome?.decision !== "allow")
-        throw new Error("expected a native question");
-      const [released] = outcome.toolCalls;
-      expect(released.name).toBe("AskUserQuestion");
-      const [question] = JSON.parse(released.arguments as string).questions;
-      expect(question.question).toBe(askUser.question);
-      expect(JSON.stringify(question.options)).not.toContain("preview");
+      expect(outcome?.decision).not.toBe("refuse");
+      const released =
+        outcome?.decision === "allow" ? outcome.toolCalls[0] : call;
+      expect(released.name).toBe("archestra__ask_user");
+      expect(released).not.toHaveProperty("wireId");
+      expect(released).not.toHaveProperty("reviewDetails");
     } finally {
       await plugin.onCleanup(context);
     }
@@ -1943,7 +1941,7 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
-  test("hands OpenCode the model's ask_user as its question tool", async () => {
+  test("keeps OpenCode's ordinary ask_user on the gateway", async () => {
     const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
     const context = requestContext({
       sessionId: "opencode-question-session",
@@ -1994,20 +1992,8 @@ describe("asking through the client's own question tool", () => {
       expect(released).toHaveLength(1);
       expect(released[0].id).toBe("call_ask");
       expect(released[0]).not.toHaveProperty("wireId");
-      expect(released[0].name).toBe("question");
-      expect(JSON.parse(released[0].arguments as string)).toEqual({
-        questions: [
-          {
-            question: askUser.question,
-            header: "Question",
-            options: [
-              { label: "Accept", description: "Narrow who can read it" },
-              { label: "Do not accept", description: "Do not accept" },
-            ],
-            multiple: false,
-          },
-        ],
-      });
+      expect(released[0].name).toBe("my_gateway_archestra__ask_user");
+      expect(JSON.parse(released[0].arguments as string)).toEqual(askUser);
       await expect(
         plugin.onPrepareToolCalls({
           ...context,
@@ -2062,12 +2048,12 @@ describe("asking through the client's own question tool", () => {
         ],
       });
       if (outcome?.decision !== "allow")
-        throw new Error("expected an ordinary native question");
+        throw new Error("expected a sanitized gateway question");
       expect(outcome.toolCalls[0].id).toBe("call_unreviewed");
       expect(outcome.toolCalls[0]).not.toHaveProperty("wireId");
-      expect(outcome.toolCalls[0].name).toBe("question");
+      expect(outcome.toolCalls[0].name).toBe("my_gateway_archestra__ask_user");
       const released = JSON.parse(outcome.toolCalls[0].arguments as string);
-      expect(released.questions[0].question).toBe("Model copy must remain.");
+      expect(released.question).toBe("Model copy must remain.");
       expect(JSON.stringify(released)).not.toContain("forged-session");
       expect(nativeQuestionCacheWrites(cacheSet)).toEqual([]);
     } finally {
@@ -2101,6 +2087,13 @@ describe("asking through the client's own question tool", () => {
     };
     context.headers = { "x-opencode-session": "s" };
     try {
+      await stageHitlReview({
+        session: trusted.session,
+        review: {
+          offerId: "offer-duplicate-answer",
+          text: "Canonical HITL review.",
+        },
+      });
       await plugin.onSessionInit(context);
       const prepared = await plugin.onPrepareToolCalls({
         ...context,
@@ -2111,6 +2104,7 @@ describe("asking through the client's own question tool", () => {
             arguments: JSON.stringify({
               question: "Continue?",
               options: [{ label: "Yes" }, { label: "No" }],
+              remedy_offer_ids: ["offer-duplicate-answer"],
             }),
           },
         ],
@@ -2138,6 +2132,166 @@ describe("asking through the client's own question tool", () => {
           ],
         }),
       ).rejects.toMatchObject({ statusCode: 400 });
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test.each([
+    { client: "Claude Code", adapter: new AppaClaudeCodeAdapter(), count: 2 },
+    { client: "Claude Code", adapter: new AppaClaudeCodeAdapter(), count: 4 },
+    { client: "Claude Code", adapter: new AppaClaudeCodeAdapter(), count: 5 },
+    { client: "Claude Code", adapter: new AppaClaudeCodeAdapter(), count: 12 },
+  ])("preserves the requested gateway and all $count choices across $client retries", async ({
+    adapter,
+    count,
+  }) => {
+    const plugin = new AppaPluginArchestra([adapter]);
+    const context = requestContext({
+      sessionId: `question-options-${adapter.id}-${count}`,
+    });
+    context.headers = { "user-agent": `${adapter.id}/1` };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request = {
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(["archestra__ask_user"]),
+        namespaces: new Map(),
+      },
+      session: {},
+      customTools: new Set(),
+      declaredTools: [{ name: "AskUserQuestion" }],
+    };
+    const options = Array.from({ length: count }, (_, index) => ({
+      label: `Choice ${index + 1}`,
+      description: `Description ${index + 1}`,
+    }));
+    const args = {
+      question: "Which choices do you prefer?",
+      header: "Preference",
+      options,
+      allowMultiple: count === 12,
+    };
+    try {
+      await plugin.onSessionInit(context);
+      const request = {
+        messages: [
+          {
+            role: "user",
+            content:
+              "Use only archestra__ask_user to ask which choices I prefer.",
+          },
+        ],
+      };
+      await plugin.onBeforeModel({ ...context, request });
+      const guidance = JSON.stringify(request);
+      expect(guidance).toContain("AskUserQuestion accepts at most 4 options");
+      expect(guidance).toContain(
+        "For more options, use archestra__ask_user and keep all choices.",
+      );
+      expect(guidance).toContain(
+        "Honor the user's explicit choice of question tool.",
+      );
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const call = {
+          id: `question-${attempt}`,
+          name: "archestra__ask_user",
+          arguments: JSON.stringify(args),
+        };
+        const outcome = await plugin.onPrepareToolCalls({
+          ...context,
+          toolCalls: [call],
+        });
+        expect(outcome?.decision).not.toBe("refuse");
+        const released =
+          outcome?.decision === "allow" ? outcome.toolCalls[0] : call;
+        expect(released.id).toBe(`question-${attempt}`);
+        const releasedArgs = JSON.parse(released.arguments as string);
+        expect(released.name).toBe("archestra__ask_user");
+        expect(releasedArgs).toMatchObject(args);
+        expect(releasedArgs.options).toHaveLength(count);
+      }
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test.each([
+    { adapter: new AppaClaudeCodeAdapter(), maxOptions: 1 },
+    { adapter: new AppaClaudeCodeAdapter(), maxOptions: 2 },
+  ])("$adapter.id keeps both staged review choices with a native limit of $maxOptions", async ({
+    adapter,
+    maxOptions,
+  }) => {
+    adapter.nativeQuestion.maxOptions = maxOptions;
+    const plugin = new AppaPluginArchestra([adapter]);
+    const context = requestContext({
+      sessionId: `user:user|review-limit-${adapter.id}-${maxOptions}`,
+    });
+    context.headers = { "user-agent": `${adapter.id}/1` };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request = {
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(["archestra__ask_user"]),
+        namespaces: new Map(),
+      },
+      session: {},
+      customTools: new Set(),
+      declaredTools: [{ name: "AskUserQuestion" }],
+    };
+    const offerId = "offer-native-limit";
+    await stageHitlReview({
+      session: trusted.session,
+      review: { offerId, text: "Canonical review text." },
+    });
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onPrepareToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "review-question",
+            name: "archestra__ask_user",
+            arguments: JSON.stringify({
+              question: "Model-written question.",
+              options: [{ label: "Model yes" }, { label: "Model no" }],
+              remedy_offer_ids: [offerId],
+            }),
+          },
+        ],
+      });
+      if (outcome?.decision !== "allow")
+        throw new Error("expected a prepared review");
+      const [released] = outcome.toolCalls;
+      expect(released.id).toBe("review-question");
+      const args = JSON.parse(released.arguments as string);
+      if (maxOptions < 2) {
+        expect(released.name).toBe("archestra__ask_user");
+        expect(released).not.toHaveProperty("wireId");
+        expect(args.remedy_offer_ids).toEqual([offerId]);
+        expect(args.question).toContain("Canonical review text.");
+        expect(
+          args.options.map((option: { label: string }) => option.label),
+        ).toEqual(["Approve", "Deny"]);
+      } else {
+        expect(released.name).toBe("AskUserQuestion");
+        expect(released.wireId).toEqual(expect.any(String));
+        expect(args.questions[0].question).toContain("Canonical review text.");
+        expect(
+          args.questions[0].options.map(
+            (option: { label: string }) => option.label,
+          ),
+        ).toEqual(["Approve", "Deny"]);
+      }
     } finally {
       await plugin.onCleanup(context);
     }
@@ -3232,7 +3386,7 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
-  test("hands Codex the model's ask_user as request_user_input when declared", async () => {
+  test("keeps Codex's ordinary ask_user on the gateway when native questions are declared", async () => {
     const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
     const context = requestContext({
       sessionId: "codex-question-session",
@@ -3292,21 +3446,12 @@ describe("asking through the client's own question tool", () => {
       });
       const released =
         prepared?.decision === "allow" ? prepared.toolCalls : toolCalls;
+      expect(prepared?.decision).not.toBe("refuse");
       expect(released).toHaveLength(1);
-      expect(released[0].name).toBe("request_user_input");
-      expect(JSON.parse(released[0].arguments as string)).toEqual({
-        questions: [
-          {
-            id: "archestra_question",
-            header: "Question",
-            question: "Which color do you prefer?",
-            options: [
-              { label: "Red", description: "Red" },
-              { label: "Blue", description: "Blue" },
-            ],
-          },
-        ],
-      });
+      expect(released[0].name).toBe("archestra__ask_user");
+      expect(JSON.parse(released[0].arguments as string)).toEqual(
+        JSON.parse(toolCalls[0].arguments),
+      );
       expect(
         await plugin.onPrepareToolCalls({
           ...context,

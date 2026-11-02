@@ -1,4 +1,4 @@
-/** Every layer above core, until the split carves them into projects. */
+/** The layers not yet carved into referenced source projects. */
 const APP = "tsconfig.app.json";
 
 /**
@@ -14,14 +14,15 @@ const APP = "tsconfig.app.json";
  * files to a layer other than the one their path suggests: a small module that
  * lower layers need, or a helper whose imports belong higher. A file belongs to
  * the layer that pins it, else to the first layer whose `path` matches it
- * (`layerOf`). Tests (`*.test.ts`) and the test helpers are not in a layer:
- * they may import anything.
+ * (`layerOf`). A layer without a `path` holds only the files it pins: a part
+ * of a directory that sits above the rest of it. Tests (`*.test.ts`) and the
+ * test helpers are not in a layer: they may import anything.
  *
  * `project` is the TypeScript project that checks the layer's files
  * (tsconfig.json lists them); scripts/check-projects.mjs holds the two
  * together. Layers share a project until a slice of the split carves theirs.
  *
- * @type {{ name: string; path: string; files?: string[]; project: string }[]}
+ * @type {{ name: string; path?: string; files?: string[]; project: string }[]}
  */
 const layerTable = [
   {
@@ -61,31 +62,27 @@ const layerTable = [
     project: "tsconfig.core.json",
   },
   {
+    // A new model that reads an agent model belongs in models-upper: pin it
+    // there.
     name: "models",
     path: "^src/(models|auth)/",
+    project: "tsconfig.models.json",
     files: [
-      // Count users through the user model.
-      "src/enterprise-tier.ts",
-      // Observability setup and the metrics backed by models.
-      "src/observability/index.ts",
-      "src/observability/metrics/active-users.ts",
+      // The agent runtime health metric, backed by models.
       "src/observability/metrics/agent-runtime-health.ts",
-      // Provider key resolution reads keys through the models; the keyless
-      // provider credentials it falls back to come with it.
-      "src/utils/llm-api-key-resolution.ts",
+      // The provider key mappings, and the keyless provider credentials that
+      // key resolution (models-upper) falls back to.
       "src/utils/provider-key-mappings.ts",
-      "src/utils/llm-resolution.ts",
-      // What model resolution reads besides keys: the output budget an agent
-      // gets, the team access to a model, and whether Gemini runs on Vertex AI.
-      "src/agents/agent-output-budget.ts",
-      "src/routes/proxy/utils/model-team-access.ts",
-      "src/clients/gemini-vertex-ai.ts",
       "src/clients/anthropic-keyless-auth.ts",
       "src/clients/anthropic-vertex.ts",
       "src/clients/anthropic-vertex-request.ts",
       "src/clients/anthropic-workload-identity.ts",
       "src/clients/azure-url.ts",
       "src/clients/azure-openai-credentials.ts",
+      // What model resolution reads besides keys: the output budget an agent
+      // gets, and whether Gemini runs on Vertex AI.
+      "src/agents/agent-output-budget.ts",
+      "src/clients/gemini-vertex-ai.ts",
       // Change notification the config-cached models subscribe to, and the
       // notify hubs it runs on.
       "src/services/config-cache.ts",
@@ -97,6 +94,8 @@ const layerTable = [
       // Pricing and catalog data the model rows are enriched with, and the
       // price table the Bedrock pricing reads.
       "src/services/media-pricing.ts",
+      "src/services/vendor-published-pricing.ts",
+      "src/services/cross-provider-pricing.ts",
       "src/services/bedrock-aws-pricing.ts",
       "src/services/bedrock-aws-prices.json",
       "src/clients/models-dev-client.ts",
@@ -110,7 +109,6 @@ const layerTable = [
       // auth models call.
       "src/services/connected-client-oauth.ts",
       "src/services/github-app-copilot-token.ts",
-      "src/services/identity-providers/linked-idp-auth.ts",
       "src/services/apps/app-connector-resource.ts",
       // The request origin the auth middleware reads.
       "src/routes/request-origin.ts",
@@ -131,13 +129,11 @@ const layerTable = [
       "src/openappa/plaintext-envelope.ts",
       "src/openappa/actor.ts",
       "src/openappa/session-token.ts",
+      "src/openappa/subagent-binding.ts",
       "src/openappa/policy-test-hashes.ts",
-      // The built-in skills catalogue and the skill file format the skill
-      // model reads, with the guide content the catalogue embeds.
-      "src/skills/built-in-skills.ts",
+      // The skill file format the skill model reads, and the guide content
+      // the built-in skills catalogue (models-agents) embeds.
       "src/skills/built-in-skill-branding.ts",
-      "src/skills/runtime-handoff.ts",
-      "src/skills/appa-guide.ts",
       "src/skills/appa-guide-archestra-reference.ts",
       "src/skills/appa-guide-contracts.ts",
       "src/skills/appa-guide-validation.ts",
@@ -151,22 +147,195 @@ const layerTable = [
       // Constants the chatops config model validates against.
       "src/agents/chatops/constants.ts",
       "src/agents/incoming-email/constants.ts",
-      // Resource permissions, which the auth helpers and better-auth's hooks
-      // check and update, with what an update runs: the credential and MCP
-      // server assignability rules, the app MCP backing resync and member
-      // removal, and the MCP advanced settings the auth plugin resolves.
-      "src/services/resource-permissions.ts",
-      "src/services/credential-resource-permissions.ts",
-      "src/services/mcp-server-assignability.ts",
-      "src/services/apps/app-mcp-backing.ts",
+      // The run link the app MCP backing resync (models-upper) reads.
       "src/services/apps/app-run-link.ts",
-      "src/services/member-removal.ts",
-      "src/services/mcp-advanced-settings.ts",
     ],
-    project: APP,
   },
-  { name: "runtime", path: "^src/(k8s|sandbox-runtime|skills-sandbox)/", project: APP },
-  { name: "kb", path: "^src/knowledge-base/", project: APP },
+  {
+    // The agent models and what they import back: agents with their tools,
+    // skills and teams, the MCP servers and catalog they use, users and
+    // service accounts, and the access checks over them. They import each
+    // other, so they are one layer; the models layer is below them.
+    name: "models-agents",
+    files: [
+      "src/models/agent-access-context.ts",
+      "src/models/agent-excluded-skill.ts",
+      "src/models/agent-skill.ts",
+      "src/models/agent-team.ts",
+      "src/models/agent-tool.ts",
+      "src/models/agent.ts",
+      "src/models/entity-labels.ts",
+      "src/models/internal-mcp-catalog.ts",
+      "src/models/limit.ts",
+      "src/models/mcp-catalog-team.ts",
+      "src/models/mcp-server.ts",
+      "src/models/proxy-request-context.ts",
+      "src/models/service-account.ts",
+      "src/models/skill.ts",
+      "src/models/tool.ts",
+      "src/models/user.ts",
+      // The access checks the agent models make and the enterprise tier
+      // they count users for.
+      "src/auth/permission-gated.ts",
+      "src/auth/utils.ts",
+      "src/enterprise-tier.ts",
+      // The built-in skills catalogue the skill model reads.
+      "src/skills/appa-guide.ts",
+      "src/skills/built-in-skills.ts",
+      "src/skills/runtime-handoff.ts",
+    ],
+    project: "tsconfig.models-agents.json",
+  },
+  {
+    // What builds on the agent models: conversations and interactions, apps,
+    // plugins, projects and environments, provider keys and OAuth clients,
+    // tool calls and usage, and the models barrel.
+    name: "models-upper",
+    files: [
+      "src/models/app.ts",
+      "src/models/conversation-enabled-tool.ts",
+      "src/models/conversation.ts",
+      "src/models/environment.ts",
+      "src/models/external-mcp-skill-usage-event.ts",
+      "src/models/hook-file.ts",
+      "src/models/index.ts",
+      "src/models/interaction.ts",
+      "src/models/invitation.ts",
+      "src/models/llm-oauth-client.ts",
+      "src/models/llm-provider-api-key.ts",
+      "src/models/managed-oauth-client.ts",
+      "src/models/mcp-oauth-client.ts",
+      "src/models/mcp-tool-call.ts",
+      "src/models/playwright-runtime.ts",
+      "src/models/plugin-skill-usage-event.ts",
+      "src/models/plugin.ts",
+      "src/models/project.ts",
+      "src/models/schedule-trigger.ts",
+      "src/models/skill-usage-actors.ts",
+      "src/models/skill-usage-event.ts",
+      "src/models/statistics.ts",
+      "src/models/usage-statistics.ts",
+      "src/models/virtual-api-key.ts",
+      // The auth helpers that check access to agents, catalogs, OAuth
+      // clients and skills, and the auth barrel.
+      "src/auth/agent-type-permissions.ts",
+      "src/auth/idp.ee.ts",
+      "src/auth/index.ts",
+      "src/auth/linked-idp.ts",
+      "src/auth/mcp-catalog-permissions.ts",
+      "src/auth/oauth-client-permissions.ts",
+      "src/auth/request-lookups.ts",
+      "src/auth/skill-permissions.ts",
+      // Observability setup and the active-user metric, which count through
+      // the user model.
+      "src/observability/index.ts",
+      "src/observability/metrics/active-users.ts",
+      // Resource permissions, which the auth helpers check and update, with
+      // what an update runs: the credential and MCP server assignability
+      // rules, the app MCP backing resync and member removal, and the MCP
+      // advanced settings the auth plugin resolves. With them, the linked
+      // identity provider check and the team access to a model.
+      "src/routes/proxy/utils/model-team-access.ts",
+      "src/services/apps/app-mcp-backing.ts",
+      "src/services/credential-resource-permissions.ts",
+      "src/services/identity-providers/linked-idp-auth.ts",
+      "src/services/mcp-advanced-settings.ts",
+      "src/services/mcp-server-assignability.ts",
+      "src/services/member-removal.ts",
+      "src/services/resource-permissions.ts",
+      // Provider key and model resolution, which read agents.
+      "src/utils/llm-api-key-resolution.ts",
+      "src/utils/llm-resolution.ts",
+    ],
+    project: "tsconfig.models-upper.json",
+  },
+  {
+    name: "llm-clients",
+    // Provider SDKs and client construction sit below their knowledge-base,
+    // policy, service and route consumers.
+    files: [
+      "src/clients/llm-client.ts",
+      "src/clients/anthropic-endpoint.ts",
+      "src/clients/azure-media-language-model.ts",
+      "src/clients/gemini-client.ts",
+      "src/clients/internal-call.ts",
+      "src/clients/openrouter-attribution.ts",
+      "src/clients/openrouter-response-healing.ts",
+      "src/clients/openrouter-reported-cost.ts",
+      "src/services/azure-model-capabilities.ts",
+      "src/services/billable-usage.ts",
+      "src/services/fireworks-model.ts",
+      "src/routes/proxy/utils/cost-optimization.ts",
+      "src/routes/chat/normalization/apply-prompt-cache.ts",
+    ],
+    project: "tsconfig.llm-clients.json",
+  },
+  {
+    name: "runtime",
+    path: "^src/(k8s|sandbox-runtime|skills-sandbox)/",
+    files: [
+      // Runtime-neutral contracts, failure vocabulary, sizing and placement.
+      "src/services/agent-runtime/backends/types.ts",
+      "src/services/agent-runtime/failure-reason.ts",
+      "src/services/agent-runtime/run-failure.ts",
+      "src/services/agent-runtime/runtime-tiers.ts",
+      // Credential resolution and network policy are shared runtime inputs.
+      "src/services/credentials.ts",
+      "src/services/credential-access.ts",
+      "src/services/github-user-connection.ts",
+      "src/services/environments/network-policy.ts",
+      "src/services/environments/network-policy-domains.ts",
+      // The generic background queue stores work and dispatches registered
+      // callbacks; domain-specific handlers stay above their services.
+      "src/task-queue/index.ts",
+      "src/task-queue/task-queue.ts",
+      "src/task-queue/periodic-tasks.ts",
+      // Active-use tracking belongs with the MCP runtime that owns hibernation.
+      "src/services/mcp-active-use.ee.ts",
+    ],
+    project: "tsconfig.runtime.json",
+  },
+  {
+    // New orchestration that reaches a concrete connector belongs in kb.
+    name: "kb-core",
+    path: "^src/knowledge-base/",
+    project: "tsconfig.kb-core.json",
+  },
+  {
+    name: "kb-connectors",
+    files: [
+      "src/knowledge-base/connectors/asana/asana-connector.ts",
+      "src/knowledge-base/connectors/confluence/confluence-connector.ts",
+      "src/knowledge-base/connectors/dropbox/dropbox-connector.ts",
+      "src/knowledge-base/connectors/gdrive/gdrive-connector.ts",
+      "src/knowledge-base/connectors/github/github-connector.ts",
+      "src/knowledge-base/connectors/gitlab/gitlab-connector.ts",
+      "src/knowledge-base/connectors/jira/jira-connector.ts",
+      "src/knowledge-base/connectors/linear/linear-connector.ts",
+      "src/knowledge-base/connectors/mfiles/mfiles-connector.ts",
+      "src/knowledge-base/connectors/notion/notion-connector.ts",
+      "src/knowledge-base/connectors/onedrive/onedrive-connector.ts",
+      "src/knowledge-base/connectors/outline/outline-connector.ts",
+      "src/knowledge-base/connectors/perforce/perforce-connector.ts",
+      "src/knowledge-base/connectors/registry.ts",
+      "src/knowledge-base/connectors/salesforce/salesforce-connector.ts",
+      "src/knowledge-base/connectors/servicenow/servicenow-connector.ts",
+      "src/knowledge-base/connectors/sharepoint/sharepoint-connector.ts",
+      "src/knowledge-base/connectors/web-crawler/web-crawler-connector.ts",
+    ],
+    project: "tsconfig.kb-connectors.json",
+  },
+  {
+    name: "kb",
+    files: [
+      "src/knowledge-base/connector-sync.ts",
+      "src/knowledge-base/index.ts",
+      "src/knowledge-base/permission-sync-trigger.ts",
+      "src/knowledge-base/permission-sync.ts",
+      "src/knowledge-base/source-access-control.ts",
+    ],
+    project: "tsconfig.kb.json",
+  },
   {
     name: "policy",
     path: "^src/(openappa|proxy|auto-routing|skills|task-queue|plugins|features|data-retention)/",
@@ -189,6 +358,25 @@ const layerTable = [
     // The Fastify server, the websocket, middleware and the entry scripts.
     name: "server",
     path: "^src/((server|fastify-instance|websocket|startup-health|metrics-registration|middleware|ngrok-tunnel-manager)\\.ts$|server/|middleware/|hooks/|entrypoints/|openapi/|standalone-scripts/)",
+    files: [
+      // The Better Auth instance and what composes it into the server: the
+      // Fastify plugin, the route registry and the routes that serve or wire
+      // the instance (the auth handler, API keys, identity providers), the SSO
+      // email reconciliation its hooks run, and the JWKS key check that reads
+      // its context. Lower layers reach sessions, sign-up and the key check
+      // through ports (models/ports.ts).
+      "src/auth/better-auth.ts",
+      "src/auth/sso-email-reconciliation.ee.ts",
+      "src/auth/jwks-signing-key-guard.ts",
+      "src/auth/fastify-plugin/index.ts",
+      "src/auth/fastify-plugin/plugin.ts",
+      "src/auth/fastify-plugin/middleware.ts",
+      "src/routes/index.ts",
+      "src/routes/index.ee.ts",
+      "src/routes/auth.ts",
+      "src/routes/api-key.ts",
+      "src/routes/identity-provider.ee.ts",
+    ],
     project: APP,
   },
 ];
@@ -205,16 +393,22 @@ const PINNED = layerTable
  *
  * @type {{ name: string; path: string; project: string }[]}
  */
-const layers = layerTable.map((layer) => ({
-  name: layer.name,
-  project: layer.project,
-  path: [
-    ...(layer.files?.length
-      ? [`^(?:${layer.files.map(escapeRegex).join("|")})$`]
-      : []),
-    `^(?!(?:${PINNED})$)(?:${layer.path})`,
-  ].join("|"),
-}));
+const layers = layerTable.map((layer) => {
+  // A layer with neither would match every file.
+  if (!layer.path && !layer.files?.length) {
+    throw new Error(`Layer ${layer.name} needs a path or pinned files`);
+  }
+  return {
+    name: layer.name,
+    project: layer.project,
+    path: [
+      ...(layer.files?.length
+        ? [`^(?:${layer.files.map(escapeRegex).join("|")})$`]
+        : []),
+      ...(layer.path ? [`^(?!(?:${PINNED})$)(?:${layer.path})`] : []),
+    ].join("|"),
+  };
+});
 
 /** The layer of a source file, or undefined for tests and files in no layer. */
 export function layerOf(file) {

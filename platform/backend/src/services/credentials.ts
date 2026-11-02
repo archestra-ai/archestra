@@ -1,8 +1,6 @@
 import { resolveInstallationCredential } from "@/integrations/github/app-auth";
-import {
-  RuntimeCredentialConnectionModel,
-  RuntimeCredentialDefinitionModel,
-} from "@/models";
+import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
+import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import { CredentialAccess } from "@/services/credential-access";
 import { githubUserConnectionManager } from "@/services/github-user-connection";
 import {
@@ -40,6 +38,11 @@ export async function resolveCredential(params: {
 
 /** A definition snapshot belongs only to one launch or preflight operation. */
 export class CredentialResolutionBatch {
+  private readonly values = new Map<
+    string,
+    Promise<Map<string, PromiseSettledResult<string | null>>>
+  >();
+
   private constructor(
     private readonly organizationId: string,
     private readonly definitions: Map<string, RuntimeCredentialDefinition>,
@@ -73,7 +76,37 @@ export class CredentialResolutionBatch {
     return resolveDefinedCredential(
       params,
       this.definitions.get(params.credentialId) ?? null,
+      () => this.resolveStoredValue(params),
     );
+  }
+
+  private async resolveStoredValue(
+    params: Parameters<typeof resolveCredential>[0],
+  ) {
+    const owner = JSON.stringify([
+      params.scope,
+      params.scope === "personal" ? (params.userId ?? "") : null,
+    ]);
+    let values = this.values.get(owner);
+    if (!values) {
+      values = RuntimeCredentialConnectionModel.resolveValues({
+        ...params,
+        credentialIds: [...this.definitions.values()]
+          .filter(
+            (definition) =>
+              definition.kind !== "github_app_user" &&
+              (params.scope === "personal"
+                ? definition.allowPersonal
+                : definition.allowOrganization),
+          )
+          .map((definition) => definition.key),
+      });
+      this.values.set(owner, values);
+      values.catch(() => this.values.delete(owner));
+    }
+    const result = (await values).get(params.credentialId);
+    if (result?.status === "rejected") throw result.reason;
+    return result?.value ?? null;
   }
 }
 
@@ -273,6 +306,7 @@ async function blockerForMissingValue(params: {
 async function resolveDefinedCredential(
   params: Parameters<typeof resolveCredential>[0],
   definition: RuntimeCredentialDefinition | null,
+  readValue = () => RuntimeCredentialConnectionModel.resolveValue(params),
 ): Promise<{ value: string; expiresAt: number | null } | null> {
   if (!definition) throw new ApiError(400, "Credential is no longer available");
   if (
@@ -289,7 +323,7 @@ async function resolveDefinedCredential(
       userId: params.userId,
     });
   }
-  const value = await RuntimeCredentialConnectionModel.resolveValue(params);
+  const value = await readValue();
   if (!value) return null;
   if (definition.kind !== "github_app") return { value, expiresAt: null };
   if (

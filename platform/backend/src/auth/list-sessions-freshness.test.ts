@@ -1,6 +1,6 @@
 import { APIError } from "better-auth/api";
 import { makeSignature } from "better-auth/crypto";
-import { betterAuth } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import config from "@/config";
 import { describe, expect, test } from "@/test";
 

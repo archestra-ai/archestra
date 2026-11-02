@@ -4,11 +4,11 @@
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
-import { McpServerModel, OrganizationModel } from "@/models";
-import {
+import McpServerModel, {
   MCP_DEMAND_HEARTBEAT_INTERVAL_MS,
   MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS,
 } from "@/models/mcp-server";
+import OrganizationModel from "@/models/organization";
 import { trackBackgroundWork } from "@/utils/background-work";
 
 type DemandTrackingMode = "off" | "required";

@@ -1,6 +1,7 @@
 import { archestraApiClient, E2eTestId } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -33,6 +34,10 @@ import { StreamedQueries } from "./streamed-queries";
 
 vi.mock("next/navigation");
 vi.mock("sonner");
+
+Element.prototype.scrollIntoView = vi.fn();
+Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+Element.prototype.releasePointerCapture = vi.fn();
 
 const origin = window.location.origin;
 const server = setupServer(...handlers);
@@ -75,11 +80,18 @@ function renderPage(
   client.setQueryData(["organization", "details"], organizationSeed);
   if (memberAgents) client.setQueryData(["member-default-agent"], memberAgents);
   seed?.(client);
-  render(
+  const page = (
     <QueryClientProvider client={client}>
       {wrap(<AgentsPage />)}
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const view = render(page);
+  return () =>
+    view.rerender(
+      <QueryClientProvider client={client}>
+        {wrap(<AgentsPage />)}
+      </QueryClientProvider>,
+    );
 }
 
 it("loads the pinned agents and the list on the client, without an empty state while the list is out", async () => {
@@ -300,4 +312,104 @@ it("commits the header and the table's placeholder before rows already in the ca
   );
   expect(removedPlaceholder).toBe(true);
   expect(screen.getByRole("heading", { name: "Agents" })).toBeInTheDocument();
+});
+
+it("filters the catalog by runtime, preserves search, resets pagination and clears the selection", async () => {
+  const user = userEvent.setup();
+  const requests: URLSearchParams[] = [];
+  let params = new URLSearchParams("runtime=codex&name=helper&page=2");
+  vi.mocked(useSearchParams).mockImplementation(
+    () => params as ReturnType<typeof useSearchParams>,
+  );
+  const push = vi.mocked(useRouter().push);
+  push.mockImplementation((href) => {
+    params = new URL(href, origin).searchParams;
+  });
+  server.use(
+    http.get(`${origin}/api/agent-catalog`, ({ request }) => {
+      const query = new URL(request.url).searchParams;
+      requests.push(query);
+      if (query.get("pinned") === "true")
+        return HttpResponse.json(makeAgentCatalog());
+      const name =
+        query.get("runtime") === "claude-code"
+          ? "Claude helper"
+          : query.get("runtime") === "codex"
+            ? "Codex helper"
+            : "All helpers";
+      return HttpResponse.json(
+        makeAgentCatalog({ agents: [makeAgent({ id: name, name })] }),
+      );
+    }),
+  );
+  const rerender = renderPage({
+    defaultAgentId: null,
+    personalChatAgentId: null,
+  });
+  expect(await screen.findByText("Codex helper")).toBeInTheDocument();
+  expect(
+    requests.some(
+      (query) =>
+        query.get("runtime") === "codex" &&
+        query.get("offset") === String(DEFAULT_TABLE_LIMIT) &&
+        query.get("name") === "helper",
+    ),
+  ).toBe(true);
+  await user.click(
+    screen.getByRole("combobox", { name: "Filter by agent runtime" }),
+  );
+  await user.click(screen.getByRole("option", { name: "Claude Code" }));
+  expect(params.get("page")).toBe("1");
+  expect(params.get("name")).toBe("helper");
+  expect(params.get("runtime")).toBe("claude-code");
+  rerender();
+  expect(await screen.findByText("Claude helper")).toBeInTheDocument();
+  expect(screen.queryByText("Codex helper")).not.toBeInTheDocument();
+  expect(
+    requests.some(
+      (query) =>
+        query.get("runtime") === "claude-code" &&
+        query.get("pinned") === "true",
+    ),
+  ).toBe(true);
+  await user.click(
+    screen.getByRole("combobox", { name: "Filter by agent runtime" }),
+  );
+  await user.click(screen.getByRole("option", { name: "All runtimes" }));
+  expect(params.has("runtime")).toBe(false);
+  expect(params.get("name")).toBe("helper");
+  rerender();
+  expect(await screen.findByText("All helpers")).toBeInTheDocument();
+  await user.click(
+    screen.getByRole("combobox", { name: "Filter by agent runtime" }),
+  );
+  await user.click(screen.getByRole("option", { name: "Claude Code" }));
+  rerender();
+  expect(await screen.findByText("Claude helper")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Clear" }));
+  expect(params.has("runtime")).toBe(false);
+  expect(params.has("name")).toBe(false);
+  rerender();
+  expect(await screen.findByText("All helpers")).toBeInTheDocument();
+});
+
+it("ignores an invalid bookmarked runtime so the list remains usable", async () => {
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams("runtime=unknown") as ReturnType<
+      typeof useSearchParams
+    >,
+  );
+  const requests: URLSearchParams[] = [];
+  server.use(
+    http.get(`${origin}/api/agent-catalog`, ({ request }) => {
+      requests.push(new URL(request.url).searchParams);
+      return HttpResponse.json(makeAgentCatalog());
+    }),
+  );
+  renderPage({ defaultAgentId: null, personalChatAgentId: null });
+  await waitFor(() => expect(requests.length).toBeGreaterThan(0));
+  expect(requests.every((query) => !query.has("runtime"))).toBe(true);
+  expect(
+    screen.getByRole("combobox", { name: "Filter by agent runtime" }),
+  ).toHaveTextContent("All runtimes");
 });

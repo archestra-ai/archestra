@@ -12,6 +12,7 @@ import {
 import { z } from "zod";
 import { schema } from "@/database/schema";
 import { A2ATaskFailureSchema, A2ATaskStateSchema } from "./a2a-task";
+import type { NetworkPolicy } from "./environment";
 
 /**
  * Runtime backends an Agent Runtime configuration can name. The enum is the
@@ -354,6 +355,8 @@ export type ResolvedAgentRuntime = AgentRuntime & {
   organizationId: string;
   environmentId: string | null;
   secretId: string | null;
+  /** The Agent's own egress override; absent or null inherits the environment. */
+  agentNetworkPolicy?: NetworkPolicy | null;
 };
 
 export const SelectAgentRunRecordSchema = createSelectSchema(

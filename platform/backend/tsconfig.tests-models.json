@@ -1,0 +1,28 @@
+{
+  // Tests of models and authentication.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./.tsbuild/tests-models.tsbuildinfo"
+  },
+  "include": [
+    "src/ambient/*.d.ts",
+    "src/models/**/*.test.ts",
+    "src/auth/**/*.test.ts"
+  ],
+  "references": [
+    { "path": "../shared/tsconfig.lib.json" },
+    { "path": "../tools/drizzle-migration-linter/tsconfig.lib.json" },
+    { "path": "./tsconfig.schema.json" },
+    { "path": "./tsconfig.core.json" },
+    { "path": "./tsconfig.models.json" },
+    { "path": "./tsconfig.models-agents.json" },
+    { "path": "./tsconfig.models-upper.json" },
+    { "path": "./tsconfig.runtime.json" },
+    { "path": "./tsconfig.llm-clients.json" },
+    { "path": "./tsconfig.kb-core.json" },
+    { "path": "./tsconfig.kb-connectors.json" },
+    { "path": "./tsconfig.kb.json" },
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.test-support.json" }
+  ]
+}

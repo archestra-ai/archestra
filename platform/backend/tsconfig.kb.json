@@ -1,0 +1,50 @@
+{
+  // Sync, permission and access-control orchestration above the connector registry.
+  "extends": "./tsconfig.source-project.json",
+  "compilerOptions": {
+    "outDir": "./.tsbuild/kb",
+    "tsBuildInfoFile": "./.tsbuild/kb.tsbuildinfo"
+  },
+  "files": [
+    "src/knowledge-base/connector-sync.ts",
+    "src/knowledge-base/index.ts",
+    "src/knowledge-base/permission-sync-trigger.ts",
+    "src/knowledge-base/permission-sync.ts",
+    "src/knowledge-base/source-access-control.ts"
+  ],
+  "include": [
+    "src/ambient/*.d.ts"
+  ],
+  "references": [
+    {
+      "path": "../shared/tsconfig.lib.json"
+    },
+    {
+      "path": "./tsconfig.schema.json"
+    },
+    {
+      "path": "./tsconfig.core.json"
+    },
+    {
+      "path": "./tsconfig.models.json"
+    },
+    {
+      "path": "./tsconfig.models-agents.json"
+    },
+    {
+      "path": "./tsconfig.models-upper.json"
+    },
+    {
+      "path": "./tsconfig.llm-clients.json"
+    },
+    {
+      "path": "./tsconfig.runtime.json"
+    },
+    {
+      "path": "./tsconfig.kb-core.json"
+    },
+    {
+      "path": "./tsconfig.kb-connectors.json"
+    }
+  ]
+}

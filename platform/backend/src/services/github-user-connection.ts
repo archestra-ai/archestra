@@ -3,14 +3,12 @@ import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 import config from "@/config";
 import { parseGitHubAppSecrets } from "@/integrations/github/app-secrets";
-import {
-  RuntimeCredentialConnectionModel,
-  RuntimeCredentialDefinitionModel,
-  VerificationModel,
-} from "@/models";
 import McpDeploymentLeaseModel, {
   ClusterLeaseHeldError,
 } from "@/models/mcp-deployment-lease";
+import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
+import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
+import VerificationModel from "@/models/verification";
 import { ApiError, GITHUB_COM_API_URL, GitHubUserIdSchema } from "@/types";
 
 class GitHubUserConnectionManager {

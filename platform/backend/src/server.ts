@@ -48,8 +48,8 @@ import {
   renewEmailSubscriptionIfNeeded,
 } from "@/agents/incoming-email";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { fastifyAuthPlugin } from "@/auth";
 import { revokeBasicAuthOnlySessions } from "@/auth/basic-auth-lockout";
+import { authPlugin as fastifyAuthPlugin } from "@/auth/fastify-plugin";
 import { applyPendingNormalTiers } from "@/auto-routing/pending-normal-tier";
 import { cacheManager } from "@/cache-manager";
 // SPDX-SnippetBegin

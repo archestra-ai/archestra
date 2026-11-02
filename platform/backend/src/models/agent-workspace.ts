@@ -115,6 +115,25 @@ class AgentWorkspaceModel {
       );
   }
 
+  /** Kubernetes workspaces of one Agent whose Pod may be running now. */
+  static async listRunningForAgent(params: {
+    agentId: string;
+    organizationId: string;
+  }): Promise<AgentWorkspace[]> {
+    const table = schema.agentWorkspacesTable;
+    return db
+      .select()
+      .from(table)
+      .where(
+        and(
+          eq(table.agentId, params.agentId),
+          eq(table.organizationId, params.organizationId),
+          eq(table.backend, "kubernetes"),
+          inArray(table.state, ["active", "idle"]),
+        ),
+      );
+  }
+
   static async listForReaping(
     defaultIdleTimeoutMinutes: number,
   ): Promise<AgentWorkspace[]> {

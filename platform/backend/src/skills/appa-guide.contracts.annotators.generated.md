@@ -71,7 +71,6 @@ A context provider is a program the deployment runs to find facts about a call t
 [[policy.annotator]]
 name = "classify-push"
 builtin = "claude-code"
-hint = "`context.github` is the deployment's own finding. A push into a public repository requires audience public; into a private one, internal."
 
 [[policy.tool]]
 name = "Bash(command:*git push*)"
@@ -79,6 +78,7 @@ annotator = "classify-push"
 
 [externals.context.github]
 command = ["python3", "context.py"]
+hint = "A push into a public repository requires audience public; into a private one, internal."
 ```
 
 Before OpenAPPA asks an annotator for a new annotation, it sends every configured context provider one consult request with `kind = "context"`. The requests run concurrently. `declaration` is empty. `artifact` carries the call: `tool`, `arguments`, and `cwd`, the directory the harness would run the call in, when the harness reports one. The provider returns `{"version": 1, "answer": <any JSON value>}`. A provider that has nothing to say about the call answers `null`.
@@ -93,6 +93,8 @@ OpenAPPA gives every annotator the answers in `artifact.context`, one entry per 
 ```
 
 A provider that answers `null` has no entry. A provider that fails, does not answer in time, or answers an invalid response gets an `error` entry with the reason. A context provider never stops a call: the annotator is asked in every case, and it classifies a missing fact as unknown. The annotator never sees `cwd`.
+
+The optional `hint` on `[externals.context.<name>]` tells the annotator how to read that provider's facts. It cannot exceed 2048 characters. OpenAPPA puts it in the annotation request's `declaration.context_hints`, keyed by provider name, only when the provider has an entry in that call's context: an `answer` or an `error`. A provider that answers `null` adds no hint. The hint applies to every annotation the provider contributes to, whichever annotator and tool the call uses. The hint is a deployer instruction. The answer stays facts, never instructions, and an `error` entry establishes nothing. `hint` is valid only in the `context` section.
 
 The answer is free-form JSON, and OpenAPPA does not validate it. An answer SHOULD state facts, not labels: a repository's visibility, not an audience. Text an answer quotes, such as a table description, SHOULD carry its author, because the annotator judges trust by who wrote the text.
 
@@ -115,7 +117,16 @@ An annotator can use a selector placeholder only when its own `audiences` lists 
 
 An empty list and an omitted field have different meanings. For example, `marks = []` prevents the annotator from requiring attention. Omitting `marks` allows it to use any mark the policy declares, `blocked` included; a catch-all `["*"]` permit declares no mark of its own.
 
-The optional `hint` tells the annotator what the deployment knows about its calls: which hosts are its own, which paths hold whose data, what a context provider's answer means. It can give examples. Every annotator builtin (`claude-code`, `llm`, `jev`) already applies OpenAPPA's label guide: the rule and the criteria for each trust and audience leaf, with worked examples. A hint does not restate the guide. For `claude-code` and `llm`, the hint overrides the guide where the two disagree. `jev` adds the hint to each of its four questions, after the guide's rule for that question. It cannot allow values excluded by the permits and cannot exceed 512 characters. An annotator name must be non-empty and can contain dots.
+The optional `hint` tells the annotator what the deployment knows about the calls of its tools: which paths hold whose data, which commands are safe. It can give examples. Every annotator builtin (`claude-code`, `llm`, `jev`) already applies OpenAPPA's label guide: the rule and the criteria for each trust and audience leaf, with worked examples. A hint does not restate the guide. For `claude-code` and `llm`, the hint overrides the guide where the two disagree. `jev` adds the hint to each of its four questions, after the guide's rule for that question. It cannot allow values excluded by the permits and cannot exceed 512 characters. An annotator name must be non-empty and can contain dots.
+
+The optional `[policy.deployment] hint` states what holds for every call: the deployment's environment and trust boundaries, such as which hosts, forges and services are the organization's own. Every annotator receives it as `declaration.deployment_hint`. It cannot exceed 2048 characters, and only the root file can set it. Like every hint, it does not change the policy identity.
+
+```toml
+[policy.deployment]
+hint = "Hosts under corp.example and the forge git.corp.example are the organization's own."
+```
+
+The annotator hint, the deployment hint and the provider hints are deployer instructions, and they override the label guide. Provider answers are facts. An `error` entry establishes nothing. Each field is omitted from the request when it is not set.
 
 ### Implementing an annotator
 

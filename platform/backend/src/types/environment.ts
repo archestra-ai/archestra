@@ -87,7 +87,7 @@ export const NetworkPolicyInputSchema = z
   .transform((policy) => normalizeNetworkPolicy(policy));
 
 export const EffectiveNetworkPolicySchema = z.object({
-  source: z.enum(["environment", "organization_default", "built_in"]),
+  source: z.enum(["agent", "environment", "organization_default", "built_in"]),
   policy: NetworkPolicySchema.nullable(),
 });
 

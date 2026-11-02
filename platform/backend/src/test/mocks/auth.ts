@@ -54,6 +54,8 @@ export function betterAuthModuleMock() {
   return {
     auth: {
       api: {
+        createApiKey: vi.fn<MockFunction>(),
+        deleteApiKey: vi.fn<MockFunction>(),
         getSession: vi.fn<MockFunction>(),
         verifyApiKey: vi.fn<MockFunction>(),
         hasPermission: vi.fn<MockFunction>(),

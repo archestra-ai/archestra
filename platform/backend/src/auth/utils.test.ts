@@ -3,14 +3,7 @@ import type { Permissions } from "@archestra/shared";
 import { vi } from "vitest";
 
 // better-auth is the real external auth boundary — mock it, not the DB.
-vi.mock("./better-auth", () => ({
-  auth: {
-    api: {
-      getSession: vi.fn(),
-      verifyApiKey: vi.fn(),
-    },
-  },
-}));
+vi.mock("@/auth/better-auth");
 
 import { PGlite } from "@electric-sql/pglite";
 import { bindPorts, type PortBindings } from "@/models/ports";

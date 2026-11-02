@@ -41,6 +41,7 @@
     { "path": "./tsconfig.models-agents.json" },
     { "path": "./tsconfig.models-upper.json" },
     { "path": "./tsconfig.runtime.json" },
+    { "path": "./tsconfig.llm-clients.json" },
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.test-support.json" }
   ]

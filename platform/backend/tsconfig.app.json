@@ -25,6 +25,17 @@
     "src/skills/skill-catalog.generated.json"
   ],
   "exclude": [
+    "src/openappa/subagent-binding.ts",
+    "src/clients/llm-client.ts",
+    "src/clients/anthropic-endpoint.ts",
+    "src/clients/azure-media-language-model.ts",
+    "src/clients/gemini-client.ts",
+    "src/clients/internal-call.ts",
+    "src/clients/openrouter-attribution.ts",
+    "src/clients/openrouter-response-healing.ts",
+    "src/clients/openrouter-reported-cost.ts",
+    "src/services/azure-model-capabilities.ts",
+
     // Runtime files are checked against declarations in tsconfig.runtime.json.
     "src/k8s/agent-runtime/atomic-file-write.ts",
     "src/k8s/agent-runtime/exec.ts",
@@ -205,6 +216,7 @@
     "src/test/**"
   ],
   "references": [
+    { "path": "./tsconfig.llm-clients.json" },
     { "path": "./tsconfig.runtime.json" },
     { "path": "../shared/tsconfig.lib.json" },
     // The migration lint script imports the linter (@drizzle-migration-linter).

@@ -224,6 +224,7 @@ export const TYPE_CHECK_PROJECT_PEAK_BYTES: Readonly<
     "tsconfig.models.json": 1.5 * 1024 ** 3,
     "tsconfig.models-agents.json": 1.0 * 1024 ** 3,
     "tsconfig.models-upper.json": 1.5 * 1024 ** 3,
+    "tsconfig.llm-clients.json": 0.8 * 1024 ** 3,
     "tsconfig.runtime.json": 1.0 * 1024 ** 3,
     "tsconfig.app.json": 4.1 * 1024 ** 3,
     "tsconfig.test-support.json": 1.5 * 1024 ** 3,

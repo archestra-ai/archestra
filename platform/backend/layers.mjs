@@ -1,4 +1,4 @@
-/** Every layer above the models, until the split carves them into projects. */
+/** The layers not yet carved into referenced source projects. */
 const APP = "tsconfig.app.json";
 
 /**
@@ -127,6 +127,7 @@ const layerTable = [
       "src/openappa/plaintext-envelope.ts",
       "src/openappa/actor.ts",
       "src/openappa/session-token.ts",
+      "src/openappa/subagent-binding.ts",
       "src/openappa/policy-test-hashes.ts",
       // The skill file format the skill model reads, and the guide content
       // the built-in skills catalogue (models-agents) embeds.
@@ -245,6 +246,23 @@ const layerTable = [
       "src/utils/llm-resolution.ts",
     ],
     project: "tsconfig.models-upper.json",
+  },
+  {
+    name: "llm-clients",
+    // Provider SDKs and client construction sit below their knowledge-base,
+    // policy, service and route consumers.
+    files: [
+      "src/clients/llm-client.ts",
+      "src/clients/anthropic-endpoint.ts",
+      "src/clients/azure-media-language-model.ts",
+      "src/clients/gemini-client.ts",
+      "src/clients/internal-call.ts",
+      "src/clients/openrouter-attribution.ts",
+      "src/clients/openrouter-response-healing.ts",
+      "src/clients/openrouter-reported-cost.ts",
+      "src/services/azure-model-capabilities.ts",
+    ],
+    project: "tsconfig.llm-clients.json",
   },
   {
     name: "runtime",

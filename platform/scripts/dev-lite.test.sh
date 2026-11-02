@@ -167,6 +167,22 @@ out="$(uncopied_build)"
 check "a frontend build without its static files fails" grep -q "could not copy" <<<"$out"
 check "even inside an if" fails grep -q "reported success" <<<"$out"
 
+# tsdown empties dist/ first: a failed backend build leaves the last one.
+failed_backend_build() {
+  (
+    scratch="$ARCHESTRA_DEV_LITE_STATE_DIR/backend-build"
+    PLATFORM_DIR="$scratch/platform"
+    STATE_DIR="$scratch/state"
+    mkdir -p "$PLATFORM_DIR/backend/dist" "$PLATFORM_DIR/backend/node_modules/.bin"
+    echo last > "$PLATFORM_DIR/backend/dist/server.mjs"
+    printf '#!/usr/bin/env bash\nrm -rf dist\nexit 1\n' > "$PLATFORM_DIR/backend/node_modules/.bin/tsdown"
+    chmod +x "$PLATFORM_DIR/backend/node_modules/.bin/tsdown"
+    build_backend || true
+  ) > /dev/null 2>&1 || true
+  cat "$ARCHESTRA_DEV_LITE_STATE_DIR/backend-build/platform/backend/dist/server.mjs" 2>/dev/null
+}
+check "a failed backend build keeps the last build to start again" test "$(failed_backend_build)" = last
+
 # --- start order, prepare, pause --------------------------------------------
 # Every step echoes its name; the builds and servers act on a scratch platform
 # directory, so `keep` finds builds there and nothing touches the checkout.
@@ -281,18 +297,23 @@ real_wait_resume() {
     db_ready() { return 0; }
     build_frontend() { echo build_frontend >&2; }
     build_backend() { echo build_backend >&2; }
-    start_backend() { ALIVE="$ALIVE backend"; }
+    start_backend() { ALIVE="$ALIVE backend${CRASHES:+-crashed}"; }
     start_frontend() { ALIVE="$ALIVE frontend"; }
     http_ok() { return 0; }
     log() { :; }
     ARCHESTRA_DEV_LITE_TIMEOUT_SECONDS=5 cmd_resume
-  ' real-wait "$SCRIPT_DIR" > /dev/null 2>&1
+  ' real-wait "$SCRIPT_DIR" > "$ARCHESTRA_DEV_LITE_STATE_DIR/resume.out" 2>&1
 }
 touch "$SERVERS_FILE"
 printf 'frontend=build\nbackend=0\n' > "$PAUSED_FILE"
 check "a frontend-only resume is ready without the backend" real_wait_resume
 printf 'frontend=none\nbackend=1\n' > "$PAUSED_FILE"
 check "a backend-only resume is ready without the frontend" real_wait_resume
+check "and says only the backend is ready" grep -qx "dev stack ready: backend :9000" "$ARCHESTRA_DEV_LITE_STATE_DIR/resume.out"
+check "the pause ends once the resumed servers answer" test ! -f "$PAUSED_FILE"
+printf 'frontend=none\nbackend=1\n' > "$PAUSED_FILE"
+check "a resumed backend that exits fails the resume" fails env CRASHES=1 bash -c "$(declare -f real_wait_resume); SCRIPT_DIR=$SCRIPT_DIR real_wait_resume"
+check "and keeps the pause, so resume can be run again" grep -q "^backend=1" "$PAUSED_FILE"
 rm -f "$PAUSED_FILE"
 failing_frontend_reload() { (frontend_mode() { echo build; }; LIFE_FAIL=build_frontend LIFE_ALIVE=" backend" lifecycle cmd_reload frontend) || true; }
 out="$(failing_frontend_reload)"

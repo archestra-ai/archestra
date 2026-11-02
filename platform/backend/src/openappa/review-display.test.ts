@@ -309,4 +309,13 @@ describe("redactCredentials", () => {
       ),
     ).toBe('{"id":9007199254740993,"headers":{"X-Api-Key":"[redacted]"}}');
   });
+
+  test("redacts deeply nested JSON without overflowing the stack", () => {
+    const deep = `${"[".repeat(20_000)}"Authorization: Bearer tok"${"]".repeat(20_000)}`;
+    const json = (key: string, inner: string) =>
+      `{"headers":{"X-Api-Key":"${key}"},"deep":${inner}}`;
+    expect(redactCredentials(json("tok", deep))).toBe(
+      json("[redacted]", deep.replace("Bearer tok", "Bearer [redacted]")),
+    );
+  });
 });

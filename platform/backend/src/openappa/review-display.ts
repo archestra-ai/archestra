@@ -142,8 +142,10 @@ type JsonToken = { start: number; end: number; text?: string; edits: Edit[] };
 
 // Walks a span already known to be valid JSON. A credential sits under a
 // header-named key, in the `value` beside a `name`, `key` or `header` naming
-// one, or second in a `[name, value]` pair.
-function walkJson(json: string, at: number): JsonToken {
+// one, or second in a `[name, value]` pair. A container past `MAX_JSON_DEPTH`
+// is shown as `"[redacted]"`, so deep nesting cannot overflow the stack or
+// show what it holds.
+function walkJson(json: string, at: number, depth = 0): JsonToken {
   const start = skipSpace(json, at);
   const opener = json[start];
   if (opener === '"') {
@@ -153,6 +155,11 @@ function walkJson(json: string, at: number): JsonToken {
     const edits =
       shown === text ? [] : [{ start, end, text: JSON.stringify(shown) }];
     return { start, end, text, edits };
+  }
+  if ((opener === "{" || opener === "[") && depth > MAX_JSON_DEPTH) {
+    const end = containerEnd(json, start);
+    const text = JSON.stringify(REDACTED_CREDENTIAL);
+    return { start, end, edits: [{ start, end, text }] };
   }
   if (opener !== "{" && opener !== "[") {
     let end = start;
@@ -168,7 +175,7 @@ function walkJson(json: string, at: number): JsonToken {
       key = JSON.parse(json.slice(index, keyEnd));
       index = skipSpace(json, keyEnd) + 1;
     }
-    const value = walkJson(json, index);
+    const value = walkJson(json, index, depth + 1);
     members.push({ key, value });
     index = skipSpace(json, value.end);
     if (json[index] === ",") index = skipSpace(json, index + 1);
@@ -202,6 +209,18 @@ function walkJson(json: string, at: number): JsonToken {
 
 function namesCredential(token: JsonToken | undefined): boolean {
   return token?.text !== undefined && CREDENTIAL_NAME.test(token.text);
+}
+
+const MAX_JSON_DEPTH = 100;
+
+function containerEnd(json: string, start: number): number {
+  let depth = 0;
+  for (let index = start; ; index++) {
+    const char = json[index];
+    if (char === '"') index = stringEnd(json, index) - 1;
+    else if (char === "{" || char === "[") depth++;
+    else if ((char === "}" || char === "]") && --depth === 0) return index + 1;
+  }
 }
 
 function skipSpace(json: string, at: number): number {

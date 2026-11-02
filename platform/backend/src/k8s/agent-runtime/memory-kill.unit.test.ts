@@ -18,17 +18,32 @@ describe("parseMemoryEvents", () => {
       ),
     ).toEqual({
       oomKills: 1,
+      wardenStops: 0,
       limitHits: 3,
       peakBytes: 8 * GIB,
       limitBytes: 8 * GIB,
     });
   });
 
+  test("reads the memory warden's stops", () => {
+    expect(
+      parseMemoryEvents(
+        "oom 0\noom_kill 0\npeak 4294967296\nlimit 4294967296\nwarden_stop 2\n",
+      ),
+    ).toMatchObject({ oomKills: 0, wardenStops: 2 });
+  });
+
   test("keeps the limit and peak open when the kernel does not give them", () => {
     // memory.events' own "max" counter is not the limit.
     expect(
       parseMemoryEvents("max 1203\noom_kill 2\npeak \nlimit max\n"),
-    ).toEqual({ oomKills: 2, limitHits: 0, peakBytes: null, limitBytes: null });
+    ).toEqual({
+      oomKills: 2,
+      wardenStops: 0,
+      limitHits: 0,
+      peakBytes: null,
+      limitBytes: null,
+    });
   });
 
   test("is null without a counter (no cgroup v2, an older image shell)", () => {
@@ -46,6 +61,7 @@ describe("splitTurnPoll", () => {
     ).toEqual({
       memory: {
         oomKills: 1,
+        wardenStops: 0,
         limitHits: 1,
         peakBytes: 8 * GIB,
         limitBytes: 8 * GIB,
@@ -84,6 +100,7 @@ describe("splitTurnPoll", () => {
 describe("memoryKillBetween", () => {
   const before = {
     oomKills: 1,
+    wardenStops: 0,
     limitHits: 1,
     peakBytes: null,
     limitBytes: 8 * GIB,
@@ -92,12 +109,14 @@ describe("memoryKillBetween", () => {
     const atLimit = {
       ...before,
       oomKills: 3,
+      wardenStops: 0,
       limitHits: 2,
       peakBytes: 8 * GIB,
     };
     expect(memoryKillBetween(before, atLimit)).toEqual({
       events: atLimit,
       killed: 2,
+      stopped: 0,
       atLimit: true,
     });
     // The node's OOM killer: the cgroup never hit its own limit.
@@ -105,6 +124,16 @@ describe("memoryKillBetween", () => {
     expect(memoryKillBetween(before, nodeOom)).toEqual({
       events: nodeOom,
       killed: 1,
+      stopped: 0,
+      atLimit: false,
+    });
+  });
+  test("counts the commands the memory warden stopped near the limit", () => {
+    const stopped = { ...before, wardenStops: 2, peakBytes: 7.8 * GIB };
+    expect(memoryKillBetween(before, stopped)).toEqual({
+      events: stopped,
+      killed: 0,
+      stopped: 2,
       atLimit: false,
     });
   });
@@ -123,11 +152,13 @@ describe("describeMemoryKill", () => {
       {
         events: {
           oomKills: 1,
+          wardenStops: 0,
           limitHits: 1,
           peakBytes: 7.97 * GIB,
           limitBytes: 8 * GIB,
         },
         killed: 1,
+        stopped: 0,
         atLimit: true,
       },
       where,
@@ -147,11 +178,13 @@ describe("describeMemoryKill", () => {
         {
           events: {
             oomKills: 3,
+            wardenStops: 0,
             limitHits: 1,
             peakBytes: null,
             limitBytes: null,
           },
           killed: 3,
+          stopped: 0,
           atLimit: true,
         },
         { container: "agent-runtime", tier: null },
@@ -168,11 +201,13 @@ describe("describeMemoryKill", () => {
         {
           events: {
             oomKills: 1,
+            wardenStops: 0,
             limitHits: 1,
             peakBytes: 8_000_000_000,
             limitBytes: 8_000_000_000,
           },
           killed: 1,
+          stopped: 0,
           atLimit: true,
         },
         where,
@@ -186,11 +221,13 @@ describe("describeMemoryKill", () => {
         {
           events: {
             oomKills: 1,
+            wardenStops: 0,
             limitHits: 0,
             peakBytes: 3 * GIB,
             limitBytes: 8 * GIB,
           },
           killed: 1,
+          stopped: 0,
           atLimit: false,
         },
         where,
@@ -203,11 +240,13 @@ describe("describeMemoryKill", () => {
         {
           events: {
             oomKills: 1,
+            wardenStops: 0,
             limitHits: 0,
             peakBytes: null,
             limitBytes: null,
           },
           killed: 1,
+          stopped: 0,
           atLimit: false,
         },
         { container: "agent-runtime", tier: null },
@@ -226,5 +265,26 @@ describe("parseMemoryQuantity", () => {
     expect(parseMemoryQuantity("8589934592")).toBe(8 * GIB);
     expect(parseMemoryQuantity("lots")).toBeNull();
     expect(parseMemoryQuantity(undefined)).toBeNull();
+  });
+  test("says the warden stopped a command, and what to do, when the kernel killed nothing", () => {
+    expect(
+      describeMemoryKill(
+        {
+          events: {
+            oomKills: 0,
+            wardenStops: 1,
+            limitHits: 0,
+            peakBytes: 3.9 * GIB,
+            limitBytes: 4 * GIB,
+          },
+          killed: 0,
+          stopped: 1,
+          atLimit: false,
+        },
+        { container: "agent-runtime", tier: "S" },
+      ),
+    ).toBe(
+      "The run ran short of memory. The agent-runtime container neared its memory limit of 4 GiB at tier S (peak usage 3.9 GiB), and the memory warden stopped one of the agent's commands so the kernel would not stop every process. Start the run again at a larger tier, or have the agent run memory-heavy commands, such as type checks, test suites and builds, one at a time and with fewer workers.",
+    );
   });
 });

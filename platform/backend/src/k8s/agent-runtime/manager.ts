@@ -2005,6 +2005,7 @@ done`
         podName: running.podName,
         tier: running.tier,
         killed: kill.killed,
+        stopped: kill.stopped,
         atLimit: kill.atLimit,
         memoryLimitBytes: kill.events.limitBytes,
         memoryPeakBytes: kill.events.peakBytes,
@@ -2013,7 +2014,9 @@ done`
           tier: running.tier,
         }),
       },
-      "The kernel killed a process of an Agent Runtime run for memory",
+      kill.killed > 0
+        ? "The kernel killed a process of an Agent Runtime run for memory"
+        : "The memory warden stopped a command of an Agent Runtime run near its memory limit",
     );
   }
 

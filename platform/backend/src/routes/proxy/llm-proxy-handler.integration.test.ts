@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
+import { vi } from "vitest";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -14,6 +15,7 @@ import LimitModel from "@/models/limit";
 import LlmThroughputModel from "@/models/llm-throughput";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
+import { LlmThroughput } from "@/services/llm-throughput";
 import { accessGrants, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
@@ -458,6 +460,51 @@ availabilityTest.for([false, true])(
     ]);
     expect((await ask()).statusCode).toBe(429);
     expect(gateway.hits).toHaveLength(2);
+  },
+);
+
+availabilityTest(
+  "a fallback hidden after admission leaves the previous failure terminal",
+  async ({ gateway }) => {
+    await gateway.pool(true);
+    const fallback = await ModelModel.findByProviderAndModelId(
+      "openai",
+      "hidden-fallback",
+    );
+    if (!fallback) throw new Error("Missing fallback fixture");
+    await ModelModel.update(fallback.id, { ignored: false });
+    gateway.onRequest(async () =>
+      HttpResponse.json(
+        { error: { message: "Synthetic outage" } },
+        { status: 503 },
+      ),
+    );
+    const admit = LlmThroughput.prototype.admitSpendForModel;
+    const spy = vi
+      .spyOn(LlmThroughput.prototype, "admitSpendForModel")
+      .mockImplementation(async function (this: LlmThroughput, ...args) {
+        await admit.apply(this, args);
+        if (args[0] === fallback.modelId)
+          await ModelModel.update(fallback.id, { ignored: true });
+      });
+    try {
+      const response = await gateway.ask({
+        model: "availability-pool",
+        route: "model-router",
+      });
+      expect(response.statusCode, response.body).toBe(503);
+      expect(gateway.hits.map((hit) => hit.model)).toEqual([
+        "availability-model",
+      ]);
+      const records = await db.select().from(schema.interactionsTable);
+      expect(records).toHaveLength(1);
+      expect(records[0]).toMatchObject({
+        model: "availability-model",
+        attemptOutcome: "failed",
+      });
+    } finally {
+      spy.mockRestore();
+    }
   },
 );
 

@@ -10,6 +10,7 @@ import type { BillingAttribution } from "@/utils/billable-usage";
 import { primaryBillingUsage } from "@/utils/billable-usage";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
 import { UpstreamStreamIncompleteError } from "@/utils/upstream-stream-incomplete-error";
+import { uuidv7 } from "@/utils/uuid";
 /**
  * Generic LLM Proxy Handler
  *
@@ -351,7 +352,9 @@ export interface ModelPoolRouting {
     member: PlannedMember,
     signal: AbortSignal,
   ) => Promise<MemberTransport>;
-  recordFailedAttempt: (attempt: UpstreamAttempt) => Promise<void>;
+  prepareFailedAttempt: (
+    attempt: UpstreamAttempt,
+  ) => Promise<(outcome: "failed" | "failed_over") => Promise<void>>;
   setResponseHeaders: (attempt: UpstreamAttempt) => void;
 }
 
@@ -2245,7 +2248,7 @@ async function handleObservedLLMProxy<
                 preparedMember.value,
               );
             },
-            recordFailedAttempt: async (attempt) => {
+            prepareFailedAttempt: async (attempt) => {
               const cutOff = attempt.cutOff
                 ? await estimateCutOffAttemptUsage({
                     provider: providerName,
@@ -2254,47 +2257,57 @@ async function handleObservedLLMProxy<
                     member: attempt,
                   })
                 : undefined;
+              const interactionId = uuidv7();
+              const record: InsertInteraction = {
+                id: interactionId,
+                profileId: resolvedAgent.id,
+                externalAgentId,
+                runId,
+                userId,
+                serviceAccountId,
+                virtualKeyId,
+                passthroughVirtualKeyId,
+                appId: attributedAppId,
+                sessionId,
+                sessionSource,
+                source,
+                authMethod,
+                authenticatedAppId: authenticatedApp?.id,
+                authenticatedAppName: authenticatedApp?.name,
+                billingTeamId,
+                type: provider.interactionType,
+                request:
+                  requestAdapter.getOriginalRequest() as InteractionRequest,
+                processedRequest: null,
+                response: { error: attempt.failureReason ?? "failed" },
+                model: actualModel,
+                baselineModel: actualModel,
+                // A refused attempt is free. One we cut off had read the
+                // prompt, so it carries that input as an estimate.
+                inputTokens: cutOff?.inputTokens ?? 0,
+                inputTokensEstimated: cutOff !== undefined,
+                outputTokens: 0,
+                cost: cutOff ? cutOff.cost : "0",
+                baselineCost: cutOff?.cost,
+                billingMode,
+              };
+              // Record usage and settle all budgets before the next member is
+              // admitted. Only mark failover once a non-hidden choice opens.
               await persistProxyInteraction({
-                record: {
-                  profileId: resolvedAgent.id,
-                  externalAgentId,
-                  runId,
-                  userId,
-                  serviceAccountId,
-                  virtualKeyId,
-                  passthroughVirtualKeyId,
-                  appId: attributedAppId,
-                  sessionId,
-                  sessionSource,
-                  source,
-                  authMethod,
-                  authenticatedAppId: authenticatedApp?.id,
-                  authenticatedAppName: authenticatedApp?.name,
-                  billingTeamId,
-                  type: provider.interactionType,
-                  request:
-                    requestAdapter.getOriginalRequest() as InteractionRequest,
-                  processedRequest: null,
-                  response: { error: attempt.failureReason ?? "failed" },
-                  model: actualModel,
-                  baselineModel: actualModel,
-                  // A refused attempt is free. One we cut off had read the
-                  // prompt, so it carries that input as an estimate.
-                  inputTokens: cutOff?.inputTokens ?? 0,
-                  inputTokensEstimated: cutOff !== undefined,
-                  outputTokens: 0,
-                  cost: cutOff ? cutOff.cost : "0",
-                  baselineCost: cutOff?.cost,
-                  billingMode,
-                },
+                record,
                 encryptedChat,
                 streamTiming,
                 attributionLabels,
                 throughput,
-                // A failed attempt has no usage to attribute to its routing decision.
                 autoRouting: undefined,
-                upstreamAttempt: attempt,
+                upstreamAttempt: { ...attempt, attemptOutcome: "failed" },
               });
+              return async (outcome) => {
+                if (outcome === "failed_over")
+                  await InteractionModel.markPoolAttemptFailedOver(
+                    interactionId,
+                  );
+              };
             },
             setResponseHeaders: (attempt) => {
               if (reply.raw.headersSent) return;
@@ -5044,7 +5057,7 @@ async function openUpstream<TRequest, T>(params: {
       beforeAttempt: (member) => pool.checkLimits(member),
       open: authorizedOpen,
       memberTimeoutMs,
-      recordFailedAttempt: pool.recordFailedAttempt,
+      prepareFailedAttempt: pool.prepareFailedAttempt,
       ...retry,
     });
   } catch (error) {

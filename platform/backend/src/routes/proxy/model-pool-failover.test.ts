@@ -318,7 +318,7 @@ describe("planModelPool", () => {
       },
       isRetryable: () => false,
       shouldContinue: () => true,
-      recordFailedAttempt: async () => {},
+      prepareFailedAttempt: async () => async () => {},
     });
 
     expect(
@@ -429,7 +429,7 @@ describe("a pool's own timeouts and cooldown", () => {
       },
       isRetryable: () => false,
       shouldContinue: () => true,
-      recordFailedAttempt: async () => {},
+      prepareFailedAttempt: async () => async () => {},
     });
 
     const [health] = await withMemberHealth(await ModelPoolModel.list(org.id));
@@ -487,8 +487,8 @@ describe("openThroughModelPool", () => {
       },
       isRetryable: () => false,
       shouldContinue: () => true,
-      recordFailedAttempt: async (failed) => {
-        recorded.push(failed);
+      prepareFailedAttempt: async (failed) => async (outcome) => {
+        recorded.push({ ...failed, attemptOutcome: outcome });
       },
     });
     expect(result).toBe("answer");
@@ -517,8 +517,8 @@ describe("openThroughModelPool", () => {
         memberTimeoutMs: 5,
         isRetryable: () => false,
         shouldContinue: () => true,
-        recordFailedAttempt: async (failed) => {
-          recorded.push({ ...failed });
+        prepareFailedAttempt: async (failed) => async (outcome) => {
+          recorded.push({ ...failed, attemptOutcome: outcome });
         },
       }),
     ).rejects.toMatchObject({ status: 408 });
@@ -531,6 +531,40 @@ describe("openThroughModelPool", () => {
     expect(attempt.interactionRecorded).toBe(true);
   });
 
+  test("hiding during retry backoff preserves the dispatched member's connection failure", async () => {
+    const attempt: UpstreamAttempt = {};
+    const dropped = Object.assign(new Error("socket hang up"), {
+      code: "ECONNRESET",
+    });
+    let hidden = false;
+    let dispatched = 0;
+    await expect(
+      openThroughModelPool({
+        plan: { ...plan, members: [plan.members[0]] },
+        attempt,
+        transportFor: async (member) => transport(member.providerApiKeyId),
+        open: async () => {
+          if (hidden) throw new ApiError(403, "hidden", "model_hidden");
+          dispatched++;
+          throw dropped;
+        },
+        isRetryable: (error) => error === dropped,
+        shouldContinue: () => true,
+        onRetry: () => {
+          hidden = true;
+        },
+        prepareFailedAttempt: async () => async () => {},
+      }),
+    ).rejects.toBe(dropped);
+    expect(dispatched).toBe(1);
+    expect(attempt).toMatchObject({
+      attempt: 1,
+      providerApiKeyId: keyA,
+      attemptOutcome: "failed",
+      failureReason: "unreachable (502)",
+    });
+  });
+
   test("fails over before the first chunk and records the failed attempt", async () => {
     const attempt: UpstreamAttempt = {};
     const recorded: UpstreamAttempt[] = [];
@@ -541,8 +575,8 @@ describe("openThroughModelPool", () => {
       ...openKey((key) => (key === keyA ? httpError(529) : null)),
       isRetryable: () => false,
       shouldContinue: () => true,
-      recordFailedAttempt: async (failed) => {
-        recorded.push(failed);
+      prepareFailedAttempt: async (failed) => async (outcome) => {
+        recorded.push({ ...failed, attemptOutcome: outcome });
       },
     });
 
@@ -579,7 +613,7 @@ describe("openThroughModelPool", () => {
       ...openKey((key) => (key === keyA ? httpError(401) : null)),
       isRetryable: () => false,
       shouldContinue: () => true,
-      recordFailedAttempt: async () => {},
+      prepareFailedAttempt: async () => async () => {},
     });
     expect(attempt.providerApiKeyId).toBe(keyB);
   });
@@ -599,7 +633,7 @@ describe("openThroughModelPool", () => {
         }),
         isRetryable: () => false,
         shouldContinue: () => true,
-        recordFailedAttempt: async () => {},
+        prepareFailedAttempt: async () => async () => {},
       }),
     ).rejects.toBe(badRequest);
     expect(opened).toEqual([keyA]);
@@ -631,8 +665,8 @@ describe("openThroughModelPool", () => {
       memberTimeoutMs: 20,
       isRetryable: () => false,
       shouldContinue: () => true,
-      recordFailedAttempt: async (failed) => {
-        recorded.push(failed);
+      prepareFailedAttempt: async (failed) => async (outcome) => {
+        recorded.push({ ...failed, attemptOutcome: outcome });
       },
     });
 
@@ -667,8 +701,8 @@ describe("openThroughModelPool", () => {
         open: async () => "unexpected answer",
         isRetryable: () => false,
         shouldContinue: () => true,
-        recordFailedAttempt: async (failed) => {
-          recorded.push(failed);
+        prepareFailedAttempt: async (failed) => async (outcome) => {
+          recorded.push({ ...failed, attemptOutcome: outcome });
         },
       }),
     ).rejects.toBe(refusal);
@@ -692,8 +726,8 @@ describe("openThroughModelPool", () => {
       open: async (t) => `answer from ${await t.execute({})}`,
       isRetryable: () => false,
       shouldContinue: () => true,
-      recordFailedAttempt: async (failed) => {
-        recorded.push(failed);
+      prepareFailedAttempt: async (failed) => async (outcome) => {
+        recorded.push({ ...failed, attemptOutcome: outcome });
       },
     });
 
@@ -712,7 +746,7 @@ describe("openThroughModelPool", () => {
         open: async () => "unreachable",
         isRetryable: () => false,
         shouldContinue: () => true,
-        recordFailedAttempt: async () => {},
+        prepareFailedAttempt: async () => async () => {},
       }),
     ).rejects.toBe(vaultDown);
   });
@@ -739,7 +773,7 @@ describe("openThroughModelPool", () => {
       memberTimeoutMs: 20,
       isRetryable: (error) => error === dropped,
       shouldContinue: () => true,
-      recordFailedAttempt: async () => {},
+      prepareFailedAttempt: async () => async () => {},
     });
 
     expect(result).toBe(`answer from ${keyB}`);
@@ -765,7 +799,7 @@ describe("openThroughModelPool", () => {
       },
       isRetryable: (error) => error === dropped,
       shouldContinue: () => true,
-      recordFailedAttempt: async () => {},
+      prepareFailedAttempt: async () => async () => {},
     });
 
     expect(opened).toEqual([keyA, keyB]);
@@ -783,7 +817,7 @@ describe("openThroughModelPool", () => {
         ...openKey((key) => (key === keyB ? lastError : httpError(503))),
         isRetryable: () => false,
         shouldContinue: () => true,
-        recordFailedAttempt: async () => {},
+        prepareFailedAttempt: async () => async () => {},
       }),
     ).rejects.toBe(lastError);
     expect(attempt).toMatchObject({

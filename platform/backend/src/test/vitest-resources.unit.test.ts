@@ -11,6 +11,7 @@ import {
   resourceEnvelope,
   typeScriptCheckers,
   typeScriptMemorySettings,
+  wholeProgramGoMemoryLimits,
 } from "../../../vitest.resources";
 import { calculateVitestResourceLimits } from "./vitest-resource-limits";
 
@@ -444,5 +445,45 @@ describe("describeToolMemoryKill", () => {
         after: atLimit,
       }),
     ).toBeNull();
+  });
+});
+
+describe("wholeProgramGoMemoryLimits", () => {
+  const pod = (gib: number) =>
+    resourceEnvelope({ ...NODE, constrainedMemoryBytes: gib * GIB });
+
+  test("in a 4 GiB pod the frontend gets the room left with the servers stopped, less the compiler's own", () => {
+    // 2.68 GiB with the servers stopped, less 0.5 GiB outside Go's heap.
+    const limits = wholeProgramGoMemoryLimits(pod(4), 1.9 * GIB);
+    expect((limits?.serversPausedBytes ?? 0) / GIB).toBeCloseTo(2.18, 2);
+  });
+
+  test("beside the servers, and in any pod, never below the program's live data", () => {
+    // 1.83 GiB beside the servers, less 0.5, is below the frontend's 1.9 GiB.
+    expect(
+      wholeProgramGoMemoryLimits(pod(4), 1.9 * GIB)?.besideServersBytes,
+    ).toBe(Math.ceil(1.9 * GIB));
+    expect(
+      wholeProgramGoMemoryLimits(pod(3), 1.9 * GIB)?.serversPausedBytes,
+    ).toBe(Math.ceil(1.9 * GIB));
+  });
+
+  test("gives Go whole bytes, as GOMEMLIMIT needs", () => {
+    for (const gib of [3, 4, 6, 8, 12]) {
+      const limits = wholeProgramGoMemoryLimits(pod(gib), 1.9 * GIB);
+      expect(Number.isInteger(limits?.besideServersBytes)).toBe(true);
+      expect(Number.isInteger(limits?.serversPausedBytes)).toBe(true);
+    }
+  });
+
+  test("a small program gets the room beside the servers", () => {
+    expect(
+      (wholeProgramGoMemoryLimits(pod(4), 0.4 * GIB)?.besideServersBytes ?? 0) /
+        GIB,
+    ).toBeCloseTo(1.33, 2);
+  });
+
+  test("sets nothing where the lane is off", () => {
+    expect(wholeProgramGoMemoryLimits(pod(24), 1.9 * GIB)).toBeNull();
   });
 });

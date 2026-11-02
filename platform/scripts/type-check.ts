@@ -37,9 +37,11 @@ import {
   describeToolMemoryKill,
   detectResourceEnvelope,
   readCgroupMemory,
+  TYPE_CHECK_LIVE_BYTES,
   TYPE_CHECK_PEAK_BYTES,
   typeScriptCheckers,
   typeScriptMemorySettings,
+  wholeProgramGoMemoryLimits,
 } from "../vitest.resources.ts";
 import { runHeavy } from "./heavy-lane.ts";
 import {
@@ -78,11 +80,21 @@ if (
 ) {
   tscArgs.push("--incremental", "false");
 }
-const env =
-  memory !== null && !process.env.GOMEMLIMIT
-    ? { ...process.env, GOMEMLIMIT: String(memory.goMemoryLimitBytes) }
-    : process.env;
 const pkg = checkedPackage();
+// A whole program with a measured live size gets the room the heavy lane gives
+// it (never less than its live data): what fits beside the dev stack's
+// servers, and more only once the lane has them stopped. Other checks keep the
+// envelope's share. A GOMEMLIMIT set by hand wins.
+const liveBytes = TYPE_CHECK_LIVE_BYTES[pkg];
+const limits =
+  liveBytes === undefined || process.env.GOMEMLIMIT
+    ? null
+    : wholeProgramGoMemoryLimits(envelope, liveBytes);
+const goMemoryLimit = limits?.besideServersBytes ?? memory?.goMemoryLimitBytes;
+const env =
+  goMemoryLimit !== undefined && !process.env.GOMEMLIMIT
+    ? { ...process.env, GOMEMLIMIT: String(goMemoryLimit) }
+    : process.env;
 const memoryBefore = readCgroupMemory();
 // Where checkers are sized, compilers and the other heavy tools take turns
 // (scripts/heavy-lane.ts), and one too big to fit beside the dev stack's
@@ -93,6 +105,9 @@ const result = runHeavy({
   env,
   label: `type-check (${pkg})`,
   peakBytes: TYPE_CHECK_PEAK_BYTES[pkg],
+  pausedEnv: limits
+    ? { GOMEMLIMIT: String(limits.serversPausedBytes) }
+    : undefined,
   lane: sized !== null,
 });
 if (result.error) throw result.error;

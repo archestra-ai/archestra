@@ -171,6 +171,42 @@ export const TYPE_CHECK_PEAK_BYTES: Readonly<Record<string, number>> = {
 };
 
 /**
+ * The live data of the whole programs a package's type check covers: Go's heap
+ * in use at the end of a one-checker check (`--extendedDiagnostics`, "Memory
+ * used"). The frontend measured 1.98 GB; a soft limit below its live data only
+ * costs time (at 1.5 GiB the frontend check took a third longer).
+ */
+export const TYPE_CHECK_LIVE_BYTES: Readonly<Record<string, number>> = {
+  frontend: Math.round(1.9 * 1024 ** 3),
+};
+
+/**
+ * Go's soft memory limit (`GOMEMLIMIT`, whole bytes: Go refuses a fraction)
+ * for a whole program's check in a small container, for each room the heavy
+ * lane can give it: beside the dev stack's servers, and with them stopped.
+ * The room less what the compiler holds outside Go's heap (about 0.5 GiB),
+ * never below the program's live data. The lane applies the second only once
+ * the servers are stopped (`HeavyCommand.pausedEnv`). Null where the lane is
+ * off (16 GiB and up).
+ */
+export function wholeProgramGoMemoryLimits(
+  envelope: ResourceEnvelope,
+  liveBytes: number,
+): { besideServersBytes: number; serversPausedBytes: number } | null {
+  if (!heavyLaneActive(envelope)) return null;
+  const ceilings = heavyLaneCeilings(envelope);
+  const limit = (room: number) =>
+    Math.max(
+      Math.ceil(liveBytes),
+      Math.floor(room - TYPESCRIPT_OUTSIDE_HEAP_BYTES),
+    );
+  return {
+    besideServersBytes: limit(ceilings.besideServersBytes),
+    serversPausedBytes: limit(ceilings.serversPausedBytes),
+  };
+}
+
+/**
  * The peak of each project's check in a package whose tsconfig.json is a
  * solution (`scripts/type-check-solution.ts`), by project config relative to
  * the package: the compiler's measured peak at one checker on 2 CPUs, plus
@@ -508,6 +544,8 @@ const TYPESCRIPT_FULL_MEMORY_BYTES = 16 * BYTES_PER_GIB;
 const TYPESCRIPT_ONE_CHECKER_BELOW_BYTES = 12 * BYTES_PER_GIB;
 const TYPESCRIPT_GO_MEMORY_LIMIT_FRACTION = 5 / 8;
 const HEAVY_LANE_BELOW_BYTES = 16 * BYTES_PER_GIB;
+/** What tsgo holds outside Go's heap at its peak: 2.48 GiB RSS on a 1.98 GB heap. */
+const TYPESCRIPT_OUTSIDE_HEAP_BYTES = 0.5 * BYTES_PER_GIB;
 const POD_FIXED_BYTES = 1.12 * BYTES_PER_GIB;
 const DEV_STACK_DATABASE_BYTES = 0.2 * BYTES_PER_GIB;
 const DEV_STACK_SERVERS_BYTES = 0.85 * BYTES_PER_GIB;

@@ -180,6 +180,89 @@ describe("heavy lane", () => {
   );
 
   test.skipIf(!hasFlock)(
+    "the command gets the paused-servers variables only while the servers are stopped",
+    async () => {
+      const { log, env, devLite, root } = scratch();
+      const sizes = (name: string) => [
+        "--paused-env",
+        "GOMEMLIMIT=2340757176",
+        "--",
+        "sh",
+        "-c",
+        `echo "${name} \${GOMEMLIMIT:-none}" >> ${log}`,
+      ];
+      // Paused for it: the larger limit.
+      const paused = await runCli({ ...env, GOMEMLIMIT: "2040109466" }, [
+        ...bigCommand(devLite).slice(0, -1),
+        ...sizes("paused"),
+      ]);
+      expect(paused.status).toBe(0);
+      // A pause that does not happen: the limit sized beside the servers.
+      const stuck = path.join(root, "stuck-dev-lite.sh");
+      writeFileSync(stuck, "cmd_pause() { :; }\nexit 0\n");
+      const failed = await runCli({ ...env, GOMEMLIMIT: "2040109466" }, [
+        ...bigCommand(stuck).slice(0, -1),
+        ...sizes("not-paused"),
+      ]);
+      expect(failed.status).toBe(0);
+      // Without the lane (a large container) nothing is paused either.
+      const direct = await runCli(
+        {
+          ...env,
+          ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "32Gi",
+          GOMEMLIMIT: "2040109466",
+        },
+        [...bigCommand(devLite).slice(0, -1), ...sizes("direct")],
+      );
+      expect(direct.status).toBe(0);
+      expect(
+        readFileSync(log, "utf8")
+          .trim()
+          .split("\n")
+          .filter((line) => !["pause", "resume"].includes(line)),
+      ).toEqual([
+        "paused 2340757176",
+        "not-paused 2040109466",
+        "direct 2040109466",
+      ]);
+    },
+  );
+
+  test.skipIf(!hasFlock)(
+    "the paused-servers variables reach the command, not the stack's resume",
+    async () => {
+      const { log, env, root, paused } = scratch();
+      const devLite = path.join(root, "logging-dev-lite.sh");
+      writeFileSync(
+        devLite,
+        [
+          "cmd_pause() { :; }",
+          `case "$1" in`,
+          `  pause) echo "pause \${ONLY_COMMAND:-unset}" >> ${log}; touch ${paused} ;;`,
+          `  resume) echo "resume \${ONLY_COMMAND:-unset}" >> ${log}; rm -f ${paused} ;;`,
+          "esac",
+          "",
+        ].join("\n"),
+      );
+      const result = await runCli(env, [
+        ...bigCommand(devLite).slice(0, -1),
+        "--paused-env",
+        "ONLY_COMMAND=present",
+        "--",
+        "sh",
+        "-c",
+        `echo "command \${ONLY_COMMAND:-unset}" >> ${log}`,
+      ]);
+      expect(result.status).toBe(0);
+      expect(readFileSync(log, "utf8").trim().split("\n")).toEqual([
+        "pause unset",
+        "command present",
+        "resume unset",
+      ]);
+    },
+  );
+
+  test.skipIf(!hasFlock)(
     "a process a heavy command leaves running does not keep the lane",
     async () => {
       const { log, env } = scratch();

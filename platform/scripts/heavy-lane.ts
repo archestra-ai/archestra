@@ -29,7 +29,8 @@
  * The ceilings (`heavyLaneCeilings` in vitest.resources.ts) are the 4 GiB
  * budget measured in staging pods.
  *
- *   tsx scripts/heavy-lane.ts [--label <text>] [--peak-gib <n>] [--dev-lite <script>] -- <command> [args...]
+ *   tsx scripts/heavy-lane.ts [--label <text>] [--peak-gib <n>] [--dev-lite <script>]
+ *     [--paused-env NAME=VALUE]... -- <command> [args...]
  */
 import { type SpawnSyncReturns, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -59,6 +60,13 @@ export interface HeavyCommand {
   lane?: boolean;
   /** The dev stack script whose `pause` and `resume` make room (default `scripts/dev-lite.sh`). */
   devLiteScript?: string;
+  /**
+   * Variables the command gets on top of `env` only when the dev stack's
+   * servers are stopped while it runs (the lane paused them, or someone else
+   * did): sized for that room, which a pause that fails or a lane that is off
+   * never gives.
+   */
+  pausedEnv?: Record<string, string>;
 }
 
 /**
@@ -89,6 +97,14 @@ export function runHeavy(heavy: HeavyCommand): SpawnSyncReturns<Buffer> {
   const pause =
     pausesServers(envelope, heavy.peakBytes) && supportsPause(devLite);
   const ceilings = heavyLaneCeilings(envelope);
+  const pausedEnv = Object.entries(heavy.pausedEnv ?? {}).map(
+    ([name, value]) => {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || /\n/.test(value)) {
+        throw new Error(`heavy-lane: cannot pass ${name} to the command`);
+      }
+      return `${name}=${value}`;
+    },
+  );
   const why =
     heavy.peakBytes === undefined
       ? ""
@@ -107,6 +123,7 @@ export function runHeavy(heavy: HeavyCommand): SpawnSyncReturns<Buffer> {
       pausedFile(env),
       why,
       String(process.pid),
+      pausedEnv.join("\n"),
       heavy.command,
       ...heavy.args,
     ],
@@ -134,11 +151,13 @@ const OWN_DEV_LITE_SCRIPT = path.join(
  * servers when asked and they run, runs the command and resumes them. From
  * then on a no-op INT/TERM/HUP handler keeps this shell alive to resume while
  * the signal reaches the command (handlers, unlike ignored signals, are not
- * inherited). The dev stack starts without the lane's own variables.
+ * inherited). While the servers are stopped (the lane paused them, or someone
+ * else did) the command, and only the command, gets the paused variables too.
+ * The dev stack starts without the lane's own variables.
  */
 const HELD_SCRIPT = `
-lock="$1" holder="$2" label="$3" pause="$4" dev_lite="$5" paused_file="$6" why="$7" caller="$8"
-shift 8
+lock="$1" holder="$2" label="$3" pause="$4" dev_lite="$5" paused_file="$6" why="$7" caller="$8" paused_env="$9"
+shift 9
 exec 9>>"$lock"
 flock 9 || exit $?
 # A caller that went away while this waited no longer wants the command.
@@ -146,15 +165,21 @@ kill -0 "$caller" 2>/dev/null || exit 143
 trap ':' INT TERM HUP
 printf '%s\\t%s\\t%s\\n' "$$" "$(date +%s)" "$label" > "$holder" 2>/dev/null || :
 stack() { env -u ARCHESTRA_HEAVY_LANE -u GOMEMLIMIT bash "$dev_lite" "$1" > /dev/null 2>&1 9>&-; }
-resume=0
-if [ "$pause" = 1 ] && [ ! -e "$paused_file" ]; then
+resume=0 stopped=0
+[ -e "$paused_file" ] && stopped=1
+if [ "$pause" = 1 ] && [ "$stopped" = 0 ]; then
   stack pause || :
   if [ -e "$paused_file" ]; then
-    resume=1
+    resume=1 stopped=1
     echo "heavy-lane: stopped the dev stack's backend and frontend while $label runs: $why. They start again when it ends; PostgreSQL keeps running." >&2
   fi
 fi
-"$@" 9>&-
+# The paused variables reach the command alone, not the dev stack's resume.
+only_command=()
+if [ "$stopped" = 1 ] && [ -n "$paused_env" ]; then
+  while IFS= read -r variable; do only_command+=("$variable"); done <<< "$paused_env"
+fi
+env "\${only_command[@]}" "$@" 9>&-
 status=$?
 if [ "$resume" = 1 ]; then
   echo "heavy-lane: starting the dev stack's backend and frontend again" >&2
@@ -249,23 +274,32 @@ if (
 ) {
   const usage = () => {
     process.stderr.write(
-      "usage: tsx scripts/heavy-lane.ts [--label <text>] [--peak-gib <n>] [--dev-lite <script>] -- <command> [args...]\n",
+      "usage: tsx scripts/heavy-lane.ts [--label <text>] [--peak-gib <n>] [--dev-lite <script>] [--paused-env NAME=VALUE]... -- <command> [args...]\n",
     );
     process.exit(64);
   };
   // Known options, each with a value, then `--`, then the command.
   const argv = process.argv.slice(2);
   const options = new Map<string, string>();
+  const pausedEnv: Record<string, string> = {};
   let index = 0;
   for (; index < argv.length && argv[index] !== "--"; index += 2) {
     const [name, value] = [argv[index], argv[index + 1]];
     if (
-      !["--label", "--peak-gib", "--dev-lite"].includes(name) ||
+      !["--label", "--peak-gib", "--dev-lite", "--paused-env"].includes(
+        name,
+      ) ||
       value === undefined
     ) {
       usage();
     }
-    options.set(name, value);
+    if (name === "--paused-env") {
+      const equals = value.indexOf("=");
+      if (equals < 1) usage();
+      pausedEnv[value.slice(0, equals)] = value.slice(equals + 1);
+    } else {
+      options.set(name, value);
+    }
   }
   const [command, ...args] = argv.slice(index + 1);
   if (index >= argv.length || !command) usage();
@@ -279,6 +313,7 @@ if (
     label: flag("--label") ?? path.basename(command),
     peakBytes: peakFlag === undefined ? undefined : peak * GIB,
     devLiteScript: flag("--dev-lite"),
+    pausedEnv,
   });
   if (result.error) throw result.error;
   process.exit(

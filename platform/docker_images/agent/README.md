@@ -23,7 +23,7 @@ All targets inherit the same tools from `agent-base`:
 | Independent code review | Nitpicker, pinned to a revision with reviewer deadlines and OpenTelemetry support |
 | Browser automation and recording | Playwright 1.64.0, Chromium, shot-scraper 1.12 |
 | Media processing | FFmpeg/ffprobe, H.264 and AAC encoding, subtitle rendering, fonts |
-| Project tooling | Node.js 24, pnpm through corepack 0.36 (a repository's pinned `packageManager` version, else 11.28.7), Python 3, uv/uvx, Rust 1.93 with Cargo, C/C++ build tools, OpenSSL headers, pkg-config, tmux |
+| Project tooling | Node.js 24, pnpm through corepack 0.36 (a repository's pinned `packageManager` version, else 11.28.7, which a pin elsewhere never replaces), Python 3, uv/uvx, Rust 1.93 with Cargo, C/C++ build tools, OpenSSL headers, pkg-config, tmux |
 | Local database | PostgreSQL 18 with pgvector, from the PostgreSQL project's Debian repository |
 
 These are enough to run the Archestra platform itself from a checkout, without

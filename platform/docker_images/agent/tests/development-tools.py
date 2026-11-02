@@ -42,17 +42,19 @@ class DevelopmentToolsTest(unittest.TestCase):
             # Corepack writes no pin into a repository that has none.
             self.assertNotIn("packageManager", manifest.read_text())
             # A pinned version that is installed runs in the pnpm process
-            # itself: the only process between this test and the probe.
+            # itself, which corepack started (it sets COREPACK_ROOT before it
+            # loads pnpm): the only process between this test and the probe.
             manifest.write_text('{"name": "probe", "private": true, "packageManager": "pnpm@11.28.7"}\n')
             probe = (
                 "const fs = require('fs'); let pid = process.ppid, between = 0;"
                 " while (pid > 1 && pid !== Number(process.env.TEST_PID)) { between++;"
                 " pid = Number(/PPid:\\s+(\\d+)/.exec(fs.readFileSync(`/proc/${pid}/status`, 'utf8'))[1]); }"
-                " console.log(between);"
+                " console.log(between, process.env.COREPACK_ROOT ? 'corepack' : 'no-corepack');"
             )
-            between = run("pnpm", "exec", "node", "-e", probe, cwd=directory,
-                          env={**os.environ, "TEST_PID": str(os.getpid())})
-            self.assertEqual(between.strip(), "1")
+            env = {key: value for key, value in os.environ.items() if key != "COREPACK_ROOT"}
+            result = run("pnpm", "exec", "node", "-e", probe, cwd=directory,
+                         env={**env, "TEST_PID": str(os.getpid())})
+            self.assertEqual(result.strip(), "1 corepack")
 
     def test_launchers_describe_the_machine_after_the_agent_prompt(self):
         prompt = run("archestra-agent-instructions",

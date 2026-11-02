@@ -116,10 +116,12 @@ ENV PATH=$PNPM_HOME/bin:$PNPM_HOME:$PATH
 # check chain nests several. Repositories without a pin get 11.28.7.
 # COREPACK_HOME is shared and writable by the agent's user: a pinned version
 # is downloaded, signature-checked, on first use. Corepack never writes a pin
-# into a repository's package.json.
+# into a repository's package.json, and a newer version some repository pins
+# never becomes the default for the others.
 ENV COREPACK_HOME=/usr/local/share/corepack \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
-    COREPACK_ENABLE_AUTO_PIN=0
+    COREPACK_ENABLE_AUTO_PIN=0 \
+    COREPACK_DEFAULT_TO_LATEST=0
 RUN corepack disable \
  && rm -rf /usr/local/lib/node_modules/corepack /usr/local/lib/node_modules/npm \
  && curl -fsSL https://registry.npmjs.org/npm/-/npm-11.21.1.tgz -o /tmp/npm.tgz \

@@ -23,7 +23,7 @@ describe("auto routing dispatcher", () => {
   let autoRoutingDispatcher: AutoRoutingDispatcher;
   beforeEach(() => {
     config.autoRouting.enabled = true;
-    autoRoutingDispatcher = new AutoRoutingDispatcher();
+    autoRoutingDispatcher = new AutoRoutingDispatcher(() => 0);
   });
 
   test("enqueues a fit for an organization changed since its last fit", async ({
@@ -175,17 +175,23 @@ describe("auto routing dispatcher", () => {
     await db.execute(sql`create trigger cancel_cleanup before delete on routing_decisions
       for each statement execute function cancel_cleanup()`);
     try {
-      const now = Date.now();
+      const startedAt = Date.now();
+      const now = startedAt + 6 * 60_000;
+      let elapsed = 0;
+      autoRoutingDispatcher = new AutoRoutingDispatcher(() => elapsed);
       const attempts = async () => {
         const result = await db.execute<{ count: number }>(
           sql`select last_value::int as count from cleanup_attempts`,
         );
         return result.rows[0]?.count;
       };
-      await Promise.all([
-        autoRoutingDispatcher.dispatch(new Date(now)),
-        autoRoutingDispatcher.dispatch(new Date(now)),
+      const pending = Promise.all([
+        autoRoutingDispatcher.dispatch(new Date(startedAt)),
+        autoRoutingDispatcher.dispatch(new Date(startedAt)),
       ]);
+      // The canceled attempt outlasts the initial five-minute retry delay.
+      elapsed = 6 * 60_000;
+      await pending;
       expect(await queuedFits(organizationId)).toBe(1);
       expect(await attempts()).toBe(1);
       // Retries wait 5, 10, 20, 40, then at most 60 minutes.

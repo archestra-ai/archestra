@@ -23,6 +23,10 @@ export class AutoRoutingDispatcher {
   private purgeRetryMs = INITIAL_PURGE_RETRY_MS;
   private purgeInFlight = false;
 
+  constructor(
+    private readonly monotonicNow: () => number = () => performance.now(),
+  ) {}
+
   async dispatch(now: Date = new Date()): Promise<void> {
     await this.purgeDaily(now);
     if (!config.autoRouting.enabled) return;
@@ -43,6 +47,8 @@ export class AutoRoutingDispatcher {
 
   private async purgeDaily(now: Date): Promise<void> {
     if (this.purgeInFlight || now.getTime() < this.nextPurgeAt) return;
+    const startedAt = this.monotonicNow();
+    const completedAt = () => now.getTime() + this.monotonicNow() - startedAt;
     this.purgeInFlight = true;
     try {
       const purged = {
@@ -52,11 +58,11 @@ export class AutoRoutingDispatcher {
           keepScorerVersionId: (await activeSourceVersion()).id,
         }),
       };
-      this.nextPurgeAt = now.getTime() + DAY_MS;
+      this.nextPurgeAt = completedAt() + DAY_MS;
       this.purgeRetryMs = INITIAL_PURGE_RETRY_MS;
       logger.info(purged, "[AutoRouting] Purged expired routing history");
     } catch (error) {
-      this.nextPurgeAt = now.getTime() + this.purgeRetryMs;
+      this.nextPurgeAt = completedAt() + this.purgeRetryMs;
       this.purgeRetryMs = Math.min(this.purgeRetryMs * 2, MAX_PURGE_RETRY_MS);
       logger.error(
         { err: error },

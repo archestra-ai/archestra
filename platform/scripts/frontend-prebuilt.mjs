@@ -81,6 +81,14 @@ const CONFIG_ENV_SOURCES = [
   "platform/shared",
 ];
 const IGNORED_ENV = new Set(["CI"]);
+// Next loads these from the frontend directory into a production build; one
+// that git does not track is a local change no tree id shows.
+const FRONTEND_DOTENV = [
+  ".env",
+  ".env.local",
+  ".env.production",
+  ".env.production.local",
+];
 // How far back install-cache looks for a commit with the same configuration.
 const CACHE_SEARCH_DEPTH = 30;
 const STAMP = ".frontend-prebuilt";
@@ -208,15 +216,26 @@ function typeScriptFiles(relatives) {
   return files;
 }
 
-/** Whether the working tree builds what the key of HEAD names. */
-function treeIsClean() {
+/**
+ * Why the working tree does not build what the key of HEAD names, or "" when
+ * it does.
+ */
+function localChanges() {
   const paths = [...SOURCE_PATHS, ...CONFIG_PATHS, ...RECIPE_PATHS].filter(
     (relative) => existsSync(path.join(repoDir, relative)),
   );
-  return (
-    git("status", "--porcelain", "--untracked-files=all", "--", ...paths) ===
-      "" && recipeText(null) === recipeText("HEAD")
+  if (git("status", "--porcelain", "--untracked-files=all", "--", ...paths)) {
+    return "the frontend's inputs have local changes";
+  }
+  if (recipeText(null) !== recipeText("HEAD")) {
+    return "dev-lite.sh's frontend build has local changes";
+  }
+  const dotenv = FRONTEND_DOTENV.map((name) => `platform/frontend/${name}`).find(
+    (relative) =>
+      existsSync(path.join(repoDir, relative)) &&
+      git("ls-files", "--", relative) === "",
   );
+  return dotenv ? `${dotenv} is not in git` : "";
 }
 
 function git(...args) {
@@ -234,8 +253,8 @@ function sha256(text) {
 /** CI: `<dir>/build` and `<dir>/cache`, each published as one artifact. */
 function pack(outDir) {
   if (!outDir) throw new Error("usage: --pack <dir>");
-  if (!treeIsClean())
-    throw new Error("the frontend's inputs have local changes");
+  const changes = localChanges();
+  if (changes) throw new Error(changes);
   const key = cacheKey("HEAD");
   const commit = git("rev-parse", "HEAD");
   for (const [kind, source] of [
@@ -271,10 +290,9 @@ async function install() {
   // for its output.
   rmSync(stamp, { force: true });
   if (!usable()) return false;
-  if (!treeIsClean()) {
-    console.error(
-      "frontend-prebuilt: the frontend's inputs have local changes; building",
-    );
+  const changes = localChanges();
+  if (changes) {
+    console.error(`frontend-prebuilt: ${changes}; building`);
     return false;
   }
   const key = cacheKey("HEAD");

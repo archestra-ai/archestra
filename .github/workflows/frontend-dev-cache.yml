@@ -56,7 +56,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup node/pnpm + install dependencies
-        uses: ./.github/actions/setup-env
+        uses: $/.github/actions/setup-env
 
       # The key covers the build's environment, part of which comes from
       # platform/.env: let dev-lite.sh write it as it does in a pod.

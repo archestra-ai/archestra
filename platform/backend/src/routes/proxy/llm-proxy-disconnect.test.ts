@@ -33,6 +33,7 @@ for (const provider of ["anthropic", "openai", "responses"] as const) {
     let baseUrl: string;
     let token: string;
     let providerFinished: ReturnType<typeof deferred>;
+    let clientDisconnected: boolean;
     let finalizationGate: ReturnType<typeof deferred> | undefined;
     let unregister: (() => void) | undefined;
     let failures: number;
@@ -102,6 +103,7 @@ for (const provider of ["anthropic", "openai", "responses"] as const) {
 
     beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
       providerFinished = deferred();
+      clientDisconnected = false;
       finalizationGate = undefined;
       failures = 0;
       cleanups = 0;
@@ -159,6 +161,11 @@ for (const provider of ["anthropic", "openai", "responses"] as const) {
         ownerId: user.id,
       });
       app = createFastifyInstance();
+      app.addHook("onRequest", async (_request, reply) => {
+        reply.raw.on("close", () => {
+          if (!reply.raw.writableEnded) clientDisconnected = true;
+        });
+      });
       await app.register(
         provider === "anthropic" ? anthropicProxyRoutes : openaiProxyRoutes,
       );
@@ -263,6 +270,7 @@ for (const provider of ["anthropic", "openai", "responses"] as const) {
       expect(response.status).toBe(200);
       await providerFinished.promise;
       controller.abort();
+      await vi.waitFor(() => expect(clientDisconnected).toBe(true));
       finalizationGate.resolve();
       await vi.waitFor(async () => {
         const rows =

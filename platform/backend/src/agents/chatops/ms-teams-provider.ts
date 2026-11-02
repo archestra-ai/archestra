@@ -267,9 +267,6 @@ class MSTeamsProvider implements ChatOpsProvider {
           !a.contentType.startsWith("application/vnd.microsoft.card."),
       ),
     );
-    if (!activity.text && !hasFileAttachment) {
-      return null;
-    }
 
     // Extract channel ID, stripping thread suffix if present
     let channelId =
@@ -285,12 +282,19 @@ class MSTeamsProvider implements ChatOpsProvider {
       return null;
     }
 
-    const cleanedText = cleanBotMention(
+    const mentionlessText = cleanBotMention(
       activity.text ?? "",
       activity.recipient?.name,
     );
-    // Files sent in a channel or group chat never ride on the activity; they
-    // are read from Graph once the bot decides to answer (see
+    // Older installed manifests can submit the menu description as prompt text.
+    const cleanedText =
+      /^change which agent handles (?:the|this) conversation$/i.test(
+        mentionlessText,
+      )
+        ? "/select-agent"
+        : mentionlessText;
+    // Channel and group-chat files can be absent from the activity; they
+    // are then read from Graph once the bot decides to answer (see
     // downloadMessageFiles), so a message that looks empty here may still
     // carry one.
     const mayCarryGraphFiles =
@@ -324,8 +328,9 @@ class MSTeamsProvider implements ChatOpsProvider {
     // attachments). Files that could not be delivered are passed on as
     // skipped, so the agent explains the miss instead of saying it sees
     // nothing.
+    const activityFiles = filterTeamsFileAttachments(activity.attachments);
     const fileOutcomes = await this.downloadTeamsFiles(
-      filterTeamsFileAttachments(activity.attachments),
+      activityFiles,
       activity.serviceUrl,
     );
     const attachments = fileOutcomes.flatMap((o) =>
@@ -369,6 +374,11 @@ class MSTeamsProvider implements ChatOpsProvider {
         conversationType: activity.conversation?.conversationType,
         botMentioned: this.wasBotMentioned(activity),
         botName: activity.recipient?.name,
+        // Graph may return the same files already processed from this activity.
+        teamsActivityFileUrls:
+          activity.conversation?.conversationType === "channel"
+            ? activityFiles.map((file) => file.contentUrl)
+            : [],
         // Names of OTHER people @mentioned in the message — a message
         // @mentioning someone else is most likely addressed to them.
         mentionedOthers: extractMentionedOthers(activity),
@@ -1431,7 +1441,7 @@ class MSTeamsProvider implements ChatOpsProvider {
 
   /**
    * Download the files of a channel or group-chat message. Teams does not put
-   * them on the bot's activity: each is a SharePoint `reference` attachment
+   * them on every bot activity: each is a SharePoint `reference` attachment
    * that only Graph returns. Reading the message uses the app's RSC message
    * permission; reading the file needs the app's Graph `Sites.Selected`
    * permission plus a read grant on the team's site, and without one the
@@ -1459,7 +1469,13 @@ class MSTeamsProvider implements ChatOpsProvider {
               .get();
       const files: ChatThreadMessageFile[] = (graphMessage?.attachments ?? [])
         .filter(
-          (a) => a.contentType === GRAPH_REFERENCE_ATTACHMENT && a.contentUrl,
+          (a) =>
+            a.contentType === GRAPH_REFERENCE_ATTACHMENT &&
+            a.contentUrl &&
+            !(
+              Array.isArray(message.metadata?.teamsActivityFileUrls) &&
+              message.metadata.teamsActivityFileUrls.includes(a.contentUrl)
+            ),
         )
         .map((a) => ({
           url: a.contentUrl as string,
@@ -1528,9 +1544,8 @@ class MSTeamsProvider implements ChatOpsProvider {
       }
       return new Response(null, { status: location.status });
     }
-    // Graph answers with a redirect to a pre-signed download URL; fetch drops
-    // the Authorization header on that cross-origin hop.
-    return fetch(
+    // Follow only validated download redirects, dropping credentials across origins.
+    return fetchTeamsFile(
       `${GRAPH_V1}/drives/${encodeURIComponent(location.driveId)}/root:/${encodeGraphPath(location.itemPath)}:/content`,
       { headers },
     );
@@ -1541,7 +1556,7 @@ class MSTeamsProvider implements ChatOpsProvider {
     headers: Record<string, string>;
   }): Promise<{ driveId: string; itemPath: string[] } | { status: number }> {
     const url = new URL(params.fileUrl);
-    const segments = pathSegments(url.pathname);
+    const segments = sharePointFileSegments(url.pathname);
     // `/sites/<name>`, `/teams/<name>` or `/personal/<user>`, then the
     // library, then the file.
     if (segments.length < 4) return { status: 404 };
@@ -1702,7 +1717,16 @@ class MSTeamsProvider implements ChatOpsProvider {
 
       try {
         const isSharePointReference =
-          attachment.contentType === GRAPH_REFERENCE_ATTACHMENT;
+          attachment.contentType === GRAPH_REFERENCE_ATTACHMENT ||
+          (!attachment.preAuthenticated &&
+            isSharePointFilePage(attachment.contentUrl));
+        if (
+          isSharePointReference &&
+          !isSharePointFilePage(attachment.contentUrl)
+        ) {
+          skip({ name: attachment.name, reason: "download_failed" });
+          continue;
+        }
         // Determine if the URL needs authentication (same host as serviceUrl)
         const headers: Record<string, string> = {};
         if (isSharePointReference) {
@@ -1725,10 +1749,12 @@ class MSTeamsProvider implements ChatOpsProvider {
         }
 
         const response = isSharePointReference
+
           ? await this.fetchSharePointFile(attachment.contentUrl)
-          : await fetch(
+          : await fetchTeamsFile(
               attachment.contentUrl,
-              Object.keys(headers).length > 0 ? { headers } : undefined,
+              { headers },
+              serviceUrl,
             );
 
         if (!response.ok) {
@@ -2133,6 +2159,8 @@ interface TeamsFileAttachment {
   contentUrl: string;
   name?: string;
   size?: number;
+  /** Teams supplied a signed download URL rather than a SharePoint page. */
+  preAuthenticated?: boolean;
 }
 
 /**
@@ -2159,6 +2187,7 @@ function filterTeamsFileAttachments(
               contentType: mimeFromExtension(a.name ?? ""),
               contentUrl: downloadUrl,
               name: a.name,
+              preAuthenticated: true,
             },
           ]
         : [];
@@ -2352,7 +2381,16 @@ function isAllowedTeamsFileHost(
   serviceUrl?: string,
 ): boolean {
   try {
-    const hostname = new URL(contentUrl).hostname;
+    const parsed = new URL(contentUrl);
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.username ||
+      parsed.password ||
+      parsed.port
+    ) {
+      return false;
+    }
+    const hostname = parsed.hostname;
     if (
       hostname.endsWith(".blob.core.windows.net") ||
       hostname.endsWith(".sharepoint.com") ||
@@ -2366,6 +2404,59 @@ function isAllowedTeamsFileHost(
       if (hostname === serviceHost) return true;
     }
     return false;
+  } catch {
+    return false;
+  }
+}
+
+/** Validate every content redirect before following it; tokens stay on their origin. */
+async function fetchTeamsFile(
+  initialUrl: string,
+  options: { headers: Record<string, string> },
+  serviceUrl?: string,
+): Promise<Response> {
+  let url = initialUrl;
+  let headers = options.headers;
+  for (let redirects = 0; redirects <= 5; redirects++) {
+    if (!isAllowedTeamsFileHost(url, serviceUrl)) {
+      return new Response(null, { status: 400 });
+    }
+    const response = await fetch(url, { headers, redirect: "manual" });
+    if (![301, 302, 303, 307, 308].includes(response.status)) return response;
+    const location = response.headers.get("location");
+    await response.body?.cancel();
+    if (!location || redirects === 5)
+      return new Response(null, { status: 400 });
+    const next = new URL(location, url);
+    if (next.origin !== new URL(url).origin) headers = {};
+    url = next.href;
+  }
+  return new Response(null, { status: 400 });
+}
+
+/** Office's direct sharing links wrap the server-relative file path in /:x:/r/. */
+function sharePointFileSegments(pathname: string): string[] {
+  const segments = pathSegments(pathname);
+  return /^:[a-z]:$/i.test(segments[0] ?? "") && segments[1] === "r"
+    ? segments.slice(2)
+    : segments;
+}
+
+/** A document page needs Graph; signed download URLs must stay untouched. */
+function isSharePointFilePage(value: string): boolean {
+  try {
+    const url = new URL(value);
+    const segments = sharePointFileSegments(url.pathname);
+    return (
+      url.protocol === "https:" &&
+      !url.username &&
+      !url.password &&
+      !url.port &&
+      url.hostname.endsWith(".sharepoint.com") &&
+      ["sites", "teams", "personal"].includes(segments[0]?.toLowerCase()) &&
+      segments.length >= 4 &&
+      !url.searchParams.has("tempauth")
+    );
   } catch {
     return false;
   }

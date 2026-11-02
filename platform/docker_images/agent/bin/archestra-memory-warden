@@ -41,6 +41,8 @@ CGROUP = os.environ.get("ARCHESTRA_MEMORY_WARDEN_CGROUP", "/sys/fs/cgroup")
 LOG = os.environ.get(
     "ARCHESTRA_MEMORY_WARDEN_LOG", "/var/run/archestra/memory-warden.log"
 )
+# Times memory was short but no agent command held enough to free.
+NOTES = os.path.splitext(LOG)[0] + ".notes.log"
 INTERVAL = float(os.environ.get("ARCHESTRA_MEMORY_WARDEN_INTERVAL", "0.2"))
 # After a stop, the kernel needs a moment to hand the memory back.
 COOLDOWN_SECONDS = 2.0
@@ -259,7 +261,11 @@ def note_nothing_to_stop(used, limit, largest):
         "limit_bytes": limit,
         "largest_command_bytes": largest,
     }
-    print(f"archestra-memory-warden: {json.dumps(record)}", file=sys.stderr)
+    try:
+        with open(NOTES, "a") as handle:
+            handle.write(json.dumps(record) + "\n")
+    except OSError:
+        pass
 
 
 def gib(value):
@@ -283,8 +289,12 @@ def check(own_pid):
     # Stopping a command that holds less than the overshoot frees too little:
     # the memory is held by what the warden never stops (a dev stack, tmpfs),
     # and every small command would be killed in turn.
-    overshoot = used - (limit - reserve_bytes(limit))
-    if anon < max(MIN_VICTIM_BYTES, overshoot):
+    # Within the last quarter of the reserve the kernel is about to stop
+    # everything: then any command above the floor is worth stopping.
+    reserve = reserve_bytes(limit)
+    overshoot = used - (limit - reserve)
+    needed = MIN_VICTIM_BYTES if used > limit - reserve // 4 else max(MIN_VICTIM_BYTES, overshoot)
+    if anon < needed:
         note_nothing_to_stop(used, limit, anon)
         return False
     message = (

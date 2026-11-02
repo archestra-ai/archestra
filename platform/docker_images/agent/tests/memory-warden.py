@@ -37,6 +37,27 @@ def process(ppid, pgid, score, anon, cmd="sh"):
     return {"ppid": ppid, "pgid": pgid, "comm": cmd.split()[0], "score": score, "anon": anon, "cmd": cmd}
 
 
+def scored_command(mib):
+    """A process in a session of its own with score 1000 holding `mib` MiB, once it says ready."""
+    command = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "import sys, time\n"
+            "open('/proc/self/oom_score_adj', 'w').write('1000')\n"
+            f"held = bytearray({mib} << 20)\n"
+            "for i in range(0, len(held), 4096): held[i] = 1\n"
+            "print('ready', flush=True)\n"
+            "time.sleep(30)\n",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    assert command.stdout.readline().strip() == b"ready"
+    return command
+
+
 class TriggerTest(unittest.TestCase):
     def test_counts_only_memory_the_kernel_cannot_reclaim(self):
         stat = "anon 100\nfile 5000\nshmem 10\nkernel_stack 1\npagetables 2\nslab_reclaimable 700\nslab_unreclaimable 3\nsock 4\n"
@@ -98,17 +119,11 @@ class SmallVictimTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             cgroup = Path(directory)
             (cgroup / "memory.max").write_text(f"{4 * GIB}\n")
-            (cgroup / "memory.stat").write_text(f"anon {int(3.9 * GIB)}\n")
+            # 3.85 GiB: past the 3.7 GiB line, short of the last quarter of the reserve.
+            (cgroup / "memory.stat").write_text(f"anon {int(3.85 * GIB)}\n")
             (cgroup / "memory.pressure").write_text("full avg10=0.00\n")
-            command = subprocess.Popen(
-                ["sh", "-c", "echo 1000 > /proc/self/oom_score_adj && exec sleep 30"],
-                start_new_session=True,
-            )
-            root = subprocess.Popen(["sleep", "30"])
+            command = scored_command(0)
             try:
-                for _ in range(100):
-                    if Path(f"/proc/{command.pid}/oom_score_adj").read_text().strip() == "1000":
-                        break
                 env = dict(
                     os.environ,
                     ARCHESTRA_MEMORY_WARDEN_CGROUP=str(cgroup),
@@ -120,12 +135,39 @@ class SmallVictimTest(unittest.TestCase):
                 # Exit 1: nothing stopped; the small command still runs.
                 self.assertEqual(result.returncode, 1)
                 self.assertIsNone(command.poll())
-                self.assertIn(b"nothing to stop", result.stderr)
+                note = json.loads((cgroup / "warden.notes.log").read_text().splitlines()[0])
+                self.assertEqual(note["note"], "nothing to stop")
             finally:
                 command.kill()
                 command.wait()
-                root.kill()
-                root.wait()
+                command.stdout.close()
+                command.stderr.close()
+
+    def test_close_to_the_limit_any_command_above_the_floor_is_stopped(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cgroup = Path(directory)
+            (cgroup / "memory.max").write_text(f"{4 * GIB}\n")
+            # 3.95 GiB: inside the last quarter of the 0.3 GiB reserve.
+            (cgroup / "memory.stat").write_text(f"anon {int(3.95 * GIB)}\n")
+            (cgroup / "memory.pressure").write_text("full avg10=0.00\n")
+            command = scored_command(100)
+            try:
+                env = dict(
+                    os.environ,
+                    ARCHESTRA_MEMORY_WARDEN_CGROUP=str(cgroup),
+                    ARCHESTRA_MEMORY_WARDEN_LOG=str(cgroup / "warden.log"),
+                    ARCHESTRA_MEMORY_WARDEN_AGENT_ROOT=str(os.getpid()),
+                    ARCHESTRA_MEMORY_WARDEN_ONCE="1",
+                )
+                result = subprocess.run([sys.executable, str(WARDEN)], env=env, timeout=30)
+                self.assertEqual(result.returncode, 0)
+                self.assertEqual(command.wait(timeout=10), -signal.SIGKILL)
+            finally:
+                if command.poll() is None:
+                    command.kill()
+                command.wait()
+                command.stdout.close()
+                command.stderr.close()
 
 
 class EndToEndTest(unittest.TestCase):
@@ -137,32 +179,15 @@ class EndToEndTest(unittest.TestCase):
             (cgroup / "memory.stat").write_text(f"anon {int(3.8 * GIB)}\nfile {GIB}\n")
             (cgroup / "memory.pressure").write_text("some avg10=0.00\nfull avg10=0.00\n")
             log = cgroup / "warden.log"
-            # The command holds 200 MiB, under a root process of its own: the
-            # test runner may itself be an agent command with score 1000.
-            command = subprocess.Popen(
-                [
-                    sys.executable,
-                    "-c",
-                    "import os, time\n"
-                    "open('/proc/self/oom_score_adj', 'w').write('1000')\n"
-                    "held = bytearray(200 << 20)\n"
-                    "for i in range(0, len(held), 4096): held[i] = 1\n"
-                    "print('ready', flush=True)\n"
-                    "time.sleep(30)\n",
-                ],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                start_new_session=True,
-            )
-            root = subprocess.Popen(["sleep", "30"])
+            # The runner is the agent root and roots are never stopped, so the
+            # check runs even where the runner is itself an agent command.
+            command = scored_command(200)
             try:
-                self.assertEqual(command.stdout.readline().strip(), b"ready")
                 env = dict(
                     os.environ,
                     ARCHESTRA_MEMORY_WARDEN_CGROUP=str(cgroup),
                     ARCHESTRA_MEMORY_WARDEN_LOG=str(log),
                     ARCHESTRA_MEMORY_WARDEN_AGENT_ROOT=str(os.getpid()),
-                    # Only the command counts: the runner is the root, and roots are never stopped.
                     ARCHESTRA_MEMORY_WARDEN_ONCE="1",
                 )
                 result = subprocess.run([sys.executable, str(WARDEN)], env=env, timeout=30)
@@ -179,8 +204,6 @@ class EndToEndTest(unittest.TestCase):
                 command.wait()
                 command.stdout.close()
                 command.stderr.close()
-                root.kill()
-                root.wait()
 
 
 if __name__ == "__main__":

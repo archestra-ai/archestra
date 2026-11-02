@@ -565,13 +565,16 @@ describe("battery helper bridge", () => {
       waiting = openappaHelperBridge.consult(params);
       await new Promise((resolve) => setTimeout(resolve, 200));
       expect(run).toHaveBeenCalledTimes(1);
+      release(result);
+      await first;
+      expect((await waiting)?.kind).toBe("answered");
+      expect(run).toHaveBeenCalledTimes(2);
     } finally {
       release(result);
       await first;
+      await waiting;
       config.daggerRuntime.maxConcurrent = pool;
     }
-    expect((await waiting)?.kind).toBe("answered");
-    expect(run).toHaveBeenCalledTimes(2);
     expect((await openappaHelperBridge.consult(params)).kind).toBe("answered");
     expect(run).toHaveBeenCalledTimes(3);
   });

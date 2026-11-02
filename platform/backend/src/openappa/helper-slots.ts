@@ -5,7 +5,10 @@
 export class HelperSlots {
   /** Executions in flight, a raced-out run included until it settles. */
   private inFlight = 0;
-  private readonly waiting: Array<() => void> = [];
+  private readonly waiting: Array<{
+    deadline: number;
+    handOver: () => void;
+  }> = [];
 
   constructor(private readonly cap: () => number) {}
 
@@ -16,25 +19,39 @@ export class HelperSlots {
       return Promise.resolve(true);
     }
     return new Promise((resolve) => {
-      const handOver = () => {
-        clearTimeout(timer);
-        resolve(true);
+      const waiter = {
+        deadline,
+        handOver: () => {
+          clearTimeout(timer);
+          resolve(true);
+        },
       };
       const timer = setTimeout(
         () => {
-          this.waiting.splice(this.waiting.indexOf(handOver), 1);
+          this.waiting.splice(this.waiting.indexOf(waiter), 1);
           resolve(false);
         },
         Math.max(0, deadline - Date.now()),
       );
-      this.waiting.push(handOver);
+      this.waiting.push(waiter);
     });
   }
 
-  /** End an execution: its slot passes to the oldest waiting consult, if the cap still has room. */
+  /**
+   * End an execution: its slot passes to the oldest consult still within its
+   * wait, if the cap still has room.
+   */
   release(): void {
-    const next = this.inFlight <= this.cap() ? this.waiting.shift() : undefined;
-    if (next) next();
-    else this.inFlight--;
+    if (this.inFlight <= this.cap()) {
+      const now = Date.now();
+      const next = this.waiting.findIndex((waiter) => waiter.deadline > now);
+      if (next >= 0) {
+        // Waiters before it are past their deadline; their timers turn them away.
+        const [waiter] = this.waiting.splice(next, 1);
+        waiter.handOver();
+        return;
+      }
+    }
+    this.inFlight--;
   }
 }

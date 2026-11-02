@@ -24,6 +24,16 @@ describe("HelperSlots", () => {
     expect(await slots.acquire(Date.now())).toBe(true);
   });
 
+  test("a slot freed after a waiter's deadline is not handed to it", async () => {
+    const slots = new HelperSlots(() => 1);
+    await slots.acquire(Date.now());
+    const overdue = slots.acquire(Date.now() - 1);
+    slots.release();
+    expect(await overdue).toBe(false);
+    expect(await slots.acquire(Date.now())).toBe(true);
+    expect(await slots.acquire(Date.now())).toBe(false);
+  });
+
   test("waiting consults take freed slots oldest first", async () => {
     const slots = new HelperSlots(() => 1);
     await slots.acquire(Date.now());

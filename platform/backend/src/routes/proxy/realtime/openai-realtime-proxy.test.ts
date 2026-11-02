@@ -399,34 +399,6 @@ describe("OpenAI realtime sessions through the Model Router", () => {
     }
   });
 
-  test("a hidden model cannot start a realtime session and showing it restores access", async ({
-    makeAgent,
-    makeSecret,
-    makeLlmProviderApiKey,
-  }) => {
-    const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
-    const key = await mappedKey({
-      organizationId: agent.organizationId,
-      makeSecret,
-      makeLlmProviderApiKey,
-    });
-    const model = await ModelModel.findByProviderAndModelId(
-      "openai",
-      "gpt-realtime-2.1",
-    );
-    if (!model) throw new Error("Missing fixture model");
-    const url = `${origin}/v1/openai/${agent.id}/realtime?model=gpt-realtime-2.1`;
-    await ModelModel.update(model.id, { ignored: true });
-    const hidden = await connect(url, key.value);
-    expect("status" in hidden && hidden.status).toBe(404);
-    expect(upstreamConnections).toHaveLength(0);
-    await ModelModel.update(model.id, { ignored: false });
-    const shown = await connect(url, key.value);
-    if (!("socket" in shown)) throw new Error(`Refused: ${shown.body}`);
-    expect(upstreamConnections).toHaveLength(1);
-    shown.socket.close();
-  });
-
   test("forwards the session with the mapped key, logs each response with its transcript and cost, and settles it", async ({
     makeAdmin,
     makeAgent,

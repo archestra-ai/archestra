@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
+import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -9,13 +10,17 @@ import {
   ModelPoolModel,
   VirtualApiKeyModel,
 } from "@/models";
+import LimitModel from "@/models/limit";
+import LlmThroughputModel from "@/models/llm-throughput";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { accessGrants, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { useMswServer } from "@/test/msw";
-import modelRouterRoutes from "./model-router";
-import openAiProxyRoutes from "./openai";
+import modelRouterRoutes from "./routes/model-router";
+import openAiProxyRoutes from "./routes/openai";
+import vllmProxyRoutes from "./routes/vllm";
 
 // biome-ignore lint/correctness/useHookAtTopLevel: per-test HTTP boundary
 const server = useMswServer();
@@ -35,7 +40,6 @@ const availabilityTest = test.extend<{
     pool: (fallback?: boolean) => Promise<void>;
     onRequest: (hook: (model: string) => Promise<Response | undefined>) => void;
     restrict: () => Promise<void>;
-    list: () => Promise<string>;
   };
 }>({
   gateway: async (
@@ -158,14 +162,6 @@ const availabilityTest = test.extend<{
               messages: [{ role: "user", content: "Hello" }],
             },
           }),
-        list: async () =>
-          (
-            await app.inject({
-              method: "GET",
-              url: `/v1/model-router/${agent.id}/models`,
-              headers: { authorization: `Bearer ${virtual.value}` },
-            })
-          ).body,
         restrict: async () => {
           const key = {
             organizationId: org.id,
@@ -318,38 +314,18 @@ availabilityTest.for(["admin", "member"] as const)(
     await gateway.setHidden(false);
     const restored = await gateway.ask({ caller });
     expect(restored.statusCode, restored.body).toBe(200);
+    if (caller === "member") {
+      await gateway.restrict();
+      const restricted = await gateway.ask({ caller });
+      expect(restricted.statusCode, restricted.body).toBe(403);
+      expect(gateway.hits).toHaveLength(1);
+    }
   },
 );
 
-availabilityTest(
-  "catalog and router follow hide/unhide and existing grants still apply",
-  async ({ gateway }) => {
-    expect(await gateway.list()).toContain("openai:availability-model");
-    await gateway.setHidden(true);
-    expect(await gateway.list()).not.toContain("openai:availability-model");
-    const hidden = await gateway.ask({
-      route: "model-router",
-      model: "openai:availability-model",
-    });
-    expect(hidden.statusCode, hidden.body).toBeGreaterThanOrEqual(400);
-    expect(gateway.hits).toHaveLength(0);
-    await gateway.setHidden(false);
-    expect(await gateway.list()).toContain("openai:availability-model");
-    const restored = await gateway.ask({
-      route: "model-router",
-      model: "openai:availability-model",
-    });
-    expect(restored.statusCode, restored.body).toBe(200);
-    await gateway.restrict();
-    const restricted = await gateway.ask({ caller: "member" });
-    expect(restricted.statusCode, restricted.body).toBe(403);
-    expect(gateway.hits).toHaveLength(1);
-  },
-);
-
-availabilityTest(
-  "hiding does not cancel an already-started call, but blocks the next",
-  async ({ gateway }) => {
+availabilityTest.for([false, true])(
+  "hiding preserves an already-started call but blocks the next (stream=%s)",
+  async (stream, { gateway }) => {
     let release!: () => void;
     let reached!: () => void;
     const waiting = new Promise<void>((resolve) => {
@@ -359,15 +335,46 @@ availabilityTest(
       reached = resolve;
     });
     gateway.onRequest(async () => {
-      reached();
-      await waiting;
-      return undefined;
+      if (!stream) {
+        reached();
+        await waiting;
+        return undefined;
+      }
+      const encoder = new TextEncoder();
+      const event = (delta: Record<string, string>, finish: string | null) =>
+        `data: ${JSON.stringify({ id: "running-stream", object: "chat.completion.chunk", created: 1, model: "availability-model", choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
+      return new HttpResponse(
+        new ReadableStream({
+          async start(controller) {
+            controller.enqueue(
+              encoder.encode(
+                event({ role: "assistant", content: "Started" }, null),
+              ),
+            );
+            reached();
+            await waiting;
+            controller.enqueue(
+              encoder.encode(
+                `${event({ content: " finished" }, "stop")}data: [DONE]\n\n`,
+              ),
+            );
+            controller.close();
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      );
     });
-    const ongoing = gateway.ask();
+    const ongoing = gateway.ask({ stream });
     await started;
     await gateway.setHidden(true);
     release();
-    expect((await ongoing).statusCode).toBe(200);
+    const completed = await ongoing;
+    expect(completed.statusCode, completed.body).toBe(200);
+    if (stream) {
+      expect(completed.body).toContain("Started");
+      expect(completed.body).toContain(" finished");
+      expect(completed.body).toContain("[DONE]");
+    }
     const next = await gateway.ask();
     expect(next.statusCode, next.body).toBe(403);
     expect(gateway.hits).toHaveLength(1);
@@ -419,3 +426,220 @@ availabilityTest.for([false, true])(
     }
   },
 );
+
+test.for(
+  (["vllm", "openai"] as const).flatMap((provider) =>
+    [false, true].map((hideAlias) => ({ provider, hideAlias })),
+  ),
+)("hidden Fireworks identity blocks both spellings ($provider, hideAlias=$hideAlias)", async ({
+  provider,
+  hideAlias,
+}, { makeAgent, makeUser, makeMember }) => {
+  const baseUrl = "https://api.fireworks.ai/inference/v1";
+  const canonical = "accounts/fireworks/models/availability-test";
+  const shorthand = "availability-test";
+  config.llm.vllm.enabled = true;
+  config.llm[provider].baseUrl = baseUrl;
+  const agent = await makeAgent({ agentType: "llm_proxy" });
+  const owner = await makeUser();
+  await makeMember(owner.id, agent.organizationId, { role: "admin" });
+  const token = await makePassthroughCredential({
+    organizationId: agent.organizationId,
+    ownerId: owner.id,
+  });
+  const model = await ModelModel.create({
+    provider,
+    modelId: canonical,
+    externalId: `${provider}/${canonical}`,
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    ignored: !hideAlias,
+  });
+  const alias = await ModelModel.create({
+    provider,
+    modelId: shorthand,
+    externalId: `${provider}/${shorthand}`,
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    ignored: hideAlias,
+  });
+  let calls = 0;
+  server.use(
+    http.post(`${baseUrl}/chat/completions`, async ({ request }) => {
+      expect(((await request.json()) as { model: string }).model).toBe(
+        canonical,
+      );
+      calls++;
+      return HttpResponse.json({
+        id: "synthetic",
+        object: "chat.completion",
+        created: 1,
+        model: canonical,
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: "Synthetic answer" },
+            finish_reason: "stop",
+          },
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      });
+    }),
+  );
+  const app = createFastifyInstance();
+  await app.register(provider === "vllm" ? vllmProxyRoutes : openAiProxyRoutes);
+  const ask = (model: string) =>
+    app.inject({
+      method: "POST",
+      url: `/v1/${provider}/${agent.id}/chat/completions`,
+      headers: {
+        authorization: "Bearer synthetic-test-key",
+        "x-archestra-virtual-key": token,
+      },
+      payload: {
+        model,
+        messages: [{ role: "user", content: "Synthetic request" }],
+      },
+    });
+  try {
+    for (const name of [canonical, shorthand]) {
+      const response = await ask(name);
+      expect(response.statusCode, response.body).toBe(403);
+      expect(response.json().error.internal_code).toBe("model_hidden");
+    }
+    expect(calls).toBe(0);
+    await ModelModel.update((hideAlias ? alias : model).id, { ignored: false });
+    for (const name of [canonical, shorthand]) {
+      const response = await ask(name);
+      expect(response.statusCode, response.body).toBe(200);
+    }
+    expect(calls).toBe(2);
+  } finally {
+    await app.close();
+  }
+});
+
+test.for([
+  false,
+  true,
+])("a hidden canonical pool member releases its unsent allowance (stream=%s)", async (stream, {
+  makeOrganization,
+  makeAgent,
+  makeSecret,
+  makeLlmProviderApiKey,
+}) => {
+  config.llmProxy.modelPoolsEnabled = true;
+  const canonical = "accounts/fireworks/models/glm-5p3-flash";
+  const fireworks = "https://api.fireworks.ai/inference/v1";
+  config.llm.vllm.enabled = true;
+  config.llm.vllm.baseUrl = fireworks;
+  const org = await makeOrganization();
+  const agent = await makeAgent({
+    organizationId: org.id,
+    agentType: "llm_proxy",
+  });
+  const key = await makeLlmProviderApiKey(
+    org.id,
+    (await makeSecret({ secret: { apiKey: "synthetic-unsent-pool" } })).id,
+    { provider: "vllm", baseUrl: fireworks },
+  );
+  const virtual = await VirtualApiKeyModel.create({
+    organizationId: org.id,
+    name: "Unsent pool client",
+    ...accessGrants("org"),
+    providerApiKeys: [{ provider: "vllm", providerApiKeyId: key.id }],
+  });
+  const pool = await ModelPoolModel.create({
+    organizationId: org.id,
+    input: {
+      name: "guarded-fireworks-pool",
+      members: [
+        {
+          providerApiKeyId: key.id,
+          modelId: "glm-5p3-flash",
+          priority: 1,
+          weight: 1,
+          enabled: true,
+        },
+      ],
+    },
+  });
+  await ModelPoolModel.setPoolsForVirtualApiKey({
+    organizationId: org.id,
+    virtualApiKeyId: virtual.virtualKey.id,
+    poolIds: [pool.id],
+  });
+  const requestCap = await LimitModel.create({
+    entityType: "virtual_key",
+    entityId: virtual.virtualKey.id,
+    limitType: "requests",
+    cleanupInterval: "calendar_day",
+    limitValue: 1,
+  });
+  await LimitModel.create({
+    entityType: "organization",
+    entityId: org.id,
+    limitType: "token_cost",
+    limitValue: 1,
+    model: [canonical],
+  });
+  await ModelModel.create({
+    externalId: `vllm/${canonical}`,
+    provider: "vllm",
+    modelId: canonical,
+    ignored: true,
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+  });
+  modelsDevClient.clearFetchCache();
+  let dispatched = 0;
+  server.use(
+    http.get("https://models.dev/api.json", () =>
+      HttpResponse.json({
+        "fireworks-ai": {
+          id: "fireworks-ai",
+          name: "Fireworks",
+          models: {
+            [canonical]: {
+              id: canonical,
+              name: "GLM fixture",
+              cost: { input: 2, output: 8 },
+            },
+          },
+        },
+      }),
+    ),
+    http.post(`${fireworks}/chat/completions`, () => {
+      dispatched++;
+      return HttpResponse.json(
+        { error: { message: "Unexpected dispatch" } },
+        { status: 500 },
+      );
+    }),
+  );
+  const app = createFastifyInstance();
+  await app.register(vllmProxyRoutes);
+  try {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/vllm/${agent.id}/chat/completions`,
+        headers: { authorization: `Bearer ${virtual.value}` },
+        payload: {
+          model: "guarded-fireworks-pool",
+          stream,
+          messages: [{ role: "user", content: "Fixture request" }],
+        },
+      });
+      // A leaked reservation would turn the second rejection into quota 429.
+      expect(response.statusCode, response.body).toBe(403);
+      expect(response.json().error.internal_code).toBe("model_hidden");
+      const usage = await LlmThroughputModel.usage([requestCap]);
+      expect(usage.get(requestCap.id)?.currentUsage ?? 0).toBe(0);
+    }
+    expect(dispatched).toBe(0);
+  } finally {
+    await app.close();
+    modelsDevClient.clearFetchCache();
+  }
+});

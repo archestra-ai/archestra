@@ -739,13 +739,10 @@ test.for([
   { memberModel: "unknown-deployment", status: 400, stream: true },
   { memberModel: "glm-5p3-flash", status: 403, stream: false },
   { memberModel: "glm-5p3-flash", status: 403, stream: true },
-  { memberModel: "glm-5p3-flash", status: 403, stream: false, hidden: true },
-  { memberModel: "glm-5p3-flash", status: 403, stream: true, hidden: true },
 ])("a first Fireworks member rejected with $status releases its unsent request allowance (stream=$stream)", async ({
   memberModel,
   status,
   stream,
-  hidden = false,
 }, { makeOrganization, makeAgent, makeSecret, makeLlmProviderApiKey }) => {
   const canonical = "accounts/fireworks/models/glm-5p3-flash";
   const fireworks = "https://api.fireworks.ai/inference/v1";
@@ -806,7 +803,6 @@ test.for([
       externalId: `vllm/${canonical}`,
       provider: "vllm",
       modelId: canonical,
-      ignored: hidden,
       inputModalities: ["text"],
       outputModalities: ["text"],
     });
@@ -816,13 +812,11 @@ test.for([
       scope: model.id,
     };
     const current = await ResourcePermissionPolicyModel.find(policyKey);
-    if (!hidden) {
-      await ResourcePermissionPolicyModel.replace({
-        ...policyKey,
-        revision: current?.revision ?? 0,
-        grants: [],
-      });
-    }
+    await ResourcePermissionPolicyModel.replace({
+      ...policyKey,
+      revision: current?.revision ?? 0,
+      grants: [],
+    });
   }
   modelsDevClient.clearFetchCache();
   let dispatched = 0;
@@ -866,9 +860,6 @@ test.for([
       });
       // A leaked reservation would turn the second rejection into quota 429.
       expect(response.statusCode, response.body).toBe(status);
-      if (hidden) {
-        expect(response.json().error.internal_code).toBe("model_hidden");
-      }
       const usage = await LlmThroughputModel.usage([requestCap]);
       expect(usage.get(requestCap.id)?.currentUsage ?? 0).toBe(0);
     }

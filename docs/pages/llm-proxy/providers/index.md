@@ -2,7 +2,7 @@
 title: Model Providers
 description: Connect provider API keys and personal subscriptions for Chat and the LLM Proxy
 order: 2
-lastUpdated: 2026-11-02
+lastUpdated: 2026-10-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -67,12 +67,6 @@ When one level has several keys, the **Primary** key wins, then the oldest one.
 - A subscription is used only by the person who connected it, even when an agent or a conversation picks it. Anyone else uses their own subscription, or gets a sign-in prompt.
 - For vLLM, Ollama, and Azure, each key points at its own server. A key whose server does not host the model you picked is skipped for one that does.
 - Clients that call the proxy pick their key through their [authentication method](/docs/llm-proxy/authentication).
-
-## Hide a Model
-
-To stop a model from being selected or called, go to **Models**, edit the model, turn on **Hide this model**, and save. Hidden models stay in the catalog for editing and sync, but leave chat and router selections. New requests cannot execute them, including direct provider API calls and saved pool members. Administrator access does not override this setting.
-
-Requests already sent to a provider, including open realtime sessions, continue. Choose **Show model** to restore availability under the model's existing permissions. Clients configured to call a hidden model must choose another model or wait until it is shown again.
 
 ## Supported Providers
 

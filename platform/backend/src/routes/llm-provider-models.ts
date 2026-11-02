@@ -396,7 +396,6 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Update several LLM models in one request. Today the only " +
           "bulk-editable field is `ignored`, which hides a model from pickers " +
           "and blocks new executions, including direct provider requests, without deleting it. " +
-          "Showing the model restores availability subject to its access permissions. " +
           "Ids that match no model are " +
           "reported in `failed` and leave the rest of the batch applied.",
         tags: ["LLM Models"],

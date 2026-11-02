@@ -53,6 +53,7 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import { onAgentToolSurfaceChange } from "@/models/agent-tool-surface";
 import { isAppaDelegatedRun } from "@/openappa/service";
 import type { SubagentBinding } from "@/openappa/subagent-binding";
 import {
@@ -503,6 +504,9 @@ export function clearChatMcpClient(agentId: string): void {
     "Cleared MCP client, tool, and UI resource cache entries for agent",
   );
 }
+
+// The agent model reports tool surface changes without importing this module.
+onAgentToolSurfaceChange(clearChatMcpClient);
 
 /**
  * Close and remove cached MCP client for a specific agent/user/scope.

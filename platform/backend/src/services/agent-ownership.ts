@@ -1,7 +1,7 @@
 import { getResourceForAgentType } from "@archestra/shared";
 import { AgentModel, LlmProviderApiKeyModel, TeamModel } from "@/models";
 import { ApiError } from "@/types";
-import { assertNoStaticPinsBrokenByTargetChange } from "./agent-tool-assignment";
+import { assertNoStaticPinsBrokenByTargetChange } from "./mcp-server-assignability";
 import { ResourcePermissions } from "./resource-permissions";
 
 export async function transferAgentOwnership(params: {

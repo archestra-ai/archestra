@@ -6,10 +6,12 @@ import { describe, expect, test } from "@/test";
 import {
   assignToolToAgent,
   assignToolToApp,
-  filterMcpServersAssignableToTarget,
-  isMcpServerAssignableToTarget,
   validateAssignment,
 } from "./agent-tool-assignment";
+import {
+  filterMcpServersAssignableToTarget,
+  isMcpServerAssignableToTarget,
+} from "./mcp-server-assignability";
 
 describe("filterMcpServersAssignableToTarget", () => {
   test("drops every personal connection without membership lookups", async ({

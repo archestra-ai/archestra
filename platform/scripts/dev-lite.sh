@@ -400,6 +400,14 @@ install_native_addons() {
   (cd "$PLATFORM_DIR" && node scripts/napi-prebuilt.mjs "${CRATES[@]}") >&2 || true
 }
 
+# Restore before the agent edits source; later checks reuse the compiler's
+# incremental state. A missing publication never makes bootstrap compile.
+install_backend_declarations() {
+  (cd "$PLATFORM_DIR" && node --import tsx scripts/heavy-lane.ts \
+    --label "backend declaration cache" --peak-gib 0.8 \
+    -- node scripts/backend-types-prebuilt.mjs install) >&2 || true
+}
+
 # The crates whose addon is not built, one per line.
 missing_native_addons() {
   local crate
@@ -660,19 +668,28 @@ build_frontend() {
 
 # CI (.github/workflows/frontend-dev-cache.yml): `key` prints the key of this
 # checkout's frontend as an Agent Runtime's stack builds it, `pack <dir>`
-# builds it that way and collects the artifacts to publish.
+# builds it that way and collects the artifacts to publish. `build` uses the
+# same environment/cache for a root workspace build, always compiling so all
+# of Next's build output is present, including after source edits.
 cmd_frontend_artifact() {
   require_platform_dir
   mkdir -p "$STATE_DIR" "$LOG_DIR"
   ensure_env 0 0
   case "${1:-}" in
     key) frontend_prebuilt --key --explain ;;
+    build)
+      shift
+      frontend_prebuilt install-cache || true
+      frontend_build_node -e \
+        'const { status } = require("node:child_process").spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build", ...process.argv.slice(1)], { stdio: "inherit" }); process.exit(status ?? 1);' \
+        -- "$@"
+      ;;
     pack)
       [ -n "${2:-}" ] || die "frontend-artifact pack: expected an output directory"
       ARCHESTRA_DEV_FRONTEND_PREBUILT=false build_frontend
       frontend_prebuilt --pack "$(cd "$2" && pwd)"
       ;;
-    *) die "frontend-artifact: expected key or pack <dir>" ;;
+    *) die "frontend-artifact: expected key, build, or pack <dir>" ;;
   esac
 }
 
@@ -920,6 +937,7 @@ cmd_start() {
   ensure_env "$e2e" "$keycloak"
   install_dependencies
   install_native_addons
+  install_backend_declarations
   start_postgres
   wait_for_db
   migrate

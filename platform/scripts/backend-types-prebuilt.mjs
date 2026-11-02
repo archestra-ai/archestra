@@ -159,8 +159,18 @@ export function restore(root, json) {
   return artifact.commit;
 }
 
-async function download() {
-  const base = `https://${REPOSITORY.split("/")[0]}/v2/${REPOSITORY.split("/").slice(1).join("/")}`;
+export async function download(root = ROOT, repository = REPOSITORY) {
+  const registry = new URL(
+    /^https?:\/\//.test(repository) ? repository : `https://${repository}`,
+  );
+  const name = registry.pathname.replace(/^\/+|\/+$/g, "");
+  const base = `${registry.origin}/v2/${name}`;
+  const accept = [
+    "application/vnd.oci.image.manifest.v1+json",
+    "application/vnd.oci.image.index.v1+json",
+    "application/vnd.docker.distribution.manifest.v2+json",
+    "application/vnd.docker.distribution.manifest.list.v2+json",
+  ].join(", ");
   let token;
   async function get(url, accept) {
     let response = await fetch(url, {
@@ -177,10 +187,7 @@ async function download() {
       const auth = new URL(realm);
       const service = /service="([^"]+)"/.exec(challenge)?.[1];
       if (service) auth.searchParams.set("service", service);
-      auth.searchParams.set(
-        "scope",
-        `repository:${REPOSITORY.split("/").slice(1).join("/")}:pull`,
-      );
+      auth.searchParams.set("scope", `repository:${name}:pull`);
       const reply = await fetch(auth, { signal: AbortSignal.timeout(30_000) });
       if (!reply.ok) throw new Error(`registry token: ${reply.status}`);
       const body = await reply.json();
@@ -191,11 +198,21 @@ async function download() {
     if (!response.ok) throw new Error(`registry: ${response.status}`);
     return response;
   }
-  const response = await get(
-    `${base}/manifests/${sourceKey(ROOT)}`,
-    "application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
-  );
-  const manifest = await response.json();
+  const response = await get(`${base}/manifests/${sourceKey(root)}`, accept);
+  let manifest = await response.json();
+  if (Array.isArray(manifest.manifests)) {
+    const entry = manifest.manifests.find(
+      (item) =>
+        item.platform?.os === "linux" &&
+        item.platform?.architecture === "amd64",
+    );
+    if (!/^sha256:[0-9a-f]{64}$/.test(entry?.digest ?? "")) {
+      throw new Error("cache has no linux/amd64 image");
+    }
+    manifest = await (
+      await get(`${base}/manifests/${entry.digest}`, accept)
+    ).json();
+  }
   if (
     manifest.layers?.length !== 1 ||
     !/^sha256:[0-9a-f]{64}$/.test(manifest.layers[0].digest)

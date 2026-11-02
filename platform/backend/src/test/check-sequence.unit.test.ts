@@ -117,6 +117,8 @@ test.each([
         PATH: `${dir}${path.delimiter}${process.env.PATH}`,
         ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "4Gi",
         ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "1",
+        ARCHESTRA_DEV_LITE_STATE_DIR: path.join(dir, "dev-lite"),
+        ARCHESTRA_HEAVY_LANE: "held",
       },
     },
   );
@@ -127,6 +129,77 @@ test.each([
     "--filter=@backend",
     "--concurrency=1",
   ]);
+});
+
+test.each([
+  { args: [], override: false },
+  { args: ["--webpack", "--profile"], override: true },
+])("frontend builds fit the container and preserve explicit build options ($override)", ({
+  args,
+  override,
+}) => {
+  const recorded = path.join(dir, "next-build");
+  const cached = path.join(dir, "cache-command");
+  const bash = path.join(dir, "bash");
+  fs.writeFileSync(
+    bash,
+    `#!${process.execPath}\nconst fs = require("node:fs");
+      const args = process.argv.slice(2);
+      fs.writeFileSync(${JSON.stringify(cached)}, JSON.stringify(args));
+      const result = require("node:child_process").spawnSync("next", ["build", ...args.slice(3)], { stdio: "inherit" });
+      process.exit(result.status ?? 1);\n`,
+  );
+  fs.chmodSync(bash, 0o755);
+  const next = path.join(dir, "next");
+  fs.writeFileSync(
+    next,
+    `#!${process.execPath}\nrequire("node:fs").writeFileSync(${JSON.stringify(recorded)}, JSON.stringify({
+      args: process.argv.slice(2),
+      workers: process.env.CIRCLE_NODE_TOTAL,
+      maps: process.env.ARCHESTRA_DEV_LITE_SOURCE_MAPS,
+      node: process.env.NODE_OPTIONS,
+    }));\n`,
+  );
+  fs.chmodSync(next, 0o755);
+  const platform = path.resolve(__dirname, "../../..");
+  const result = spawnSync(
+    process.execPath,
+    [path.join(platform, "scripts/check-workspace.mjs"), "build", ...args],
+    {
+      cwd: path.join(platform, "frontend"),
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${dir}${path.delimiter}${process.env.PATH}`,
+        ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "4Gi",
+        ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "1",
+        ARCHESTRA_HEAVY_LANE: "held",
+        NODE_OPTIONS: override ? "--max-old-space-size=3072" : "",
+        CIRCLE_NODE_TOTAL: override ? "3" : undefined,
+        ARCHESTRA_DEV_LITE_SOURCE_MAPS: override ? "true" : undefined,
+      },
+    },
+  );
+  expect(result.error).toBeUndefined();
+  expect(result.status, result.stderr).toBe(0);
+  const built = JSON.parse(fs.readFileSync(recorded, "utf8"));
+  expect(built.args).toEqual(
+    override ? ["build", "--webpack", "--profile"] : ["build", "--turbopack"],
+  );
+  if (override) expect(fs.existsSync(cached)).toBe(false);
+  else {
+    expect(JSON.parse(fs.readFileSync(cached, "utf8"))).toEqual([
+      path.join(platform, "scripts/dev-lite.sh"),
+      "frontend-artifact",
+      "build",
+      "--turbopack",
+    ]);
+  }
+  expect(built.node).toBe(
+    override ? "--max-old-space-size=3072" : "--max-old-space-size=2048",
+  );
+  expect(built.workers).toBe(override ? "3" : "2");
+  expect(built.maps).toBe(override ? "true" : "false");
 });
 
 function nodeCheck(

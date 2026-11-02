@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, test } from "node:test";
-import { pack, restore, sourceKey } from "./backend-types-prebuilt.mjs";
+import {
+  download,
+  pack,
+  restore,
+  sourceKey,
+} from "./backend-types-prebuilt.mjs";
 
 let root;
 const groups = ["backend", "shared", "tools/drizzle-migration-linter"];
@@ -183,4 +190,68 @@ test("a packed declaration cache remains usable after moving the checkout", () =
       stdio: "pipe",
     }),
   );
+});
+
+test("downloads an authenticated OCI index and rejects a corrupt layer", async () => {
+  artifact();
+  const bytes = execFileSync("tar", [
+    "-czf",
+    "-",
+    "-C",
+    path.join(root, "packed"),
+    "backend-types.json",
+  ]);
+  const digest = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+  const imageDigest = `sha256:${"1".repeat(64)}`;
+  let corrupt = false;
+  let origin;
+  const server = http.createServer((request, response) => {
+    response.setHeader("content-type", "application/json");
+    if (request.url.startsWith("/token")) {
+      assert.match(request.url, /scope=repository%3Acache%3Apull/);
+      response.end(JSON.stringify({ token: "test-only-anonymous-token" }));
+    } else if (
+      request.headers.authorization !== "Bearer test-only-anonymous-token"
+    ) {
+      response
+        .writeHead(401, {
+          "www-authenticate": `Bearer realm="${origin}/token",service="fixture"`,
+        })
+        .end();
+    } else if (request.url === `/v2/cache/manifests/${sourceKey(root)}`) {
+      response.end(
+        JSON.stringify({
+          manifests: [
+            {
+              digest: imageDigest,
+              platform: { os: "linux", architecture: "amd64" },
+            },
+          ],
+        }),
+      );
+    } else if (request.url === `/v2/cache/manifests/${imageDigest}`) {
+      response.end(
+        JSON.stringify({ layers: [{ digest, size: bytes.length }] }),
+      );
+    } else if (request.url === `/v2/cache/blobs/${digest}`) {
+      const layer = Buffer.from(bytes);
+      if (corrupt) layer[0] ^= 1;
+      response.end(layer);
+    } else response.writeHead(404).end();
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  origin = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const json = await download(root, `${origin}/cache`);
+    clear();
+    restore(root, json);
+    assert.equal(
+      fs.existsSync(path.join(buildDir("backend"), "source.d.ts")),
+      true,
+    );
+    corrupt = true;
+    await assert.rejects(download(root, `${origin}/cache`), /digest mismatch/);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
 });

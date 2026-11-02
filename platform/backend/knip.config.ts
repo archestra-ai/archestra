@@ -42,9 +42,8 @@ const config: KnipConfig = {
     "typescript-7",
   ],
   ignoreBinaries: [
-    // biome and concurrently are in root package.json
+    // biome is in root package.json
     "biome",
-    "concurrently",
     // System tools that tests run where the machine has them.
     "kubectl",
     "unshare",

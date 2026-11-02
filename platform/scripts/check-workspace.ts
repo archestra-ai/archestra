@@ -51,7 +51,51 @@ export function runWorkspaceCommand(input: string[]): number {
             ? ["--concurrency=1"]
             : []),
         ],
-        managesLane: true,
+        managesLane: mode !== "all-build",
+        ...(mode === "all-build" ? { peakBytes: 3 * 1024 ** 3 } : {}),
+      },
+    ]);
+  }
+  if (workspace === "frontend" && mode === "build") {
+    if (manifest.name !== "@frontend") {
+      throw new Error(`Unexpected workspace: ${manifest.name}`);
+    }
+    const envelope = detectResourceEnvelope();
+    const constrained = heavyLaneActive(envelope);
+    const explicitBundler = args.some((arg) =>
+      ["--webpack", "--turbo", "--turbopack"].includes(arg),
+    );
+    const nodeOptions = process.env.NODE_OPTIONS ?? "";
+    const buildArgs = [...(!explicitBundler ? ["--turbopack"] : []), ...args];
+    const cachedBuild = constrained && !args.includes("--webpack");
+    return runWorkspaceChecks([
+      {
+        label: "frontend build",
+        command: cachedBuild ? "bash" : "next",
+        args: cachedBuild
+          ? [
+              path.join(path.dirname(SCRIPT), "dev-lite.sh"),
+              "frontend-artifact",
+              "build",
+              ...buildArgs,
+            ]
+          : ["build", ...buildArgs],
+        peakBytes: 3.7 * 1024 ** 3,
+        env: constrained
+          ? {
+              ...process.env,
+              ARCHESTRA_DEV_LITE_SOURCE_MAPS:
+                process.env.ARCHESTRA_DEV_LITE_SOURCE_MAPS ?? "false",
+              CIRCLE_NODE_TOTAL:
+                process.env.CIRCLE_NODE_TOTAL ??
+                String(envelope.availableParallelism + 1),
+              NODE_OPTIONS: /--max[-_]old[-_]space[-_]size(?:=|\s)/.test(
+                nodeOptions,
+              )
+                ? nodeOptions
+                : `${nodeOptions} --max-old-space-size=2048`.trim(),
+            }
+          : process.env,
       },
     ]);
   }

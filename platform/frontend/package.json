@@ -10,7 +10,7 @@
     "dev:profile": "node ./scripts/dev.mjs --webpack --experimental-cpu-prof",
     "dev:turbo": "node ./scripts/dev.mjs --turbopack",
     "dev:turbo:profile": "node ./scripts/dev.mjs --turbopack --experimental-cpu-prof",
-    "build": "next build --turbopack",
+    "build": "node ../scripts/check-workspace.mjs build",
     "start": "NODE_ENV=production next start",
     "lint": "biome check",
     "lint:fix": "biome check --write",

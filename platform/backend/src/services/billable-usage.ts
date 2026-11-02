@@ -47,9 +47,9 @@ export async function resolvePricingQuote(params: {
     params.billingEndpoint === "fireworks" ||
     (params.billingEndpoint === undefined &&
       isFireworksEndpoint(key?.inferenceBaseUrl ?? key?.baseUrl));
-  const registry = fireworks
-    ? await modelsDevClient.fetchModelsFromApi().catch(() => null)
-    : null;
+  let registryPromise:
+    | ReturnType<typeof modelsDevClient.fetchModelsFromApi>
+    | undefined;
   const breakdown = usage.billingUsage ?? primaryBillingUsage(usage, model);
   const rows = await ModelModel.findByProviderAndModelIds(provider, [
     ...new Set([
@@ -63,7 +63,11 @@ export async function resolvePricingQuote(params: {
       apiKeyId: providerApiKeyId,
       modelIds: [...rows.values()].map((row) => row.id),
     });
-  const quote = (modelId: string, size: number): QuotedPrices => {
+  const quote = async (
+    modelId: string,
+    componentUsage: UsageView,
+  ): Promise<QuotedPrices> => {
+    const size = promptTokens(componentUsage);
     let row = rows.get(modelId);
     const requested =
       modelId === model && params.requestedModel
@@ -121,6 +125,21 @@ export async function resolvePricingQuote(params: {
       fireworks &&
       !(row?.longContextThreshold != null && size > row.longContextThreshold)
     ) {
+      // Configured rates must not depend on registry availability. Fetch only
+      // for missing base rates or cache directions this usage actually needs.
+      const needsPublished = instance
+        ? pricing.pricePerMillionInput === null ||
+          pricing.pricePerMillionOutput === null
+        : pricing.source !== "custom" ||
+          ((componentUsage.cacheReadTokens ?? 0) > 0 &&
+            row?.customPricePerMillionCacheRead == null) ||
+          ((componentUsage.cacheWriteTokens ?? 0) > 0 &&
+            row?.customPricePerMillionCacheWrite == null);
+      if (needsPublished && !registryPromise)
+        registryPromise = modelsDevClient
+          .fetchModelsFromApi()
+          .catch(() => ({}));
+      const registry = needsPublished ? await registryPromise : null;
       const cost = registry?.["fireworks-ai"]?.models[modelId]?.cost;
       const rate = (value: number | undefined): string | null =>
         value !== undefined && Number.isFinite(value) && value >= 0
@@ -200,19 +219,22 @@ export async function resolvePricingQuote(params: {
       },
     };
   };
+  const [request, components] = await Promise.all([
+    quote(model, usage),
+    Promise.all(
+      breakdown.components.map(
+        async (item) => [item.id, await quote(item.model, item)] as const,
+      ),
+    ),
+  ]);
   return {
     model,
     provider,
     providerApiKeyId,
     billingEndpoint: fireworks ? "fireworks" : "other",
     requestedModel: params.requestedModel,
-    request: quote(model, promptTokens(usage)),
-    components: new Map(
-      breakdown.components.map((item) => [
-        item.id,
-        quote(item.model, promptTokens(item)),
-      ]),
-    ),
+    request,
+    components: new Map(components),
   };
 }
 

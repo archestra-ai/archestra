@@ -512,3 +512,101 @@ test.each([
 ])("does not infer a paid endpoint from %s", (url) => {
   expect(isFireworksEndpoint(url)).toBe(false);
 });
+
+fixtureTest.for([
+  "custom",
+  "custom-cache",
+  "instance-zero",
+  "long-context",
+] as const)(
+  "complete Fireworks $0 prices do not depend on registry availability",
+  async (source, { makeOrganization, makeLlmProviderApiKey }) => {
+    const canonical = "accounts/fireworks/models/synthetic-local-prices";
+    modelsDevClient.clearFetchCache();
+    let registryRequests = 0;
+    server.use(
+      http.get("https://models.dev/api.json", () => {
+        registryRequests++;
+        return new HttpResponse(null, { status: 503 });
+      }),
+    );
+    const org = await makeOrganization();
+    const key = await makeLlmProviderApiKey(org.id, null, {
+      provider: "vllm",
+      baseUrl: "https://api.fireworks.ai/inference/v1",
+    });
+    const model = await ModelModel.create({
+      externalId: `vllm/${canonical}`,
+      provider: "vllm",
+      modelId: canonical,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      ...(source !== "instance-zero"
+        ? { customPricePerMillionInput: "1", customPricePerMillionOutput: "5" }
+        : {}),
+      ...(source === "custom-cache"
+        ? {
+            customPricePerMillionCacheRead: "0.25",
+            customPricePerMillionCacheWrite: "0",
+          }
+        : {}),
+      ...(source === "long-context"
+        ? {
+            longContextThreshold: 100,
+            longContextPricePerMillionInput: "2",
+            longContextPricePerMillionOutput: "8",
+            longContextPricePerMillionCacheRead: "0.5",
+            longContextPricePerMillionCacheWrite: "0",
+          }
+        : {}),
+    });
+    if (source === "instance-zero")
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        key.id,
+        [
+          {
+            id: model.id,
+            modelId: canonical,
+            providerPricing: {
+              promptPricePerToken: "0",
+              completionPricePerToken: "0",
+              cacheReadPricePerToken: "0",
+              cacheWritePricePerToken: "0",
+            },
+          },
+        ],
+        "vllm",
+      );
+    try {
+      for (let request = 0; request < 2; request++) {
+        const result = await priceBillingUsage({
+          model: canonical,
+          provider: "vllm",
+          providerApiKeyId: key.id,
+          mode: "enforce",
+          usage: {
+            inputTokens: 1000,
+            outputTokens: 100,
+            ...(source !== "custom"
+              ? { cacheReadTokens: 400, cacheWriteTokens: 200 }
+              : {}),
+          },
+        });
+        expect(result.status).toBe("complete");
+        expect(Number(result.cost)).toBeCloseTo(
+          source === "instance-zero"
+            ? 0
+            : source === "long-context"
+              ? 0.003
+              : source === "custom-cache"
+                ? 0.0016
+                : 0.0015,
+          10,
+        );
+      }
+      expect(registryRequests).toBe(0);
+    } finally {
+      modelsDevClient.clearFetchCache();
+    }
+  },
+);

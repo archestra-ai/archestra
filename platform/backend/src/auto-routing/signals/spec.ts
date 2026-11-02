@@ -77,5 +77,5 @@ export const JEV_SESSION_SPEC: JevSessionSpec = {
         CONTEXT_GUIDANCE,
     },
   },
-  stateTemplateVersion: 4,
+  stateTemplateVersion: 5,
 };

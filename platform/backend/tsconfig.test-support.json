@@ -17,6 +17,10 @@
     { "path": "../shared/tsconfig.lib.json" },
     { "path": "./tsconfig.schema.json" },
     { "path": "./tsconfig.core.json" },
+    { "path": "./tsconfig.models.json" },
+    { "path": "./tsconfig.models-agents.json" },
+    { "path": "./tsconfig.models-upper.json" },
+    { "path": "./tsconfig.runtime.json" },
     { "path": "./tsconfig.app.json" }
   ]
 }

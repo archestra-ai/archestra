@@ -4,7 +4,10 @@
  * pinned to one. It reads models only, so the resource permissions that run
  * the guard can sit below the tool assignment service.
  */
-import { AgentToolModel, AppToolModel, MemberModel, TeamModel } from "@/models";
+import AgentToolModel from "@/models/agent-tool";
+import AppToolModel from "@/models/app-tool";
+import MemberModel from "@/models/member";
+import TeamModel from "@/models/team";
 import {
   type AgentScope,
   ApiError,

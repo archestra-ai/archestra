@@ -49,6 +49,7 @@ import { metrics } from "@/observability";
 import type { ProxyRequestFailure } from "@/observability/llm-proxy-request";
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import type { SpanTeamInfo, SpanUserInfo } from "@/observability/tracing";
+import { toolCallArgumentsText } from "@/openappa/tool-call-arguments";
 import type { LlmProxyToolCallRefusal } from "@/proxy/plugins/registry";
 import { getTokenizer } from "@/tokenizers";
 import type {
@@ -66,7 +67,6 @@ import {
   isConnectionErrno,
   isTimeoutErrno,
 } from "@/utils/network-errors";
-import { toolCallArgumentsText } from "./tool-call-arguments";
 import * as utils from "./utils";
 import { estimateToolTokens } from "./utils/cost-optimization";
 import {

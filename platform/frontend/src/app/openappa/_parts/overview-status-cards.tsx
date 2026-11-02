@@ -10,6 +10,7 @@ import {
   LoaderCircle,
   MessageCircle,
   RefreshCw,
+  ShieldAlert,
 } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
@@ -41,6 +42,7 @@ import { useOpenAppaYellsSummary } from "@/lib/openappa-yells.query";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 import { ValidationStatusBadge } from "../validation/_parts/validation-parts";
+import { breakTheGlassSummary } from "./break-the-glass-summary";
 import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
 import { OpenAppaChatButton } from "./openappa-chat-button";
 import {
@@ -311,11 +313,16 @@ function YellsCard() {
       title="Yells"
       description="Agent reports of blocks it could not make sense of or get past. Investigate them with the configuration agent."
       action={
-        <Button size="sm" variant="outline" asChild>
-          <Link href="/openappa/yells">
-            Review yells <ArrowRight />
-          </Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" asChild>
+            <Link href="/openappa/yells">
+              Review yells <ArrowRight />
+            </Link>
+          </Button>
+          <Button size="sm" variant="ghost" asChild>
+            <Link href="/settings/guardrails#break-the-glass">Settings</Link>
+          </Button>
+        </div>
       }
     >
       {summary.isError ? (
@@ -330,15 +337,43 @@ function YellsCard() {
             </span>
             <span className="text-sm text-muted-foreground">unresolved</span>
           </p>
-          {deployment.data?.breakTheGlassEnabled && (
-            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <CircleCheck className="size-3.5 text-amber-600 dark:text-amber-400" />
-              <span>Break the glass on</span>
-            </p>
+          {deployment.data && (
+            <BreakTheGlassLines lines={breakTheGlassSummary(deployment.data)} />
           )}
         </div>
       )}
     </StatusCard>
+  );
+}
+
+/** What Break the glass lets through, one line per setting that is on. */
+function BreakTheGlassLines({
+  lines,
+}: {
+  lines: ReturnType<typeof breakTheGlassSummary>;
+}) {
+  return (
+    <div className="space-y-1 pt-2 text-sm">
+      <p className="flex items-center gap-1.5">
+        <ShieldAlert
+          className={
+            lines.length
+              ? "size-3.5 text-amber-600 dark:text-amber-400"
+              : "size-3.5 text-muted-foreground"
+          }
+        />
+        <span className="font-medium">Break the glass</span>
+        {lines.length === 0 && (
+          <span className="text-muted-foreground">off</span>
+        )}
+      </p>
+      {lines.map((line) => (
+        <p key={line.label} className="pl-5">
+          {line.label}{" "}
+          <span className="text-muted-foreground">{line.value}</span>
+        </p>
+      ))}
+    </div>
   );
 }
 

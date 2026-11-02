@@ -507,8 +507,8 @@ function WaivedCallMark({ yell }: { yell: OpenAppaYell }) {
 }
 
 const WAIVED_CALL_HINT = {
-  approval_waived: "Platform let a call waiting for human approval through",
-  block_waived: "Platform let a call no remedy could lift through",
+  approval_waived: "Break the glass waived human approval",
+  block_waived: "Soft block: a blocked call was let through",
 } as const;
 
 /** A shield-off icon with its explanation on hover; nothing for a plain yell. */

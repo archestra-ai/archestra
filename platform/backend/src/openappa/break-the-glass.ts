@@ -123,7 +123,6 @@ export async function recordWaivedCall(params: {
 const HARD_BLOCK = /requires attention: (?:blocked|hard-block)\b/;
 
 const WAIVER_MESSAGE: Record<WaiverKind, string> = {
-  approval_waived:
-    "Break the glass let a call waiting for human approval through:",
-  block_waived: "Break the glass let a call no remedy could lift through:",
+  approval_waived: "Break the glass waived human approval for",
+  block_waived: "Soft block let a blocked call through:",
 };

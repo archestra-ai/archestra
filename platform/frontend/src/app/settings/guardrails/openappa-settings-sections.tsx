@@ -86,7 +86,8 @@ export function OpenAppaEnforcementSetting() {
 
 /**
  * Break the glass: what happens to a call waiting for human approval, to a
- * call no remedy can lift, and to a session whose agent calls `yell`.
+ * call no remedy can lift (a soft block), and to a session whose agent calls
+ * `yell`. One group, since together they say how much Guardrails let through.
  */
 export function OpenAppaBreakTheGlassSettings() {
   const deployment = useGuardrailsDeployment({ poll: true });
@@ -97,9 +98,13 @@ export function OpenAppaBreakTheGlassSettings() {
   const data = deployment.data;
   const disabled = !canManage || !data?.featureEnabled || update.isPending;
   return (
-    <>
-      <BreakTheGlassSelect
-        id="human-approval"
+    <SettingsBlock
+      id="break-the-glass"
+      title="Break the glass"
+      description="Let blocked calls through and record a yell instead of stopping the agent. Use it to see what the policy would block without blocking it."
+      contentClassName="divide-y rounded-lg border"
+    >
+      <BreakTheGlassRow
         title="Human approval"
         description="Calls waiting for human approval."
         value={data?.humanApprovalMode}
@@ -108,21 +113,19 @@ export function OpenAppaBreakTheGlassSettings() {
           { value: "block", label: "Block until approved" },
           {
             value: "unattended",
-            label: "Allow and record a yell in unattended sessions",
+            label: "Waive in unattended sessions",
             description:
               "Agent Runtimes, Scheduled tasks, and clients sending x-archestra-unattended: 1.",
           },
-          { value: "everywhere", label: "Allow and record a yell everywhere" },
+          { value: "everywhere", label: "Waive everywhere" },
         ]}
         onChange={(humanApprovalMode) => update.mutate({ humanApprovalMode })}
       />
-      <BreakTheGlassSelect
-        id="unapprovable-blocks"
-        title="Blocks that can't be approved"
+      <BreakTheGlassRow
+        title="Soft block"
         description={
           <>
-            Trust, audience and effects blocks; never the <code>blocked</code>{" "}
-            mark.
+            Blocks no approval can lift; never the <code>blocked</code> mark.
           </>
         }
         value={data?.unapprovableBlockMode}
@@ -135,8 +138,7 @@ export function OpenAppaBreakTheGlassSettings() {
           update.mutate({ unapprovableBlockMode })
         }
       />
-      <BreakTheGlassSelect
-        id="break-the-glass"
+      <BreakTheGlassRow
         title="Yell tool"
         description={
           <>
@@ -158,7 +160,7 @@ export function OpenAppaBreakTheGlassSettings() {
           update.mutate({ breakTheGlassEnabled: value === "off" })
         }
       />
-    </>
+    </SettingsBlock>
   );
 }
 
@@ -392,8 +394,7 @@ function ClientsDocsLink({
 
 // ===
 
-function BreakTheGlassSelect<T extends string>(props: {
-  id: string;
+function BreakTheGlassRow<T extends string>(props: {
   title: string;
   description: ReactNode;
   value: T | undefined;
@@ -402,39 +403,40 @@ function BreakTheGlassSelect<T extends string>(props: {
   onChange: (value: T) => void;
 }) {
   return (
-    <SettingsBlock
-      id={props.id}
-      title={props.title}
-      description={props.description}
-      control={
-        props.value ? (
-          <Select
-            value={props.value}
-            disabled={props.disabled}
-            onValueChange={(value) => {
-              const option = props.options.find((each) => each.value === value);
-              if (option) props.onChange(option.value);
-            }}
-          >
-            <SelectTrigger aria-label={props.title} className="w-full lg:w-72">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper" align="end">
-              {props.options.map((option) => (
-                <SelectItem
-                  key={option.value}
-                  value={option.value}
-                  description={option.description}
-                >
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : (
-          <Skeleton className="h-9 w-72" />
-        )
-      }
-    />
+    <div className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)] lg:items-center lg:gap-8">
+      <div className="min-w-0 space-y-1">
+        <h3 className="text-sm font-medium leading-5">{props.title}</h3>
+        <div className="text-sm leading-5 text-muted-foreground">
+          {props.description}
+        </div>
+      </div>
+      {props.value ? (
+        <Select
+          value={props.value}
+          disabled={props.disabled}
+          onValueChange={(value) => {
+            const option = props.options.find((each) => each.value === value);
+            if (option) props.onChange(option.value);
+          }}
+        >
+          <SelectTrigger aria-label={props.title} className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" align="end">
+            {props.options.map((option) => (
+              <SelectItem
+                key={option.value}
+                value={option.value}
+                description={option.description}
+              >
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : (
+        <Skeleton className="h-9 w-full" />
+      )}
+    </div>
   );
 }

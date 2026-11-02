@@ -5,7 +5,7 @@ import {
   createUpdateSchema,
 } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { ToolExposureModeSchema } from "./agent";
 import { SelectConversationChatErrorSchema } from "./conversation-chat-error";
 import { SelectConversationCompactionSchema } from "./conversation-compaction";

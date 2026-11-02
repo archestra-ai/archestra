@@ -74,6 +74,7 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import type { ChatMessage } from "@/types";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 import {
   resolveForkParentSelection,
   resolveSubagentTierSelection,
@@ -86,20 +87,6 @@ import {
   type StageResult,
   stageAttachmentsIntoSandbox,
 } from "./a2a/stage-attachments";
-
-/**
- * Source-agnostic attachment for A2A execution.
- * Callers (email, Slack, Teams, etc.) should transform their provider-specific
- * attachment types into this format before passing to executeA2AMessage.
- */
-export interface A2AAttachment {
-  /** MIME content type (e.g., 'image/png', 'application/pdf') */
-  contentType: string;
-  /** Base64-encoded content */
-  contentBase64: string;
-  /** Optional filename for context */
-  name?: string;
-}
 
 /**
  * Longest delegation chain (root agent + delegated descendants) allowed before

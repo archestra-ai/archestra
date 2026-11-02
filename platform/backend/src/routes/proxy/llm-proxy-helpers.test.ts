@@ -112,6 +112,25 @@ describe("planDispatchModeToolCallRewrites", () => {
     ]);
   });
 
+  // A call to a tool without parameters can stream no argument text, or only
+  // whitespace: it is re-addressed with empty tool_args like any other call.
+  test.each([
+    "",
+    " ",
+    "\n",
+  ])("re-addresses a direct call with argument text %j as empty tool_args", (text) => {
+    const result = planDispatchModeToolCallRewrites({
+      toolCalls: [{ id: "call_1", name: "gh__list", arguments: text }],
+      enabledToolNames: DISPATCH_PAIR,
+    });
+
+    expect(result?.[0].name).toBe("archestra__run_tool");
+    expect(JSON.parse(result?.[0].arguments ?? "")).toEqual({
+      tool_name: "gh__list",
+      tool_args: {},
+    });
+  });
+
   test("rewrites only the direct calls in a mixed batch, keeping order", () => {
     const result = planDispatchModeToolCallRewrites({
       toolCalls: [
@@ -513,6 +532,16 @@ describe("normalizeToolCallsForPolicy", () => {
       "mcp__some_local_alias__github__run_tool",
     );
     expect(result[0].isRunToolDispatchTarget).toBeUndefined();
+  });
+
+  // GitHub Copilot's Chat Completions streams no argument text for a Claude
+  // model's call to a tool without parameters: policy sees an empty object.
+  test("reads empty string arguments as an empty object", () => {
+    const result = normalizeToolCallsForPolicy([
+      { name: "tool1", arguments: "" },
+    ]);
+
+    expect(result[0].toolCallArgs).toBe("{}");
   });
 
   test("passes through valid JSON string arguments", () => {

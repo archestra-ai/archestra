@@ -68,6 +68,7 @@ import {
 } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
 import { policyView } from "./result-view";
+import { toolCallArgumentsText } from "./tool-call-arguments";
 import type { DeclaredToolSpelling } from "./wire";
 
 export { APPA_PARENT_HEADER, APPA_SESSION_HEADER };
@@ -1297,7 +1298,10 @@ export async function evaluateToolCalls(
       throw new ApiError(400, "OpenAPPA requires distinct tool-call IDs");
     }
     ids.add(call.id);
-    if (typeof call.arguments === "string" && !isJson(call.arguments)) {
+    if (
+      typeof call.arguments === "string" &&
+      !isJson(toolCallArgumentsText(call.arguments))
+    ) {
       malformedIds.add(call.id);
     }
   }

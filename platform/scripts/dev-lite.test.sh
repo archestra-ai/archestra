@@ -149,6 +149,23 @@ check "build mode builds, then serves the standalone server" grep -q "started in
 check "build mode is recorded" grep -q "mode build" <<<"$(frontend_start build)"
 check "dev mode builds nothing" fails grep -q built <<<"$(frontend_start dev)"
 check "dev mode is recorded" grep -q "mode dev" <<<"$(frontend_start dev)"
+# A build whose static files cannot be copied next to its server fails, also
+# under a caller's `if`, which switches errexit off inside build_frontend.
+uncopied_build() {
+  (
+    scratch="$ARCHESTRA_DEV_LITE_STATE_DIR/uncopied"
+    PLATFORM_DIR="$scratch/platform"
+    STANDALONE_DIR="$scratch/standalone"
+    mkdir -p "$PLATFORM_DIR/frontend" "$STANDALONE_DIR" "$scratch/bin"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$scratch/bin/node"
+    chmod +x "$scratch/bin/node"
+    PATH="$scratch/bin:$PATH"
+    if build_frontend; then echo "build reported success"; fi
+  ) 2>&1 || true
+}
+out="$(uncopied_build)"
+check "a frontend build without its static files fails" grep -q "could not copy" <<<"$out"
+check "even inside an if" fails grep -q "reported success" <<<"$out"
 
 # --- start order, prepare, pause --------------------------------------------
 # Every step echoes its name; the builds and servers act on a scratch platform
@@ -166,10 +183,16 @@ lifecycle() {
       touch "$PLATFORM_DIR/backend/dist/server.mjs" "$STANDALONE_DIR/server.js"
     fi
     require_platform_dir() { :; }
-    for step in ensure_env install_dependencies ensure_native_addons start_postgres wait_for_db migrate \
-      build_frontend build_backend wait_ready; do
+    for step in ensure_env install_dependencies install_native_addons start_postgres wait_for_db migrate \
+      build_native_addons build_frontend build_backend wait_ready; do
       eval "$step() { echo \"$step \${1:-}\"; }"
     done
+    # LIFE_FAIL: the stubbed steps that fail.
+    for step in ${LIFE_FAIL:-}; do
+      eval "$step() { echo \"$step failed\"; return 1; }"
+    done
+    # NATIVE_MISSING: crates whose prebuilt addon was not found.
+    missing_native_addons() { if [ -n "${NATIVE_MISSING:-}" ]; then echo "$NATIVE_MISSING"; fi; }
     stop_session() { echo "stop_session $1"; ALIVE="${ALIVE// $1/}"; }
     free_ports() { :; }
     start_session() { echo "server $1"; ALIVE="$ALIVE $1"; }
@@ -186,10 +209,17 @@ check "up builds the frontend once" test "$(grep -c "^build_frontend" <<<"$out")
 backend_running_up() { (session_alive() { [ "$1" = backend ]; }; lifecycle cmd_start 1); }
 out="$(backend_running_up)"
 check "up stops a running backend before the frontend builds" test "$(order_of "$out" "^stop_session backend")" -lt "$(order_of "$out" "^build_frontend")"
+check "and does not rebuild that backend" fails grep -q "^build_backend" <<<"$out"
+out="$(NATIVE_MISSING=app-runtime-rs LIFE_ALIVE=" backend" lifecycle cmd_start 1)"
+check "up builds missing native addons first, with no server running" \
+  test "$(order_of "$out" "^stop_session backend")" -lt "$(order_of "$out" "^build_native_addons")"
+check "then the frontend" test "$(order_of "$out" "^build_native_addons")" -lt "$(order_of "$out" "^build_frontend")"
 
 out="$(lifecycle cmd_prepare)"
 check "prepare migrates" grep -q "^migrate" <<<"$out"
 check "prepare builds nothing" fails grep -q "^build_" <<<"$out"
+out="$(NATIVE_MISSING=app-runtime-rs lifecycle cmd_prepare)"
+check "prepare leaves native addons without a prebuilt one to up" fails grep -q "^build_" <<<"$out"
 check "prepare starts no server" fails grep -q "^server" <<<"$out"
 
 paused_lifecycle() { printf 'frontend=%s\nbackend=1\n' "${PAUSED_MODE:-build}" > "$PAUSED_FILE"; lifecycle "$@"; }
@@ -226,6 +256,10 @@ check "resume makes a missing build before either server starts" test "$(order_o
 printf 'frontend=build\nbackend=1\n' > "$PAUSED_FILE"
 ( (db_ready() { return 0; }; start_backend() { return 1; }; lifecycle cmd_resume) >/dev/null 2>&1 ) || true
 check "a failed resume keeps the pause" grep -q "^frontend=build" "$PAUSED_FILE"
+printf 'frontend=build\nbackend=0\n' > "$PAUSED_FILE"
+no_frontend_session() { start_session() { if [ "$1" = frontend ]; then return 1; fi; echo "server $1"; }; "$@"; }
+( (db_ready() { return 0; }; lifecycle no_frontend_session cmd_resume) >/dev/null 2>&1 ) || true
+check "a resume whose frontend session does not start keeps the pause" grep -q "^frontend=build" "$PAUSED_FILE"
 rm -f "$PAUSED_FILE"
 reload_beside_backend() { (frontend_mode() { echo build; }; LIFE_ALIVE=" backend" lifecycle cmd_reload frontend); }
 out="$(reload_beside_backend)"
@@ -260,12 +294,33 @@ check "a frontend-only resume is ready without the backend" real_wait_resume
 printf 'frontend=none\nbackend=1\n' > "$PAUSED_FILE"
 check "a backend-only resume is ready without the frontend" real_wait_resume
 rm -f "$PAUSED_FILE"
-failing_frontend_reload() { (frontend_mode() { echo build; }; build_frontend() { echo "build_frontend failed"; return 1; }; LIFE_ALIVE=" backend" lifecycle cmd_reload frontend) || true; }
+failing_frontend_reload() { (frontend_mode() { echo build; }; LIFE_FAIL=build_frontend LIFE_ALIVE=" backend" lifecycle cmd_reload frontend) || true; }
 out="$(failing_frontend_reload)"
-check "a failed frontend build on reload brings the backend back" grep -q "^server backend" <<<"$out"
+check "a failed frontend build on reload brings the backend back" \
+  test "$(order_of "$out" "^build_frontend failed")" -lt "$(order_of "$out" "^server backend")"
 failing_backend_start() { (frontend_mode() { echo build; }; start_backend() { return 1; }; LIFE_ALIVE=" frontend" lifecycle cmd_reload backend) || true; }
 out="$(failing_backend_start)"
 check "a backend that does not start on reload brings the frontend back" grep -q "^server frontend" <<<"$out"
+up_beside_frontend() { (frontend_mode() { echo build; }; LIFE_ALIVE=" frontend" lifecycle cmd_start 1); }
+out="$(up_beside_frontend)"
+check "up stops a running frontend before the backend builds" test "$(order_of "$out" "^stop_session frontend")" -lt "$(order_of "$out" "^build_backend")"
+failing_up_build() { (LIFE_FAIL=build_frontend LIFE_ALIVE=" backend" lifecycle cmd_start 1) || true; }
+out="$(failing_up_build)"
+check "a failed frontend build on up brings the backend back" \
+  test "$(order_of "$out" "^build_frontend failed")" -lt "$(order_of "$out" "^server backend")"
+check "and starts no frontend" fails grep -q "^server frontend" <<<"$out"
+failing_backend_after_builds() { (frontend_mode() { echo build; }; start_backend() { echo "start_backend failed"; return 1; }; LIFE_ALIVE=" frontend" lifecycle cmd_start 1) || true; }
+out="$(failing_backend_after_builds)"
+check "a backend that does not start after up's builds brings the frontend back" \
+  test "$(order_of "$out" "^start_backend failed")" -lt "$(order_of "$out" "^server frontend")"
+failing_addon_build() { (LIFE_FAIL=build_native_addons NATIVE_MISSING=image-rs LIFE_ALIVE=" backend" lifecycle cmd_start 1) || true; }
+out="$(failing_addon_build)"
+check "a failed native addon build on up brings the backend back" \
+  test "$(order_of "$out" "^build_native_addons failed")" -lt "$(order_of "$out" "^server backend")"
+check "and builds nothing after it" fails grep -q "^build_frontend" <<<"$out"
+failing_reload_restart() { (frontend_mode() { echo build; }; start_backend() { return 1; }; LIFE_ALIVE=" backend" lifecycle cmd_reload frontend) || true; }
+out="$(failing_reload_restart)"
+check "a frontend reload whose backend does not start again brings the frontend back" grep -q "^server frontend" <<<"$out"
 gone="$ARCHESTRA_DEV_LITE_STATE_DIR/removed-checkout"
 echo "$gone" > "$SERVERS_FILE"
 check "pause refuses when the stack's checkout is gone" grep -q "has no scripts/dev-lite.sh any more" <<<"$( (lifecycle cmd_pause) 2>&1 || true)"

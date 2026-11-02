@@ -9,7 +9,11 @@ import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model
 import UserModel from "@/models/user";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError } from "@/types";
-import type { UnsupportedAppaClientAction } from "@/types/guardrails-policy";
+import type {
+  HumanApprovalMode,
+  UnapprovableBlockMode,
+  UnsupportedAppaClientAction,
+} from "@/types/guardrails-policy";
 
 export type GuardrailsV2Activation = "active" | "inactive";
 
@@ -40,6 +44,8 @@ export async function getGuardrailsDeploymentFromSnapshot(
     enabled,
     unsupportedClientAction,
     breakTheGlassEnabled,
+    humanApprovalMode,
+    unapprovableBlockMode,
     annotatorModelId,
     annotatorLlmApiKeyId,
   } = await GuardrailsDeploymentModel.get(snapshot);
@@ -47,6 +53,8 @@ export async function getGuardrailsDeploymentFromSnapshot(
     enabled,
     unsupportedClientAction,
     breakTheGlassEnabled,
+    humanApprovalMode,
+    unapprovableBlockMode,
     annotatorModelId,
     annotatorLlmApiKeyId,
     featureEnabled: enterpriseTier.isOpenappaActive(),
@@ -79,6 +87,8 @@ export async function setGuardrailsDeployment(
     enabled?: boolean;
     unsupportedClientAction?: UnsupportedAppaClientAction;
     breakTheGlassEnabled?: boolean;
+    humanApprovalMode?: HumanApprovalMode;
+    unapprovableBlockMode?: UnapprovableBlockMode;
     annotatorModelId?: string | null;
     annotatorLlmApiKeyId?: string | null;
   },
@@ -128,6 +138,8 @@ function deploymentSettings(
     active: deployment.active,
     unsupportedClientAction: deployment.unsupportedClientAction,
     breakTheGlassEnabled: deployment.breakTheGlassEnabled,
+    humanApprovalMode: deployment.humanApprovalMode,
+    unapprovableBlockMode: deployment.unapprovableBlockMode,
     annotatorModelId: deployment.annotatorModelId,
     annotatorLlmApiKeyId: deployment.annotatorLlmApiKeyId,
   };

@@ -42,7 +42,8 @@ fi
 session="${ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID:-${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}}"
 export ANTHROPIC_CUSTOM_HEADERS="${ANTHROPIC_CUSTOM_HEADERS:+${ANTHROPIC_CUSTOM_HEADERS}
 }X-Archestra-Session-Id: ${session}
-X-Appa-Session-ID: ${session}${ARCHESTRA_AGENT_RUNTIME_BINDING:+
+X-Appa-Session-ID: ${session}
+X-Archestra-Unattended: 1${ARCHESTRA_AGENT_RUNTIME_BINDING:+
 X-Archestra-Runtime-Binding: ${ARCHESTRA_AGENT_RUNTIME_BINDING}}"
 
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"

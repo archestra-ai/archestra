@@ -479,6 +479,13 @@ export const SESSION_ID_HEADER = "X-Archestra-Session-Id";
 export const SOURCE_HEADER = "X-Archestra-Source";
 
 /**
+ * `1` says no person is there to answer for the session: Agent Runtime
+ * clients and Scheduled task runs send it. Guardrails' Break the glass
+ * settings can then let calls waiting for human approval through, with a yell.
+ */
+export const UNATTENDED_HEADER = "X-Archestra-Unattended";
+
+/**
  * Header name for a run ID.
  * Clients can pass this header to associate interactions with a specific run.
  */

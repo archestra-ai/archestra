@@ -38,6 +38,11 @@ import OpenAppaSpawnCorrelationModel, {
 import { reportAgentRuntimeObservedReads } from "@/observability/metrics/agent-runtime";
 import { childSessionId, clientSessionId } from "@/openappa/actor";
 import {
+  isUnattendedRequest,
+  recordWaivedCall,
+  waiverFor,
+} from "@/openappa/break-the-glass";
+import {
   type AppaChildReturnCompletion,
   collectAndStripChildReturns,
   mintChildReturnMarker,
@@ -169,7 +174,10 @@ import {
   agentRunUrl,
   submittedRunNextStep,
 } from "@/services/agent-runtime/run-handle";
-import { readGuardrailsV2Activation } from "@/services/guardrails-deployment";
+import {
+  getGuardrailsDeployment,
+  readGuardrailsV2Activation,
+} from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
 import type {
   RuntimeLaunchFailureReason,
@@ -402,13 +410,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       ],
     });
     // The runtime never saw a call the model made while enforcement was off,
-    // so OpenAPPA ignores its result: the result reaches the model as it is.
-    const toolResults = context.toolResults.filter(
-      (result) =>
-        binding.unenforcedCalls.reasons.get(
-          withoutTrajectoryStamp(result.id),
-        ) !== "made",
-    );
+    // nor the run of a denied call Break the glass let through, so OpenAPPA
+    // ignores its result: the result reaches the model as it is.
+    const toolResults = context.toolResults.filter((result) => {
+      const reason = binding.unenforcedCalls.reasons.get(
+        withoutTrajectoryStamp(result.id),
+      );
+      return reason !== "made" && reason !== "waived";
+    });
     const childResultUpdates: Record<string, string> = Object.create(null);
     const results = toolResults.map((result) => {
       const content = binding.adapter?.normalizeChildLaunchResult?.(result);
@@ -1580,6 +1589,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
 
     const notice = binding.request.tools?.notice;
+    // Only the ordinary calls the runtime ruled on here can be waived.
+    const evaluatedIds = new Set(rest.map((call) => call.id));
+    // Read once for the batch, by the first denial.
+    let breakTheGlass: ReturnType<typeof getGuardrailsDeployment> | undefined;
     // Resolved once for the batch, by the first denial that has no notice tool.
     let pendingServersTool: Promise<string | undefined> | undefined;
     const blocked: { id: string; name: string; reason: string }[] = [];
@@ -1716,6 +1729,34 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           resolution: this.resolution(binding),
         });
         continue;
+      }
+      // Break the glass: a denied ordinary call can run anyway, with a yell.
+      // Runtime and spawn calls need the runtime's own release, so they stay
+      // denied.
+      if (
+        decision.kind === "deny" &&
+        evaluatedIds.has(call.id) &&
+        !runtimeCalls.has(call.id) &&
+        !(binding.adapter && isChildSpawnCall(binding.adapter, call))
+      ) {
+        breakTheGlass ??= getGuardrailsDeployment();
+        const waiver = waiverFor({
+          decision,
+          settings: await breakTheGlass,
+          unattended: isUnattendedRequest(binding.requestHeaders),
+        });
+        if (
+          waiver &&
+          (await recordWaivedCall({
+            session,
+            toolCallId: call.id,
+            tool: this.policyIdentity(binding, call).name,
+            kind: waiver,
+          }))
+        ) {
+          released.push(call);
+          continue;
+        }
       }
       // The registry pins `blocked` to the wire batch: the entry names the
       // call as given. The identity the runtime ruled on — the dispatch's

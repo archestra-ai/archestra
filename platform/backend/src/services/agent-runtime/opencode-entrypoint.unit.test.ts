@@ -127,6 +127,7 @@ fi
                 "X-Archestra-Run-Id": "12345678-abcd-4000-8000-123456789abc",
                 "X-Archestra-Session-Id": "agent-run-opencode-12345678",
                 "X-Appa-Session-ID": "agent-run-opencode-12345678",
+                "X-Archestra-Unattended": "1",
               },
             },
             models: {

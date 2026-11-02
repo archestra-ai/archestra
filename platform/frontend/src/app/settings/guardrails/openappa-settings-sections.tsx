@@ -2,7 +2,7 @@
 
 import { DocsPage, getDocsUrl, providerSupportsChat } from "@archestra/shared";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { useOpenAppaSetupState } from "@/app/openappa/_parts/use-openappa-setup-state";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
@@ -22,7 +22,7 @@ import { getVisibleDocsUrl } from "@/lib/docs/docs";
 import {
   useGuardrailsDeployment,
   useUpdateAnnotatorModel,
-  useUpdateBreakTheGlassEnabled,
+  useUpdateBreakTheGlass,
   useUpdateGuardrailsDeployment,
   useUpdateUnsupportedClientAction,
 } from "@/lib/guardrails-deployment.query";
@@ -85,40 +85,79 @@ export function OpenAppaEnforcementSetting() {
 }
 
 /**
- * Whether a yell also turns OpenAPPA off for the session that sends it, so a
- * stuck agent can get unblocked.
+ * Break the glass: what happens to a call waiting for human approval, to a
+ * call no remedy can lift, and to a session whose agent calls `yell`.
  */
-export function OpenAppaBreakTheGlassSetting() {
+export function OpenAppaBreakTheGlassSettings() {
   const deployment = useGuardrailsDeployment({ poll: true });
-  const update = useUpdateBreakTheGlassEnabled();
+  const update = useUpdateBreakTheGlass();
   const { data: canManage } = useHasPermissions({
     organizationSettings: ["update"],
   });
-  const enabled = Boolean(deployment.data?.breakTheGlassEnabled);
+  const data = deployment.data;
+  const disabled = !canManage || !data?.featureEnabled || update.isPending;
   return (
-    <SettingsBlock
-      id="break-the-glass"
-      title="Break the glass"
-      description={
-        enabled
-          ? "A yell will disable guardrails for the session, unblocking your stuck agents."
-          : "A yell only sends a report. Guardrails stay on for the session."
-      }
-      control={
-        deployment.data ? (
-          <Switch
-            aria-label="Break the glass"
-            checked={enabled}
-            disabled={
-              !canManage || !deployment.data.featureEnabled || update.isPending
-            }
-            onCheckedChange={(checked) => update.mutate(checked)}
-          />
-        ) : (
-          <Skeleton className="h-5 w-9 rounded-full" />
-        )
-      }
-    />
+    <>
+      <BreakTheGlassSelect
+        id="human-approval"
+        title="Human approval"
+        description="Calls waiting for human approval."
+        value={data?.humanApprovalMode}
+        disabled={disabled}
+        options={[
+          { value: "block", label: "Block until approved" },
+          {
+            value: "unattended",
+            label: "Allow and record a yell in unattended sessions",
+            description: "Sessions sent with x-archestra-unattended: 1.",
+          },
+          { value: "everywhere", label: "Allow and record a yell everywhere" },
+        ]}
+        onChange={(humanApprovalMode) => update.mutate({ humanApprovalMode })}
+      />
+      <BreakTheGlassSelect
+        id="unapprovable-blocks"
+        title="Blocks that can't be approved"
+        description={
+          <>
+            Trust, audience and effects blocks; never the <code>blocked</code>{" "}
+            mark.
+          </>
+        }
+        value={data?.unapprovableBlockMode}
+        disabled={disabled}
+        options={[
+          { value: "refuse", label: "Refuse the call" },
+          { value: "allow", label: "Allow and record a yell" },
+        ]}
+        onChange={(unapprovableBlockMode) =>
+          update.mutate({ unapprovableBlockMode })
+        }
+      />
+      <BreakTheGlassSelect
+        id="break-the-glass"
+        title="Yell tool"
+        description={
+          <>
+            When the agent calls <code>yell</code> itself.
+          </>
+        }
+        value={
+          data ? (data.breakTheGlassEnabled ? "off" : "record") : undefined
+        }
+        disabled={disabled}
+        options={[
+          { value: "record", label: "Record the yell only" },
+          {
+            value: "off",
+            label: "Record the yell and turn Guardrails off for the session",
+          },
+        ]}
+        onChange={(value) =>
+          update.mutate({ breakTheGlassEnabled: value === "off" })
+        }
+      />
+    </>
   );
 }
 
@@ -347,5 +386,54 @@ function ClientsDocsLink({
     >
       {children}
     </ExternalDocsLink>
+  );
+}
+
+// ===
+
+function BreakTheGlassSelect<T extends string>(props: {
+  id: string;
+  title: string;
+  description: ReactNode;
+  value: T | undefined;
+  disabled: boolean;
+  options: { value: T; label: string; description?: string }[];
+  onChange: (value: T) => void;
+}) {
+  return (
+    <SettingsBlock
+      id={props.id}
+      title={props.title}
+      description={props.description}
+      control={
+        props.value ? (
+          <Select
+            value={props.value}
+            disabled={props.disabled}
+            onValueChange={(value) => {
+              const option = props.options.find((each) => each.value === value);
+              if (option) props.onChange(option.value);
+            }}
+          >
+            <SelectTrigger aria-label={props.title} className="w-full lg:w-72">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper" align="end">
+              {props.options.map((option) => (
+                <SelectItem
+                  key={option.value}
+                  value={option.value}
+                  description={option.description}
+                >
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Skeleton className="h-9 w-72" />
+        )
+      }
+    />
   );
 }

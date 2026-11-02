@@ -312,7 +312,8 @@ jq -n \
       default_headers:({
         "X-Archestra-Run-Id":$task_id,
         "X-Archestra-Session-Id":$session,
-        "X-Appa-Session-ID":$session
+        "X-Appa-Session-ID":$session,
+        "X-Archestra-Unattended":"1"
       } + (if $binding == "" then {} else {"X-Archestra-Runtime-Binding":$binding} end))
     },
     mcp_discovery_timeout:30,

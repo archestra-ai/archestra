@@ -61259,6 +61259,8 @@ export type GetGuardrailsDeploymentResponses = {
         enabled: boolean;
         unsupportedClientAction: 'bypass' | 'block';
         breakTheGlassEnabled: boolean;
+        humanApprovalMode: 'block' | 'unattended' | 'everywhere';
+        unapprovableBlockMode: 'refuse' | 'allow';
         annotatorModelId: string | null;
         annotatorLlmApiKeyId: string | null;
         featureEnabled: boolean;
@@ -61273,6 +61275,8 @@ export type UpdateGuardrailsDeploymentData = {
         enabled?: boolean;
         unsupportedClientAction?: 'bypass' | 'block';
         breakTheGlassEnabled?: boolean;
+        humanApprovalMode?: 'block' | 'unattended' | 'everywhere';
+        unapprovableBlockMode?: 'refuse' | 'allow';
         annotatorModelId?: string | null;
         annotatorLlmApiKeyId?: string | null;
     };
@@ -61357,6 +61361,8 @@ export type UpdateGuardrailsDeploymentResponses = {
         enabled: boolean;
         unsupportedClientAction: 'bypass' | 'block';
         breakTheGlassEnabled: boolean;
+        humanApprovalMode: 'block' | 'unattended' | 'everywhere';
+        unapprovableBlockMode: 'refuse' | 'allow';
         annotatorModelId: string | null;
         annotatorLlmApiKeyId: string | null;
         featureEnabled: boolean;
@@ -120845,6 +120851,8 @@ export type GetOpenAppaYellsResponses = {
             message: string;
             withTrajectory: boolean;
             superyell: boolean;
+            kind: 'agent' | 'approval_waived' | 'block_waived';
+            count: number;
             createdAt: string;
             reportedAt: string | null;
             reportFailed: boolean;
@@ -121058,6 +121066,8 @@ export type GetOpenAppaYellResponses = {
         message: string;
         withTrajectory: boolean;
         superyell: boolean;
+        kind: 'agent' | 'approval_waived' | 'block_waived';
+        count: number;
         createdAt: string;
         reportedAt: string | null;
         reportFailed: boolean;
@@ -121180,6 +121190,8 @@ export type UpdateOpenAppaYellResponses = {
         message: string;
         withTrajectory: boolean;
         superyell: boolean;
+        kind: 'agent' | 'approval_waived' | 'block_waived';
+        count: number;
         createdAt: string;
         reportedAt: string | null;
         reportFailed: boolean;

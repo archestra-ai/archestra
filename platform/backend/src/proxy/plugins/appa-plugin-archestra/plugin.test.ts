@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import { gunzipSync } from "node:zlib";
 import { TimeInMs } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import { type MockInstance, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
@@ -5773,6 +5774,112 @@ describe("rendering runtime text for this client", () => {
     } finally {
       cancelCalls.mockRestore();
       evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test("Break the glass runs a denied call in an unattended session and records a yell, while an attended session still waits", async ({
+    makeOrganization,
+  }) => {
+    config.openappa.enabled = true;
+    config.openappa.yellEnabled = true;
+    const organizationId = (await makeOrganization()).id;
+    const deployment = vi
+      .spyOn(guardrailsDeployment, "getGuardrailsDeployment")
+      .mockResolvedValue({
+        ...(await guardrailsDeployment.getGuardrailsDeployment()),
+        active: true,
+        humanApprovalMode: "unattended",
+        unapprovableBlockMode: "allow",
+      });
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async (_session, calls) =>
+        calls.map((call) =>
+          call.name === "post_message"
+            ? {
+                kind: "deny" as const,
+                feedback: "[appa] Blocked: requires attention: human-approval",
+                recorded: true as const,
+                offers: ["offer"],
+                review: [{ offer_id: "offer", text: "Approve?" }],
+              }
+            : {
+                kind: "deny" as const,
+                feedback: "[appa] Blocked: forbidden after a send effect",
+                recorded: true as const,
+                offers: [],
+              },
+        ),
+      );
+    const cancelCalls = vi
+      .spyOn(appaService, "cancelCalls")
+      .mockResolvedValue(undefined);
+    const run = async (sessionId: string, unattended: boolean) => {
+      const plugin = new AppaPluginArchestra([]);
+      const context = requestContext({ sessionId, organizationId });
+      if (unattended) context.headers = { "x-archestra-unattended": "1" };
+      (
+        context.resources.get(APPA_PLUGIN_TRUSTED_CONTEXT) as Record<
+          string,
+          unknown
+        >
+      ).enforcement = "active";
+      (
+        context.resources.get(APPA_PLUGIN_TRUSTED_CONTEXT) as Record<
+          string,
+          unknown
+        >
+      ).request = {
+        tools: {
+          control: { name: "archestra__execute_remedy_plan" },
+          notice: { name: "archestra__get_remedy_plans" },
+          platformToolNames: new Set(),
+          namespaces: new Map(),
+        },
+        customTools: new Set(),
+        declaredTools: [{ name: "archestra__get_remedy_plans" }],
+      };
+      await plugin.onSessionInit(context);
+      return plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          { id: "post", name: "post_message", arguments: {} },
+          { id: "send", name: "send_email", arguments: {} },
+        ],
+      });
+    };
+    try {
+      // Nothing to rewrite: both calls go to the client as the model wrote them.
+      expect(await run("unattended-run", true)).toBeUndefined();
+      // In an attended session the approval waits behind its notice; only
+      // the call no remedy can lift runs.
+      expect(await run("attended-run", false)).toMatchObject({
+        decision: "allow",
+        toolCalls: [
+          { id: "post", name: "archestra__get_remedy_plans" },
+          { id: "send", name: "send_email" },
+        ],
+      });
+
+      const yells = await db
+        .select()
+        .from(schema.openappaYellsTable)
+        .where(eq(schema.openappaYellsTable.organizationId, organizationId));
+      expect(
+        yells
+          .map(({ sessionId, kind }) => ({ sessionId, kind }))
+          .sort((a, b) =>
+            `${a.sessionId}${a.kind}`.localeCompare(`${b.sessionId}${b.kind}`),
+          ),
+      ).toEqual([
+        { sessionId: "attended-run", kind: "block_waived" },
+        { sessionId: "unattended-run", kind: "approval_waived" },
+        { sessionId: "unattended-run", kind: "block_waived" },
+      ]);
+    } finally {
+      cancelCalls.mockRestore();
+      evaluateToolCalls.mockRestore();
+      deployment.mockRestore();
     }
   });
 

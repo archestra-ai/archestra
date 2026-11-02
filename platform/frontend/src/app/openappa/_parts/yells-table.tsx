@@ -13,6 +13,7 @@ import {
   MessageCircle,
   MessagesSquare,
   RotateCcw,
+  ShieldAlert,
   ShieldOff,
   UserRound,
 } from "lucide-react";
@@ -478,9 +479,37 @@ function TimeCell({ yell }: { yell: OpenAppaYell }) {
         <LogTime showTooltip={false} timestamp={yell.createdAt} />
       </Faded>
       <BrokeTheGlassMark yell={yell} />
+      <WaivedCallMark yell={yell} />
     </div>
   );
 }
+
+/**
+ * For a yell the platform raised under the Break the glass settings: which
+ * kind of blocked call it let through, and how many times.
+ */
+function WaivedCallMark({ yell }: { yell: OpenAppaYell }) {
+  if (yell.kind === "agent") return null;
+  const hint = `${WAIVED_CALL_HINT[yell.kind]}${yell.count > 1 ? ` (${yell.count} calls)` : ""}`;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex shrink-0 cursor-default items-center gap-0.5 text-xs text-muted-foreground">
+          <ShieldAlert className="size-3.5" aria-label={hint} />
+          {yell.count > 1 && (
+            <span className="tabular-nums">×{yell.count}</span>
+          )}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{hint}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+const WAIVED_CALL_HINT = {
+  approval_waived: "Platform let a call waiting for human approval through",
+  block_waived: "Platform let a call no remedy could lift through",
+} as const;
 
 /** A shield-off icon with its explanation on hover; nothing for a plain yell. */
 export function BrokeTheGlassMark({ yell }: { yell: OpenAppaYell }) {

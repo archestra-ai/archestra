@@ -345,7 +345,7 @@ function deploymentHintLine(): string {
     isLocalHostname(url.hostname)
   )
     return "";
-  const hint = `\`${url.host}\` is this organization's own Archestra deployment: a call to it, such as fetching a link one of its tools returned, reaches the organization's own platform.`;
+  const hint = `\`${url.host}\` is this organization's own platform deployment, the one these policies run on: a call to it, such as fetching a link one of its tools returned, reaches the organization's own platform.`;
   return `hint = ${JSON.stringify(hint)}`;
 }
 

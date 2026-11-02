@@ -206,8 +206,10 @@ async function resolveCredential(
   }
 
   let apiKeyUserId: string | null = null;
+  // Outside the try below, which reads any failure as an invalid key.
+  const authSessions = await port("authSessions");
   try {
-    const result = await (await port("authSessions")).verifyApiKey({
+    const result = await authSessions.verifyApiKey({
       body: { key: credential },
     });
     apiKeyUserId = result?.valid ? (result.key?.referenceId ?? null) : null;

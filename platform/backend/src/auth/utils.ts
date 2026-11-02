@@ -47,6 +47,9 @@ export const hasPermission = async (
     { permissionCount: Object.keys(permissions).length },
     "[hasPermission] Checking permissions",
   );
+  // Outside the try below, which reads any failure as "no session": an
+  // unbound port or a Better Auth instance that fails to load is a fault.
+  const authSessions = await port("authSessions");
 
   try {
     if (serviceAccount) {
@@ -69,9 +72,7 @@ export const hasPermission = async (
       return await checkUserPermissions({ ...userContext, permissions });
     }
 
-    const session = await (await port("authSessions")).getSession({
-      headers,
-    });
+    const session = await authSessions.getSession({ headers });
     if (!session?.user?.id) {
       throw new Error("No session");
     }
@@ -199,10 +200,12 @@ async function checkApiKeyPermissions(params: {
   permissions: Permissions;
 }): Promise<{ success: boolean; error: Error | null } | null> {
   let apiKeyUserId: string | null = null;
+  // Outside the try below, which reads any failure as an invalid key.
+  const authSessions = await port("authSessions");
 
   try {
     logger.trace("[hasPermission] Verifying API key for permission check");
-    const apiKeyResult = await (await port("authSessions")).verifyApiKey({
+    const apiKeyResult = await authSessions.verifyApiKey({
       body: { key: params.apiKey },
     });
     apiKeyUserId =

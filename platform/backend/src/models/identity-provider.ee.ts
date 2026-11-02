@@ -1225,9 +1225,9 @@ type StoredIdentityProviderConfigs =
 
 /**
  * The Better Auth call the identity provider model makes. The identity provider
- * route, which composes Better Auth into the server, passes the instance in, so
- * a change to the call's request no longer fitting this body fails to compile
- * there.
+ * route, which composes Better Auth into the server, passes the instance in.
+ * The compiler checks there that the call accepts this body's typed fields; the
+ * OIDC and SAML configs are parsed JSON, so they are not checked, as before.
  */
 interface SsoProviderRegistrar {
   api: {

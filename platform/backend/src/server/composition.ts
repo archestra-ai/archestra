@@ -12,6 +12,11 @@
  */
 import { bindPorts, type PortBindings } from "@/models/ports";
 
+/** The Better Auth instance, loaded on first use. */
+async function betterAuth() {
+  return (await import("@/auth/better-auth")).auth;
+}
+
 const BINDINGS: PortBindings = {
   mcpServerRuntime: async () =>
     (await import("@/k8s/mcp-server-runtime")).McpServerRuntimeManager,
@@ -19,14 +24,14 @@ const BINDINGS: PortBindings = {
   skillSandboxAvailability: () => import("@/skills/skill-sandbox-availability"),
   archestraToolCatalog: () => import("@/archestra-mcp-server"),
   authSessions: async () => {
-    const { auth } = await import("@/auth/better-auth");
+    const auth = await betterAuth();
     return {
       getSession: (params) => auth.api.getSession(params),
       verifyApiKey: (params) => auth.api.verifyApiKey(params),
     };
   },
   authAccounts: async () => {
-    const { auth } = await import("@/auth/better-auth");
+    const auth = await betterAuth();
     return { signUpEmail: (params) => auth.api.signUpEmail(params) };
   },
   jwksSigningKey: () => import("@/auth/jwks-signing-key-guard"),

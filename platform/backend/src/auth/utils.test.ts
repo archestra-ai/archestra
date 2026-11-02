@@ -13,6 +13,7 @@ vi.mock("./better-auth", () => ({
 }));
 
 import { PGlite } from "@electric-sql/pglite";
+import { bindPorts, type PortBindings } from "@/models/ports";
 import ServiceAccountModel from "@/models/service-account";
 import {
   beforeEach,
@@ -385,6 +386,24 @@ describe("hasPermission", () => {
   });
 
   describe("edge cases", () => {
+    test("a Better Auth instance that fails to load is an error, not a missing session", async () => {
+      // The bindings server/composition.ts made for the test setup.
+      const bound = (globalThis as Record<symbol, PortBindings>)[
+        Symbol.for("archestra.backend.ports")
+      ];
+      bindPorts({
+        ...bound,
+        authSessions: () => Promise.reject(new Error("auth secret missing")),
+      });
+      try {
+        await expect(
+          hasPermission({ agent: ["read"] }, { authorization: "key" }),
+        ).rejects.toThrow("auth secret missing");
+      } finally {
+        bindPorts(bound);
+      }
+    });
+
     test("should handle empty permissions object", async ({
       makeOrganization,
       makeUser,

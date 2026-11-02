@@ -61432,6 +61432,26 @@
           },
           {
             "schema": {
+              "type": "string",
+              "enum": [
+                "chat",
+                "custom",
+                "claude-code",
+                "codex",
+                "opencode",
+                "hermes",
+                "openclaw",
+                "grok",
+                "kimi",
+                "copilot"
+              ]
+            },
+            "in": "query",
+            "name": "runtime",
+            "required": false
+          },
+          {
+            "schema": {
               "anyOf": [
                 {
                   "type": "string",

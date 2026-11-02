@@ -106,7 +106,7 @@ export function OpenAppaBreakTheGlassSettings() {
     >
       <BreakTheGlassRow
         title="Human approval"
-        description="Calls waiting for human approval."
+        description="Calls and remedy plans waiting for human approval."
         value={data?.humanApprovalMode}
         disabled={disabled}
         options={[

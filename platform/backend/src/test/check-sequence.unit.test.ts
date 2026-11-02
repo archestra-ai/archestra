@@ -218,22 +218,57 @@ function nodeCheck(
 }
 
 test.each([
-  { fail: "", expected: 0, modes: ["cache", "compile", "generate"], args: [] },
-  { fail: "compile", expected: 17, modes: ["cache", "compile"], args: [] },
   {
+    command: "build",
+    fail: "",
+    expected: 0,
+    modes: ["cache", "compile", "generate"],
+    args: [],
+  },
+  {
+    command: "build",
+    fail: "compile",
+    expected: 17,
+    modes: ["cache", "compile"],
+    args: [],
+  },
+  {
+    command: "build",
     fail: "generate",
     expected: 23,
     modes: ["cache", "compile", "generate"],
     args: [],
   },
-  { fail: "signal", expected: 143, modes: ["cache", "compile"], args: [] },
   {
+    command: "build",
+    fail: "signal",
+    expected: 143,
+    modes: ["cache", "compile"],
+    args: [],
+  },
+  {
+    command: "build",
     fail: "",
     expected: 0,
     modes: ["cache", "generate"],
     args: ["--experimental-build-mode", "generate"],
   },
-])("frontend phases release the compiler and preserve failures/options ($fail, $args)", ({
+  {
+    command: "pack",
+    fail: "",
+    expected: 0,
+    modes: ["cache", "compile", "generate", "pack"],
+    args: [],
+  },
+  {
+    command: "pack",
+    fail: "compile",
+    expected: 1,
+    modes: ["cache", "compile"],
+    args: [],
+  },
+])("frontend phases release the compiler and preserve failures/options ($command, $fail, $args)", ({
+  command,
   fail,
   expected,
   modes,
@@ -246,6 +281,11 @@ test.each([
   fs.mkdirSync(path.dirname(next), { recursive: true });
   fs.mkdirSync(scripts, { recursive: true });
   fs.mkdirSync(path.join(platform, "backend"));
+  fs.mkdirSync(path.join(frontend, ".next", "static"), { recursive: true });
+  fs.mkdirSync(path.join(frontend, ".next", "standalone", "frontend", ".next"), {
+    recursive: true,
+  });
+  fs.mkdirSync(path.join(frontend, "public"));
   fs.writeFileSync(path.join(platform, "Tiltfile"), "");
   fs.writeFileSync(path.join(platform, ".env.example"), "");
   fs.copyFileSync(
@@ -255,7 +295,9 @@ test.each([
   const log = path.join(dir, "phases.jsonl");
   fs.writeFileSync(
     path.join(scripts, "frontend-prebuilt.mjs"),
-    `import fs from "node:fs"; fs.appendFileSync(process.env.ARCHESTRA_TEST_NEXT_LOG, JSON.stringify({ mode: "cache" }) + "\\n");`,
+    `import fs from "node:fs";
+if (process.argv[2] === "install") process.exit(1);
+fs.appendFileSync(process.env.ARCHESTRA_TEST_NEXT_LOG, JSON.stringify({ mode: process.argv[2] === "--pack" ? "pack" : "cache" }) + "\\n");`,
   );
   fs.writeFileSync(
     next,
@@ -281,11 +323,15 @@ if (mode === "compile" && process.env.ARCHESTRA_TEST_NEXT_FAIL === "signal") pro
     [
       path.join(scripts, "dev-lite.sh"),
       "frontend-artifact",
-      "build",
-      "--turbopack",
-      "--debug-build-paths",
-      "app/page with $literal",
-      ...args,
+      command,
+      ...(command === "pack"
+        ? [dir]
+        : [
+            "--turbopack",
+            "--debug-build-paths",
+            "app/page with $literal",
+            ...args,
+          ]),
     ],
     {
       cwd: platform,
@@ -294,6 +340,7 @@ if (mode === "compile" && process.env.ARCHESTRA_TEST_NEXT_FAIL === "signal") pro
         ...process.env,
         ARCHESTRA_DEV_LITE_STATE_DIR: path.join(dir, "state"),
         ARCHESTRA_DEV_LITE_SOURCE_MAPS: "false",
+        ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "1",
         ARCHESTRA_TEST_NEXT_LOG: log,
         ARCHESTRA_TEST_NEXT_FAIL: fail,
       },
@@ -306,7 +353,10 @@ if (mode === "compile" && process.env.ARCHESTRA_TEST_NEXT_FAIL === "signal") pro
     .split("\n")
     .map((line) => JSON.parse(line));
   expect(events.map((event) => event.mode)).toEqual(modes);
-  for (const event of events.slice(1)) {
-    expect(event.args).toContain("app/page with $literal");
+  for (const event of events.filter((event) => event.args)) {
+    expect(event.args).toContain("--turbopack");
+    if (command === "build") {
+      expect(event.args).toContain("app/page with $literal");
+    }
   }
 });

@@ -654,7 +654,9 @@ build_frontend() {
   fi
   frontend_prebuilt install-cache || true
   cpus="$(available_cpus)"
-  launcher='const { status } = require("node:child_process").spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build", "--turbopack"], { stdio: "inherit" }); process.exit(status ?? 1);'
+  # Release Turbopack's native heap before starting page-generation workers,
+  # including when reload rebuilds an edited frontend from CI's warm cache.
+  launcher='for (const mode of ["compile", "generate"]) { const { status, signal } = require("node:child_process").spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build", "--turbopack", "--experimental-build-mode=" + mode], { stdio: "inherit" }); const code = status ?? (signal ? 128 + require("node:os").constants.signals[signal] : 1); if (code) process.exit(code); }'
   log "building the frontend (production build, as CI serves it); log in $LOG_DIR/frontend-build.log"
   CIRCLE_NODE_TOTAL=$((cpus + 1)) frontend_build_node -e "$launcher" > "$LOG_DIR/frontend-build.log" 2>&1 \
     || { tail -n 30 "$LOG_DIR/frontend-build.log" >&2; die "frontend build failed"; }

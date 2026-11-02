@@ -86,6 +86,7 @@ async function discoverOAuthResourceMetadata(
     : [...new Set([`${rootWellKnownUrl}${pathname}`, rootWellKnownUrl])];
 
   let lastError: unknown;
+  let originResourceError: OAuthMetadataValidationError | undefined;
   for (const wellKnownUrl of wellKnownUrls) {
     try {
       const response = await (overrides?.fetchFn ?? createMcpOAuthFetch())(
@@ -115,9 +116,21 @@ async function discoverOAuthResourceMetadata(
           ? url.origin
           : serverUrl;
       if (metadata?.resource !== expectedResource) {
-        throw new OAuthMetadataValidationError(
+        const error = new OAuthMetadataValidationError(
           "Protected resource metadata resource does not match the requested resource",
         );
+        if (
+          !overrides?.resourceMetadataUrl &&
+          wellKnownUrl !== rootWellKnownUrl &&
+          metadata?.resource === url.origin
+        ) {
+          // Some servers serve origin metadata at every well-known path.
+          // Discard this document and independently validate the root document;
+          // none of its scopes or authorization servers are trusted here.
+          originResourceError = error;
+          continue;
+        }
+        throw error;
       }
       return metadata;
     } catch (error) {
@@ -129,6 +142,10 @@ async function discoverOAuthResourceMetadata(
       lastError = error;
     }
   }
+
+  // A failed root lookup must not turn an identity failure into a transport
+  // failure that callers can bypass with legacy discovery or endpoint overrides.
+  if (originResourceError) throw originResourceError;
 
   throw new Error(
     `Resource metadata discovery failed: ${lastError instanceof Error ? lastError.message : "Unknown error"}`,

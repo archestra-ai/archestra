@@ -1395,6 +1395,8 @@ describe("APPA feature boundary", () => {
         { id: "first", name: "read_file", arguments: {} },
         { id: "truncated", name: "read_file", arguments: '{"path": "/a' },
         { id: "control", name: "remedy", arguments: "{" },
+        // A call to a tool without parameters can stream no argument text.
+        { id: "empty", name: "read_file", arguments: "" },
       ],
       {
         canonicalize: (name) => name,
@@ -1405,15 +1407,19 @@ describe("APPA feature boundary", () => {
       "allow",
       "deny",
       "deny",
+      "allow",
     ]);
     // The runtime never saw these calls, so it holds no ruling for their ids.
     expect(decisions[1]).not.toHaveProperty("recorded");
     expect(decisions[2]).not.toHaveProperty("recorded");
-    expect(
-      native.dispatchHook.mock.calls.map(
-        ([raw]) => JSON.parse(raw).operation_id,
-      ),
-    ).toEqual(["call:first"]);
+    const dispatched = native.dispatchHook.mock.calls.map(([raw]) =>
+      JSON.parse(raw),
+    );
+    expect(dispatched.map((event) => event.operation_id)).toEqual([
+      "call:first",
+      "call:empty",
+    ]);
+    expect(dispatched[1].arguments).toEqual({});
   });
 
   test("fails closed when a withheld admission cannot be settled", async () => {

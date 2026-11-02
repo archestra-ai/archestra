@@ -3581,18 +3581,24 @@ async function handleStreaming<
     streamCompleted = true;
     return reply;
   } catch (error) {
-    const lifecycleError = error;
+    // A disconnect after the provider's terminal must preserve final usage.
+    // Before it, both quiet EOF and throwing aborts are client cancellations.
+    const clientDisconnected = reply.raw.destroyed && !providerTerminalSeen;
+    const lifecycleError = clientDisconnected
+      ? new ApiError(499, "Client disconnected during inference")
+      : error;
+    if (clientDisconnected) clientGone = true;
     if (
-      error instanceof CodexResponsesGenerationError &&
-      error.isIncompleteTerminal
+      lifecycleError instanceof CodexResponsesGenerationError &&
+      lifecycleError.isIncompleteTerminal
     )
       ctx.telemetry?.markIncomplete();
     else
       ctx.telemetry?.fail(
-        error instanceof CodexResponsesGenerationError ||
-          error instanceof ResponsesStreamIncompleteError
+        lifecycleError instanceof CodexResponsesGenerationError ||
+          lifecycleError instanceof ResponsesStreamIncompleteError
           ? { statusCode: 502, origin: "provider", outcome: "error" }
-          : classifyProxyFailure(error),
+          : classifyProxyFailure(lifecycleError),
       );
     const codexError =
       error instanceof CodexResponsesGenerationError ? error : undefined;
@@ -3627,11 +3633,22 @@ async function handleStreaming<
       provider.interactionType === "openai:responses"
         ? error
         : undefined;
-    if (eofError) {
+    const responsesError =
+      clientDisconnected &&
+      provider.provider === "openai" &&
+      provider.interactionType === "openai:responses"
+        ? {
+            code: "client_disconnected",
+            message: "Client disconnected during inference",
+          }
+        : eofError;
+    if (clientDisconnected || responsesError) {
       // Discard held executable fragments without emitting a synthetic success.
       streamAdapter.formatToolCallsSSE?.([]);
       streamAdapter.state.toolCalls = [];
       streamAdapter.state.rawToolCallEvents = [];
+    }
+    if (responsesError) {
       streamAdapter.state.stopReason = "error";
       const observed = asRecord(
         discardUnadmittedResponsesOutput(
@@ -3653,7 +3670,7 @@ async function handleStreaming<
         model: streamAdapter.state.model || actualModel,
         status: "incomplete",
         incomplete_details: null,
-        error: { code: eofError.code, message: eofError.message },
+        error: { code: responsesError.code, message: responsesError.message },
         output: Array.isArray(observed?.output)
           ? observed.output.filter(
               (item) =>
@@ -3666,7 +3683,7 @@ async function handleStreaming<
     }
     try {
       if (pluginRegistry && pluginContext) {
-        await pluginRegistry.fail({ ...pluginContext, error });
+        await pluginRegistry.fail({ ...pluginContext, error: lifecycleError });
       }
     } catch (pluginError) {
       logger.warn(

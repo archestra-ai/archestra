@@ -10,6 +10,7 @@ import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import anthropicProxyRoutes from "./routes/anthropic";
+import geminiProxyRoutes from "./routes/gemini";
 import openaiProxyRoutes from "./routes/openai";
 
 function deferred() {
@@ -20,7 +21,12 @@ function deferred() {
   return { promise, resolve };
 }
 
-for (const provider of ["anthropic", "openai", "responses"] as const) {
+for (const provider of [
+  "anthropic",
+  "openai",
+  "responses",
+  "gemini",
+] as const) {
   describe(`${provider} client disconnect`, () => {
     let app: FastifyInstance;
     let upstream: Server;
@@ -41,7 +47,11 @@ for (const provider of ["anthropic", "openai", "responses"] as const) {
     let completions: number;
     let mode: "headers" | "stream" | "tool-stream" | "complete";
     const model =
-      provider === "anthropic" ? "claude-3-5-sonnet-20241022" : "gpt-4o-mini";
+      provider === "anthropic"
+        ? "claude-3-5-sonnet-20241022"
+        : provider === "gemini"
+          ? "gemini-2.5-pro"
+          : "gpt-4o-mini";
 
     function sendStart(response: ServerResponse) {
       response.writeHead(200, { "content-type": "text/event-stream" });
@@ -65,6 +75,10 @@ for (const provider of ["anthropic", "openai", "responses"] as const) {
         response.write(
           'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Partial"}}\n\n',
         );
+      } else if (provider === "gemini") {
+        response.write(
+          `data: ${JSON.stringify({ responseId: "gemini-cancel", modelVersion: model, candidates: [{ content: { role: "model", parts: [{ text: "Partial" }] } }], usageMetadata: { promptTokenCount: 12, candidatesTokenCount: 1, totalTokenCount: 13 } })}\n\n`,
+        );
       } else if (provider === "responses") {
         response.write(
           `event: response.created\ndata: ${JSON.stringify({ type: "response.created", sequence_number: 0, response: { id: "resp-cancel", object: "response", created_at: 1, status: "in_progress", model, output: [] } })}\n\n`,
@@ -80,7 +94,14 @@ for (const provider of ["anthropic", "openai", "responses"] as const) {
     }
 
     function sendHeldToolCall(response: ServerResponse) {
-      if (provider === "anthropic") {
+      if (provider === "gemini") {
+        response.write(
+          `data: ${JSON.stringify({ candidates: [{ content: { role: "model", parts: [{ functionCall: { id: "held-call", name: "lookup", args: {} } }] } }], usageMetadata: { promptTokenCount: 12, candidatesTokenCount: 1, totalTokenCount: 13 } })}\n\n`,
+        );
+        response.write(
+          `data: ${JSON.stringify({ candidates: [{ content: { role: "model", parts: [{ text: "After held call" }] } }] })}\n\n`,
+        );
+      } else if (provider === "anthropic") {
         response.write(
           'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
         );
@@ -121,7 +142,11 @@ for (const provider of ["anthropic", "openai", "responses"] as const) {
 
     function finish(response: ServerResponse) {
       completed = true;
-      if (provider === "anthropic") {
+      if (provider === "gemini") {
+        response.end(
+          `data: ${JSON.stringify({ candidates: [{ content: { role: "model", parts: [] }, finishReason: "STOP" }], usageMetadata: { promptTokenCount: 12, candidatesTokenCount: 40, totalTokenCount: 52 } })}\n\n`,
+        );
+      } else if (provider === "anthropic") {
         response.write(
           'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
         );
@@ -208,7 +233,11 @@ for (const provider of ["anthropic", "openai", "responses"] as const) {
         });
       });
       await app.register(
-        provider === "anthropic" ? anthropicProxyRoutes : openaiProxyRoutes,
+        provider === "anthropic"
+          ? anthropicProxyRoutes
+          : provider === "gemini"
+            ? geminiProxyRoutes
+            : openaiProxyRoutes,
       );
       baseUrl = await app.listen({ port: 0, host: "127.0.0.1" });
     });
@@ -226,31 +255,41 @@ for (const provider of ["anthropic", "openai", "responses"] as const) {
       const path =
         provider === "anthropic"
           ? `/v1/anthropic/${agentId}/v1/messages`
-          : provider === "responses"
-            ? `/v1/openai/${agentId}/responses`
-            : `/v1/openai/${agentId}/chat/completions`;
+          : provider === "gemini"
+            ? `/v1/gemini/${agentId}/v1beta/models/${model}:streamGenerateContent`
+            : provider === "responses"
+              ? `/v1/openai/${agentId}/responses`
+              : `/v1/openai/${agentId}/chat/completions`;
       return fetch(`${baseUrl}${path}`, {
         method: "POST",
         signal,
         headers: {
           "content-type": "application/json",
           "x-api-key": "synthetic-key",
+          "x-goog-api-key": "synthetic-key",
           authorization: "Bearer synthetic-key",
           "anthropic-version": "2023-06-01",
           "x-archestra-virtual-key": token,
         },
-        body: JSON.stringify({
-          model,
-          max_tokens: 100,
-          stream,
-          ...(provider === "responses"
-            ? { input: "Count slowly" }
-            : { messages: [{ role: "user", content: "Count slowly" }] }),
-        }),
+        body: JSON.stringify(
+          provider === "gemini"
+            ? {
+                contents: [{ role: "user", parts: [{ text: "Count slowly" }] }],
+              }
+            : {
+                model,
+                max_tokens: 100,
+                stream,
+                ...(provider === "responses"
+                  ? { input: "Count slowly" }
+                  : { messages: [{ role: "user", content: "Count slowly" }] }),
+              },
+        ),
       });
     }
 
-    for (const stream of [true, false]) {
+    // SDK 1.45's early-abort timing gap is intentionally outside this coverage.
+    for (const stream of provider === "gemini" ? [] : [true, false]) {
       test(`cancels before upstream headers (stream=${stream})`, async () => {
         mode = "headers";
         const controller = new AbortController();
@@ -266,11 +305,17 @@ for (const provider of ["anthropic", "openai", "responses"] as const) {
         await vi.waitFor(() => expect(cleanups).toBe(1));
         expect(failures).toBe(1);
         expect(completions).toBe(0);
-        await vi.waitFor(async () =>
-          expect(
-            await InteractionModel.getAllInteractionsForProfile(agentId),
-          ).toHaveLength(1),
-        );
+        await vi.waitFor(async () => {
+          const rows =
+            await InteractionModel.getAllInteractionsForProfile(agentId);
+          expect(rows).toHaveLength(1);
+          if (provider === "responses" && stream) {
+            expect(rows[0].response).toMatchObject({
+              status: "incomplete",
+              error: { code: "client_disconnected" },
+            });
+          }
+        });
       });
     }
 
@@ -292,9 +337,11 @@ for (const provider of ["anthropic", "openai", "responses"] as const) {
         const rows =
           await InteractionModel.getAllInteractionsForProfile(agentId);
         expect(rows).toHaveLength(1);
-        expect(rows[0].outputTokens).toBe(provider === "anthropic" ? 1 : 0);
-        expect(rows[0].inputTokens).toBe(provider === "anthropic" ? 12 : 0);
-        if (provider === "anthropic") {
+        const reportsPartialUsage =
+          provider === "anthropic" || provider === "gemini";
+        expect(rows[0].outputTokens).toBe(reportsPartialUsage ? 1 : 0);
+        expect(rows[0].inputTokens).toBe(reportsPartialUsage ? 12 : 0);
+        if (reportsPartialUsage) {
           const receipts = await InteractionBillingModel.findMany([rows[0].id]);
           expect(receipts).toHaveLength(1);
           expect(receipts[0].usage.status).toBe("incomplete");
@@ -331,6 +378,15 @@ for (const provider of ["anthropic", "openai", "responses"] as const) {
         expect(rows[0].outputTokens).toBe(provider === "openai" ? 0 : 1);
         expect(JSON.stringify(rows[0].response)).not.toContain("held-call");
         expect(JSON.stringify(rows[0].response)).not.toContain("lookup");
+        if (provider === "responses") {
+          expect(rows[0].response).toMatchObject({
+            status: "incomplete",
+            error: {
+              code: "client_disconnected",
+              message: "Client disconnected during inference",
+            },
+          });
+        }
         if (provider !== "openai") {
           const receipts = await InteractionBillingModel.findMany([rows[0].id]);
           expect(receipts).toHaveLength(1);

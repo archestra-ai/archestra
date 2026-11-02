@@ -5,9 +5,9 @@ import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import { REPEAT_CALL_TERMINATION_CEILING } from "@/clients/tool-call-repeat-tracker";
 import ModelModel from "@/models/model";
 import { expect, test } from "@/test";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 import type { StageResult } from "./a2a/stage-attachments";
 import {
-  type A2AAttachment,
   buildUserContent,
   createLiveSubagentToolCallEmitter,
   emitSubagentToolCalls,

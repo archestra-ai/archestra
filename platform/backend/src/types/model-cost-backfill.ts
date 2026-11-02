@@ -2,7 +2,7 @@ import { SupportedProvidersSchema } from "@archestra/shared";
 import { isValidModelPrice } from "@archestra/shared/model-price";
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { PriceSourceSchema } from "./model";
 
 /**

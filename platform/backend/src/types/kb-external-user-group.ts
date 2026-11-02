@@ -3,7 +3,7 @@
 
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import type { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { ConnectorTypeSchema } from "./knowledge-connector";
 
 // Brand `connectorType` with the ConnectorType enum (drizzle-zod does not carry

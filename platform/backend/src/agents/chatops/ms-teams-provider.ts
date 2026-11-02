@@ -29,14 +29,12 @@ import {
   TurnContext,
   type WebResponse,
 } from "@microsoft/agents-hosting";
-import type { A2AAttachment } from "@/agents/a2a-executor";
 import { msTeamsDirectory } from "@/agents/chatops/ms-teams-directory";
 import {
   type MsTeamsOAuthClient,
   type MsTeamsSignInOutcome,
   msTeamsUserSignIn,
 } from "@/agents/chatops/ms-teams-user-sign-in";
-
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
@@ -59,6 +57,7 @@ import type {
   ThreadHistoryParams,
   UpdateApprovalRequestOptions,
 } from "@/types";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 import { detectImageType } from "@/utils/detect-image-type";
 import { stripHtmlTags } from "@/utils/strip-html";
 import { isUuid } from "@/utils/uuid";

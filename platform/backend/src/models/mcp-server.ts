@@ -28,7 +28,7 @@ import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
-import { constructFrozenMcpDeploymentName } from "@/k8s/shared";
+import { constructFrozenMcpDeploymentName } from "@/k8s/deployment-names";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import { computeSecretStorageType } from "@/secrets-manager/utils";

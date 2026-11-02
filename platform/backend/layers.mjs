@@ -81,6 +81,71 @@ const layerTable = [
       "src/clients/anthropic-workload-identity.ts",
       "src/clients/azure-url.ts",
       "src/clients/azure-openai-credentials.ts",
+      // Change notification the config-cached models subscribe to, and the
+      // notify hubs it runs on.
+      "src/services/config-cache.ts",
+      "src/services/shared-notify-hub.ts",
+      "src/services/pg-notify-hub.ts",
+      // Environment isolation, which the catalog, server, skill and tool
+      // models filter by.
+      "src/services/environments/environment-isolation.ts",
+      // Pricing and catalog data the model rows are enriched with, and the
+      // price table the Bedrock pricing reads.
+      "src/services/media-pricing.ts",
+      "src/services/bedrock-aws-pricing.ts",
+      "src/services/bedrock-aws-prices.json",
+      "src/clients/models-dev-client.ts",
+      // Contracts the agent run and app render diagnostics models store: the
+      // runtime contract, and the app diagnostics with the native app runtime
+      // they classify.
+      "src/services/agent-runtime/runtime-contract.ts",
+      "src/services/apps/app-diagnostics.ts",
+      "src/services/apps/app-runtime-native.ts",
+      // Credential and identity helpers the connected-client, provider key and
+      // auth models call.
+      "src/services/connected-client-oauth.ts",
+      "src/services/github-app-copilot-token.ts",
+      "src/services/identity-providers/linked-idp-auth.ts",
+      "src/services/apps/app-connector-resource.ts",
+      // The request origin the auth middleware reads.
+      "src/routes/request-origin.ts",
+      // The SRE agent's definition the permission and runtime models read, and
+      // the runtime image it names.
+      "src/services/sre-agent/definition.ts",
+      "src/skills-sandbox/runtime-image.ts",
+      // The session id header the interaction and routing models parse, and
+      // the meta header it is read from.
+      "src/routes/proxy/utils/headers/session-id.ts",
+      "src/routes/proxy/utils/headers/meta-header.ts",
+      // The deployment names the catalog, server and Playwright runtime
+      // models store (no Kubernetes client).
+      "src/k8s/deployment-names.ts",
+      // The ACL token format the knowledge base ACL models store.
+      "src/knowledge-base/acl-tokens.ts",
+      // The OpenAPPA records' encodings and identities.
+      "src/openappa/plaintext-envelope.ts",
+      "src/openappa/actor.ts",
+      "src/openappa/session-token.ts",
+      "src/openappa/policy-test-hashes.ts",
+      // The built-in skills catalogue and the skill file format the skill
+      // model reads, with the guide content the catalogue embeds.
+      "src/skills/built-in-skills.ts",
+      "src/skills/built-in-skill-branding.ts",
+      "src/skills/runtime-handoff.ts",
+      "src/skills/appa-guide.ts",
+      "src/skills/appa-guide-archestra-reference.ts",
+      "src/skills/appa-guide-contracts.ts",
+      "src/skills/appa-guide-validation.ts",
+      "src/skills/appa-guide-workflows.ts",
+      "src/archestra-mcp-server/app-authoring-guidance.ts",
+      "src/services/apps/app-ui-policy.ts",
+      "src/skills/parser.ts",
+      "src/skills/skill-manifest-serializer.ts",
+      // The Archestra tool metadata the tool model reads.
+      "src/archestra-mcp-server/metadata.ts",
+      // Constants the chatops config model validates against.
+      "src/agents/chatops/constants.ts",
+      "src/agents/incoming-email/constants.ts",
     ],
     project: APP,
   },

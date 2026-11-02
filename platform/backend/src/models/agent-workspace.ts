@@ -43,6 +43,18 @@ class AgentWorkspaceModel {
     return row ?? null;
   }
 
+  /** `findByWorkloadName` for many names at once, keyed by workload name. */
+  static async findByWorkloadNames(
+    names: string[],
+  ): Promise<Map<string, AgentWorkspace>> {
+    if (names.length === 0) return new Map();
+    const rows = await db
+      .select()
+      .from(schema.agentWorkspacesTable)
+      .where(inArray(schema.agentWorkspacesTable.workloadName, names));
+    return new Map(rows.map((row) => [row.workloadName, row]));
+  }
+
   // A new turn refreshes activity, never the workspace's original hard deadline.
   static async claim(params: {
     id: string;

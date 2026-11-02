@@ -889,6 +889,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             nativeQuestionToolName: nativeQuestion,
             nativeQuestionMaxOptions:
               binding.adapter?.nativeQuestion?.maxOptions,
+            nativeQuestionSupportsMultiple:
+              binding.adapter?.nativeQuestion?.supportsMultiple,
             gatewayQuestionUsesNativeForm:
               binding.adapter?.nativeQuestion?.requiresNativeForm,
           }),

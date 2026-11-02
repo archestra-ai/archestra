@@ -1992,6 +1992,8 @@ describe("asking through the client's own question tool", () => {
       declaredTools: [{ name: nativeTool }],
     };
     context.headers = headers;
+    context.provider = "openai";
+    context.interactionType = "openai:responses";
     const askUser = {
       question: "Accept this change for the rest of this session?",
       options: [
@@ -2003,6 +2005,25 @@ describe("asking through the client's own question tool", () => {
     const cacheSet = vi.spyOn(cacheManager, "set");
     try {
       await plugin.onSessionInit(context);
+      const request = {
+        input: [{ role: "user", content: "Ask me a question." }],
+      };
+      await plugin.onBeforeModel({ ...context, request });
+      const guidance = JSON.stringify(request.input);
+      expect(guidance).toContain(`ask with ${nativeTool}.`);
+      expect(guidance).not.toContain(`${nativeTool} (or`);
+      expect(guidance).toContain(
+        "For guardrail reviews, use my_gateway_archestra__ask_user with the offer IDs.",
+      );
+      expect(guidance).not.toContain(
+        "Honor the user's explicit choice of question tool.",
+      );
+      if (nativeTool === "ask_user") {
+        expect(guidance).toContain("This tool accepts a single selection.");
+        expect(guidance).toContain(
+          "Collect multiple selections with separate questions.",
+        );
+      }
       const toolCalls = [
         {
           id: "call_ask",
@@ -2393,6 +2414,8 @@ describe("asking through the client's own question tool", () => {
       declaredTools: [],
     };
     context.headers = { "x-opencode-session": "s" };
+    context.provider = "openai";
+    context.interactionType = "openai:responses";
     const toolCalls = [
       {
         id: "call_ask",
@@ -2404,11 +2427,24 @@ describe("asking through the client's own question tool", () => {
       },
     ];
 
-    await plugin.onSessionInit(context);
-    expect(
-      await plugin.onPrepareToolCalls({ ...context, toolCalls }),
-    ).toBeUndefined();
-    await plugin.onCleanup(context);
+    try {
+      await plugin.onSessionInit(context);
+      const request = {
+        input: [{ role: "user", content: "Ask me a question." }],
+      };
+      await plugin.onBeforeModel({ ...context, request });
+      const guidance = JSON.stringify(request.input);
+      expect(guidance).toContain("has no native question tool available");
+      expect(guidance).toContain(
+        "Do not send ordinary questions to the gateway",
+      );
+      expect(guidance).not.toContain("ask with");
+      expect(
+        await plugin.onPrepareToolCalls({ ...context, toolCalls }),
+      ).toBeUndefined();
+    } finally {
+      await plugin.onCleanup(context);
+    }
   });
 
   test("binds an OpenCode native approval to the staged offer", async () => {

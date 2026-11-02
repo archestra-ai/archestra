@@ -18,7 +18,6 @@
     "src/knowledge-base/connectors/gdrive/gdrive-oauth.ts",
     "src/knowledge-base/connectors/github/github-repository-settings.ts",
     "src/knowledge-base/connectors/identity-cache.ts",
-    "src/knowledge-base/connectors/pdf-utils.ts",
     "src/knowledge-base/connectors/perforce/p4-endpoint.ts",
     "src/knowledge-base/connectors/perforce/p4-protections.ts",
     "src/knowledge-base/connectors/perforce/p4-rest-client.ts",
@@ -30,9 +29,7 @@
     "src/knowledge-base/contextual-retrieval.ts",
     "src/knowledge-base/embedder.ts",
     "src/knowledge-base/embedding-clients/azure.ts",
-    "src/knowledge-base/embedding-clients/bedrock-models.ts",
     "src/knowledge-base/embedding-clients/bedrock.ts",
-    "src/knowledge-base/embedding-clients/cohere-models.ts",
     "src/knowledge-base/embedding-clients/cohere.ts",
     "src/knowledge-base/embedding-clients/gemini.ts",
     "src/knowledge-base/embedding-clients/index.ts",
@@ -40,8 +37,6 @@
     "src/knowledge-base/embedding-clients/registry.ts",
     "src/knowledge-base/embedding-clients/shared.ts",
     "src/knowledge-base/embedding-clients/types.ts",
-    "src/knowledge-base/embedding-clients/vertex-models.ts",
-    "src/knowledge-base/embedding-clients/voyage-models.ts",
     "src/knowledge-base/embedding-clients/voyage.ts",
     "src/knowledge-base/errors.ts",
     "src/knowledge-base/file-upload/extract.ts",
@@ -98,6 +93,7 @@
     },
     {
       "path": "./tsconfig.runtime.json"
-    }
+    },
+    { "path": "./tsconfig.llm-protocol.json" }
   ]
 }

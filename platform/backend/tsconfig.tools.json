@@ -21,6 +21,8 @@
     { "path": "./tsconfig.kb-core.json" },
     { "path": "./tsconfig.kb-connectors.json" },
     { "path": "./tsconfig.kb.json" },
+    { "path": "./tsconfig.llm-protocol.json" },
+    { "path": "./tsconfig.provider-adapters.json" },
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.test-support.json" }
   ]

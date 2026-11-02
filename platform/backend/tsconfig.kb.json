@@ -40,6 +40,7 @@
     {
       "path": "./tsconfig.runtime.json"
     },
+    { "path": "./tsconfig.llm-protocol.json" },
     {
       "path": "./tsconfig.kb-core.json"
     },

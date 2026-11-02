@@ -226,6 +226,8 @@ export const TYPE_CHECK_PROJECT_PEAK_BYTES: Readonly<
     "tsconfig.models-upper.json": 1.5 * 1024 ** 3,
     "tsconfig.llm-clients.json": 0.9 * 1024 ** 3,
     "tsconfig.runtime.json": 1.0 * 1024 ** 3,
+    "tsconfig.llm-protocol.json": 1.4 * 1024 ** 3,
+    "tsconfig.provider-adapters.json": 1.0 * 1024 ** 3,
     "tsconfig.kb-core.json": 1.3 * 1024 ** 3,
     "tsconfig.kb-connectors.json": 1.3 * 1024 ** 3,
     "tsconfig.kb.json": 0.8 * 1024 ** 3,

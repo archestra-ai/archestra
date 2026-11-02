@@ -54,6 +54,9 @@ function bindings(overrides: Partial<PortBindings> = {}): PortBindings {
     mcpToolDiscovery: unused,
     skillSandboxAvailability: unused,
     archestraToolCatalog: unused,
+    authSessions: unused,
+    authAccounts: unused,
+    jwksSigningKey: unused,
     ...overrides,
   };
 }

@@ -3,6 +3,7 @@ import {
   approvalPromptCall,
   formatArgumentLines,
   parseReviewedArguments,
+  redactCredentials,
   reviewedToolLabel,
 } from "./review-display";
 
@@ -103,5 +104,34 @@ describe("formatArgumentLines", () => {
 
   test("returns an empty string without arguments", () => {
     expect(formatArgumentLines({})).toBe("");
+  });
+});
+
+describe("redactCredentials", () => {
+  test.each([
+    [
+      "curl --header 'Authorization: Bearer abc.DEF-123_x' https://x/api",
+      "curl --header 'Authorization: Bearer [redacted]' https://x/api",
+    ],
+    [
+      'curl -H "proxy-authorization:Basic dXNlcjpw" -H "X-Api-Key: k1"',
+      'curl -H "proxy-authorization:Basic [redacted]" -H "X-Api-Key: [redacted]"',
+    ],
+    ["Authorization: rawtoken", "Authorization: [redacted]"],
+    ["PRIVATE-TOKEN: glpat-1 and more", "PRIVATE-TOKEN: [redacted] and more"],
+    [
+      "curl https://x/api/files --output out",
+      "curl https://x/api/files --output out",
+    ],
+  ])("%s", (input, expected) => {
+    expect(redactCredentials(input)).toBe(expected);
+  });
+
+  test("keeps a JSON payload parseable", () => {
+    const command = "curl -H 'Authorization: Bearer s3cr3t'\nnext";
+    const redacted = redactCredentials(JSON.stringify({ command }));
+    expect(parseReviewedArguments(redacted)).toEqual({
+      command: "curl -H 'Authorization: Bearer [redacted]'\nnext",
+    });
   });
 });

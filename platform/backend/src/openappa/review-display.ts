@@ -17,7 +17,7 @@ export function approvalPromptCall(params: {
   toolArgs?: Record<string, unknown>;
   reviewText?: string;
 } {
-  const { review } = params;
+  const review = params.review && displayedReview(params.review);
   if (review?.tool) {
     const toolArgs = parseReviewedArguments(review.arguments);
     return {
@@ -59,6 +59,42 @@ export function parseReviewedArguments(
     return undefined;
   }
 }
+
+/**
+ * The review as a person sees it, with credential header values replaced.
+ * Display only: the staged payload, its digest and the ruling stay bound to
+ * the exact call.
+ */
+export function displayedReview<
+  T extends { text: string; arguments?: string; summary?: string },
+>(review: T): T {
+  return {
+    ...review,
+    text: redactCredentials(review.text),
+    ...(review.arguments === undefined
+      ? {}
+      : { arguments: redactCredentials(review.arguments) }),
+    ...(review.summary === undefined
+      ? {}
+      : { summary: redactCredentials(review.summary) }),
+  };
+}
+
+/** @internal exported for tests */
+export function redactCredentials(text: string): string {
+  return text.replace(
+    CREDENTIAL_HEADER,
+    (_credential, header: string) => `${header}${REDACTED_CREDENTIAL}`,
+  );
+}
+
+const REDACTED_CREDENTIAL = "[redacted]";
+
+// A credential header as a command or JSON string carries it: the name, an
+// optional auth scheme, then the credential up to a quote, backslash or space,
+// so a JSON payload stays parseable.
+const CREDENTIAL_HEADER =
+  /((?:proxy-)?authorization\s*:\s*(?:[A-Za-z][\w-]*\s+)?|(?:api-key|auth-token|private-token)\s*:\s*)[^\s'"\\]+/gi;
 
 /**
  * Argument values as one line each, names padded to one column, longer

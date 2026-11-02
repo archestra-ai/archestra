@@ -269,6 +269,19 @@ describe("hitlReviewCard", () => {
   }) => hitlReviewCard({ base, review });
   const previewOf = (card: HitlReviewCard, label: string) =>
     card.options.find((option) => option.label === label)?.preview ?? "";
+
+  test("never shows a credential header the reviewed call carries", () => {
+    const secret = "tok_5c3f9a1e7b2d4c6a";
+    const command = `curl --fail --header 'Authorization: Bearer ${secret}' https://example.test/api/files/1`;
+    const review = {
+      tool: "Bash",
+      arguments: JSON.stringify({ command }),
+      text: `Approve this call?\n${command}`,
+    };
+    const { card } = cardFor(review);
+    expect(JSON.stringify(card)).not.toContain(secret);
+    expect(renderHitlReviewText(review)).not.toContain(secret);
+  });
   const fitsThePane = (preview: string) =>
     preview.length <= 2000 &&
     preview.split("\n").every((line) => [...line].length <= 34);

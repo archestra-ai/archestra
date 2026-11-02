@@ -6,7 +6,11 @@ import {
   isCommandExecutionTool,
   withoutArgumentCopies,
 } from "./command-normalization";
-import { parseReviewedArguments, reviewedToolLabel } from "./review-display";
+import {
+  displayedReview,
+  parseReviewedArguments,
+  reviewedToolLabel,
+} from "./review-display";
 
 /**
  * The native approval card for a review, and the complete review text a
@@ -105,7 +109,8 @@ export function hitlReviewCard(params: {
   /** The reviewer holds this exact payload's complete review text. */
   inspected?: boolean;
 }): { card: HitlReviewCard; approve: boolean } {
-  const { base, review } = params;
+  const { base } = params;
+  const review = displayedReview(params.review);
   const inspected = params.inspected === true;
   const card = {
     question: base.question,
@@ -163,7 +168,8 @@ export function hitlReviewCard(params: {
  * coverage, without the copy of the arguments it embeds; any other shape is
  * shown verbatim in a fence. Nothing is shortened or reordered.
  */
-export function renderHitlReviewText(review: HitlInspectableReview): string {
+export function renderHitlReviewText(staged: HitlInspectableReview): string {
+  const review = displayedReview(staged);
   const sections: string[] = [
     [
       "## Approval review",

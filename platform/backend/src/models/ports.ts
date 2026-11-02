@@ -7,9 +7,11 @@
  * Port members are function-typed properties, not methods, so that check is
  * strict: the implementation must accept every argument the port allows.
  *
- * Every entry point binds the ports and calls `assertPortsBound()` before it
- * does anything else, so a missed entry point fails when it starts, not on the
- * first call; a call through an unbound port throws as a second line.
+ * Every entry point imports `@/server/composition` first, which binds the
+ * ports as it loads, and calls `assertPortsBound()` before it does anything
+ * else, so a missed entry point fails when it starts, not on the first call; a
+ * call through an unbound port throws as a second line. The bindings live on
+ * `globalThis`, so a test that resets the module registry keeps them.
  */
 import type { CommonMcpToolDefinition, InternalMcpCatalog } from "@/types";
 
@@ -90,7 +92,7 @@ export type PortBindings = {
 
 /** Binds every port. Called once, by server/composition.ts. */
 export function bindPorts(next: PortBindings): void {
-  bindings = next;
+  store()[BINDINGS] = next;
 }
 
 /**
@@ -98,30 +100,34 @@ export function bindPorts(next: PortBindings): void {
  * after binding, so a missed binding stops the process at startup.
  */
 export function assertPortsBound(): void {
+  const bindings = store()[BINDINGS];
   const unbound = PORT_NAMES.filter((name) => !bindings?.[name]);
-  if (unbound.length > 0) {
-    throw new Error(
-      `Unbound ports: ${unbound.join(", ")}. The entry point must call bindAllPorts() from @/server/composition before it starts.`,
-    );
-  }
+  if (unbound.length > 0) throw unboundError(unbound);
 }
 
 /** The implementation behind a port, loaded on first use. */
 export async function port<Name extends keyof Ports>(
   name: Name,
 ): Promise<Ports[Name]> {
-  const load = bindings?.[name];
-  if (!load) {
-    throw new Error(
-      `Port "${name}" is unbound. The entry point must call bindAllPorts() from @/server/composition before it starts.`,
-    );
-  }
+  const load = store()[BINDINGS]?.[name];
+  if (!load) throw unboundError([name]);
   return load();
 }
 
 // ===== Internal helpers =====
 
-let bindings: PortBindings | null = null;
+/** Where the bindings live: one slot per process, shared by every module instance. */
+const BINDINGS = Symbol.for("archestra.backend.ports");
+
+function store(): { [BINDINGS]?: PortBindings } {
+  return globalThis as { [BINDINGS]?: PortBindings };
+}
+
+function unboundError(names: readonly string[]): Error {
+  return new Error(
+    `Unbound ports: ${names.join(", ")}. The entry point must import @/server/composition before anything else.`,
+  );
+}
 
 const PORT_NAMES = [
   "mcpServerRuntime",

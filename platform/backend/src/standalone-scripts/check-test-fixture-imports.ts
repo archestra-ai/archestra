@@ -1,12 +1,12 @@
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import { assertPortsBound } from "@/models/ports";
-import { bindAllPorts } from "@/server/composition";
 
-// Bind the ports of the layers below before anything uses them, and stop here
-// if one is unbound (server/composition.ts).
-bindAllPorts();
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
 assertPortsBound();
 
 const sourceRoot = path.resolve(import.meta.dirname, "../");

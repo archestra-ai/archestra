@@ -1,14 +1,14 @@
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
 import db, { initializeDatabase } from "@/database";
 import { assertPortsBound } from "@/models/ports";
-import { bindAllPorts } from "@/server/composition";
 import {
   parseInteractionUserActivityArguments,
   rebuildInteractionUserActivityCommand,
 } from "./rebuild-interaction-user-activity-command";
 
-// Bind the ports of the layers below before anything uses them, and stop here
-// if one is unbound (server/composition.ts).
-bindAllPorts();
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
 assertPortsBound();
 
 const options = parseInteractionUserActivityArguments(process.argv.slice(2));

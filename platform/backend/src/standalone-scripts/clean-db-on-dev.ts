@@ -1,14 +1,14 @@
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
 import { pathToFileURL } from "node:url";
 import { sql } from "drizzle-orm";
 import config from "@/config";
 import db, { initializeDatabase } from "@/database";
 import logger from "@/logging";
 import { assertPortsBound } from "@/models/ports";
-import { bindAllPorts } from "@/server/composition";
 
-// Bind the ports of the layers below before anything uses them, and stop here
-// if one is unbound (server/composition.ts).
-bindAllPorts();
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
 assertPortsBound();
 
 /**

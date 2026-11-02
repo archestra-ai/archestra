@@ -1,3 +1,5 @@
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
 import { pathToFileURL } from "node:url";
 import {
   ADMIN_ROLE_NAME,
@@ -17,7 +19,6 @@ import {
 } from "@/models";
 import AgentUsageModel from "@/models/agent-usage";
 import { assertPortsBound } from "@/models/ports";
-import { bindAllPorts } from "@/server/composition";
 import {
   seedArchestraCatalogAndTools,
   seedDefaultUserAndOrg,
@@ -32,9 +33,8 @@ import {
   type MockAgentWithTeams,
 } from "./mocks";
 
-// Bind the ports of the layers below before anything uses them, and stop here
-// if one is unbound (server/composition.ts).
-bindAllPorts();
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
 assertPortsBound();
 
 // Set to true to create tools and interactions

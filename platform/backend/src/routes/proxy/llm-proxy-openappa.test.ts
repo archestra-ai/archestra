@@ -4717,17 +4717,14 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     test.each([
       true,
       false,
-    ])("presents the model's own ask_user question as AskUserQuestion and returns the answer as its result (stream=%s)", async (stream) => {
+    ])("preserves the gateway question and returns its answer as the tool result (stream=%s)", async (stream) => {
       config.openappa = { ...config.openappa, offerSigningSecret: "" };
       const askUser = {
         name: "archestra__ask_user",
         input: {
           question: "Which report format?",
           header: "Format",
-          options: [
-            { label: "Short", preview: "model-written preview" },
-            { label: "Long" },
-          ],
+          options: [{ label: "Short" }, { label: "Long" }],
         },
       };
       options = {
@@ -4736,7 +4733,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         nonStreamingToolUse: askUser,
         streamingToolUse: askUser,
       };
-      const opening = [{ role: "user", content: "Write the report" }];
+      const opening = [
+        {
+          role: "user",
+          content: "Write the report. Ask me with archestra__ask_user.",
+        },
+      ];
 
       const asked = await app.inject({
         method: "POST",
@@ -4749,26 +4751,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(asked.statusCode, asked.body).toBe(200);
       expect(asked.body).not.toContain("is not loaded in this session");
       const question = noticeFrom(asked.body, stream);
-      expect(question.name).toBe("AskUserQuestion");
-      // The model wrote these options, so they carry no preview.
-      expect(question.input).toEqual({
-        questions: [
-          {
-            question: "Which report format?",
-            header: "Format",
-            options: [
-              { label: "Short", description: "Short" },
-              { label: "Long", description: "Long" },
-            ],
-            multiSelect: false,
-          },
-        ],
-      });
+      expect(question.name).toBe(askUser.name);
+      expect(question.input).toEqual(askUser.input);
 
       options = { includeToolUse: false, streamStopReason: "end_turn" };
       providerRequests.length = 0;
-      const answer =
-        'Your questions have been answered: "Which report format?"="Long". You can now continue with the user\'s answers in mind.';
+      const answer = JSON.stringify({ action: "accept", selected: ["Long"] });
       const answered = await app.inject({
         method: "POST",
         url: url(),

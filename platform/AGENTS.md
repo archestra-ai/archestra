@@ -27,7 +27,10 @@
      (about 3.5 GB once pages are open). A pod's bootstrap only runs
      `scripts/dev-lite.sh prepare` (dependencies, PostgreSQL, migrations):
      run `up` when you need the servers; it builds the backend and the
-     frontend one after the other, then starts them. `pause` and `resume`
+     frontend one after the other, then starts them. On a clean checkout of
+     a main commit it installs the frontend CI built for that commit
+     instead, and a rebuild after edits starts from CI's build cache
+     (`scripts/frontend-prebuilt.mjs`). `pause` and `resume`
      stop and restart the two servers, keeping PostgreSQL and the builds, to
      give one memory-heavy command their memory. MCP server installs, nested Agent
      Runtime, the code runtime, Vault, Keycloak specs and the `api-k8s`,

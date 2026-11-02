@@ -53,6 +53,20 @@ publishes for main's `platform/archestra-rs` tree (`scripts/napi-prebuilt.mjs`,
 about a second) and builds them with cargo only for a changed tree (about 6
 minutes at 16 CPUs, longer at 2 or 4).
 
+The production frontend works the same way. CI builds it for every main
+commit that changes it, exactly as `up` builds it in an Agent Runtime
+(`.github/workflows/frontend-dev-cache.yml`), and publishes the standalone
+server (about 40 MB) and that build's Turbopack cache (about 420 MB). On a
+clean checkout of a published commit, `up` installs the server in a few
+seconds instead of building for minutes at about 3.5 GiB. After an edit, or on
+a commit CI has not published, the build starts from the cache of the newest
+published commit with the same Next configuration, dependencies and platform
+version. A small change then rebuilds in about 1.2 to 1.8 GiB. A cache from
+another configuration does not help: Turbopack drops it whole.
+`scripts/frontend-prebuilt.mjs` holds the key, which covers the frontend's
+sources, its configuration, the build recipe and the environment the build
+reads. `ARCHESTRA_DEV_FRONTEND_PREBUILT=false` turns both off.
+
 ## Use
 
 In a checkout inside the runtime:

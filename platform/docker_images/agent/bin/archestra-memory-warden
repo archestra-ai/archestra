@@ -44,6 +44,8 @@ LOG = os.environ.get(
 INTERVAL = float(os.environ.get("ARCHESTRA_MEMORY_WARDEN_INTERVAL", "0.2"))
 # After a stop, the kernel needs a moment to hand the memory back.
 COOLDOWN_SECONDS = 2.0
+# A command smaller than this is never worth stopping.
+MIN_VICTIM_BYTES = 64 << 20
 # Memory pressure that stalls every task this share of the last 10 s means the
 # container is thrashing on the page cache it has left.
 PRESSURE_FULL_AVG10 = 20.0
@@ -195,6 +197,7 @@ def choose_victim(table, roots, own_pid):
         pid
         for pid, info in table.items()
         if pid not in (1, own_pid)
+        and pid not in roots
         and info["score"] == COMMAND_SCORE
         and under_agent(pid)
     }
@@ -217,18 +220,46 @@ def choose_victim(table, roots, own_pid):
 
 
 def stop(pids, message):
+    # Append without blocking: the command's stderr may be its log file (never
+    # truncate it) or a pipe nobody reads (never wait on it).
+    flags = os.O_WRONLY | os.O_APPEND | os.O_NONBLOCK | os.O_NOCTTY
     for pid in pids:
         try:
-            with open(f"/proc/{pid}/fd/2", "w") as stderr:
-                stderr.write(message + "\n")
+            fd = os.open(f"/proc/{pid}/fd/2", flags)
+        except OSError:
+            continue
+        try:
+            os.write(fd, (message + "\n").encode())
             break
         except OSError:
             continue
+        finally:
+            os.close(fd)
     for pid in pids:
         try:
             os.kill(pid, signal.SIGKILL)
         except OSError:
             pass
+
+
+# The last time the warden said it had nothing worth stopping.
+_NOTHING_TO_STOP_AT = [0.0]
+
+
+def note_nothing_to_stop(used, limit, largest):
+    """Say once a minute that memory is short but no agent command holds enough to free."""
+    now = time.time()
+    if now - _NOTHING_TO_STOP_AT[0] < 60:
+        return
+    _NOTHING_TO_STOP_AT[0] = now
+    record = {
+        "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "note": "nothing to stop",
+        "used_bytes": used,
+        "limit_bytes": limit,
+        "largest_command_bytes": largest,
+    }
+    print(f"archestra-memory-warden: {json.dumps(record)}", file=sys.stderr)
 
 
 def gib(value):
@@ -249,6 +280,13 @@ def check(own_pid):
     if victim is None:
         return False
     pids, anon, cmd = victim
+    # Stopping a command that holds less than the overshoot frees too little:
+    # the memory is held by what the warden never stops (a dev stack, tmpfs),
+    # and every small command would be killed in turn.
+    overshoot = used - (limit - reserve_bytes(limit))
+    if anon < max(MIN_VICTIM_BYTES, overshoot):
+        note_nothing_to_stop(used, limit, anon)
+        return False
     message = (
         f"archestra-memory-warden: stopped this command ({gib(anon)}): the container "
         f"reached {gib(used)} of its {gib(limit)} memory limit, and at the limit the "

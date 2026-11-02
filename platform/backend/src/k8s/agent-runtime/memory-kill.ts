@@ -135,6 +135,15 @@ export function memoryKillBetween(
 }
 
 /**
+ * A kill that can explain or end a turn: the kernel's. A stop by the memory
+ * warden takes one of the agent's commands, which the agent sees fail and
+ * survives; it is logged, but a later failure of the turn is not blamed on it.
+ */
+export function turnEndingKill(kill: MemoryKill | null): MemoryKill | null {
+  return kill && kill.killed > 0 ? kill : null;
+}
+
+/**
  * The failure reason for a run whose processes the kernel killed for memory.
  * A container that hit its own limit needs a larger tier or less at once; a
  * node that ran out of memory does not, and the run can simply start again.

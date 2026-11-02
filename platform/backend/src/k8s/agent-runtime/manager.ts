@@ -96,6 +96,7 @@ import {
   parseMemoryEvents,
   READ_MEMORY_EVENTS_COMMAND,
   splitTurnPoll,
+  turnEndingKill,
 } from "./memory-kill";
 import {
   AGENT_RUNTIME_LEASE_SCOPE,
@@ -1319,7 +1320,9 @@ class AgentRuntimeManager {
             }
             const turnFailure = agentRuntimeTurnFailure(result);
             const turnReason = agentRuntimeFailureReason(result);
-            const killed = memoryKillBetween(running.atStart, poll.memory);
+            const killed = turnEndingKill(
+              memoryKillBetween(running.atStart, poll.memory),
+            );
             if (!killed) {
               return {
                 outcome: "failed",
@@ -1373,7 +1376,9 @@ class AgentRuntimeManager {
           // read the counters.
           const killed =
             pod?.status?.phase === "Running" && running
-              ? memoryKillBetween(running.atStart, running.latest)
+              ? turnEndingKill(
+                  memoryKillBetween(running.atStart, running.latest),
+                )
               : null;
           const failure = agentRunFailure(
             podFailure && pod
@@ -1406,7 +1411,9 @@ class AgentRuntimeManager {
           ).catch(() => undefined);
           if (params.abortSignal?.aborted) break;
           const killed =
-            now === undefined ? null : memoryKillBetween(running.atStart, now);
+            now === undefined
+              ? null
+              : turnEndingKill(memoryKillBetween(running.atStart, now));
           if (killed) {
             // A container that hit its limit ran out of memory; a node that
             // did took the process with it, which says nothing about the

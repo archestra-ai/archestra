@@ -128,10 +128,12 @@ limit (7.5% of it, at least 0.3 GiB and at most 1 GiB), or memory pressure
 stalls the container while close to it, it SIGKILLs the agent command with the
 most anonymous memory: a process with score 1000 under the agent's terminal
 (the tmux server on the default socket), with its whole process group when
-every member is one. The client, its launcher, tmux, PID 1 and anything
+every member is one, and only when that frees at least the overshoot (and
+64 MiB): memory held by what it never stops is reported once a minute instead
+of costing every small command. The client, its launcher, tmux, PID 1 and anything
 detached from the agent's terminal (a dev stack's servers on their own tmux
 socket, PostgreSQL) are never stopped. The command's stderr gets a line saying
-why; each stop is a JSON line in `/var/run/archestra/memory-warden.log`, which
+why (appended, without blocking); each stop is a JSON line in `/var/run/archestra/memory-warden.log`, which
 the platform's memory-kill report and the repository's type-check and test
 reports count next to the kernel's `oom_kill`. On a node with
 `singleProcessOOMKill` the kernel's own choice backs it up.

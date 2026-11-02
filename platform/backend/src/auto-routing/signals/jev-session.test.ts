@@ -275,7 +275,7 @@ describe("JevSessionSource", () => {
     expect(state.tools).toBe("Available tools: 2\na_search\nz_lookup");
   });
 
-  test("preserves long namespaced tool identifiers while redacting recognizable credentials", async () => {
+  test("preserves MCP tool identifiers while redacting prefixed and opaque credentials", async () => {
     let state: Record<string, string> = {};
     server.use(
       http.post(TYPESAFE_ENDPOINT, async ({ request }) => {
@@ -287,10 +287,21 @@ describe("JevSessionSource", () => {
     const name =
       "mcp__example__inspect_database_migration_execution_permissions";
     await source.read(
-      { ...INPUT, tools: [{ name }, { name: `sk-${"b".repeat(30)}` }] },
+      {
+        ...INPUT,
+        tools: [
+          { name },
+          { name: `sk-${"b".repeat(30)}` },
+          { name: "a1b2".repeat(16) },
+          { name: "c2Vuc2l0aXZl".repeat(6) },
+          { name: `mcp__example__sk-${"b".repeat(30)}` },
+        ],
+      },
       ctx(),
     );
-    expect(state.tools).toBe(`Available tools: 2\n<redacted>\n${name}`);
+    expect(state.tools).toBe(
+      `Available tools: 5\n<redacted>\n<redacted>\n<redacted>\nmcp__example__<redacted>\n${name}`,
+    );
   });
 
   test("rejects oversized name lists before the scorer call instead of silently taking a prefix", async () => {

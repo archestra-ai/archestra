@@ -203,9 +203,8 @@ function sessionState(input: PreRunInput): Record<string, string> {
     });
   }
   if (input.tools?.length) {
-    // Namespaced tool identifiers often exceed the opaque-token heuristic's 40 characters.
     const names = input.tools
-      .map((tool) => tool.name.replace(CREDENTIAL, "<redacted>"))
+      .map((tool) => redactToolName(tool.name))
       .sort()
       .join("\n");
     // Reject pathological input rather than silently hide capabilities from the scorer.
@@ -222,6 +221,13 @@ function sessionState(input: PreRunInput): Record<string, string> {
 
 function redact(text: string): string {
   return text.replace(SECRET, "<redacted>");
+}
+
+function redactToolName(name: string): string {
+  // Recognized MCP identifiers often exceed 40 characters; opaque names still need redaction.
+  return /^mcp__[A-Za-z0-9_-]+__[A-Za-z0-9_-]+$/.test(name)
+    ? name.replace(CREDENTIAL, "<redacted>")
+    : redact(name);
 }
 
 function clip(

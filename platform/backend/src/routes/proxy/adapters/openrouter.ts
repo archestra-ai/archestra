@@ -57,7 +57,7 @@ class OpenrouterRequestAdapter
   implements LLMRequestAdapter<OpenrouterRequest, OpenrouterMessages>
 {
   readonly provider = "openrouter" as const;
-  private delegate: OpenAIRequestAdapter;
+  private delegate: OpenAIRequestAdapter<OpenrouterRequest>;
   private readonly request: OpenrouterRequest;
 
   constructor(request: OpenrouterRequest) {

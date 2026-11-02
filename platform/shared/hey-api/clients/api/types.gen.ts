@@ -469,6 +469,21 @@ export type OpenAiChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -2185,6 +2200,21 @@ export type CerebrasChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -2821,6 +2851,21 @@ export type MistralChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -3335,6 +3380,21 @@ export type PerplexityChatCompletionRequestInput = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -3854,6 +3914,21 @@ export type GroqChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -4367,6 +4442,10 @@ export type OpenrouterChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text' | 'json_object' | 'json_schema';
+        [key: string]: unknown;
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -4383,10 +4462,6 @@ export type OpenrouterChatCompletionRequestInput = {
         include_usage?: boolean;
     } | null;
     user?: string;
-    response_format?: {
-        type: 'text' | 'json_object' | 'json_schema';
-        [key: string]: unknown;
-    };
     reasoning?: {
         enabled?: boolean;
         effort?: string;
@@ -5917,6 +5992,21 @@ export type DeepSeekChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -6432,6 +6522,21 @@ export type ArchestraChatCompletionRequestInput = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -7518,6 +7623,21 @@ export type XaiChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -8101,6 +8221,21 @@ export type OpenAiChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -9819,6 +9954,21 @@ export type CerebrasChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -10455,6 +10605,21 @@ export type MistralChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -10969,6 +11134,21 @@ export type PerplexityChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -11488,6 +11668,21 @@ export type GroqChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -12001,6 +12196,10 @@ export type OpenrouterChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text' | 'json_object' | 'json_schema';
+        [key: string]: unknown;
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -12017,10 +12216,6 @@ export type OpenrouterChatCompletionRequest = {
         include_usage?: boolean;
     } | null;
     user?: string;
-    response_format?: {
-        type: 'text' | 'json_object' | 'json_schema';
-        [key: string]: unknown;
-    };
     reasoning?: {
         enabled?: boolean;
         effort?: string;
@@ -13551,6 +13746,21 @@ export type DeepSeekChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -14066,6 +14276,21 @@ export type ArchestraChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -15150,6 +15375,21 @@ export type XaiChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -51282,6 +51522,21 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -51887,6 +52142,21 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                         syntax: 'lark' | 'regex';
                     };
                 };
+            };
+        };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
             };
         };
         temperature?: number | null;
@@ -58285,6 +58555,21 @@ export type GetInteractionsResponses = {
                         };
                     };
                 };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                };
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
@@ -58731,6 +59016,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -59326,6 +59626,21 @@ export type GetInteractionsResponses = {
                         };
                     };
                 };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                };
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
@@ -59772,6 +60087,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -60367,6 +60697,21 @@ export type GetInteractionsResponses = {
                         };
                     };
                 };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                };
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
@@ -60813,6 +61158,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -66012,6 +66372,21 @@ export type GetInteractionResponses = {
                     };
                 };
             };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            };
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
@@ -66458,6 +66833,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -67053,6 +67443,21 @@ export type GetInteractionResponses = {
                     };
                 };
             };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            };
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
@@ -67499,6 +67904,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -68094,6 +68514,21 @@ export type GetInteractionResponses = {
                     };
                 };
             };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            };
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
@@ -68540,6 +68975,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -74192,6 +74642,21 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -74797,6 +75262,21 @@ export type KimiChatCompletionsWithAgentData = {
                         syntax: 'lark' | 'regex';
                     };
                 };
+            };
+        };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
             };
         };
         temperature?: number | null;
@@ -90473,6 +90953,21 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -91078,6 +91573,21 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                         syntax: 'lark' | 'regex';
                     };
                 };
+            };
+        };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
             };
         };
         temperature?: number | null;
@@ -93227,6 +93737,21 @@ export type ModelRouterChatCompletionsWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -93836,6 +94361,21 @@ export type ModelRouterChatCompletionsWithAgentData = {
                         syntax: 'lark' | 'regex';
                     };
                 };
+            };
+        };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
             };
         };
         temperature?: number | null;

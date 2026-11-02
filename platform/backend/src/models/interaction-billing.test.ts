@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { priceBillingUsage } from "@/services/billable-usage";
@@ -84,6 +84,99 @@ async function record(params: {
     },
   };
 }
+
+test("verified aliases settle canonical rows once and count toward default user caps", async ({
+  makeAgent,
+  makeOrganization,
+  makeUser,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  const agent = await makeAgent({ organizationId: org.id });
+  const canonical = "accounts/fireworks/models/glm-5p3-flash";
+  const alias = "glm-5p3-flash";
+  const caps = [];
+  for (const model of [[alias], [canonical], [alias, canonical], ["other"]]) {
+    caps.push(
+      await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1,
+        model,
+        lastCleanup: new Date(),
+      }),
+    );
+  }
+  await EnvironmentDefaultUserLimitModel.create({
+    organizationId: org.id,
+    environmentId: null,
+    limitValue: 1,
+    model: [alias, canonical],
+    cleanupInterval: "1w",
+  });
+  const data = await record({ agent, userId: user.id, cacheOnly: true });
+  const component = data.billingUsage?.components[0];
+  if (!component || !data.billingUsage) throw new Error("Missing usage");
+  component.model = canonical;
+  component.modelAliases = [alias];
+  component.cost = "0.6000000000";
+  data.billingUsage.cost = component.cost;
+  data.cost = component.cost;
+  data.model = canonical;
+  await InteractionModel.create(data);
+  await InteractionModel.create(data);
+  const breakdowns = await LimitModel.getModelUsageBreakdowns(
+    caps.map((cap) => cap.id),
+  );
+  for (const cap of caps.slice(0, 3)) {
+    expect(breakdowns.get(cap.id)?.filter((row) => row.cost > 0)).toEqual([
+      expect.objectContaining({ model: canonical, cost: 0.6 }),
+    ]);
+  }
+  expect(breakdowns.get(caps[3].id)?.every((row) => row.cost === 0)).toBe(true);
+  const charges = await db
+    .select()
+    .from(schema.limitBillingUsageTable)
+    .where(
+      inArray(
+        schema.limitBillingUsageTable.limitId,
+        caps.map((cap) => cap.id),
+      ),
+    );
+  expect(charges).toHaveLength(3);
+  for (const charge of charges) {
+    expect(charge.model).toBe(canonical);
+    expect(Number(charge.cost)).toBe(0.6);
+  }
+  const check = () =>
+    LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+      userId: user.id,
+      model: canonical,
+      modelAliases: [alias],
+    });
+  // Listing both names must not double a single component's 60-cent charge.
+  expect(await check()).toBeNull();
+  // The second distinct receipt brings both explicit and inherited caps over $1.
+  data.id = uuidv7();
+  await InteractionModel.create(data);
+  expect((await check())?.[2]).toMatchObject({ source: "default_user" });
+  expect(
+    await LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+      model: canonical,
+      modelAliases: [alias],
+    }),
+  ).not.toBeNull();
+  // Alias-only inherited caps must count the stored canonical components too.
+  const inherited = await EnvironmentDefaultUserLimitModel.findGlobal(org.id);
+  if (!inherited) throw new Error("Missing default limit");
+  await EnvironmentDefaultUserLimitModel.patch(inherited.id, {
+    model: [alias],
+  });
+  expect((await check())?.[2]).toMatchObject({ source: "default_user" });
+});
 
 test("settles once across replay, keeps historical rates, and replay after reset cannot charge a new window", async ({
   makeAgent,

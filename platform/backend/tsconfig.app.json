@@ -621,7 +621,9 @@
     "src/routes/proxy/utils/cost-optimization.ts",
     "src/routes/chat/normalization/apply-prompt-cache.ts",
 
-    "src/openappa/subagent-binding.ts",
+    // Provider clients and billing helpers are checked in tsconfig.llm-clients.json.
+    "src/services/fireworks-model.ts",
+    // Provider clients and billing helpers are checked in tsconfig.llm-clients.json.
     "src/clients/llm-client.ts",
     "src/clients/anthropic-endpoint.ts",
     "src/clients/azure-media-language-model.ts",
@@ -765,6 +767,7 @@
     "src/k8s/deployment-names.ts",
     "src/knowledge-base/acl-tokens.ts",
     "src/openappa/actor.ts",
+    "src/openappa/subagent-binding.ts",
     "src/openappa/plaintext-envelope.ts",
     "src/openappa/policy-test-hashes.ts",
     "src/openappa/session-token.ts",

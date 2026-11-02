@@ -53,6 +53,9 @@ export const MODEL_POOL_MAX_RESPONSE_TIMEOUT_MS = 30 * 60_000;
 
 /** What a request's interaction rows record about the attempt that wrote them. */
 export interface UpstreamAttempt {
+  modelAliases?: string[];
+  billingEndpoint?: "fireworks" | "other";
+  requestedModel?: string;
   providerApiKeyId?: string;
   modelPoolId?: string;
   attempt?: number;

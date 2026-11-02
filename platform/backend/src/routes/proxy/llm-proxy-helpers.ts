@@ -49,6 +49,7 @@ import { metrics } from "@/observability";
 import type { ProxyRequestFailure } from "@/observability/llm-proxy-request";
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import type { SpanTeamInfo, SpanUserInfo } from "@/observability/tracing";
+import { toolCallArgumentsText } from "@/openappa/tool-call-arguments";
 import type { LlmProxyToolCallRefusal } from "@/proxy/plugins/registry";
 import { getTokenizer } from "@/tokenizers";
 import type {
@@ -130,9 +131,10 @@ export function normalizeToolCallsForPolicy(
     let args: unknown;
     let argsString: string;
     if (typeof tc.arguments === "string") {
+      const text = toolCallArgumentsText(tc.arguments);
       try {
-        args = JSON.parse(tc.arguments);
-        argsString = tc.arguments;
+        args = JSON.parse(text);
+        argsString = text;
       } catch {
         args = undefined;
         argsString = JSON.stringify({ raw: tc.arguments });
@@ -279,7 +281,7 @@ export function planDispatchModeToolCallRewrites(params: {
     // shape and dispatch something the model did not ask for.
     let toolArgs: unknown;
     try {
-      toolArgs = JSON.parse(toolCall.arguments || "{}");
+      toolArgs = JSON.parse(toolCallArgumentsText(toolCall.arguments));
     } catch {
       return toolCall;
     }

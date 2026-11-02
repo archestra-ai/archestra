@@ -159,6 +159,96 @@ export function typeScriptMemorySettings(
 }
 
 /**
+ * The peak a package's type check declares, wrappers included, measured at one
+ * checker in a 4 GiB pod; unknown packages declare none and never pause the
+ * servers.
+ */
+export const TYPE_CHECK_PEAK_BYTES: Readonly<Record<string, number>> = {
+  backend: 5.6 * 1024 ** 3,
+  frontend: 2.8 * 1024 ** 3,
+  shared: 0.7 * 1024 ** 3,
+  "e2e-tests": 0.8 * 1024 ** 3,
+};
+
+/**
+ * The peak of each project's check in a package whose tsconfig.json is a
+ * solution (`scripts/type-check-solution.ts`), by project config relative to
+ * the package: the compiler's measured peak at one checker on 2 CPUs, plus
+ * 0.2 GiB for the runner. A project without an entry declares none and never
+ * pauses the servers.
+ */
+export const TYPE_CHECK_PROJECT_PEAK_BYTES: Readonly<
+  Record<string, Readonly<Record<string, number>>>
+> = {
+  backend: {
+    "../shared/tsconfig.lib.json": 1.0 * 1024 ** 3,
+    "../tools/drizzle-migration-linter/tsconfig.lib.json": 0.3 * 1024 ** 3,
+    "tsconfig.schema.json": 1.5 * 1024 ** 3,
+    "tsconfig.app.json": 4.8 * 1024 ** 3,
+    "tsconfig.test-support.json": 1.5 * 1024 ** 3,
+    "tsconfig.tests-database.json": 1.1 * 1024 ** 3,
+    "tsconfig.tests-core.json": 1.6 * 1024 ** 3,
+    "tsconfig.tests-models-a.json": 1.3 * 1024 ** 3,
+    "tsconfig.tests-models-b.json": 1.6 * 1024 ** 3,
+    "tsconfig.tests-models-c.json": 1.0 * 1024 ** 3,
+    "tsconfig.tests-models-d.json": 1.4 * 1024 ** 3,
+    "tsconfig.tests-services.json": 1.5 * 1024 ** 3,
+    "tsconfig.tests-domain-a.json": 1.2 * 1024 ** 3,
+    "tsconfig.tests-domain-b.json": 1.5 * 1024 ** 3,
+    "tsconfig.tests-domain-c.json": 1.4 * 1024 ** 3,
+    "tsconfig.tests-other.json": 1.6 * 1024 ** 3,
+    "tsconfig.tests-routes-proxy-a.json": 1.3 * 1024 ** 3,
+    "tsconfig.tests-routes-proxy-b.json": 1.5 * 1024 ** 3,
+    "tsconfig.tests-routes-proxy-c.json": 1.3 * 1024 ** 3,
+    "tsconfig.tests-routes-chat.json": 1.2 * 1024 ** 3,
+    "tsconfig.tests-routes-rest-a.json": 1.4 * 1024 ** 3,
+    "tsconfig.tests-routes-rest-b.json": 1.6 * 1024 ** 3,
+    "tsconfig.tests-routes-rest-c.json": 1.6 * 1024 ** 3,
+    "tsconfig.tools.json": 0.9 * 1024 ** 3,
+  },
+};
+
+/**
+ * Whether memory-heavy commands take turns (`scripts/heavy-lane.ts`): in a
+ * container below 16 GiB, where two of them side by side can take the
+ * container past its limit.
+ */
+export function heavyLaneActive(envelope: ResourceEnvelope): boolean {
+  return (
+    envelope.constrained && envelope.totalMemoryBytes < HEAVY_LANE_BELOW_BYTES
+  );
+}
+
+/**
+ * The memory one heavy command can have: beside the dev stack's backend and
+ * frontend servers, and with them paused (PostgreSQL keeps running). The 4 GiB
+ * budget measured in staging pods: per pod 1.12 GiB for the runtime, the
+ * agent's harness, kernel memory, a page-cache floor the tools still run on
+ * and a margin; PostgreSQL 0.2; the two servers 0.85 after use. In a 4 GiB pod
+ * that leaves 1.83 GiB beside the servers and 2.68 with them paused.
+ */
+export function heavyLaneCeilings(envelope: ResourceEnvelope): {
+  besideServersBytes: number;
+  serversPausedBytes: number;
+} {
+  const pausedBytes =
+    envelope.totalMemoryBytes - POD_FIXED_BYTES - DEV_STACK_DATABASE_BYTES;
+  return {
+    besideServersBytes: pausedBytes - DEV_STACK_SERVERS_BYTES,
+    serversPausedBytes: pausedBytes,
+  };
+}
+
+/** Whether a command of this peak has the servers paused while it runs. */
+export function pausesServers(
+  envelope: ResourceEnvelope,
+  peakBytes: number | undefined,
+): boolean {
+  if (peakBytes === undefined || !heavyLaneActive(envelope)) return false;
+  return peakBytes > heavyLaneCeilings(envelope).besideServersBytes;
+}
+
+/**
  * The memory counters of the cgroup a process runs in (cgroup v2). A
  * container's memory limit is enforced by the kernel, which kills a process in
  * it once the container reaches the limit; the killed command only says
@@ -168,6 +258,12 @@ export function typeScriptMemorySettings(
 export interface CgroupMemory {
   /** Processes of the cgroup an OOM killer killed (`memory.events` oom_kill). */
   oomKills: number;
+  /**
+   * Agent commands the image's memory warden stopped just before the limit
+   * (`archestra-memory-warden`, one line each in its log), so the kernel would
+   * not stop every process in the container.
+   */
+  wardenStops: number;
   /** Times the cgroup reached its memory limit (`memory.events` oom). */
   limitHits: number;
   /** The highest usage seen (`memory.peak`), when the kernel gives it. */
@@ -182,6 +278,7 @@ export interface CgroupMemory {
  */
 export function readCgroupMemory(
   dir: string = ownCgroupDirectory(),
+  wardenLog: string = MEMORY_WARDEN_LOG,
 ): CgroupMemory | null {
   const events = readText(path.join(dir, "memory.events"));
   if (events === null) return null;
@@ -192,8 +289,10 @@ export function readCgroupMemory(
   }
   const oomKills = counters.get("oom_kill");
   if (oomKills === undefined) return null;
+  const stops = readText(wardenLog);
   return {
     oomKills,
+    wardenStops: stops ? stops.split("\n").filter(Boolean).length : 0,
     limitHits: counters.get("oom") ?? 0,
     peakBytes: readBytes(path.join(dir, "memory.peak")),
     limitBytes: readBytes(path.join(dir, "memory.max")),
@@ -221,8 +320,33 @@ export function describeToolMemoryKill(params: {
   env?: NodeJS.ProcessEnv;
 }): string | null {
   const { before, after } = params;
-  if (!before || !after || after.oomKills <= before.oomKills) return null;
+  if (!before || !after) return null;
   const env = params.env ?? process.env;
+  // The warden stopped the command (or another) before the kernel had to.
+  if (
+    after.oomKills <= before.oomKills &&
+    (after.wardenStops ?? 0) > (before.wardenStops ?? 0)
+  ) {
+    const tier = env.ARCHESTRA_AGENT_RUNTIME_TIER?.trim();
+    const near =
+      after.limitBytes !== null
+        ? `this container neared its memory limit of ${formatLimitGibibytes(after.limitBytes)}${tier ? ` at tier ${tier}` : ""}`
+        : "this container neared its memory limit";
+    const what = params.subjectKilled
+      ? `${params.subject} was stopped for memory`
+      : `the memory warden stopped a command in this container while ${params.subject} ran`;
+    const steps = [
+      "Run type checks, test suites and builds one at a time, not side by side.",
+      ...params.steps,
+      largerTierStep(env),
+    ];
+    return [
+      `${params.tool}: ${what}: ${near}, and its memory warden stops the largest command before the kernel stops every process.`,
+      "To fit in memory:",
+      ...steps.map((step) => `  - ${step}`),
+    ].join("\n");
+  }
+  if (after.oomKills <= before.oomKills) return null;
   const killed = after.oomKills - before.oomKills;
   const atLimit = after.limitHits > before.limitHits;
   const tier = env.ARCHESTRA_AGENT_RUNTIME_TIER?.trim();
@@ -372,6 +496,8 @@ function largerTierStep(env: NodeJS.ProcessEnv): string {
 }
 
 const MEMORY_KILL_REPORT = Symbol.for("archestra.memoryKillReport");
+/** Where `archestra-memory-warden` records each command it stopped. */
+const MEMORY_WARDEN_LOG = "/var/run/archestra/memory-warden.log";
 const BYTES_PER_MIB = 1024 ** 2;
 const BYTES_PER_GIB = 1024 ** 3;
 const TYPESCRIPT_DEFAULT_CHECKERS = 4;
@@ -380,6 +506,10 @@ const TYPESCRIPT_FULL_MEMORY_BYTES = 16 * BYTES_PER_GIB;
 /** Below this the compiler runs one checker without incremental build state. */
 const TYPESCRIPT_ONE_CHECKER_BELOW_BYTES = 12 * BYTES_PER_GIB;
 const TYPESCRIPT_GO_MEMORY_LIMIT_FRACTION = 5 / 8;
+const HEAVY_LANE_BELOW_BYTES = 16 * BYTES_PER_GIB;
+const POD_FIXED_BYTES = 1.12 * BYTES_PER_GIB;
+const DEV_STACK_DATABASE_BYTES = 0.2 * BYTES_PER_GIB;
+const DEV_STACK_SERVERS_BYTES = 0.85 * BYTES_PER_GIB;
 const MEMORY_UNITS: Record<string, number> = {
   "": 1,
   k: 1000,

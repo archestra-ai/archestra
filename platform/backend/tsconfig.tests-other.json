@@ -1,0 +1,32 @@
+{
+  // Tests of the remaining policy, runtime and server modules, and of the
+  // files directly in src/.
+  "extends": "./tsconfig.test-project.json",
+  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-other.tsbuildinfo" },
+  "include": [
+    "src/ambient/*.d.ts",
+    "src/*.test.ts",
+    "src/task-queue/**/*.test.ts",
+    "src/skills/**/*.test.ts",
+    "src/standalone-scripts/**/*.test.ts",
+    "src/skills-sandbox/**/*.test.ts",
+    "src/sandbox-runtime/**/*.test.ts",
+    "src/test/**/*.test.ts",
+    "src/middleware/**/*.test.ts",
+    "src/features/**/*.test.ts",
+    "src/auto-routing/**/*.test.ts",
+    "src/data-retention/**/*.test.ts",
+    "src/plugins/**/*.test.ts",
+    "src/server/**/*.test.ts",
+    "src/hooks/**/*.test.ts",
+    "src/openapi/**/*.test.ts",
+    "src/websocket/**/*.test.ts",
+    "src/entrypoints/**/*.test.ts"
+  ],
+  "references": [
+    { "path": "../shared/tsconfig.lib.json" },
+    { "path": "./tsconfig.schema.json" },
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.test-support.json" }
+  ]
+}

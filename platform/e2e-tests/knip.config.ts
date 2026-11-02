@@ -4,8 +4,6 @@ const config: KnipConfig = {
   entry: ["tests/**/*.ts", "auth.*.setup.ts", "consts.ts"],
   project: ["**/*.{ts,mts}"],
   ignoreDependencies: [
-    // Workspace dependency - resolved by pnpm
-    "@archestra/shared",
     // Provides tsc, which scripts/type-check.ts runs for `pnpm type-check`.
     "typescript-7",
   ],
@@ -15,6 +13,11 @@ const config: KnipConfig = {
     "concurrently",
     "tsx",
   ],
+  rules: {
+    // knip runs per workspace, outside the root that holds pnpm's catalog,
+    // so it cannot resolve `catalog:`; pnpm install already fails on a bad one.
+    catalogReferences: "off",
+  },
 };
 
 export default config;

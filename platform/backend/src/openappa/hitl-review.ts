@@ -560,7 +560,7 @@ function buildHitlAskUserCard(review: PendingHitlReview): HitlAskUserArguments {
 
 /**
  * The inspectable card for a review: the call in the preview pane, with
- * Allow, Deny and Inspect. When a signed Inspect answer is still pending, the
+ * Inspect, Allow and Deny. When a signed Inspect answer is still pending, the
  * card carries the complete review text for the transport to place above
  * it; the pending state is not consumed here, only when an answer to that
  * very card comes back. Returns undefined when the review is already ruled

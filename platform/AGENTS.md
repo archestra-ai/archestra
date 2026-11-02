@@ -107,8 +107,10 @@ pnpm run prepare                        # Install the husky pre-commit hook. `ti
 pnpm lint                               # Check lint
 pnpm lint:fix                           # Lint and auto-fix
 pnpm type-check                         # Check TypeScript types. Run it (or `pnpm --dir <pkg> type-check`), not bare
-                                        # `tsc --noEmit`: it sizes the compiler to the memory it has. Bare tsc in
-                                        # backend/ holds about 9 GB, past a small Agent Runtime tier's limit.
+                                        # `tsc --noEmit`: it sizes the compiler to the memory it has. backend/tsconfig.json
+                                        # is a solution of projects (one per layer or test shard), so bare tsc there
+                                        # checks nothing; type-check builds the projects one at a time, each in its own
+                                        # compiler, and keeps their declarations in .tsbuild/ for the next run.
 pnpm test                               # Run tests
 pnpm test:e2e                           # Run e2e tests with Playwright (chromium, webkit, firefox)
 
@@ -342,7 +344,8 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
     createInsertSchema,
     createUpdateSchema,
   } from "drizzle-zod";
-  import { schema } from "@/database";
+  // The table definitions only: "@/database" also opens the connection.
+  import { schema } from "@/database/schema";
 
   export const SelectEntitySchema = createSelectSchema(schema.entityTable);
   export const InsertEntitySchema = createInsertSchema(schema.entityTable).omit(

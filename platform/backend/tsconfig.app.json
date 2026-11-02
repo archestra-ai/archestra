@@ -1,0 +1,40 @@
+{
+  // Every source file above the schema layer, until later slices carve it
+  // into its layers (layers.mjs).
+  "extends": "./tsconfig.source-project.json",
+  "compilerOptions": {
+    "outDir": "./.tsbuild/app",
+    "tsBuildInfoFile": "./.tsbuild/app.tsbuildinfo"
+  },
+  // JSON modules must be listed to be imported.
+  "include": [
+    "src/**/*.ts",
+    "src/playwright-mcp-image.json",
+    "src/services/bedrock-aws-prices.json",
+    "src/skills/skill-catalog.generated.json"
+  ],
+  "exclude": [
+    // The schema project's files (tsconfig.schema.json), but the ambient
+    // declarations: they are not emitted, so every project includes them.
+    "src/types/**",
+    "src/database/schemas/**",
+    "src/database/schema.ts",
+    "src/agents/a2a/a2a-protocol.ts",
+    "src/utils/billable-usage.ts",
+    "src/utils/network.ts",
+    "src/utils/sanitize-svg.ts",
+    "src/utils/schedule-trigger.ts",
+    "src/utils/uuid.ts",
+    // Tests and test helpers (tsconfig.test-support.json, tsconfig.tests-*.json).
+    "src/**/*.test.ts",
+    "src/**/*.test-*.ts",
+    "src/**/__mocks__/**",
+    "src/test/**"
+  ],
+  "references": [
+    { "path": "../shared/tsconfig.lib.json" },
+    // The migration lint script imports the linter (@drizzle-migration-linter).
+    { "path": "../tools/drizzle-migration-linter/tsconfig.lib.json" },
+    { "path": "./tsconfig.schema.json" }
+  ]
+}

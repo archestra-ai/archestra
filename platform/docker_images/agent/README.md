@@ -82,6 +82,64 @@ use them for Agent Runtime workspaces.
 
 The native wrappers create client configuration at run time under `/var/run/archestra`. Credentials are never baked into images. On the provider path, the runtime receives a temporary virtual key and routes inference through the Agent-scoped LLM proxy. The upstream provider credential stays in the backend.
 
+## Memory limits
+
+The agent's shell commands take the highest OOM score, 1000. The client, its
+launcher, tmux and PID 1 keep the container's own score. On a node that kills
+one process at a container's memory limit (the kubelet's
+`singleProcessOOMKill`), the kernel then kills the command, and the agent sees
+it fail instead of losing its session. A process with score 1000 is one of the
+agent's commands.
+
+How each client gets it:
+
+- **Claude Code, Codex, OpenCode, Hermes, Grok Build, Kimi Code**: these run
+  commands with `bash -c`. Each launcher exports
+  `BASH_ENV=archestra-command-oom-score.sh` just before it starts the client,
+  and that file raises the shell's score. Claude Code and Kimi Code give the
+  shell a socket for its input, sometimes with `SHLVL=0`. Bash then reads
+  `/etc/bash.bashrc` instead of `BASH_ENV`, and the image's `/etc/bash.bashrc`
+  runs the same file. A hook script the launcher wrote to the runtime
+  directory keeps its score when the client runs it as `bash -c <hook>`, as
+  Codex does.
+- **OpenClaw** raises the score of every process it starts on its own and
+  drops `BASH_ENV`, so its launcher sets nothing.
+- **GitHub Copilot CLI** drops `BASH_ENV` and starts
+  `bash --norc --noprofile`. Its launcher raises every shell the client starts,
+  and every process below one, ten times a second, so a command can run for up
+  to 0.1 s with the container's score. The launcher is a child subreaper: a
+  process a command leaves behind stays below it and is raised too.
+
+A `BASH_ENV` that the client's environment already had, such as a derived
+image's own, still runs after the hook in the client's non-interactive shells.
+`tests/command-oom-score.py` checks each client during the image build: its
+shell tool's command, a process the command starts and a process it leaves
+behind all get 1000, and the client and launcher keep their score.
+
+### Memory warden
+
+With the kubelet's default on cgroup v2 (`memory.oom.group`), a container that
+reaches its memory limit loses every process, the client's session included,
+whatever the scores. `archestra-agent-init` starts `archestra-memory-warden`
+(once per container) for that case. It polls the memory the kernel cannot
+reclaim (anonymous and shared memory, kernel stacks, page tables, sockets,
+unreclaimable slab) every 200 ms, and when that comes within a reserve of the
+limit (7.5% of it, at least 0.3 GiB and at most 1 GiB), or memory pressure
+stalls the container while close to it, it SIGKILLs the agent command with the
+most anonymous memory: a process with score 1000 under the agent's terminal
+(the tmux server on the default socket), with its whole process group when
+every member is one, and only when that frees at least the overshoot (and
+64 MiB), except within the last quarter of the reserve, where any command over
+64 MiB goes: memory held by what it never stops is noted once a minute in
+`memory-warden.notes.log` instead of costing every small command. The client, its launcher, tmux, PID 1 and anything
+detached from the agent's terminal (a dev stack's servers on their own tmux
+socket, PostgreSQL) are never stopped. The command's stderr gets a line saying
+why (appended, without blocking); each stop is a JSON line in `/var/run/archestra/memory-warden.log`, which
+the platform's memory-kill report and the repository's type-check and test
+reports count next to the kernel's `oom_kill`. On a node with
+`singleProcessOOMKill` the kernel's own choice backs it up.
+`tests/memory-warden.py` checks the trigger, the victim choice and one stop.
+
 Claude Code personal subscriptions use a token from the configured secrets backend. The wrapper sends inference through the Agent-scoped LLM proxy with a personal passthrough key, so token usage appears in proxy logs. The OAuth token remains the provider credential; subscription requests do not count toward metered cost limits. MCP calls use the Agent-scoped gateway and its tool policies.
 
 Delegated Claude Code assignments stay open until registered background work finishes and the main agent handles its result. This includes shells, subagents and native scheduled monitors. Stop background servers and delete recurring monitors when the assignment is done. Unregistered detached processes are not detected. See the [background-work contract](runtime-contract.md#background-work-in-maintained-images) for lifecycle and failure rules. Codex and OpenCode adapters are not included.

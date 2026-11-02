@@ -6,6 +6,7 @@ JSON events and consumes pipe steering only between completed prompts.
 """
 
 import contextlib
+import ctypes
 import http.client
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -127,6 +128,12 @@ def main():
             os.close(steer)
 
 
+PR_SET_CHILD_SUBREAPER = 36
+# Children this launcher starts besides the client; see raise_command_scores.
+OWN_CHILDREN = set()
+OWN_CHILDREN_LOCK = threading.Lock()
+
+
 def client_environment(home, gate):
     env = {key: value for key, value in os.environ.items() if not key.startswith("COPILOT_")}
     env.update(COPILOT_HOME=str(home), COPILOT_OFFLINE="true", COPILOT_AUTO_UPDATE="false",
@@ -165,6 +172,7 @@ def run_prompt(task, session_id, home, config, entries):
         try:
             child = subprocess.Popen(args, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                      stderr=subprocess.DEVNULL, text=True, pass_fds=(descriptor.fileno(),), start_new_session=True)
+            raise_command_scores(child)
             def guard_startup():
                 deadline = time.monotonic() + 30
                 while child.poll() is None:
@@ -260,6 +268,7 @@ def run_terminal(task, session_id, home, config, entries, artifact):
             if task:
                 args.extend(["--interactive", task])
             child = subprocess.Popen(args, env=env, pass_fds=(descriptor.fileno(),))
+            raise_command_scores(child)
             for number in signals:
                 signal.signal(number, lambda signum, _frame: child.send_signal(signum))
             while child.poll() is None:
@@ -440,6 +449,65 @@ def runtime_headers():
     return headers
 
 
+def raise_command_scores(client):
+    """The client's shell commands take the highest OOM score, as in the other
+    maintained images (archestra-command-oom-score.sh): on a node that kills one
+    process at the memory limit, the kernel then kills the command, not the
+    client. Copilot starts each command as `bash --norc --noprofile -c` and
+    removes BASH_ENV from its environment, so no shell startup file runs in it.
+    This launcher raises them instead, ten times a second: every shell the
+    client starts and every process below one, so a command can run for up to
+    0.1 s with the container's score. The launcher becomes a child subreaper,
+    so a command that detaches (setsid, nohup) stays below it, is raised as
+    well, and is reaped here when it exits. The client, its other helpers and
+    this launcher keep the container's score."""
+    launcher = os.getpid()
+    with contextlib.suppress(OSError, AttributeError):
+        ctypes.CDLL(None, use_errno=True).prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0)
+
+    def raise_scores():
+        while client.poll() is None:
+            # Held for the whole scan: a child this launcher starts meanwhile
+            # is recorded before it can be mistaken for an adopted process.
+            with OWN_CHILDREN_LOCK:
+                table = processes()
+                children = {}
+                for pid, (parent, _state, _exe) in table.items():
+                    children.setdefault(parent, []).append(pid)
+                pending = [pid for pid in children.get(client.pid, []) if table[pid][2] in ("bash", "dash", "sh")]
+                for pid in children.get(launcher, []):
+                    if pid == client.pid or pid in OWN_CHILDREN:
+                        continue
+                    if table[pid][1] == "Z":
+                        with contextlib.suppress(ChildProcessError):
+                            os.waitpid(pid, os.WNOHANG)
+                    else:
+                        pending.append(pid)
+                while pending:
+                    pid = pending.pop()
+                    pending.extend(children.get(pid, []))
+                    score = Path(f"/proc/{pid}/oom_score_adj")
+                    with contextlib.suppress(OSError, ValueError):
+                        if int(score.read_text()) < 1000:
+                            score.write_text("1000")
+            time.sleep(0.1)
+    threading.Thread(target=raise_scores, daemon=True).start()
+
+
+def processes():
+    """Each process: its parent, state and executable name."""
+    table = {}
+    for entry in os.scandir("/proc"):
+        if entry.name.isdigit():
+            # The command name in parentheses can hold spaces: the state and
+            # parent PID are the first two fields after it.
+            with contextlib.suppress(OSError, ValueError, IndexError):
+                state, parent = Path(entry.path, "stat").read_text().rpartition(")")[2].split()[:2]
+                exe = os.path.basename(os.readlink(entry.path + "/exe")) if state != "Z" else ""
+                table[int(entry.name)] = (int(parent), state, exe)
+    return table
+
+
 def stop(child):
     with contextlib.suppress(ProcessLookupError):
         os.killpg(child.pid, signal.SIGTERM)
@@ -507,7 +575,16 @@ def turn_attention(event, answered):
 
 def attention(action, label=""):
     helper = Path(__file__).with_name("archestra-agent-attention")
-    subprocess.run([str(helper), action, label], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    # Started under the lock raise_command_scores scans with: it is this
+    # launcher's own child, not a process a command left behind.
+    with OWN_CHILDREN_LOCK:
+        child = subprocess.Popen([str(helper), action, label], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        OWN_CHILDREN.add(child.pid)
+    try:
+        child.wait()
+    finally:
+        with OWN_CHILDREN_LOCK:
+            OWN_CHILDREN.discard(child.pid)
 
 
 def fail(code, message):

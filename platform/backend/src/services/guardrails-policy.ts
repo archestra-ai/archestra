@@ -3,7 +3,9 @@ import {
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
 } from "@archestra/shared";
+import ipaddr from "ipaddr.js";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
@@ -327,6 +329,35 @@ function hash(content: string) {
 }
 
 /**
+ * The deployment's statement that its own host is first-party, as a TOML line. A
+ * frontend URL that is not HTTP(S), names no host, or names a loopback or
+ * unspecified address names no host the organization runs, so the policy then
+ * states nothing.
+ */
+function deploymentHintLine(): string {
+  const url = URL.canParse(config.frontendBaseUrl)
+    ? new URL(config.frontendBaseUrl)
+    : null;
+  if (
+    url === null ||
+    (url.protocol !== "http:" && url.protocol !== "https:") ||
+    url.hostname === "" ||
+    isLocalHostname(url.hostname)
+  )
+    return "";
+  const hint = `\`${url.host}\` is this organization's own platform deployment, the one these policies run on: a call to it, such as fetching a link one of its tools returned, reaches the organization's own platform.`;
+  return `hint = ${JSON.stringify(hint)}`;
+}
+
+function isLocalHostname(hostname: string): boolean {
+  const name = hostname.replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  if (name === "localhost" || name.endsWith(".localhost")) return true;
+  if (!ipaddr.isValid(name)) return false;
+  const range = ipaddr.process(name).range();
+  return range === "loopback" || range === "unspecified";
+}
+
+/**
  * The text an organization that never saved a revision is read as. It installs
  * the bundled `archestra` battery over the built-in tools, under the name they
  * carry in this deployment, and the bundled `coding` battery over the client
@@ -380,6 +411,7 @@ internal = ["${ARCHESTRA_BATTERY}:members"]
 
 [policy.deployment]
 context_control = true
+${deploymentHintLine()}
 
 # Lets an agent hand a risky read to a subagent. The subagent must reply in
 # the strict JSON shape the agent asked for, so injected instructions and
@@ -411,7 +443,6 @@ annotator = "archestra.run-command"
 [[policy.annotator]]
 name = "${CLAUDE_CODE_BATTERY}.bash-repository-requirements"
 builtin = "archestra"
-hint = "\`context.github\` is the deployment's finding about the repository and pull request or issue the command reaches. A push, pull request, issue, release, or comment into a public repository, or one it does not establish, requires audience public; into a private or internal one, internal. A read keeps the session's audience."
 
 [[policy.annotator]]
 name = "${CLAUDE_CODE_BATTERY}.bash-requirements"
@@ -430,7 +461,7 @@ ranks = ["suspicious", "trusted"]
 audiences = ["self", "internal"]
 marks = []
 effects = []
-hint = "Routine requester-local file/shell operations, diagnostics, edits, builds, tests and client setup need no audience or trust requirement when they do not publish data or perform destructive actions. A network fetch or dependency install alone is not disclosure of trajectory data. Require public audience for actual external sends, internal for organization-only sends. Keep secrets self-only; third-party content stays suspicious. Use supplied context; do not guess destination visibility."
+hint = "Routine requester-local file and shell operations, diagnostics, edits, builds, tests, dependency installs and client setup need no audience or trust requirement when they neither publish data nor destroy anything. A network fetch or an install alone discloses no trajectory data."
 
 # Questions carry no data: they keep an empty label even if the catch-all
 # below is made stricter. search_tools gets the same from the archestra battery.

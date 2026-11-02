@@ -17,6 +17,7 @@ import {
   OpenAppaSessionModel,
   VirtualApiKeyModel,
 } from "@/models";
+import RoutingDecisionModel from "@/models/routing-decision";
 import {
   ApiError,
   constructResponseSchema,
@@ -28,6 +29,10 @@ import {
   UserInfoSchema,
   UuidIdSchema,
 } from "@/types";
+import {
+  AutoRoutingTierNameSchema,
+  InteractionAutoRoutingResponseSchema,
+} from "@/types/auto-routing-api";
 
 const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -475,6 +480,50 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           limit: query.limit,
         }),
       );
+    },
+  );
+
+  fastify.get(
+    "/api/interactions/:interactionId/auto-routing",
+    {
+      schema: {
+        operationId: RouteId.GetInteractionAutoRouting,
+        description:
+          "Get the persisted auto-routing decision linked to a visible interaction. Null means no retained decision is linked, not proof that routing was disabled. Does not re-score the request.",
+        tags: ["Interaction"],
+        params: z.object({ interactionId: UuidIdSchema }),
+        response: constructResponseSchema(InteractionAutoRoutingResponseSchema),
+      },
+    },
+    async ({ params: { interactionId }, user, organizationId }, reply) => {
+      const interaction = await InteractionModel.findAccessMetadata({
+        id: interactionId,
+        organizationId,
+      });
+      if (!interaction) throw new ApiError(404, "Interaction not found");
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
+      if (!canSeeAllLogs && interaction.userId !== user.id) {
+        throw new ApiError(404, "Interaction not found");
+      }
+      const decision = await RoutingDecisionModel.findForInteraction({
+        organizationId,
+        interactionId,
+      });
+      return reply.send({
+        decision: decision
+          ? {
+              ...decision,
+              tier: AutoRoutingTierNameSchema.parse(
+                AutoRoutingTierNameSchema.options[decision.tierIndex],
+              ),
+            }
+          : null,
+      });
     },
   );
 

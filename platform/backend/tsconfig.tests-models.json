@@ -1,17 +1,13 @@
 {
-  // Tests of the models whose files start with j to m.
-  "extends": "./tsconfig.test-project.json",
-  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-models-c.tsbuildinfo" },
+  // Tests of models and authentication.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./.tsbuild/tests-models.tsbuildinfo"
+  },
   "include": [
     "src/ambient/*.d.ts",
-    "src/models/j*.test.ts",
-    "src/models/j*/**/*.test.ts",
-    "src/models/k*.test.ts",
-    "src/models/k*/**/*.test.ts",
-    "src/models/l*.test.ts",
-    "src/models/l*/**/*.test.ts",
-    "src/models/m*.test.ts",
-    "src/models/m*/**/*.test.ts"
+    "src/models/**/*.test.ts",
+    "src/auth/**/*.test.ts"
   ],
   "references": [
     { "path": "../shared/tsconfig.lib.json" },

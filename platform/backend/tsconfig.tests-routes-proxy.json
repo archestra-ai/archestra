@@ -1,15 +1,12 @@
 {
-  // Tests of the models whose files start with a to c.
-  "extends": "./tsconfig.test-project.json",
-  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-models-a.tsbuildinfo" },
+  // Tests of the LLM proxy routes.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./.tsbuild/tests-routes-proxy.tsbuildinfo"
+  },
   "include": [
     "src/ambient/*.d.ts",
-    "src/models/a*.test.ts",
-    "src/models/a*/**/*.test.ts",
-    "src/models/b*.test.ts",
-    "src/models/b*/**/*.test.ts",
-    "src/models/c*.test.ts",
-    "src/models/c*/**/*.test.ts"
+    "src/routes/proxy/**/*.test.ts"
   ],
   "references": [
     { "path": "../shared/tsconfig.lib.json" },

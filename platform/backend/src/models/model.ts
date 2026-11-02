@@ -20,6 +20,7 @@ import { PreparedQuery } from "@/database/prepared-query";
 import logger from "@/logging";
 import { resolveBedrockAwsPrices } from "@/services/bedrock-aws-pricing";
 import { mediaPricingFor } from "@/services/media-pricing";
+import { resolveVendorPublishedPriceSchedule } from "@/services/vendor-published-pricing";
 import type {
   CreateModel,
   Model,
@@ -967,6 +968,34 @@ class ModelModel {
     return { ...model, ...prices[0], providerPricing: prices[0] ?? undefined };
   }
 
+  /** The effective threshold used by both routing plans and request pricing. */
+  static getLongContextThreshold(model: ProviderPricedModel): number | null {
+    if (model.longContextThreshold !== null) return model.longContextThreshold;
+    if (model.providerPricing) return null;
+    const schedule = resolveVendorPublishedPriceSchedule(model);
+    if (!schedule) return null;
+    const short = ModelModel.getEffectivePricing(
+      model,
+      undefined,
+      undefined,
+      schedule.threshold,
+    );
+    const long = ModelModel.getEffectivePricing(
+      model,
+      undefined,
+      undefined,
+      schedule.threshold + 1,
+    );
+    // Custom prices can make the published tier irrelevant, including a model
+    // with an unpublished cache direction. Do not constrain routing in that case.
+    return short.pricePerMillionInput !== long.pricePerMillionInput ||
+      short.pricePerMillionOutput !== long.pricePerMillionOutput ||
+      short.pricePerMillionCacheRead !== long.pricePerMillionCacheRead ||
+      short.pricePerMillionCacheWrite !== long.pricePerMillionCacheWrite
+      ? schedule.threshold
+      : null;
+  }
+
   /**
    * Get effective pricing for a model.
    *
@@ -983,8 +1012,9 @@ class ModelModel {
    * Cache prices are null when the provider has no cache pricing model and none
    * was synced/set (so cache cost is not fabricated for non-caching providers).
    *
-   * With `promptTokens` above the model's long-context threshold, its long
-   * prices replace all four rates while the chosen source is kept.
+   * Published context schedules replace incomplete flat catalogs, below custom
+   * overrides and selected-instance pricing. An explicit custom schedule
+   * replaces the published threshold and long rates.
    */
   static getEffectivePricing(
     model: ProviderPricedModel | null,
@@ -997,7 +1027,28 @@ class ModelModel {
     if (model?.providerPricing && model.providerPricing !== "conflicting") {
       model = { ...model, ...model.providerPricing };
     }
-    const base = ModelModel.getEffectiveBasePricing(model, modelId, provider);
+    const resolvedProvider = model?.provider ?? provider;
+    const schedule =
+      resolvedProvider && !model?.providerPricing
+        ? resolveVendorPublishedPriceSchedule({
+            provider: resolvedProvider,
+            modelId: model?.modelId ?? modelId ?? "",
+          })
+        : null;
+    const published = schedule
+      ? isLongContextPrompt(
+          model?.longContextThreshold == null ? schedule.threshold : null,
+          promptTokens,
+        )
+        ? schedule.long
+        : schedule.short
+      : undefined;
+    const base = ModelModel.getEffectiveBasePricing(
+      model,
+      modelId,
+      provider,
+      published,
+    );
     const instance = model?.providerPricing;
     const useInstance = instance && base.source !== "custom";
     const pricePerMillionInput = useInstance
@@ -1019,10 +1070,12 @@ class ModelModel {
       model,
       pricePerMillionInput,
       provider,
+      published,
     );
 
     const cacheSource =
-      cache.cacheSource === "models_dev" && model?.providerPricing
+      cache.cacheSource === "models_dev" &&
+      (model?.providerPricing || published)
         ? "provider"
         : cache.cacheSource;
     if (
@@ -1032,14 +1085,14 @@ class ModelModel {
       // The CHECK constraint makes the threshold and all four prices all-or-none.
       // They are configured on the model, so they are no estimate even when
       // the base rates fell back to the default.
-      const longSource = source === "default" ? "custom" : source;
+      const longSource = "custom";
       return {
         pricePerMillionInput: model.longContextPricePerMillionInput,
         pricePerMillionOutput: model.longContextPricePerMillionOutput,
         pricePerMillionCacheRead: model.longContextPricePerMillionCacheRead,
         pricePerMillionCacheWrite: model.longContextPricePerMillionCacheWrite,
         source: longSource,
-        cacheSource: cacheSource ?? longSource,
+        cacheSource: longSource,
       };
     }
 
@@ -1059,6 +1112,7 @@ class ModelModel {
     model: Model | null,
     modelId?: string,
     provider?: SupportedProvider,
+    published?: ProviderModelPricing,
   ): {
     pricePerMillionInput: string;
     pricePerMillionOutput: string;
@@ -1073,6 +1127,21 @@ class ModelModel {
         pricePerMillionInput: model.customPricePerMillionInput,
         pricePerMillionOutput: model.customPricePerMillionOutput,
         source: "custom",
+      };
+    }
+
+    if (
+      published?.promptPricePerToken != null &&
+      published.completionPricePerToken != null
+    ) {
+      return {
+        pricePerMillionInput: formatPerMillionPrice(
+          Number(published.promptPricePerToken) * 1_000_000,
+        ),
+        pricePerMillionOutput: formatPerMillionPrice(
+          Number(published.completionPricePerToken) * 1_000_000,
+        ),
+        source: "provider",
       };
     }
 
@@ -1156,6 +1225,7 @@ class ModelModel {
     model: ProviderPricedModel | null,
     effectivePricePerMillionInput: string | null,
     providerHint?: SupportedProvider,
+    published?: ProviderModelPricing,
   ): {
     pricePerMillionCacheRead: string | null;
     pricePerMillionCacheWrite: string | null;
@@ -1171,14 +1241,20 @@ class ModelModel {
 
     const read = resolveCacheDirection({
       custom: model?.customPricePerMillionCacheRead,
-      syncedPerToken: model?.cacheReadPricePerToken,
-      multiplierFactor: model?.providerPricing ? undefined : multiplier?.read,
+      syncedPerToken: published
+        ? published.cacheReadPricePerToken
+        : model?.cacheReadPricePerToken,
+      multiplierFactor:
+        model?.providerPricing || published ? undefined : multiplier?.read,
       effectivePricePerMillionInput: priceIn,
     });
     const write = resolveCacheDirection({
       custom: model?.customPricePerMillionCacheWrite,
-      syncedPerToken: model?.cacheWritePricePerToken,
-      multiplierFactor: model?.providerPricing ? undefined : multiplier?.write,
+      syncedPerToken: published
+        ? published.cacheWritePricePerToken
+        : model?.cacheWritePricePerToken,
+      multiplierFactor:
+        model?.providerPricing || published ? undefined : multiplier?.write,
       effectivePricePerMillionInput: priceIn,
     });
 

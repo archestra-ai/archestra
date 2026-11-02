@@ -1,6 +1,6 @@
 {
   // Tests of the services.
-  "extends": "./tsconfig.test-project.json",
+  "extends": "./tsconfig.base.json",
   "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-services.tsbuildinfo" },
   "include": [
     "src/ambient/*.d.ts",

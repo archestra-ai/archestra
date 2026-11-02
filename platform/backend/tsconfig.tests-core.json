@@ -1,6 +1,6 @@
 {
   // Tests of the rest of the core layer.
-  "extends": "./tsconfig.test-project.json",
+  "extends": "./tsconfig.base.json",
   "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-core.tsbuildinfo" },
   "include": [
     "src/ambient/*.d.ts",

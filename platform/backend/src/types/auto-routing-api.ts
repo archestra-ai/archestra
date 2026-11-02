@@ -13,6 +13,7 @@ import {
   RoutingPlanRecordSchema,
   RoutingPlanStatusSchema,
   RoutingPlanTriggerSchema,
+  SelectRoutingDecisionSchema,
 } from "@/types/auto-routing";
 
 /** `routing_plans.budget_usd_per_day` is numeric(12, 2). */
@@ -140,8 +141,42 @@ export const AutoRoutingPlansQuerySchema = z.object({
  */
 export const AUTO_ROUTING_PREVIEW_MAX_CHARS = 20_000;
 
-export const AutoRoutingPreviewBodySchema = z.strictObject({
-  text: z.string().trim().min(1).max(AUTO_ROUTING_PREVIEW_MAX_CHARS),
+export const AutoRoutingPreviewBodySchema = z.union([
+  z.strictObject({
+    text: z.string().trim().min(1).max(AUTO_ROUTING_PREVIEW_MAX_CHARS),
+  }),
+  z.strictObject({
+    request: z
+      .record(z.string(), z.unknown())
+      .describe(
+        "An opening Chat Completions, Responses or Anthropic Messages request body. Only its opening user text, system instructions and tool metadata are scored; the request is not executed.",
+      ),
+    client: z.string().trim().min(1).max(256).optional(),
+  }),
+]);
+export type AutoRoutingPreviewBody = z.infer<
+  typeof AutoRoutingPreviewBodySchema
+>;
+
+/** Persisted provenance, not a fresh scorer invocation or a synthesized explanation. */
+export const InteractionAutoRoutingResponseSchema = z.object({
+  decision: SelectRoutingDecisionSchema.omit({
+    organizationId: true,
+    sessionKey: true,
+  })
+    .extend({
+      tier: AutoRoutingTierNameSchema,
+      model: AutoRoutingTierModelSchema,
+      scorerVersion: z
+        .object({
+          id: z.string().uuid(),
+          name: z.string(),
+          model: z.string(),
+          specHash: z.string(),
+        })
+        .nullable(),
+    })
+    .nullable(),
 });
 
 export const AutoRoutingSimulateBodySchema = z.strictObject({

@@ -4,8 +4,7 @@
   // project here. Source projects emit declarations into .tsbuild/, which the
   // projects above them read instead of their sources:
   //   shared lib, migration linter lib -> schema -> core -> models
-  //   -> models-agents -> models-upper -> runtime and llm-clients
-  //   -> app -> test-support -> tests-*, tools
+  //   -> models-agents -> models-upper -> runtime and llm-clients -> app -> test-support -> tests-*, tools
   // The options every project shares, and the `paths` alias the runtime tools
   // read through this file, are in tsconfig.base.json. pnpm check:projects
   // checks that every backend file is in exactly one project.
@@ -25,22 +24,15 @@
     { "path": "./tsconfig.test-support.json" },
     { "path": "./tsconfig.tests-database.json" },
     { "path": "./tsconfig.tests-core.json" },
-    { "path": "./tsconfig.tests-models-a.json" },
-    { "path": "./tsconfig.tests-models-b.json" },
-    { "path": "./tsconfig.tests-models-c.json" },
-    { "path": "./tsconfig.tests-models-d.json" },
+    { "path": "./tsconfig.tests-models.json" },
     { "path": "./tsconfig.tests-services.json" },
-    { "path": "./tsconfig.tests-domain-a.json" },
-    { "path": "./tsconfig.tests-domain-b.json" },
-    { "path": "./tsconfig.tests-domain-c.json" },
+    { "path": "./tsconfig.tests-knowledge-base.json" },
+    { "path": "./tsconfig.tests-agents.json" },
+    { "path": "./tsconfig.tests-integrations.json" },
     { "path": "./tsconfig.tests-other.json" },
-    { "path": "./tsconfig.tests-routes-proxy-a.json" },
-    { "path": "./tsconfig.tests-routes-proxy-b.json" },
-    { "path": "./tsconfig.tests-routes-proxy-c.json" },
+    { "path": "./tsconfig.tests-routes-proxy.json" },
     { "path": "./tsconfig.tests-routes-chat.json" },
-    { "path": "./tsconfig.tests-routes-rest-a.json" },
-    { "path": "./tsconfig.tests-routes-rest-b.json" },
-    { "path": "./tsconfig.tests-routes-rest-c.json" },
+    { "path": "./tsconfig.tests-routes-rest.json" },
     { "path": "./tsconfig.tools.json" }
   ]
 }

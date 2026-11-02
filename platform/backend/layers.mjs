@@ -94,6 +94,8 @@ const layerTable = [
       // Pricing and catalog data the model rows are enriched with, and the
       // price table the Bedrock pricing reads.
       "src/services/media-pricing.ts",
+      "src/services/vendor-published-pricing.ts",
+      "src/services/cross-provider-pricing.ts",
       "src/services/bedrock-aws-pricing.ts",
       "src/services/bedrock-aws-prices.json",
       "src/clients/models-dev-client.ts",

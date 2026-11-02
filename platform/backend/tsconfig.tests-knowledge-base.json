@@ -1,11 +1,12 @@
 {
-  // Tests of the other routes whose names start with a.
-  "extends": "./tsconfig.test-project.json",
-  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-routes-rest-a.tsbuildinfo" },
+  // Tests of knowledge-base connectors and workflows.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./.tsbuild/tests-knowledge-base.tsbuildinfo"
+  },
   "include": [
     "src/ambient/*.d.ts",
-    "src/routes/a*.test.ts",
-    "src/routes/a*/**/*.test.ts"
+    "src/knowledge-base/**/*.test.ts"
   ],
   "references": [
     { "path": "../shared/tsconfig.lib.json" },

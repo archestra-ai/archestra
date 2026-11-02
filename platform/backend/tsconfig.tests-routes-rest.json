@@ -1,13 +1,12 @@
 {
-  // Tests of k8s, the clients, OpenAPPA and the proxy helpers.
-  "extends": "./tsconfig.test-project.json",
-  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-domain-c.tsbuildinfo" },
+  // Route tests other than chat, MCP gateway, and the LLM proxy.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./.tsbuild/tests-routes-rest.tsbuildinfo"
+  },
   "include": [
     "src/ambient/*.d.ts",
-    "src/k8s/**/*.test.ts",
-    "src/clients/**/*.test.ts",
-    "src/openappa/**/*.test.ts",
-    "src/proxy/**/*.test.ts"
+    "src/routes/**/*.test.ts"
   ],
   "references": [
     { "path": "../shared/tsconfig.lib.json" },
@@ -21,5 +20,10 @@
     { "path": "./tsconfig.llm-clients.json" },
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.test-support.json" }
+  ],
+  "exclude": [
+    "src/routes/chat/**",
+    "src/routes/mcp-gateway/**",
+    "src/routes/proxy/**"
   ]
 }

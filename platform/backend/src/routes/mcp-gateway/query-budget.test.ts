@@ -1,3 +1,10 @@
+import {
+  AGENT_TOOL_PREFIX,
+  SKILL_TOOL_PREFIX,
+  slugify,
+  TOOL_RUN_TOOL_FULL_NAME,
+  TOOL_SEARCH_TOOLS_FULL_NAME,
+} from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
@@ -7,6 +14,7 @@ import {
 import {
   AgentConnectorAssignmentModel,
   AgentKnowledgeBaseModel,
+  AgentModel,
   UserTokenModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -25,6 +33,101 @@ describe("MCP gateway tools/list query budget", () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  test("compact gateways skip hidden delegation expansion while search and full mode retain it", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeSkill,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const gateway = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      toolExposureMode: "search_and_run_only",
+    });
+    await AgentModel.update(gateway.id, { accessAllSubagents: true });
+    const target = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      name: "Discoverable worker",
+    });
+    const name = `${AGENT_TOOL_PREFIX}${slugify(target.name)}`;
+    const skill = await makeSkill(org.id, {
+      name: "discoverable-delegated-skill",
+      agentName: target.name,
+      access: "org",
+    });
+    const skillName = `${SKILL_TOOL_PREFIX}${slugify(skill.name)}`;
+    const token = await UserTokenModel.create(user.id, org.id);
+    const request = (method: string, params: Record<string, unknown>) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/mcp/${gateway.id}`,
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          authorization: `Bearer ${token.value}`,
+        },
+        payload: { jsonrpc: "2.0", id: 1, method, params },
+      });
+    const list = () => request("tools/list", {});
+    const expanded = (statements: string[]) =>
+      statements.filter(
+        (query) =>
+          query.includes('from "agents"') && query.includes('"built_in" ='),
+      );
+    const compact = await recordQueries(list);
+    expect(compact.result.statusCode).toBe(200);
+    expect(
+      compact.result
+        .json()
+        .result.tools.map((tool: { name: string }) => tool.name),
+    ).toEqual(
+      expect.arrayContaining([
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        TOOL_RUN_TOOL_FULL_NAME,
+      ]),
+    );
+    expect(JSON.stringify(compact.result.json().result.tools)).not.toContain(
+      name,
+    );
+    expect(JSON.stringify(compact.result.json().result.tools)).not.toContain(
+      skillName,
+    );
+    expect(expanded(compact.statements)).toHaveLength(0);
+    const search = await request("tools/call", {
+      name: TOOL_SEARCH_TOOLS_FULL_NAME,
+      arguments: { query: target.name },
+    });
+    expect(search.statusCode).toBe(200);
+    expect(JSON.stringify(search.json().result)).toContain(name);
+    const skillSearch = await request("tools/call", {
+      name: TOOL_SEARCH_TOOLS_FULL_NAME,
+      arguments: { query: skill.name },
+    });
+    expect(skillSearch.statusCode).toBe(200);
+    expect(JSON.stringify(skillSearch.json().result)).toContain(skillName);
+    await AgentModel.update(gateway.id, { toolExposureMode: "full" });
+    const full = await recordQueries(list);
+    expect(full.result.statusCode).toBe(200);
+    expect(
+      full.result
+        .json()
+        .result.tools.map((tool: { name: string }) => tool.name),
+    ).toContain(name);
+    expect(
+      full.result
+        .json()
+        .result.tools.map((tool: { name: string }) => tool.name),
+    ).toContain(skillName);
+    // This guard proves the SQL matcher still recognizes the full-mode scans;
+    // the compact zero-query assertion must never pass due to matcher drift.
+    expect(expanded(full.statements).length).toBeGreaterThan(0);
   });
 
   test("member tools/list", async ({

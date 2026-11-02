@@ -1,7 +1,9 @@
 "use client";
 
+import { AlertCircle } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -77,15 +79,22 @@ export function TryPrompt({
         rows={3}
         disabled={!canUpdate}
       />
-      <p
-        id="auto-routing-preview-input-help"
-        className="text-xs text-muted-foreground"
-      >
-        {parsed.error ??
-          (requestMode
+      {parsed.error ? (
+        <InlineNotice id="auto-routing-preview-input-help" variant="error">
+          <AlertCircle />
+          <span className="font-medium">Invalid request JSON</span>
+          <InlineNoticeText>{parsed.error}</InlineNoticeText>
+        </InlineNotice>
+      ) : (
+        <p
+          id="auto-routing-preview-input-help"
+          className="text-xs text-muted-foreground"
+        >
+          {requestMode
             ? "Uses the request's opening user message, system instructions and tools, as live routing does. Scores a new session under the current plan; does not replay a saved decision or execute the request."
-            : "Text-only preview. Use request JSON to include the agent's system instructions and tools.")}
-      </p>
+            : "Text-only preview. Use request JSON to include the agent's system instructions and tools."}
+        </p>
+      )}
       {requestMode && (
         <div className="space-y-2">
           <Label htmlFor="auto-routing-preview-client">

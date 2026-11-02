@@ -744,9 +744,9 @@ describe("AutoRoutingOverviewPage", () => {
     await user.click(input);
     await user.paste("not JSON");
     expect(screen.getByRole("button", { name: "Preview" })).toBeDisabled();
-    expect(
-      screen.getByText("Enter valid JSON containing the request body."),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Enter valid JSON containing the request body.",
+    );
     expect(previewed).toEqual([]);
 
     const request = {
@@ -757,6 +757,7 @@ describe("AutoRoutingOverviewPage", () => {
     await user.clear(input);
     await user.click(input);
     await user.paste(JSON.stringify(request));
+    expect(screen.queryByText("Invalid request JSON")).not.toBeInTheDocument();
     await user.type(
       screen.getByLabelText("Client identifier (optional)"),
       "opencode",

@@ -12,9 +12,11 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { runInNewContext } from "node:vm";
 import { expect, test } from "vitest";
 import { renderSetupScript, type SetupScriptContext } from "../index";
 import { SETUP_STOPPED_EXIT_CODE } from "../types";
+import { CODEX_WSL_SETUP_HINT } from "./codex-handoff";
 
 const exec = promisify(execFile);
 const ctx: SetupScriptContext = {
@@ -65,6 +67,12 @@ const fs = require('node:fs'); const path = require('node:path');
 const args = process.argv.slice(2); const home = process.env.CODEX_HOME;
 fs.appendFileSync(path.join(process.env.HOME, 'calls'), args.join(' ') + '\\n');
 if (args[0] === '--version') { console.log('codex-cli test-version'); process.exit(0); }
+// Like Codex: a model_catalog_json file it cannot open stops every command.
+const catalog = /^model_catalog_json = "(.*)"$/m.exec(fs.existsSync(path.join(home, 'config.toml')) ? fs.readFileSync(path.join(home, 'config.toml'), 'utf8') : '')?.[1];
+if (catalog && !fs.existsSync(catalog)) {
+  console.error('Error: failed to load configuration\\n\\nCaused by:\\n    No such file or directory (os error 2)');
+  process.exit(1);
+}
 if (args[0] === 'debug' && process.env.BROKEN_CONFIG) {
   console.error('Error: ' + path.join(home, 'config.toml') + ':1:14: invalid transport\\n\\nCaused by:\\n    in \`mcp_servers.test_gateway\`');
   process.exit(1);
@@ -146,7 +154,7 @@ test("model mismatch stops setup before client mutations", async () => {
     );
     expect(await readdir(f.codexHome)).toEqual(["config.toml"]);
     expect(await readFile(path.join(f.home, "calls"), "utf8")).not.toMatch(
-      /mcp|plugin/,
+      /mcp (add|remove)|plugin/,
     );
   } finally {
     await rm(f.home, { recursive: true, force: true });
@@ -293,6 +301,135 @@ test("preflight shows the Codex error for a config Codex cannot load", async () 
   }
 });
 
+test.each([
+  { name: "with the LLM proxy", proxy: ctx.proxy },
+  { name: "gateway-only", proxy: null },
+])("preflight stops $name setup when Codex cannot load a config value that model discovery leaves out", async ({
+  proxy,
+}) => {
+  const f = await fixture();
+  try {
+    const config = `model_catalog_json = "${path.join(f.codexHome, "missing.json")}"\n${original}`;
+    await writeFile(f.config, config);
+    await writeFile(f.script, renderSetupScript({ ...ctx, proxy }));
+    const result = await exec("bash", [f.script], { env: f.env }).catch(
+      (error) => error,
+    );
+    expect(result.code).toBe(SETUP_STOPPED_EXIT_CODE);
+    expect(result.stderr).toContain(
+      `Codex setup preflight failed: Codex could not load ${f.config}. Codex reported:\n  Error: failed to load configuration`,
+    );
+    expect(result.stderr).toContain("No such file or directory (os error 2)");
+    expect(result.stderr).toContain("No client configuration was changed.");
+    expect(result.stderr).not.toContain("Setup is incomplete");
+    expect(result.stderr).not.toContain("WSL");
+    expect(await readFile(f.config, "utf8")).toBe(config);
+    expect(await readFile(path.join(f.home, ".zshrc"), "utf8")).toBe(
+      "# existing shell profile\n",
+    );
+    expect(await readdir(f.codexHome)).toEqual(["config.toml"]);
+    expect(await readFile(path.join(f.home, "calls"), "utf8")).not.toMatch(
+      /mcp (add|remove)|plugin/,
+    );
+  } finally {
+    await rm(f.home, { recursive: true, force: true });
+  }
+});
+
+const WSL_MODE = "[desktop]\nrunCodexInWindowsSubsystemForLinux = true\n";
+
+test.each([
+  {
+    name: "a desktop app that runs Codex in WSL",
+    home: "C:\\Users\\me\\.codex",
+    config: `model_catalog_json = "/mnt/c/Users/me/.codex/catalog.json"\n${WSL_MODE}`,
+    hint: "Run the macOS / Linux setup command in WSL. Enter this command first:\n  export CODEX_HOME=/mnt/c/Users/me/.codex",
+  },
+  {
+    name: "a WSL path inside a table, with WSL on",
+    home: "D:\\codex\\",
+    config: `[mcp_servers.repl]\ncommand = "/mnt/d/tools/repl.exe"\n${WSL_MODE}`,
+    hint: "export CODEX_HOME=/mnt/d/codex",
+  },
+  {
+    // The paths stay behind after the desktop app stops running Codex in WSL.
+    name: "WSL paths with WSL turned off",
+    home: "C:\\Users\\me\\.codex\\",
+    config:
+      'model_catalog_json = "/mnt/c/Users/me/.codex/catalog.json"\n[desktop]\nrunCodexInWindowsSubsystemForLinux = false\n',
+    hint: "Change them to Windows paths, for example /mnt/c/Users/me/.codex to C:\\Users\\me\\.codex.",
+  },
+  {
+    // Codex for Windows may still load it, but Codex in WSL cannot open the
+    // Windows paths a Windows setup would add.
+    name: "Windows paths only, with WSL on",
+    home: "C:\\Users\\me\\.codex",
+    config: `model_catalog_json = "C:\\\\Users\\\\me\\\\catalog.json"\n${WSL_MODE}`,
+    hint: "export CODEX_HOME=/mnt/c/Users/me/.codex",
+  },
+  {
+    name: "a WSL path in an array, with WSL off",
+    home: "C:\\Users\\me\\.codex",
+    config:
+      '[mcp_servers.repl]\ncommand = "node"\nargs = ["/mnt/c/tools/repl.js"]\n',
+    hint: "Change them to Windows paths, for example /mnt/c/Users/me/.codex to C:\\Users\\me\\.codex.",
+  },
+  {
+    name: "Windows paths only",
+    home: "C:\\Users\\me\\.codex",
+    config: 'model_catalog_json = "C:\\\\Users\\\\me\\\\catalog.json"\n',
+    hint: null,
+  },
+  {
+    name: "a WSL path in a comment",
+    home: "C:\\Users\\me\\.codex",
+    config: '# model_catalog_json = "/mnt/c/Users/me/.codex/catalog.json"\n',
+    hint: null,
+  },
+  {
+    name: "the WSL switch outside the [desktop] table",
+    home: "C:\\Users\\me\\.codex",
+    config: "[features]\nrunCodexInWindowsSubsystemForLinux = true\n",
+    hint: null,
+  },
+  {
+    name: "a Linux Codex home",
+    home: "/home/me/.codex",
+    config: `model_catalog_json = "/mnt/c/Users/me/.codex/catalog.json"\n${WSL_MODE}`,
+    hint: null,
+  },
+])("the WSL setup hint for $name", ({ home, config, hint }) => {
+  const message = runInNewContext(
+    `${CODEX_WSL_SETUP_HINT}\nwslSetupHint(home, config)`,
+    { home, config },
+  );
+  if (hint === null) expect(message).toBe("");
+  else expect(message.endsWith(hint)).toBe(true);
+});
+
+test.each([
+  { platform: "win32", config: WSL_MODE, stops: true },
+  {
+    platform: "win32",
+    config: `[desktop]\nrunCodexInWindowsSubsystemForLinux = false\n`,
+    stops: false,
+  },
+  // In WSL the setup is the one the hint asks for.
+  { platform: "linux", config: WSL_MODE, stops: false },
+])("a $platform setup with config $config stops: $stops", ({
+  platform,
+  config,
+  stops,
+}) => {
+  const message = runInNewContext(
+    `${CODEX_WSL_SETUP_HINT}\nwindowsWslConflict(platform, home, config)`,
+    { platform, home: "C:\\Users\\me\\.codex", config },
+  );
+  if (stops)
+    expect(message).toContain("Run the macOS / Linux setup command in WSL");
+  else expect(message).toBe("");
+});
+
 test.each<{
   name: string;
   env: Record<string, string>;
@@ -374,7 +511,7 @@ test.each<{
     // With plugins on, app-server leaves a git sync running that keeps the
     // temporary Codex home in use on Windows, so its removal fails.
     expect(calls).toContain("-c features.plugins=false app-server");
-    expect(calls).not.toMatch(/mcp |plugin /);
+    expect(calls).not.toMatch(/mcp (add|remove)|plugin /);
     if (downloads) {
       expect(calls.match(/^debug models/gm)).toHaveLength(downloads);
     }

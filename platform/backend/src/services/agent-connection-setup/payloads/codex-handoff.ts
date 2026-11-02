@@ -1,5 +1,42 @@
 import { SETUP_STOPPED_EXIT_CODE } from "../types";
 
+/**
+ * The ChatGPT desktop app can run Codex in WSL. It then writes Linux paths into
+ * the shared config.toml, and Codex in WSL cannot open the Windows paths that a
+ * Windows setup writes. While that mode is on, setup belongs in WSL, with
+ * CODEX_HOME set to the same folder. After it is turned off, the Linux paths
+ * stay behind, and Codex for Windows cannot load them.
+ *
+ * @public — asserted by the preflight unit tests, which knip --production ignores.
+ */
+export const CODEX_WSL_SETUP_HINT = String.raw`
+// The desktop app keeps this switch in the [desktop] table of config.toml.
+function runsCodexInWsl(config) {
+  let table = '';
+  for (const line of config.split(/\r?\n/)) {
+    const header = /^\s*\[\s*([^\]\s]+)\s*\]/.exec(line);
+    if (header) table = header[1];
+    else if (table === 'desktop' && /^\s*runCodexInWindowsSubsystemForLinux\s*=\s*true\b/.test(line)) return true;
+  }
+  return false;
+}
+function wslSetupHint(home, config) {
+  const drive = /^([A-Za-z]):[\\/](.*)$/.exec(home);
+  if (!drive) return '';
+  const windowsHome = home.replace(/[\\/]+$/, '');
+  const linuxHome = '/mnt/' + drive[1].toLowerCase() + '/' + drive[2].replace(/\\/g, '/').replace(/\/+$/, '');
+  if (runsCodexInWsl(config)) {
+    return '\nThe desktop app is set to run Codex in WSL (runCodexInWindowsSubsystemForLinux = true), and Codex in WSL cannot open the Windows paths that this setup writes. Run the macOS / Linux setup command in WSL. Enter this command first:\n  export CODEX_HOME=' + linuxHome;
+  }
+  if (!/^[^#\r\n]*["']\/mnt\/[a-z]\//m.test(config)) return '';
+  return '\nThis config has WSL paths from a time when Codex ran in WSL. Codex for Windows cannot open these paths. Change them to Windows paths, for example ' + linuxHome + ' to ' + windowsHome + '.';
+}
+// A Windows setup stops while the desktop app runs Codex in WSL, even when
+// Codex for Windows can still load the config.
+function windowsWslConflict(platform, home, config) {
+  return platform === 'win32' && runsCodexInWsl(config) ? wslSetupHint(home, config) : '';
+}`;
+
 /** Local helper installed beside the guard. Prepares direct mode and reads native config. */
 export const CODEX_HANDOFF_HELPER = String.raw`
 const { spawn, spawnSync } = require('node:child_process');
@@ -174,6 +211,24 @@ function codexErrorDetail(result, shadow, home) {
   const output = String(result.stderr || result.error?.message || '').split(shadow).join(home).trim();
   return output ? ' Codex reported:\n  ' + output.split(/\r?\n/).slice(0, 12).join('\n  ').slice(0, 1200) : '';
 }
+// Discovery reads a copy without model_catalog_json, and a gateway-only setup
+// skips it. Codex must load the real config too, or the first native command
+// fails after setup has started editing.
+function assertConfigLoads(executable) {
+  const home = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
+  const file = path.join(home, 'config.toml');
+  if (!existsSync(file)) return;
+  const config = readFileSync(file, 'utf8');
+  const conflict = windowsWslConflict(process.platform, home, config);
+  if (conflict) throw new Error('Codex for Windows cannot set up ' + file + '.' + conflict);
+  if (!executable) return;
+  const { command, args } = codexEntry(executable);
+  // A neutral working directory, so no project's .codex/config.toml is layered in.
+  const result = spawnSync(command, [...args, 'mcp', 'list'], { cwd: os.tmpdir(), encoding: 'utf8', windowsHide: true, maxBuffer: 10 * 1024 * 1024, timeout: 30000 });
+  if (!result.error && result.status === 0) return;
+  throw new Error('Codex could not load ' + file + '.' + codexErrorDetail(result, home, home) + wslSetupHint(home, config));
+}
+${CODEX_WSL_SETUP_HINT}
 function modelCompatibilityError(requested, executable, catalog) {
   let version = 'version unavailable';
   if (executable) {
@@ -420,8 +475,17 @@ function updateDirectConfig(home, filename) {
     throw error;
   }
 }
-if (process.argv[2] === '--setup-only') {
-  // Gateway/skills-only setup does not require model discovery.
+if (process.argv[2] === '--setup-only' || process.argv[2] === '--preflight') {
+  try {
+    assertConfigLoads(process.argv[3]);
+    // Gateway/skills-only setup does not require model discovery.
+    if (process.argv[2] === '--preflight') prepareDirectCatalog(process.argv[3], [], false);
+  } catch (error) {
+    const next = error instanceof CatalogFailure ? '' : ' Fix the problem above, then start a new installer run.';
+    process.stderr.write('Codex setup preflight failed: ' + withNextStep(error, 'start a new installer run') + '\nNo client configuration was changed.' + next + '\n');
+    // The cause and the next step are printed; the setup script stops quietly.
+    process.exitCode = ${SETUP_STOPPED_EXIT_CODE};
+  }
 } else if (process.argv[2] === '--remove-direct') {
   try {
     const home = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
@@ -433,14 +497,6 @@ if (process.argv[2] === '--setup-only') {
   } catch (error) {
     process.stderr.write('Codex direct tool mode could not be removed: ' + error.message + '\n');
     process.exitCode = 1;
-  }
-} else if (process.argv[2] === '--preflight') {
-  try { prepareDirectCatalog(process.argv[3], [], false); }
-  catch (error) {
-    const next = error instanceof CatalogFailure ? '' : ' Fix the problem above, then start a new installer run.';
-    process.stderr.write('Codex setup preflight failed: ' + withNextStep(error, 'start a new installer run') + '\nNo client configuration was changed.' + next + '\n');
-    // The cause and the next step are printed; the setup script stops quietly.
-    process.exitCode = ${SETUP_STOPPED_EXIT_CODE};
   }
 } else if (process.argv[2] === '--direct' || process.argv[2] === '--install-direct') {
   try {

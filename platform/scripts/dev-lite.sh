@@ -465,10 +465,22 @@ backend_watch() {
 # Without the watcher the backend is built here, in the foreground, so the
 # build never overlaps the frontend's. The watcher builds in its own session.
 build_backend() {
-  local started=$SECONDS
+  local started=$SECONDS dist="$PLATFORM_DIR/backend/dist" kept="$STATE_DIR/backend-dist.previous"
   log "building the backend; log in $LOG_DIR/backend-build.log"
-  (cd "$PLATFORM_DIR/backend" && ./node_modules/.bin/tsdown) > "$LOG_DIR/backend-build.log" 2>&1 \
-    || { tail -n 30 "$LOG_DIR/backend-build.log" >&2; die "backend build failed"; }
+  # tsdown empties dist/ before it compiles: keep the last build, so a failed
+  # one leaves a backend to start again.
+  rm -rf "$kept"
+  if [ -f "$dist/server.mjs" ]; then
+    mkdir -p "$STATE_DIR" && cp -a "$dist" "$kept" || die "could not keep the last backend build"
+  fi
+  if ! (cd "$PLATFORM_DIR/backend" && ./node_modules/.bin/tsdown) > "$LOG_DIR/backend-build.log" 2>&1; then
+    tail -n 30 "$LOG_DIR/backend-build.log" >&2
+    if [ -d "$kept" ]; then
+      rm -rf "$dist" && mv "$kept" "$dist" && log "kept the last backend build"
+    fi
+    die "backend build failed"
+  fi
+  rm -rf "$kept"
   log "backend built in $((SECONDS - started)) s"
 }
 
@@ -770,11 +782,14 @@ http_ok() {
 # exited fails the wait with the tail of its log, whatever answered before.
 # The application servers readiness waits for: both, or what a resume started.
 WAIT_SERVERS="backend frontend"
+# Set by `resume` while it waits for the servers it started: the pause marker
+# stays until they answer, so a failed resume can be retried.
+RESUMING=0
 
 require_sessions_alive() {
   local name servers="$WAIT_SERVERS"
   # Paused on purpose: the command that paused them resumes them.
-  [ -f "$PAUSED_FILE" ] && servers=""
+  [ -f "$PAUSED_FILE" ] && [ "$RESUMING" = 0 ] && servers=""
   if [ -n "$servers" ] && [ ! -f "$SERVERS_FILE" ] && ! session_alive backend && ! session_alive frontend; then
     die "the backend and frontend are not started (the stack is only prepared): run 'archestra-dev-lite up'"
   fi
@@ -787,7 +802,7 @@ wait_ready() {
   local deadline=$((SECONDS + ${ARCHESTRA_DEV_LITE_TIMEOUT_SECONDS:-900})) backend_ok=0 frontend_ok=0 e2e_ok=0 keycloak_ok=0
   case " $WAIT_SERVERS " in *" backend "*) ;; *) backend_ok=1 ;; esac
   case " $WAIT_SERVERS " in *" frontend "*) ;; *) frontend_ok=1 ;; esac
-  [ -f "$PAUSED_FILE" ] && log "the backend and frontend are paused for a memory-heavy command; waiting until they resume ('archestra-dev-lite resume' resumes them now)"
+  [ -f "$PAUSED_FILE" ] && [ "$RESUMING" = 0 ] && log "the backend and frontend are paused for a memory-heavy command; waiting until they resume ('archestra-dev-lite resume' resumes them now)"
   while (( SECONDS < deadline )); do
     require_sessions_alive
     [ "$backend_ok" = 1 ] || { http_ok "http://127.0.0.1:$BACKEND_PORT/ready" && backend_ok=1 && log "backend answers on :$BACKEND_PORT"; }
@@ -808,7 +823,10 @@ wait_ready() {
     if [ "$backend_ok" = 1 ] && [ "$frontend_ok" = 1 ] && [ "$e2e_ok" = 1 ] && [ "$keycloak_ok" = 1 ]; then
       # Answers are cached from earlier polls; the processes are checked now.
       require_sessions_alive
-      echo "dev stack ready: frontend :$FRONTEND_PORT, backend :$BACKEND_PORT"
+      local ready=""
+      case " $WAIT_SERVERS " in *" frontend "*) ready="frontend :$FRONTEND_PORT" ;; esac
+      case " $WAIT_SERVERS " in *" backend "*) ready="${ready:+$ready, }backend :$BACKEND_PORT" ;; esac
+      echo "dev stack ready: $ready"
       [ -n "${ARCHESTRA_DEV_LITE_PUBLIC_FRONTEND_URL:-}" ] && echo "browser URL: $ARCHESTRA_DEV_LITE_PUBLIC_FRONTEND_URL"
       return 0
     fi
@@ -1040,12 +1058,14 @@ cmd_resume() {
   fi
   if [ "$backend" = 1 ]; then start_backend || die "the backend did not start; the stack stays paused"; fi
   if [ "$frontend" != none ]; then start_frontend "$frontend" keep || die "the frontend did not start; the stack stays paused"; fi
-  rm -f "$PAUSED_FILE"
-  # Wait for what was resumed, not for a server pause never stopped.
+  # Wait for what was resumed, not for a server pause never stopped; the pause
+  # ends once they answer.
   WAIT_SERVERS=""
   if [ "$backend" = 1 ]; then WAIT_SERVERS="backend"; fi
   if [ "$frontend" != none ]; then WAIT_SERVERS="$WAIT_SERVERS frontend"; fi
+  RESUMING=1
   wait_ready
+  rm -f "$PAUSED_FILE"
 }
 
 cmd_status() {

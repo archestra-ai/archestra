@@ -35,6 +35,7 @@ export function buildTeamsManifest(params: {
     },
     icons: { outline: "outline.png", color: "color.png" },
     accentColor: "#FFFFFF",
+    supportsChannelFeatures: "tier1",
     bots: [
       {
         botId: botAppId || "{{BOT_MS_APP_ID}}",
@@ -47,19 +48,31 @@ export function buildTeamsManifest(params: {
         commandLists: [
           {
             scopes: conversationScopes,
+            // Keep menu descriptions readable while inserting executable commands.
             commands: [
               {
                 title: "/select-agent",
                 description: "Change which agent handles this conversation",
+                type: "prompt",
+                prompt: "/select-agent",
               },
               {
                 title: "/status",
                 description: "Show current agent for this conversation",
+                type: "prompt",
+                prompt: "/status",
               },
-              { title: "/help", description: "Show available commands" },
+              {
+                title: "/help",
+                description: "Show available commands",
+                type: "prompt",
+                prompt: "/help",
+              },
               {
                 title: "/sign-out",
                 description: "Stop the bot reading your group-chat files",
+                type: "prompt",
+                prompt: "/sign-out",
               },
             ],
           },

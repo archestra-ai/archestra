@@ -393,7 +393,9 @@ export class TaskQueueService {
         const connectorRunId = payload.connectorRunId as string | undefined;
         if (connectorRunId) {
           try {
-            const { ConnectorRunModel } = await import("@/models");
+            const { default: ConnectorRunModel } = await import(
+              "@/models/connector-run"
+            );
             const documentIds =
               (payload.documentIds as string[] | undefined) ?? [];
             const updatedRun = await ConnectorRunModel.completeBatch(

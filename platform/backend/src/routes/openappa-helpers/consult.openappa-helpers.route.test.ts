@@ -570,7 +570,7 @@ describe("battery helper bridge", () => {
   });
 
   test.skipIf(!config.daggerRuntime.enabled)(
-    "a bound helper runs in the sandbox with the envelope on stdin and the credential in its environment",
+    "a bound helper runs in the sandbox with the envelope on stdin, and the credential and its budget in its environment",
     async ({ makeInternalMcpCatalog }) => {
       const files = [
         {
@@ -583,7 +583,7 @@ describe("battery helper bridge", () => {
         },
         {
           path: "echo.py",
-          text: 'import hashlib, json, os, sys\nrequest = json.load(sys.stdin)\ntoken = os.environ["APPA_PROVIDER_ACME_TOKEN"]\nprint(json.dumps({"version": 1, "answer": {"echo": request["arguments"], "token_sha256": hashlib.sha256(token.encode()).hexdigest()}}))\n',
+          text: 'import hashlib, json, os, sys\nrequest = json.load(sys.stdin)\ntoken = os.environ["APPA_PROVIDER_ACME_TOKEN"]\nprint(json.dumps({"version": 1, "answer": {"echo": request["arguments"], "token_sha256": hashlib.sha256(token.encode()).hexdigest(), "budget_ms": os.environ.get("APPA_CONSULT_TIMEOUT_MS")}}))\n',
         },
       ];
       await openappaBatteriesService.uploadPackage({
@@ -645,6 +645,7 @@ describe("battery helper bridge", () => {
           token_sha256: createHash("sha256")
             .update("acme-secret-value")
             .digest("hex"),
+          budget_ms: "4000",
         },
       });
     },

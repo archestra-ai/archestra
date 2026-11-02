@@ -36,8 +36,4 @@ Archestra does not configure the server's cache, insert cache breakpoints, or gu
 
 ## Fireworks
 
-For Fireworks, use `https://api.fireworks.ai/inference/v1` as the Base URL. Archestra recognizes this endpoint on both OpenAI and OpenAI-compatible connections and uses Fireworks-specific catalog prices. Custom prices take precedence. Missing prices produce an incomplete, estimated cost instead of the self-hosted zero-rate fallback; this estimate counts toward spend limits. It is not a provider invoice.
-
-A pinned short name such as `glm-5p3-flash` resolves to `accounts/fireworks/models/glm-5p3-flash` when that full ID exists in the model catalog. Archestra sends the full ID upstream and uses it for model access checks, usage, and spend limits. Existing access restrictions and custom prices on the short name still apply.
-
-Dynamic aliases such as `auto` and `firerouter/auto`, and unknown short names, are refused when enforced spend limits or model access restrictions apply. Use a full, fixed model ID in these cases. A custom reverse proxy is not automatically identified as Fireworks; configure its prices explicitly.
+For Fireworks, use `https://api.fireworks.ai/inference/v1` as the Base URL. When enforced spend limits or model access restrictions apply, use a full, fixed model ID or a recognized fixed alias; opaque routers such as `auto` and `firerouter/auto`, and unrecognized short names, are rejected. Missing prices are estimated and count toward spend limits.

@@ -3,11 +3,11 @@ import { enterOpenappaEncryptedChat } from "@/openappa/encrypted-chat";
 import { validateAzureModelOperation } from "@/services/azure-model-capabilities";
 import {
   fireworksModelAliases,
+  isFireworksEndpoint,
   resolveFireworksModel,
 } from "@/services/fireworks-model";
 import type { BillingAttribution } from "@/utils/billable-usage";
 import { primaryBillingUsage } from "@/utils/billable-usage";
-import { isFireworksEndpoint } from "@/utils/fireworks-endpoint";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
 import { UpstreamStreamIncompleteError } from "@/utils/upstream-stream-incomplete-error";
 /**

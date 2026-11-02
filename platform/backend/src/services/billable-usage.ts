@@ -6,7 +6,10 @@ import { modelsDevClient } from "@/clients/models-dev-client";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
-import { fireworksModelAliases } from "@/services/fireworks-model";
+import {
+  fireworksModelAliases,
+  isFireworksEndpoint,
+} from "@/services/fireworks-model";
 import type { UsageView } from "@/types/llm-provider";
 import {
   estimateMissingPrices,
@@ -22,7 +25,6 @@ import {
   scalePrice,
   sumMoney,
 } from "@/utils/billable-usage";
-import { isFireworksEndpoint } from "@/utils/fireworks-endpoint";
 
 /**
  * Resolve every component's prices for one request in a single batch, each at

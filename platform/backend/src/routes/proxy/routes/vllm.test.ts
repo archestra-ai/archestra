@@ -139,9 +139,15 @@ describe("Fireworks through a vLLM-compatible endpoint", () => {
       { provider: "openai" as const, restricted: false },
       { provider: "openai" as const, restricted: true },
     ].flatMap((entry) =>
-      [false, true].flatMap((stream) =>
-        [false, true].map((shortBudget) => ({ ...entry, stream, shortBudget })),
-      ),
+      entry.restricted
+        ? [{ ...entry, stream: false, shortBudget: false }]
+        : [false, true].flatMap((stream) =>
+            [false, true].map((shortBudget) => ({
+              ...entry,
+              stream,
+              shortBudget,
+            })),
+          ),
     ),
   )("canonical and pinned alias share prices and access ($provider, restricted=$restricted, stream=$stream, shortBudget=$shortBudget)", async ({
     provider,

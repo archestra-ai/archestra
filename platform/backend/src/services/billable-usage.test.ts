@@ -7,6 +7,7 @@ import { test as fixtureTest } from "@/test";
 import { useMswServer } from "@/test/msw";
 import { normalizeAnthropicUsage, sumMoney } from "@/utils/billable-usage";
 import { priceBillingUsage } from "./billable-usage";
+import { isFireworksEndpoint } from "./fireworks-model";
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest HTTP boundary fixture
 const server = useMswServer();
@@ -488,3 +489,26 @@ fixtureTest.for([
     expect(result.status).toBe("complete");
   },
 );
+
+test.each([
+  "https://api.fireworks.ai/inference",
+  "https://api.fireworks.ai/inference/v1",
+  "https://api.fireworks.ai:443/inference/v1/",
+])("recognizes the documented inference endpoint %s", (url) => {
+  expect(isFireworksEndpoint(url)).toBe(true);
+});
+
+test.each([
+  undefined,
+  "http://localhost:8000/v1",
+  "https://api.fireworks.ai.example.test/inference/v1",
+  "https://api.fireworks.ai@localhost/inference/v1",
+  "https://user@api.fireworks.ai/inference/v1",
+  "http://api.fireworks.ai/inference/v1",
+  "https://api.fireworks.ai:8443/inference/v1",
+  "https://api.fireworks.ai/custom/v1",
+  "https://api.fireworks.ai/inference/v1?endpoint=other",
+  "not a URL",
+])("does not infer a paid endpoint from %s", (url) => {
+  expect(isFireworksEndpoint(url)).toBe(false);
+});

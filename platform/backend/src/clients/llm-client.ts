@@ -38,7 +38,6 @@ import {
   USER_ID_HEADER,
 } from "@archestra/shared";
 import type { AzureModelEvidence } from "@archestra/shared/azure-models";
-
 import { context, propagation } from "@opentelemetry/api";
 import {
   extractReasoningMiddleware,
@@ -85,6 +84,11 @@ import {
   type AzureModelCapabilities,
   resolveAzureModelCapabilities,
 } from "@/services/azure-model-capabilities";
+import {
+  fireworksModelAliases,
+  isFireworksEndpoint,
+  resolveFireworksModel,
+} from "@/services/fireworks-model";
 import { ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
@@ -181,6 +185,23 @@ export function createDirectLLMModel({
     resolvedBaseUrl && cfg.proxiedPathSuffix
       ? `${resolvedBaseUrl}${cfg.proxiedPathSuffix}`
       : resolvedBaseUrl;
+  const upstreamFetch =
+    provider === "openrouter" ? createResponseHealingFetch() : globalThis.fetch;
+  const availableFetch: typeof globalThis.fetch = async (input, init) => {
+    const resolved = await resolveFireworksModel({
+      provider,
+      model: modelName,
+      baseUrl: baseURL,
+    });
+    await ModelModel.assertAvailable({
+      provider,
+      modelId: resolved.model,
+      aliases: isFireworksEndpoint(baseURL)
+        ? fireworksModelAliases(resolved.model)
+        : undefined,
+    });
+    return upstreamFetch(input, init);
+  };
   return withCatalogOutputBudget(
     cfg.createModel({
       apiKey,
@@ -189,8 +210,7 @@ export function createDirectLLMModel({
       headers: providerHeaders(cfg),
       // Direct OpenRouter models bypass the proxy adapter, so heal the request
       // body here; the wrapper no-ops for non-healable requests.
-      fetch:
-        provider === "openrouter" ? createResponseHealingFetch() : undefined,
+      fetch: availableFetch,
       direct: true,
     }),
     { provider, modelName, chatApiKeyId },
@@ -1220,9 +1240,9 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   // --- Special providers ---
 
   gemini: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
-      // Proxied path (headers/fetch provided): always use GoogleGenerativeAI
-      if (headers || fetch) {
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch, direct }) => {
+      // Proxy calls always use the Google wire, even when the server uses Vertex.
+      if (!direct) {
         return createGoogleGenerativeAI({
           apiKey: apiKey || "vertex-ai-mode",
           baseURL,
@@ -1234,6 +1254,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       if (isVertexAiEnabled()) {
         const { vertexAi } = config.llm.gemini;
         return createVertex({
+          fetch,
           project: vertexAi.project,
           location: resolveVertexLocation(modelName),
           googleAuthOptions: {
@@ -1251,7 +1272,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
           "Gemini API key is required when Vertex AI is not enabled. Please configure GEMINI_API_KEY or enable Vertex AI.",
         );
       }
-      return createGoogleGenerativeAI({ apiKey, baseURL })(modelName);
+      return createGoogleGenerativeAI({ apiKey, baseURL, fetch })(modelName);
     },
     defaultBaseUrl: undefined, // GoogleGenerativeAI has its own default
     // apiKeyRequiredMessage is undefined — validation is inside createModel (Vertex AI special case)

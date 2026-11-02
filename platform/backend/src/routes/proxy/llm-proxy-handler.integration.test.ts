@@ -18,6 +18,7 @@ import { accessGrants, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { useMswServer } from "@/test/msw";
+import geminiProxyRoutes from "./routes/gemini";
 import modelRouterRoutes from "./routes/model-router";
 import openAiProxyRoutes from "./routes/openai";
 import vllmProxyRoutes from "./routes/vllm";
@@ -37,6 +38,7 @@ const availabilityTest = test.extend<{
     setHidden: (hidden: boolean) => Promise<unknown>;
     hits: Array<{ model: string; authorization: string | null }>;
     agentId: string;
+    virtualKeyId: string;
     pool: (fallback?: boolean) => Promise<void>;
     onRequest: (hook: (model: string) => Promise<Response | undefined>) => void;
     restrict: () => Promise<void>;
@@ -141,6 +143,7 @@ const availabilityTest = test.extend<{
     try {
       await use({
         agentId: agent.id,
+        virtualKeyId: virtual.virtualKey.id,
         onRequest: (hook) => {
           beforeResponse = hook;
         },
@@ -395,11 +398,66 @@ availabilityTest(
       model: "availability-pool",
       route: "model-router",
     });
-    expect(response.statusCode, response.body).toBe(403);
-    expect(JSON.parse(response.body).error.internal_code).toBe("model_hidden");
+    expect(response.statusCode, response.body).toBe(503);
+    expect(response.body).toContain("Synthetic outage");
+    const records = await db.select().from(schema.interactionsTable);
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      model: "availability-model",
+      attemptOutcome: "failed",
+    });
     expect(gateway.hits.map((hit) => hit.model)).toEqual([
       "availability-model",
     ]);
+  },
+);
+
+availabilityTest.for([false, true])(
+  "skips hidden pool choices without charges or cooldown (stream=%s)",
+  async (stream, { gateway }) => {
+    await gateway.pool(true);
+    await gateway.setHidden(true);
+    const fallback = await ModelModel.findByProviderAndModelId(
+      "openai",
+      "hidden-fallback",
+    );
+    if (!fallback) throw new Error("Missing fallback fixture");
+    const requestCap = await LimitModel.create({
+      entityType: "virtual_key",
+      entityId: gateway.virtualKeyId,
+      limitType: "requests",
+      cleanupInterval: "calendar_day",
+      limitValue: 2,
+    });
+    const ask = () =>
+      gateway.ask({
+        model: "availability-pool",
+        route: "model-router",
+        stream,
+      });
+    // Every member is hidden: no upstream attempt and no request allowance spent.
+    expect((await ask()).statusCode).toBe(403);
+    expect(
+      (await LlmThroughputModel.usage([requestCap])).get(requestCap.id)
+        ?.currentUsage ?? 0,
+    ).toBe(0);
+    expect(gateway.hits).toHaveLength(0);
+    await ModelModel.update(fallback.id, { ignored: false });
+    expect((await ask()).statusCode).toBe(200);
+    expect(gateway.hits.map((hit) => hit.model)).toEqual(["hidden-fallback"]);
+    expect(
+      (await LlmThroughputModel.usage([requestCap])).get(requestCap.id)
+        ?.currentUsage,
+    ).toBe(1);
+    // Showing the primary restores its priority immediately, without a cooldown.
+    await gateway.setHidden(false);
+    expect((await ask()).statusCode).toBe(200);
+    expect(gateway.hits.map((hit) => hit.model)).toEqual([
+      "hidden-fallback",
+      "availability-model",
+    ]);
+    expect((await ask()).statusCode).toBe(429);
+    expect(gateway.hits).toHaveLength(2);
   },
 );
 
@@ -641,5 +699,73 @@ test.for([
   } finally {
     await app.close();
     modelsDevClient.clearFetchCache();
+  }
+});
+
+test.for([
+  false,
+  true,
+])("Gemini embedding aliases cannot bypass a hidden catalog model (stored prefix=%s)", async (prefixed, {
+  makeAgent,
+  makeUser,
+  makeMember,
+}) => {
+  const originalBaseUrl = config.llm.gemini.baseUrl;
+  config.llm.gemini.baseUrl = "https://gemini-availability.example.test";
+  const agent = await makeAgent({ agentType: "llm_proxy" });
+  const owner = await makeUser();
+  await makeMember(owner.id, agent.organizationId, { role: "admin" });
+  const token = await makePassthroughCredential({
+    organizationId: agent.organizationId,
+    ownerId: owner.id,
+  });
+  const bare = "gemini-embedding-001";
+  const stored = prefixed ? `models/${bare}` : bare;
+  const requested = prefixed ? bare : `models/${bare}`;
+  const model = await ModelModel.create({
+    provider: "gemini",
+    modelId: stored,
+    externalId: `gemini/${stored}`,
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    ignored: true,
+  });
+  let calls = 0;
+  server.use(
+    http.post(
+      "https://gemini-availability.example.test/v1beta/models/:operation",
+      () => {
+        calls++;
+        return HttpResponse.json({
+          embedding: { values: [0.1, 0.2] },
+          embeddings: [{ values: [0.1, 0.2] }],
+        });
+      },
+    ),
+  );
+  const app = createFastifyInstance();
+  await app.register(geminiProxyRoutes);
+  const ask = () =>
+    app.inject({
+      method: "POST",
+      url: `/v1/gemini/${agent.id}/embeddings`,
+      headers: {
+        authorization: "Bearer synthetic-provider-key",
+        "x-archestra-virtual-key": token,
+      },
+      payload: { model: requested, input: "fixture" },
+    });
+  try {
+    const hidden = await ask();
+    expect(hidden.statusCode, hidden.body).toBe(403);
+    expect(hidden.json().error.internal_code).toBe("model_hidden");
+    expect(calls).toBe(0);
+    await ModelModel.update(model.id, { ignored: false });
+    const shown = await ask();
+    expect(shown.statusCode, shown.body).toBe(200);
+    expect(calls).toBe(1);
+  } finally {
+    config.llm.gemini.baseUrl = originalBaseUrl;
+    await app.close();
   }
 });

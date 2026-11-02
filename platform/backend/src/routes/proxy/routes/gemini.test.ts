@@ -1534,3 +1534,111 @@ function findStreamedFunctionCallPart(body: string): StreamedFunctionCallPart {
   }
   return part;
 }
+
+describe("native Gemini embedding availability", () => {
+  test.for([
+    "embedContent",
+    "batchEmbedContents",
+    "asyncBatchEmbedContent",
+  ] as const)("checks the selected model before forwarding %s", async (method, {
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const upstream = Fastify();
+    const forwarded: string[] = [];
+    upstream.post("/v1/models/*", async (request) => {
+      forwarded.push(request.url);
+      return {
+        embedding: { values: [0.1, 0.2] },
+        embeddings: [{ values: [0.1, 0.2] }],
+        name: "batches/synthetic",
+      };
+    });
+    upstream.get("/v1/models/*", async () => ({
+      name: "models/gemini-embedding-001",
+    }));
+    const address = await upstream.listen({ port: 0, host: "127.0.0.1" });
+    const previous = config.llm.gemini.baseUrl;
+    config.llm.gemini.baseUrl = address;
+    const agent = await makeAgent({ agentType: "llm_proxy" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId, { role: "admin" });
+    const token = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
+    const row = await ModelModel.create({
+      provider: "gemini",
+      modelId: "gemini-embedding-001",
+      externalId: "gemini/gemini-embedding-001",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      ignored: true,
+    });
+    const app = createFastifyInstance();
+    await app.register(geminiProxyRoutes);
+    const headers = {
+      "x-goog-api-key": "synthetic-provider-key",
+      "x-archestra-virtual-key": token,
+    };
+    const ask = (model = row.modelId, encoded = false) => {
+      const embedRequest = {
+        model: `models/${model}`,
+        content: { parts: [{ text: "fixture" }] },
+      };
+      const resource = `${model}:${method}`;
+      return app.inject({
+        method: "POST",
+        url: `/v1/gemini/${agent.id}/v1beta/models/${encoded ? encodeURIComponent(resource) : resource}`,
+        headers,
+        payload:
+          method === "embedContent"
+            ? { content: embedRequest.content }
+            : method === "batchEmbedContents"
+              ? { requests: [embedRequest] }
+              : {
+                  batch: {
+                    displayName: "synthetic",
+                    inputConfig: {
+                      requests: { requests: [{ request: embedRequest }] },
+                    },
+                  },
+                },
+      });
+    };
+    try {
+      for (const encoded of [false, true]) {
+        const hidden = await ask(row.modelId, encoded);
+        expect(hidden.statusCode, hidden.body).toBe(403);
+      }
+      expect(forwarded).toEqual([]);
+      if (method === "embedContent") {
+        const metadata = await app.inject({
+          method: "GET",
+          url: `/v1/gemini/${agent.id}/v1beta/models/${row.modelId}`,
+          headers,
+        });
+        expect(metadata.statusCode, metadata.body).toBe(200);
+        const count = await app.inject({
+          method: "POST",
+          url: `/v1/gemini/${agent.id}/v1beta/models/${row.modelId}:countTokens`,
+          headers,
+          payload: { contents: [{ parts: [{ text: "fixture" }] }] },
+        });
+        expect(count.statusCode, count.body).toBe(200);
+        forwarded.length = 0;
+      }
+      await ModelModel.update(row.id, { ignored: false });
+      const visible = await ask();
+      expect(visible.statusCode, visible.body).toBe(200);
+      const custom = await ask("uncatalogued-embedding");
+      expect(custom.statusCode, custom.body).toBe(200);
+      expect(forwarded).toHaveLength(2);
+    } finally {
+      config.llm.gemini.baseUrl = previous;
+      await app.close();
+      await upstream.close();
+    }
+  });
+});

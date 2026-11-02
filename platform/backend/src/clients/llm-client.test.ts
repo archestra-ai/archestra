@@ -209,6 +209,23 @@ describe("createDirectLLMModel", () => {
     expect(model).toBeDefined();
   });
 
+  test("the direct availability fetch preserves Gemini Vertex routing", () => {
+    mockIsVertexAiEnabled.mockReturnValue(true);
+    try {
+      const model = createDirectLLMModel({
+        provider: "gemini",
+        apiKey: undefined,
+        modelName: "gemini-2.5-flash",
+        baseUrl: null,
+      });
+      expect(typeof model === "string" ? model : model.provider).toContain(
+        "vertex",
+      );
+    } finally {
+      mockIsVertexAiEnabled.mockReturnValue(false);
+    }
+  });
+
   test("decodes Bedrock SigV4 credentials on the direct provider path", () => {
     const marker = encodeBedrockSigV4Marker({
       accessKeyId: "test-access-key",

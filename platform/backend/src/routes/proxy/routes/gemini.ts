@@ -5,6 +5,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
+import ModelModel from "@/models/model";
 import {
   constructResponseSchema,
   ErrorResponsesSchema,
@@ -342,6 +343,26 @@ function createGeminiProxyPreHandler() {
           status: "INVALID_ARGUMENT",
         },
       });
+    }
+
+    if (request.method === "POST") {
+      // Native embedding APIs select the model in the path; batch entries
+      // must use that same model. Metadata and token-count routes stay available.
+      let decodedPath = urlPath;
+      try {
+        decodedPath = decodeURIComponent(urlPath);
+      } catch {
+        // Leave malformed paths for the provider's existing validation.
+      }
+      const embeddingModel = decodedPath.match(
+        /\/models\/([^/]+):(?:embedContent|batchEmbedContents|asyncBatchEmbedContent)$/,
+      )?.[1];
+      if (embeddingModel) {
+        await ModelModel.assertAvailable({
+          provider: "gemini",
+          modelId: embeddingModel,
+        });
+      }
     }
 
     await cleanForwardedBody(request);

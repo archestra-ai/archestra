@@ -95,6 +95,8 @@ const layerTable = [
       "src/services/environments/environment-isolation.ts",
       // Pricing and catalog data the model rows are enriched with, and the
       // price table the Bedrock pricing reads.
+      // Catalog identity resolution shared by KB and proxy execution.
+      "src/services/fireworks-model.ts",
       "src/services/media-pricing.ts",
       "src/services/vendor-published-pricing.ts",
       "src/services/cross-provider-pricing.ts",

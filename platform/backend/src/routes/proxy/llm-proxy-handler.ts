@@ -6,7 +6,6 @@ import {
   isFireworksEndpoint,
   resolveFireworksModel,
 } from "@/services/fireworks-model";
-import { assertModelAvailable } from "@/services/model-availability";
 import type { BillingAttribution } from "@/utils/billable-usage";
 import { primaryBillingUsage } from "@/utils/billable-usage";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
@@ -346,6 +345,7 @@ export interface LLMProxyContext<TRequest> {
 /** How a request is spread across its model pool's members. */
 export interface ModelPoolRouting {
   plan: ModelPoolPlan;
+  prepareAttempt: (member: PlannedMember) => Promise<void>;
   checkLimits: (member: PlannedMember) => Promise<void>;
   transportFor: (
     member: PlannedMember,
@@ -1607,7 +1607,7 @@ async function handleObservedLLMProxy<
     // A pool name is not a provider model. Its selected member is checked at
     // dispatch; direct and automatically routed calls already have an identity.
     if (!modelPoolPlan) {
-      await assertModelAvailable({
+      await ModelModel.assertAvailable({
         provider: autoRoutedMember?.provider ?? providerName,
         modelId: autoRoutedMember?.modelId ?? actualModel,
         aliases: autoRoutedMember ? undefined : modelAliases,
@@ -2183,7 +2183,11 @@ async function handleObservedLLMProxy<
       modelPoolPlan && poolWire
         ? {
             plan: modelPoolPlan,
-            checkLimits: async (member) => {
+            prepareAttempt: async (member) => {
+              await ModelModel.assertAvailable({
+                provider: member.provider,
+                modelId: member.modelId,
+              });
               try {
                 preparedMember = { value: await memberCredential(member) };
               } catch (error) {
@@ -2197,6 +2201,15 @@ async function handleObservedLLMProxy<
               );
               const model = stripClaudeContextVariantSuffix(member.modelId);
               upstreamAttempt.modelId = model;
+              await ModelModel.assertAvailable({
+                provider: member.provider,
+                modelId: model,
+                aliases: upstreamAttempt.modelAliases,
+              });
+            },
+            checkLimits: async (member) => {
+              if (!preparedMember || "error" in preparedMember) return;
+              const model = stripClaudeContextVariantSuffix(member.modelId);
               const violation =
                 await LimitValidationService.checkLimitsBeforeRequest({
                   ...limitContext,
@@ -2538,6 +2551,7 @@ async function handleObservedLLMProxy<
         lifecycleError.quota,
       );
     if (
+      upstreamAttempt.interactionRecorded ||
       (lifecycleError instanceof ObservedProviderUsageError &&
         lifecycleError.billingRecorded) ||
       (lifecycleError instanceof ThroughputError &&
@@ -3770,7 +3784,8 @@ async function handleStreaming<
     // A stream that fails before any usage arrives (e.g. a provider 400
     // rejecting the request, or a mid-stream failure once SSE headers and
     // content are already on the wire) still has to reach interaction history.
-    if (!observedUsage()) {
+    if (ctx.upstreamAttempt.interactionRecorded) accountingFinalized = true;
+    if (!observedUsage() && !ctx.upstreamAttempt.interactionRecorded) {
       const errorMessage = upstreamErrorMessage(
         lifecycleError,
         provider.extractErrorMessage,
@@ -4968,7 +4983,7 @@ async function openUpstream<TRequest, T>(params: {
   const authorizedOpen = async (attemptTransport: MemberTransport) => {
     await ctx.authorizeA2AOAuthAttempt?.();
     try {
-      await assertModelAvailable({
+      await ModelModel.assertAvailable({
         provider: ctx.upstreamAttempt.provider ?? providerName,
         modelId: ctx.upstreamAttempt.modelId ?? ctx.actualModel,
         aliases:
@@ -4982,7 +4997,8 @@ async function openUpstream<TRequest, T>(params: {
     } catch (error) {
       // A queued request can become unavailable after admission. It never
       // reached the provider, so release its reservation before recording it.
-      if (!dispatched) await ctx.throughput?.cancelBeforeSend();
+      if (!dispatched && !ctx.modelPool)
+        await ctx.throughput?.cancelBeforeSend();
       throw error;
     }
     dispatched = true;
@@ -5020,11 +5036,12 @@ async function openUpstream<TRequest, T>(params: {
       plan: pool.plan,
       attempt: ctx.upstreamAttempt,
       transportFor: pool.transportFor,
-      beforeAttempt: (member) => {
+      prepareAttempt: (member) => {
         // Preparation can fail before authorizedOpen installs the next getter.
         ctx.getUpstreamStreamUsage = undefined;
-        return pool.checkLimits(member);
+        return pool.prepareAttempt(member);
       },
+      beforeAttempt: (member) => pool.checkLimits(member),
       open: authorizedOpen,
       memberTimeoutMs,
       recordFailedAttempt: pool.recordFailedAttempt,

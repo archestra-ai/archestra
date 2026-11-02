@@ -6,13 +6,13 @@ import config from "@/config";
 import logger from "@/logging";
 import { InteractionModel } from "@/models";
 import { LimitValidationService } from "@/models/limit";
+import ModelModel from "@/models/model";
 import ProxyRequestContextModel from "@/models/proxy-request-context";
 import { getGuardrailsDeploymentFromSnapshot } from "@/services/guardrails-deployment";
 import {
   mediaTariffCovers,
   priceOpenAiRealtime,
 } from "@/services/media-pricing";
-import { assertModelAvailable } from "@/services/model-availability";
 import { ApiError, type GatewayAgent, type UsageView } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
 import type { BillingAttribution } from "@/utils/billable-usage";
@@ -281,7 +281,7 @@ async function admit(request: IncomingMessage, socket: Duplex, head: Buffer) {
   upstreamUrl.searchParams.set("model", resolution.modelId);
   const beta = request.headers["openai-beta"];
   // Credential and budget reads can wait while an operator hides the model.
-  await assertModelAvailable({
+  await ModelModel.assertAvailable({
     provider: "openai",
     modelId: resolution.modelId,
   });

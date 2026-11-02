@@ -2,6 +2,7 @@ import config from "@/config";
 import { ModelPoolModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
+import { ApiError } from "@/types";
 import {
   type ModelPoolCaller,
   type ModelPoolPlan,
@@ -468,6 +469,66 @@ describe("openThroughModelPool", () => {
       if (error) throw error;
       return `answer from ${key}`;
     },
+  });
+
+  test("a hide between selection and dispatch skips the member without recording an outage", async () => {
+    const attempt: UpstreamAttempt = {};
+    const recorded: UpstreamAttempt[] = [];
+    const opened: string[] = [];
+    const result = await openThroughModelPool({
+      plan,
+      attempt,
+      transportFor: async (member) => transport(member.providerApiKeyId),
+      open: async (transport) => {
+        const key = (await transport.execute({})) as string;
+        if (key === keyA) throw new ApiError(403, "hidden", "model_hidden");
+        opened.push(key);
+        return "answer";
+      },
+      isRetryable: () => false,
+      shouldContinue: () => true,
+      recordFailedAttempt: async (failed) => {
+        recorded.push(failed);
+      },
+    });
+    expect(result).toBe("answer");
+    expect(opened).toEqual([keyB]);
+    expect(recorded).toEqual([]);
+    expect(attempt).toMatchObject({
+      attempt: 1,
+      providerApiKeyId: keyB,
+      attemptOutcome: "answered",
+    });
+  });
+
+  test("a hidden trailing member preserves a timed-out attempt and records it once", async () => {
+    const attempt: UpstreamAttempt = {};
+    const recorded: UpstreamAttempt[] = [];
+    await expect(
+      openThroughModelPool({
+        plan,
+        attempt,
+        prepareAttempt: async (member) => {
+          if (member.providerApiKeyId === keyB)
+            throw new ApiError(403, "hidden", "model_hidden");
+        },
+        transportFor: async (member) => transport(member.providerApiKeyId),
+        open: async () => new Promise(() => {}),
+        memberTimeoutMs: 5,
+        isRetryable: () => false,
+        shouldContinue: () => true,
+        recordFailedAttempt: async (failed) => {
+          recorded.push({ ...failed });
+        },
+      }),
+    ).rejects.toMatchObject({ status: 408 });
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]).toMatchObject({
+      providerApiKeyId: keyA,
+      attemptOutcome: "failed",
+      cutOff: true,
+    });
+    expect(attempt.interactionRecorded).toBe(true);
   });
 
   test("fails over before the first chunk and records the failed attempt", async () => {

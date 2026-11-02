@@ -1,6 +1,5 @@
 import { describe, expect, test } from "vitest";
 import ModelModel from "@/models/model";
-import { assertModelAvailable } from "./model-availability";
 
 describe("resolved model availability", () => {
   test("Claude context variants use the canonical row and do not cross providers", async () => {
@@ -13,17 +12,20 @@ describe("resolved model availability", () => {
       ignored: true,
     });
     await expect(
-      assertModelAvailable({
+      ModelModel.assertAvailable({
         provider: "anthropic",
         modelId: "claude-sonnet-4-6[1m]",
       }),
     ).rejects.toMatchObject({ statusCode: 403, internalCode: "model_hidden" });
     await expect(
-      assertModelAvailable({ provider: "vllm", modelId: "claude-sonnet-4-6" }),
+      ModelModel.assertAvailable({
+        provider: "vllm",
+        modelId: "claude-sonnet-4-6",
+      }),
     ).resolves.toBeUndefined();
     await ModelModel.update(model.id, { ignored: false });
     await expect(
-      assertModelAvailable({
+      ModelModel.assertAvailable({
         provider: "anthropic",
         modelId: "claude-sonnet-4-6[1m]",
       }),

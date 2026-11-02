@@ -89,6 +89,15 @@ export function buildCodexResponsesRequest(
     parallel_tool_calls:
       (params as { parallel_tool_calls?: boolean }).parallel_tool_calls ?? true,
   };
+  const format = params.response_format;
+  if (format) {
+    request.text = {
+      format:
+        format.type === "json_schema"
+          ? { ...format.json_schema, type: "json_schema" }
+          : format,
+    };
+  }
   if (promptCacheKey) {
     request.prompt_cache_key = promptCacheKey;
   }

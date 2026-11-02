@@ -15,7 +15,8 @@
  * (`heavyLaneCeilings`) first stops the backend and frontend with
  * `scripts/dev-lite.sh pause`, keeping PostgreSQL and the builds, and starts
  * them again with `resume` when it ends, however it ends short of SIGKILL. It
- * says so on stderr. A stack paused by someone else stays as it was.
+ * says so on stderr. A stack paused by someone else stays as it was, and a
+ * stack whose dev-lite.sh cannot pause (no `cmd_pause`) is left running.
  *
  * Today the type check (`scripts/type-check.ts`) and every package's knip run
  * take the lane, so a package's `check:commit` no longer runs tsc and knip
@@ -28,11 +29,7 @@
  * The ceilings (`heavyLaneCeilings` in vitest.resources.ts) are the 4 GiB
  * budget measured in staging pods.
  *
- *   node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/heavy-lane.ts \
- *     [--label <text>] [--peak-gib <n>] [--dev-lite <script>] -- <command> [args...]
- *
- * (Node 24 strips the types; the flag silences its note that platform/ has no
- * package type.)
+ *   tsx scripts/heavy-lane.ts [--label <text>] [--peak-gib <n>] [--dev-lite <script>] -- <command> [args...]
  */
 import { type SpawnSyncReturns, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -252,7 +249,7 @@ if (
 ) {
   const usage = () => {
     process.stderr.write(
-      "usage: node scripts/heavy-lane.ts [--label <text>] [--peak-gib <n>] [--dev-lite <script>] -- <command> [args...]\n",
+      "usage: tsx scripts/heavy-lane.ts [--label <text>] [--peak-gib <n>] [--dev-lite <script>] -- <command> [args...]\n",
     );
     process.exit(64);
   };

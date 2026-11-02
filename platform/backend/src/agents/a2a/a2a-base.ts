@@ -1,17 +1,4 @@
-import type { A2AOAuthExecution } from "@/routes/mcp-gateway/utils";
-
-export interface A2AActor {
-  id: string;
-  kind:
-    | "user"
-    | "team"
-    | "organization"
-    | "oauthClient"
-    | "serviceAccount"
-    | "system";
-  organizationId: string;
-  oauthExecution?: A2AOAuthExecution;
-}
+export type { A2AActor } from "@/types/a2a-actor";
 
 export enum A2AErrorKind {
   InvalidToken,

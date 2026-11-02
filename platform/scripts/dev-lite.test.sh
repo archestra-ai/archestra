@@ -229,6 +229,27 @@ reload_beside_backend() { (frontend_mode() { echo build; }; LIFE_ALIVE=" backend
 out="$(reload_beside_backend)"
 check "a production frontend reload stops the backend before it builds" test "$(order_of "$out" "^stop_session backend")" -lt "$(order_of "$out" "^build_frontend")"
 check "and starts it again before the frontend" test "$(order_of "$out" "^server backend")" -lt "$(order_of "$out" "^server frontend")"
+reload_backend_beside_frontend() { (frontend_mode() { echo build; }; LIFE_ALIVE=" frontend" lifecycle cmd_reload backend); }
+out="$(reload_backend_beside_frontend)"
+check "a backend reload stops the frontend before it builds" test "$(order_of "$out" "^stop_session frontend")" -lt "$(order_of "$out" "^build_backend")"
+check "and starts it again after the backend, from its build" test "$(order_of "$out" "^server backend")" -lt "$(order_of "$out" "^server frontend")"
+check "without building the frontend" fails grep -q "^build_frontend" <<<"$out"
+# A one-server resume waits only for that server, through the real readiness check.
+real_wait_resume() {
+  (
+    ALIVE=""
+    db_ready() { return 0; }
+    start_backend() { ALIVE="$ALIVE backend"; }
+    start_frontend() { ALIVE="$ALIVE frontend"; }
+    http_ok() { return 0; }
+    ARCHESTRA_DEV_LITE_TIMEOUT_SECONDS=5 cmd_resume
+  ) > /dev/null 2>&1
+}
+touch "$SERVERS_FILE"
+printf 'frontend=build\nbackend=0\n' > "$PAUSED_FILE"
+check "a frontend-only resume is ready without the backend" real_wait_resume
+printf 'frontend=none\nbackend=1\n' > "$PAUSED_FILE"
+check "a backend-only resume is ready without the frontend" real_wait_resume
 other="$ARCHESTRA_DEV_LITE_STATE_DIR/other-checkout"
 mkdir -p "$other/scripts"
 printf 'echo "delegated $*"\n' > "$other/scripts/dev-lite.sh"

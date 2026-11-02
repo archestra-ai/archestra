@@ -704,8 +704,11 @@ http_ok() {
 
 # Every session this stack started must still be alive: the first one that
 # exited fails the wait with the tail of its log, whatever answered before.
+# The application servers readiness waits for: both, or what a resume started.
+WAIT_SERVERS="backend frontend"
+
 require_sessions_alive() {
-  local name servers="backend frontend"
+  local name servers="$WAIT_SERVERS"
   # Paused on purpose: the command that paused them resumes them.
   [ -f "$PAUSED_FILE" ] && servers=""
   if [ -n "$servers" ] && [ ! -f "$SERVERS_FILE" ] && ! session_alive backend && ! session_alive frontend; then
@@ -718,6 +721,8 @@ require_sessions_alive() {
 
 wait_ready() {
   local deadline=$((SECONDS + ${ARCHESTRA_DEV_LITE_TIMEOUT_SECONDS:-900})) backend_ok=0 frontend_ok=0 e2e_ok=0 keycloak_ok=0
+  case " $WAIT_SERVERS " in *" backend "*) ;; *) backend_ok=1 ;; esac
+  case " $WAIT_SERVERS " in *" frontend "*) ;; *) frontend_ok=1 ;; esac
   [ -f "$PAUSED_FILE" ] && log "the backend and frontend are paused for a memory-heavy command; waiting until they resume ('archestra-dev-lite resume' resumes them now)"
   while (( SECONDS < deadline )); do
     require_sessions_alive
@@ -930,6 +935,8 @@ cmd_resume() {
   if [ "$backend" = 1 ]; then start_backend || die "the backend did not start; the stack stays paused"; fi
   if [ "$frontend" != none ]; then start_frontend "$frontend" keep || die "the frontend did not start; the stack stays paused"; fi
   rm -f "$PAUSED_FILE"
+  # Wait for what was resumed, not for a server pause never stopped.
+  WAIT_SERVERS="$([ "$backend" = 1 ] && echo backend) $([ "$frontend" != none ] && echo frontend)"
   wait_ready
 }
 
@@ -1087,8 +1094,24 @@ cmd_reload() {
     backend)
       log "reloading the backend"
       stop_session backend
-      backend_watch || build_backend
-      start_backend
+      if ! backend_watch; then
+        # The build runs alone: a running frontend stops for it and comes back
+        # from its build afterwards, also when the build fails.
+        local frontend_was=""
+        if session_alive frontend; then
+          frontend_was="$(frontend_mode)"
+          log "stopping the frontend while the backend builds"
+          stop_session frontend
+        fi
+        if ! (build_backend); then
+          [ -n "$frontend_was" ] && start_frontend "$frontend_was" keep
+          die "backend build failed; see $LOG_DIR/backend-build.log"
+        fi
+        start_backend
+        [ -n "$frontend_was" ] && start_frontend "$frontend_was" keep
+      else
+        start_backend
+      fi
       ;;
     frontend)
       # A production build (build or e2e mode) is rebuilt first.

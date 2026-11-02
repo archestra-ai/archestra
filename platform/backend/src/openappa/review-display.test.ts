@@ -221,4 +221,58 @@ describe("redactCredentials", () => {
       encoded: JSON.stringify([{ headers: masked }]),
     });
   });
+
+  test("masks the second item of a [name, value] header pair, nested or encoded in a string", () => {
+    expect(
+      parseReviewedArguments(
+        redactCredentials(
+          JSON.stringify({ headers: [["Authorization", "Bearer tok_secret"]] }),
+        ),
+      ),
+    ).toEqual({ headers: [["Authorization", "Bearer [redacted]"]] });
+
+    const headers = [
+      ["Cookie", "sid=s3cr3t"],
+      ["Accept", "application/json"],
+    ];
+    const masked = [
+      ["Cookie", "[redacted]"],
+      ["Accept", "application/json"],
+    ];
+    expect(
+      parseReviewedArguments(
+        redactCredentials(
+          JSON.stringify({
+            request: { headers },
+            encoded: JSON.stringify([{ headers }]),
+          }),
+        ),
+      ),
+    ).toEqual({
+      request: { headers: masked },
+      encoded: JSON.stringify([{ headers: masked }]),
+    });
+  });
+
+  test("masks JSON embedded in prose, keeping its indentation and the prose", () => {
+    const args = {
+      headers: [{ name: "Authorization", value: "Bearer tok_secret" }],
+      request: { headers: [["X-Api-Key", "s3cr3t"]], url: "https://x/{id}" },
+    };
+    const masked = {
+      headers: [{ name: "Authorization", value: "Bearer [redacted]" }],
+      request: {
+        headers: [["X-Api-Key", "[redacted]"]],
+        url: "https://x/{id}",
+      },
+    };
+    const prose = (value: object) =>
+      `Approve this call? {not json}\nArguments:\n${JSON.stringify(value, null, 2)}\nAuthorization: tok_secret`;
+    expect(redactCredentials(prose(args))).toBe(
+      prose(masked).replace(
+        "Authorization: tok_secret",
+        "Authorization: [redacted]",
+      ),
+    );
+  });
 });

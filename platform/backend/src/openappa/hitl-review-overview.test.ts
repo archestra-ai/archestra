@@ -282,6 +282,25 @@ describe("hitlReviewCard", () => {
     expect(JSON.stringify(card)).not.toContain(secret);
     expect(renderHitlReviewText(review)).not.toContain(secret);
   });
+  test.each([
+    {
+      headers: [
+        { name: "Authorization", value: "Bearer tok_5c3f9a1e7b2d4c6a" },
+      ],
+    },
+    {
+      request: { headers: [["Authorization", "Bearer tok_5c3f9a1e7b2d4c6a"]] },
+    },
+  ])("never shows a credential header carried as a name/value pair: %j", (args) => {
+    const review = {
+      tool: "mcp/http/fetch",
+      arguments: JSON.stringify(args),
+      text: `Approve this call?\nArguments:\n${JSON.stringify(args, null, 2)}`,
+    };
+    const { card } = cardFor(review);
+    expect(JSON.stringify(card)).not.toContain("tok_5c3f9a1e7b2d4c6a");
+    expect(renderHitlReviewText(review)).not.toContain("tok_5c3f9a1e7b2d4c6a");
+  });
   const fitsThePane = (preview: string) =>
     preview.length <= 2000 &&
     preview.split("\n").every((line) => [...line].length <= 34);

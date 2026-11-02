@@ -82,14 +82,48 @@ export function displayedReview<
 
 /**
  * The text with credential header values replaced, for display only. JSON,
- * including JSON encoded in its strings, is redacted by structure and stays
- * parseable; any other text by its `Name: value` and `Name=value` pairs.
+ * whether it is the whole text, embedded in it or encoded in its strings, is
+ * redacted by structure and stays parseable; any other text by its
+ * `Name: value` and `Name=value` pairs.
  */
 export function redactCredentials(text: string): string {
-  const json = parseJsonContainer(text);
-  if (json === undefined) return text.replace(CREDENTIAL_TEXT, redactTextPair);
-  const redacted = JSON.stringify(redactJson(json));
-  return redacted === JSON.stringify(json) ? text : redacted;
+  let shown = "";
+  let from = 0;
+  for (let start = 0; start < text.length; start++) {
+    if (text[start] !== "{" && text[start] !== "[") continue;
+    const end = jsonSpanEnd(text, start);
+    const span = text.slice(start, end);
+    const json = end === undefined ? undefined : parseJsonContainer(span);
+    if (end === undefined || json === undefined) continue;
+    const indent = /\n([ \t]+)/.exec(span)?.[1];
+    const redacted = JSON.stringify(redactJson(json), null, indent);
+    shown += `${redactText(text.slice(from, start))}${
+      redacted === JSON.stringify(json, null, indent) ? span : redacted
+    }`;
+    from = end;
+    start = end - 1;
+  }
+  return `${shown}${redactText(text.slice(from))}`;
+}
+
+function redactText(text: string): string {
+  return text.replace(CREDENTIAL_TEXT, redactTextPair);
+}
+
+// The end of the bracketed span opening at `start`, skipping JSON strings.
+function jsonSpanEnd(text: string, start: number): number | undefined {
+  let depth = 0;
+  let inString = false;
+  for (let index = start; index < text.length; index++) {
+    const char = text[index];
+    if (inString) {
+      if (char === "\\") index++;
+      else if (char === '"') inString = false;
+    } else if (char === '"') inString = true;
+    else if (char === "{" || char === "[") depth++;
+    else if ((char === "}" || char === "]") && --depth === 0) return index + 1;
+  }
+  return undefined;
 }
 
 function parseJsonContainer(text: string): object | undefined {
@@ -101,11 +135,18 @@ function parseJsonContainer(text: string): object | undefined {
   }
 }
 
-// A credential sits under a header-named key, or in the `value` beside a
-// `name`, `key` or `header` naming one.
+// A credential sits under a header-named key, in the `value` beside a
+// `name`, `key` or `header` naming one, or second in a `[name, value]` pair.
 function redactJson(value: unknown): unknown {
   if (typeof value === "string") return redactCredentials(value);
-  if (Array.isArray(value)) return value.map(redactJson);
+  if (Array.isArray(value)) {
+    const [name, secret] = value;
+    return value.length === 2 &&
+      typeof name === "string" &&
+      CREDENTIAL_NAME.test(name)
+      ? [name, redactField(secret)]
+      : value.map(redactJson);
+  }
   if (typeof value !== "object" || value === null) return value;
   const entries = Object.entries(value);
   const namesCredential = entries.some(
@@ -118,12 +159,14 @@ function redactJson(value: unknown): unknown {
     entries.map(([key, field]) => [
       key,
       CREDENTIAL_NAME.test(key) || (namesCredential && key === "value")
-        ? typeof field === "string"
-          ? redactSecret(field)
-          : REDACTED_CREDENTIAL
+        ? redactField(field)
         : redactJson(field),
     ]),
   );
+}
+
+function redactField(field: unknown): string {
+  return typeof field === "string" ? redactSecret(field) : REDACTED_CREDENTIAL;
 }
 
 function redactTextPair(

@@ -1,4 +1,5 @@
-import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { SecretsManagerType } from "@archestra/shared";
+import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -9,6 +10,7 @@ import {
   type RuntimeCredentialConnection,
   type RuntimeCredentialConnectionScope,
 } from "@/types";
+import SecretModel from "./secret";
 
 export default class RuntimeCredentialConnectionModel {
   static async upsert(params: {
@@ -73,6 +75,56 @@ export default class RuntimeCredentialConnectionModel {
     });
     const value = secret?.secret?.[connection.secretKey];
     return typeof value === "string" && value.length > 0 ? value : null;
+  }
+
+  /** Fresh values for one owner's credential batch; never retained across operations. */
+  static async resolveValues(params: {
+    organizationId: string;
+    scope: RuntimeCredentialConnectionScope;
+    userId?: string | null;
+    credentialIds: string[];
+  }): Promise<Map<string, string>> {
+    if (!params.credentialIds.length) return new Map();
+    const connections = schema.runtimeCredentialConnectionsTable;
+    const rows = await db
+      .select()
+      .from(connections)
+      .where(
+        and(
+          eq(connections.organizationId, params.organizationId),
+          eq(connections.scope, params.scope),
+          params.scope === "personal"
+            ? eq(connections.userId, params.userId ?? "")
+            : isNull(connections.userId),
+          inArray(connections.credentialId, [...new Set(params.credentialIds)]),
+        ),
+      );
+    const manager = secretManager();
+    // Database rows can be decrypted in one query. Vault-backed handles still
+    // go through their configured manager, bypassing its value cache.
+    const secrets =
+      manager.type === SecretsManagerType.DB
+        ? await SecretModel.findByIds([
+            ...new Set(rows.map((row) => row.secretId)),
+          ])
+        : await Promise.all(
+            rows.map((row) =>
+              manager.getSecret(row.secretId, { skipCache: true }),
+            ),
+          );
+    const byId = new Map(
+      secrets.flatMap((secret) =>
+        secret ? [[secret.id, secret] as const] : [],
+      ),
+    );
+    return new Map(
+      rows.flatMap((row) => {
+        const value = byId.get(row.secretId)?.secret[row.secretKey];
+        return typeof value === "string" && value.length > 0
+          ? [[row.credentialId, value] as const]
+          : [];
+      }),
+    );
   }
 
   static async delete(params: {

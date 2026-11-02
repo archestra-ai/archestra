@@ -248,6 +248,6 @@ if (input) {
 const updated = JSON.stringify(config, null, 2) + "\n";
 if (original !== null ? original !== updated : Object.keys(config).length > 0) {
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
-  fs.writeFileSync(configPath, updated);
+  fs.writeFileSync(configPath, updated, { mode: 0o600 });
 }
 `;

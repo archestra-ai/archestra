@@ -30,6 +30,7 @@ const SESSION_SOURCES: Exclude<SessionSource, null>[] = [
   "header",
   "meta_header",
   "codex_session",
+  "chatgpt_session",
   "pi_session",
   "copilot_session",
   CLAUDE_CODE_HEADER_SESSION_SOURCE,

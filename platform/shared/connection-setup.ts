@@ -17,6 +17,7 @@ export const NATIVE_SESSION_CLIENT_LABELS = {
   "claude-code": "Claude Code",
   "claude-desktop": "Claude Desktop",
   codex: "Codex",
+  chatgpt: "ChatGPT",
   "copilot-cli": "Copilot CLI",
   pi: "Pi",
   "kimi-code": "Kimi Code",

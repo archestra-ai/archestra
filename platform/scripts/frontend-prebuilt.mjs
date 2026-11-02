@@ -222,6 +222,8 @@ function pack(outDir) {
     rmSync(dir, { recursive: true, force: true });
     mkdirSync(dir, { recursive: true });
     execFileSync("cp", ["-a", path.join(nextDir, source), dir]);
+    // The public files (about 80 MB of images) are in every checkout.
+    rmSync(path.join(dir, "standalone", "frontend", "public"), { recursive: true, force: true });
     const manifest = { key, kind, commit, config: configId("HEAD") };
     writeFileSync(path.join(dir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   }
@@ -250,6 +252,11 @@ async function install() {
   try {
     rmSync(path.join(nextDir, "standalone"), { recursive: true, force: true });
     renameSync(path.join(artifact.dir, "standalone"), path.join(nextDir, "standalone"));
+    execFileSync("cp", [
+      "-R",
+      path.join(repoDir, "platform", "frontend", "public"),
+      path.join(nextDir, "standalone", "frontend", "public"),
+    ]);
     writeFileSync(stamp, `${key}\n`);
     console.error(`frontend-prebuilt: installed the frontend CI built at ${artifact.manifest.commit}`);
     return true;

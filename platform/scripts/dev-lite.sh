@@ -680,9 +680,22 @@ cmd_frontend_artifact() {
     build)
       shift
       frontend_prebuilt install-cache || true
-      frontend_build_node -e \
-        'const { status } = require("node:child_process").spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build", ...process.argv.slice(1)], { stdio: "inherit" }); process.exit(status ?? 1);' \
-        -- "$@"
+      local arg mode explicit_mode=0
+      for arg in "$@"; do
+        case "$arg" in
+          --experimental-build-mode | --experimental-build-mode=*) explicit_mode=1 ;;
+        esac
+      done
+      local launcher='const { status, signal } = require("node:child_process").spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build", ...process.argv.slice(1)], { stdio: "inherit" }); process.exit(status ?? (signal ? 128 + require("node:os").constants.signals[signal] : 1));'
+      if [ "$explicit_mode" = 1 ]; then
+        frontend_build_node -e "$launcher" -- "$@"
+      else
+        # Turbopack retains its native compiler heap after compilation.
+        # A new process for generation keeps it out of the page worker's budget.
+        for mode in compile generate; do
+          frontend_build_node -e "$launcher" -- "$@" "--experimental-build-mode=$mode" || return $?
+        done
+      fi
       ;;
     pack)
       [ -n "${2:-}" ] || die "frontend-artifact pack: expected an output directory"

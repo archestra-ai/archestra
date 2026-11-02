@@ -216,3 +216,97 @@ function nodeCheck(
     env: { ...process.env, ARCHESTRA_HEAVY_LANE: "held" },
   };
 }
+
+test.each([
+  { fail: "", expected: 0, modes: ["cache", "compile", "generate"], args: [] },
+  { fail: "compile", expected: 17, modes: ["cache", "compile"], args: [] },
+  {
+    fail: "generate",
+    expected: 23,
+    modes: ["cache", "compile", "generate"],
+    args: [],
+  },
+  { fail: "signal", expected: 143, modes: ["cache", "compile"], args: [] },
+  {
+    fail: "",
+    expected: 0,
+    modes: ["cache", "generate"],
+    args: ["--experimental-build-mode", "generate"],
+  },
+])("frontend phases release the compiler and preserve failures/options ($fail, $args)", ({
+  fail,
+  expected,
+  modes,
+  args,
+}) => {
+  const platform = path.join(dir, "frontend fixture");
+  const scripts = path.join(platform, "scripts");
+  const frontend = path.join(platform, "frontend");
+  const next = path.join(frontend, "node_modules/next/dist/bin/next.js");
+  fs.mkdirSync(path.dirname(next), { recursive: true });
+  fs.mkdirSync(scripts, { recursive: true });
+  fs.mkdirSync(path.join(platform, "backend"));
+  fs.writeFileSync(path.join(platform, "Tiltfile"), "");
+  fs.writeFileSync(path.join(platform, ".env.example"), "");
+  fs.copyFileSync(
+    path.resolve(__dirname, "../../../scripts/dev-lite.sh"),
+    path.join(scripts, "dev-lite.sh"),
+  );
+  const log = path.join(dir, "phases.jsonl");
+  fs.writeFileSync(
+    path.join(scripts, "frontend-prebuilt.mjs"),
+    `import fs from "node:fs"; fs.appendFileSync(process.env.ARCHESTRA_TEST_NEXT_LOG, JSON.stringify({ mode: "cache" }) + "\\n");`,
+  );
+  fs.writeFileSync(
+    next,
+    String.raw`
+const fs = require("node:fs");
+const args = process.argv.slice(2);
+const flag = args.find(arg => arg.startsWith("--experimental-build-mode="));
+const mode = flag ? flag.split("=")[1] : args[args.indexOf("--experimental-build-mode") + 1];
+const log = process.env.ARCHESTRA_TEST_NEXT_LOG;
+const earlier = fs.readFileSync(log, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+const compiler = earlier.find(event => event.mode === "compile");
+if (mode === "generate" && compiler) {
+  try { process.kill(compiler.pid, 0); process.exit(88); }
+  catch (error) { if (error.code !== "ESRCH") throw error; }
+}
+fs.appendFileSync(log, JSON.stringify({ mode, args, pid: process.pid }) + "\n");
+if (mode === process.env.ARCHESTRA_TEST_NEXT_FAIL) process.exit(mode === "compile" ? 17 : 23);
+if (mode === "compile" && process.env.ARCHESTRA_TEST_NEXT_FAIL === "signal") process.kill(process.pid, "SIGTERM");
+`,
+  );
+  const result = spawnSync(
+    "bash",
+    [
+      path.join(scripts, "dev-lite.sh"),
+      "frontend-artifact",
+      "build",
+      "--turbopack",
+      "--debug-build-paths",
+      "app/page with $literal",
+      ...args,
+    ],
+    {
+      cwd: platform,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        ARCHESTRA_DEV_LITE_STATE_DIR: path.join(dir, "state"),
+        ARCHESTRA_DEV_LITE_SOURCE_MAPS: "false",
+        ARCHESTRA_TEST_NEXT_LOG: log,
+        ARCHESTRA_TEST_NEXT_FAIL: fail,
+      },
+    },
+  );
+  expect(result.status, result.stderr).toBe(expected);
+  const events = fs
+    .readFileSync(log, "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  expect(events.map((event) => event.mode)).toEqual(modes);
+  for (const event of events.slice(1)) {
+    expect(event.args).toContain("app/page with $literal");
+  }
+});

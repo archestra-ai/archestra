@@ -1236,10 +1236,24 @@ export function buildElicitationMandateInstruction(params?: {
   askUserToolName?: string;
   nativeQuestionToolName?: string;
   nativeQuestionMaxOptions?: number;
+  nativeQuestionSupportsMultiple?: boolean;
+  gatewayQuestionUsesNativeForm?: boolean;
 }): string {
+  const nativeOnly = params?.gatewayQuestionUsesNativeForm === true;
+  const reviews =
+    nativeOnly && params?.askUserToolName
+      ? ` For guardrail reviews, use ${params.askUserToolName} with the offer IDs. Keep the call blocked if no review form is available.`
+      : "";
+  if (nativeOnly && !params?.nativeQuestionToolName) {
+    return `This client cannot show MCP elicitation forms and has no native question tool available. Do not send ordinary questions to the gateway; explain that the client cannot collect an answer.${reviews}`;
+  }
   const tools: string[] = [];
   if (params?.nativeQuestionToolName) tools.push(params.nativeQuestionToolName);
-  if (params?.askUserToolName && !tools.includes(params.askUserToolName)) {
+  if (
+    !nativeOnly &&
+    params?.askUserToolName &&
+    !tools.includes(params.askUserToolName)
+  ) {
     tools.push(params.askUserToolName);
   }
   const toolName =
@@ -1250,13 +1264,17 @@ export function buildElicitationMandateInstruction(params?: {
     params?.askUserToolName &&
     params.nativeQuestionToolName &&
     params.nativeQuestionMaxOptions !== undefined
-      ? ` ${params.nativeQuestionToolName} accepts at most ${params.nativeQuestionMaxOptions} options. For more options, use ${params.askUserToolName} and keep all choices.`
+      ? ` ${params.nativeQuestionToolName} accepts at most ${params.nativeQuestionMaxOptions} options.${nativeOnly ? " Do not discard choices to fit." : ` For more options, use ${params.askUserToolName} and keep all choices.`}`
+      : "";
+  const singleSelection =
+    nativeOnly && params?.nativeQuestionSupportsMultiple === false
+      ? " This tool accepts a single selection. Collect multiple selections with separate questions."
       : "";
   const toolChoice =
     tools.length > 1
       ? " Honor the user's explicit choice of question tool."
       : "";
-  return `When you need a decision, a clarification, a preference, or an approval from the user, ask with ${toolName}. The user then answers in the client's question interface. Ask multiple-choice questions with ${toolName} too, not in plain text.${toolChoice}${nativeLimit} A link or command the user must open or run goes in your reply text, not in the question.`;
+  return `When you need a decision, a clarification, a preference, or an approval from the user, ask with ${toolName}. The user then answers in the client's question interface. Ask multiple-choice questions with ${toolName} too, not in plain text.${toolChoice}${nativeLimit}${singleSelection}${reviews} A link or command the user must open or run goes in your reply text, not in the question.`;
 }
 
 /**

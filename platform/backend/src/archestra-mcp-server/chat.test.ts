@@ -169,7 +169,7 @@ describe("chat tool execution", () => {
     expect(text).not.toContain("Do not ask this as a plain-text");
   });
 
-  test("ask_user tells the model to use the client's own question tool when the client cannot show the form", async () => {
+  test("ask_user permits native fallback only when allowed and all choices fit", async () => {
     mockContext = {
       ...mockContext,
       elicitation: { elicit: async () => ({ status: "no_viewer" as const }) },
@@ -189,6 +189,10 @@ describe("chat tool execution", () => {
     expect(result.isError).toBe(true);
     const text = (result.content[0] as any).text;
     expect(text).toContain("This client did not answer the choice form");
+    expect(text).toContain(
+      "only if the user permits it and it supports all choices",
+    );
+    expect(text).toContain("Do not repeat this call unchanged");
     expect(text).toContain("Do not ask this as a plain-text chat question");
   });
 

@@ -12,7 +12,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { z } from "zod";
-import db from "@/database";
+import db, { type Transaction } from "@/database";
 import conversationsTable, {
   notDeletedConversation,
 } from "@/database/schemas/conversation";
@@ -59,21 +59,27 @@ export default class OpenAppaYellModel {
   }
 
   /**
-   * Records a call the platform let through under the Break the glass
+   * Records calls the platform let through under the Break the glass
    * settings. Repeats of the same tool and kind in a session add to one
    * unresolved yell, so a looping agent does not flood the Yells tab; once
-   * resolved, the next repeat raises it again.
+   * resolved, the next repeat raises it again. `calls` is how many distinct
+   * calls this record stands for; the caller counts a call once.
    */
-  static async recordWaiver(input: {
-    organizationId: string;
-    callerId: string;
-    sessionId: string;
-    kind: Exclude<OpenAppaYellKind, "agent">;
-    tool: string;
-    message: string;
-    superyell: boolean;
-  }) {
-    await db
+  static async recordWaiver(
+    input: {
+      organizationId: string;
+      callerId: string;
+      sessionId: string;
+      kind: Exclude<OpenAppaYellKind, "agent">;
+      tool: string;
+      message: string;
+      superyell: boolean;
+      calls?: number;
+    },
+    executor: typeof db | Transaction = db,
+  ) {
+    const calls = input.calls ?? 1;
+    await executor
       .insert(table)
       .values({
         organizationId: input.organizationId,
@@ -84,6 +90,7 @@ export default class OpenAppaYellModel {
         message: input.message,
         withTrajectory: false,
         kind: input.kind,
+        count: calls,
         superyell: input.superyell,
       })
       .onConflictDoUpdate({
@@ -94,7 +101,7 @@ export default class OpenAppaYellModel {
           table.toolCallId,
         ],
         set: {
-          count: sql`${table.count} + 1`,
+          count: sql`${table.count} + ${calls}`,
           message: input.message,
           superyell: input.superyell,
           resolvedAt: null,

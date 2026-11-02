@@ -1,12 +1,22 @@
 import { and, eq } from "drizzle-orm";
+import { vi } from "vitest";
 import db, { schema } from "@/database";
+import OpenAppaYellModel from "@/models/openappa-yell";
 import { describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import {
+  humanApprovalWaived,
   isUnattendedRequest,
+  isUnattendedSession,
   recordWaivedCall,
+  recordWaivedReview,
+  rememberUnattendedSession,
   waiverFor,
 } from "./break-the-glass";
 import { findUnenforcedCalls, isUnenforcedSession } from "./unenforced";
+
+// The unattended note lives in the real cache.
+setupTestCacheManager();
 
 const on = {
   active: true,
@@ -179,3 +189,154 @@ test("a waived call turns Guardrails off for the session when the yell is a supe
     .where(eq(schema.openappaYellsTable.sessionId, session.session_id));
   expect(yell).toMatchObject({ kind: "approval_waived", superyell: true });
 });
+
+test("a repeated evaluation of a waived call counts once; another call counts again", async ({
+  makeOrganization,
+}) => {
+  const organizationId = (await makeOrganization()).id;
+  const session = {
+    organization_id: organizationId,
+    caller_id: "user:u1",
+    session_id: "user:u1|s3",
+  };
+  const waive = (toolCallId: string) =>
+    recordWaivedCall({
+      session,
+      toolCallId,
+      tool: "mcp/slack/send",
+      kind: "approval_waived",
+      superyell: false,
+    });
+  expect(await waive("call-1")).toBe(true);
+  // A retried response proposes the same call id again.
+  expect(await waive("call-1")).toBe(true);
+  expect((await yellsOf(organizationId, session.session_id))[0]?.count).toBe(1);
+  expect(await waive("call-2")).toBe(true);
+  expect((await yellsOf(organizationId, session.session_id))[0]?.count).toBe(2);
+});
+
+test("a failed yell write leaves no marker behind, and the next record succeeds", async ({
+  makeOrganization,
+}) => {
+  const organizationId = (await makeOrganization()).id;
+  const session = {
+    organization_id: organizationId,
+    caller_id: "user:u1",
+    session_id: "user:u1|s4",
+  };
+  const waive = () =>
+    recordWaivedCall({
+      session,
+      toolCallId: "call-1",
+      tool: "mcp/slack/send",
+      kind: "approval_waived",
+      superyell: true,
+    });
+  const failing = vi
+    .spyOn(OpenAppaYellModel, "recordWaiver")
+    .mockRejectedValueOnce(new Error("yell storage down"));
+  try {
+    expect(await waive()).toBe(false);
+  } finally {
+    failing.mockRestore();
+  }
+  // The marker rolled back with the yell: the refused call's result stays
+  // withheld, and the session stays under OpenAPPA.
+  expect(
+    (await findUnenforcedCalls({ session, toolCallIds: ["call-1"] })).reasons
+      .size,
+  ).toBe(0);
+  expect(await isUnenforcedSession(session)).toBe(false);
+  expect(await yellsOf(organizationId, session.session_id)).toEqual([]);
+
+  expect(await waive()).toBe(true);
+  expect(
+    Object.fromEntries(
+      (await findUnenforcedCalls({ session, toolCallIds: ["call-1"] })).reasons,
+    ),
+  ).toEqual({ "call-1": "waived" });
+  expect(await isUnenforcedSession(session)).toBe(true);
+  expect(await yellsOf(organizationId, session.session_id)).toEqual([
+    expect.objectContaining({ kind: "approval_waived", count: 1 }),
+  ]);
+});
+
+test("a waived review records a yell for the reviewed tool and follows the Yell tool setting", async ({
+  makeOrganization,
+}) => {
+  const organizationId = (await makeOrganization()).id;
+  const session = {
+    organization_id: organizationId,
+    caller_id: "user:u1",
+    session_id: "user:u1|s5",
+  };
+  expect(
+    await recordWaivedReview({
+      session,
+      tool: "host/archestra/Agent",
+      superyell: false,
+    }),
+  ).toBe(true);
+  expect(await isUnenforcedSession(session)).toBe(false);
+  expect(
+    await recordWaivedReview({
+      session,
+      tool: "host/archestra/Agent",
+      superyell: true,
+    }),
+  ).toBe(true);
+  expect(await isUnenforcedSession(session)).toBe(true);
+  expect(await yellsOf(organizationId, session.session_id)).toEqual([
+    expect.objectContaining({
+      kind: "approval_waived",
+      count: 2,
+      superyell: true,
+      message: expect.stringContaining("host/archestra/Agent"),
+    }),
+  ]);
+});
+
+test("the proxy's unattended note is read for that session only", async ({
+  makeOrganization,
+}) => {
+  const organizationId = (await makeOrganization()).id;
+  const session = { organization_id: organizationId, session_id: "s6" };
+  expect(await isUnattendedSession(session)).toBe(false);
+  await rememberUnattendedSession(session);
+  expect(await isUnattendedSession(session)).toBe(true);
+  expect(await isUnattendedSession({ ...session, session_id: "s7" })).toBe(
+    false,
+  );
+  expect(
+    await isUnattendedSession({ ...session, organization_id: "other" }),
+  ).toBe(false);
+});
+
+test("humanApprovalWaived reaches an unattended session, everywhere, or nowhere", () => {
+  const settings = (
+    humanApprovalMode: "block" | "unattended" | "everywhere",
+  ) => ({
+    active: true,
+    humanApprovalMode,
+    unapprovableBlockMode: "refuse" as const,
+  });
+  expect(humanApprovalWaived(settings("block"), true)).toBe(false);
+  expect(humanApprovalWaived(settings("unattended"), false)).toBe(false);
+  expect(humanApprovalWaived(settings("unattended"), true)).toBe(true);
+  expect(humanApprovalWaived(settings("everywhere"), false)).toBe(true);
+  expect(
+    humanApprovalWaived({ ...settings("everywhere"), active: false }, true),
+  ).toBe(false);
+});
+
+async function yellsOf(organizationId: string, sessionId: string) {
+  return db
+    .select()
+    .from(schema.openappaYellsTable)
+    .where(
+      and(
+        eq(schema.openappaYellsTable.organizationId, organizationId),
+        eq(schema.openappaYellsTable.sessionId, sessionId),
+      ),
+    );
+}

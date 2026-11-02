@@ -44,7 +44,6 @@
     "src/services/cross-provider-pricing.ts",
     "src/services/environments/environment-isolation.ts",
     "src/services/github-app-copilot-token.ts",
-    "src/services/fireworks-model.ts",
     "src/services/media-pricing.ts",
     "src/services/pg-notify-hub.ts",
     "src/services/shared-notify-hub.ts",

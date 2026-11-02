@@ -511,7 +511,6 @@
     "src/services/identity-providers/linked-idp-auth.ts",
     "src/services/mcp-advanced-settings.ts",
     "src/services/mcp-server-assignability.ts",
-    "src/services/fireworks-model.ts",
     "src/services/media-pricing.ts",
     "src/services/member-removal.ts",
     "src/services/pg-notify-hub.ts",

@@ -240,12 +240,28 @@ describe("readCgroupMemory", () => {
       );
       writeFileSync(path.join(dir, "memory.peak"), `${8 * GIB}\n`);
       writeFileSync(path.join(dir, "memory.max"), "max\n");
-      expect(readCgroupMemory(dir)).toEqual({
+      expect(readCgroupMemory(dir, path.join(dir, "no-warden.log"))).toEqual({
         oomKills: 2,
+        wardenStops: 0,
         limitHits: 3,
         peakBytes: 8 * GIB,
         // "max" is no limit.
         limitBytes: null,
+      });
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  test("counts the commands the memory warden stopped", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "cgroup-"));
+    try {
+      writeFileSync(path.join(dir, "memory.events"), "oom 0\noom_kill 0\n");
+      const log = path.join(dir, "memory-warden.log");
+      writeFileSync(log, '{"reason":"limit"}\n{"reason":"pressure"}\n');
+      expect(readCgroupMemory(dir, log)).toMatchObject({
+        oomKills: 0,
+        wardenStops: 2,
       });
     } finally {
       rmSync(dir, { recursive: true });
@@ -265,12 +281,14 @@ describe("readCgroupMemory", () => {
 describe("describeToolMemoryKill", () => {
   const before = {
     oomKills: 0,
+    wardenStops: 0,
     limitHits: 10,
     peakBytes: 5 * GIB,
     limitBytes: 8 * GIB,
   };
   const atLimit = {
     oomKills: 1,
+    wardenStops: 0,
     limitHits: 11,
     peakBytes: 8 * GIB,
     limitBytes: 8 * GIB,
@@ -289,6 +307,21 @@ describe("describeToolMemoryKill", () => {
     steps: ["Give the compiler one checker: add --checkers 1."],
     env,
   };
+
+  test("says the memory warden stopped the command near the limit", () => {
+    const report = describeToolMemoryKill({
+      ...typeCheck,
+      subjectKilled: true,
+      before,
+      after: { ...before, wardenStops: 1, peakBytes: 7.8 * GIB },
+    });
+    expect(report).toContain(
+      "type-check: tsc was stopped for memory: this container neared its memory limit of 8 GiB at tier S, and its memory warden stops the largest command before the kernel stops every process.",
+    );
+    expect(report).toContain(
+      "  - Give the compiler one checker: add --checkers 1.",
+    );
+  });
 
   test("names the killed command, the limit, the tier, the peak and what to change", () => {
     expect(

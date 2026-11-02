@@ -1,0 +1,15 @@
+{
+  // Tests of the knowledge base.
+  "extends": "./tsconfig.test-project.json",
+  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-domain-a.tsbuildinfo" },
+  "include": [
+    "src/ambient/*.d.ts",
+    "src/knowledge-base/**/*.test.ts"
+  ],
+  "references": [
+    { "path": "../shared/tsconfig.lib.json" },
+    { "path": "./tsconfig.schema.json" },
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.test-support.json" }
+  ]
+}

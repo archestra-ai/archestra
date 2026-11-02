@@ -18,14 +18,15 @@
  * Nothing here is backend-specific: any package that turns its tsconfig.json
  * into a solution gets the same check.
  */
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import { constants, tmpdir } from "node:os";
+import { constants } from "node:os";
 import path from "node:path";
 import {
   describeToolMemoryKill,
   readCgroupMemory,
+  TYPE_CHECK_PROJECT_PEAK_BYTES,
 } from "../vitest.resources.ts";
+import { runHeavy } from "./heavy-lane.ts";
 
 export interface SolutionProject {
   /** Absolute path of the project's tsconfig. */
@@ -129,22 +130,25 @@ export function typeCheckSolution(params: {
   projects: SolutionProject[];
   /** The solution's directory; projects are named relative to it. */
   solutionDir: string;
+  /** The package checked, for the lane's labels and the declared peaks. */
+  packageName: string;
   /** The caller's compiler options, without `--project` and `--noEmit`. */
   args: string[];
   /** The checkers a compiler gets (`typeScriptCheckers`), or null for the compiler's default. */
   checkers: number | null;
   /** The single-program check's Go memory limit (`typeScriptMemorySettings`), or null for none. */
   goMemoryLimitBytes: number | null;
-  /** Whether compilers take turns, as the single-program check does. */
-  takeTurns: boolean;
+  /** Whether each project takes a turn in the heavy-command lane, as the single-program check does. */
+  lane: boolean;
 }): number {
   const {
     projects,
     solutionDir,
+    packageName,
     args,
     checkers,
     goMemoryLimitBytes,
-    takeTurns,
+    lane,
   } = params;
   const buildArgs = [...args];
   if (checkers !== null && !hasOption(args, "--checkers", "--singleThreaded")) {
@@ -174,23 +178,20 @@ export function typeCheckSolution(params: {
   let killedProject: string | null = null;
   let memoryBefore = readCgroupMemory();
   const outcome = buildProjects(projects, (project) => {
-    const compiler = ["tsc", "-b", project.config, ...buildArgs];
-    // The same turn the single-program check takes (type-check.ts), so a
-    // package's projects never build beside another package's compiler.
-    const command =
-      takeTurns && hasFlock()
-        ? [
-            "flock",
-            path.join(tmpdir(), "archestra-type-check.lock"),
-            ...compiler,
-          ]
-        : compiler;
     memoryBefore = readCgroupMemory();
     const started = Date.now();
-    const result = spawnSync(command[0], command.slice(1), {
-      stdio: "inherit",
+    // One turn per project in the heavy-command lane (scripts/heavy-lane.ts),
+    // with the project's declared peak: a project too big to fit beside the
+    // dev stack's servers has them paused while it builds, the others do not.
+    const projectName = name(project.config);
+    const declared = TYPE_CHECK_PROJECT_PEAK_BYTES[packageName];
+    const result = runHeavy({
+      command: "tsc",
+      args: ["-b", project.config, ...buildArgs],
       env,
-      shell: process.platform === "win32",
+      label: `type-check (${packageName}: ${projectName})`,
+      peakBytes: declared?.[projectName],
+      lane,
     });
     if (result.error) throw result.error;
     const status =
@@ -333,11 +334,4 @@ export function checkerCount(args: string[]): number {
     if (value !== undefined && /^\d+$/.test(value)) return Number(value);
   }
   return 4;
-}
-
-// type-check.ts has the same check for the single program's turn; both give
-// way to the heavy-command lane (scripts/heavy-lane.ts) once it lands.
-function hasFlock(): boolean {
-  if (process.platform !== "linux") return false;
-  return spawnSync("flock", ["--version"], { stdio: "ignore" }).status === 0;
 }

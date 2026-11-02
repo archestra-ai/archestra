@@ -2,8 +2,10 @@
 // Checks that the backend's TypeScript projects (the references of
 // tsconfig.json) check every backend file exactly once: a file in no project
 // is never type-checked, and one in two is checked twice. A source file must
-// be in the project its layer names (layers.mjs), and every project must
-// include the ambient declarations, which no project emits.
+// be in the project its layer names (layers.mjs), every project must include
+// the ambient declarations, which no project emits, and every project must
+// declare its peak (TYPE_CHECK_PROJECT_PEAK_BYTES), which the heavy-command
+// lane reads to decide whether the dev stack's servers make room for it.
 //
 // Usage: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-projects.mjs
 // (the projects are the ones `pnpm type-check` builds, read by its own code;
@@ -14,6 +16,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { solutionBuildOrder } from "../../scripts/type-check-solution.ts";
+import { TYPE_CHECK_PROJECT_PEAK_BYTES } from "../../vitest.resources.ts";
 import { layers, TESTS } from "../layers.mjs";
 
 const backendDir = path.resolve(
@@ -35,12 +38,19 @@ console.log("Every backend file is in exactly one TypeScript project.");
 function checkProjects(root) {
   const solution = solutionBuildOrder(path.join(root, "tsconfig.json"));
   if (!solution) return ["tsconfig.json is not a solution of projects"];
+  const declared = TYPE_CHECK_PROJECT_PEAK_BYTES.backend ?? {};
+  const problems = solution
+    .map((project) => path.relative(root, project.config).split(path.sep).join("/"))
+    .filter((name) => declared[name] === undefined)
+    .map(
+      (name) =>
+        `${name} declares no peak: add its measured peak to TYPE_CHECK_PROJECT_PEAK_BYTES (vitest.resources.ts)`,
+    );
   const projects = solution
     .map((project) => project.config)
     // Other packages' projects check their own files.
     .filter((config) => path.dirname(config) === root);
   const owners = new Map();
-  const problems = [];
   const ambient = backendFiles(root, "src/ambient");
   for (const config of projects) {
     const name = path.basename(config);

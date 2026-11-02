@@ -108,9 +108,8 @@ test.for([
       "/v1/azure/chat/completions",
       "/v1/azure/{agentId}/chat/completions",
     ]) {
-      const requestBody = document.paths?.[path]?.post?.requestBody;
-      expect(requestBody).toHaveProperty(
-        "content.application/json.schema.properties.response_format",
+      expect(document.paths?.[path]?.post).toHaveProperty(
+        "requestBody.content.application/json.schema.properties.response_format",
       );
     }
     const client = new OpenAI({

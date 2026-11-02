@@ -408,6 +408,34 @@ test.each([
 });
 
 test.each([
+  {
+    name: "a space",
+    home: "C:\\Users\\Jane Doe\\.codex",
+    linuxHome: "/mnt/c/Users/Jane Doe/.codex",
+  },
+  {
+    name: "a quote and a dollar sign",
+    home: "C:\\Users\\O'Brien $HOME\\.codex",
+    linuxHome: "/mnt/c/Users/O'Brien $HOME/.codex",
+  },
+])("the WSL export command keeps a Codex home with $name as one value", async ({
+  home,
+  linuxHome,
+}) => {
+  const message: string = runInNewContext(
+    `${CODEX_WSL_SETUP_HINT}\nwslSetupHint(home, config)`,
+    { home, config: WSL_MODE },
+  );
+  const command = message.split("\n").at(-1)?.trim() ?? "";
+  expect(command).toMatch(/^export CODEX_HOME=/);
+  const { stdout } = await exec("sh", [
+    "-c",
+    `${command}; printf %s "$CODEX_HOME"`,
+  ]);
+  expect(stdout).toBe(linuxHome);
+});
+
+test.each([
   { platform: "win32", config: WSL_MODE, stops: true },
   {
     platform: "win32",

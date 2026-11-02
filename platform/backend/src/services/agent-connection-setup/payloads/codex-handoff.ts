@@ -20,13 +20,17 @@ function runsCodexInWsl(config) {
   }
   return false;
 }
+// One shell word: quoted when the path has a space or a shell character.
+function shellWord(value) {
+  return /^[\w\/.,:@%+=-]+$/.test(value) ? value : "'" + value.replace(/'/g, "'\\''") + "'";
+}
 function wslSetupHint(home, config) {
   const drive = /^([A-Za-z]):[\\/](.*)$/.exec(home);
   if (!drive) return '';
   const windowsHome = home.replace(/[\\/]+$/, '');
   const linuxHome = '/mnt/' + drive[1].toLowerCase() + '/' + drive[2].replace(/\\/g, '/').replace(/\/+$/, '');
   if (runsCodexInWsl(config)) {
-    return '\nThe desktop app is set to run Codex in WSL (runCodexInWindowsSubsystemForLinux = true), and Codex in WSL cannot open the Windows paths that this setup writes. Run the macOS / Linux setup command in WSL. Enter this command first:\n  export CODEX_HOME=' + linuxHome;
+    return '\nThe desktop app is set to run Codex in WSL (runCodexInWindowsSubsystemForLinux = true), and Codex in WSL cannot open the Windows paths that this setup writes. Run the macOS / Linux setup command in WSL. Enter this command first:\n  export CODEX_HOME=' + shellWord(linuxHome);
   }
   if (!/^[^#\r\n]*["']\/mnt\/[a-z]\//m.test(config)) return '';
   return '\nThis config has WSL paths from a time when Codex ran in WSL. Codex for Windows cannot open these paths. Change them to Windows paths, for example ' + linuxHome + ' to ' + windowsHome + '.';

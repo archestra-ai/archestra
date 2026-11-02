@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { AgentModel } from "@/models";
@@ -15,13 +15,15 @@ import {
   setOrganizationTrio,
 } from "@/test/auto-routing";
 import { RoutingSessionKeySchema } from "@/types/auto-routing";
-import { autoRoutingDispatcher } from "./auto-routing-dispatch-handler";
+import { AutoRoutingDispatcher } from "./auto-routing-dispatch-handler";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 describe("auto routing dispatcher", () => {
+  let autoRoutingDispatcher: AutoRoutingDispatcher;
   beforeEach(() => {
     config.autoRouting.enabled = true;
+    autoRoutingDispatcher = new AutoRoutingDispatcher(() => 0);
   });
 
   test("enqueues a fit for an organization changed since its last fit", async ({
@@ -157,6 +159,96 @@ describe("auto routing dispatcher", () => {
 
     await autoRoutingDispatcher.dispatch(new Date(now.getTime() + DAY_MS));
     expect(await decisionCount(organizationId)).toBe(0);
+  });
+
+  test("backs off canceled cleanup while continuing to enqueue due fits", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = await configuredOrganization(makeOrganization);
+    // PostgreSQL sequences retain increments when the canceled statement rolls back.
+    await db.execute(sql`create sequence cleanup_attempts`);
+    await db.execute(sql`create function cancel_cleanup() returns trigger language plpgsql as $$
+      begin
+        perform nextval('cleanup_attempts');
+        raise exception 'synthetic query cancellation' using errcode = '57014';
+      end $$`);
+    await db.execute(sql`create trigger cancel_cleanup before delete on routing_decisions
+      for each statement execute function cancel_cleanup()`);
+    try {
+      const startedAt = Date.now();
+      const now = startedAt + 6 * 60_000;
+      let elapsed = 0;
+      autoRoutingDispatcher = new AutoRoutingDispatcher(() => elapsed);
+      const attempts = async () => {
+        const result = await db.execute<{ count: number }>(
+          sql`select last_value::int as count from cleanup_attempts`,
+        );
+        return result.rows[0]?.count;
+      };
+      const pending = Promise.all([
+        autoRoutingDispatcher.dispatch(new Date(startedAt)),
+        autoRoutingDispatcher.dispatch(new Date(startedAt)),
+      ]);
+      // The canceled attempt outlasts the initial five-minute retry delay.
+      elapsed = 6 * 60_000;
+      await pending;
+      expect(await queuedFits(organizationId)).toBe(1);
+      expect(await attempts()).toBe(1);
+      // Retries wait 5, 10, 20, 40, then at most 60 minutes.
+      for (const [index, minute] of [5, 15, 35, 75, 135, 195].entries()) {
+        await autoRoutingDispatcher.dispatch(
+          new Date(now + (minute - 1) * 60_000),
+        );
+        expect(await attempts()).toBe(index + 1);
+        await autoRoutingDispatcher.dispatch(new Date(now + minute * 60_000));
+        expect(await attempts()).toBe(index + 2);
+      }
+      await db.execute(sql`drop trigger cancel_cleanup on routing_decisions`);
+      const model = await makeRoutingModel();
+      const scorer = await makeScorerVersion();
+      const expired = async () => {
+        const { decision } = await RoutingDecisionModel.insertOrGet(
+          plannedDecision({
+            organizationId,
+            sessionKey: RoutingSessionKeySchema.parse(randomUUID()),
+            modelId: model.id,
+            scorerVersionId: scorer.id,
+          }),
+        );
+        await db
+          .update(schema.routingDecisionsTable)
+          .set({ createdAt: new Date(now - 91 * DAY_MS) })
+          .where(eq(schema.routingDecisionsTable.id, decision.id));
+      };
+      await expired();
+      const recoveredAt = now + 255 * 60_000;
+      await autoRoutingDispatcher.dispatch(new Date(recoveredAt));
+      expect(await decisionCount(organizationId)).toBe(0);
+      await expired();
+      await autoRoutingDispatcher.dispatch(new Date(recoveredAt + 60_000));
+      expect(await decisionCount(organizationId)).toBe(1);
+      await autoRoutingDispatcher.dispatch(new Date(recoveredAt + DAY_MS));
+      expect(await decisionCount(organizationId)).toBe(0);
+      await db.execute(sql`create trigger cancel_cleanup before delete on routing_decisions
+        for each statement execute function cancel_cleanup()`);
+      const failedAgainAt = recoveredAt + 2 * DAY_MS;
+      await autoRoutingDispatcher.dispatch(new Date(failedAgainAt));
+      expect(await attempts()).toBe(8);
+      await autoRoutingDispatcher.dispatch(
+        new Date(failedAgainAt + 4 * 60_000),
+      );
+      expect(await attempts()).toBe(8);
+      await autoRoutingDispatcher.dispatch(
+        new Date(failedAgainAt + 5 * 60_000),
+      );
+      expect(await attempts()).toBe(9);
+    } finally {
+      await db.execute(
+        sql`drop trigger if exists cancel_cleanup on routing_decisions`,
+      );
+      await db.execute(sql`drop function cancel_cleanup()`);
+      await db.execute(sql`drop sequence cleanup_attempts`);
+    }
   });
 });
 

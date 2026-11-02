@@ -5,7 +5,7 @@
   // projects above them read instead of their sources:
   //   shared lib, migration linter lib -> schema -> core -> models
   //   -> models-agents -> models-upper -> runtime and llm-clients
-  //   -> app -> test-support -> tests-*, tools
+  //   -> kb-core -> kb-connectors -> kb -> app -> test-support -> tests-*, tools
   // The options every project shares, and the `paths` alias the runtime tools
   // read through this file, are in tsconfig.base.json. pnpm check:projects
   // checks that every backend file is in exactly one project.
@@ -21,6 +21,9 @@
     { "path": "./tsconfig.models-upper.json" },
     { "path": "./tsconfig.runtime.json" },
     { "path": "./tsconfig.llm-clients.json" },
+    { "path": "./tsconfig.kb-core.json" },
+    { "path": "./tsconfig.kb-connectors.json" },
+    { "path": "./tsconfig.kb.json" },
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.test-support.json" },
     { "path": "./tsconfig.tests-database.json" },

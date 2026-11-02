@@ -2,8 +2,8 @@
  * Capabilities lower backend layers need from code above them, reached through
  * ports so those layers import nothing from a higher layer (layers.mjs). Each
  * port is one narrow interface; `server/composition.ts` binds every port to
- * its implementation with the same lazy `import()` the models used to make,
- * and the compiler checks there that each implementation still fits its port.
+ * its implementation through a lazy `import()`, and the compiler checks there
+ * that each implementation still fits its port.
  * Port members are function-typed properties, not methods, so that check is
  * strict: the implementation must accept every argument the port allows.
  *
@@ -14,7 +14,11 @@
  * `globalThis`, so a test that resets the module registry keeps them.
  */
 import type { LocalMcpInstallationState } from "@archestra/shared";
-import type { CommonMcpToolDefinition, InternalMcpCatalog } from "@/types";
+import type {
+  CommonMcpToolDefinition,
+  ConnectorRun,
+  InternalMcpCatalog,
+} from "@/types";
 
 /** Tears down an MCP server's Kubernetes deployment (k8s/mcp-server-runtime). */
 export interface McpServerRuntimePort {
@@ -94,6 +98,13 @@ export interface MountedSkillsReadabilityPort {
   }) => Promise<{ ok: true } | { ok: false; code: string; reason: string }>;
 }
 
+/** Finalizes a connector run after its last embedding task completes or dies. */
+export interface EmbeddingFinalizationPort {
+  finalizeConnectorAfterEmbeddingDrain: (
+    run: ConnectorRun | null,
+  ) => Promise<void>;
+}
+
 /** Every port, by name. */
 export interface Ports {
   mcpServerRuntime: McpServerRuntimePort;
@@ -105,6 +116,7 @@ export interface Ports {
   jwksSigningKey: JwksSigningKeyPort;
   mcpInstallationEvents: McpInstallationEventsPort;
   mountedSkillsReadability: MountedSkillsReadabilityPort;
+  embeddingFinalization: EmbeddingFinalizationPort;
 }
 
 /** A binding for each port: loads the implementation when the port is first used. */
@@ -161,6 +173,7 @@ const PORT_NAMES = [
   "jwksSigningKey",
   "mcpInstallationEvents",
   "mountedSkillsReadability",
+  "embeddingFinalization",
 ] as const satisfies readonly (keyof Ports)[];
 
 /** Fails to compile when a port is missing from PORT_NAMES. */

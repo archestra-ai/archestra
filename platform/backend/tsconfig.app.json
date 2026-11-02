@@ -25,6 +25,15 @@
     "src/skills/skill-catalog.generated.json"
   ],
   "exclude": [
+    "src/task-queue/index.ts",
+    "src/task-queue/task-queue.ts",
+    "src/task-queue/periodic-tasks.ts",
+
+    "src/knowledge-base/**",
+    "src/services/billable-usage.ts",
+    "src/routes/proxy/utils/cost-optimization.ts",
+    "src/routes/chat/normalization/apply-prompt-cache.ts",
+
     "src/openappa/subagent-binding.ts",
     "src/clients/llm-client.ts",
     "src/clients/anthropic-endpoint.ts",
@@ -216,6 +225,9 @@
     "src/test/**"
   ],
   "references": [
+    { "path": "./tsconfig.kb-core.json" },
+    { "path": "./tsconfig.kb-connectors.json" },
+    { "path": "./tsconfig.kb.json" },
     { "path": "./tsconfig.llm-clients.json" },
     { "path": "./tsconfig.runtime.json" },
     { "path": "../shared/tsconfig.lib.json" },

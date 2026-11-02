@@ -1,0 +1,103 @@
+{
+  // Knowledge-base content, retrieval, embeddings and shared connector support.
+  "extends": "./tsconfig.source-project.json",
+  "compilerOptions": {
+    "outDir": "./.tsbuild/kb-core",
+    "tsBuildInfoFile": "./.tsbuild/kb-core.tsbuildinfo"
+  },
+  "files": [
+    "src/knowledge-base/chunk-and-store.ts",
+    "src/knowledge-base/chunker.ts",
+    "src/knowledge-base/connector-credentials.ts",
+    "src/knowledge-base/connector-settings-change.ts",
+    "src/knowledge-base/connectors/atlassian-admin-email-resolver.ts",
+    "src/knowledge-base/connectors/base-connector.ts",
+    "src/knowledge-base/connectors/docx-text-extractor.ts",
+    "src/knowledge-base/connectors/folder-traversal.ts",
+    "src/knowledge-base/connectors/gdrive/gdrive-auth.ts",
+    "src/knowledge-base/connectors/gdrive/gdrive-oauth.ts",
+    "src/knowledge-base/connectors/github/github-repository-settings.ts",
+    "src/knowledge-base/connectors/identity-cache.ts",
+    "src/knowledge-base/connectors/pdf-utils.ts",
+    "src/knowledge-base/connectors/perforce/p4-endpoint.ts",
+    "src/knowledge-base/connectors/perforce/p4-protections.ts",
+    "src/knowledge-base/connectors/perforce/p4-rest-client.ts",
+    "src/knowledge-base/connectors/perforce/p4-shim-client.ts",
+    "src/knowledge-base/connectors/perforce/p4-shim-service.ts",
+    "src/knowledge-base/connectors/pptx-text-extractor.ts",
+    "src/knowledge-base/connectors/xlsx-text-extractor.ts",
+    "src/knowledge-base/context-expansion.ts",
+    "src/knowledge-base/contextual-retrieval.ts",
+    "src/knowledge-base/embedder.ts",
+    "src/knowledge-base/embedding-clients/azure.ts",
+    "src/knowledge-base/embedding-clients/bedrock-models.ts",
+    "src/knowledge-base/embedding-clients/bedrock.ts",
+    "src/knowledge-base/embedding-clients/cohere-models.ts",
+    "src/knowledge-base/embedding-clients/cohere.ts",
+    "src/knowledge-base/embedding-clients/gemini.ts",
+    "src/knowledge-base/embedding-clients/index.ts",
+    "src/knowledge-base/embedding-clients/openai.ts",
+    "src/knowledge-base/embedding-clients/registry.ts",
+    "src/knowledge-base/embedding-clients/shared.ts",
+    "src/knowledge-base/embedding-clients/types.ts",
+    "src/knowledge-base/embedding-clients/vertex-models.ts",
+    "src/knowledge-base/embedding-clients/voyage-models.ts",
+    "src/knowledge-base/embedding-clients/voyage.ts",
+    "src/knowledge-base/errors.ts",
+    "src/knowledge-base/file-upload/extract.ts",
+    "src/knowledge-base/file-upload/index-file.ts",
+    "src/knowledge-base/github-settings-compatibility.ts",
+    "src/knowledge-base/group-token-cache.ts",
+    "src/knowledge-base/kb-interaction.ts",
+    "src/knowledge-base/kb-llm-client.ts",
+    "src/knowledge-base/knowledge-source-deletion.ts",
+    "src/knowledge-base/media-chunk.ts",
+    "src/knowledge-base/metadata-suffix.ts",
+    "src/knowledge-base/mfiles-gates.ts",
+    "src/knowledge-base/native-rerank.ts",
+    "src/knowledge-base/parent-passage.ts",
+    "src/knowledge-base/pdf-ocr.ts",
+    "src/knowledge-base/permission-sync-schedule.ts",
+    "src/knowledge-base/query-expansion.ts",
+    "src/knowledge-base/query.ts",
+    "src/knowledge-base/quote-verification.ts",
+    "src/knowledge-base/reranker-prompt.ts",
+    "src/knowledge-base/reranker.ts",
+    "src/knowledge-base/retrieval-backend.ts",
+    "src/knowledge-base/retrieval-backends/postgres/postgres-retrieval-backend.ts",
+    "src/knowledge-base/retrieval-backends/registry.ts",
+    "src/knowledge-base/retrieval-result-verifier.ts",
+    "src/knowledge-base/rrf.ts",
+    "src/knowledge-base/salesforce-auth-policy.ts",
+    "src/knowledge-base/tokenizer.ts"
+  ],
+  "include": [
+    "src/ambient/*.d.ts"
+  ],
+  "references": [
+    {
+      "path": "../shared/tsconfig.lib.json"
+    },
+    {
+      "path": "./tsconfig.schema.json"
+    },
+    {
+      "path": "./tsconfig.core.json"
+    },
+    {
+      "path": "./tsconfig.models.json"
+    },
+    {
+      "path": "./tsconfig.models-agents.json"
+    },
+    {
+      "path": "./tsconfig.models-upper.json"
+    },
+    {
+      "path": "./tsconfig.llm-clients.json"
+    },
+    {
+      "path": "./tsconfig.runtime.json"
+    }
+  ]
+}

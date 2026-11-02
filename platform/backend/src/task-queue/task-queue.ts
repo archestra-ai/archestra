@@ -1,6 +1,7 @@
 import config from "@/config";
 import logger from "@/logging";
-import { TaskModel } from "@/models";
+import { port } from "@/models/ports";
+import TaskModel from "@/models/task";
 import * as metrics from "@/observability/metrics";
 import type { InsertTask, Task, TaskHandler, TaskLane } from "@/types";
 import { TASK_LANES } from "@/types";
@@ -405,8 +406,8 @@ export class TaskQueueService {
               },
               task.id,
             );
-            const { finalizeConnectorAfterEmbeddingDrain } = await import(
-              "@/task-queue/handlers/batch-embedding-finalizer"
+            const { finalizeConnectorAfterEmbeddingDrain } = await port(
+              "embeddingFinalization",
             );
             await finalizeConnectorAfterEmbeddingDrain(updatedRun);
           } catch (batchError) {

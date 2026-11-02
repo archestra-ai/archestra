@@ -19,7 +19,7 @@ import SkillTeamModel from "@/models/skill-team";
 import { isBuiltInSkillSourceRef } from "@/skills/built-in-skills";
 import { ApiError } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
-import { assertNoStaticPinsBrokenByTargetChange } from "./agent-tool-assignment";
+import { assertNoStaticPinsBrokenByTargetChange } from "./mcp-server-assignability";
 import { ResourcePermissions } from "./resource-permissions";
 
 export async function transferResourceOwnership(params: {

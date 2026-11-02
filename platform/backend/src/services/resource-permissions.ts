@@ -39,8 +39,8 @@ import ResourcePermissionSubjectModel, {
   type PrincipalSource,
 } from "@/models/resource-permission-subject";
 import ResourcePermissionTargetModel from "@/models/resource-permission-target";
-import { assertNoStaticPinsBrokenByTargetChange } from "@/services/agent-tool-assignment";
 import { resyncAppBackingInstallScope } from "@/services/apps/app-mcp-backing";
+import { assertNoStaticPinsBrokenByTargetChange } from "@/services/mcp-server-assignability";
 import type { ListInternalMcpCatalog } from "@/types";
 import { ApiError } from "@/types";
 import { CredentialResourcePermissions } from "./credential-resource-permissions";

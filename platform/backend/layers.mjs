@@ -146,6 +146,17 @@ const layerTable = [
       // Constants the chatops config model validates against.
       "src/agents/chatops/constants.ts",
       "src/agents/incoming-email/constants.ts",
+      // Resource permissions, which the auth helpers and better-auth's hooks
+      // check and update, with what an update runs: the credential and MCP
+      // server assignability rules, the app MCP backing resync and member
+      // removal, and the MCP advanced settings the auth plugin resolves.
+      "src/services/resource-permissions.ts",
+      "src/services/credential-resource-permissions.ts",
+      "src/services/mcp-server-assignability.ts",
+      "src/services/apps/app-mcp-backing.ts",
+      "src/services/apps/app-run-link.ts",
+      "src/services/member-removal.ts",
+      "src/services/mcp-advanced-settings.ts",
     ],
     project: APP,
   },

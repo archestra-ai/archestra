@@ -108,6 +108,7 @@ import AgentSkillModel from "./agent-skill";
 import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
+import { agentToolSurfaceChanged } from "./agent-tool-surface";
 import AgentUserModel from "./agent-user";
 import AgentVersionModel from "./agent-version";
 import CreatedByModel from "./created-by";
@@ -4257,13 +4258,8 @@ class AgentModel {
 
         // Invalidate tool cache for all parent agents so they pick up the new tool name
         const parentAgentIds = await ToolModel.getParentAgentIds(id);
-        // Lazy (here and below): the chat MCP client imports the service
-        // layer, which would otherwise load with every model.
-        const { clearChatMcpClient } = await import(
-          "@/clients/chat-mcp-client"
-        );
         for (const parentAgentId of parentAgentIds) {
-          clearChatMcpClient(parentAgentId);
+          agentToolSurfaceChanged(parentAgentId);
         }
       }
 
@@ -4277,10 +4273,7 @@ class AgentModel {
         updatedAgent.toolExposureMode !== existingAgent.toolExposureMode ||
         updatedAgent.accessAllTools !== existingAgent.accessAllTools
       ) {
-        const { clearChatMcpClient } = await import(
-          "@/clients/chat-mcp-client"
-        );
-        clearChatMcpClient(id);
+        agentToolSurfaceChanged(id);
       }
     } else {
       updatedAgent = existingAgent;

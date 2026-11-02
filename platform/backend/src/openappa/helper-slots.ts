@@ -14,6 +14,8 @@ export class HelperSlots {
 
   /** Take a slot, waiting for one until `deadline` (epoch ms); false when none freed up. */
   acquire(deadline: number): Promise<boolean> {
+    // A cap raised since the last release first serves the consults already waiting.
+    this.handOverFree();
     if (this.inFlight < this.cap()) {
       this.inFlight++;
       return Promise.resolve(true);
@@ -42,16 +44,19 @@ export class HelperSlots {
    * wait, if the cap still has room.
    */
   release(): void {
-    if (this.inFlight <= this.cap()) {
-      const now = Date.now();
-      const next = this.waiting.findIndex((waiter) => waiter.deadline > now);
-      if (next >= 0) {
-        // Waiters before it are past their deadline; their timers turn them away.
-        const [waiter] = this.waiting.splice(next, 1);
-        waiter.handOver();
-        return;
-      }
-    }
     this.inFlight--;
+    this.handOverFree();
+  }
+
+  private handOverFree(): void {
+    const now = Date.now();
+    while (this.inFlight < this.cap()) {
+      const next = this.waiting.findIndex((waiter) => waiter.deadline > now);
+      if (next < 0) return;
+      // Waiters before it are past their deadline; their timers turn them away.
+      const [waiter] = this.waiting.splice(next, 1);
+      this.inFlight++;
+      waiter.handOver();
+    }
   }
 }

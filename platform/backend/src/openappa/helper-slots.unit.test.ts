@@ -51,6 +51,16 @@ describe("HelperSlots", () => {
     expect(order).toEqual(["first", "second"]);
   });
 
+  test("a raised cap serves the consults already waiting before a new one", async () => {
+    let cap = 1;
+    const slots = new HelperSlots(() => cap);
+    await slots.acquire(Date.now());
+    const waiting = slots.acquire(Date.now() + 50);
+    cap = 2;
+    expect(await slots.acquire(Date.now())).toBe(false);
+    expect(await waiting).toBe(true);
+  });
+
   test("a lowered cap is honoured: a freed slot above it is not handed over", async () => {
     let cap = 2;
     const slots = new HelperSlots(() => cap);

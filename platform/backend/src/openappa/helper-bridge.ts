@@ -146,8 +146,9 @@ class OpenAppaHelperBridge {
     const cwd = skillRootPath(battery.name);
     // Only sandbox execution consumes this share. In-process audience reads,
     // missing helpers and credential validation do not occupy sandbox workers.
-    // A consult over the cap waits for a slot as long as its execution still
-    // gets its whole budget before the deadline.
+    // A consult over the cap waits for a slot as long as its execution budget
+    // still ends before the deadline. The wait comes out of the margin kept for
+    // container start-up, which beats turning the consult away outright.
     const waitUntil = deadline - HELPER_EXEC_TIMEOUT_SECONDS * 1000;
     if (!(await this.slots.acquire(waitUntil))) return { kind: "busy" };
     try {

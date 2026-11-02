@@ -103,8 +103,8 @@ class XaiRequestAdapter implements LLMRequestAdapter<XaiRequest, XaiMessages> {
   convertToolResultContent(messages: XaiMessages) {
     return this.delegate.convertToolResultContent(messages);
   }
-  toProviderRequest() {
-    return this.delegate.toProviderRequest();
+  toProviderRequest(options?: { preserveToolCallIds?: boolean }) {
+    return this.delegate.toProviderRequest(options);
   }
 }
 

@@ -14,8 +14,11 @@ import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import anthropicRoutes from "./anthropic";
 import azureRoutes from "./azure";
+import groqRoutes from "./groq";
+import mistralRoutes from "./mistral";
 import modelRouterRoutes from "./model-router";
 import openrouterRoutes from "./openrouter";
+import xaiRoutes from "./xai";
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper
 const server = useMswServer();
@@ -66,7 +69,14 @@ const poolTest = test.extend<{
     poolId: string;
     ask: (
       extra?: Record<string, unknown>,
-      wire?: "openai" | "anthropic" | "azure" | "openrouter",
+      wire?:
+        | "openai"
+        | "anthropic"
+        | "azure"
+        | "openrouter"
+        | "groq"
+        | "mistral"
+        | "xai",
     ) => Promise<LightMyRequestResponse>;
   };
 }>({
@@ -130,9 +140,19 @@ const poolTest = test.extend<{
     await app.register(anthropicRoutes);
     await app.register(azureRoutes);
     await app.register(openrouterRoutes);
+    await app.register(groqRoutes);
+    await app.register(mistralRoutes);
+    await app.register(xaiRoutes);
     const ask = (
       extra: Record<string, unknown> = {},
-      wire: "openai" | "anthropic" | "azure" | "openrouter" = "openai",
+      wire:
+        | "openai"
+        | "anthropic"
+        | "azure"
+        | "openrouter"
+        | "groq"
+        | "mistral"
+        | "xai" = "openai",
     ) =>
       app.inject({
         method: "POST",
@@ -418,7 +438,14 @@ for (const stream of [false, true]) {
   );
 }
 
-for (const wire of ["openai", "azure", "openrouter"] as const) {
+for (const wire of [
+  "openai",
+  "azure",
+  "openrouter",
+  "groq",
+  "mistral",
+  "xai",
+] as const) {
   for (const stream of [false, true]) {
     poolTest(
       `roundtrips signed tool calls through the existing Gemini translator (${wire}, stream=${stream})`,

@@ -288,11 +288,8 @@ class MSTeamsProvider implements ChatOpsProvider {
     );
     // Older installed manifests can submit the menu description as prompt text.
     const cleanedText =
-      /^change which agent handles (?:the|this) conversation$/i.test(
-        mentionlessText,
-      )
-        ? "/select-agent"
-        : mentionlessText;
+      LEGACY_MENU_COMMANDS.get(mentionlessText.toLowerCase()) ??
+      mentionlessText;
     // Channel and group-chat files can be absent from the activity; they
     // are then read from Graph once the bot decides to answer (see
     // downloadMessageFiles), so a message that looks empty here may still
@@ -1724,6 +1721,13 @@ class MSTeamsProvider implements ChatOpsProvider {
           isSharePointReference &&
           !isSharePointFilePage(attachment.contentUrl)
         ) {
+          logger.warn(
+            {
+              name: attachment.name,
+              hostname: safeHostname(attachment.contentUrl),
+            },
+            "[MSTeamsProvider] Skipping unsupported file reference URL",
+          );
           skip({ name: attachment.name, reason: "download_failed" });
           continue;
         }
@@ -2727,3 +2731,10 @@ function formatApprovalArgValue(value: unknown): string {
     ? `${text.slice(0, APPROVAL_ARG_VALUE_MAX_LENGTH)}… (truncated)`
     : text;
 }
+
+const LEGACY_MENU_COMMANDS = new Map([
+  ["change which agent handles the conversation", "/select-agent"],
+  ["change which agent handles this conversation", "/select-agent"],
+  ["show current agent for this conversation", "/status"],
+  ["show available commands", "/help"],
+]);

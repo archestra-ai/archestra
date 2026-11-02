@@ -2322,14 +2322,16 @@ describe("MSTeamsProvider files sent in Teams messages", () => {
 });
 
 test.each([
-  "Change which agent handles the conversation",
-  "Change which agent handles this conversation",
-])("old menu text %s invokes agent selection after removing the mention", async (description) => {
+  ["Change which agent handles the conversation", "/select-agent"],
+  ["Change which agent handles this conversation", "/select-agent"],
+  ["Show current agent for this conversation", "/status"],
+  ["Show available commands", "/help"],
+])("old menu text %s invokes %s after removing the mention", async (description, command) => {
   const message = await createProvider().parseWebhookNotification(
     makeActivity({ text: `<at>TestBot</at> ${description}` }),
     {},
   );
-  expect(message?.text).toBe("/select-agent");
+  expect(message?.text).toBe(command);
   expect(message?.rawText).toContain(description);
 });
 

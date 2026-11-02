@@ -45,6 +45,8 @@ says() {
   out="$("$@" 2>&1 || true)"
   grep -q "$text" <<<"$out"
 }
+# The line number of the first line of $1 matching $2.
+order_of() { awk -v want="$2" '$0 ~ want { print NR; exit }' <<<"$1"; }
 wait_ready_quietly() { (ARCHESTRA_DEV_LITE_TIMEOUT_SECONDS=2 wait_ready >/dev/null 2>&1); }
 wait_ready_loudly() { (ARCHESTRA_DEV_LITE_TIMEOUT_SECONDS=2 wait_ready) || true; }
 e2e_output() { (PATH="$FAKE_BIN:$PATH" cmd_e2e 2>&1) || true; }
@@ -145,7 +147,7 @@ frontend_start() {
 out="$(frontend_start build)"
 check "build mode builds, then serves the standalone server" grep -q "started in $STANDALONE_DIR" <<<"$out"
 check "build mode is recorded" grep -q "mode build" <<<"$(frontend_start build)"
-check "dev mode builds nothing" fails grep -q built <<<"$(frontend_start dev)"
+check "dev mode builds nothing" fails grep -qx built <<<"$(frontend_start dev)"
 check "dev mode is recorded" grep -q "mode dev" <<<"$(frontend_start dev)"
 # A build whose static files cannot be copied next to its server fails, also
 # under a caller's `if`, which switches errexit off inside build_frontend.
@@ -158,12 +160,35 @@ uncopied_build() {
     printf '#!/usr/bin/env bash\nexit 0\n' > "$scratch/bin/node"
     chmod +x "$scratch/bin/node"
     PATH="$scratch/bin:$PATH"
+    frontend_prebuilt() { return 1; }
     if build_frontend; then echo "build reported success"; fi
   ) 2>&1 || true
 }
 out="$(uncopied_build)"
 check "a frontend build without its static files fails" grep -q "could not copy" <<<"$out"
 check "even inside an if" fails grep -q "reported success" <<<"$out"
+# A clean checkout whose build CI published installs it; anything else builds,
+# from CI's build cache when one is published for its configuration.
+prebuilt_build() {
+  (
+    scratch="$ARCHESTRA_DEV_LITE_STATE_DIR/prebuilt"
+    PLATFORM_DIR="$scratch/platform"
+    STANDALONE_DIR="$scratch/standalone"
+    mkdir -p "$PLATFORM_DIR/frontend/.next/static" "$PLATFORM_DIR/frontend/public" "$STANDALONE_DIR/.next"
+    frontend_prebuilt() { echo "prebuilt $1"; [ "$1" = install ] && [ "$PUBLISHED" = 1 ]; }
+    frontend_build_node() { echo "next build"; }
+    build_frontend
+    cat "$LOG_DIR/frontend-build.log"
+  ) 2>&1
+}
+: > "$LOG_DIR/frontend-build.log"
+out="$(PUBLISHED=1 prebuilt_build)"
+check "a published frontend is installed" grep -qx "prebuilt install" <<<"$out"
+check "instead of built" fails grep -q "next build\|install-cache" <<<"$out"
+: > "$LOG_DIR/frontend-build.log"
+out="$(PUBLISHED=0 prebuilt_build)"
+check "an unpublished one builds" grep -qx "next build" <<<"$out"
+check "after seeding the build cache" test "$(order_of "$out" "^prebuilt install-cache")" -lt "$(order_of "$out" "^next build")"
 
 # --- start order, prepare, pause --------------------------------------------
 # Every step echoes its name; the builds and servers act on a scratch platform
@@ -197,7 +222,6 @@ lifecycle() {
     "$@"
   ) 2>&1
 }
-order_of() { awk -v want="$2" '$0 ~ want { print NR; exit }' <<<"$1"; }
 rm -f "$PAUSED_FILE" "$SERVERS_FILE"
 out="$(lifecycle cmd_start 1)"
 check "up builds the frontend before the backend" test "$(order_of "$out" "^build_frontend")" -lt "$(order_of "$out" "^build_backend")"

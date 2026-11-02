@@ -1,6 +1,7 @@
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
 import { HttpResponse, http } from "msw";
+import client from "prom-client";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
@@ -8,6 +9,7 @@ import {
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
 import { ModelPoolModel, VirtualApiKeyModel } from "@/models";
+import { initializeLlmProxyMetrics } from "@/observability/metrics/llm-proxy";
 import { accessGrants, beforeEach, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
@@ -232,6 +234,11 @@ for (const stream of [false, true]) {
   poolTest(
     `fails over from Z.ai to Bedrock by the pool's name (stream: ${stream})`,
     async ({ router }) => {
+      initializeLlmProxyMetrics();
+      const histogram = client.register.getSingleMetric(
+        "llm_proxy_request_duration_seconds",
+      ) as client.Histogram;
+      histogram.reset();
       let zaiCalls = 0;
       let bedrockModel: string | undefined;
       server.use(
@@ -289,6 +296,19 @@ for (const stream of [false, true]) {
       });
 
       expect(response.statusCode, response.body).toBe(200);
+      const counts = (await histogram.get()).values.filter((value) =>
+        value.metricName?.endsWith("_count"),
+      );
+      expect(counts).toEqual([
+        expect.objectContaining({
+          value: 1,
+          labels: expect.objectContaining({
+            provider: "bedrock",
+            outcome: "success",
+            stream: String(stream),
+          }),
+        }),
+      ]);
       expect(zaiCalls).toBeGreaterThan(0);
       expect(bedrockModel).toBe("zai.glm-5");
       expect(response.headers["x-archestra-pool"]).toBe("glm-5");

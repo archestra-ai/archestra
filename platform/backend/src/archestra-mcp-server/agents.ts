@@ -95,8 +95,6 @@ const AgentCreateToolArgsSchema = CreateBaseToolArgsSchema.extend({
   runtime: AgentRuntimeToolInputSchema.optional(),
   llmApiKeyId: AgentModelToolInputSchemas.llmApiKeyId.optional(),
   modelId: AgentModelToolInputSchemas.modelId.optional(),
-  fastModelId: AgentModelToolInputSchemas.fastModelId.optional(),
-  smartModelId: AgentModelToolInputSchemas.smartModelId.optional(),
 }).strict();
 
 const GetAgentToolArgsSchema = GetResourceToolArgsSchema.extend({
@@ -217,18 +215,6 @@ const EditAgentToolArgsSchema = z
           .optional()
           .describe(
             `${AgentModelToolInputSchemas.modelId.description} Pass null for both to use the default model.`,
-          ),
-        fastModelId: AgentModelToolInputSchemas.fastModelId
-          .nullable()
-          .optional()
-          .describe(
-            `${AgentModelToolInputSchemas.fastModelId.description} Pass null to clear.`,
-          ),
-        smartModelId: AgentModelToolInputSchemas.smartModelId
-          .nullable()
-          .optional()
-          .describe(
-            `${AgentModelToolInputSchemas.smartModelId.description} Pass null to clear.`,
           ),
       })
       .strict(),

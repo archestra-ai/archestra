@@ -3,7 +3,7 @@ import ModelModel from "@/models/model";
 import { normalizeAnthropicUsage, sumMoney } from "@/utils/billable-usage";
 import { priceBillingUsage } from "./billable-usage";
 
-test("uses provider-specific rates for model-name collisions and preserves known charges when cache rates are missing", async () => {
+test("uses provider-specific rates for model-name collisions and estimates missing cache rates at half the input rate", async () => {
   for (const provider of ["openrouter", "anthropic"] as const)
     await ModelModel.create({
       provider,
@@ -20,9 +20,10 @@ test("uses provider-specific rates for model-name collisions and preserves known
     mode: "enforce",
     usage: { inputTokens: 100, outputTokens: 20, cacheReadTokens: 2000 },
   });
-  expect(priced.cost).toBe("0.0002000000");
+  // 100 * 1 + 20 * 5 + 2000 cache reads at half the input rate of 1, per million
+  expect(priced.cost).toBe("0.0012000000");
   expect(priced.status).toBe("incomplete");
-  expect(priced.issues).toContain("unpriced_usage");
+  expect(priced.issues).toEqual(["estimated_cache_price"]);
   const authoritative = await priceBillingUsage({
     model: "unknown",
     provider: "openrouter",

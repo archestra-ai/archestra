@@ -2,7 +2,7 @@
 title: Tracing
 description: Send OpenTelemetry traces and logs for every LLM call, tool call, and agent run to your collector
 order: 2
-lastUpdated: 2026-10-22
+lastUpdated: 2026-10-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -24,6 +24,10 @@ Send model requests, tool calls, and backend logs to your OpenTelemetry collecto
 
 Archestra appends `/v1/traces` and `/v1/logs` to the base URL.
 
+### Collect Metrics Alongside Traces
+
+Configure [Prometheus scraping](/docs/admin/observability/metrics#scraping) alongside traces. It includes [Guardrails and OpenAPPA hook and engine metrics](/docs/admin/observability/metrics/openappa) without additional setup.
+
 ### Logs
 
 Archestra sends its backend logs to the same collector. Each record carries `trace_id` and `span_id`, plus `session_id` inside an agent session. Your tracing backend uses them to jump from a span to its logs.
@@ -43,13 +47,15 @@ Each event is truncated to 10,000 characters; [`ARCHESTRA_OTEL_CONTENT_MAX_LENGT
 
 Capture is on by default. Set [`ARCHESTRA_OTEL_CAPTURE_CONTENT=false`](/docs/admin/deployment/configuration#ARCHESTRA_OTEL_CAPTURE_CONTENT) to leave the events out. With [content encryption](/docs/admin/content-encryption) on, capture is off by default. This keeps encrypted content from reaching your telemetry backend as plaintext. [`ARCHESTRA_OTEL_CAPTURE_CONTENT=true`](/docs/admin/deployment/configuration#ARCHESTRA_OTEL_CAPTURE_CONTENT) turns it back on.
 
+When content capture is disabled or a session suppresses content capture, LLM span error statuses also omit provider error messages.
+
 ## Verbose Tracing
 
 By default, Archestra exports only agent spans: LLM calls, MCP tool calls, agent runs, and Knowledge Base calls. Set [`ARCHESTRA_OTEL_VERBOSE_TRACING=true`](/docs/admin/deployment/configuration#ARCHESTRA_OTEL_VERBOSE_TRACING) to also export HTTP routes, outgoing HTTP calls, database queries, and DNS lookups. Use it for debugging. It multiplies span volume.
 
 ## Trace Structure
 
-Each agent turn groups its model requests and tool calls in one trace.
+A session has one stable trace identity across turns and backend replicas. Each turn, inference request, tool call, and Guardrails hook is a separate span in its waterfall. The original session ID remains available as `gen_ai.conversation.id`; the trace ID is a stable 128-bit identifier derived from it. Calls without a session ID keep independent traces.
 
 The root span's `route.category` tells you how the agent was invoked:
 
@@ -60,9 +66,17 @@ The root span's `route.category` tells you how the agent was invoked:
 | Slack, Microsoft Teams, Telegram | `chatops` |
 | Email | `email` |
 
-Calls from your own applications to the [LLM Proxy](/docs/llm-proxy) (`route.category=llm-proxy`) and the [MCP Gateway](/docs/mcp/gateway) (`route.category=mcp-gateway`) start their own traces.
+Calls from your own applications to the [LLM Proxy](/docs/llm-proxy) (`route.category=llm-proxy`) and the [MCP Gateway](/docs/mcp/gateway) (`route.category=mcp-gateway`) join the trace for their recorded session identity.
 
-To group LLM Proxy calls into one trace, send [`X-Archestra-Session-Id`](/docs/llm-proxy#custom-headers) with your conversation ID. Archestra records it as `gen_ai.conversation.id`. When Guardrails are active, [`X-Appa-Session-ID`](/docs/agents/guardrails/clients#session-headers) takes precedence as the recorded session identity. MCP Gateway spans do not group by `X-Archestra-Session-Id`.
+To group LLM Proxy calls into one trace, send [`X-Archestra-Session-Id`](/docs/llm-proxy#custom-headers) with your conversation ID. Archestra records it as `gen_ai.conversation.id`. When Guardrails are active, [`X-Appa-Session-ID`](/docs/agents/guardrails/clients#session-headers) takes precedence as the recorded session identity. MCP Gateway spans use the Guardrails session identity when one is present.
+
+## Investigate a Session
+
+Open **Session Investigation** in Grafana and click a session row. **Session Trace** shows the session’s calls and policy checks. **Session Logs**, below it, shows inference, tool, Guardrails, and correlated application events. Select a session by its ID; the trace lookup happens automatically.
+
+The session list includes first and last request times, agent, user, models, credential names, request count, token usage, elapsed time, total inference time, and estimated costs split by billed and subscription-covered usage. Totals come from persisted session summaries and include requests outside the dashboard's selected time range. The selected range determines which recent summaries appear. Both Loki and Tempo are required.
+
+Summaries contain metadata only. Prompts, responses, credential values, and policy text are not included. New summaries and session traces appear as requests run after deployment; older telemetry is not rewritten.
 
 ## LLM Spans
 
@@ -128,3 +142,28 @@ LLM spans, MCP spans, and agent run root spans carry who made the request:
 | `gen_ai.conversation.id` | The session ID |
 
 The LLM Proxy has no labels or teams. Filter its traffic by the `archestra.user.team.*`, `archestra.external_agent_id`, or `archestra.app.name` attributes.
+
+## Proxy Request Log Events
+
+Attribute logical [LLM Proxy](/docs/llm-proxy) and model router outcomes—including throttled, denied, cancelled, and midstream-failed requests—to a model, agent, user, app, or virtual key with the `archestra.llm_proxy.request` OpenTelemetry log event.
+
+When an inference request handled by the shared proxy or model router finishes, logger `archestra-llm-proxy` emits one structured log record with body `"LLM proxy request completed"` (`INFO` on success or an incomplete terminal, `WARN` on failure) attached to the active trace context (`trace_id` and `span_id`). Like [`llm_proxy_request_duration_seconds`](/docs/admin/observability/metrics/llm#llm_proxy_request_duration_seconds), it records one event per logical request across internal retries and failovers, and excludes pre-handler authentication or validation rejections, model listing, unsupported passthrough endpoints, and provider file routes.
+
+Emission is best-effort and unsampled, so every completed proxy inference request emits the event regardless of [`ARCHESTRA_OTEL_TRACES_SAMPLE_RATE`](/docs/admin/deployment/configuration#ARCHESTRA_OTEL_TRACES_SAMPLE_RATE). The record uses a metadata-only allowlist—never prompts, completions, request or response bodies, headers, or error messages—and is not durable log replication. Use [LLM spans](#llm-spans) for token and cost attribution, [limit metrics](/docs/admin/observability/metrics/limits) for rule evaluations, and [audit logs](/docs/admin/observability/audit-logs) for administrative actions.
+
+| Attribute | Value |
+| --- | --- |
+| `gen_ai.provider.name` | Provider name (for example `openai` or `anthropic`), or `router` if a model-router request fails before provider selection |
+| `gen_ai.operation.name` | Inference operation, such as `chat`, `generate_content`, or `embedding` |
+| `gen_ai.request.streaming` | `true` or `false` |
+| `http.response.status_code` | Committed HTTP status code (`200` when a stream fails after headers are sent, `499` on client disconnect before headers) |
+| `archestra.proxy.outcome` | `success`, `incomplete`, `error`, `throttled`, `denied`, `cancelled`, `timeout`, or `overloaded` |
+| `archestra.proxy.error_origin` | `none` for `success` or `incomplete`, `archestra`, `provider`, or `client` |
+| `archestra.proxy.duration_seconds` | End-to-end logical request duration in seconds, including preflight and streaming |
+| `error.type` | Normalized failure status code as a string (such as `"429"` or `"502"`), present on failed requests even when `http.response.status_code` is `200` |
+| `gen_ai.request.model` | Requested model name, when resolved |
+| `archestra.organization.id`, `gen_ai.agent.id`, `archestra.user.id` | Organization, agent, and user IDs, when available |
+| `archestra.virtual_key.id`, `archestra.passthrough_virtual_key.id` | [Virtual key](/docs/llm-proxy/authentication) or passthrough virtual key ID, when used |
+| `archestra.app.id` | [App](/docs/chat/apps) ID, when called from an app |
+| `archestra.trigger.source` | Invocation source, such as `api`, `chat`, or `email`, when available |
+| `archestra.model_pool.member_model`, `archestra.model_pool.id`, `archestra.provider_api_key.id`, `archestra.proxy.pool_attempts` | Configured final model-pool member model, pool ID, provider credential ID, and number of pool attempts, when a pool is used |

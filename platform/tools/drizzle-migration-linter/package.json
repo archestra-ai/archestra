@@ -13,7 +13,7 @@
   "scripts": {
     "lint": "pnpm --dir ../.. exec tsx tools/drizzle-migration-linter/src/cli.ts",
     "test": "pnpm --dir ../../backend exec vitest run --root ../tools/drizzle-migration-linter",
-    "type-check": "pnpm --dir ../../backend exec tsc --noEmit --project ../tools/drizzle-migration-linter/tsconfig.json",
+    "type-check": "pnpm --dir ../../backend exec tsx ../scripts/type-check.ts --noEmit --project ../tools/drizzle-migration-linter/tsconfig.json",
     "check:ci": "pnpm type-check && pnpm test",
     "check:commit": "pnpm type-check"
   },

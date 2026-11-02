@@ -33,7 +33,9 @@ import { expect, test } from "./api-fixtures";
 // =============================================================================
 
 test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
-  test("should authenticate with external IdP JWT, call tools, and log external identity", async ({
+  test("should authenticate with external IdP JWT, call tools, and log external identity", {
+    tag: "@needs-keycloak",
+  }, async ({
     request,
     deleteAgent,
     createIdentityProvider,
@@ -140,7 +142,9 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
     }
   });
 
-  test("should reject invalid JWT with 401", async ({
+  test("should reject invalid JWT with 401", {
+    tag: "@needs-keycloak",
+  }, async ({
     request,
     deleteAgent,
     createIdentityProvider,

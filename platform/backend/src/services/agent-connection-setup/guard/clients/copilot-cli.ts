@@ -3,9 +3,14 @@
 
 import {
   COPILOT_PROVIDER_ENV_KEYS,
+  REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
   STARTUP_GUARD_INSTALL,
+  TOOL_ASK_USER_SHORT_NAME,
 } from "@archestra/shared";
-import { COPILOT_PROVIDER_CONFIG_NODE } from "../../payloads/copilot-provider-config";
+import {
+  COPILOT_PROVIDER_CONFIG_NODE,
+  copilotStripProfileLinesBash,
+} from "../../payloads/copilot-provider-config";
 import { psq, sh } from "../../steps/quoting";
 import type { StartupGuardClient, StartupGuardContext } from "../startup-guard";
 import { jsonMemberGoneVerify, windowsJsonMemberGoneVerify } from "./verify";
@@ -63,6 +68,15 @@ export const COPILOT_GUARD_CLIENT: StartupGuardClient = {
     manualCommand: "copilot plugin marketplace remove",
   }),
   renderProxyDisconnect: copilotProxyDisconnect,
+  // Copilot asks before each MCP tool call it has not been allowed, and one
+  // blocked call runs the guardrail helpers several times. Connect allows
+  // these helpers at launch, as it does for Claude Code and Codex; other
+  // gateway tools keep Copilot's question. `--allow-tool=<server>(<tool>)`
+  // is the pattern `copilot help permissions` documents for an MCP tool.
+  gatewayLaunchArgs: (mcp) =>
+    [...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES, TOOL_ASK_USER_SHORT_NAME].map(
+      (name) => `--allow-tool=${mcp.serverName}(${mcp.toolPrefix}${name})`,
+    ),
   windows: {
     mcpDisconnect: `      if ($archRealExe) { try { & $archRealExe.Source mcp remove $McpServerName 2>$null | Out-Null } catch { } }`,
     skillsDisconnect: `      if ($archRealExe) {
@@ -105,12 +119,8 @@ function copilotProxyDisconnect(ctx: StartupGuardContext): string {
   ARCHESTRA_COPILOT_ACTION=remove ARCHESTRA_COPILOT_CONFIG=${sh(JSON.stringify({ url: ctx.proxy?.url }))} node <<'ARCHESTRA_COPILOT_REMOVE' || return 1
 ${COPILOT_PROVIDER_CONFIG_NODE}
 ARCHESTRA_COPILOT_REMOVE
-  archestra_copilot_exports=${sh(`^[[:space:]]*(export[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|API_KEY|HEADERS)=|set[[:space:]]+-gx[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|API_KEY|HEADERS)[[:space:]]|export[[:space:]]+COPILOT_MODEL=['"]?archestra/|set[[:space:]]+-gx[[:space:]]+COPILOT_MODEL[[:space:]]+['"]?archestra/)`)}
-  for profile in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile" "$HOME/.bash_profile" "$HOME/.bash_login" "\${ZDOTDIR:-$HOME}/.zshrc" "\${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish" "\${XDG_CONFIG_HOME:-$HOME/.config}"/fish/conf.d/*.fish; do
-    [ -f "$profile" ] || continue
-    grep -Eq "$archestra_copilot_exports" "$profile" || continue
-    awk -v pattern="$archestra_copilot_exports" '$0 !~ pattern { print }' "$profile" > "$profile.archestra-tmp" && cat "$profile.archestra-tmp" > "$profile" && rm "$profile.archestra-tmp" || return 1
-  done
+  archestra_copilot_exports=${sh(`^[[:space:]]*(export[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|WIRE_API|API_KEY|HEADERS)=|set[[:space:]]+-gx[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|WIRE_API|API_KEY|HEADERS)[[:space:]]|export[[:space:]]+COPILOT_MODEL=['"]?archestra/|set[[:space:]]+-gx[[:space:]]+COPILOT_MODEL[[:space:]]+['"]?archestra/)`)}
+  ${copilotStripProfileLinesBash("archestra_copilot_exports")}
 }
 
 proxy_disconnect_notes() {
@@ -125,6 +135,7 @@ function copilotWindowsProxyDisconnect(ctx: StartupGuardContext): string {
   const names = [
     COPILOT_PROVIDER_ENV_KEYS.type,
     COPILOT_PROVIDER_ENV_KEYS.baseUrl,
+    COPILOT_PROVIDER_ENV_KEYS.wireApi,
     COPILOT_PROVIDER_ENV_KEYS.apiKey,
     COPILOT_PROVIDER_ENV_KEYS.headers,
   ]

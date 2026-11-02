@@ -39,6 +39,14 @@ import {
   Xai,
   Zhipuai,
 } from "./llm-providers";
+import {
+  PassthroughRequestSchema,
+  PassthroughResponseSchema,
+} from "./passthrough";
+import {
+  RealtimeInteractionRequestSchema,
+  RealtimeInteractionResponseSchema,
+} from "./realtime";
 import { VirtualApiKeyTypeSchema } from "./virtual-api-key";
 import { ResourceVisibilityScopeSchema } from "./visibility";
 
@@ -209,6 +217,8 @@ export const InteractionRequestSchema = z.union([
   Azure.API.ImageGenerationRequestSchema,
   Azure.API.RealtimeTurnRequestSchema,
   Jev.API.DecisionsRequestSchema,
+  PassthroughRequestSchema,
+  RealtimeInteractionRequestSchema,
 ]);
 
 /**
@@ -266,6 +276,8 @@ export const InteractionResponseSchema = z.union([
   Azure.API.ImageGenerationResponseSchema,
   Jev.API.DecisionsResponseSchema,
   InteractionErrorResponseSchema,
+  PassthroughResponseSchema,
+  RealtimeInteractionResponseSchema,
 ]);
 
 /**
@@ -468,6 +480,14 @@ const withErrorResponse = <T extends z.ZodTypeAny>(schema: T) =>
  * Discriminated union schema for API responses
  * This provides type safety based on the type field
  */
+/**
+ * A Gemini row's request as logged: an image edit's row also names its
+ * reference images, as OpenAI edits do.
+ */
+const GeminiLoggedRequestSchema = Gemini.API.GenerateContentRequestSchema.and(
+  z.object({ input_files: z.record(z.string(), z.unknown()).optional() }),
+);
+
 export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["openai:chatCompletions"]),
@@ -537,7 +557,7 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["gemini:generateContent"]),
-    request: withReadFallback(Gemini.API.GenerateContentRequestSchema),
+    request: withReadFallback(GeminiLoggedRequestSchema),
     processedRequest: withReadFallback(Gemini.API.GenerateContentRequestSchema)
       .nullable()
       .optional(),
@@ -818,7 +838,8 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
-    type: z.enum(["azure:images"]),
+    type: z.enum(["azure:images", "openai:images"]),
+
     request: withReadFallback(Azure.API.ImageGenerationRequestSchema),
     processedRequest: withReadFallback(Azure.API.ImageGenerationRequestSchema)
       .nullable()
@@ -868,6 +889,26 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
       .optional(),
     response: withErrorResponse(Jev.API.DecisionsResponseSchema),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["openai:realtime"]),
+    request: withReadFallback(RealtimeInteractionRequestSchema),
+    processedRequest: withReadFallback(RealtimeInteractionRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(RealtimeInteractionResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["openai:passthrough", "anthropic:passthrough"]),
+    request: withReadFallback(PassthroughRequestSchema),
+    processedRequest: withReadFallback(PassthroughRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(PassthroughResponseSchema),
+    requestType: RequestTypeSchema.optional(),
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
 ]);

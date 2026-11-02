@@ -50,7 +50,6 @@ describe("native Claude credential migration", () => {
       backend: "kubernetes" as const,
       steerMode: "tmux_keys" as const,
       privileged: false,
-      resources: null,
       environment: null,
       credentials: [github, legacyClaude],
       ttlHours: null,

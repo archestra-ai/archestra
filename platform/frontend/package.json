@@ -1,6 +1,6 @@
 {
   "name": "@frontend",
-  "version": "1.5.0-rc.15",
+  "version": "1.5.0-rc.19",
   "private": true,
   "type": "module",
   "scripts": {
@@ -15,7 +15,7 @@
     "lint": "biome check",
     "lint:fix": "biome check --write",
     "lint:fix:unsafe": "biome check --write --unsafe",
-    "type-check": "tsc --noEmit",
+    "type-check": "tsx ../scripts/type-check.ts --noEmit",
     "test": "vitest",
     "test:integration": "playwright test",
     "test:integration:ui": "playwright test --ui",
@@ -27,6 +27,7 @@
   "dependencies": {
     "@ai-sdk/react": "^3.0.195",
     "@archestra/shared": "workspace:*",
+    "@aws-crypto/sha256-js": "^5.2.0",
     "@better-auth/core": "catalog:",
     "@better-auth/oauth-provider": "catalog:",
     "@better-auth/sso": "catalog:",
@@ -130,7 +131,7 @@
     "@types/ua-parser-js": "^0.7.39",
     "highlight.js": "^11.11.1",
     "jsdom": "^29.0.0",
-    "knip": "^5.85.0",
+    "knip": "^6.43.0",
     "msw": "^2.14.6",
     "semver": "^7.7.4",
     "tailwindcss": "^4",

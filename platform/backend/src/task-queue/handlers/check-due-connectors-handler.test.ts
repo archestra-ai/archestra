@@ -71,6 +71,32 @@ describe("handleCheckDueConnectors", () => {
     });
   });
 
+  test("does not schedule uploaded files even with a due cron", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    // Existing upload connectors inherited the default cron and have never synced.
+    await makeKnowledgeBaseConnector(kb.id, org.id, {
+      connectorType: "file_upload",
+      config: {} as never,
+      enabled: true,
+    });
+    const external = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      schedule: "* * * * *",
+      enabled: true,
+    });
+
+    await handleCheckDueConnectors();
+
+    expect(mockEnqueue).toHaveBeenCalledExactlyOnceWith({
+      taskType: "connector_sync",
+      payload: { connectorId: external.id },
+    });
+  });
+
   test("does not enqueue when a pending/processing task already exists", async ({
     makeOrganization,
     makeKnowledgeBase,

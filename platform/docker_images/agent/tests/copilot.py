@@ -65,6 +65,42 @@ def gateway(failure=None):
 
 
 class CopilotTest(unittest.TestCase):
+    def test_attention_waits_for_the_user_only_after_an_answer(self):
+        loader = importlib.machinery.SourceFileLoader("copilot_wrapper", str(BIN / "archestra-copilot"))
+        module = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+        loader.exec_module(module)
+
+        def changes(events):
+            answered, seen = False, []
+            for kind, data in events:
+                change, answered = module.turn_attention({"type": kind, "data": data}, answered)
+                if change:
+                    seen.append(change)
+            return seen
+
+        # The native events of one prompt with one tool round, in their order.
+        tool_round = [("user.message", {}), ("assistant.turn_start", {}),
+                      ("assistant.message", {"toolRequests": [{"name": "bash"}]}),
+                      ("tool.execution_start", {}), ("tool.execution_complete", {}),
+                      ("assistant.turn_end", {}), ("assistant.turn_start", {}),
+                      ("assistant.message", {"content": "Done.", "toolRequests": []}),
+                      ("assistant.turn_end", {})]
+        self.assertEqual(changes(tool_round),
+                         [("clear",), ("clear",), ("clear",), ("set", "Waiting for input")])
+        aborted = tool_round[:5] + [("abort", {}), ("assistant.turn_end", {})]
+        self.assertEqual(changes(aborted)[-1], ("set", "Waiting for input"))
+        failed = tool_round[:3] + [("session.error", {})]
+        self.assertEqual(changes(failed)[-1], ("set", "API error: check terminal"))
+        # A subagent's answer, while the main agent's task tool still runs.
+        subagent = tool_round[:4] + [
+            ("assistant.turn_start", {"agentId": "child"}),
+            ("assistant.message", {"agentId": "child", "content": "Found it.", "toolRequests": []}),
+            ("assistant.turn_end", {"agentId": "child"})]
+        self.assertEqual(changes(subagent), [("clear",), ("clear",)])
+        # A turn with no answer of its own does not reuse the last answer.
+        answered_then_empty = tool_round + [("assistant.turn_start", {}), ("assistant.turn_end", {})]
+        self.assertEqual(changes(answered_then_empty)[-2:], [("set", "Waiting for input"), ("clear",)])
+
     def test_disconnected_stream_does_not_poison_discovery(self):
         loader = importlib.machinery.SourceFileLoader("copilot_wrapper", str(BIN / "archestra-copilot"))
         module = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))

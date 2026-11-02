@@ -50,7 +50,6 @@ import {
   AgentVersionModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
-  LlmProviderApiKeyModel,
   MemberModel,
   OrganizationModel,
   ProjectModel,
@@ -73,6 +72,7 @@ import { populateAgentListActivationSkillCounts } from "@/services/agent-list";
 import { transferAgentOwnership } from "@/services/agent-ownership";
 import {
   assertAgentRuntimeModelCompatibility,
+  assertAgentRuntimeTiersExist,
   assertCanBindRuntimeCredentials,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
@@ -132,7 +132,6 @@ import {
   RestoreAgentVersionBodySchema,
   SelectPublicAgentVersionSchema,
 } from "@/types/agent-version";
-import { assertModelTrioTiers } from "@/utils/llm-resolution";
 import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
 
 const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -789,10 +788,16 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Cannot create an agent in another organization",
         );
       }
-      requireAgentRuntimePermission({
+      await requireAgentRuntimePermission({
         agentType,
         runtime: body.runtime,
         isAdmin: checker.isAdmin(agentType),
+        userId: user.id,
+        organizationId,
+      });
+      await assertAgentRuntimeTiersExist({
+        runtime: body.runtime,
+        organizationId,
       });
       await assertCanBindRuntimeCredentials({
         organizationId,
@@ -846,11 +851,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "An agent's model and API key must be set together",
         );
       }
-      await assertModelTrioTiers({
-        apiKeyId: body.llmApiKeyId ?? null,
-        fastModelId: body.fastModelId ?? null,
-        smartModelId: body.smartModelId ?? null,
-      });
       await assertAgentRuntimeModelCompatibility({
         runtime: body.runtime,
         agent: {
@@ -859,6 +859,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         organizationId,
         userId: user.id,
+        selectsModel: true,
       });
 
       const environmentId = await resolveNewAgentEnvironmentId({
@@ -1281,6 +1282,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
       }
+
+      await requireAgentRuntimePermission({
+        agentType: sourceAgent.agentType,
+        runtime: sourceAgent.runtime,
+        isAdmin: checker.isAdmin(sourceAgent.agentType),
+        userId: user.id,
+        organizationId,
+      });
 
       // The copy is the caller's own Agent, so the credentials it reads are
       // checked as if they had attached them.
@@ -2174,10 +2183,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         throw error;
       }
-      requireAgentRuntimePermission({
+      await requireAgentRuntimePermission({
         agentType: existingAgent.agentType,
         runtime: body.runtime,
         isAdmin: checker.isAdmin(existingAgent.agentType),
+        userId: user.id,
+        organizationId,
+        previous: existingAgent.runtime,
+      });
+      await assertAgentRuntimeTiersExist({
+        runtime: body.runtime,
+        organizationId,
       });
       await assertCanBindRuntimeCredentials({
         organizationId,
@@ -2264,12 +2280,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ...(body.modelPoolId !== undefined && {
             modelPoolId: body.modelPoolId,
           }),
-          ...(body.fastModelId !== undefined && {
-            fastModelId: body.fastModelId,
-          }),
-          ...(body.smartModelId !== undefined && {
-            smartModelId: body.smartModelId,
-          }),
         };
       } else {
         // `builtInAgentConfig` is server-owned and a trust attribute (drives
@@ -2304,27 +2314,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       if (
-        body.llmApiKeyId !== undefined ||
-        body.fastModelId !== undefined ||
-        body.smartModelId !== undefined
-      ) {
-        await assertModelTrioTiers({
-          apiKeyId:
-            body.llmApiKeyId !== undefined
-              ? body.llmApiKeyId
-              : existingAgent.llmApiKeyId,
-          fastModelId:
-            body.fastModelId !== undefined
-              ? body.fastModelId
-              : existingAgent.fastModelId,
-          smartModelId:
-            body.smartModelId !== undefined
-              ? body.smartModelId
-              : existingAgent.smartModelId,
-        });
-      }
-
-      if (
         body.runtime !== undefined ||
         body.modelId !== undefined ||
         body.llmApiKeyId !== undefined
@@ -2342,6 +2331,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
           organizationId,
           userId: user.id,
+          // A body that names neither keeps the agent's pair: an image or
+          // limits change does not choose a model.
+          selectsModel:
+            body.modelId !== undefined || body.llmApiKeyId !== undefined,
         });
       }
 

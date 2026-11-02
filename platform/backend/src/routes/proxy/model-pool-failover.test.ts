@@ -583,6 +583,39 @@ describe("openThroughModelPool", () => {
     expect(signals.get(keyB)?.aborted).toBe(false);
   });
 
+  test("a slow request-level refusal neither times out nor fails over", async () => {
+    const checked: string[] = [];
+    const loaded: string[] = [];
+    const recorded: UpstreamAttempt[] = [];
+    const refusal = httpError(402);
+
+    await expect(
+      openThroughModelPool({
+        plan,
+        attempt: {},
+        memberTimeoutMs: 1,
+        beforeAttempt: async (member) => {
+          checked.push(member.modelId);
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          throw refusal;
+        },
+        transportFor: async (member) => {
+          loaded.push(member.providerApiKeyId);
+          return transport(member.providerApiKeyId);
+        },
+        open: async () => "unexpected answer",
+        isRetryable: () => false,
+        shouldContinue: () => true,
+        recordFailedAttempt: async (failed) => {
+          recorded.push(failed);
+        },
+      }),
+    ).rejects.toBe(refusal);
+    expect(checked).toEqual([plan.members[0].modelId]);
+    expect(loaded).toEqual([]);
+    expect(recorded).toEqual([]);
+  });
+
   test("moves past a member whose key can't be loaded", async () => {
     const attempt: UpstreamAttempt = {};
     const recorded: UpstreamAttempt[] = [];

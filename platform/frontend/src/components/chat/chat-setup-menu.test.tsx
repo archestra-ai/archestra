@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
+import { useOrganizationDefaultModelSummary } from "@/lib/organization.query";
 import { ChatSetupMenu, type ChatSetupMenuProps } from "./chat-setup-menu";
 
 const {
@@ -24,6 +25,7 @@ const {
       authorId: "user-1",
       builtIn: false,
       runtime: null,
+      modelId: undefined as string | undefined,
     },
     {
       id: "agent-research",
@@ -135,6 +137,8 @@ vi.mock("@/lib/chat/chat.query", () => ({
   useUpdateConversation: () => ({ mutate: mutateConversation }),
 }));
 
+vi.mock("@/lib/organization.query");
+
 vi.mock("@/lib/integration-overrides", () => ({
   useModelProviderCatalog: () => ({
     label: (provider: string) => (provider === "vllm" ? "vLLM" : provider),
@@ -160,6 +164,9 @@ beforeEach(() => {
   readiness.splice(0);
   pools.splice(0);
   mutateConversation.mockReset();
+  vi.mocked(useOrganizationDefaultModelSummary).mockReturnValue({
+    data: undefined,
+  } as never);
 });
 
 describe("ChatSetupMenu", () => {
@@ -406,10 +413,48 @@ describe("ChatSetupMenu", () => {
       screen.getAllByRole("radiogroup", { name: "Reasoning effort" }),
     ).toHaveLength(1);
   });
+
+  it("names the trio auto routing runs the organization default on, for an agent on the default", () => {
+    const tier = (id: string, displayName: string) => ({
+      id,
+      provider: "vllm" as const,
+      displayName,
+    });
+    const tiers = {
+      fast: tier("model-fast", "Fast tier"),
+      normal: tier("model-plain", "Llama 3 8B"),
+      smart: tier("model-smart", "Smart tier"),
+    };
+    vi.mocked(useOrganizationDefaultModelSummary).mockReturnValue({
+      data: { model: tiers.normal, autoRouting: { active: true, tiers } },
+    } as never);
+    const defaultRow = () =>
+      screen.getByRole("option", { name: /Llama 3 8B/ }).nextElementSibling;
+
+    const { unmount } = render(<ChatSetupMenu {...menuProps()} />);
+    expect(defaultRow()).toHaveTextContent(/Fast tier.*Llama 3 8B.*Smart tier/);
+    unmount();
+
+    agents[0].modelId = "model-thinker";
+    try {
+      render(<ChatSetupMenu {...menuProps()} />);
+      expect(defaultRow()).not.toHaveTextContent(/Fast tier/);
+    } finally {
+      agents[0].modelId = undefined;
+    }
+  });
 });
 
 function renderMenu(overrides: Partial<ChatSetupMenuProps> = {}) {
-  const props: ChatSetupMenuProps = {
+  const props = menuProps(overrides);
+  render(<ChatSetupMenu {...props} />);
+  return props;
+}
+
+function menuProps(
+  overrides: Partial<ChatSetupMenuProps> = {},
+): ChatSetupMenuProps {
+  return {
     conversationId: "conversation-1",
     close: vi.fn(),
     agentId: "agent-mine",
@@ -431,6 +476,4 @@ function renderMenu(overrides: Partial<ChatSetupMenuProps> = {}) {
     notRecommendedForAgents: false,
     ...overrides,
   };
-  render(<ChatSetupMenu {...props} />);
-  return props;
 }

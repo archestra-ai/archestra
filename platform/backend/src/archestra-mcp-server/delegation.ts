@@ -48,7 +48,6 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import { type Agent, ApiError } from "@/types";
 import {
   availableSubagentTiers,
-  type ModelTrioTiers,
   resolveForkParentSelection,
 } from "@/utils/llm-resolution";
 import { errorResult, isAbortLikeError, successResult } from "./helpers";
@@ -436,6 +435,7 @@ export async function handleDelegation(
       chatOpsThreadId: context.chatOpsThreadId,
       chatOpsPinnedAgentId: context.chatOpsPinnedAgentId,
       scheduleTriggerRunId: context.scheduleTriggerRunId,
+      runId: context.runId,
       abortSignal: context.abortSignal,
       // Surface the child's tool calls on the caller's conversation, attributed
       // to this delegation call. The shared bridge is threaded into the child
@@ -936,7 +936,7 @@ async function forkTiers(params: {
   caller: {
     llmApiKeyId: string | null;
     modelId: string | null;
-  } & ModelTrioTiers;
+  };
   organizationId: string;
   userId?: string;
   parentLlm?: ModelSelection;
@@ -949,7 +949,7 @@ async function forkTiers(params: {
     userId,
     parentLlm,
   });
-  return availableSubagentTiers({ parent, agentTrio: caller, organizationId });
+  return availableSubagentTiers({ parent, organizationId, userId });
 }
 
 /** A fork may not fork again, so it is not offered the fork tool. */

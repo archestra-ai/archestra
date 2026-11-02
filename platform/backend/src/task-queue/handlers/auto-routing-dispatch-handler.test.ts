@@ -12,6 +12,7 @@ import {
   makeRoutingModel,
   makeScorerVersion,
   plannedDecision,
+  setOrganizationTrio,
 } from "@/test/auto-routing";
 import { RoutingSessionKeySchema } from "@/types/auto-routing";
 import { autoRoutingDispatcher } from "./auto-routing-dispatch-handler";
@@ -171,12 +172,10 @@ async function configuredOrganization(
     await makeRoutingModel(),
     await makeRoutingModel(),
   ];
+  await setOrganizationTrio(organizationId, { fast, normal, smart });
   await AutoRoutingSettingsModel.update(organizationId, {
     enabled: true,
     budgetUsdPerDay: "25.00",
-    fastModelId: fast.id,
-    normalModelId: normal.id,
-    smartModelId: smart.id,
   });
   return organizationId;
 }

@@ -1,9 +1,10 @@
 import { describe, expect, test } from "vitest";
 import {
+  componentCacheCosts,
+  estimateMissingPrices,
   mergeAnthropicUsage,
   moneyUnits,
   normalizeAnthropicUsage,
-  parseUsageAccountingMode,
   priceTokens,
   sumMoney,
   type TokenPrices,
@@ -170,9 +171,7 @@ describe("cumulative provider accounting", () => {
       ).billingUsage?.status,
     ).toBe("incomplete");
   });
-  test("rejects invalid modes and token arithmetic", () => {
-    expect(parseUsageAccountingMode(undefined)).toBe("off");
-    expect(() => parseUsageAccountingMode("client-choice")).toThrow();
+  test("rejects invalid token arithmetic", () => {
     expect(() => moneyUnits("-0.01")).toThrow();
     expect(() => sumMoney(["1.00", "-0.01"])).toThrow();
     expect(moneyUnits("0001.00")).toBe(10_000_000_000n);
@@ -189,5 +188,147 @@ describe("cumulative provider accounting", () => {
         rates,
       ),
     ).toThrow();
+  });
+});
+
+describe("estimating missing rates", () => {
+  const used = {
+    inputTokens: 100,
+    outputTokens: 10,
+    cacheReadTokens: 1000,
+    cacheWriteTokens: 300,
+    cacheWrite1hTokens: 100,
+  };
+  const unpricedCache: TokenPrices = {
+    ...rates,
+    input: "3",
+    cacheRead: null,
+    cacheWrite: null,
+    cacheWrite1h: null,
+  };
+
+  test("derives cache rates from the provider's own cache multipliers", () => {
+    const estimate = estimateMissingPrices({
+      usage: used,
+      prices: unpricedCache,
+      provider: "anthropic",
+    });
+    expect(estimate).toMatchObject({ model: false, cache: true });
+    expect(estimate.prices).toMatchObject({
+      cacheRead: "0.3000000000",
+      cacheWrite: "3.7500000000",
+      cacheWrite1h: "6.0000000000",
+    });
+    expect(
+      estimateMissingPrices({
+        usage: used,
+        prices: unpricedCache,
+        provider: "openai",
+      }).prices,
+    ).toMatchObject({
+      cacheRead: "0.7500000000",
+      cacheWrite: "0.0000000000",
+      cacheWrite1h: "0.0000000000",
+    });
+  });
+
+  test("a provider without cache multipliers reads at half the input rate and writes at it", () => {
+    const estimate = estimateMissingPrices({
+      usage: used,
+      prices: unpricedCache,
+      provider: "vllm",
+    });
+    expect(estimate).toMatchObject({ model: false, cache: true });
+    expect(estimate.prices).toMatchObject({
+      cacheRead: "1.5000000000",
+      cacheWrite: "3.0000000000",
+      cacheWrite1h: "3.0000000000",
+    });
+  });
+
+  test("reports only estimates for tokens the request used", () => {
+    expect(
+      estimateMissingPrices({
+        usage: {
+          ...used,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          cacheWrite1hTokens: 0,
+        },
+        prices: unpricedCache,
+        provider: "vllm",
+      }),
+    ).toMatchObject({ model: false, cache: false });
+    expect(
+      estimateMissingPrices({ usage: used, prices: rates, provider: "vllm" }),
+    ).toEqual({
+      prices: rates,
+      model: false,
+      cache: false,
+    });
+  });
+
+  test("a free input rate makes the cache free without calling it an estimate", () => {
+    expect(
+      estimateMissingPrices({
+        usage: used,
+        prices: { ...unpricedCache, input: "0.00" },
+        provider: "vllm",
+      }),
+    ).toMatchObject({
+      model: false,
+      cache: false,
+      prices: { cacheRead: "0.0000000000" },
+    });
+  });
+
+  test("takes a missing input or output rate from the catalog, or charges zero and says so", () => {
+    const fromCatalog = estimateMissingPrices({
+      usage: used,
+      prices: { ...rates, input: null },
+      provider: "vllm",
+      fallback: { input: "2.00", output: "8.00" },
+    });
+    expect(fromCatalog).toMatchObject({
+      model: true,
+      cache: false,
+      prices: { input: "2.00", output: "5" },
+    });
+    const nowhere = estimateMissingPrices({
+      usage: used,
+      prices: { ...unpricedCache, input: null },
+      provider: "vllm",
+    });
+    expect(nowhere).toMatchObject({
+      model: true,
+      prices: { input: "0", cacheRead: "0.0000000000" },
+    });
+  });
+});
+
+describe("cache figures", () => {
+  test("token counts that cannot be priced have no cache figures instead of failing", () => {
+    expect(
+      componentCacheCosts({
+        id: "primary",
+        model: "m",
+        kind: "message",
+        provider: "anthropic",
+        inputTokens: 10,
+        outputTokens: 10,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        cacheWrite1hTokens: 5,
+        prices: {
+          input: "3",
+          output: "15",
+          cacheRead: "0.3",
+          cacheWrite: "3.75",
+          cacheWrite1h: "6",
+          source: "models_dev",
+        },
+        cost: "0.0000000000",
+      }),
+    ).toEqual({ cacheCost: 0, cacheSavings: 0, cacheReadSavings: 0 });
   });
 });

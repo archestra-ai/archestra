@@ -53,8 +53,13 @@ import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
 import {
   resolveLogContentMode,
   withholdInteractionContent,
+  withoutInteractionMedia,
 } from "@/log-content";
 import logger from "@/logging";
+import {
+  exportSessionSummary,
+  shouldExportSessionSummary,
+} from "@/observability/session-summary";
 import { parseClaudeMetadataParentSessionId } from "@/routes/proxy/utils/headers/session-id";
 import type {
   CopilotCredentialSource,
@@ -84,7 +89,7 @@ import {
 import { trackBackgroundWork } from "@/utils/background-work";
 import { retryOnceOnDeadlock } from "@/utils/deadlock";
 import { repairLoneSurrogateText } from "@/utils/lone-surrogates";
-import { hasUnavailableMediaCost } from "@/utils/media-usage";
+import { isMediaUsage } from "@/utils/media-usage";
 import { sizedChunks } from "@/utils/sized-chunks";
 import { isUuid, uuidv7 } from "@/utils/uuid";
 import AgentModel from "./agent";
@@ -98,6 +103,7 @@ import InteractionUserActivityModel from "./interaction-user-activity";
 import LimitModel from "./limit";
 import LlmProviderApiKeyModel from "./llm-provider-api-key";
 import { interactionBelongsToOrganization } from "./log-organization";
+import OrganizationModel from "./organization";
 import RoutingUsageModel from "./routing-usage";
 import VirtualApiKeyModel from "./virtual-api-key";
 
@@ -1500,7 +1506,7 @@ class InteractionModel {
       }
 
       // Audio/image counts cannot be repriced using generic text-token tariffs.
-      if (hasUnavailableMediaCost(interaction.response)) return;
+      if (isMediaUsage(interaction.response)) return;
 
       // Calculate token usage for this interaction
       const inputTokens = interaction.inputTokens || 0;
@@ -2489,7 +2495,7 @@ class InteractionModel {
       interactionId: string | null;
     }>,
     whereClause: SQL | undefined,
-  ): Promise<SessionSummary[]> {
+  ): Promise<Array<SessionSummary & { totalDurationMs: number | null }>> {
     // Sessionless interactions each form their own group; real sessions group
     // by their shared session id.
     const sessionGroupExpr = sql`COALESCE(${schema.interactionsTable.sessionId}, ${schema.interactionsTable.id}::text)`;
@@ -2529,6 +2535,7 @@ class InteractionModel {
         interactionId: sql<string>`CASE WHEN MAX(${schema.interactionsTable.sessionId}) IS NULL THEN MAX(${schema.interactionsTable.id}::text) ELSE NULL END`,
         requestCount: count(),
         failedOverCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.attemptOutcome} = 'failed_over')`,
+        totalDurationMs: sum(schema.interactionsTable.durationMs),
         totalInputTokens: sum(schema.interactionsTable.inputTokens),
         totalOutputTokens: sum(schema.interactionsTable.outputTokens),
         totalCacheReadTokens: sum(schema.interactionsTable.cacheReadTokens),
@@ -2692,6 +2699,8 @@ class InteractionModel {
         interactionId: s.interactionId, // Only set for single interactions (null session)
         requestCount: Number(s.requestCount),
         failedOverCount: Number(s.failedOverCount),
+        totalDurationMs:
+          s.totalDurationMs === null ? null : Number(s.totalDurationMs),
         totalInputTokens: Number(s.totalInputTokens) || 0,
         totalOutputTokens: Number(s.totalOutputTokens) || 0,
         totalCacheReadTokens: Number(s.totalCacheReadTokens) || 0,
@@ -3002,7 +3011,13 @@ class InteractionModel {
             (hasOpenAiContent ||
               hasResponsesContent ||
               hasGeminiContent ||
-              isLogContentNotStored(interaction.request))
+              isLogContentNotStored(interaction.request) ||
+              // Media, realtime and pass-through rows carry no message
+              // array; they are turns when their request summarises to text.
+              buildLastUserMessagePreview(
+                interaction.request,
+                interaction.type,
+              ) !== null)
           ) {
             if (isGuardrail || isOpenCodeSideTurn) {
               if (isGuardrail) guardrailTip ??= interaction;
@@ -3530,15 +3545,35 @@ class InteractionModel {
     } = data;
     if (billingUsage && !billingAttribution)
       throw new Error("Billing attribution is required for settlement");
+    // One cached read of the agent gives its environment and its
+    // organization's media setting.
+    const agentSettings = data.profileId
+      ? await AgentModel.findLogSettings(data.profileId)
+      : null;
     const environmentId = billingAttribution
       ? billingAttribution.environmentId
       : data.profileId
-        ? await AgentModel.findEnvironmentId(data.profileId)
+        ? (agentSettings?.environmentId ?? null)
         : (data.environmentId ?? null);
     // Enforced here, in the single funnel, so no writer can store content
-    // the deployment's Log Content mode withholds.
+    // the deployment's Log Content mode withholds, or media the organization
+    // keeps out of its logs, whether the call came from Chat, an agent
+    // session or a client of the proxy.
     const withheld = resolveLogContentMode() === "metadata_only";
-    const record = withheld ? withholdInteractionContent(columns) : columns;
+    const keepMedia =
+      withheld ||
+      (agentSettings?.keepMediaInLogs ??
+        (await OrganizationModel.keepsMediaInLogs({
+          organizationId: billingAttribution?.organizationId,
+          appId: data.appId,
+          connectorId: data.connectorId,
+          environmentId,
+        })));
+    const record = withheld
+      ? withholdInteractionContent(columns)
+      : keepMedia
+        ? columns
+        : withoutInteractionMedia(columns);
     // A withheld row holds no content to encrypt under a conversation key, so
     // it is written like the encrypted-chat fallback: unkeyed, marker in place.
     const audit = withheld ? null : (auditContext ?? null);
@@ -3682,25 +3717,11 @@ class InteractionModel {
                     await RoutingUsageModel.record(tx, routingUsage);
                   const created = await write(tx);
                   if (claimed && data.billingMode !== "subscription") {
-                    if (billingUsage.mode === "enforce") {
-                      await LimitModel.settleBillableUsage({
-                        tx,
-                        usage: billingUsage,
-                        attribution: billingAttribution,
-                      });
-                    } else {
-                      // Shadow records the candidate quote but posts only legacy counts.
-                      await LimitModel.recordInteractionTokenUsage({
-                        agentId: data.profileId ?? "",
-                        teamIds: [],
-                        entities: [],
-                        model: data.model ?? "",
-                        inputTokens: data.inputTokens ?? 0,
-                        outputTokens: data.outputTokens ?? 0,
-                        tx,
-                        attribution: billingAttribution,
-                      });
-                    }
+                    await LimitModel.settleBillableUsage({
+                      tx,
+                      usage: billingUsage,
+                      attribution: billingAttribution,
+                    });
                   }
                   return created;
                 }),
@@ -3765,6 +3786,26 @@ class InteractionModel {
       usedAt: interaction.createdAt,
     });
 
+    // Run after the committed write, without delaying inference. Read the same
+    // bounded session aggregation as the UI, so time ranges/truncated log queries
+    // cannot turn a partial set of requests into misleading totals.
+    if (shouldExportSessionSummary()) {
+      trackBackgroundWork(
+        InteractionModel.summarizeSessionPage(
+          [
+            {
+              sessionId: insertValues.sessionId ?? null,
+              interactionId: insertValues.sessionId ? null : interaction.id,
+            },
+          ],
+          undefined,
+        )
+          .then((rows) => {
+            for (const row of rows) exportSessionSummary(row);
+          })
+          .catch(() => {}),
+      );
+    }
     return interaction;
   }
 }
@@ -3892,6 +3933,9 @@ function isHarnessInjectedUserBlock(text: string): boolean {
   if (!trimmed) return true;
   return (
     trimmed.startsWith("<system-reminder>") ||
+    // Copilot CLI's own notes to the model: deferred tools, background agents.
+    trimmed.startsWith("<system_reminder>") ||
+    trimmed.startsWith("<system_notification>") ||
     trimmed.startsWith("<local-command-stdout>") ||
     trimmed.startsWith("<local-command-stderr>") ||
     trimmed.startsWith("<local-command-caveat>") ||
@@ -3939,9 +3983,73 @@ function extractGenuineAnthropicUserMessage(request: unknown): string | null {
   return null;
 }
 
+/** The datetime line Copilot CLI opens every user message with. */
+const LEADING_DATETIME = /^\s*<current_datetime>[^<]*<\/current_datetime>\s*/;
+
+/**
+ * The last text a person wrote in a Responses request's `input`, past the
+ * notes a client sends as user messages (Copilot CLI's deferred-tools
+ * reminder and background-agent notices), Copilot's leading datetime line and
+ * the labels of attached images and files.
+ */
+function extractGenuineResponsesUserMessage(request: unknown): string | null {
+  const input = (request as { input?: unknown } | null)?.input;
+  if (!Array.isArray(input)) return null;
+  for (let i = input.length - 1; i >= 0; i--) {
+    const item = input[i] as {
+      type?: string;
+      role?: string;
+      content?: unknown;
+    } | null;
+    if (
+      item?.role !== "user" ||
+      (item.type !== undefined && item.type !== "message")
+    )
+      continue;
+    const texts = writtenTexts(item.content);
+    for (let j = texts.length - 1; j >= 0; j--) {
+      const text = texts[j].replace(LEADING_DATETIME, "");
+      if (!isHarnessInjectedUserBlock(text)) return text.trim();
+    }
+  }
+  return null;
+}
+
+/**
+ * The text parts of one user message, past the labels of its attachments.
+ * Copilot CLI sends each attached image or file as a text part naming it
+ * (`Image file at path …`, `Document at path "…"`) right before the image or
+ * file part, after the person's prompt. A text part followed by a part that
+ * is not text is such a label, unless the message has no other text.
+ */
+function writtenTexts(content: unknown): string[] {
+  if (typeof content === "string") return [content];
+  if (!Array.isArray(content)) return [];
+  const textOf = (part: unknown) => {
+    const text = (part as { text?: unknown } | null)?.text;
+    return typeof text === "string" ? text : undefined;
+  };
+  const texts: string[] = [];
+  const unlabeled: string[] = [];
+  content.forEach((part, index) => {
+    const text = textOf(part);
+    if (text === undefined) return;
+    texts.push(text);
+    const next = content[index + 1];
+    if (next === undefined || textOf(next) !== undefined) unlabeled.push(text);
+  });
+  return unlabeled.length > 0 ? unlabeled : texts;
+}
+
+/**
+ * The session title's text: the last user message. A media row may keep
+ * what the user said on its response (the text a speech call spoke), so the
+ * response is read too when the caller has it.
+ */
 function buildLastUserMessagePreview(
   request: unknown,
   type: string,
+  response: unknown = {},
 ): string | null {
   try {
     if (type === "anthropic:messages") {
@@ -3950,9 +4058,15 @@ function buildLastUserMessagePreview(
         return truncatePreview(genuine);
       }
     }
+    if (type.endsWith(":responses")) {
+      const genuine = extractGenuineResponsesUserMessage(request);
+      if (genuine) {
+        return truncatePreview(genuine);
+      }
+    }
     const interaction = new DynamicInteraction({
       request,
-      response: {},
+      response: response ?? {},
       type,
     } as never);
     const message = interaction.getLastUserMessage().trim();
@@ -4073,11 +4187,20 @@ function buildSessionPreview(
     : findMarkers(request, SESSION_PREVIEW_MARKERS);
   const isTitleGeneration = hasTitleGenerationMarker(markers);
   const contentNotStored = isLogContentNotStored(request);
+  const lastUserMessagePreview = buildLastUserMessagePreview(
+    data.request,
+    data.type,
+    data.response,
+  );
   return {
     hasContent:
       [request?.messages, request?.input, request?.contents].some(
         (value) => Array.isArray(value) && value.length > 0,
-      ) || contentNotStored,
+      ) ||
+      contentNotStored ||
+      // Media, realtime and pass-through rows carry no message array; they
+      // are turns when their request summarises to text.
+      lastUserMessagePreview !== null,
     isTitleGeneration,
     isPromptSuggestion: markers.has(PROMPT_SUGGESTION_MARKER),
     isOpenCodeSideTurn:
@@ -4090,10 +4213,7 @@ function buildSessionPreview(
       (isClaudeSessionSource(data.sessionSource ?? null) &&
         hasClaudeSubagentMarker(data.request)),
     contentNotStored,
-    lastUserMessagePreview: buildLastUserMessagePreview(
-      data.request,
-      data.type,
-    ),
+    lastUserMessagePreview,
     claudeCodeTitle: isTitleGeneration
       ? extractClaudeCodeTitle(data.response)
       : null,

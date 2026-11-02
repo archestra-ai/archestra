@@ -133,7 +133,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       // Add per-model usage breakdown for token_cost limits
-      const breakdowns = await LimitModel.getModelUsageBreakdowns(
+      const spend = await LimitModel.getSpendUsage(
         limits
           .filter((limit) => limit.limitType === "token_cost")
           .map((limit) => limit.id),
@@ -141,14 +141,11 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const throughput = await LlmThroughputModel.usage(limits);
       return reply.send(
-        limits.map((limit) => {
-          const modelUsage = breakdowns.get(limit.id);
-          return {
-            ...limit,
-            modelUsage,
-            throughputUsage: throughput.get(limit.id),
-          };
-        }),
+        limits.map((limit) => ({
+          ...limit,
+          ...spend.get(limit.id),
+          throughputUsage: throughput.get(limit.id),
+        })),
       );
     },
   );
@@ -225,8 +222,8 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      const breakdowns = await LimitModel.getModelUsageBreakdowns([limit.id]);
-      return reply.send({ ...limit, modelUsage: breakdowns.get(limit.id) });
+      const spend = await LimitModel.getSpendUsage([limit.id]);
+      return reply.send({ ...limit, ...spend.get(limit.id) });
     },
   );
 
@@ -241,11 +238,24 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: UuidIdSchema,
         }),
         // entityType/entityId are immutable: changing the target entity would
-        // bypass the create-time org-scoping guard.
+        // bypass the create-time org-scoping guard. Resets own lastCleanup:
+        // setting it here would move the schedule without clearing usage.
         body: UpdateLimitSchema.omit({
           entityType: true,
           entityId: true,
-        }).partial(),
+          lastCleanup: true,
+        })
+          .partial()
+          .extend({
+            // Null is what older generated clients send for an untouched
+            // field; it is accepted and ignored.
+            lastCleanup: z
+              .null({
+                error:
+                  "lastCleanup cannot be edited. To reset a spend limit's window, use POST /api/limits/{id}/reset.",
+              })
+              .optional(),
+          }),
         response: constructResponseSchema(SelectLimitSchema),
       },
     },
@@ -266,12 +276,62 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       assertLimitTarget(teamIds, existing);
       assertCanChangeLimit(teamIds, existing);
-      const limit = await LimitModel.patch(id, body);
+      const { lastCleanup: _resetOwned, ...changes } = body;
+      const limit = await LimitModel.patch(id, changes);
 
       if (!limit) {
         throw new ApiError(404, "Limit not found");
       }
 
+      return reply.send(limit);
+    },
+  );
+
+  fastify.post(
+    "/api/limits/:id/reset",
+    {
+      schema: {
+        operationId: RouteId.ResetLimitUsage,
+        description:
+          "Reset a spend limit's current window to $0, so the requests it blocks run again. Cost reports keep the past spend. A calendar interval keeps its schedule. A rolling interval next resets one interval from now.",
+        tags: ["Limits"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(SelectLimitSchema),
+      },
+    },
+    async (request, reply) => {
+      const {
+        params: { id },
+        organizationId,
+      } = request;
+      // A reset changes the limit, so it takes the same access as an update.
+      const teamIds = await getLimitAccess(request, "update");
+      const existing = await LimitModel.findByIdInOrganization(
+        id,
+        organizationId,
+      );
+      if (!existing) {
+        throw new ApiError(404, "Limit not found");
+      }
+      assertLimitTarget(teamIds, existing);
+      assertCanChangeLimit(teamIds, existing);
+      if (
+        existing.limitType !== "token_cost" ||
+        existing.cleanupInterval === "minute"
+      ) {
+        throw new ApiError(
+          400,
+          "Only spend limits with an hourly or longer interval can be reset. Other limits recover on their own schedule.",
+        );
+      }
+
+      await LimitModel.resetLimitsUsage([id]);
+      const limit = await LimitModel.findByIdInOrganization(id, organizationId);
+      if (!limit) {
+        throw new ApiError(404, "Limit not found");
+      }
       return reply.send(limit);
     },
   );

@@ -14,17 +14,15 @@
 // for apps with one, Claude Desktop's download, the copy prompt for other
 // agents, or the manual steps themselves.
 
-import { DocsPage } from "@archestra/shared";
+import { DocsPage, resolveMcpClientServerName } from "@archestra/shared";
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { NATIVE_SESSION_CLIENT_LABELS } from "@archestra/shared/connection-setup";
 import {
   ArrowDown,
   BookOpen,
   ChartColumn,
-  Check,
   ChevronDown,
   ChevronRight,
-  Copy,
   Cpu,
   Gauge,
   Info,
@@ -80,6 +78,7 @@ import {
   readConnectPicks,
   saveConnectChoices,
 } from "./connect-choices";
+import type { DesktopSetupCache } from "./connect-command-panel";
 import {
   type ConnectPageData,
   type ConnectPageSkill,
@@ -97,6 +96,7 @@ import {
   nameOf,
   PromptRow,
   plural,
+  ScriptBlock,
   sentenceNameOf,
   TextButton,
   useCopy,
@@ -115,6 +115,7 @@ import {
   setupModeFor,
   useManualSteps,
 } from "./manual-setup";
+import { detectPlatform } from "./platform.utils";
 import { useUpdateUrlParams } from "./use-update-url-params";
 
 // The approval panel is large; the page only needs it for Claude Desktop's
@@ -717,6 +718,32 @@ function ConnectArea({
   const startWaiting = () => {
     if (!manual && !download && text) setPhase("waiting");
   };
+  // Claude Desktop's setup has no approval page to wait for. Its download, or
+  // its copied terminal command, goes straight to the starter prompt.
+  const startFinishing = () => setPhase("finish");
+  // Desktop in third-party mode cannot install extensions: terminal setup.
+  const [desktopTerminal, setDesktopTerminal] = useState(false);
+  // The installer runs on the computer that downloads it, so installer mode
+  // uses this computer's OS; only the terminal command can be for another.
+  useEffect(() => {
+    if (download && !desktopTerminal)
+      setWindows(detectPlatform() === "windows");
+  }, [download, desktopTerminal, setWindows]);
+  // A changed OS can remount the panel (its plugins differ); its setups stay.
+  const desktopSetups = useRef<DesktopSetupCache>({
+    byKey: new Map(),
+    requestedAt: new Map(),
+    pending: new Map(),
+  });
+  // The connector Desktop lists for the gateway, by the name setup registers.
+  const connector =
+    download && choices.tools && data.partsFor(client).tools && data.gateway
+      ? resolveMcpClientServerName({
+          gatewayName: data.gateway.name,
+          appName: data.appName,
+          isPersonalGateway: data.gateway.isPersonalGateway,
+        })
+      : null;
   useConnectedSignal(phase === "waiting", () => setPhase("connected"));
 
   const copy = async () => {
@@ -726,32 +753,111 @@ function ConnectArea({
   const band = (
     <Band busy={data.revalidating} dim={phase === "connected"}>
       <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
-        <StepHeading step={step} />
+        {download ? (
+          <OneOf shown={desktopTerminal ? 1 : 0}>
+            <StepHeading step={step} />
+            <StepHeading step="Run the command in your terminal" />
+          </OneOf>
+        ) : (
+          <StepHeading step={step} />
+        )}
+        {download && (
+          // The other way to set up Desktop belongs to the step it replaces,
+          // so it shares the heading's line.
+          <TextButton
+            onClick={() => setDesktopTerminal(!desktopTerminal)}
+            className="text-xs text-muted-foreground"
+          >
+            <OneOf inline shown={desktopTerminal ? 1 : 0}>
+              <span>Desktop in third-party mode? Use terminal setup</span>
+              <span>Desktop in standard mode? Download the installer</span>
+            </OneOf>
+          </TextButton>
+        )}
       </div>
 
       {download ? (
-        <ConnectCommandPanel
-          // Remount on a changed selection; the panel reads it once.
-          key={setupKey}
-          variant="download"
-          client={client}
-          exclude={leftOutParts}
-          pluginSlugs={
-            picks.pluginIds === null
-              ? undefined
-              : keptPlugins.map((p) => p.slug)
-          }
-          mcpGateways={data.gateway ? [data.gateway] : null}
-          mcpGatewayId={data.gateway?.id ?? null}
-          onMcpGatewaySelect={() => {}}
-          llmProxyId={data.llmProxyId}
-          shownProviders={data.shownProviders}
-          urlProvider={null}
-          onProviderSelect={() => {}}
-          baseUrl={data.baseUrl}
-          skillsEnabled={data.skillsEnabled}
-          pluginsEnabled={data.pluginsEnabled}
-        />
+        <>
+          <OneOf
+            shown={desktopTerminal ? 1 : 0}
+            className="mt-2 px-1 text-xs text-muted-foreground"
+          >
+            <p>
+              Open Claude Desktop Settings → Extensions and install the
+              downloaded .MCPB file. Your browser guides you through sign-in,
+              then setup closes and reopens Desktop.
+            </p>
+            <p>
+              Run it in a terminal on the computer where you use Claude Desktop.
+              Setup needs Python 3.9 or newer, and Claude Code for subscription
+              sign-in.
+            </p>
+          </OneOf>
+          <ConnectCommandPanel
+            // Remount on a changed selection; the panel reads it once.
+            key={setupKey}
+            variant="download"
+            client={client}
+            exclude={leftOutParts}
+            pluginSlugs={
+              picks.pluginIds === null
+                ? undefined
+                : keptPlugins.map((p) => p.slug)
+            }
+            mcpGateways={data.gateway ? [data.gateway] : null}
+            mcpGatewayId={data.gateway?.id ?? null}
+            onMcpGatewaySelect={() => {}}
+            llmProxyId={data.llmProxyId}
+            shownProviders={data.shownProviders}
+            urlProvider={null}
+            onProviderSelect={() => {}}
+            baseUrl={data.baseUrl}
+            skillsEnabled={data.skillsEnabled}
+            pluginsEnabled={data.pluginsEnabled}
+            onStarted={startFinishing}
+            terminal={desktopTerminal}
+            setupCache={desktopSetups.current}
+            // The terminal command follows the page's OS switch; the
+            // installer runs on the computer that downloads it.
+            platform={
+              desktopTerminal ? (windows ? "windows" : "macos") : undefined
+            }
+          />
+          {/* The OS switch's column stays reserved without it, so the steps
+              keep one width in both modes. */}
+          <div className="mt-4 grid gap-x-8 gap-y-2 px-1 text-xs text-muted-foreground md:grid-cols-[minmax(0,1fr)_auto]">
+            <div>
+              <p className="font-semibold text-foreground">When it finishes</p>
+              <OneOf shown={!desktopTerminal ? 0 : windows ? 1 : 2}>
+                {[
+                  { terminal: false, windows },
+                  { terminal: true, windows: true },
+                  { terminal: true, windows: false },
+                ].map((variant) => (
+                  <ol
+                    key={`${variant.terminal}-${variant.windows}`}
+                    className="mt-1 list-decimal space-y-0.5 pl-4"
+                  >
+                    {desktopNextSteps({ ...variant, connector }).map((line) => (
+                      <li key={line.key}>{line.content}</li>
+                    ))}
+                  </ol>
+                ))}
+              </OneOf>
+            </div>
+            <TextButton
+              onClick={() => setWindows(!windows)}
+              aria-hidden={!desktopTerminal}
+              tabIndex={desktopTerminal ? undefined : -1}
+              className={cn("self-start", !desktopTerminal && "invisible")}
+            >
+              <OneOf inline shown={windows ? 0 : 1}>
+                <span>Use the macOS / Linux command</span>
+                <span>Use the Windows command</span>
+              </OneOf>
+            </TextButton>
+          </div>
+        </>
       ) : manual ? (
         // The steps start right here, in the band.
         <div
@@ -759,9 +865,17 @@ function ConnectArea({
           className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-300"
         >
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-muted-foreground">
-            <span>Copy each block into {nameOf(client)}, top to bottom.</span>
+            <span>
+              {client.id === "chatgpt"
+                ? "Add the gateway as a plugin in ChatGPT."
+                : `Copy each block into ${nameOf(client)}, top to bottom.`}
+            </span>
           </div>
-          <ManualSteps client={client} data={data} />
+          <ManualSteps
+            client={client}
+            data={data}
+            includeSkills={choices.skills}
+          />
         </div>
       ) : (
         <>
@@ -822,7 +936,7 @@ function ConnectArea({
           )}
 
           {script && (
-            <div className="mt-3 grid gap-x-8 gap-y-2 px-1 text-xs text-muted-foreground md:grid-cols-[minmax(0,1fr)_auto]">
+            <div className="mt-4 grid gap-x-8 gap-y-2 px-1 text-xs text-muted-foreground md:grid-cols-[minmax(0,1fr)_auto]">
               <div>
                 <p className="font-semibold text-foreground">
                   When it finishes
@@ -858,6 +972,7 @@ function ConnectArea({
         phase={phase}
         client={run.client}
         script={run.script}
+        connector={connector}
         welcome={
           origin
             ? welcomePrompt({
@@ -879,44 +994,58 @@ function ConnectArea({
 }
 
 /**
- * The installer command on two lines after a dim prompt, in the page's own
- * colours. Copy takes the text exactly as shown.
+ * Claude Desktop's "When it finishes" list, for the installer or the terminal
+ * setup. Desktop has no installer-made way to turn a connector on, so the
+ * gateway steps are the user's.
  */
-function ScriptBlock({
-  command,
-  copied,
-  disabled,
-  onCopy,
-  onSelectionCopy,
+function desktopNextSteps({
+  terminal,
+  windows,
+  connector,
 }: {
-  command: string;
-  copied: boolean;
-  disabled: boolean;
-  onCopy: () => void;
-  /** The command text was selected and copied by hand. */
-  onSelectionCopy: () => void;
-}) {
-  return (
-    <div className="relative mt-2 rounded-2xl border bg-background shadow-sm">
-      <Button
-        size="xs"
-        variant="ghost"
-        onClick={onCopy}
-        disabled={disabled}
-        className="absolute top-2.5 right-2.5 text-muted-foreground"
-      >
-        {copied ? <Check /> : <Copy />}
-        {copied ? "Copied" : "Copy"}
-      </Button>
-      <pre
-        onCopy={onSelectionCopy}
-        className="overflow-x-auto py-4 pr-24 pl-5 font-mono text-sm leading-relaxed"
-      >
-        <span className="text-muted-foreground select-none">$ </span>
-        {command}
-      </pre>
-    </div>
-  );
+  terminal: boolean;
+  windows: boolean;
+  connector: string | null;
+}): { key: string; content: ReactNode }[] {
+  const steps: { key: string; content: ReactNode }[] = [];
+  if (!terminal) {
+    steps.push({
+      key: "restart",
+      content: windows
+        ? "If Desktop doesn't restart after extension installation, quit it (choose Exit from its tray icon) and open it again."
+        : "If Desktop doesn't restart after extension installation, quit it and open it again.",
+    });
+  } else if (windows) {
+    steps.push({
+      key: "exit",
+      content:
+        "When the terminal asks, choose Exit from the Claude icon in the system tray. Setup then reopens Desktop.",
+    });
+  }
+  if (connector) {
+    steps.push(
+      {
+        key: "connect",
+        content: (
+          <>
+            Open Settings → Connectors in Desktop and connect the new{" "}
+            <strong>{connector}</strong> connector. Complete sign-in and approve
+            access in your browser.
+          </>
+        ),
+      },
+      {
+        key: "enable",
+        content: (
+          <>
+            In a new conversation, open + → Connectors and turn on{" "}
+            <strong>{connector}</strong> if it is off.
+          </>
+        ),
+      },
+    );
+  }
+  return steps;
 }
 
 /**
@@ -959,7 +1088,7 @@ function scriptNextSteps(client: ConnectClient): string[] {
       ];
     case "copilot-cli":
       return [
-        "If you connected an LLM provider, its settings are saved in providers.json. The printed environment variables are optional.",
+        "If you connected an LLM provider, its settings are saved in providers.json and the model in settings.json. Leave COPILOT_MODEL and the COPILOT_PROVIDER_* variables unset.",
         "Press Enter when it offers to start Copilot CLI, or run the copilot command it prints in a new terminal. It opens the browser to sign in to the gateway.",
       ];
     case "opencode":
@@ -983,7 +1112,9 @@ function currentStep(client: ConnectClient, setup: SetupMode): string {
   const name = nameOf(client);
   switch (setup) {
     case "manual":
-      return `Follow the steps for ${name}`;
+      return client.id === "chatgpt"
+        ? "Install the ChatGPT plugin"
+        : `Follow the steps for ${name}`;
     case "script":
       return "Run the command in your terminal";
     case "download":
@@ -991,6 +1122,43 @@ function currentStep(client: ConnectClient, setup: SetupMode): string {
     case "prompt":
       return `Paste the prompt into ${name}`;
   }
+}
+
+/**
+ * Several versions of one spot, stacked in the same place with only one
+ * shown: the largest sets the size, so switching between them moves nothing
+ * around it.
+ */
+function OneOf({
+  shown,
+  inline,
+  className,
+  children,
+}: {
+  shown: number;
+  /** Inside a button or text: spans instead of divs. */
+  inline?: boolean;
+  className?: string;
+  children: ReactNode[];
+}) {
+  const Tag = inline ? "span" : "div";
+  return (
+    <Tag className={cn("grid grid-cols-[minmax(0,1fr)]", className)}>
+      {children.map((child, index) => (
+        <Tag
+          // biome-ignore lint/suspicious/noArrayIndexKey: fixed set of versions
+          key={index}
+          aria-hidden={index !== shown}
+          className={cn(
+            "min-w-0 [grid-area:1/1]",
+            index !== shown && "invisible",
+          )}
+        >
+          {child}
+        </Tag>
+      ))}
+    </Tag>
+  );
 }
 
 function Band({
@@ -1022,9 +1190,11 @@ function Band({
 
 function StepHeading({ step }: { step: string }) {
   return (
+    // Times the fade-in alone: a transition duration would also apply to
+    // visibility, so a heading OneOf hides would stay painted over the next.
     <h2
       key={step}
-      className="inline-flex items-center gap-2.5 text-sm font-semibold tracking-tight motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300"
+      className="inline-flex items-center gap-2.5 text-sm font-semibold tracking-tight motion-safe:animate-in motion-safe:fade-in motion-safe:animation-duration-300"
     >
       <span
         aria-hidden
@@ -1040,11 +1210,19 @@ function StepHeading({ step }: { step: string }) {
 function ManualSteps({
   client,
   data,
+  includeSkills,
 }: {
   client: ConnectClient;
   data: ConnectPageData;
+  includeSkills: boolean;
 }) {
-  const steps = useManualSteps(client, data);
+  const steps = useManualSteps(client, data, includeSkills);
+  if (client.id === "chatgpt")
+    return (
+      <div className="mt-4 rounded-2xl border bg-background p-6">
+        {steps[0]?.content}
+      </div>
+    );
   if (steps.length === 0)
     return (
       <p className="mt-4 rounded-2xl border border-dashed p-5 text-sm text-muted-foreground">
@@ -1082,7 +1260,7 @@ function ManualSteps({
 
 /**
  * Agents OpenAPPA follows natively (the Claude Code, Claude Desktop, Codex,
- * OpenCode, Kilo Code and Pi adapters in
+ * Copilot CLI, OpenCode, Kilo Code and Pi adapters in
  * backend/src/proxy/plugins/appa-plugin-archestra/session-identity.ts). Others
  * count as unsupported unless they send OpenAPPA session headers, which the
  * agents on this page don't.
@@ -1118,9 +1296,11 @@ function guardrailsStatus(
       tone: "warn",
       label: "Not enforced",
       detail:
-        client.proxy.kind === "unsupported"
-          ? `Guardrails work through the LLM proxy, and ${client.label} sends its model requests to its own service, so its tool calls aren't checked against the policy.`
-          : `Guardrails work through the LLM proxy, and it's off for ${client.label}, so its tool calls aren't checked against the policy.`,
+        client.id === "chatgpt"
+          ? "This plugin does not configure model routing, so it cannot establish LLM proxy guardrail enforcement. Local Work needs separate provider configuration."
+          : client.proxy.kind === "unsupported"
+            ? `Guardrails work through the LLM proxy, and ${client.label} sends its model requests to its own service, so its tool calls aren't checked against the policy.`
+            : `Guardrails work through the LLM proxy, and it's off for ${client.label}, so its tool calls aren't checked against the policy.`,
     };
   if (GUARDRAILS_NATIVE.has(client.id))
     return {
@@ -1228,13 +1408,16 @@ function ProfileCard({
   const status: StatusItem[] = [];
   // The LLM proxy's real state for this agent: the admin setting, whether
   // the agent can use a custom model endpoint, then the user's choice.
-  const proxyReason = !data.llmProxyEnabled
-    ? `Your admin hasn't turned on ${data.appName}'s LLM proxy, so ${client.label} calls its model provider directly.`
-    : client.proxy.kind === "unsupported"
-      ? `${client.label} can't send its model requests to ${data.appName}'s LLM proxy, so it calls its model provider directly.`
-      : !routed
-        ? `You turned the LLM proxy off, so ${client.label} calls its model provider directly. Turn it back on in Choose what to include.`
-        : `${client.label}'s model requests go through ${data.appName}'s LLM proxy. Same models, plus your org's limits, logging and cost tracking.`;
+  const proxyReason =
+    client.id === "chatgpt" && client.proxy.kind === "unsupported"
+      ? client.proxy.reason
+      : !data.llmProxyEnabled
+        ? `Your admin hasn't turned on ${data.appName}'s LLM proxy, so ${client.label} calls its model provider directly.`
+        : client.proxy.kind === "unsupported"
+          ? `${client.label} can't send its model requests to ${data.appName}'s LLM proxy, so it calls its model provider directly.`
+          : !routed
+            ? `You turned the LLM proxy off, so ${client.label} calls its model provider directly. Turn it back on in Choose what to include.`
+            : `${client.label}'s model requests go through ${data.appName}'s LLM proxy. Same models, plus your org's limits, logging and cost tracking.`;
   status.push({
     id: "routing",
     icon: (
@@ -1249,7 +1432,9 @@ function ProfileCard({
     state: !data.llmProxyEnabled
       ? "Not active"
       : !proxyOn
-        ? "Not supported"
+        ? client.id === "chatgpt"
+          ? "Separate setup"
+          : "Not supported"
         : choices.proxy
           ? "On"
           : "Off",

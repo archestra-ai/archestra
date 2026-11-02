@@ -49,6 +49,7 @@ add-zsh-hook precmd terminal_startup
           skills: null,
           mcp: {
             serverName: "test_gateway",
+            toolPrefix: "archestra__",
             url: "https://example.com/mcp",
             ref: "test-gateway",
           },

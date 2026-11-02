@@ -5,7 +5,7 @@ import {
   type archestraApiTypes,
   type StatisticsTimeFrame,
 } from "@archestra/shared";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { throwOnApiError } from "@/lib/utils/api";
 
 const {
@@ -61,6 +61,7 @@ export function useMyStatistics({
       return data;
     },
     enabled,
+    placeholderData: keepPreviousData,
     refetchInterval: 30_000, // Refresh every 30 seconds
   });
 }
@@ -90,6 +91,7 @@ export function useMyUsageBreakdown({
       return data;
     },
     enabled,
+    placeholderData: keepPreviousData,
     // Deliberately not on the 30s refetch its sibling uses: this is a page you
     // read and think about, not a live counter, and it costs three aggregations
     // over `interactions` each time.

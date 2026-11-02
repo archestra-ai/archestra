@@ -1,6 +1,6 @@
 {
   "name": "@archestra/shared",
-  "version": "1.5.0-rc.15",
+  "version": "1.5.0-rc.19",
   "description": "",
   "type": "module",
   "sideEffects": false,
@@ -43,7 +43,7 @@
     "lint": "biome check",
     "lint:fix": "biome check --write",
     "lint:fix:unsafe": "biome check --write --unsafe",
-    "type-check": "tsc --noEmit",
+    "type-check": "tsx ../scripts/type-check.ts --noEmit",
     "test": "vitest",
     "codegen:api-client": "tsx hey-api/openapi-ts.ts && biome check --write ./hey-api/clients",
     "codegen:theme-css": "tsx ./themes/generate-theme-css.ts",
@@ -63,7 +63,7 @@
   "devDependencies": {
     "@hey-api/openapi-ts": "^0.97.3",
     "@types/node": "^25",
-    "knip": "^5.85.0",
+    "knip": "^6.43.0",
     "typescript": "catalog:",
     "typescript-7": "catalog:",
     "vitest": "^4.1.11"

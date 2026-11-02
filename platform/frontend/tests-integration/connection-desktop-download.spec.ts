@@ -63,7 +63,7 @@ test.beforeEach(async ({ mswControl }) => {
   });
 });
 
-test("one click prepares and downloads once; the ready link downloads the same artifact again", async ({
+test("each click prepares a new setup and downloads it once", async ({
   page,
 }, testInfo) => {
   const preparations: string[] = [];
@@ -106,19 +106,20 @@ test("one click prepares and downloads once; the ready link downloads the same a
     rawToken: "test-render-ticket",
   });
 
-  const link = page.getByRole("link", {
-    name: "Download installer",
-    exact: true,
-  });
-  await expect(link).toHaveAttribute("href", installerUrl);
+  await expect(
+    page.getByText("Downloaded. Install it within 15 minutes.", {
+      exact: true,
+    }),
+  ).toBeVisible();
   expect(preparations).toHaveLength(1);
   expect(downloads).toBe(1);
+  // Installing a setup uses it up, so another click prepares a new one.
   const repeatDownload = page.waitForEvent("download");
-  await link.click();
+  await downloadButton.click();
   expect((await repeatDownload).suggestedFilename()).toBe(
     "Connect-Claude-Desktop.mcpb",
   );
-  expect(preparations).toHaveLength(1);
+  expect(preparations).toHaveLength(2);
   expect(downloads).toBe(2);
   await testInfo.attach("installer-downloaded", {
     body: await page.screenshot({
@@ -179,6 +180,44 @@ test("a failed preparation offers one-click retry and disables repeated retry cl
   expect(preparations).toBe(2);
   expect(downloads).toBe(1);
   await expect(
-    page.getByRole("link", { name: "Download installer", exact: true }),
+    page.getByText("Downloaded. Install it within 15 minutes.", {
+      exact: true,
+    }),
   ).toBeVisible();
+});
+
+test("switching between installer and terminal setup swaps the heading at once", async ({
+  page,
+}) => {
+  await page.goto("/connection?clientId=claude-desktop");
+  const band = page.getByRole("region", { name: "Connect" });
+  await expect(
+    band.getByRole("heading", {
+      name: "Download the installer for Claude Desktop",
+    }),
+  ).toBeVisible();
+  for (const [link, heading] of [
+    [
+      "Desktop in third-party mode? Use terminal setup",
+      "Run the command in your terminal",
+    ],
+    [
+      "Desktop in standard mode? Download the installer",
+      "Download the installer for Claude Desktop",
+    ],
+  ]) {
+    // Clicks and looks two frames later, well before a lingering heading
+    // would go: the old heading must not stay painted over the new one.
+    const painted = await band
+      .getByRole("button", { name: link })
+      .evaluate(async (button) => {
+        (button as HTMLElement).click();
+        for (let frame = 0; frame < 2; frame++)
+          await new Promise(requestAnimationFrame);
+        return [...(button.closest("section")?.querySelectorAll("h2") ?? [])]
+          .filter((h2) => getComputedStyle(h2).visibility === "visible")
+          .map((h2) => h2.textContent);
+      });
+    expect(painted).toEqual([heading]);
+  }
 });

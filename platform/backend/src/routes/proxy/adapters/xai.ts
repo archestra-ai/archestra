@@ -155,8 +155,8 @@ class XaiStreamAdapter
   readonly provider = "xai" as const;
   private delegate: OpenAIStreamAdapter;
 
-  constructor() {
-    this.delegate = new OpenAIStreamAdapter();
+  constructor(request?: XaiRequest) {
+    this.delegate = new OpenAIStreamAdapter("openai", request);
   }
 
   get state() {
@@ -218,8 +218,10 @@ export const xaiAdapterFactory: LLMProvider<
     return new XaiResponseAdapter(response);
   },
 
-  createStreamAdapter(): LLMStreamAdapter<XaiStreamChunk, XaiResponse> {
-    return new XaiStreamAdapter();
+  createStreamAdapter(
+    request?: XaiRequest,
+  ): LLMStreamAdapter<XaiStreamChunk, XaiResponse> {
+    return new XaiStreamAdapter(request);
   },
 
   extractApiKey(headers: XaiHeaders): string | undefined {

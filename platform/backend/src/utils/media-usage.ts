@@ -13,23 +13,25 @@ export function withMediaUsageAvailability(
   >;
   return {
     ...record,
-    ...(usage.usageUnavailable || usage.costUnavailable
+    ...(usage.usageUnavailable || usage.costUnavailable || usage.mediaTariff
       ? {
           __mediaUsage: {
             tokensAvailable: !usage.usageUnavailable,
-            costAvailable: false,
+            costAvailable: !usage.usageUnavailable && !usage.costUnavailable,
           },
         }
       : {}),
   };
 }
 
-export function hasUnavailableMediaCost(response: unknown): boolean {
-  if (!response || typeof response !== "object") return false;
-  const marker = (response as Record<string, unknown>).__mediaUsage;
+/**
+ * Whether a recorded response is a media operation's. Its counts are not chat
+ * tokens, so per-token tariffs and token quotas must not price them.
+ */
+export function isMediaUsage(response: unknown): boolean {
   return (
-    !!marker &&
-    typeof marker === "object" &&
-    (marker as Record<string, unknown>).costAvailable === false
+    !!response &&
+    typeof response === "object" &&
+    !!(response as Record<string, unknown>).__mediaUsage
   );
 }

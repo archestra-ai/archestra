@@ -11,6 +11,7 @@ import {
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+  TOOL_YELL_SHORT_NAME,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import type { GatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
@@ -39,6 +40,7 @@ import {
   type HistoryWire,
   historyWire,
   isClientRunToolType,
+  loadDeclarationsUpFront,
   type ProviderToolCall,
   type ProviderWire,
   providerHostedTool,
@@ -495,6 +497,25 @@ export function prepareAppaRequest(params: {
   const notices = noticeAliases.length > 0 ? noticeAliases : [notice];
   stripAppaTools({ body: params.body, tools: notices });
   stripToolReferences({ body: params.body, tools: notices });
+  // A client that defers its MCP tools behind the provider's own tool search
+  // (Copilot CLI) reaches these only through that search, which can come
+  // back empty for them; then no plan, review, or report can run. They are
+  // few and small, so they are loaded up front.
+  if (defersTools) {
+    loadDeclarationsUpFront({
+      body: params.body,
+      tools: [
+        ...(controlAliases.length > 0 ? controlAliases : [control]),
+        ...askUserDeclarations,
+        ...platformDeclarationsOf(
+          TOOL_YELL_SHORT_NAME,
+          clientEntries,
+          params.identity,
+          params.trustBarePlatformTools === true,
+        ),
+      ],
+    });
+  }
   return {
     tools: {
       control,

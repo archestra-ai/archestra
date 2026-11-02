@@ -1669,6 +1669,7 @@ export const anthropicAdapterFactory: LLMProvider<
   async executeStream(
     client: unknown,
     request: AnthropicRequest,
+    onAccepted?: () => void,
   ): Promise<AsyncIterable<AnthropicStreamChunk>> {
     const anthropicClient = client as AnthropicProvider;
     return withSamplingParamFallback({
@@ -1692,7 +1693,9 @@ export const anthropicAdapterFactory: LLMProvider<
           stream: true,
         } as AnthropicProvider.Messages.MessageCreateParamsStreaming);
         if (typeof pending.asResponse !== "function") return pending;
-        return iterateAnthropicStreamEvents(await pending.asResponse());
+        const response = await pending.asResponse();
+        onAccepted?.();
+        return iterateAnthropicStreamEvents(response);
       },
     });
   },

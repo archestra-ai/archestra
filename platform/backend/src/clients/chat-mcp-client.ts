@@ -307,6 +307,10 @@ export const __test = {
       toolCache.clear();
     }
   },
+  getToolCacheEntry(toolCacheKey: string) {
+    return toolCache.get(toolCacheKey);
+  },
+  getToolCacheKey,
   getCacheKey,
   isBrowserMcpTool,
   filterToolsByEnabledIds,
@@ -839,6 +843,8 @@ export async function getChatMcpTools({
   elicitation,
   user,
   scheduleTriggerRunId,
+  runId,
+  agentRuntimeTier,
   hookRunCollector,
   kbChunksCollector,
   subagentToolStream,
@@ -889,6 +895,10 @@ export async function getChatMcpTools({
   user?: { id: string; email?: string; name?: string };
   /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
+  /** The calling agent run's task ID or run ID, when dispatched from a runtime container or chat. */
+  runId?: string;
+  /** Explicit runtime tier of the calling instance, when available. */
+  agentRuntimeTier?: string;
   /** Per-turn sink for inline `data-hook-run` entries (chat path only). */
   hookRunCollector?: CollectedHookRun[];
   /**
@@ -975,6 +985,8 @@ export async function getChatMcpTools({
     cached.context.modelAcceptsImageToolResults =
       modelAcceptsImageToolResults ?? true;
     cached.context.parentLlm = parentLlm;
+    cached.context.runId = runId;
+    cached.context.agentRuntimeTier = agentRuntimeTier;
     logger.info(
       {
         agentId,
@@ -1109,6 +1121,8 @@ export async function getChatMcpTools({
       sessionId,
       delegationChain,
       scheduleTriggerRunId,
+      runId,
+      agentRuntimeTier,
       abortSignal,
       elicitation,
       user,

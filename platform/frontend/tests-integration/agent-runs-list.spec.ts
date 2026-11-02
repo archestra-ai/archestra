@@ -14,7 +14,6 @@ const agent = makeAgent({
     backend: "kubernetes",
     steerMode: "pipe",
     privileged: false,
-    resources: null,
     environment: null,
     credentials: null,
     ttlHours: null,
@@ -248,6 +247,7 @@ function makeRun(overrides: Partial<AgentRunListItem>): AgentRunListItem {
     shareVisibility: null,
     shareTeamNames: null,
     shareUserNames: null,
+    runtimeLimits: null,
     ...overrides,
     // A run without a workspace is its own session.
     sessionId:

@@ -151,34 +151,32 @@ describe("internal MCP catalog — team-scope RBAC", () => {
     });
   }
 
-  test("an author shares with a team only once they belong to it", async ({
+  test("an author shares with an unrelated team and its members gain access", async ({
     makeUser,
     makeMember,
     makeTeam,
     makeTeamMember,
   }) => {
-    // Full access on one item does not reach every team: adding each of them
-    // would make the item close to org-wide, which takes Full access on every
-    // entry. Someone who manages only this item shares it with their teams.
     const editor = await makeUser();
     await makeMember(editor.id, organizationId, { role: EDITOR_ROLE_NAME });
-    const otherTeam = await makeTeam(organizationId, editor.id); // not a member
+    const recipient = await makeUser();
+    await makeMember(recipient.id, organizationId, { role: MEMBER_ROLE_NAME });
+    const otherTeam = await makeTeam(organizationId, recipient.id);
+    await makeTeamMember(otherTeam.id, recipient.id);
 
     currentUser = editor;
     const created = await post(remotePayload());
-    const refused = await share(created.json().id, [
-      { subject: { type: "team", id: otherTeam.id }, actions: USE },
-    ]);
-    expect(refused.statusCode, refused.body).toBe(403);
-    expect(refused.json().error.message).toBe(
-      "Only someone with Full access to every MCP registry entry can share it with a team they are not in.",
-    );
+    expect(created.statusCode, created.body).toBe(200);
+    currentUser = recipient;
+    expect((await get(created.json().id)).statusCode).toBe(404);
 
-    await makeTeamMember(otherTeam.id, editor.id);
+    currentUser = editor;
     const shared = await share(created.json().id, [
       { subject: { type: "team", id: otherTeam.id }, actions: USE },
     ]);
     expect(shared.statusCode, shared.body).toBe(200);
+    currentUser = recipient;
+    expect((await get(created.json().id)).statusCode).toBe(200);
   });
 
   test("sharing is out of reach of an edit and of a caller without permission management", async ({

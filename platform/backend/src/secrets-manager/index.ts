@@ -2,7 +2,7 @@ import { SecretsManagerType, SupportedProviders } from "@archestra/shared";
 import { encodeBedrockSigV4Marker } from "@/clients/bedrock-credentials";
 import config from "@/config";
 import logger from "@/logging";
-import type { ISecretManager, VaultConfig } from "@/types";
+import type { ISecretManager, SecretReadOptions, VaultConfig } from "@/types";
 import { DbSecretsManager } from "./db";
 import {
   getVaultConfigFromEnv,
@@ -124,8 +124,9 @@ export function secretManager(): ISecretManager {
  */
 export async function getSecretValueForLlmProviderApiKey(
   secretId: string,
+  options?: SecretReadOptions,
 ): Promise<string | undefined> {
-  const secret = await secretManager().getSecret(secretId);
+  const secret = await secretManager().getSecret(secretId, options);
   const data = secret?.secret as Record<string, unknown> | null;
   if (!data) return undefined;
 

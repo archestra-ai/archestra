@@ -1,6 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
 import { beforeEach, vi } from "vitest";
-import { VirtualApiKeyModel } from "@/models";
+import { LlmProviderApiKeyModel, VirtualApiKeyModel } from "@/models";
 import type { AnthropicCreditVerdict } from "@/routes/chat/model-fetchers/anthropic-credit-probe";
 import { probeAnthropicCredit } from "@/routes/chat/model-fetchers/anthropic-credit-probe";
 import {
@@ -8,6 +9,7 @@ import {
   ensureConnectionVirtualKey,
   readVirtualKeyValue,
 } from "@/services/connection-setup";
+import { encodeGithubAppReference } from "@/services/github-app-copilot-token";
 import { describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 
@@ -187,6 +189,197 @@ describe("ensureConnectionVirtualKey", () => {
         provider: "github-copilot",
       }),
     ).rejects.toThrow(/Connect your own/);
+  });
+
+  test("per-user provider: binds the organization plan the user picks, then their own sign-in again", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const ownKey = await makeLlmProviderApiKey(
+      org.id,
+      (await makeSecret()).id,
+      { provider: "github-copilot", userId: user.id },
+    );
+    // An organization plan: a GitHub App key, shared with the organization.
+    const planValue = encodeGithubAppReference({
+      ref: { organizationId: org.id, credentialId: randomUUID() },
+      installationId: "2",
+      organization: "acme",
+      githubUrl: "https://github.com",
+    });
+    const planKey = await LlmProviderApiKeyModel.create(
+      {
+        organizationId: org.id,
+        name: "GitHub Copilot (acme)",
+        provider: "github-copilot",
+        secretId: (await makeSecret({ secret: { apiKey: planValue } })).id,
+        scope: "org",
+        userId: null,
+      },
+      {
+        apiKeyValue: planValue,
+        // As connecting the GitHub App grants it: everyone may use the plan.
+        initialPermissionGrants: [
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
+      },
+    );
+    const connect = (selectedProviderKeyId?: string) =>
+      ensureConnectionVirtualKey({
+        organizationId: org.id,
+        userId: user.id,
+        userEmail: user.email,
+        userTeamIds: [],
+        provider: "github-copilot",
+        clientId: "copilot-cli",
+        selectedProviderKeyId,
+      });
+
+    const { virtualApiKeyId: id } = await connect(planKey.id);
+    expect(await VirtualApiKeyModel.getProviderApiKeys(id)).toEqual([
+      expect.objectContaining({
+        provider: "github-copilot",
+        providerApiKeyId: planKey.id,
+      }),
+    ]);
+
+    // The same client's key moves back to the user's own sign-in.
+    const again = await connect();
+    expect(again.virtualApiKeyId).toBe(id);
+    expect(await VirtualApiKeyModel.getProviderApiKeys(id)).toEqual([
+      expect.objectContaining({
+        provider: "github-copilot",
+        providerApiKeyId: ownKey.id,
+      }),
+    ]);
+  });
+
+  test("per-user provider: binds the picked organization plan when the key includes future providers", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    await makeLlmProviderApiKey(org.id, (await makeSecret()).id, {
+      provider: "github-copilot",
+      userId: user.id,
+    });
+    const planValue = encodeGithubAppReference({
+      ref: { organizationId: org.id, credentialId: randomUUID() },
+      installationId: "2",
+      organization: "acme",
+      githubUrl: "https://github.com",
+    });
+    const planKey = await LlmProviderApiKeyModel.create(
+      {
+        organizationId: org.id,
+        name: "GitHub Copilot (acme)",
+        provider: "github-copilot",
+        secretId: (await makeSecret({ secret: { apiKey: planValue } })).id,
+        scope: "org",
+        userId: null,
+      },
+      {
+        apiKeyValue: planValue,
+        initialPermissionGrants: [
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
+      },
+    );
+    const connect = () =>
+      ensureConnectionVirtualKey({
+        organizationId: org.id,
+        userId: user.id,
+        userEmail: user.email,
+        userTeamIds: [],
+        provider: "github-copilot",
+        clientId: "copilot-cli",
+        selectedProviderKeyId: planKey.id,
+        includeFutureProviders: true,
+      });
+
+    // Issued with future providers, and again over the existing key.
+    for (const attempt of [1, 2]) {
+      const { virtualApiKeyId } = await connect();
+      expect(
+        (await VirtualApiKeyModel.findById(virtualApiKeyId))
+          ?.includeFutureProviders,
+        `attempt ${attempt}`,
+      ).toBe(true);
+      expect(
+        (await VirtualApiKeyModel.getProviderApiKeys(virtualApiKeyId)).filter(
+          (key) => key.provider === "github-copilot",
+        ),
+        `attempt ${attempt}`,
+      ).toEqual([
+        expect.objectContaining({
+          provider: "github-copilot",
+          providerApiKeyId: planKey.id,
+        }),
+      ]);
+    }
+  });
+
+  test("per-user provider: refuses a picked key that is not the user's to use", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const otherUser = await makeUser();
+    await makeMember(user.id, org.id);
+    await makeMember(otherUser.id, org.id);
+    await makeLlmProviderApiKey(org.id, (await makeSecret()).id, {
+      provider: "github-copilot",
+      userId: user.id,
+    });
+    const othersSignIn = await makeLlmProviderApiKey(
+      org.id,
+      (await makeSecret()).id,
+      { provider: "github-copilot", userId: otherUser.id },
+    );
+    const openAiKey = await makeLlmProviderApiKey(
+      org.id,
+      (await makeSecret()).id,
+      { provider: "openai" },
+    );
+    const connect = (selectedProviderKeyId: string) =>
+      ensureConnectionVirtualKey({
+        organizationId: org.id,
+        userId: user.id,
+        userEmail: user.email,
+        userTeamIds: [],
+        provider: "github-copilot",
+        selectedProviderKeyId,
+      });
+
+    // Another member's sign-in, a key of another provider, and a key that
+    // does not exist are refused, never replaced by the user's own.
+    for (const id of [othersSignIn.id, openAiKey.id, randomUUID()]) {
+      await expect(connect(id)).rejects.toMatchObject({
+        statusCode: 404,
+        message: expect.stringMatching(/not available to you/),
+      });
+    }
   });
 
   test("adds a second provider mapping without clobbering the first", async ({

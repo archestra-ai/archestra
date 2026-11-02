@@ -393,7 +393,7 @@ describe("native proxy throughput", () => {
       const started = Date.now();
       const response = await app.inject({
         method: "POST",
-        url: `/v1/openai/${agent.id}/${mode === "raw-passthrough" ? "images/generations" : mode === "embedding" ? "embeddings" : "chat/completions"}`,
+        url: `/v1/openai/${agent.id}/${mode === "raw-passthrough" ? "moderations" : mode === "embedding" ? "embeddings" : "chat/completions"}`,
         headers: {
           authorization: "Bearer sk-test-only",
           "x-archestra-virtual-key": key,

@@ -208,4 +208,61 @@ describe("JevSessionSource", () => {
       prompt: `${redacted.slice(0, 3000)}\n…[${redacted.length - 4000} chars omitted]…\n${redacted.slice(-1000)}`,
     });
   });
+
+  test("sends independently bounded, redacted agent context without displacing the user task", async () => {
+    let state: Record<string, string> = {};
+    server.use(
+      http.post(TYPESAFE_ENDPOINT, async ({ request }) => {
+        state = ((await request.json()) as { state: Record<string, string> })
+          .state;
+        return HttpResponse.json(ANSWERS);
+      }),
+    );
+    const secret = `sk-${"a".repeat(30)}`;
+    await source.read(
+      {
+        ...INPUT,
+        systemPrompt: `Use ${secret}. ${"instruction ".repeat(1000)} End of instructions.`,
+        tools: Array.from({ length: 100 }, (_, index) => ({
+          name: `tool_${index}`,
+          description: `Use ${secret}. ${"description ".repeat(1000)}`,
+        })),
+      },
+      ctx(),
+    );
+
+    expect(state.prompt).toBe(INPUT.firstUserText);
+    expect(state.system_prompt).toContain("Use <redacted>.");
+    expect(state.system_prompt).toContain("chars omitted");
+    expect(state.system_prompt).toMatch(/End of instructions\.$/);
+    expect(state.system_prompt.length).toBeLessThan(2100);
+    expect(state.tools).toContain(
+      "Available tools: 100\ntool_0: Use <redacted>.",
+    );
+    expect(state.tools).toContain("omitted");
+    expect(state.tools).not.toContain("tool_20:");
+    expect(state.tools.length).toBeLessThan(2150);
+    expect(JSON.stringify(state)).not.toContain(secret);
+  });
+
+  test("does not duplicate a long tool summary when truncating without a tail", async () => {
+    let state: Record<string, string> = {};
+    server.use(
+      http.post(TYPESAFE_ENDPOINT, async ({ request }) => {
+        state = ((await request.json()) as { state: Record<string, string> })
+          .state;
+        return HttpResponse.json(ANSWERS);
+      }),
+    );
+    await source.read(
+      {
+        ...INPUT,
+        tools: [{ name: "lookup", description: `${"word ".repeat(100)}END` }],
+      },
+      ctx(),
+    );
+    expect(state.tools).toContain("lookup: word");
+    expect(state.tools).not.toContain("END");
+    expect(state.tools.length).toBeLessThan(250);
+  });
 });

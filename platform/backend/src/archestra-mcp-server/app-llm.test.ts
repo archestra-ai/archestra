@@ -1,5 +1,6 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 import {
+  AUTO_ROUTABLE_HEADER,
   BUILT_IN_AGENT_IDS,
   getArchestraToolFullName,
   TOOL_APP_LLM_COMPLETE_SHORT_NAME,
@@ -107,6 +108,25 @@ describe("app llm completion", () => {
     expect(vi.mocked(generateText)).toHaveBeenCalledWith(
       expect.objectContaining({ prompt: "summarize this", system: undefined }),
     );
+  });
+
+  test("asks the proxy to auto route the completion", async () => {
+    const { generateText: realGenerateText } =
+      await vi.importActual<typeof import("ai")>("ai");
+    vi.mocked(generateText).mockImplementation(realGenerateText);
+    const sent: Headers[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: unknown, init: RequestInit | undefined) => {
+        sent.push(new Headers(init?.headers));
+        return new Response("upstream stub", { status: 400 });
+      }),
+    );
+
+    await executeArchestraTool(llmTool, { prompt: "summarize this" }, context);
+
+    expect(sent.length).toBeGreaterThan(0);
+    expect(sent[0].get(AUTO_ROUTABLE_HEADER)).toBe("true");
   });
 
   test("jsonMode steers the model with a JSON directive", async () => {

@@ -45,13 +45,19 @@ export function UsageCell({ session }: { session: UsageSession }) {
       Number(session.totalCost ?? 0),
   );
   const tokens = session.totalInputTokens + session.totalOutputTokens;
-  const amount = formatUsageCost(billed);
+  // No request in the session recorded a cost (a file listing, a model
+  // without a tariff): say so rather than show a $0 that reads as free.
+  const noCost =
+    session.totalCost == null &&
+    session.totalBilledCost == null &&
+    session.totalSubscriptionCost == null;
+  const amount = noCost ? "—" : formatUsageCost(billed);
 
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <UnstyledButton
-          aria-label={`${session.requestCount.toLocaleString()} requests, ${amount} billed, ${session.totalInputTokens.toLocaleString()} input tokens, ${session.totalOutputTokens.toLocaleString()} output tokens${subscription > 0 ? ", includes subscription usage" : ""}`}
+          aria-label={`${session.requestCount.toLocaleString()} requests, ${noCost ? "no cost recorded" : `${amount} billed`}, ${session.totalInputTokens.toLocaleString()} input tokens, ${session.totalOutputTokens.toLocaleString()} output tokens${subscription > 0 ? ", includes subscription usage" : ""}`}
           className="ml-auto block cursor-default text-right whitespace-nowrap tabular-nums"
         >
           <span className="flex items-center justify-end gap-1.5 text-sm leading-5">
@@ -103,7 +109,13 @@ export function UsageCell({ session }: { session: UsageSession }) {
             </>
           ) : null}
           <dt className="text-muted-foreground">Billed</dt>
-          <dd className="text-right">{formatCost(billed)}</dd>
+          <dd className="text-right">
+            {noCost ? (
+              <span>Not recorded</span>
+            ) : (
+              <span>{formatCost(billed)}</span>
+            )}
+          </dd>
           {subscription > 0 ? (
             <>
               <dt className="text-muted-foreground">Subscription (list)</dt>

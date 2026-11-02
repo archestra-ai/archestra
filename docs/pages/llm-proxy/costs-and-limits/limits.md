@@ -2,7 +2,7 @@
 title: Limits
 description: Cap spend, tokens, and requests across your organization, teams, virtual keys, users, agents, OAuth clients, and environments
 order: 2
-lastUpdated: 2026-10-29
+lastUpdated: 2026-10-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -69,6 +69,14 @@ Each limit resets or recovers according to its **Interval**:
 | **Rolling** | **Every hour**, **Every 12 hours**, **Every 24 hours**, **Every week**, **Every month** | Resets once the full interval has elapsed since the previous reset. |
 | **Calendar** | **Calendar day**, **Calendar week (Sun)**, **Calendar week (Mon)**, **Calendar month** | Resets at `00:00` local server time at the start of the next day, Sunday, Monday, or month. |
 
+## Reset a Spend Limit
+
+Unblock a spend limit before its next scheduled reset. In **Explicit limits**, click **Reset usage** on the limit and confirm. Spend starts again at `$0`, and cost reports keep the past usage.
+
+- A **Calendar** interval keeps its schedule. A **Rolling** interval next resets one full interval after your reset.
+- Token, request, and per-minute limits have no **Reset usage**. They recover on their own schedule.
+- Resetting a limit needs [`llmLimit:update`](/docs/reference/permissions#llmLimit:update). Team admins can also reset the limits they set on their own team.
+
 ## Default User Spend Limits
 
 <span id="default-user-limits"></span>
@@ -81,7 +89,7 @@ At the top of **Costs & Limits → Limits**, the **Default user limit** card set
 
 ## How Usage Is Counted
 
-- **Spend (`$`):** counts metered API-key calls at the model's token prices. Calls on flat-rate subscriptions record `$0` spend and do not consume spend limits (see [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost)).
+- **Spend (`$`):** counts metered API-key calls at the model's token prices, cache reads and writes included. Calls on flat-rate subscriptions record `$0` spend and do not consume spend limits (see [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost)). A charge [estimated for a missing price](/docs/llm-proxy/costs-and-limits#when-a-price-is-missing) counts too, and the limit shows **Includes estimates**.
 - **Tokens:** counts newly processed input and output tokens reported by the provider after each call finishes (including cache writes and subscription traffic; reused cached input does not consume token limits). Because token counts arrive when a response completes, requests already in flight can push usage slightly past a token limit before subsequent requests are blocked.
 - **Requests:** counts one request when the proxy admits a model call, including subscription traffic.
 

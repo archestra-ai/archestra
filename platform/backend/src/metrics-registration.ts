@@ -1,6 +1,7 @@
 import metricsPlugin from "fastify-metrics";
 import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { collectOpenappaEngineMetrics } from "@/observability/metrics/openappa";
 import { HEALTH_PATH, READY_PATH } from "@/routes/route-paths";
 
 const { observability } = config;
@@ -32,6 +33,29 @@ export const registerStandaloneMetricsEndpoint = async (params: {
 }): Promise<void> => {
   const { fastify, enableDefaultMetrics } = params;
   addMetricsAuthenticationHook(fastify);
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  fastify.addHook("onSend", async (request, reply, payload) => {
+    if (
+      request.url.split("?", 1)[0] !== observability.metrics.endpoint ||
+      reply.statusCode !== 200 ||
+      typeof payload !== "string"
+    ) {
+      return payload;
+    }
+    const engine = collectOpenappaEngineMetrics();
+    if (!engine) return payload;
+    // Preserve the OpenMetrics end marker if the registry enables that format.
+    const hasEndMarker = /# EOF\s*$/.test(payload);
+    // OpenMetrics counter metadata uses the base name; samples retain _total.
+    const engineText = hasEndMarker
+      ? engine.replace(/^# (HELP|TYPE) (appa_[a-z_]+)_total(?= )/gm, "# $1 $2")
+      : engine;
+    return `${payload.replace(/# EOF\s*$/, "").trimEnd()}\n${engineText.trimEnd()}\n${hasEndMarker ? "# EOF\n" : ""}`;
+  });
+
+  // SPDX-SnippetEnd
 
   await fastify.register(metricsPlugin, {
     endpoint: observability.metrics.endpoint,

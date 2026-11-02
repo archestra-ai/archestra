@@ -4,10 +4,7 @@ import db, { schema } from "@/database";
 import { priceBillingUsage } from "@/services/billable-usage";
 import { expect, test } from "@/test";
 import type { InsertInteraction } from "@/types/interaction";
-import {
-  normalizeAnthropicUsage,
-  type PricedBillingUsage,
-} from "@/utils/billable-usage";
+import { normalizeAnthropicUsage } from "@/utils/billable-usage";
 import { uuidv7 } from "@/utils/uuid";
 import EnvironmentModel from "./environment";
 import EnvironmentDefaultUserLimitModel from "./environment-default-user-limit";
@@ -20,7 +17,6 @@ import StatisticsModel from "./statistics";
 async function record(params: {
   agent: { id: string; organizationId: string; environmentId: string | null };
   userId?: string;
-  mode?: PricedBillingUsage["mode"];
   cacheOnly?: boolean;
 }): Promise<InsertInteraction> {
   for (const model of ["executor", "advisor"])
@@ -53,7 +49,7 @@ async function record(params: {
     model: "executor",
     usage,
     provider: "anthropic",
-    mode: params.mode ?? "enforce",
+    mode: "enforce",
   });
   return {
     id: uuidv7(),
@@ -216,7 +212,6 @@ test("cache-only spend survives metadata-only logs, retention and mode changes",
   await db
     .delete(schema.interactionsTable)
     .where(eq(schema.interactionsTable.id, data.id as string));
-  config.llmProxy.usageAccountingMode = "off";
   await EnvironmentDefaultUserLimitModel.create({
     organizationId: org.id,
     environmentId: null,
@@ -281,7 +276,7 @@ test("default model-scoped caps include advisor charges while subscription and t
   ).not.toBeNull();
 });
 
-test("mixed shadow and enforced completions preserve uncovered legacy usage, including after reset", async ({
+test("legacy counters from an older release still count beside settled charges until a reset", async ({
   makeAgent,
   makeOrganization,
 }) => {
@@ -294,19 +289,23 @@ test("mixed shadow and enforced completions preserve uncovered legacy usage, inc
     limitValue: 100,
     model: null,
   });
-  const enforce = await record({ agent });
-  const shadow = structuredClone(enforce);
-  shadow.id = uuidv7();
-  if (shadow.billingUsage) shadow.billingUsage.mode = "shadow";
-  await InteractionModel.create(enforce);
-  await InteractionModel.create(shadow);
+  // An older release posts only the executor's token counts.
+  const legacy = () =>
+    LimitModel.recordInteractionTokenUsage({
+      agentId: agent.id,
+      teamIds: [],
+      entities: [],
+      model: "executor",
+      inputTokens: 300,
+      outputTokens: 50,
+    });
+  await InteractionModel.create(await record({ agent }));
+  await legacy();
   let rows =
     (await LimitModel.getModelUsageBreakdowns([cap.id])).get(cap.id) ?? [];
   expect(rows.reduce((sum, row) => sum + row.cost, 0)).toBeCloseTo(3.0011, 10);
   await LimitModel.resetLimitsUsage([cap.id]);
-  const lateShadow = structuredClone(shadow);
-  lateShadow.id = uuidv7();
-  await InteractionModel.create(lateShadow);
+  await legacy();
   rows = (await LimitModel.getModelUsageBreakdowns([cap.id])).get(cap.id) ?? [];
   expect(rows.reduce((sum, row) => sum + row.cost, 0)).toBeCloseTo(0.00055, 10);
 });

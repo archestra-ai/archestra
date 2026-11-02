@@ -66,6 +66,18 @@ pnpm --dir e2e-tests exec playwright test --list --project=chromium tests/your-s
 
 Choose the project that should run the spec and confirm it appears in the output.
 
+## Dependency tags
+
+Tag a test or describe group that installs a local MCP server (the Kubernetes orchestrator) with `@needs-kubernetes`, and one that needs the e2e Keycloak realm with `@needs-keycloak`:
+
+```typescript
+test("installs a local server", { tag: "@needs-kubernetes" }, async ({ request }) => {
+  // ...
+});
+```
+
+A stack that lacks the dependency names it in `E2E_UNAVAILABLE` (`kubernetes`, `keycloak`), and both fixture bases skip the tagged tests with that reason. CI and the lite harness run both and set nothing; `scripts/dev-lite.sh e2e` sets it from what it runs (`up --e2e --keycloak` adds Keycloak). A group whose `beforeAll` needs the dependency also calls `skipWhenUnavailable("kubernetes")` from `e2e-tests/dependencies.ts` in its body, so the hook never runs without it.
+
 ## Fixtures
 
 - Use the Playwright fixtures pattern.

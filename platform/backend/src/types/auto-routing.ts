@@ -120,13 +120,21 @@ export const SelectRoutingPlanSchema = createSelectSchema(
 );
 export type RoutingPlan = z.infer<typeof SelectRoutingPlanSchema>;
 
-/** Auto-routing settings of an organization, stored on its LLM Proxy row. */
-export const AutoRoutingSettingsSchema = z.object({
-  enabled: z.boolean(),
-  budgetUsdPerDay: z.string().nullable(),
+/** The tiers auto routing chooses between: the organization's default model trio. */
+const AutoRoutingTrioSchema = z.object({
   fastModelId: z.string().uuid().nullable(),
   normalModelId: z.string().uuid().nullable(),
   smartModelId: z.string().uuid().nullable(),
+});
+export type AutoRoutingTrio = z.infer<typeof AutoRoutingTrioSchema>;
+
+/**
+ * Auto-routing settings of an organization, stored on its LLM Proxy row. The
+ * tiers are read from the organization's default model trio.
+ */
+export const AutoRoutingSettingsSchema = AutoRoutingTrioSchema.extend({
+  enabled: z.boolean(),
+  budgetUsdPerDay: z.string().nullable(),
   scorerVersionId: z.string().uuid().nullable(),
   /** Bumped by every write of plan-relevant state; a fit publishes only at the generation it read. */
   generation: z.number().int(),
@@ -135,10 +143,9 @@ export const AutoRoutingSettingsSchema = z.object({
 });
 export type AutoRoutingSettings = z.infer<typeof AutoRoutingSettingsSchema>;
 
-export const UpdateAutoRoutingSettingsSchema = AutoRoutingSettingsSchema.omit({
-  scorerVersionId: true,
-  generation: true,
-  plannedGeneration: true,
+export const UpdateAutoRoutingSettingsSchema = AutoRoutingSettingsSchema.pick({
+  enabled: true,
+  budgetUsdPerDay: true,
 }).partial();
 export type UpdateAutoRoutingSettings = z.infer<
   typeof UpdateAutoRoutingSettingsSchema

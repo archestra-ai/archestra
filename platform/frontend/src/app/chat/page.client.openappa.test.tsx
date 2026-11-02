@@ -334,7 +334,8 @@ test("an ordinary launch ready on mount creates and sends once under StrictMode"
       </QueryClientProvider>
     </StrictMode>,
   );
-  await waitFor(() => expect(sent).toHaveLength(1));
+  // Match the async session/agent/model bootstrap budget of the launch test above.
+  await waitFor(() => expect(sent).toHaveLength(1), { timeout: 5000 });
   expect(createBodies).toHaveLength(1);
   expect(createBodies[0]).toMatchObject({
     agentId: agent.id,

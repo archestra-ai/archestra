@@ -2,6 +2,8 @@
 
 Run `pnpm docs:screenshots` from `platform/` against a seeded local stack. See [the screenshot workflow](../../../.agents/skills/archestra-docs-writer/references/site-mechanics.md#screenshots) for setup and adding scenes.
 
+The exact `DOCS_SCREENSHOTS_ONLY=automated_screenshots/llm-proxy_model-router-key` selection seeds only the persona and real provider mappings needed by that dialog. Full captures retain the complete demo seed, including Kubernetes environments and knowledge data.
+
 Use an isolated fixture instance: the guardrails overview enables real enforcement through the API and verifies that it is active before capturing. It does not simulate deployment status in the browser.
 
 Keep only scenes embedded by a docs page. The site scales the embedded image at every screen width and switches only between its light and dark files; it does not select a mobile variant. Responsive product regression tests belong in `e2e-tests`, not this publication manifest.

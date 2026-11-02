@@ -1,3 +1,6 @@
+import { isDeepStrictEqual } from "node:util";
+import { findAgentRuntimeTier } from "@archestra/shared";
+import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import {
   LlmProviderApiKeyModel,
@@ -9,16 +12,43 @@ import type { Agent, AgentRuntime, AgentType } from "@/types";
 import { ApiError } from "@/types";
 import { isAnyAgentRuntimeBackendDriverEnabled } from "./backends";
 import { getResolvedAgentRuntimeModelCompatibility } from "./model-compatibility";
+import { organizationAgentRuntimeTiers } from "./runtime-tiers";
 
 // Checks every surface that writes an Agent's runtime or model must run. The
 // agents REST routes and the create_agent/edit_agent MCP tools both call these,
 // so neither can store a runtime or model pairing the other would refuse.
 
-export function requireAgentRuntimePermission(params: {
+export async function requireAgentRuntimePermission(params: {
   agentType: AgentType;
   runtime?: AgentRuntime | null;
   isAdmin: boolean;
-}): void {
+  userId: string;
+  organizationId: string;
+  previous?: AgentRuntime | null;
+}): Promise<void> {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Omitted and unchanged values preserve existing configuration, including
+  // on ordinary edits after a role loses permission. Null removes a runtime.
+  const changesRuntime =
+    params.runtime !== undefined &&
+    !isDeepStrictEqual(params.runtime, params.previous ?? null);
+  if (
+    changesRuntime &&
+    !(await userHasPermission(
+      params.userId,
+      params.organizationId,
+      "agent",
+      "configure-runtime",
+    ))
+  ) {
+    throw new ApiError(
+      403,
+      "Configure runtime permission is required to change an agent runtime",
+    );
+  }
+  // SPDX-SnippetEnd
   if (params.runtime == null) return;
   if (!isAnyAgentRuntimeBackendDriverEnabled()) {
     throw new ApiError(
@@ -40,6 +70,29 @@ export function requireAgentRuntimePermission(params: {
       403,
       "Privileged background deployments are disabled by the deployment operator",
     );
+  }
+}
+
+/**
+ * Refuse a runtime whose default or scaleup tier is not one of the
+ * organization's tiers, naming the tiers it has.
+ */
+export async function assertAgentRuntimeTiersExist(params: {
+  runtime: Pick<AgentRuntime, "tier" | "maxTier"> | null | undefined;
+  organizationId: string;
+}): Promise<void> {
+  if (!params.runtime) return;
+  const { tiers } = await organizationAgentRuntimeTiers(params.organizationId);
+  for (const [label, name] of [
+    ["default tier", params.runtime.tier],
+    ["scaleup tier", params.runtime.maxTier],
+  ] as const) {
+    if (name && !findAgentRuntimeTier(tiers, name)) {
+      throw new ApiError(
+        400,
+        `The ${label} ${name} is not one of the organization's runtime tiers: ${tiers.map((tier) => tier.name).join(", ")}`,
+      );
+    }
   }
 }
 
@@ -111,13 +164,21 @@ export async function assertAgentRuntimeModelCompatibility(params: {
   agent: Pick<Agent, "llmApiKeyId" | "modelId">;
   organizationId: string;
   userId: string;
+  /**
+   * Whether this write picks the agent's model or key. A write that only
+   * changes the runtime keeps the pair the agent already has, so the caller
+   * need not be able to use that key themselves; the runtime is still checked
+   * against that pair, as the agent's runs use it.
+   */
+  selectsModel: boolean;
 }): Promise<void> {
   const { runtime } = params;
   if (!runtime) return;
-  await assertAgentModelSelectionAvailable(params);
+  if (params.selectsModel) await assertAgentModelSelectionAvailable(params);
   const result = await getResolvedAgentRuntimeModelCompatibility({
     ...params,
     runtime,
+    asStored: !params.selectsModel,
   });
   if (!result.compatibility.compatible) {
     throw new ApiError(409, result.compatibility.message);

@@ -227,6 +227,7 @@ labTest(
 labTest(
   "AC-O2 / AC-F3 a black-holed member costs one timeout, then is benched",
   async ({ lab }) => {
+    config.llmProxy.streamKeepAliveIntervalMs = 30;
     const [first, second] = await lab.deploy([
       { priority: 1 },
       { priority: 2 },
@@ -235,6 +236,8 @@ labTest(
     const slow = await lab.ask({ stream: true });
     expect(slow.status).toBe(200);
     expect(slow.body).toContain("[DONE]");
+    expect(slow.attempts).toBe("2");
+    expect(slow.providerKey).toBe(second.keyId);
     expect(slow.ms).toBeGreaterThanOrEqual(300);
     const fast = await lab.ask({ stream: true });
     expect(fast.providerKey).toBe(second.keyId);

@@ -54,6 +54,7 @@ import openAiProxyRoutes from "./routes/openai";
 setupTestCacheManager();
 
 const native = vi.hoisted(() => ({
+  collectOpenappaMetrics: vi.fn(() => ""),
   initializeOpenappa: vi.fn(),
   dispatchHook: vi.fn(),
   // No batteries declared: the composed policy is the root alone.

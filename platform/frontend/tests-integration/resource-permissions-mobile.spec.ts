@@ -353,7 +353,12 @@ test("the Add access field sits in the body and is a full touch target on a phon
     {
       method: "get",
       url: "/api/resource-permissions/mcpRegistry/:scope/subjects",
-      body: [],
+      body: [
+        {
+          subject: { type: "user", id: "new-collaborator" },
+          name: "New collaborator",
+        },
+      ],
     },
   ]);
   await page.goto("/mcp/registry?permissions=all");
@@ -376,4 +381,37 @@ test("the Add access field sits in the body and is a full touch target on a phon
   await expect(page.getByRole("listbox", { name: "Recipients" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(add).toBeFocused();
+});
+
+test("an exhausted recipient field stays disabled and touch-sized on a phone", async ({
+  page,
+  mswControl,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mswControl.registerMany([
+    {
+      method: "get",
+      url: "/api/resource-permissions/mcpRegistry/:scope",
+      body: policy,
+    },
+    {
+      method: "get",
+      url: "/api/resource-permissions/mcpRegistry/:scope/subjects",
+      body: [],
+    },
+  ]);
+  await page.goto("/mcp/registry?permissions=all");
+  const dialog = page.getByRole("dialog", { name: title, exact: true });
+  const exhausted = dialog
+    .locator('[data-slot="dialog-body"]')
+    .getByRole("combobox", { name: "No more recipients to add", exact: true });
+  await expect(exhausted).toBeVisible();
+  await expect(exhausted).toBeDisabled();
+  await expectInsideViewport(page, exhausted);
+  await expect
+    .poll(async () => (await exhausted.boundingBox())?.height ?? 0)
+    .toBeGreaterThanOrEqual(43.99);
+  await expect(page.getByRole("listbox", { name: "Recipients" })).toHaveCount(
+    0,
+  );
 });

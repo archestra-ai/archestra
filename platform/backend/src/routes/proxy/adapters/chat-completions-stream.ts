@@ -15,9 +15,12 @@ import { APIError } from "openai";
  */
 export async function streamChatCompletionChunks<T>(
   request: PromiseLike<unknown>,
+  onAccepted?: () => void,
 ): Promise<AsyncIterable<T>> {
   if (isSdkRequest(request)) {
-    return readChunks<T>(await request.asResponse());
+    const response = await request.asResponse();
+    onAccepted?.();
+    return readChunks<T>(response);
   }
   return (await request) as AsyncIterable<T>;
 }

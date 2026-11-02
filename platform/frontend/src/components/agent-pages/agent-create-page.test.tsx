@@ -12,6 +12,16 @@ import { useOrganization } from "@/lib/organization.query";
 import { makeOrganization } from "@/mocks/data/organization";
 import { AgentCreatePage } from "./agent-create-page";
 
+vi.mock("@/lib/agent-runtime-templates.query", () => ({
+  useRuntimeTemplateCatalog: () => ({
+    data: [],
+    isFetching: false,
+    isPending: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+  useResolveRuntimeTemplate: () => ({ isPending: false, mutate: vi.fn() }),
+}));
 vi.mock("next/navigation");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/auth/auth.query");
@@ -193,6 +203,36 @@ describe("AgentCreatePage", () => {
         "Requires permission to create agents.",
       );
     }
+  });
+
+  it("allows ordinary agents but denies runtime templates without Configure runtime", () => {
+    vi.mocked(useFeature).mockImplementation((feature) =>
+      feature === "agentRuntime" ? true : undefined,
+    );
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.agent?.includes("configure-runtime"),
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    renderAgentCreatePage();
+    expect(
+      screen.getByText("Configure runtime permission required"),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /new archestra agent/i }),
+    ).toBeEnabled();
+    for (const name of [/codex/i, /custom image/i]) {
+      const choice = screen.getByRole("button", { name });
+      expect(choice).toBeDisabled();
+      expect(choice).toHaveAccessibleDescription(
+        "Requires Configure runtime permission.",
+      );
+    }
+    expect(
+      screen.getByRole("button", { name: /connect via a2a/i }),
+    ).toBeEnabled();
   });
 
   it("offers maintained Agent templates and prefills the existing create wizard", async () => {

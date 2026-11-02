@@ -21,7 +21,7 @@ vi.mock("../pdf-utils", async (importOriginal) => {
   };
 });
 
-// ===== Mock googleapis =====
+// ===== Mock the Google clients =====
 
 const mockFilesList = vi.fn();
 const mockFilesGet = vi.fn();
@@ -45,7 +45,7 @@ const oauthClients: Array<{
   credentials: Record<string, unknown>;
 }> = [];
 
-vi.mock("googleapis", () => {
+vi.mock("google-auth-library", () => {
   class MockOAuth2 {
     credentials: Record<string, unknown> = {};
     constructor(
@@ -67,38 +67,40 @@ vi.mock("googleapis", () => {
       if (this.subject) impersonatedSubjects.push(this.subject);
     }
   }
-
-  return {
-    google: {
-      drive: () => ({
-        files: {
-          list: (...args: unknown[]) => mockFilesList(...args),
-          get: (...args: unknown[]) => mockFilesGet(...args),
-          export: (...args: unknown[]) => mockFilesExport(...args),
-        },
-        drives: {
-          list: (...args: unknown[]) => mockDrivesList(...args),
-          get: (...args: unknown[]) => mockDrivesGet(...args),
-        },
-        permissions: {
-          list: (...args: unknown[]) => mockPermissionsList(...args),
-        },
-        about: {
-          get: (...args: unknown[]) => mockAboutGet(...args),
-        },
-      }),
-      admin: () => ({
-        users: {
-          list: (...args: unknown[]) => mockDirectoryUsersList(...args),
-        },
-      }),
-      auth: {
-        GoogleAuth: MockGoogleAuth,
-        OAuth2: MockOAuth2,
-      },
-    },
-  };
+  return { GoogleAuth: MockGoogleAuth, OAuth2Client: MockOAuth2 };
 });
+
+vi.mock("googleapis/build/src/apis/drive/v3.js", () => ({
+  drive_v3: {
+    Drive: class {
+      files = {
+        list: (...args: unknown[]) => mockFilesList(...args),
+        get: (...args: unknown[]) => mockFilesGet(...args),
+        export: (...args: unknown[]) => mockFilesExport(...args),
+      };
+      drives = {
+        list: (...args: unknown[]) => mockDrivesList(...args),
+        get: (...args: unknown[]) => mockDrivesGet(...args),
+      };
+      permissions = {
+        list: (...args: unknown[]) => mockPermissionsList(...args),
+      };
+      about = {
+        get: (...args: unknown[]) => mockAboutGet(...args),
+      };
+    },
+  },
+}));
+
+vi.mock("googleapis/build/src/apis/admin/directory_v1.js", () => ({
+  admin_directory_v1: {
+    Admin: class {
+      users = {
+        list: (...args: unknown[]) => mockDirectoryUsersList(...args),
+      };
+    },
+  },
+}));
 
 const credentials = { apiToken: "test-access-token" };
 

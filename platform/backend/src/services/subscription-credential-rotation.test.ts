@@ -84,13 +84,15 @@ describe("withLatestRotatedRefreshToken", () => {
       }),
     );
     await xaiSubscriptionTokenManager.getAccessToken({
-      refreshToken: rtOriginal,
+      credential: { refreshToken: rtOriginal, userId: "x-user" },
     });
 
     const latest = withLatestRotatedRefreshToken(value);
     expect(decodeXaiSubscriptionCredential(latest)).toMatchObject({
       refreshToken: "rt-rotated",
       userId: "x-user",
+      accessToken: "at_1",
+      accessTokenExpiresAtMs: expect.any(Number),
       email: "user@example.com",
     });
   });

@@ -9,6 +9,11 @@ import { buildTerminalRecorderScript } from "./terminal-recorder";
  * PID 1 owns the workspace, not the agent command. Requests are published by
  * the control plane using atomic rename. A started request is never replayed
  * after a Pod replacement: its side effects may already have happened.
+ *
+ * A write the workspace volume refuses ends this script under `set -e`; the
+ * startup's `buildWorkspaceExitTrapScript` trap then says whether the volume
+ * is full. The turn's own result is moved into place only when it was written
+ * whole: an empty result would read as a turn that never ends.
  */
 export function buildSandboxSupervisorScript(): string {
   return String.raw`set -eu
@@ -106,7 +111,7 @@ while :; do
     done
     rm -f ${AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE}
     if [ "$recording_failed" = 0 ]; then
-      printf '%s\n' "touch '$turn.running'; export ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX='$turn'; /bin/sh '$request'; status=\$?; sleep 2; printf '%s\\n' \"\$status\" > '$turn.result.tmp'; mv '$turn.result.tmp' '$turn.result'; exit \"\$status\"" > "$turn.session"
+      printf '%s\n' "touch '$turn.running'; export ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX='$turn'; /bin/sh '$request'; status=\$?; sleep 2; printf '%s\\n' \"\$status\" > '$turn.result.tmp' && mv '$turn.result.tmp' '$turn.result' || rm -f '$turn.result.tmp'; exit \"\$status\"" > "$turn.session"
       tmux respawn-pane -k -t agent "/bin/sh '$turn.session'"
     fi
     startup_polls=0

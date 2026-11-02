@@ -168,6 +168,18 @@ describe("DisconnectLine", () => {
     return found;
   };
 
+  it("disconnects ChatGPT through plugin removal without a local cleanup prompt", () => {
+    render(
+      <DisconnectLine data={data} picked={client("chatgpt")} agents={[]} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "How it works" }));
+    expect(
+      screen.getByText("Remove the plugin connection in ChatGPT"),
+    ).toBeVisible();
+    expect(screen.queryByText("Clean up this computer")).toBeNull();
+    expect(screen.queryByText(/disconnect\.md/)).toBeNull();
+  });
+
   it("explains disconnecting before anything is connected", () => {
     render(
       <DisconnectLine data={data} picked={client("claude-code")} agents={[]} />,

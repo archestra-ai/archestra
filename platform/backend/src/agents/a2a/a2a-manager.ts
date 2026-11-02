@@ -41,6 +41,7 @@ import type {
   A2AContext,
   A2AMessage,
   AgentRunCompletionTarget,
+  AgentRunLimits,
   AgentRunRecord,
 } from "@/types";
 import { isTerminalA2ATaskState } from "@/types/a2a-task";
@@ -181,6 +182,8 @@ export interface A2ASystemParams {
   resumeFromTaskId?: string;
   /** Caller-owned runtime title; bypasses automatic title generation. */
   runtimeTitle?: string;
+  /** The run's tier and limits, already resolved against the Agent's settings. */
+  runtimeLimits?: AgentRunLimits;
   sessionId?: string;
   /** Project assigned by an interactive Chat execution launcher. */
   projectId?: string;
@@ -695,6 +698,7 @@ export class A2AManager {
               return runTaskInAgentRuntime({
                 resumeFromTaskId,
                 runtime,
+                limits: systemParams?.runtimeLimits,
                 // Each task is a turn; continuations share the retained
                 // Sandbox identity and adoption never repeats a started turn.
                 taskId: runOpts.taskId,
@@ -727,6 +731,7 @@ export class A2AManager {
               userId: a2aActorUserId(actor),
               oauthExecution: actor.oauthExecution,
               sessionId,
+              runId: runOpts.taskId,
               source: systemParams?.source,
               // A chat posts a paused review to the requester (see ChatOps).
               // Detached tasks a chat starts report back without a form.

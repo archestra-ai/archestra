@@ -7,6 +7,60 @@ import LimitModel from "./limit";
 import LlmThroughputModel from "./llm-throughput";
 
 describe("shared LLM throughput admission", () => {
+  test("settles pool member spend independently while charging one logical request", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const entities = [
+      { entityType: "organization" as const, entityId: org.id },
+    ];
+    const rpm = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "requests_per_minute",
+      limitValue: 1,
+    });
+    const spend = [];
+    for (const model of [null, ["a", "b"], ["a"], ["b"], ["alias"]]) {
+      spend.push(
+        await LimitModel.create({
+          entityType: "organization",
+          entityId: org.id,
+          limitType: "token_cost",
+          cleanupInterval: "minute",
+          limitValue: 1,
+          model,
+        }),
+      );
+    }
+    const call = new LlmThroughput({
+      entities,
+      model: "alias",
+      rules: [rpm],
+      attemptSpendRules: spend,
+    });
+    await call.admit();
+    await call.admitSpendForModel("a", false);
+    await call.settleSpend(0.2, "metered");
+    await call.admitSpendForModel("b", false);
+    await call.admit(); // A retry/failover must not reserve another request.
+    await call.settleSpend(0.3, "metered");
+    await call.settleSpend(0.3, "metered"); // Duplicate finalization is idempotent.
+    const usage = await LlmThroughputModel.usage([rpm, ...spend]);
+    expect(usage.get(rpm.id)?.currentUsage).toBeCloseTo(1, 1);
+    for (const [index, expected] of [0.5, 0.5, 0.2, 0.3, 0].entries())
+      expect(usage.get(spend[index].id)?.currentUsage ?? 0).toBeCloseTo(
+        expected,
+        1,
+      );
+    await call.admitSpendForModel("b", true);
+    await call.settleSpend(4, "subscription");
+    expect(
+      (await LlmThroughputModel.usage([spend[3]])).get(spend[3].id)
+        ?.currentUsage,
+    ).toBeCloseTo(0.3, 1);
+  });
+
   test("observes rules added and deleted after an empty lookup without leaking between entity scopes", async ({
     makeOrganization,
   }) => {

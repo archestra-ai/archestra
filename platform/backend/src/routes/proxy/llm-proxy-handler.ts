@@ -1,11 +1,9 @@
 import { enterOpenappaEncryptedChat } from "@/openappa/encrypted-chat";
 import { validateAzureModelOperation } from "@/services/azure-model-capabilities";
-import type {
-  BillingAttribution,
-  PricedBillingUsage,
-} from "@/utils/billable-usage";
+import type { BillingAttribution } from "@/utils/billable-usage";
 import { primaryBillingUsage } from "@/utils/billable-usage";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
+import { UpstreamStreamIncompleteError } from "@/utils/upstream-stream-incomplete-error";
 /**
  * Generic LLM Proxy Handler
  *
@@ -16,6 +14,7 @@ import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-erro
 import {
   APP_ID_HEADER,
   ArchestraInternalErrorCode,
+  AUTO_ROUTABLE_HEADER,
   type BillingMode,
   CHAT_API_KEY_ID_HEADER,
   hasArchestraTokenPrefix,
@@ -31,6 +30,7 @@ import {
   providerDisplayNames,
   providerRequiresPerUserCredential,
   SOURCE_HEADER,
+  type SupportedProvider,
   stripClaudeContextVariantSuffix,
 } from "@archestra/shared";
 import {
@@ -43,7 +43,17 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { assertNotAutoOnNativeRoute } from "@/auto-routing/router";
+import {
+  getArchestraToolArgsSchema,
+  getArchestraToolInputSchema,
+} from "@/archestra-mcp-server";
+import { repairEnvelopedToolArgs } from "@/archestra-mcp-server/run-tool";
+import { repairStringifiedToolCallArgs } from "@/archestra-mcp-server/tool-args-repair";
+import { followsOrganizationRouting } from "@/auto-routing/organization-default";
+import {
+  assertNotAutoOnNativeRoute,
+  routeInternalAutoSession,
+} from "@/auto-routing/router";
 import { a2aOAuthExecutionReference } from "@/clients/a2a-oauth-execution";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
@@ -74,6 +84,10 @@ import ProxyRequestContextModel, {
   type ProxyRequestState,
 } from "@/models/proxy-request-context";
 import { metrics } from "@/observability";
+import {
+  getLlmProxyRequestTelemetry,
+  type LlmProxyRequestTelemetry,
+} from "@/observability/llm-proxy-request";
 import {
   ATTR_ARCHESTRA_BILLING_MODE,
   ATTR_ARCHESTRA_COST,
@@ -146,6 +160,7 @@ import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
 import { withMediaUsageAvailability } from "@/utils/media-usage";
 import { isUuid } from "@/utils/uuid";
+import { withReplyAudioWithinLimit } from "./adapters/openai";
 import { CodexResponsesGenerationError } from "./adapters/openai-codex-translator";
 import {
   discardUnadmittedResponsesOutput,
@@ -171,6 +186,7 @@ import {
   buildInteractionRecord,
   calculateInteractionCosts,
   calculateUsageCost,
+  classifyProxyFailure,
   estimateCutOffAttemptUsage,
   handleError,
   isRetryableUpstreamConnectionFailure,
@@ -196,10 +212,13 @@ import {
   type UpstreamAttempt,
 } from "./model-pool-failover";
 import {
+  canReachMember,
   inboundPoolWire,
+  isPoolableProvider,
   type MemberTransport,
   memberAdapter,
   memberTransport,
+  type PoolWire,
   requestedMaxOutputTokens,
 } from "./model-pool-transport";
 import { StreamKeepAlive } from "./stream-keepalive";
@@ -232,11 +251,11 @@ const {
  * for maintainability and readability.
  */
 export interface LLMProxyContext<TRequest> {
+  telemetry?: LlmProxyRequestTelemetry;
   /** Recheck the original OAuth actor before each actual upstream attempt. */
   authorizeA2AOAuthAttempt?: () => Promise<unknown>;
   attributionLabels?: AttributionLabels;
   throughput?: LlmThroughput;
-  usageAccountingMode?: PricedBillingUsage["mode"];
   providerApiKeyId?: string;
   autoRouting?: AutoRoutingRequestContext;
   /**
@@ -247,6 +266,8 @@ export interface LLMProxyContext<TRequest> {
   upstreamAttempt: UpstreamAttempt;
   /** Set when the request's model is a model pool's name. */
   modelPool?: ModelPoolRouting;
+  /** Set when a platform call on the organization default was auto routed. */
+  autoRoutedTier?: AutoRoutedTier;
   billingAttribution?: BillingAttribution;
   connectionVerification?: boolean;
   appaReceipts?: OpenappaReceipts;
@@ -314,12 +335,26 @@ export interface LLMProxyContext<TRequest> {
 /** How a request is spread across its model pool's members. */
 export interface ModelPoolRouting {
   plan: ModelPoolPlan;
+  checkLimits: (member: PlannedMember) => Promise<void>;
   transportFor: (
     member: PlannedMember,
     signal: AbortSignal,
   ) => Promise<MemberTransport>;
   recordFailedAttempt: (attempt: UpstreamAttempt) => Promise<void>;
   setResponseHeaders: (attempt: UpstreamAttempt) => void;
+}
+
+/** The tier an auto-routed call runs on, reached the way a pool member is. */
+interface AutoRoutedTier {
+  member: TierMember;
+  transport: () => Promise<MemberTransport>;
+}
+
+/** A provider key and the model id its provider knows the model by. */
+interface TierMember {
+  providerApiKeyId: string;
+  provider: SupportedProvider;
+  modelId: string;
 }
 
 export interface StreamTiming {
@@ -479,6 +514,57 @@ export async function handleLLMProxy<
   reply: FastifyReply,
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
 ): Promise<FastifyReply> {
+  const telemetry = getLlmProxyRequestTelemetry({
+    request,
+    provider: (
+      request as FastifyRequest & {
+        llmProxyAuthOverride?: LLMProxyAuthOverride;
+      }
+    ).llmProxyAuthOverride?.modelPoolId
+      ? "router"
+      : provider.provider,
+    operation: provider.spanName,
+    stream: asRecord(body)?.stream === true,
+  });
+  try {
+    return await handleObservedLLMProxy({
+      body,
+      request,
+      reply,
+      provider,
+      telemetry,
+    });
+  } catch (error) {
+    telemetry.fail(classifyProxyFailure(error));
+    throw error;
+  } finally {
+    telemetry.finish({
+      statusCode: reply.statusCode,
+      headersSent: reply.raw.headersSent,
+      disconnected: reply.raw.destroyed && !reply.raw.writableEnded,
+    });
+  }
+}
+
+async function handleObservedLLMProxy<
+  TRequest,
+  TResponse,
+  TMessages,
+  TChunk,
+  THeaders,
+>({
+  body,
+  request,
+  reply,
+  provider,
+  telemetry,
+}: {
+  body: TRequest;
+  request: FastifyRequest;
+  reply: FastifyReply;
+  provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>;
+  telemetry: LlmProxyRequestTelemetry;
+}): Promise<FastifyReply> {
   const streamTiming: StreamTiming = { requestReceivedAt: Date.now() };
   const clientRuntimeEvidence = consumeClientRuntimeEvidence(request);
   const proof = internalCallProvenance(request);
@@ -598,7 +684,7 @@ export async function handleLLMProxy<
       externalAgentId,
     }),
   });
-  const { sessionId, sessionSource }: utils.headers.sessionId.SessionInfo =
+  let { sessionId, sessionSource }: utils.headers.sessionId.SessionInfo =
     extractedSession.sessionId === null && autoRouting?.derivedSessionKey
       ? {
           sessionId: autoRouting.derivedSessionKey,
@@ -614,12 +700,14 @@ export async function handleLLMProxy<
     otelContext.active(),
     request.headers,
   );
+  telemetry.setTraceContext(parentContext);
 
   // Removes gateway tool attestation markers from the body in place
   // before adapters, logs, provider requests, or database records access them.
   const gatewayToolDeclarations =
     utils.gatewayToolDeclarations.extractGatewayToolDeclarations(body);
   const requestAdapter = provider.createRequestAdapter(body);
+  telemetry.setStreaming(requestAdapter.isStreaming());
   assertNotAutoOnNativeRoute(requestAdapter.getModel());
   const streamAdapter = provider.createStreamAdapter(body);
   const providerMessages = requestAdapter.getProviderMessages();
@@ -1091,10 +1179,11 @@ export async function handleLLMProxy<
 
   // The acting user as proven by a credential, as opposed to `userId`, which
   // starts from the unauthenticated X-Archestra-User-Id / OpenWebUI-email
-  // headers. Those headers are attribution hints — good enough for logging and
-  // usage records, never sufficient to unlock access — so authorization checks
-  // must read this instead. Undefined for org-scoped virtual keys, OAuth client
-  // credentials, and raw provider-key calls, none of which identify a user.
+  // headers. Those hints may attribute requests that have no authenticated
+  // user, but must not override a credential's owner or unlock access.
+  // Authorization checks must read this instead. Undefined for org-scoped
+  // virtual keys, OAuth client credentials, and raw provider-key calls, none
+  // of which identify a user.
   const authenticatedUserId =
     authOverride?.userId ??
     passthroughUserId ??
@@ -1103,14 +1192,6 @@ export async function handleLLMProxy<
     personalTokenUserId ??
     regularVirtualKeyUserId;
 
-  // Fall back to the personal standard virtual key's owner for user attribution.
-  // Higher-precedence sources — the passthrough key, JWKS, OAuth, and the
-  // X-Archestra-User-Id header — already set `userId` above, so this only fills
-  // the gap when a personal virtual key is the sole identity signal. That is the
-  // virtual-key connection mode: the connect flow mints a personal virtual key
-  // whose author is the acting user (Codex ChatGPT subscription, Claude Code
-  // virtual key). Consistency with any other authenticated identity was just
-  // asserted, so this can never disagree with them.
   if (serviceAccountId && authenticatedUserId) {
     throw new ApiError(
       401,
@@ -1122,7 +1203,10 @@ export async function handleLLMProxy<
     userId = undefined;
     resolvedUser = null;
   }
-  if (!userId && regularVirtualKeyUserId) {
+  // A personal standard key's authenticated owner controls user limits,
+  // spend, and logs, even when an unauthenticated identity hint is supplied.
+  // Any other authenticated user credential was checked for consistency above.
+  if (regularVirtualKeyUserId) {
     userId = regularVirtualKeyUserId;
     resolvedUser = await UserModel.getById(userId);
   }
@@ -1216,6 +1300,36 @@ export async function handleLLMProxy<
   const upstreamAttempt: UpstreamAttempt = {
     providerApiKeyId: perKeyChatApiKeyId,
   };
+  telemetry.metadata = {
+    model: actualModel,
+    organizationId: resolvedAgent.organizationId,
+    agentId: resolvedAgent.id,
+    userId,
+    virtualKeyId,
+    passthroughVirtualKeyId,
+    appId: attributedAppId,
+    source,
+  };
+  // A media operation the published media tariff prices settles its cost
+  // like any other request. One it cannot price has no cost to settle, so
+  // it is refused only where a spend budget applies to it.
+  const mediaPricedForBudget =
+    provider.mediaTariffCovers?.(requestAdapter.getOriginalRequest()) === true;
+  const limitContext = {
+    unpricedMediaModel:
+      provider.unavailableUsageAccounting && !mediaPricedForBudget
+        ? actualModel
+        : undefined,
+    agentId: resolvedAgentId,
+    userId,
+    virtualKeyId,
+    passthroughVirtualKeyId,
+    llmOauthClientId: authenticatedApp?.id,
+    billingTeamId,
+    teamMemberUserId: authenticatedUserId ?? null,
+    agent: resolvedAgent,
+    snapshot: requestContext,
+  };
   try {
     // A redacted audit context cannot retain an enforceable trajectory safely.
     if (
@@ -1234,34 +1348,66 @@ export async function handleLLMProxy<
         "Encrypted chat key and escrow are required for policy storage",
       );
     }
-    if (
-      provider.unavailableUsageAccounting &&
-      config.llmProxy.usageAccountingMode === "enforce"
-    ) {
-      throw new ApiError(
-        422,
-        "Authoritative usage and cost accounting are unavailable for this media operation",
-      );
-    }
-    // Check usage limits
+    // A request for a model pool's name is served by the pool's members when
+    // the caller may use the pool (see `mayUseModelPool`). Members on a wire
+    // the client's can't reach are left out of the plan.
+    const poolWire = openAiCodexPassthrough
+      ? null
+      : inboundPoolWire(provider.interactionType);
+    // A chat or agent set to a pool names it, and sends one of its members'
+    // models. Any other platform call runs on the key and model it names.
+    const chatModelPoolHeader = internalCall
+      ? headersForExtraction[MODEL_POOL_ID_HEADER.toLowerCase()]
+      : undefined;
+    const chatModelPoolId =
+      typeof chatModelPoolHeader === "string" && chatModelPoolHeader
+        ? chatModelPoolHeader
+        : undefined;
+    const modelPoolPlan =
+      poolWire && (!internalCall || chatModelPoolId)
+        ? await planModelPool({
+            organizationId: resolvedAgent.organizationId,
+            name: actualModel,
+            poolId: chatModelPoolId,
+            inbound: poolWire,
+            caller: {
+              virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
+              providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
+            },
+            grantedPoolId: authOverride?.modelPoolId ?? grantedPoolId,
+            sessionId,
+          })
+        : null;
+    // A user's chat or agent call on the organization default model, from an
+    // agent with no model of its own, is routed across the organization trio.
+    // The router picks the session's tier and key, which the call is sent with
+    // the way a pool member is, even when the tier is the default model
+    // itself: the call's own key when it serves the tier, else the user's
+    // ranked one. A call the router cannot route runs on the model it names.
+    // A pooled call is accounted for by its pool; it is never also routed.
+    const autoRouteWire =
+      internalCall &&
+      config.autoRouting.enabled &&
+      headersForExtraction[AUTO_ROUTABLE_HEADER.toLowerCase()] === "true" &&
+      followsOrganizationRouting(resolvedAgent) &&
+      !modelPoolPlan
+        ? poolWire
+        : null;
+    const autoRouteUser = autoRouteWire ? resolvedUser : null;
+    // Model-scoped budgets wait until the pool member or routed tier is known.
+    const deferModelScopedLimits =
+      modelPoolPlan != null || autoRouteUser != null;
+    // Check usage limits. Media without a known cost is refused only when a
+    // spend budget applies to it.
     logger.debug(
       { resolvedAgentId },
       `[${providerName}Proxy] Checking usage limits`,
     );
     const limitViolation =
       await LimitValidationService.checkLimitsBeforeRequest({
-        unpricedMediaModel: provider.unavailableUsageAccounting
-          ? requestAdapter.getModel()
-          : undefined,
-        agentId: resolvedAgentId,
-        userId,
-        virtualKeyId,
-        passthroughVirtualKeyId,
-        llmOauthClientId: authenticatedApp?.id,
-        billingTeamId,
-        teamMemberUserId: authenticatedUserId ?? null,
-        agent: resolvedAgent,
-        snapshot: requestContext,
+        ...limitContext,
+        model: deferModelScopedLimits ? undefined : actualModel,
+        deferModelScopedLimits,
       });
 
     if (limitViolation) {
@@ -1329,36 +1475,53 @@ export async function handleLLMProxy<
       }
     }
 
-    // A request for a model pool's name is served by the pool's members when
-    // the caller may use the pool (see `mayUseModelPool`). Members on a wire
-    // the client's can't reach are left out of the plan.
-    const poolWire = openAiCodexPassthrough
-      ? null
-      : inboundPoolWire(provider.interactionType);
-    // A chat or agent set to a pool names it, and sends one of its members'
-    // models. Any other platform call runs on the key and model it names.
-    const chatModelPoolHeader = internalCall
-      ? headersForExtraction[MODEL_POOL_ID_HEADER.toLowerCase()]
-      : undefined;
-    const chatModelPoolId =
-      typeof chatModelPoolHeader === "string" && chatModelPoolHeader
-        ? chatModelPoolHeader
-        : undefined;
-    const modelPoolPlan =
-      poolWire && (!internalCall || chatModelPoolId)
-        ? await planModelPool({
+    const autoRoute =
+      autoRouteUser && autoRouteWire
+        ? await routeInternalAutoSession({
+            request,
             organizationId: resolvedAgent.organizationId,
-            name: actualModel,
-            poolId: chatModelPoolId,
-            inbound: poolWire,
-            caller: {
-              virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
-              providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
-            },
-            grantedPoolId: authOverride?.modelPoolId ?? grantedPoolId,
+            userId: autoRouteUser.id,
+            named: { provider: providerName, modelId: actualModel },
+            callApiKeyId: perKeyChatApiKeyId ?? null,
             sessionId,
+            body: requestAdapter.getOriginalRequest(),
+            reachable: (tierProvider) =>
+              isPoolableProvider(tierProvider) &&
+              canReachMember(autoRouteWire, tierProvider),
           })
         : null;
+    const autoRoutedMember: TierMember | null = autoRoute
+      ? {
+          providerApiKeyId: autoRoute.providerApiKeyId,
+          provider: autoRoute.model.provider,
+          modelId: autoRoute.model.modelId,
+        }
+      : null;
+    // A session the router keyed itself is logged under that key.
+    const derivedSessionKey = autoRoutingContext(request)?.derivedSessionKey;
+    if (sessionId === null && derivedSessionKey) {
+      sessionId = derivedSessionKey;
+      sessionSource = "auto_routing";
+    }
+    // Budgets scoped to a model apply to the model the call runs on: the
+    // routed tier's, or the one it names when the router left it alone.
+    if (autoRouteUser) {
+      const routedLimitViolation =
+        await LimitValidationService.checkLimitsBeforeRequest({
+          ...limitContext,
+          model: autoRoutedMember
+            ? stripClaudeContextVariantSuffix(autoRoutedMember.modelId)
+            : actualModel,
+        });
+      if (routedLimitViolation) {
+        logger.info(
+          { resolvedAgentId, reason: "token_cost_limit_exceeded" },
+          `${providerName} request blocked due to token cost limit`,
+        );
+        return sendUsageLimitRefusal(reply, routedLimitViolation);
+      }
+    }
+
     // A credential let in only for a pool has no key for this provider, so
     // the request can't go anywhere but the pool.
     if (grantedPoolId && !perKeyChatApiKeyId && !modelPoolPlan) {
@@ -1374,7 +1537,7 @@ export async function handleLLMProxy<
     // instead.
     const catalogModel = requestContext.model;
     const discovered =
-      modelPoolPlan || catalogModel
+      modelPoolPlan || autoRoutedMember || catalogModel
         ? []
         : [
             await ModelModel.ensureModelExists(actualModel, providerName),
@@ -1406,19 +1569,20 @@ export async function handleLLMProxy<
     // return a proper HTTP error status code (e.g. 429) instead of being
     // stuck with a 200. The AI SDK detects errors via HTTP status codes, so
     // this is critical for error propagation to clients like the chat UI.
-    let sseHeaders: Record<string, string> | undefined;
-    if (requestAdapter.isStreaming()) {
+    const commitsStreamHeaders = requestAdapter.isStreaming();
+    if (commitsStreamHeaders) {
       logger.debug(
         `[${providerName}Proxy] Preparing streaming response headers (lazy commit)`,
       );
-      sseHeaders = streamAdapter.getSSEHeaders();
     }
 
     // Helper to commit SSE headers before the first write.
-    // Safe to call multiple times — only writes headers once.
+    // Safe to call multiple times — only writes headers once. The headers are
+    // read at commit time: a byte stream (audio) learns the provider's own
+    // content type from its first chunk and relays it as the provider sent it.
     const ensureStreamHeaders = () => {
-      if (sseHeaders && !reply.raw.headersSent) {
-        reply.raw.writeHead(200, sseHeaders);
+      if (commitsStreamHeaders && !reply.raw.headersSent) {
+        reply.raw.writeHead(200, streamAdapter.getSSEHeaders());
         streamTiming.firstByteAt = Date.now();
       }
     };
@@ -1769,6 +1933,8 @@ export async function handleLLMProxy<
       attemptSignal?: AbortSignal;
       /** The deployment and query of an Azure-shaped inbound URL. */
       azureRequest?: ReturnType<typeof getAzureProxyIngress>;
+      /** Set when this client's key, not the request's, decides billing. */
+      credentialBillingMode?: BillingMode;
     }) =>
       target.adapter.createClient(target.apiKey, {
         ...(target.azureRequest ? { azureRequest: target.azureRequest } : {}),
@@ -1788,7 +1954,8 @@ export async function handleLLMProxy<
           if (target.adapter.provider === "anthropic") {
             billingMode = utils.refineAnthropicBillingModeFromHeaders({
               // A retry's response must not inherit a failed attempt's overage.
-              billingMode: credentialBillingMode,
+              billingMode:
+                target.credentialBillingMode ?? credentialBillingMode,
               headers: responseHeaders,
             });
           }
@@ -1799,64 +1966,149 @@ export async function handleLLMProxy<
           ? { googleUserProject: headersForExtraction["x-goog-user-project"] }
           : {}),
       });
-    // A pooled request never uses the caller's own key, which a Model Router
-    // pool request doesn't even carry.
-    const client = modelPoolPlan
-      ? undefined
-      : createUpstreamClient({
-          adapter: provider,
-          apiKey,
-          baseUrl: effectiveBaseUrl,
-          headers: mergedHeaders,
-          providerApiKeyId: perKeyChatApiKeyId,
-          model: requestAdapter.getModel(),
-          azureRequest:
-            providerName === "azure"
-              ? getAzureProxyIngress(request)
-              : undefined,
-        });
+    // A member's key, its secret and the billing mode that key implies.
+    const memberCredential = async (member: TierMember) => {
+      const row = await LlmProviderApiKeyModel.findById(
+        member.providerApiKeyId,
+      );
+      const adapter = memberAdapter(member.provider);
+      if (!row || !adapter) {
+        throw new ApiError(500, "Model pool member key no longer exists");
+      }
+      const apiKey = row.secretId
+        ? await getSecretValueForLlmProviderApiKey(row.secretId)
+        : undefined;
+      const memberBillingMode = utils.resolveInteractionBillingMode({
+        isSubscriptionCredential:
+          adapter.isSubscriptionCredential?.(apiKey) === true,
+        autodetectEnabled: config.llmCost.subscriptionAutodetect,
+      });
+      return { row, adapter, apiKey, billingMode: memberBillingMode };
+    };
+    // A member's own provider client, its own model id and, when it speaks
+    // another wire than the client's, a translator.
+    const reachMember = async (
+      inbound: PoolWire,
+      member: TierMember,
+      signal?: AbortSignal,
+      /** Set when the member's key, not the request's, decides billing. */
+      owned?: Awaited<ReturnType<typeof memberCredential>>,
+    ): Promise<MemberTransport> => {
+      const {
+        row,
+        adapter,
+        apiKey: memberApiKey,
+      } = owned ?? (await memberCredential(member));
+      const sameWire = inboundPoolWire(adapter.interactionType) === inbound;
+      return memberTransport({
+        inbound,
+        provider: member.provider,
+        modelId: member.modelId,
+        client: createUpstreamClient({
+          adapter,
+          apiKey: memberApiKey,
+          credentialBillingMode: owned?.billingMode,
+          baseUrl: row.inferenceBaseUrl ?? row.baseUrl ?? adapter.getBaseUrl(),
+          // Protocol headers (anthropic-beta, ...) only mean something to a
+          // member on the client's own wire.
+          headers: {
+            ...(row.extraHeaders ?? {}),
+            ...(sameWire ? headersToForward : {}),
+          },
+          providerApiKeyId: row.id,
+          model: member.modelId,
+          attemptSignal: signal,
+        }),
+      });
+    };
+    // The routed tier's key is read now: its model, key and billing mode are
+    // what throughput admits and settles, not the anchor's.
+    const routedCredential = autoRoutedMember
+      ? await memberCredential(autoRoutedMember)
+      : undefined;
+    if (routedCredential) billingMode = routedCredential.billingMode;
+    const autoRoutedTier: AutoRoutedTier | undefined =
+      autoRoutedMember && autoRouteWire && routedCredential
+        ? {
+            member: autoRoutedMember,
+            transport: () =>
+              reachMember(
+                autoRouteWire,
+                autoRoutedMember,
+                undefined,
+                routedCredential,
+              ),
+          }
+        : undefined;
 
-    // Each pool member is reached with its own provider's client, its own
-    // model id and, when it speaks another wire, a translator.
+    // A pooled or routed request never uses the caller's own key, which a
+    // Model Router pool request doesn't even carry.
+    const client =
+      modelPoolPlan || autoRoutedTier
+        ? undefined
+        : createUpstreamClient({
+            adapter: provider,
+            apiKey,
+            baseUrl: effectiveBaseUrl,
+            headers: mergedHeaders,
+            providerApiKeyId: perKeyChatApiKeyId,
+            model: requestAdapter.getModel(),
+            azureRequest:
+              providerName === "azure"
+                ? getAzureProxyIngress(request)
+                : undefined,
+          });
+
+    // Each pool member is reached with its own provider's client.
+    let preparedMember:
+      | { value: Awaited<ReturnType<typeof memberCredential>> }
+      | { error: unknown }
+      | undefined;
     const modelPool: ModelPoolRouting | undefined =
       modelPoolPlan && poolWire
         ? {
             plan: modelPoolPlan,
-            transportFor: async (member, signal) => {
-              const row = await LlmProviderApiKeyModel.findById(
-                member.providerApiKeyId,
-              );
-              const adapter = memberAdapter(member.provider);
-              if (!row || !adapter) {
-                throw new ApiError(
-                  500,
-                  "Model pool member key no longer exists",
-                );
+            checkLimits: async (member) => {
+              const model = stripClaudeContextVariantSuffix(member.modelId);
+              const violation =
+                await LimitValidationService.checkLimitsBeforeRequest({
+                  ...limitContext,
+                  model,
+                });
+              if (violation) throw new ModelBudgetExceededError(violation);
+              try {
+                preparedMember = { value: await memberCredential(member) };
+              } catch (error) {
+                // Keep unavailable credentials on the existing member-failover path.
+                preparedMember = { error };
+                return;
               }
-              const sameWire =
-                inboundPoolWire(adapter.interactionType) === poolWire;
-              return memberTransport({
-                inbound: poolWire,
-                provider: member.provider,
-                modelId: member.modelId,
-                client: createUpstreamClient({
-                  adapter,
-                  apiKey: row.secretId
-                    ? await getSecretValueForLlmProviderApiKey(row.secretId)
-                    : undefined,
-                  baseUrl:
-                    row.inferenceBaseUrl ?? row.baseUrl ?? adapter.getBaseUrl(),
-                  // Protocol headers (anthropic-beta, ...) only mean something
-                  // to a member on the client's own wire.
-                  headers: {
-                    ...(row.extraHeaders ?? {}),
-                    ...(sameWire ? headersToForward : {}),
-                  },
-                  providerApiKeyId: row.id,
-                  model: member.modelId,
-                  attemptSignal: signal,
-                }),
-              });
+              billingMode = preparedMember.value.billingMode;
+              try {
+                await throughput.admitSpendForModel(
+                  model,
+                  billingMode === "subscription",
+                );
+              } catch (error) {
+                if (error instanceof ThroughputError && error.status === 402)
+                  throw new ModelBudgetExceededError(
+                    [error.message, error.message],
+                    error.quota,
+                  );
+                throw error;
+              }
+            },
+            transportFor: async (member, signal) => {
+              if (!preparedMember || "error" in preparedMember)
+                throw preparedMember && "error" in preparedMember
+                  ? preparedMember.error
+                  : new ApiError(500, "Model pool member was not prepared");
+              return reachMember(
+                poolWire,
+                member,
+                signal,
+                preparedMember.value,
+              );
             },
             recordFailedAttempt: async (attempt) => {
               const cutOff = attempt.cutOff
@@ -1898,10 +2150,12 @@ export async function handleLLMProxy<
                   outputTokens: 0,
                   cost: cutOff ? cutOff.cost : "0",
                   baselineCost: cutOff?.cost,
+                  billingMode,
                 },
                 encryptedChat,
                 streamTiming,
                 attributionLabels,
+                throughput,
                 // A failed attempt has no usage to attribute to its routing decision.
                 autoRouting: undefined,
                 upstreamAttempt: attempt,
@@ -2028,7 +2282,24 @@ export async function handleLLMProxy<
       requestAdapter.getOriginalRequest(),
       claudeCodeAgentId,
     );
+    const throughput = new LlmThroughput({
+      entities: [...uniqueBillingEntities.values()],
+      model: autoRoutedMember?.modelId ?? actualModel,
+      provider: autoRoutedMember?.provider ?? providerName,
+      subscription: billingMode === "subscription",
+      rules: modelPool
+        ? requestContext.throughputRules.filter(
+            (rule) => rule.limitType !== "token_cost",
+          )
+        : requestContext.throughputRules,
+      attemptSpendRules: modelPool
+        ? requestContext.throughputRules.filter(
+            (rule) => rule.limitType === "token_cost",
+          )
+        : undefined,
+    });
     const ctx: LLMProxyContext<TRequest> = {
+      telemetry,
       authorizeA2AOAuthAttempt: oauthExecution
         ? () =>
             authorizeA2AOAuthExecution({
@@ -2037,18 +2308,13 @@ export async function handleLLMProxy<
             })
         : undefined,
       attributionLabels,
-      autoRouting,
-      throughput: new LlmThroughput({
-        entities: [...uniqueBillingEntities.values()],
-        model: actualModel,
-        provider: providerName,
-        subscription: billingMode === "subscription",
-        rules: requestContext.throughputRules,
-      }),
-      usageAccountingMode: config.llmProxy.usageAccountingMode,
+      // Read again: an "Auto" platform call records its decision above.
+      autoRouting: autoRoutingContext(request),
+      throughput,
       providerApiKeyId: perKeyChatApiKeyId,
       upstreamAttempt,
       ...(modelPool ? { modelPool } : {}),
+      ...(autoRoutedTier ? { autoRoutedTier } : {}),
       billingAttribution: {
         organizationId: resolvedAgent.organizationId,
         environmentId: resolvedAgent.environmentId,
@@ -2111,6 +2377,7 @@ export async function handleLLMProxy<
     return await handleNonStreaming(client, finalRequest, reply, provider, ctx);
   } catch (error) {
     const lifecycleError = error;
+    telemetry.fail(classifyProxyFailure(error));
     if (lifecycleError instanceof RecordedCodexGenerationFailure) {
       return handleError(
         lifecycleError,
@@ -2133,6 +2400,12 @@ export async function handleLLMProxy<
         );
       }
     }
+    if (lifecycleError instanceof ModelBudgetExceededError)
+      return sendUsageLimitRefusal(
+        reply,
+        lifecycleError.violation,
+        lifecycleError.quota,
+      );
     if (
       (lifecycleError instanceof ObservedProviderUsageError &&
         lifecycleError.billingRecorded) ||
@@ -2365,18 +2638,16 @@ async function handleStreaming<
   const carriesStreamTerminal = provider.carriesStreamTerminal;
   let terminalSent = false;
 
-  // Every byte to the client goes through here so the keep-alive knows when
-  // the stream last spoke. The keep-alive itself only ever writes to a stream
-  // that is already committed and idle (see StreamKeepAlive) — it is armed
-  // now, before the upstream call, so it also covers a stream committed
-  // during preflight and a slow post-stream plugin ruling, but it cannot
-  // itself turn a pending upstream error into a 200.
+  // Comments cannot commit a response until the upstream accepted it. Pools
+  // wait for member selection, and buffered policy responses retain their
+  // existing lazy commit. Already committed streams still get idle comments.
   const keepAlive = new StreamKeepAlive(
     reply.raw,
     config.llmProxy.streamKeepAliveIntervalMs,
     streamAdapter
       .getSSEHeaders()
       ["Content-Type"]?.startsWith("text/event-stream") ?? false,
+    ensureStreamHeaders,
   );
   keepAlive.start();
   const writeToClient = (data: string | Uint8Array) => {
@@ -2532,7 +2803,7 @@ async function handleStreaming<
     }
 
     let usage = streamAdapter.state.usage;
-    if (usage && !upstreamFinished && ctx.usageAccountingMode !== "off") {
+    if (usage && !upstreamFinished) {
       const breakdown =
         usage.billingUsage ?? primaryBillingUsage(usage, actualModel);
       usage = {
@@ -2547,20 +2818,6 @@ async function handleStreaming<
     }
     if (usage) {
       withSessionContext(sessionId, () => {
-        if (ctx.usageAccountingMode !== "enforce" && !usage.usageUnavailable)
-          metrics.llm.reportLLMTokens(
-            providerName,
-            agent,
-            {
-              input: usage.inputTokens,
-              output: usage.outputTokens,
-              cacheRead: usage.cacheReadTokens,
-              cacheWrite: usage.cacheWriteTokens,
-            },
-            actualModel,
-            source,
-          );
-
         if (usage.outputTokens && firstChunkTime) {
           const totalDurationSeconds = (Date.now() - streamStartTime) / 1000;
           metrics.llm.reportTokensPerSecond(
@@ -2576,7 +2833,6 @@ async function handleStreaming<
 
       const costs = await calculateInteractionCosts({
         autoRouting: ctx.autoRouting,
-        usageAccountingMode: ctx.usageAccountingMode,
         providerApiKeyId: ctx.providerApiKeyId,
         actualModel: ctx.upstreamAttempt.modelId ?? actualModel,
         usage,
@@ -2584,7 +2840,7 @@ async function handleStreaming<
       });
 
       withSessionContext(sessionId, () => {
-        if (costs.billingUsage?.mode === "enforce") {
+        if (costs.billingUsage) {
           reportBillableUsageMetrics({
             usage: costs.billingUsage,
             agent,
@@ -2595,6 +2851,20 @@ async function handleStreaming<
           });
           return;
         }
+        // Usage with no billable cost, such as unpriced media.
+        if (!usage.usageUnavailable)
+          metrics.llm.reportLLMTokens(
+            providerName,
+            agent,
+            {
+              input: usage.inputTokens,
+              output: usage.outputTokens,
+              cacheRead: usage.cacheReadTokens,
+              cacheWrite: usage.cacheWriteTokens,
+            },
+            actualModel,
+            source,
+          );
         metrics.llm.reportLLMCost({
           provider: providerName,
           profile: agent,
@@ -2638,7 +2908,9 @@ async function handleStreaming<
           request: originalRequest,
           processedRequest: request,
           response: withProviderToolCallIds(
-            failedStreamResponse ?? streamAdapter.toProviderResponse(),
+            failedStreamResponse ??
+              streamAdapter.toLoggedResponse?.() ??
+              streamAdapter.toProviderResponse(),
             streamAdapter.state.toolCalls,
           ),
           actualModel,
@@ -2660,8 +2932,7 @@ async function handleStreaming<
           { err: interactionError, profileId: agent.id },
           "Failed to create interaction record (agent may have been deleted)",
         );
-        if (ctx.usageAccountingMode === "enforce")
-          throw new ApiError(503, "Unable to settle LLM usage");
+        throw new ApiError(503, "Unable to settle LLM usage");
       }
     } else {
       // No usage ever arrived. On the error path the catch has already recorded
@@ -2670,7 +2941,9 @@ async function handleStreaming<
       // call must not disappear from interaction history.
       await recordUsagelessInteraction(
         withProviderToolCallIds(
-          failedStreamResponse ?? streamAdapter.toProviderResponse(),
+          failedStreamResponse ??
+            streamAdapter.toLoggedResponse?.() ??
+            streamAdapter.toProviderResponse(),
           streamAdapter.state.toolCalls,
         ),
       );
@@ -2703,6 +2976,7 @@ async function handleStreaming<
       parentContext,
       user: toSpanUserInfo(resolvedUser),
       callback: async (llmSpan) => {
+        ctx.telemetry?.setTraceContext(otelContext.active());
         if (pluginRegistry && pluginContext) {
           await pluginRegistry.onBeforeModel({ ...pluginContext, request });
         }
@@ -2713,13 +2987,31 @@ async function handleStreaming<
           await ctx.throughput?.cancelBeforeSend();
           throw new ApiError(499, "Client disconnected before inference");
         }
+        const onAccepted = () => {
+          if (
+            !ctx.modelPool &&
+            !bufferModelResponse &&
+            !ctx.connectionVerification
+          )
+            keepAlive.allowCommit();
+        };
         const stream = await openUpstream({
           ctx,
-          transport: ownTransport(provider, client),
-          open: async (transport) =>
-            withFirstChunk(
-              (await transport.executeStream(request)) as AsyncIterable<TChunk>,
-            ),
+          transport: ownTransport(provider, client, onAccepted),
+          onAccepted,
+          open: async (transport) => {
+            keepAlive.suspendCommit();
+            try {
+              return await withFirstChunk(
+                (await transport.executeStream(
+                  request,
+                )) as AsyncIterable<TChunk>,
+              );
+            } catch (error) {
+              keepAlive.suspendCommit();
+              throw error;
+            }
+          },
           memberTimeoutMs:
             ctx.modelPool?.plan.streamTimeoutMs ??
             MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS,
@@ -2736,6 +3028,8 @@ async function handleStreaming<
               model: actualModel,
             }),
         });
+        if (!bufferModelResponse && !ctx.connectionVerification)
+          keepAlive.allowCommit();
         billingMode = getBillingMode();
 
         // Record request duration at stream establishment for providers whose
@@ -2863,7 +3157,6 @@ async function handleStreaming<
             );
           }
           const cost = await calculateUsageCost({
-            usageAccountingMode: ctx.usageAccountingMode,
             providerApiKeyId: ctx.providerApiKeyId,
             model: ctx.upstreamAttempt.modelId ?? actualModel,
             usage: state.usage,
@@ -2891,9 +3184,8 @@ async function handleStreaming<
 
     // Anthropic requires message_stop; its beta usage arrives before that frame.
     upstreamFinished = providerName !== "anthropic" || providerTerminalSeen;
-    if (!upstreamFinished && ctx.usageAccountingMode === "enforce")
-      throw new ApiError(
-        502,
+    if (!upstreamFinished)
+      throw new UpstreamStreamIncompleteError(
         "Provider stream ended before final usage was confirmed",
       );
     logger.info("Stream loop completed, processing final events");
@@ -2950,6 +3242,12 @@ async function handleStreaming<
         });
       }
       toolCallBlock = toToolCallBlock(null, hostedHold.blocked);
+      if (toolCallBlock)
+        ctx.telemetry?.fail({
+          statusCode: 403,
+          origin: "archestra",
+          outcome: "denied",
+        });
       const heldEvents = streamAdapter.formatHeldHostedToolCallsSSE(
         hostedHold.notices,
       );
@@ -2968,13 +3266,14 @@ async function handleStreaming<
     let rewrittenToolCalls: AccumulatedToolCall[] | null = null;
 
     if (toolCalls.length > 0) {
-      rewrittenToolCalls = planDispatchRewrites({
+      const planned = planDispatchRewrites({
         supported: streamAdapter.formatToolCallsSSE !== undefined,
         toolCalls,
         enabledToolNames,
         toolIdentity,
         providerName,
       });
+      rewrittenToolCalls = planned.client;
 
       logger.info(
         {
@@ -2987,7 +3286,7 @@ async function handleStreaming<
       const policyOutcome = await evaluateProxyPluginToolCalls(
         ctx.pluginRegistry,
         ctx.pluginContext,
-        rewrittenToolCalls ?? toolCalls,
+        planned.policy,
         streamAdapter.formatToolCallsSSE !== undefined,
         streamAdapter.supportsToolCallReview === true &&
           typeof streamAdapter.formatToolCallsSSE === "function",
@@ -3021,6 +3320,12 @@ async function handleStreaming<
         toolInvocationRefusal,
         policyOutcome.blocked,
       );
+      if (toolCallBlock)
+        ctx.telemetry?.fail({
+          statusCode: 403,
+          origin: "archestra",
+          outcome: "denied",
+        });
     }
 
     await ctx.governedThread?.recordResponse({
@@ -3152,6 +3457,18 @@ async function handleStreaming<
     return reply;
   } catch (error) {
     const lifecycleError = error;
+    if (
+      error instanceof CodexResponsesGenerationError &&
+      error.isIncompleteTerminal
+    )
+      ctx.telemetry?.markIncomplete();
+    else
+      ctx.telemetry?.fail(
+        error instanceof CodexResponsesGenerationError ||
+          error instanceof ResponsesStreamIncompleteError
+          ? { statusCode: 502, origin: "provider", outcome: "error" }
+          : classifyProxyFailure(error),
+      );
     const codexError =
       error instanceof CodexResponsesGenerationError ? error : undefined;
     if (codexError) {
@@ -3232,6 +3549,16 @@ async function handleStreaming<
         "Plugin cleanup failed while handling proxy error",
       );
     }
+    if (lifecycleError instanceof ModelBudgetExceededError) {
+      // This member never dispatched. Earlier failed pool attempts already
+      // have their own records; do not finalize an empty stream for this one.
+      accountingFinalized = true;
+      return sendUsageLimitRefusal(
+        reply,
+        lifecycleError.violation,
+        lifecycleError.quota,
+      );
+    }
     if (codexError?.isIncompleteTerminal) {
       // Preserve Chat's legal partial terminal only after failure cleanup.
       childStream.dropModel();
@@ -3305,6 +3632,7 @@ async function handleStreaming<
       streamError = settlementError;
     }
     if (provider.binaryStream && reply.raw.headersSent) {
+      ctx.telemetry?.markServerAbort();
       reply.raw.destroy();
       return reply;
     }
@@ -3398,6 +3726,10 @@ async function handleNonStreaming<
     pluginContext,
     appaReceipts,
   } = ctx;
+  // What the log row keeps of the request; the provider and plugins still
+  // work from `originalRequest`.
+  const loggedRequest =
+    provider.toLoggedRequest?.(originalRequest) ?? originalRequest;
 
   const providerName = provider.provider;
   const sendResponse = (response: unknown) => {
@@ -3438,6 +3770,7 @@ async function handleNonStreaming<
     parentContext,
     user: toSpanUserInfo(resolvedUser),
     callback: async (llmSpan) => {
+      ctx.telemetry?.setTraceContext(otelContext.active());
       // Record request duration for providers we instrument in the handler
       // (Bedrock). getObservableFetch covers the fetch-based providers, so those
       // must not double-report here — the flag gates that.
@@ -3493,7 +3826,6 @@ async function handleNonStreaming<
             actualModel: ctx.upstreamAttempt.modelId ?? actualModel,
             usage: error.usage,
             providerName: ctx.upstreamAttempt.provider ?? providerName,
-            usageAccountingMode: ctx.usageAccountingMode,
             providerApiKeyId: ctx.providerApiKeyId,
           });
           const record = buildInteractionRecord({
@@ -3514,7 +3846,7 @@ async function handleNonStreaming<
             sessionSource,
             source,
             providerType: provider.interactionType,
-            request: originalRequest,
+            request: loggedRequest,
             processedRequest: request,
             response: error.response,
             actualModel,
@@ -3530,10 +3862,11 @@ async function handleNonStreaming<
             autoRouting: ctx.autoRouting,
             upstreamAttempt: ctx.upstreamAttempt,
           });
-          if (costs.billingUsage?.mode === "enforce")
+          const billingUsage = costs.billingUsage;
+          if (billingUsage)
             withSessionContext(sessionId, () =>
               reportBillableUsageMetrics({
-                usage: costs.billingUsage as PricedBillingUsage,
+                usage: billingUsage,
                 agent,
                 source,
                 billingMode: getBillingMode(),
@@ -3641,7 +3974,6 @@ async function handleNonStreaming<
         );
       }
       const cost = await calculateUsageCost({
-        usageAccountingMode: ctx.usageAccountingMode,
         providerApiKeyId: ctx.providerApiKeyId,
         model: ctx.upstreamAttempt.modelId ?? actualModel,
         usage,
@@ -3687,6 +4019,12 @@ async function handleNonStreaming<
           responseAdapter.getHostedToolCalls?.() ?? [],
         )
       : null;
+  if (hostedHold?.blocked.length)
+    ctx.telemetry?.fail({
+      statusCode: 403,
+      origin: "archestra",
+      outcome: "denied",
+    });
   for (const blocked of hostedHold?.blocked ?? []) {
     recordBlockedToolCallMetrics({
       allToolCallNames: [blocked.name],
@@ -3731,18 +4069,19 @@ async function handleNonStreaming<
       // The namespace the model called the tool in, on a wire that has them.
       ...(toolCall.namespace ? { namespace: toolCall.namespace } : {}),
     }));
-    rewrittenToolCalls = planDispatchRewrites({
+    const planned = planDispatchRewrites({
       supported: responseAdapter.withRewrittenToolCalls !== undefined,
       toolCalls: emittedToolCalls,
       enabledToolNames,
       toolIdentity,
       providerName,
     });
+    rewrittenToolCalls = planned.client;
 
     const policyOutcome = await evaluateProxyPluginToolCalls(
       ctx.pluginRegistry,
       ctx.pluginContext,
-      rewrittenToolCalls ?? emittedToolCalls,
+      planned.policy,
       responseAdapter.withRewrittenToolCalls !== undefined,
       responseAdapter.supportsToolCallReview === true &&
         typeof responseAdapter.withRewrittenToolCalls === "function",
@@ -3750,6 +4089,12 @@ async function handleNonStreaming<
     if (policyOutcome.wasRewritten)
       rewrittenToolCalls = policyOutcome.toolCalls;
     const toolInvocationRefusal = policyOutcome.refusal;
+    if (toolInvocationRefusal || policyOutcome.blocked.length)
+      ctx.telemetry?.fail({
+        statusCode: 403,
+        origin: "archestra",
+        outcome: "denied",
+      });
     await ctx.governedThread?.recordResponse({
       messageId: (responseAdapter.getOriginalResponse() as { id?: string }).id,
       providerCalls: toolCalls,
@@ -3829,7 +4174,6 @@ async function handleNonStreaming<
       // Record interaction with refusal (usage already corrected above)
       const costs = await calculateInteractionCosts({
         autoRouting: ctx.autoRouting,
-        usageAccountingMode: ctx.usageAccountingMode,
         providerApiKeyId: ctx.providerApiKeyId,
         actualModel: ctx.upstreamAttempt.modelId ?? actualModel,
         usage,
@@ -3837,7 +4181,7 @@ async function handleNonStreaming<
       });
 
       withSessionContext(sessionId, () => {
-        if (costs.billingUsage?.mode === "enforce") {
+        if (costs.billingUsage) {
           reportBillableUsageMetrics({
             usage: costs.billingUsage,
             agent,
@@ -3900,7 +4244,7 @@ async function handleNonStreaming<
         sessionSource,
         source,
         providerType: provider.interactionType,
-        request: originalRequest,
+        request: loggedRequest,
         processedRequest: request,
         response: responseAdapter.getLoggedResponse?.() ?? refusalResponse,
         actualModel,
@@ -4006,7 +4350,6 @@ async function handleNonStreaming<
   // its HTTP wrapper records duration only. Other providers own HTTP tokens.
   const costs = await calculateInteractionCosts({
     autoRouting: ctx.autoRouting,
-    usageAccountingMode: ctx.usageAccountingMode,
     providerApiKeyId: ctx.providerApiKeyId,
     actualModel: ctx.upstreamAttempt.modelId ?? actualModel,
     usage,
@@ -4014,7 +4357,7 @@ async function handleNonStreaming<
   });
 
   withSessionContext(sessionId, () => {
-    if (costs.billingUsage?.mode === "enforce") {
+    if (costs.billingUsage) {
       reportBillableUsageMetrics({
         usage: costs.billingUsage,
         agent,
@@ -4076,7 +4419,7 @@ async function handleNonStreaming<
       sessionSource,
       source,
       providerType: provider.interactionType,
-      request: originalRequest,
+      request: loggedRequest,
       processedRequest: request,
       // Bedrock<->OpenAI compat need to return OpenAI response to client, but store bedrock response for interaction log.
       // Providers which need this behavior should implement getLoggedResponse() for persisting interaction and getOriginalResponse() for returning to client.
@@ -4085,11 +4428,14 @@ async function handleNonStreaming<
       // still wins where it exists: those adapters log a different wire shape on
       // purpose, and after a rewrite they hand back that shape's rewritten form.
       // Either way under the provider's call ids, as the requests are logged.
-      response: withProviderToolCallIds(
-        generationFailed
-          ? clientResponse
-          : (responseAdapter.getLoggedResponse?.() ?? clientResponse),
-        [...(rewrittenToolCalls ?? []), ...(hostedHold?.notices ?? [])],
+      // A spoken reply keeps its audio up to the clip limit, so Logs plays it.
+      response: withReplyAudioWithinLimit(
+        withProviderToolCallIds(
+          generationFailed
+            ? clientResponse
+            : (responseAdapter.getLoggedResponse?.() ?? clientResponse),
+          [...(rewrittenToolCalls ?? []), ...(hostedHold?.notices ?? [])],
+        ),
       ),
       actualModel,
       usage,
@@ -4111,8 +4457,7 @@ async function handleNonStreaming<
       { err: interactionError, profileId: agent.id },
       "Failed to create interaction record (agent may have been deleted)",
     );
-    if (ctx.usageAccountingMode === "enforce")
-      throw new ApiError(503, "Unable to settle LLM usage");
+    throw new ApiError(503, "Unable to settle LLM usage");
   }
   if (tokenAccountingError) {
     if (tokenAccountingError instanceof ThroughputError)
@@ -4189,7 +4534,10 @@ function withoutUnadmittedModelOutput<TResponse>(
 /** A native terminal failure ends the HTTP response, not the governed turn. */
 async function failResponsesGeneration(params: {
   response: unknown;
-  ctx: Pick<LLMProxyContext<unknown>, "pluginRegistry" | "pluginContext">;
+  ctx: Pick<
+    LLMProxyContext<unknown>,
+    "pluginRegistry" | "pluginContext" | "telemetry"
+  >;
   error?: Error;
 }): Promise<boolean> {
   const response = asRecord(params.response);
@@ -4201,6 +4549,18 @@ async function failResponsesGeneration(params: {
     return false;
   }
   const details = asRecord(response?.error);
+  if (
+    response?.status === "incomplete" ||
+    (params.error instanceof CodexResponsesGenerationError &&
+      params.error.isIncompleteTerminal)
+  )
+    params.ctx.telemetry?.markIncomplete();
+  else
+    params.ctx.telemetry?.fail({
+      statusCode: 502,
+      origin: "provider",
+      outcome: "error",
+    });
   const reason = asRecord(response?.incomplete_details)?.reason;
   const error =
     params.error ??
@@ -4339,12 +4699,15 @@ async function holdProxyPluginHostedToolCalls(
 
 /**
  * Plan the dispatch-mode repair for one turn's tool calls, and record it when
- * there is one. Shared by the streaming and non-streaming paths so the two
+ * there is one, then apply the argument repairs a built-in would apply at
+ * execution (`run_tool`'s envelope unwrap, then the JSON-text reparse). Shared by the streaming and non-streaming paths so the two
  * surfaces stay in step.
  *
  * `supported` is the adapter's ability to re-emit the rewritten calls in its
- * own wire format; without it the repair could never reach the client, so that
- * provider keeps the pre-existing refusal-with-steer behavior.
+ * own wire format. Without it `client` is null: the dispatch repair is skipped,
+ * so that provider keeps the pre-existing refusal-with-steer behavior, and the
+ * client runs the calls as written while the plugins rule on the reparsed
+ * arguments the executor derives from them.
  */
 function planDispatchRewrites(params: {
   supported: boolean;
@@ -4355,16 +4718,14 @@ function planDispatchRewrites(params: {
     "canonicalize" | "spellingOf" | "attestationOf"
   >;
   providerName: string;
-}): AccumulatedToolCall[] | null {
-  if (!params.supported) {
-    return null;
-  }
-
-  const rewritten = planDispatchModeToolCallRewrites({
-    toolCalls: params.toolCalls,
-    enabledToolNames: params.enabledToolNames,
-    toolIdentity: params.toolIdentity,
-  });
+}): { policy: AccumulatedToolCall[]; client: AccumulatedToolCall[] | null } {
+  const rewritten = params.supported
+    ? planDispatchModeToolCallRewrites({
+        toolCalls: params.toolCalls,
+        enabledToolNames: params.enabledToolNames,
+        toolIdentity: params.toolIdentity,
+      })
+    : null;
 
   if (rewritten) {
     logger.info(
@@ -4375,7 +4736,22 @@ function planDispatchRewrites(params: {
       "Re-addressing direct tool calls through run_tool (dispatch mode)",
     );
   }
-  return rewritten;
+  const repaired = repairStringifiedToolCallArgs(
+    rewritten ?? params.toolCalls,
+    {
+      canonicalize: params.toolIdentity.canonicalize,
+      argsSchemaOf: getArchestraToolArgsSchema,
+      unwrapEnvelopes: (toolName, toolArgs) =>
+        repairEnvelopedToolArgs({
+          toolArgs,
+          schema: getArchestraToolInputSchema(toolName),
+        }).toolArgs,
+    },
+  );
+  return {
+    policy: repaired ?? rewritten ?? params.toolCalls,
+    client: params.supported ? (repaired ?? rewritten) : null,
+  };
 }
 
 /**
@@ -4387,6 +4763,8 @@ function planDispatchRewrites(params: {
 async function openUpstream<TRequest, T>(params: {
   ctx: LLMProxyContext<TRequest>;
   transport: MemberTransport;
+  /** Bound to a routed tier's stream the way `transport` binds its own. */
+  onAccepted?: () => void;
   open: (transport: MemberTransport) => Promise<T>;
   /** Moves past a silent pool member; see openThroughModelPool. */
   memberTimeoutMs?: number;
@@ -4398,11 +4776,29 @@ async function openUpstream<TRequest, T>(params: {
     error: unknown;
   }) => void;
 }): Promise<T> {
-  const { ctx, transport, open, memberTimeoutMs, ...retry } = params;
+  const { ctx, transport, onAccepted, open, memberTimeoutMs, ...retry } =
+    params;
+  let dispatched = false;
   const authorizedOpen = async (attemptTransport: MemberTransport) => {
     await ctx.authorizeA2AOAuthAttempt?.();
+    dispatched = true;
     return open(attemptTransport);
   };
+  const routed = ctx.autoRoutedTier;
+  if (routed) {
+    Object.assign(ctx.upstreamAttempt, routed.member);
+    ctx.providerApiKeyId = routed.member.providerApiKeyId;
+    const routedTransport = await routed.transport();
+    return openUpstreamWithRetry({
+      open: () =>
+        authorizedOpen({
+          execute: routedTransport.execute,
+          executeStream: (request) =>
+            routedTransport.executeStream(request, onAccepted),
+        }),
+      ...retry,
+    });
+  }
   const pool = ctx.modelPool;
   if (!pool) {
     return openUpstreamWithRetry({
@@ -4415,13 +4811,32 @@ async function openUpstream<TRequest, T>(params: {
       plan: pool.plan,
       attempt: ctx.upstreamAttempt,
       transportFor: pool.transportFor,
+      beforeAttempt: (member) => pool.checkLimits(member),
       open: authorizedOpen,
       memberTimeoutMs,
       recordFailedAttempt: pool.recordFailedAttempt,
       ...retry,
     });
+  } catch (error) {
+    if (
+      (error instanceof ModelBudgetExceededError ||
+        error instanceof ThroughputError) &&
+      !dispatched
+    )
+      await ctx.throughput?.cancelBeforeSend();
+    throw error;
   } finally {
     ctx.providerApiKeyId = ctx.upstreamAttempt.providerApiKeyId;
+    if (ctx.telemetry) {
+      if (ctx.upstreamAttempt.provider)
+        ctx.telemetry.setProvider(ctx.upstreamAttempt.provider);
+      Object.assign(ctx.telemetry.metadata, {
+        modelPoolMemberModel: ctx.upstreamAttempt.modelId,
+        modelPoolId: ctx.upstreamAttempt.modelPoolId,
+        providerApiKeyId: ctx.upstreamAttempt.providerApiKeyId,
+        poolAttempts: ctx.upstreamAttempt.attempt,
+      });
+    }
     pool.setResponseHeaders(ctx.upstreamAttempt);
   }
 }
@@ -4448,10 +4863,12 @@ function ownTransport(
     "execute" | "executeStream"
   >,
   client: unknown,
+  onAccepted?: () => void,
 ): MemberTransport {
   return {
     execute: (request) => provider.execute(client, request),
-    executeStream: (request) => provider.executeStream(client, request),
+    executeStream: (request) =>
+      provider.executeStream(client, request, onAccepted),
   };
 }
 
@@ -4606,10 +5023,17 @@ async function persistProxyInteraction({
       : record,
     encryptedChat.kind === "encrypt" ? encryptedChat.audit : null,
   );
-  await throughput?.settleSpend(
-    record.cost,
-    record.billingMode === "subscription" ? "subscription" : "metered",
-  );
+  try {
+    await throughput?.settleSpend(
+      record.cost,
+      record.billingMode === "subscription" ? "subscription" : "metered",
+    );
+  } catch (error) {
+    // The request's charge is already settled. Failing it now would invite a
+    // retry that pays for the inference twice; the next admission reads the
+    // per-minute meter and fails closed if it is still unavailable.
+    logger.error({ err: error }, "Unable to record per-minute spend");
+  }
 }
 
 /**
@@ -4710,12 +5134,16 @@ async function readProxyRequestState(
 export function sendUsageLimitRefusal(
   reply: FastifyReply,
   [_refusalMessage, contentMessage, limitMetadata]: LimitViolationResponse,
+  quota?: ThroughputError["quota"],
 ) {
+  if (quota?.retryAfter != null && !quota.oversized)
+    reply.header("Retry-After", quota.retryAfter);
   return reply.status(402).send({
     error: {
       message: contentMessage,
       type: "usage_limit_exceeded",
       code: "token_cost_limit_exceeded",
+      ...(quota ? { quota } : {}),
       usage_limit: limitMetadata
         ? {
             limit_type: limitMetadata.limitType,
@@ -4726,6 +5154,15 @@ export function sendUsageLimitRefusal(
         : undefined,
     },
   });
+}
+
+class ModelBudgetExceededError extends ApiError {
+  constructor(
+    readonly violation: LimitViolationResponse,
+    readonly quota?: ThroughputError["quota"],
+  ) {
+    super(402, violation[1]);
+  }
 }
 
 function withClaudeSubagentMetadata<TRequest>(

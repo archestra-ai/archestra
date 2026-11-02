@@ -1,0 +1,1 @@
+ALTER TABLE "interaction_billing" ADD COLUMN "entities" jsonb;

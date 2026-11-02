@@ -41,6 +41,7 @@ import { LOG_LEVEL } from "@/logging/log-level";
 // Import directly from files to avoid circular dependency through barrel export
 import AccountModel from "@/models/account";
 import AgentModel from "@/models/agent";
+import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import AuditLogModel from "@/models/audit-log";
 import InvitationModel from "@/models/invitation";
 import McpServerModel from "@/models/mcp-server";
@@ -194,6 +195,12 @@ export const auth = betterAuth({
       organizationHooks: {
         afterAddMember: recomposeOrganizationOf,
         afterAcceptInvitation: recomposeOrganizationOf,
+        // Once the row is gone, concurrent template saves cannot recreate its settings.
+        afterDeleteOrganization: async ({ organization }) => {
+          await AgentRuntimeTemplateModel.deleteForOrganization(
+            organization.id,
+          );
+        },
       },
       ac,
       dynamicAccessControl: {

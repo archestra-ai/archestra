@@ -27,7 +27,6 @@ for (const stream of [false, true]) {
         makeLlmProviderApiKey,
       }) => {
         config.llmProxy.modelPoolsEnabled = true;
-        config.llmProxy.usageAccountingMode = "enforce";
         const org = await makeOrganization();
         const agent = await makeAgent({
           organizationId: org.id,

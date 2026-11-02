@@ -62,6 +62,10 @@ export default function MyUsagePage() {
             statistics={statisticsQuery.data}
             breakdown={breakdownQuery.data}
             timeframe={timeframe}
+            isRefreshing={
+              statisticsQuery.isPlaceholderData ||
+              breakdownQuery.isPlaceholderData
+            }
           />
         )}
       </div>

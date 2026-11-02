@@ -1,6 +1,16 @@
 import { stripVTControlCharacters } from "node:util";
 import type { V1Pod } from "@kubernetes/client-node";
 import type { AgentRunFailureCode } from "@/services/agent-runtime/run-failure";
+import { AGENT_RUNTIME_TIER_ENV } from "@/services/agent-runtime/runtime-contract";
+import {
+  formatLimitGibibytes,
+  MEMORY_KILL_NEXT_STEP,
+  parseMemoryQuantity,
+} from "./memory-kill";
+import {
+  AGENT_RUNTIME_WORKSPACE_FULL_EXIT_CODE,
+  workspaceExitExplanation,
+} from "./workspace-exit";
 
 const TRUNCATED = "… (truncated)";
 
@@ -12,6 +22,9 @@ export function describeAgentRuntimePodFailure(
 ): string | null {
   if (pod?.status?.phase !== "Failed") return null;
 
+  // A container the kernel killed for memory is said first, in plain words:
+  // it is the most common pod failure and the one a reader can act on.
+  const explanations: string[] = [];
   const details: string[] = [];
   const reason = diagnosticText(pod.status.reason);
   const message = diagnosticText(pod.status.message);
@@ -34,11 +47,34 @@ export function describeAgentRuntimePodFailure(
 
       const exit = [`exit code ${terminated.exitCode}`];
       if (terminated.signal) exit.push(`signal ${terminated.signal}`);
+      // A memory kill names the limit it hit: the reader then knows the size
+      // the run had and can start one at a larger tier.
+      const memoryLimit =
+        terminated.reason === "OOMKilled"
+          ? containerMemoryLimit(pod, status.name)
+          : null;
+      if (memoryLimit) exit.push(`memory limit ${memoryLimit}`);
+      if (kind === "Container" && terminated.reason === "OOMKilled") {
+        explanations.push(
+          describeContainerMemoryKill({
+            pod,
+            container: diagnosticText(status.name),
+            exitCode: terminated.exitCode,
+            finishedAt: terminated.finishedAt,
+          }),
+        );
+      }
       details.push(
         `${kind} ${diagnosticText(status.name)}: ${diagnosticText(terminated.reason) || "Terminated"} (${exit.join(", ")})`,
       );
       const terminationMessage = diagnosticText(terminated.message);
       if (terminationMessage) details.push(terminationMessage);
+      // The runtime writes why its volume stopped the run to the termination
+      // message; this says the same when that write did not happen.
+      else if (kind === "Container") {
+        const workspace = workspaceExitExplanation(terminated.exitCode);
+        if (workspace) details.push(workspace);
+      }
     }
   }
 
@@ -67,6 +103,7 @@ export function describeAgentRuntimePodFailure(
   }
   const name = diagnosticText(pod.metadata?.name);
   const summary = [
+    ...explanations,
     "The Agent Runtime pod failed.",
     ...(name ? [`Pod: ${diagnosticText(namespace)}/${name}`] : []),
     ...details,
@@ -85,15 +122,93 @@ export function classifyAgentRuntimePodFailure(
       condition.type === "DisruptionTarget" && condition.status === "True",
   );
   if (pod.status?.reason === "Evicted" || disrupted) return "pod.evicted";
+  const containers = pod.status?.containerStatuses ?? [];
   const statuses = [
     ...(pod.status?.initContainerStatuses ?? []),
-    ...(pod.status?.containerStatuses ?? []),
+    ...containers,
   ];
   if (
     statuses.some((status) => status.state?.terminated?.reason === "OOMKilled")
   )
     return "pod.oom_killed";
+  // The runtime's startup trap sets this status when the volume was full.
+  if (
+    containers.some(
+      (status) =>
+        status.state?.terminated?.exitCode ===
+        AGENT_RUNTIME_WORKSPACE_FULL_EXIT_CODE,
+    )
+  )
+    return "pod.workspace_full";
   return "pod.failed";
+}
+
+/**
+ * The runtime tier a pod runs at, from its container's environment: a cold
+ * pod gets it with the run's variables, a warm pool's pod with its template.
+ * Null for a pod that does not say.
+ */
+export function agentRuntimePodTier(pod: V1Pod | null): string | null {
+  for (const container of pod?.spec?.containers ?? []) {
+    const tier = container.env?.find(
+      (variable) => variable.name === AGENT_RUNTIME_TIER_ENV,
+    )?.value;
+    if (tier) return diagnosticText(tier) || null;
+  }
+  return null;
+}
+
+/**
+ * A container the kernel killed for memory as a whole. On cgroup v2 the
+ * kubelet sets `memory.oom.group`, so the kernel kills every process in the
+ * container, PID 1 included, and the container exits: what it was running at
+ * the time is gone with it. The limit is named as "memory limit of 8 GiB":
+ * clients read the size the run had from it.
+ */
+function describeContainerMemoryKill(params: {
+  pod: V1Pod;
+  container: string;
+  exitCode: number;
+  finishedAt: Date | undefined;
+}): string {
+  const quantity = containerMemoryLimit(params.pod, params.container);
+  const bytes = parseMemoryQuantity(quantity ?? undefined);
+  const tier = agentRuntimePodTier(params.pod);
+  const at =
+    params.finishedAt && !Number.isNaN(new Date(params.finishedAt).getTime())
+      ? ` at ${new Date(params.finishedAt)
+          .toISOString()
+          .replace("T", " ")
+          .replace(/\.\d+Z$/, " UTC")}`
+      : "";
+  // A decimal quantity ("8G") is named as set, after its GiB.
+  const asSet = quantity && /\d[kMGT]$/.test(quantity) ? ` (${quantity})` : "";
+  const size =
+    bytes !== null
+      ? `It has a memory limit of ${formatLimitGibibytes(bytes)}${asSet}${tier ? ` at tier ${tier}` : ""}.`
+      : quantity
+        ? `It has a memory limit of ${quantity}${tier ? ` at tier ${tier}` : ""}.`
+        : tier
+          ? `It runs at tier ${tier}.`
+          : "";
+  return [
+    `The run ran out of memory. The kernel killed every process in the ${params.container} container (OOMKilled, exit code ${params.exitCode})${at}.`,
+    size,
+    MEMORY_KILL_NEXT_STEP,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function containerMemoryLimit(
+  pod: V1Pod,
+  containerName: string | undefined,
+): string | null {
+  const container = [
+    ...(pod.spec?.initContainers ?? []),
+    ...(pod.spec?.containers ?? []),
+  ].find((candidate) => candidate.name === containerName);
+  return diagnosticText(container?.resources?.limits?.memory) || null;
 }
 
 function diagnosticText(value: string | undefined): string {

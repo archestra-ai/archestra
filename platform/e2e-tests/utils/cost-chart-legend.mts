@@ -61,6 +61,11 @@ export const costStatistics = {
 export async function assertMobileCostLegend(page: Page) {
   const modelsCard = page.getByRole("region", { name: "Cost explorer" });
 
+  // Mobile starts in the table; explicitly opt into charts before checking the legend.
+  await modelsCard.getByRole("button", { name: "Chart options" }).click();
+  await page.getByRole("button", { name: "Stacked bars", exact: true }).click();
+  await page.keyboard.press("Escape");
+
   // The legend really is the wide one: its longest label is on screen.
   await expect(modelsCard.getByText(LONGEST_MODEL_NAME).first()).toBeVisible();
 

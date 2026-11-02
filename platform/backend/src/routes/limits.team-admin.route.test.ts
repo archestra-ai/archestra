@@ -196,4 +196,47 @@ describe("team admin Limits access", () => {
       (await app.inject({ method: "GET", url: "/api/limits" })).statusCode,
     ).toBe(403);
   });
+
+  test("team admins reset only the spend limits they set on their own team", async ({
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const team = await makeTeam(organizationId, user.id);
+    const other = await makeTeam(organizationId, user.id);
+    await makeTeamMember(team.id, user.id, { role: "admin" });
+    const reset = (id: string) =>
+      app.inject({ method: "POST", url: `/api/limits/${id}/reset` });
+    const orgSet = await LimitModel.create({
+      entityType: "team",
+      entityId: team.id,
+      limitType: "token_cost",
+      limitValue: 100,
+    });
+    const otherTeam = await LimitModel.create({
+      entityType: "team",
+      entityId: other.id,
+      limitType: "token_cost",
+      limitValue: 100,
+    });
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/limits",
+      payload: {
+        entityType: "team",
+        entityId: team.id,
+        limitType: "token_cost",
+        limitValue: 50,
+      },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+
+    expect((await reset(created.json().id)).statusCode).toBe(200);
+    expect((await reset(orgSet.id)).statusCode).toBe(403);
+    expect((await reset(otherTeam.id)).statusCode).toBe(404);
+    await db
+      .update(schema.teamMembersTable)
+      .set({ role: "member" })
+      .where(eq(schema.teamMembersTable.teamId, team.id));
+    expect((await reset(created.json().id)).statusCode).toBe(403);
+  });
 });

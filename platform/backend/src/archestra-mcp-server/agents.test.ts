@@ -602,7 +602,6 @@ describe("agent tool execution", () => {
         backend: "kubernetes",
         steerMode: "pipe",
         privileged: false,
-        resources: null,
         environment: null,
         credentials: null,
         ttlHours: null,
@@ -1194,6 +1193,50 @@ describe("agent runtime and model tools", () => {
     return model;
   }
 
+  test("MCP templates and runtime edits require Configure runtime while ordinary edits work", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const role = await makeCustomRole(organizationId, {
+      permission: { agent: ["read", "create"] },
+    });
+    await makeMember(user.id, organizationId, { role: role.role });
+    mockContext.userId = user.id;
+    const refused = await call(TOOL_CREATE_AGENT_SHORT_NAME, {
+      name: "Template worker",
+      runtime: { template: "codex" },
+    });
+    expect(refused.isError).toBe(true);
+    expect(JSON.stringify(refused)).toContain("Configure runtime permission");
+    const runtime = buildCustomAgentRuntime({
+      image: "example.test/worker:v1",
+    });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: user.id,
+      agentType: "agent",
+      runtime,
+    });
+    const edited = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+      id: agent.id,
+      name: "Renamed worker",
+    });
+    expect(edited.isError).not.toBe(true);
+    expect((await AgentModel.findById(agent.id))?.runtime).toEqual(runtime);
+    for (const next of [null, { image: "example.test/worker:v2" }]) {
+      const denied = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+        id: agent.id,
+        runtime: next,
+      });
+      expect(denied.isError).toBe(true);
+      expect(JSON.stringify(denied)).toContain("Configure runtime permission");
+    }
+    expect((await AgentModel.findById(agent.id))?.runtime).toEqual(runtime);
+  });
+
   test("create_agent builds a Claude Code agent the way the catalog card does", async () => {
     const result = await call(TOOL_CREATE_AGENT_SHORT_NAME, {
       name: "Claude Code",
@@ -1262,6 +1305,7 @@ describe("agent runtime and model tools", () => {
   test("create_agent refuses to read a saved credential the caller cannot use", async ({
     makeUser,
     makeMember,
+    makeCustomRole,
   }) => {
     const define = (key: string, initialGrants?: []) =>
       createRuntimeCredentialDefinition({
@@ -1283,7 +1327,12 @@ describe("agent runtime and model tools", () => {
     // Kept to admins: its value would reach every run of the new Agent.
     await define("restricted", []);
     const member = await makeUser();
-    await makeMember(member.id, organizationId, { role: "member" });
+    const runtimeRole = await makeCustomRole(organizationId, {
+      permission: { agent: ["configure-runtime"] },
+    });
+    await makeMember(member.id, organizationId, {
+      role: `member,${runtimeRole.role}`,
+    });
     mockContext = { ...mockContext, userId: member.id };
     const create = (credentialId: string) =>
       call(TOOL_CREATE_AGENT_SHORT_NAME, {
@@ -1521,6 +1570,78 @@ describe("agent runtime and model tools", () => {
       "Codex runtime requires an OpenAI",
     );
     expect((await AgentModel.findById(agent.id))?.runtime).toBeNull();
+  });
+
+  test("edit_agent moves the image of an agent whose key the caller cannot use", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeUser,
+  }) => {
+    const stranger = await makeUser();
+    const privateKey = await makeLlmProviderApiKey(
+      organizationId,
+      await secretId(),
+      { provider: "anthropic", userId: stranger.id },
+    );
+    const model = await linkModel({
+      keyId: privateKey.id,
+      provider: "anthropic",
+      modelId: "runtime-only-edit-test",
+    });
+    const agent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      authorId: mockContext.userId,
+      llmApiKeyId: privateKey.id,
+      modelId: model.id,
+      runtime: {
+        ...buildCustomAgentRuntime({ image: "example.test/agent:1" }),
+        inferenceProtocol: "anthropic",
+      },
+    });
+
+    // Only the runtime changes: the agent keeps its pair, and the new runtime
+    // is checked against that pair, as the agent's runs use it.
+    const moved = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+      id: agent.id,
+      runtime: {
+        image: "example.test/agent:2",
+        inferenceProtocol: "anthropic",
+      },
+    });
+    expect(moved.isError, JSON.stringify(moved.content)).toBe(false);
+    expect(await AgentModel.findById(agent.id)).toMatchObject({
+      llmApiKeyId: privateKey.id,
+      modelId: model.id,
+      runtime: { image: "example.test/agent:2" },
+    });
+
+    const incompatible = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+      id: agent.id,
+      runtime: { template: "codex" },
+    });
+    expect(incompatible.isError).toBe(true);
+    expect((incompatible.content[0] as any).text).toContain(
+      "Codex runtime requires an OpenAI",
+    );
+
+    // Naming the pair is choosing it, and the caller cannot use that key.
+    const reselected = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+      id: agent.id,
+      runtime: {
+        image: "example.test/agent:3",
+        inferenceProtocol: "anthropic",
+      },
+      llmApiKeyId: privateKey.id,
+      modelId: model.id,
+    });
+    expect(reselected.isError).toBe(true);
+    expect((reselected.content[0] as any).text).toContain(
+      "must be linked and available to you",
+    );
+    expect((await AgentModel.findById(agent.id))?.runtime).toMatchObject({
+      image: "example.test/agent:2",
+    });
   });
 
   test("get_agent returns the runtime and pinned model", async ({

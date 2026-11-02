@@ -33,19 +33,22 @@ export interface BrowserUserContext {
   organizationId: string;
 }
 
-interface AvailabilityResult {
+/** @public — the browser-stream feature's public methods return it, so its emitted declarations name it. */
+export interface AvailabilityResult {
   available: boolean;
   tools?: string[];
   error?: string;
 }
 
-interface NavigateResult {
+/** @public — the browser-stream feature's public methods return it, so its emitted declarations name it. */
+export interface NavigateResult {
   success: boolean;
   url?: string;
   error?: string;
 }
 
-interface ScreenshotResult {
+/** @public — the browser-stream feature's public methods return it, so its emitted declarations name it. */
+export interface ScreenshotResult {
   screenshot?: string;
   url?: string;
   error?: string;
@@ -53,7 +56,8 @@ interface ScreenshotResult {
   viewportHeight?: number;
 }
 
-interface TabResult {
+/** @public — the browser-stream feature's public methods return it, so its emitted declarations name it. */
+export interface TabResult {
   success: boolean;
   tabIndex?: number;
   tabs?: Array<{ index: number; title?: string; url?: string }>;
@@ -73,25 +77,29 @@ interface InputActionFrame {
   url: string;
 }
 
-interface ClickResult {
+/** @public — the browser-stream feature's public methods return it, so its emitted declarations name it. */
+export interface ClickResult {
   success: boolean;
   error?: string;
   frame?: InputActionFrame;
 }
 
-interface TypeResult {
+/** @public — the browser-stream feature's public methods return it, so its emitted declarations name it. */
+export interface TypeResult {
   success: boolean;
   error?: string;
   frame?: InputActionFrame;
 }
 
-interface ScrollResult {
+/** @public — the browser-stream feature's public methods return it, so its emitted declarations name it. */
+export interface ScrollResult {
   success: boolean;
   error?: string;
   frame?: InputActionFrame;
 }
 
-interface SnapshotResult {
+/** @public — the browser-stream feature's public methods return it, so its emitted declarations name it. */
+export interface SnapshotResult {
   snapshot?: string;
   error?: string;
 }

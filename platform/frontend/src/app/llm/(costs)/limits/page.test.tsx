@@ -26,6 +26,7 @@ const mockSetCostsAction = vi.fn();
 const mockUseLimits = vi.fn();
 const mockCreateLimit = vi.fn();
 const mockUpdateLimit = vi.fn();
+const mockResetLimitUsage = vi.fn();
 const mockUseAllVirtualApiKeys = vi.fn();
 const mockDataTableSearchParams = vi.fn(() => new URLSearchParams());
 const mockUpdateQueryParams = vi.fn();
@@ -61,6 +62,10 @@ vi.mock("@/lib/limits.query", () => ({
   useCreateLimit: () => ({ mutateAsync: mockCreateLimit }),
   useUpdateLimit: () => ({ mutateAsync: mockUpdateLimit }),
   useDeleteLimit: () => ({ mutateAsync: vi.fn() }),
+  useResetLimitUsage: () => ({
+    mutate: mockResetLimitUsage,
+    isPending: false,
+  }),
   useBulkDeleteLimits: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
@@ -256,7 +261,25 @@ vi.mock("@/components/ui/dialog", () => ({
 }));
 
 vi.mock("@/components/delete-confirm-dialog", () => ({
-  DeleteConfirmDialog: () => null,
+  DeleteConfirmDialog: ({
+    open,
+    title,
+    description,
+    confirmLabel,
+    onConfirm,
+  }: {
+    open: boolean;
+    title: string;
+    description: ReactNode;
+    confirmLabel?: string;
+    onConfirm: () => void;
+  }) =>
+    open ? (
+      <div role="dialog" aria-label={title}>
+        {description}
+        <input type="button" value={confirmLabel} onClick={onConfirm} />
+      </div>
+    ) : null,
 }));
 
 vi.mock("@/components/ui/progress", () => ({
@@ -1272,6 +1295,68 @@ describe("LimitsPage", () => {
     expect(
       screen.getByRole("combobox", { name: "Limit kind" }),
     ).toHaveTextContent("Tokens");
+  });
+
+  it("marks estimated spend and starts a spend limit over from Reset usage", async () => {
+    mockUseLimits.mockReturnValue({
+      data: [
+        {
+          ...limitRow({ id: "spend", limitValue: 1, cost: 5 }),
+          estimatedUsage: true,
+        },
+        {
+          ...limitRow({ id: "tokens", limitValue: 100000 }),
+          limitType: "tokens",
+          cleanupInterval: "minute",
+        },
+      ],
+      isPending: false,
+    });
+    render(<LimitsPage />);
+    const spend = screen.getByTestId("data-table-row-spend");
+    expect(spend).toHaveTextContent("Includes estimates");
+    // Token and per-minute limits recover on their own schedule.
+    expect(
+      within(screen.getByTestId("data-table-row-tokens")).queryByRole(
+        "button",
+        { name: /^Reset usage/ },
+      ),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(
+      within(spend).getByRole("button", {
+        name: "Reset usage Organization Spend",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Reset usage for Organization?",
+    });
+    expect(dialog).toHaveTextContent(
+      "Spend goes from $5.00 back to $0, so requests this limit blocks run again.",
+    );
+    expect(dialog).toHaveTextContent(
+      "The next automatic reset stays on schedule.",
+    );
+    // A failed reset leaves the dialog open to retry.
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Reset usage" }),
+    );
+    expect(mockResetLimitUsage).toHaveBeenCalledWith(
+      { id: "spend" },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+    expect(dialog).toBeInTheDocument();
+    mockResetLimitUsage.mockImplementation(
+      (_variables, options: { onSuccess: () => void }) => options.onSuccess(),
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Reset usage" }),
+    );
+    await vi.waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Reset usage for Organization?" }),
+      ).not.toBeInTheDocument(),
+    );
   });
 
   it("keeps direct Edit and Delete actions disabled without permissions", () => {

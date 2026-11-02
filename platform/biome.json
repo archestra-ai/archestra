@@ -163,7 +163,8 @@
                   "./__arena__": "design-arena: do not commit",
                   "@/app/_parts/__arena__": "design-arena: do not commit",
                   "@/lib/utils": "Import from the focused @/lib/utils module instead of the barrel, which eagerly loads date-fns and other unrelated code.",
-                  "@/lib/utils/index": "Import from the focused @/lib/utils module instead of the barrel, which eagerly loads date-fns and other unrelated code."
+                  "@/lib/utils/index": "Import from the focused @/lib/utils module instead of the barrel, which eagerly loads date-fns and other unrelated code.",
+                  "googleapis": "Import one API module, such as googleapis/build/src/apis/drive/v3.js, and auth classes from google-auth-library: the package root loads every Google API, about 100 MB in the server and 150 MB of declarations in each type check."
                 },
                 "patterns": [
                   {

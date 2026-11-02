@@ -11,6 +11,7 @@ export async function initializeObservabilityMetrics(params?: {
   const labelKeys = await AgentLabelModel.getAllKeys();
 
   metrics.llm.initializeMetrics(labelKeys);
+  metrics.llmProxy.initializeLlmProxyMetrics();
 
   if (includeMcpMetrics) {
     metrics.mcp.initializeMcpMetrics(labelKeys);
@@ -28,6 +29,7 @@ export async function initializeObservabilityMetrics(params?: {
   metrics.taskQueue.initializeTaskQueueMetrics();
   metrics.audit.initializeAuditMetrics();
   metrics.limit.initializeLimitMetrics();
+  metrics.openappa.initializeOpenappaMetrics();
   metrics.chat.initializeChatMetrics();
   metrics.agentRuntime.initializeAgentRuntimeMetrics();
   agentRuntimeHealthMetrics.initialize();

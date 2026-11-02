@@ -3,8 +3,10 @@ import { LRUCacheManager } from "@/cache-manager";
 import SecretModel from "@/models/secret";
 import type {
   ISecretManager,
+  SecretReadOptions,
   SecretsConnectivityResult,
   SecretValue,
+  SecretWriteOptions,
   SelectSecret,
 } from "@/types";
 
@@ -60,8 +62,15 @@ export class DbSecretsManager implements ISecretManager {
    */
   async getSecret(
     secid: string,
-    options?: { skipCache?: boolean },
+    options?: SecretReadOptions,
   ): Promise<SelectSecret | null> {
+    if (options?.transaction) {
+      // Transactional reads see the row as of their transaction and may lock
+      // it; they neither consult nor populate the shared cache.
+      return options.forUpdate
+        ? SecretModel.findByIdForUpdate(secid, options.transaction)
+        : SecretModel.findById(secid, options.transaction);
+    }
     if (!options?.skipCache) {
       const cachedSecret = this.secretsCache.get(secid);
       if (cachedSecret) {
@@ -91,12 +100,19 @@ export class DbSecretsManager implements ISecretManager {
   async updateSecret(
     secid: string,
     secretValue: SecretValue,
+    options?: SecretWriteOptions,
   ): Promise<SelectSecret | null> {
-    const secret = await SecretModel.update(secid, { secret: secretValue });
+    const secret = await SecretModel.update(
+      secid,
+      { secret: secretValue },
+      options?.transaction,
+    );
     this.pendingReads.delete(secid);
-    if (secret) {
+    if (secret && !options?.transaction) {
       this.secretsCache.set(secid, secret);
     } else {
+      // Inside a transaction the row is not committed yet: drop the entry
+      // rather than cache a value that may roll back.
       this.secretsCache.delete(secid);
     }
     return secret;

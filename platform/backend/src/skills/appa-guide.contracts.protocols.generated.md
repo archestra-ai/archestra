@@ -126,7 +126,7 @@ Each entry in `requirements` uses one of these forms:
 |---|---|
 | Trust | `{"kind":"trust","required":"trusted"}` |
 | Public audience | `{"kind":"audience","required":"public"}` |
-| Restricted audience | `{"kind":"audience","required":2}`; the number is the required reader count. |
+| Restricted audience | `{"kind":"audience","required":["internal","@finance","alice@corp.com"]}`; the array lists the audience entries that `contains` requires, in this order: the built-in audience, `@` references, then literal reader IDs. Only the entries after the `@` references are reader IDs. Each entry uses the spelling from the policy, the tool call arguments, or the annotation answer. OpenAPPA does not expand a group to its members. |
 | Effect exclusion | `{"kind":"effect","excludes":"email.sent"}` |
 | Attention | `{"kind":"attention","mark":"finance-signoff"}` |
 
@@ -162,7 +162,7 @@ A consult request is a JSON request that OpenAPPA sends to an external component
   "artifact": {
     "tool": "send_email",
     "arguments": { "recipient": "auditor@external.com", "body": "Ticket summary" },
-    "requirements": [{ "kind": "audience", "required": 1 }]
+    "requirements": [{ "kind": "audience", "required": ["auditor@external.com"] }]
   }
 }
 ```

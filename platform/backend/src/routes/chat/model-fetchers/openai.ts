@@ -1,14 +1,19 @@
 import { randomUUID } from "node:crypto";
-import { ArchestraInternalErrorCode } from "@archestra/shared";
+import {
+  ArchestraInternalErrorCode,
+  type ModelInputModality,
+  type ModelOutputModality,
+} from "@archestra/shared";
 import { z } from "zod";
 import config from "@/config";
 import { decodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { createOpenAiCodexFetch } from "@/services/openai-codex-token";
 import { ApiError, type OpenAi } from "@/types";
 import { joinBaseUrl } from "@/utils/base-url";
-import { fetchLiteLlmPricing } from "./litellm";
+import { fetchLiteLlmMetadata, readOutputTokenLimit } from "./litellm";
 import { fetchModelsWithBearerAuth } from "./openai-compatible";
 import {
+  type FetchedModelCapabilities,
   type ModelFetchOptions,
   type ModelInfo,
   modelFetchError,
@@ -30,7 +35,9 @@ const CodexModelsResponseSchema = z.object({
 });
 
 export function mapOpenAiModelToModelInfo(
-  model: OpenAi.Types.Model | OpenAi.Types.OrlandoModel,
+  model: (OpenAi.Types.Model | OpenAi.Types.OrlandoModel) & {
+    max_output_tokens?: unknown;
+  },
 ): ModelInfo {
   let provider: ModelInfo["provider"] = "openai";
 
@@ -41,6 +48,7 @@ export function mapOpenAiModelToModelInfo(
       provider = "gemini";
     }
   }
+  const outputLength = readOutputTokenLimit(model.max_output_tokens);
 
   return {
     id: model.id,
@@ -50,14 +58,21 @@ export function mapOpenAiModelToModelInfo(
       "created" in model
         ? new Date(model.created * 1000).toISOString()
         : undefined,
+    ...(outputLength !== undefined ? { capabilities: { outputLength } } : {}),
   };
 }
 
 // babbage/davinci are OpenAI's legacy completions-only base models: they 404 on
-// /chat/completions ("not a chat model"). They, and the other non-chat families,
-// are dropped so they never enter the selectable chat catalog.
+// /chat/completions ("not a chat model"). They, and the other non-chat families
+// that no governed endpoint serves, are dropped from sync: live voice models
+// speak only the Realtime transcription API, moderation models only
+// /moderations. Image, speech, transcription and realtime models are kept as
+// media models (openAiMediaCapabilities).
 const NON_CHAT_MODEL_ID_PATTERNS = [
   "instruct",
+  "realtime",
+  "gpt-live",
+  "moderation",
   "tts",
   "whisper",
   "image",
@@ -68,7 +83,7 @@ const NON_CHAT_MODEL_ID_PATTERNS = [
   "davinci",
 ];
 
-/** @public — exported for unit tests; the chat-catalog filter fetchOpenAiModels applies. */
+/** The chat-catalog name filter; the OpenAI proxy `/models` listing applies it too. */
 export function isChatModelId(id: string): boolean {
   const lower = id.toLowerCase();
   return !NON_CHAT_MODEL_ID_PATTERNS.some((pattern) => lower.includes(pattern));
@@ -119,7 +134,9 @@ export async function fetchOpenAiModels(
 
   const baseUrl = baseUrlOverride || config.llm.openai.baseUrl;
   const data = await fetchModelsWithBearerAuth<{
-    data: (OpenAi.Types.Model | OpenAi.Types.OrlandoModel)[];
+    data: ((OpenAi.Types.Model | OpenAi.Types.OrlandoModel) & {
+      max_output_tokens?: unknown;
+    })[];
   }>({
     url: joinBaseUrl(baseUrl, "/models"),
     apiKey,
@@ -127,13 +144,104 @@ export async function fetchOpenAiModels(
     extraHeaders,
   });
 
-  const pricing = await fetchLiteLlmPricing({ baseUrl, apiKey, extraHeaders });
-  return data.data
-    .filter((model) => isChatModelId(model.id))
-    .map((model) => ({
-      ...mapOpenAiModelToModelInfo(model),
-      ...(pricing.has(model.id)
-        ? { providerPricing: pricing.get(model.id) }
-        : {}),
-    }));
+  const { prices, outputLimits } = await fetchLiteLlmMetadata({
+    baseUrl,
+    apiKey,
+    extraHeaders,
+  });
+  return data.data.flatMap((model) => {
+    // Classification wins over the chat-name filter: transcription ids pass
+    // it, audio chat ids fail it.
+    const classified =
+      openAiMediaCapabilities(model.id) ??
+      openAiAudioChatCapabilities(model.id);
+    if (!classified && !isChatModelId(model.id)) {
+      return [];
+    }
+    const mapped = mapOpenAiModelToModelInfo(model);
+    const limits = [
+      mapped.capabilities?.outputLength,
+      outputLimits.get(model.id),
+    ].filter((limit): limit is number => typeof limit === "number");
+    const capabilities: FetchedModelCapabilities = {
+      ...(classified ?? openAiSearchCapabilities(model.id)),
+      ...(limits.length ? { outputLength: Math.min(...limits) } : {}),
+    };
+    return [
+      {
+        ...mapped,
+        ...(Object.keys(capabilities).length ? { capabilities } : {}),
+        ...(prices.has(model.id)
+          ? { providerPricing: prices.get(model.id) }
+          : {}),
+      },
+    ];
+  });
+}
+
+/**
+ * Media models the governed image and audio endpoints serve. Sync keeps them
+ * with their real modalities so the Model Router can resolve them, while a
+ * non-text output (or audio-only input) keeps them out of chat pickers
+ * (`ModelModel.supportsTextChat`).
+ */
+function openAiMediaCapabilities(id: string): FetchedModelCapabilities | null {
+  const lower = id.toLowerCase();
+  if (/^(gpt-image-|chatgpt-image-|dall-e-)/.test(lower)) {
+    return mediaCapabilities(["text"], ["image"]);
+  }
+  // The generation segment is optional: OpenAI also ships bare `gpt-transcribe`.
+  if (/^(tts-|gpt-(?:[\w.-]+-)?tts(?:-|$))/.test(lower)) {
+    return mediaCapabilities(["text"], ["audio"]);
+  }
+  if (/^(whisper-|gpt-(?:[\w.-]+-)?transcribe(?:-|$))/.test(lower)) {
+    return mediaCapabilities(["audio"], ["text"]);
+  }
+  // Realtime models speak only the Realtime API, which the Model Router
+  // serves over WebSocket; their audio output keeps them out of chat.
+  if (/^gpt-realtime(?:-|$)/.test(lower)) {
+    return mediaCapabilities(["text", "audio"], ["audio"]);
+  }
+  return null;
+}
+
+/**
+ * Audio chat models (`gpt-audio`, `gpt-audio-mini` and the `*-audio-preview`
+ * snapshots) answer `/chat/completions` with text, or with speech when the
+ * request asks for the audio modality, and call tools like any chat model.
+ * Both modalities are recorded so chat pickers and the Model Router keep them.
+ */
+function openAiAudioChatCapabilities(
+  id: string,
+): FetchedModelCapabilities | null {
+  return /^gpt-audio(?:-|$)|audio-preview/.test(id.toLowerCase())
+    ? {
+        inputModalities: ["text", "audio"],
+        outputModalities: ["text", "audio"],
+        supportsToolCalling: true,
+        authoritative: true,
+      }
+    : null;
+}
+
+/**
+ * Search models answer chat turns but reject function tools ("tools is not
+ * supported in this model"), so chat sends them none.
+ */
+function openAiSearchCapabilities(id: string): FetchedModelCapabilities | null {
+  return /-search-(?:preview|api)(?:-|$)/i.test(id)
+    ? { supportsToolCalling: false, authoritative: true }
+    : null;
+}
+
+function mediaCapabilities(
+  inputModalities: ModelInputModality[],
+  outputModalities: ModelOutputModality[],
+): FetchedModelCapabilities {
+  return {
+    inputModalities,
+    outputModalities,
+    supportsToolCalling: false,
+    authoritative: true,
+  };
 }

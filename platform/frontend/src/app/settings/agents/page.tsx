@@ -5,17 +5,12 @@ import {
   getDocsUrl,
   MESSAGING_CHANNEL_LABELS,
   type MessagingChannelId,
-  PopularAgentIdSchema,
   providerSupportsChat,
 } from "@archestra/shared";
 import { AlertTriangle, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { siKubernetes } from "simple-icons";
-import {
-  AGENT_CATALOG_TEMPLATE_NAMES,
-  CatalogAgentIcon,
-} from "@/components/agent-pages/agent-catalog";
 import { AgentRuntimeUnavailableNotice } from "@/components/agent-runtime-unavailable-notice";
 import { AgentSelector } from "@/components/agent-selector";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
@@ -31,6 +26,7 @@ import {
 import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { IntegrationAvailabilitySection } from "@/components/settings/integration-availability-section";
+import { RuntimeTemplateSection } from "@/components/settings/runtime-template-section";
 import {
   SettingsBlock,
   SettingsSaveBar,
@@ -58,6 +54,7 @@ import {
   useUpdateSecuritySettings,
 } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
+import { RuntimeTiersBlock } from "./_parts/runtime-tiers-block";
 import {
   type AgentSettingsState,
   buildSavePayload,
@@ -166,8 +163,10 @@ export default function AgentSettingsPage() {
     if (!apiKeys) return;
 
     if (changes.hasChanges) {
-      const payload = buildSavePayload(localState, savedStateRef.current);
-      await updateAgentMutation.mutateAsync(payload);
+      const saved = await updateAgentMutation.mutateAsync(
+        buildSavePayload(localState, savedStateRef.current),
+      );
+      if (!saved) return;
       savedStateRef.current = { ...localState };
     }
 
@@ -276,7 +275,6 @@ export default function AgentSettingsPage() {
                     onSelectKey={(value) => {
                       setSelectedApiKeyId(value);
                       setDefaultModel("");
-                      setTiers(EMPTY_MODEL_TIERS);
                       setApiKeySelectorOpen(false);
                     }}
                     triggerVariant="select"
@@ -306,8 +304,6 @@ export default function AgentSettingsPage() {
                   />
                   {selectedApiKey && defaultModel && (
                     <ModelTierPickers
-                      apiKeyId={selectedApiKey.id}
-                      provider={selectedApiKey.provider}
                       value={tiers}
                       onChange={setTiers}
                       disabled={isSaving || !hasPermission}
@@ -481,27 +477,13 @@ export default function AgentSettingsPage() {
         <div
           className={cn("space-y-6", runtimeEnabled !== true && "opacity-50")}
         >
-          <IntegrationAvailabilitySection
-            disabled={runtimeEnabled !== true}
-            id="popular-agents"
-            catalogKey="popularAgentOverrides"
-            catalog={PopularAgentIdSchema.options}
-            title="Agent Runtimes"
-            description="Choose which Agent Runtimes are available when creating a new agent, and in what order."
-            options={PopularAgentIdSchema.options.map((id) => ({
-              value: id,
-              label: AGENT_CATALOG_TEMPLATE_NAMES[id],
-              icon: (
-                <span className="flex size-3.5 shrink-0 items-center justify-center">
-                  <CatalogAgentIcon id={id} size={14} />
-                </span>
-              ),
-            }))}
-            placeholder="Select Agent Runtimes…"
-            emptyMessage="No agents found."
-            savedMessage="Agent Runtimes updated"
-          />
+          <RuntimeTemplateSection disabled={runtimeEnabled !== true} />
           {runtimeBackend && <RuntimeBackendSection />}
+          {runtimeBackend && (
+            <RuntimeTiersBlock
+              canEdit={isGlobalAdmin && runtimeEnabled === true}
+            />
+          )}
         </div>
       </section>
     </SettingsSectionStack>

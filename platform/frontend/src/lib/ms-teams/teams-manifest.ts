@@ -18,8 +18,8 @@ export function buildTeamsManifest(params: {
   const conversationScopes = ["team", "groupChat", "personal"];
   return {
     $schema:
-      "https://developer.microsoft.com/json-schemas/teams/v1.23/MicrosoftTeams.schema.json",
-    manifestVersion: "1.23",
+      "https://developer.microsoft.com/json-schemas/teams/v1.30/MicrosoftTeams.schema.json",
+    manifestVersion: "1.30",
     version: version || "1.0.0",
     id: botAppId || "{{BOT_MS_APP_ID}}",
     developer: {
@@ -35,6 +35,7 @@ export function buildTeamsManifest(params: {
     },
     icons: { outline: "outline.png", color: "color.png" },
     accentColor: "#FFFFFF",
+    supportsChannelFeatures: "tier1",
     bots: [
       {
         botId: botAppId || "{{BOT_MS_APP_ID}}",
@@ -47,20 +48,25 @@ export function buildTeamsManifest(params: {
         commandLists: [
           {
             scopes: conversationScopes,
-            // Teams clients insert the description when a menu item is selected.
-            // Keep it executable without requiring newer prompt-starter schemas.
+            // Keep menu descriptions readable while inserting executable commands.
             commands: [
               {
                 title: "/select-agent",
-                description: "/select-agent",
+                description: "Change which agent handles this conversation",
+                type: "prompt",
+                prompt: "/select-agent",
               },
               {
                 title: "/status",
-                description: "/status",
+                description: "Show current agent for this conversation",
+                type: "prompt",
+                prompt: "/status",
               },
               {
                 title: "/help",
-                description: "/help",
+                description: "Show available commands",
+                type: "prompt",
+                prompt: "/help",
               },
             ],
           },

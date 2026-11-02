@@ -24,8 +24,13 @@
  * When the kernel kills the compiler for memory anyway, the shell would only
  * say "Killed". The cgroup's counters, read before and after, say it was
  * memory, and the runner prints the limit, the peak and what to change.
+ *
+ * A package whose tsconfig.json is a solution (no files of its own, only
+ * project references) is checked one project at a time instead
+ * (type-check-solution.ts), with the same sizing.
  */
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { constants, tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -35,11 +40,29 @@ import {
   typeScriptCheckers,
   typeScriptMemorySettings,
 } from "../vitest.resources.ts";
+import {
+  solutionBuildOrder,
+  typeCheckSolution,
+} from "./type-check-solution.ts";
 
 const args = process.argv.slice(2);
 const envelope = detectResourceEnvelope();
 const sized = typeScriptCheckers(envelope);
 const memory = typeScriptMemorySettings(envelope);
+const solution = checkedSolution();
+if (solution) {
+  process.exit(
+    typeCheckSolution({
+      projects: solution.projects,
+      solutionDir: path.dirname(solution.config),
+      // Source projects must write their declarations.
+      args: argsWithout(["--noEmit"], ["--project", "-p"]),
+      checkers: sized,
+      limitGoMemory: memory !== null,
+      takeTurns: sized !== null,
+    }),
+  );
+}
 const tscArgs = [...args];
 if (sized !== null && !chosen("--checkers", "--singleThreaded")) {
   tscArgs.push("--checkers", String(sized));
@@ -95,6 +118,45 @@ if (status === 128 + constants.signals.SIGKILL) {
 process.exit(status);
 
 // ===== Internal helpers =====
+
+/** The checked config, `--project`/`-p` or tsconfig.json, with its projects when it is a solution. */
+function checkedSolution(): {
+  config: string;
+  projects: NonNullable<ReturnType<typeof solutionBuildOrder>>;
+} | null {
+  let config = "tsconfig.json";
+  for (const [index, arg] of args.entries()) {
+    const lower = arg.toLowerCase();
+    if (lower.startsWith("--project=")) config = arg.slice("--project=".length);
+    else if (lower === "--project" || lower === "-p")
+      config = args[index + 1] ?? config;
+  }
+  config = path.resolve(config);
+  if (!config.endsWith(".json")) config = path.join(config, "tsconfig.json");
+  if (!existsSync(config)) return null;
+  const projects = solutionBuildOrder(config);
+  return projects ? { config, projects } : null;
+}
+
+/** The caller's args without these flags and these options with their values. */
+function argsWithout(flags: string[], options: string[]): string[] {
+  const kept: string[] = [];
+  for (let index = 0; index < args.length; index++) {
+    const lower = args[index].toLowerCase();
+    if (flags.some((flag) => lower === flag.toLowerCase())) continue;
+    const option = options.find(
+      (name) =>
+        lower === name.toLowerCase() ||
+        lower.startsWith(`${name.toLowerCase()}=`),
+    );
+    if (option) {
+      if (!lower.includes("=")) index++;
+      continue;
+    }
+    kept.push(args[index]);
+  }
+  return kept;
+}
 
 /**
  * Whether the caller passed one of these options, bare or as `--name=value`.

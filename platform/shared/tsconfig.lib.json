@@ -1,0 +1,18 @@
+{
+  // The shared package as a referenced project: the backend's projects read
+  // its declarations instead of compiling its sources. The package's own
+  // check stays `tsconfig.json`.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declarationMap": true,
+    "rootDir": ".",
+    "outDir": "./.tsbuild/lib",
+    "tsBuildInfoFile": "./.tsbuild/lib.tsbuildinfo"
+  },
+  // The JSON modules the package imports must be in the project too.
+  "include": ["**/*.ts", "agent-catalog-images.json", "themes/tweakcn-themes.json"],
+  "exclude": ["node_modules", "dist", ".tsbuild", "**/*.test.ts", "vitest.config.ts", "knip.config.ts"]
+}

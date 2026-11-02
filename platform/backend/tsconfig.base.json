@@ -1,0 +1,28 @@
+{
+  // Options every backend TypeScript project shares (tsconfig.json lists the
+  // projects). Runtime tools (tsx, tsdown, Vitest, knip) read the `paths`
+  // alias through tsconfig.json, which extends this file.
+  "compilerOptions": {
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolvePackageJsonExports": true,
+    "esModuleInterop": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "ES2023",
+    "noEmit": true,
+    "incremental": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    "strict": true,
+    "types": ["node"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@drizzle-migration-linter": ["../tools/drizzle-migration-linter/src/index.ts"]
+    }
+  }
+}

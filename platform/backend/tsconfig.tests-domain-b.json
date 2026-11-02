@@ -1,0 +1,16 @@
+{
+  // Tests of the Archestra MCP server and the agents.
+  "extends": "./tsconfig.test-project.json",
+  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-domain-b.tsbuildinfo" },
+  "include": [
+    "src/ambient/*.d.ts",
+    "src/archestra-mcp-server/**/*.test.ts",
+    "src/agents/**/*.test.ts"
+  ],
+  "references": [
+    { "path": "../shared/tsconfig.lib.json" },
+    { "path": "./tsconfig.schema.json" },
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.test-support.json" }
+  ]
+}

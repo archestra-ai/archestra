@@ -83,6 +83,8 @@ docker/prev-static-assets/*
 !docker/prev-static-assets/.gitkeep
 
 tsconfig.tsbuildinfo
+# Declarations and build state of TypeScript project builds (backend/tsconfig.json)
+.tsbuild/
 benchmark-config.env
 archestra-rs/sandbox-rs/index.js
 archestra-rs/app-runtime-rs/index.js

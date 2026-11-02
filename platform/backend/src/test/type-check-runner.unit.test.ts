@@ -125,15 +125,150 @@ describe("type-check runner", () => {
     return { log, env };
   }
 
+  /** The runner in the fake compiler's directory, which has no tsconfig.json: one program. */
   function runRunner(
     env: NodeJS.ProcessEnv,
     args: string[],
   ): Promise<number | null> {
     return new Promise((resolve) =>
-      spawn(TSX, [RUNNER, ...args], { env, stdio: "ignore" }).on(
-        "exit",
-        resolve,
+      spawn(TSX, [RUNNER, ...args], {
+        env,
+        cwd: dir,
+        stdio: "ignore",
+      }).on("exit", resolve),
+    );
+  }
+});
+
+describe("type-check runner on a solution", () => {
+  let dir: string | undefined;
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+    dir = undefined;
+  });
+
+  test("builds each project in a compiler of its own, references first, sized for a small pod", async () => {
+    const { log, env, scratch } = fakeBuildCompiler();
+    writeSolution(scratch, {
+      // A tsconfig may hold comments and trailing commas.
+      "tsconfig.json": `{
+        // b and c both reference a.
+        "files": [],
+        "references": [{ "path": "./b.json" }, { "path": "./c.json" },],
+      }`,
+      "a.json": "{}",
+      "b.json": '{ "references": [{ "path": "./a.json" }] }',
+      "c.json": '{ "references": [{ "path": "./a.json" }] }',
+    });
+
+    const { status } = await runIn(scratch, env, ["--noEmit"]);
+
+    expect(status).toBe(0);
+    expect(starts(log)).toEqual(
+      ["a.json", "b.json", "c.json"].map(
+        (project) =>
+          `GOMEMLIMIT=1342177280 -b ${path.join(scratch, project)} --checkers 1 --builders 1`,
       ),
     );
+  }, 30_000);
+
+  test("does not build the projects above a failed one, and builds the others", async () => {
+    const { log, env, scratch } = fakeBuildCompiler();
+    env.FAKE_TSC_FAIL = "a.json";
+    writeSolution(scratch, {
+      "tsconfig.json":
+        '{ "files": [], "references": [{ "path": "./a.json" }, { "path": "./b.json" }, { "path": "./c.json" }] }',
+      "a.json": "{}",
+      "b.json": '{ "references": [{ "path": "./a.json" }] }',
+      "c.json": "{}",
+    });
+
+    const { status, stderr } = await runIn(scratch, env, ["--noEmit"]);
+
+    expect(status).toBe(2);
+    expect(
+      starts(log).map((line) => path.basename(line.split(" ")[2])),
+    ).toEqual(["a.json", "c.json"]);
+    expect(stderr).toContain("a.json failed (exit 2)");
+    expect(stderr).toContain(
+      "not checked, because a project they reference failed: b.json",
+    );
+  }, 30_000);
+
+  test("refuses project references that form a cycle", async () => {
+    const { log, env, scratch } = fakeBuildCompiler();
+    writeSolution(scratch, {
+      "tsconfig.json":
+        '{ "files": [], "references": [{ "path": "./a.json" }] }',
+      "a.json": '{ "references": [{ "path": "./b.json" }] }',
+      "b.json": '{ "references": [{ "path": "./a.json" }] }',
+    });
+
+    const { status, stderr } = await runIn(scratch, env, ["--noEmit"]);
+
+    expect(status).not.toBe(0);
+    expect(stderr).toContain("cycle: a.json -> b.json -> a.json");
+    expect(starts(log)).toEqual([]);
+  }, 30_000);
+
+  // ===== Helpers =====
+
+  /** A fake tsc that logs its starts and fails for the project named in FAKE_TSC_FAIL. */
+  function fakeBuildCompiler(): {
+    log: string;
+    env: NodeJS.ProcessEnv;
+    scratch: string;
+  } {
+    const scratch = mkdtempSync(path.join(tmpdir(), "type-check-solution-"));
+    dir = scratch;
+    const log = path.join(scratch, "log");
+    writeFileSync(log, "");
+    writeFileSync(
+      path.join(scratch, "tsc"),
+      `#!/bin/sh\necho "start GOMEMLIMIT=$GOMEMLIMIT $*" >> "${log}"\ncase "$*" in *"/$FAKE_TSC_FAIL "*) exit 2;; esac\n`,
+    );
+    chmodSync(path.join(scratch, "tsc"), 0o755);
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      PATH: `${scratch}:${process.env.PATH}`,
+      TMPDIR: scratch,
+      FAKE_TSC_FAIL: "none",
+      ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "2",
+      ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "8Gi",
+    };
+    delete env.GOMEMLIMIT;
+    return { log, env, scratch };
+  }
+
+  function writeSolution(scratch: string, files: Record<string, string>) {
+    for (const [name, text] of Object.entries(files)) {
+      writeFileSync(path.join(scratch, name), text);
+    }
+  }
+
+  function starts(log: string): string[] {
+    return readFileSync(log, "utf8")
+      .split("\n")
+      .filter((line) => line.startsWith("start "))
+      .map((line) => line.slice("start ".length));
+  }
+
+  function runIn(
+    cwd: string,
+    env: NodeJS.ProcessEnv,
+    args: string[],
+  ): Promise<{ status: number | null; stderr: string }> {
+    return new Promise((resolve) => {
+      let stderr = "";
+      const child = spawn(TSX, [RUNNER, ...args], {
+        env,
+        cwd,
+        stdio: ["ignore", "ignore", "pipe"],
+      });
+      child.stderr.on("data", (chunk) => {
+        stderr += chunk;
+      });
+      child.on("exit", (status) => resolve({ status, stderr }));
+    });
   }
 });

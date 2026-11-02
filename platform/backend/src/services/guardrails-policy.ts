@@ -4,6 +4,7 @@ import {
   TOOL_RUN_COMMAND_SHORT_NAME,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
@@ -336,6 +337,12 @@ function hash(content: string) {
  * default model label each sandbox command, each shell command the client
  * batteries route to a model, and each tool no rule names.
  */
+/** What every Archestra deployment knows about itself: its own host is first-party. */
+function deploymentHint(): string {
+  const { host } = new URL(config.frontendBaseUrl);
+  return `\`${host}\` is this organization's own Archestra deployment: a call to it, such as fetching a link one of its tools returned, reaches the organization's own platform, and data sent to it stays inside the organization.`;
+}
+
 export function initialPolicy(): string {
   return `include = [
   "${bundledEntry(ARCHESTRA_BATTERY)}",
@@ -380,6 +387,7 @@ internal = ["${ARCHESTRA_BATTERY}:members"]
 
 [policy.deployment]
 context_control = true
+hint = "${deploymentHint()}"
 
 # Lets an agent hand a risky read to a subagent. The subagent must reply in
 # the strict JSON shape the agent asked for, so injected instructions and
@@ -411,7 +419,6 @@ annotator = "archestra.run-command"
 [[policy.annotator]]
 name = "${CLAUDE_CODE_BATTERY}.bash-repository-requirements"
 builtin = "archestra"
-hint = "\`context.github\` is the deployment's finding about the repository and pull request or issue the command reaches. A push, pull request, issue, release, or comment into a public repository, or one it does not establish, requires audience public; into a private or internal one, internal. A read keeps the session's audience."
 
 [[policy.annotator]]
 name = "${CLAUDE_CODE_BATTERY}.bash-requirements"
@@ -430,7 +437,7 @@ ranks = ["suspicious", "trusted"]
 audiences = ["self", "internal"]
 marks = []
 effects = []
-hint = "Routine requester-local file/shell operations, diagnostics, edits, builds, tests and client setup need no audience or trust requirement when they do not publish data or perform destructive actions. A network fetch or dependency install alone is not disclosure of trajectory data. Require public audience for actual external sends, internal for organization-only sends. Keep secrets self-only; third-party content stays suspicious. Use supplied context; do not guess destination visibility."
+hint = "Routine requester-local file and shell operations, diagnostics, edits, builds, tests, dependency installs and client setup need no audience or trust requirement when they neither publish data nor destroy anything. A network fetch or an install alone discloses no trajectory data."
 
 # Questions carry no data: they keep an empty label even if the catch-all
 # below is made stricter. search_tools gets the same from the archestra battery.

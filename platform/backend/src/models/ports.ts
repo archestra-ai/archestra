@@ -4,6 +4,8 @@
  * port is one narrow interface; `server/composition.ts` binds every port to
  * its implementation with the same lazy `import()` the models used to make,
  * and the compiler checks there that each implementation still fits its port.
+ * Port members are function-typed properties, not methods, so that check is
+ * strict: the implementation must accept every argument the port allows.
  *
  * Every entry point binds the ports and calls `assertPortsBound()` before it
  * does anything else, so a missed entry point fails when it starts, not on the
@@ -13,34 +15,34 @@ import type { CommonMcpToolDefinition, InternalMcpCatalog } from "@/types";
 
 /** Tears down an MCP server's Kubernetes deployment (k8s/mcp-server-runtime). */
 export interface McpServerRuntimePort {
-  removeMcpServer(
+  removeMcpServer: (
     mcpServerId: string,
     options?: { strictCleanup?: boolean; requirePlaywrightDisabled?: boolean },
-  ): Promise<void>;
+  ) => Promise<void>;
 }
 
 /** Connects to an installed MCP server and lists its tools (clients/mcp-client). */
 export interface McpToolDiscoveryPort {
-  connectAndGetTools(params: {
+  connectAndGetTools: (params: {
     catalogItem: InternalMcpCatalog;
     mcpServerId: string;
     secrets: Record<string, unknown>;
     secretId?: string;
-  }): Promise<CommonMcpToolDefinition[]>;
+  }) => Promise<CommonMcpToolDefinition[]>;
 }
 
 /** Whether an agent's skills can run in the sandbox for a user (skills/skill-sandbox-availability). */
 export interface SkillSandboxAvailabilityPort {
-  isSkillSandboxAvailableForAgent(params: {
+  isSkillSandboxAvailableForAgent: (params: {
     userId: string | undefined;
     organizationId: string;
     agentId: string | undefined;
-  }): Promise<boolean>;
+  }) => Promise<boolean>;
 }
 
 /** The Archestra MCP server's built-in tools, as the tool rows record them (archestra-mcp-server). */
 export interface ArchestraToolCatalogPort {
-  getArchestraMcpTools(): ReadonlyArray<{
+  getArchestraMcpTools: () => ReadonlyArray<{
     name: string;
     description?: string;
     inputSchema: Record<string, unknown>;

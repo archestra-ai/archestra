@@ -1,11 +1,11 @@
 ---
 title: ChatGPT
-description: Download a ChatGPT plugin with your gateway and portable skills
+description: Bring your gateway and skills into ChatGPT, and check the desktop app's tool calls with Guardrails
 order: 4
-lastUpdated: 2026-10-30
+lastUpdated: 2026-11-01
 ---
 
-Download one plugin from Archestra to bring your gateway's MCP tools and portable skills into ChatGPT.
+Download one plugin from Archestra to bring your gateway's MCP tools and portable skills into ChatGPT. On your computer, the desktop app's Work and Codex tabs can also send their model requests through Archestra, so [Guardrails](/docs/agents/guardrails) check each tool call they make.
 
 ## Install the Plugin
 
@@ -24,10 +24,19 @@ The endpoint is inferred from your deployment, like other clients. Administrator
 
 The archive is a snapshot of readable standalone skills. Templated and agent-bound skills require Archestra activation and are omitted with a notice. Re-download and upload a new archive after changing skills. Removing the uploaded plugin removes its bundled skills; remove its connection from any dot that uses it too.
 
-## Local Work Inference
+<a id="local-work-inference"></a>
 
-A plugin archive configures tools and skills, not model inference. Local ChatGPT Work can use native model-provider configuration in the desktop app. See OpenAI's [local Work provider support](https://learn.chatgpt.com/docs/amazon-bedrock) and [managed gateway setup](https://learn.chatgpt.com/docs/enterprise/connect-to-a-gateway).
+## Use Guardrails in the Desktop App
 
-That local configuration does not apply to hosted ChatGPT or dots. Model routing and uploaded-plugin use together still require a native-app test with your deployment. The Codex installer is separate: it also changes Codex's MCP, skills, and authentication settings, so do not run it solely to configure Work.
+The desktop app's Work and Codex tabs run on your computer and read the Codex settings there. Route them through the [LLM Proxy](/docs/llm-proxy), and Guardrails check every tool call, such as a shell command in a Work task.
+
+1. On **Connect**, select **ChatGPT**. Keep **LLM proxy** on under **Choose what to include**.
+2. Under **Set up the desktop app**, click **Copy** and run the command in a terminal on the computer with the desktop app. The command runs the Codex setup, so the approval page names Codex.
+3. Approve the connection, then sign in to the gateway when the installer asks.
+4. Restart ChatGPT and start a Work task. In the [logs](/docs/admin/logs), its requests show the ChatGPT client.
+
+- The setup needs the `codex` CLI on your `PATH`. It changes `~/.codex/config.toml`, so Codex CLI on the same computer uses the same settings. See [Connect Your Agents](/docs/get-started/connect#before-you-start) for the other prerequisites.
+- On Windows, ChatGPT can run Codex in WSL. While it does, the Windows command stops before it changes anything, because Codex in WSL cannot open the Windows paths it would write. Run the macOS / Linux command in WSL instead. Before you run it, set `CODEX_HOME` to your Windows Codex folder, for example `export CODEX_HOME=/mnt/c/Users/you/.codex`. If you later stop running Codex in WSL, the Linux paths stay in the settings. Change them to Windows paths before you run the Windows command.
+- Chats and dots run on OpenAI's servers and do not read these settings. Guardrails do not check them. The plugin brings your tools and skills there.
 
 For package format and upload requirements, see OpenAI's [plugin packaging guide](https://developers.openai.com/plugins/build/plugins). OAuth approval and workspace policy remain in ChatGPT.

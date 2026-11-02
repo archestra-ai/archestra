@@ -122,6 +122,40 @@ test("downloads MCP and skill resources in one archive without installer or toke
   ).toHaveCount(0);
 });
 
+test("shows the desktop app's setup command beside the plugin", async ({
+  page,
+}) => {
+  const credentialRequests: string[] = [];
+  page.on("request", (request) => {
+    if (/\/api\/(connection-setups|user-tokens)/.test(request.url()))
+      credentialRequests.push(request.url());
+  });
+  await page.goto("/connection?clientId=chatgpt");
+  const desktop = page.getByRole("region", {
+    name: "Set up the desktop app",
+    exact: true,
+  });
+  await expect(desktop).toBeVisible();
+  await expect(desktop.locator("pre")).toContainText("--client codex");
+  await expect(
+    page.getByRole("region", {
+      name: "Install the ChatGPT plugin",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: /Choose what to include/ }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("switch", { name: "LLM proxy" })
+    .uncheck();
+  await page.keyboard.press("Escape");
+  await expect(desktop).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Download ChatGPT plugin", exact: true }),
+  ).toBeVisible();
+  expect(credentialRequests).toEqual([]);
+});
+
 test("missing gateway removes download actions", async ({
   page,
   mswControl,

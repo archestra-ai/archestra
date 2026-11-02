@@ -94,6 +94,7 @@ import {
   approxTokens,
   fmt,
   nameOf,
+  OneOf,
   PromptRow,
   plural,
   ScriptBlock,
@@ -209,7 +210,7 @@ export function ConnectPage() {
   };
 
   const setup = setupModeFor(client);
-  const step = currentStep(client, setup);
+  const step = currentStep(client, setup, routed);
 
   const pick = (id: string) => {
     setPickedId(id);
@@ -866,15 +867,18 @@ function ConnectArea({
         >
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-muted-foreground">
             <span>
-              {client.id === "chatgpt"
-                ? "Add the gateway as a plugin in ChatGPT."
-                : `Copy each block into ${nameOf(client)}, top to bottom.`}
+              {client.id !== "chatgpt"
+                ? `Copy each block into ${nameOf(client)}, top to bottom.`
+                : choices.proxy && data.partsFor(client).proxy
+                  ? "The command covers the desktop app's Work and Codex tabs. The plugin covers chats and dots."
+                  : "Add the gateway as a plugin in ChatGPT."}
             </span>
           </div>
           <ManualSteps
             client={client}
             data={data}
             includeSkills={choices.skills}
+            includeProxy={choices.proxy}
           />
         </div>
       ) : (
@@ -1108,13 +1112,19 @@ function scriptNextSteps(client: ConnectClient): string[] {
 
 // === Connect band heading: the one instruction ===
 
-function currentStep(client: ConnectClient, setup: SetupMode): string {
+function currentStep(
+  client: ConnectClient,
+  setup: SetupMode,
+  routed: boolean,
+): string {
   const name = nameOf(client);
   switch (setup) {
     case "manual":
-      return client.id === "chatgpt"
-        ? "Install the ChatGPT plugin"
-        : `Follow the steps for ${name}`;
+      return client.id !== "chatgpt"
+        ? `Follow the steps for ${name}`
+        : routed
+          ? "Set up ChatGPT"
+          : "Install the ChatGPT plugin";
     case "script":
       return "Run the command in your terminal";
     case "download":
@@ -1122,43 +1132,6 @@ function currentStep(client: ConnectClient, setup: SetupMode): string {
     case "prompt":
       return `Paste the prompt into ${name}`;
   }
-}
-
-/**
- * Several versions of one spot, stacked in the same place with only one
- * shown: the largest sets the size, so switching between them moves nothing
- * around it.
- */
-function OneOf({
-  shown,
-  inline,
-  className,
-  children,
-}: {
-  shown: number;
-  /** Inside a button or text: spans instead of divs. */
-  inline?: boolean;
-  className?: string;
-  children: ReactNode[];
-}) {
-  const Tag = inline ? "span" : "div";
-  return (
-    <Tag className={cn("grid grid-cols-[minmax(0,1fr)]", className)}>
-      {children.map((child, index) => (
-        <Tag
-          // biome-ignore lint/suspicious/noArrayIndexKey: fixed set of versions
-          key={index}
-          aria-hidden={index !== shown}
-          className={cn(
-            "min-w-0 [grid-area:1/1]",
-            index !== shown && "invisible",
-          )}
-        >
-          {child}
-        </Tag>
-      ))}
-    </Tag>
-  );
 }
 
 function Band({
@@ -1211,16 +1184,25 @@ function ManualSteps({
   client,
   data,
   includeSkills,
+  includeProxy,
 }: {
   client: ConnectClient;
   data: ConnectPageData;
   includeSkills: boolean;
+  includeProxy: boolean;
 }) {
-  const steps = useManualSteps(client, data, includeSkills);
+  const steps = useManualSteps(client, data, includeSkills, includeProxy);
   if (client.id === "chatgpt")
     return (
-      <div className="mt-4 rounded-2xl border bg-background p-6">
-        {steps[0]?.content}
+      <div className="mt-4 divide-y rounded-2xl border bg-background">
+        {steps.map((s) => (
+          <section key={s.key} aria-label={s.title} className="space-y-3 p-6">
+            {steps.length > 1 && (
+              <h3 className="text-sm font-medium">{s.title}</h3>
+            )}
+            {s.content}
+          </section>
+        ))}
       </div>
     );
   if (steps.length === 0)
@@ -1296,11 +1278,16 @@ function guardrailsStatus(
       tone: "warn",
       label: "Not enforced",
       detail:
-        client.id === "chatgpt"
-          ? "This plugin does not configure model routing, so it cannot establish LLM proxy guardrail enforcement. Local Work needs separate provider configuration."
-          : client.proxy.kind === "unsupported"
-            ? `Guardrails work through the LLM proxy, and ${client.label} sends its model requests to its own service, so its tool calls aren't checked against the policy.`
-            : `Guardrails work through the LLM proxy, and it's off for ${client.label}, so its tool calls aren't checked against the policy.`,
+        client.proxy.kind === "unsupported"
+          ? `Guardrails work through the LLM proxy, and ${client.label} sends its model requests to its own service, so its tool calls aren't checked against the policy.`
+          : `Guardrails work through the LLM proxy, and it's off for ${client.label}, so its tool calls aren't checked against the policy.`,
+    };
+  if (client.id === "chatgpt")
+    return {
+      tone: "ok",
+      label: "Enforced",
+      detail:
+        "Each tool call in the desktop app's Work and Codex tabs is checked against your organization's policy. Chats and dots run on OpenAI's servers, so they aren't checked.",
     };
   if (GUARDRAILS_NATIVE.has(client.id))
     return {
@@ -1408,16 +1395,15 @@ function ProfileCard({
   const status: StatusItem[] = [];
   // The LLM proxy's real state for this agent: the admin setting, whether
   // the agent can use a custom model endpoint, then the user's choice.
-  const proxyReason =
-    client.id === "chatgpt" && client.proxy.kind === "unsupported"
-      ? client.proxy.reason
-      : !data.llmProxyEnabled
-        ? `Your admin hasn't turned on ${data.appName}'s LLM proxy, so ${client.label} calls its model provider directly.`
-        : client.proxy.kind === "unsupported"
-          ? `${client.label} can't send its model requests to ${data.appName}'s LLM proxy, so it calls its model provider directly.`
-          : !routed
-            ? `You turned the LLM proxy off, so ${client.label} calls its model provider directly. Turn it back on in Choose what to include.`
-            : `${client.label}'s model requests go through ${data.appName}'s LLM proxy. Same models, plus your org's limits, logging and cost tracking.`;
+  const proxyReason = !data.llmProxyEnabled
+    ? `Your admin hasn't turned on ${data.appName}'s LLM proxy, so ${client.label} calls its model provider directly.`
+    : client.proxy.kind === "unsupported"
+      ? `${client.label} can't send its model requests to ${data.appName}'s LLM proxy, so it calls its model provider directly.`
+      : !routed
+        ? `You turned the LLM proxy off, so ${client.label} calls its model provider directly. Turn it back on in Choose what to include.`
+        : client.id === "chatgpt"
+          ? `The desktop app's Work and Codex tabs send their model requests through ${data.appName}'s LLM proxy. Same models, plus your org's limits, logging and cost tracking. Chats and dots keep using OpenAI's servers.`
+          : `${client.label}'s model requests go through ${data.appName}'s LLM proxy. Same models, plus your org's limits, logging and cost tracking.`;
   status.push({
     id: "routing",
     icon: (
@@ -1432,9 +1418,7 @@ function ProfileCard({
     state: !data.llmProxyEnabled
       ? "Not active"
       : !proxyOn
-        ? client.id === "chatgpt"
-          ? "Separate setup"
-          : "Not supported"
+        ? "Not supported"
         : choices.proxy
           ? "On"
           : "Off",

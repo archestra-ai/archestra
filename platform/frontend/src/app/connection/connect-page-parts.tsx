@@ -169,6 +169,43 @@ export function TextButton({
   );
 }
 
+/**
+ * Several versions of one spot, stacked in the same place with only one
+ * shown: the largest sets the size, so switching between them moves nothing
+ * around it.
+ */
+export function OneOf({
+  shown,
+  inline,
+  className,
+  children,
+}: {
+  shown: number;
+  /** Inside a button or text: spans instead of divs. */
+  inline?: boolean;
+  className?: string;
+  children: ReactNode[];
+}) {
+  const Tag = inline ? "span" : "div";
+  return (
+    <Tag className={cn("grid grid-cols-[minmax(0,1fr)]", className)}>
+      {children.map((child, index) => (
+        <Tag
+          // biome-ignore lint/suspicious/noArrayIndexKey: fixed set of versions
+          key={index}
+          aria-hidden={index !== shown}
+          className={cn(
+            "min-w-0 [grid-area:1/1]",
+            index !== shown && "invisible",
+          )}
+        >
+          {child}
+        </Tag>
+      ))}
+    </Tag>
+  );
+}
+
 /** Copies text with a brief "Copied" on the button, or a toast on failure. */
 export function useCopy() {
   const [copied, setCopied] = useState(false);

@@ -38,7 +38,10 @@ export async function resolveCredential(params: {
 
 /** A definition snapshot belongs only to one launch or preflight operation. */
 export class CredentialResolutionBatch {
-  private readonly values = new Map<string, Promise<Map<string, string>>>();
+  private readonly values = new Map<
+    string,
+    Promise<Map<string, PromiseSettledResult<string | null>>>
+  >();
 
   private constructor(
     private readonly organizationId: string,
@@ -101,7 +104,9 @@ export class CredentialResolutionBatch {
       this.values.set(owner, values);
       values.catch(() => this.values.delete(owner));
     }
-    return (await values).get(params.credentialId) ?? null;
+    const result = (await values).get(params.credentialId);
+    if (result?.status === "rejected") throw result.reason;
+    return result?.value ?? null;
   }
 }
 

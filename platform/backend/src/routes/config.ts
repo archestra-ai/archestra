@@ -10,7 +10,7 @@ import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth"
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
-import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import config from "@/config";
 import { isEncryptedChatEnabled } from "@/content-encryption/encrypted-chat";
 import { enterpriseTier } from "@/enterprise-tier";

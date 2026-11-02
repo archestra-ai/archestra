@@ -83,7 +83,7 @@ export default class RuntimeCredentialConnectionModel {
     scope: RuntimeCredentialConnectionScope;
     userId?: string | null;
     credentialIds: string[];
-  }): Promise<Map<string, string>> {
+  }): Promise<Map<string, PromiseSettledResult<string | null>>> {
     if (!params.credentialIds.length) return new Map();
     const connections = schema.runtimeCredentialConnectionsTable;
     const rows = await db
@@ -100,29 +100,40 @@ export default class RuntimeCredentialConnectionModel {
         ),
       );
     const manager = secretManager();
-    // Database rows can be decrypted in one query. Vault-backed handles still
-    // go through their configured manager, bypassing its value cache.
-    const secrets =
+    // Database rows can be decrypted in one query. Vault reads keep their
+    // individual outcomes so a denied path cannot hide another credential.
+    const databaseSecrets =
       manager.type === SecretsManagerType.DB
-        ? await SecretModel.findByIds([
-            ...new Set(rows.map((row) => row.secretId)),
-          ])
-        : await Promise.all(
-            rows.map((row) =>
-              manager.getSecret(row.secretId, { skipCache: true }),
-            ),
-          );
-    const byId = new Map(
-      secrets.flatMap((secret) =>
-        secret ? [[secret.id, secret] as const] : [],
-      ),
-    );
-    return new Map(
-      rows.flatMap((row) => {
-        const value = byId.get(row.secretId)?.secret[row.secretKey];
-        return typeof value === "string" && value.length > 0
-          ? [[row.credentialId, value] as const]
-          : [];
+        ? new Map(
+            (
+              await SecretModel.findByIds([
+                ...new Set(rows.map((row) => row.secretId)),
+              ])
+            ).map((secret) => [secret.id, secret]),
+          )
+        : null;
+    const secrets = databaseSecrets
+      ? rows.map((row) => ({
+          status: "fulfilled" as const,
+          value: databaseSecrets.get(row.secretId),
+        }))
+      : await Promise.allSettled(
+          rows.map((row) =>
+            manager.getSecret(row.secretId, { skipCache: true }),
+          ),
+        );
+    return new Map<string, PromiseSettledResult<string | null>>(
+      rows.map((row, index) => {
+        const secret = secrets[index];
+        if (secret.status === "rejected") return [row.credentialId, secret];
+        const value = secret.value?.secret[row.secretKey];
+        return [
+          row.credentialId,
+          {
+            status: "fulfilled",
+            value: typeof value === "string" && value.length > 0 ? value : null,
+          },
+        ];
       }),
     );
   }

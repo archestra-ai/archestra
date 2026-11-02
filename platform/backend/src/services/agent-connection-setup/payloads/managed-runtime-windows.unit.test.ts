@@ -12,7 +12,12 @@ import { STARTUP_GUARD_REFRESH } from "./startup-guard-refresh";
 const require = createRequire(import.meta.url);
 
 function windowsLoader(execFileSync: ReturnType<typeof vi.fn>) {
-  const module = { exports: {} as { owned: (file: string) => void } };
+  const module = {
+    exports: {} as {
+      owned: (file: string, directory?: boolean, privateFile?: boolean) => void;
+      atomic: (file: string, bytes: string) => void;
+    },
+  };
   runInNewContext(MANAGED_RUNTIME_BOOTSTRAP, {
     module,
     process: { platform: "win32", env: {} },
@@ -207,5 +212,26 @@ describe("Windows managed runtime ACL diagnostics", () => {
     });
     expect(options.stdio).toEqual(["ignore", "pipe", "pipe"]);
     expect(options.timeout).toBeGreaterThanOrEqual(10000);
+  });
+
+  test("reuses verified ACL checks for unchanged files and re-verifies after atomic writes", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "windows-acl-cache-"));
+    try {
+      const target = path.join(home, "params.json");
+      await writeFile(target, '{"v":1}\n');
+      const child = vi.fn(() => "");
+      const runtime = windowsLoader(child);
+      runtime.owned(target);
+      runtime.owned(target);
+      expect(child).toHaveBeenCalledTimes(1);
+      runtime.owned(target, false, false);
+      runtime.owned(target, false, false);
+      expect(child).toHaveBeenCalledTimes(2);
+      runtime.atomic(target, '{"v":2}\n');
+      runtime.owned(target);
+      expect(child).toHaveBeenCalledTimes(3);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
   });
 });

@@ -195,11 +195,11 @@ const directFetch = ${
   headers.delete("x-archestra-client-runtime-token");
   headers.delete("x-archestra-mcp-aliases");
   headers.delete("x-archestra-question-cards");
-  const managedRoute = Object.values(activeRoutes).some(route => {
+  const managedRoute = Object.values({ ...routes, ...activeRoutes }).some(route => {
     const base = new URL(route);
     return base.origin === url.origin && url.pathname.startsWith(base.pathname.replace(/\\/+$/, "") + "/");
   });
-  if ((url.protocol === "https:" || (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))) && process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0" && url.origin === runtimeParams.origin && managedRoute && directInferencePath.test(url.pathname) && mcpConnected()) {
+  if (url.protocol === "https:" && process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0" && url.origin === runtimeParams.origin && managedRoute && directInferencePath.test(url.pathname) && mcpConnected()) {
     const binding = sessionBindingProofs.get(headers.get("x-opencode-session"));
     if (runtimeParams.questionCards && binding?.origin === url.origin && binding.headers["x-archestra-client-runtime-token"]) headers.set("x-archestra-question-cards", "1");
     for (const [name, value] of Object.entries(binding?.origin === url.origin ? binding.headers : {})) headers.set(name, value);
@@ -223,8 +223,13 @@ if (${params.runtime ? "true" : "!globalThis[fetchGuardSymbol]"}) {
     if (chatGptAuth) {
       const target = routes.openai;
       if (!target) throw new Error("OpenAI OAuth is not supported by the connected " + appName + " LLM proxy.");
+      if (hasCatalog && !catalogPassthrough.includes("openai") && managedKeys.has("openai")) {
+        return directFetch(new Request(target + "/responses", { method: request.method, headers: withManagedCredential(request.headers, "openai", managedKeys.get("openai")), body: request.body, signal: request.signal, duplex: request.body ? "half" : undefined }));
+      }
+      const authorization = request.headers.get("Authorization");
       const headers = new Headers(request.headers);
-      for (const [name, value] of Object.entries(headersFor("openai"))) headers.set(name, value);
+      for (const [name, value] of Object.entries({ ...headersFor("openai"), ...(routeHeaders.openai ?? {}) })) headers.set(name, value);
+      if (authorization) headers.set("Authorization", authorization);
       if (!headers.has("Authorization")) throw new Error("OpenAI OAuth request is missing its current bearer token. Refresh the " + clientLabel + " OpenAI connection and try again.");
       if (!headers.has("ChatGPT-Account-Id") && chatGptAuth.accountId) headers.set("ChatGPT-Account-Id", chatGptAuth.accountId);
       headers.set(openAiOAuthBridgeHeader, "true");
@@ -347,15 +352,16 @@ export const ${OPENCODE_V1_PROXY_EXPORT} = async () => ({
   },
   async "chat.params"(input) {
     const providerId = input.provider.id ?? input.provider.info?.id;
-    const expected = activeRoutes[providerId];
+    const openAiSignedIn = providerId === "openai" && (!hasCatalog || catalogPassthrough.includes("openai")) && Boolean(currentOpenAiOAuth());
+    const expected = activeRoutes[providerId] ?? (openAiSignedIn ? routes.openai : undefined);
     if (!expected) {
       throw new Error(
         clientLabel + ' provider "' + providerId + '" is not supported by the connected ' + appName + ' LLM proxy. Disconnect or reconfigure the proxy before using it.',
       );
     }
     const actual = input.provider.options?.baseURL;
-    const expectedResolved = providerId === "openai" && currentOpenAiOAuth() ? openAiApiBaseUrl : expected;
-    if (normalizeUrl(actual) !== normalizeUrl(expectedResolved)) {
+    const expectedResolved = openAiSignedIn ? openAiApiBaseUrl : expected;
+    if (normalizeUrl(actual) !== normalizeUrl(expectedResolved) && !(openAiSignedIn && (!actual || normalizeUrl(actual) === normalizeUrl(expected)))) {
       throw new Error(
         clientLabel + ' provider "' + providerId + '" resolved to "' + (actual ?? 'no base URL') + '" instead of the connected ' + appName + ' endpoint. Re-run the connection setup.',
       );
@@ -363,11 +369,12 @@ export const ${OPENCODE_V1_PROXY_EXPORT} = async () => ({
   },
   async "chat.headers"(input, output) {
     const providerId = input.provider.id ?? input.provider.info?.id;
-    if (!activeRoutes[providerId]) return;
-    Object.assign(output.headers, headersFor(providerId));
+    const openAiPassthrough = providerId === "openai" && (!hasCatalog || catalogPassthrough.includes("openai")) && Boolean(currentOpenAiOAuth());
+    if (!activeRoutes[providerId] && !(openAiPassthrough && routes.openai)) return;
+    Object.assign(output.headers, openAiPassthrough ? { ...headersFor(providerId), ...(routeHeaders.openai ?? {}) } : headersFor(providerId));
     output.headers["x-opencode-session"] = input.sessionID;
     output.headers[openCodeAgentHeader] = input.agent;
-    if (managedKeys.has(providerId)) output.headers[managedAliasHeader] = providerId;
+    if (managedKeys.has(providerId) && !openAiPassthrough) output.headers[managedAliasHeader] = providerId;
   },
   ...(googleOAuth ? {
     auth: {
@@ -386,8 +393,8 @@ export const ${OPENCODE_V1_PROXY_EXPORT} = async () => ({
             const request = new Request(input, init);
             const headers = new Headers(request.headers);
             headers.delete("x-goog-api-key");
+            for (const [name, value] of Object.entries({ ...headersFor("google"), ...(routeHeaders.google ?? {}) })) headers.set(name, value);
             headers.set("Authorization", "Bearer " + credential.access);
-            for (const [name, value] of Object.entries(headersFor("google"))) headers.set(name, value);
             if (process.env.GOOGLE_CLOUD_PROJECT) headers.set("x-goog-user-project", process.env.GOOGLE_CLOUD_PROJECT);
             return directFetch(new Request(request, { headers }));
           },
@@ -397,8 +404,8 @@ export const ${OPENCODE_V1_PROXY_EXPORT} = async () => ({
   } : {}),
 });
 
-export const ${OPENCODE_V1_OAUTH_EXPORT} = async () => ({
-  ...(openAiOAuth ? {
+export const ${OPENCODE_V1_OAUTH_EXPORT} = async (input) => ({
+  ...(openAiOAuth && (!input?.client || (hasCatalog && !catalogPassthrough.includes("openai"))) ? {
     auth: {
       provider: "openai",
       methods: [],
@@ -416,10 +423,10 @@ export const ${OPENCODE_V1_OAUTH_EXPORT} = async () => ({
             }
             const request = new Request(input, init);
             const headers = new Headers(request.headers);
+            for (const [name, value] of Object.entries({ ...headersFor("openai"), ...(routeHeaders.openai ?? {}) })) headers.set(name, value);
             headers.set("Authorization", "Bearer " + credential.access);
             headers.set("ChatGPT-Account-Id", accountId);
             headers.set(openAiOAuthBridgeHeader, "true");
-            for (const [name, value] of Object.entries(headersFor("openai"))) headers.set(name, value);
             const target = routes.openai;
             if (!target) throw new Error("OpenAI OAuth is not supported by the connected " + appName + " LLM proxy.");
             return directFetch(new Request(target + "/responses", { method: request.method, headers, body: request.body, signal: request.signal, duplex: request.body ? "half" : undefined }));
@@ -620,7 +627,7 @@ export default {
         const base = new URL(route);
         return base.origin === finalUrl.origin && finalUrl.pathname.startsWith(base.pathname.replace(/\\/+$/, "") + "/");
       });
-      if ((finalUrl.protocol === "https:" || (finalUrl.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(finalUrl.hostname))) && process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0" && finalUrl.origin === runtimeParams.origin && managedRoute && directInferencePath.test(finalUrl.pathname)) {
+      if (finalUrl.protocol === "https:" && process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0" && finalUrl.origin === runtimeParams.origin && managedRoute && directInferencePath.test(finalUrl.pathname)) {
         for (const [name, value] of Object.entries(bindingProof?.() ?? {})) headers.set(name, value);
       }
       event.request = rewritten

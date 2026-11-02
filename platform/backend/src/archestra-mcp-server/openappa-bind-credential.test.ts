@@ -115,6 +115,32 @@ describe("the deployment hint a policy read suggests", () => {
       url.includes("localhost"),
     );
   });
+
+  test("a revision saved without a hint keeps none and still gets the suggestion", async () => {
+    config.frontendBaseUrl = "https://archestra.example.com";
+    const unhinted = initialPolicy().replace(/^hint = .*\n/m, "");
+    expect(
+      (
+        await call("update_guardrails_policy", {
+          content: unhinted,
+          expectedRevision: 0,
+        })
+      ).isError,
+    ).toBeFalsy();
+    const [block] = (await call("get_guardrails_policy", {})).content;
+    const read = JSON.parse(block?.type === "text" ? block.text : "null") as {
+      content: string;
+      suggestedDeploymentHint: string | null;
+    };
+    const saved = parseToml(read.content) as {
+      policy: { deployment: { hint?: string } };
+    };
+    expect(saved.policy.deployment.hint).toBeUndefined();
+    const starter = parseToml(initialPolicy()) as {
+      policy: { deployment: { hint?: string } };
+    };
+    expect(read.suggestedDeploymentHint).toBe(starter.policy.deployment.hint);
+  });
 });
 
 /** The starter policy with the bundled github battery included. */

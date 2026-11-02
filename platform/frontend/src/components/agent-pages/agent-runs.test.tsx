@@ -319,6 +319,47 @@ describe("AgentRuns", () => {
     await user.click(screen.getByRole("button", { name: "Delete run" }));
     expect(sent).toEqual(["session-1"]);
   });
+  it("opens a link to an earlier turn of a continued run", async () => {
+    const current = {
+      ...createRun(null),
+      taskId: "turn-2",
+      sessionId: "session-1",
+    };
+    state.runs = [current];
+    // The list shows only the current turn; reading the earlier turn's task
+    // resolves it to the session's current turn.
+    server.use(
+      http.get("http://localhost:9000/api/agent-runs/turn-1", () =>
+        HttpResponse.json({
+          ...current,
+          agent: { id: "agent-1", name: "Maintenance Agent", icon: null },
+          viewerRole: "owner",
+          canAttach: true,
+        }),
+      ),
+    );
+    renderRuns("agent-1", false, "section=runs&run=turn-1");
+    expect(
+      await screen.findByRole("heading", { name: "Native TUI verification" }),
+    ).toBeVisible();
+  });
+  it("falls back to the list for a link to a run that is gone", async () => {
+    server.use(
+      http.get("http://localhost:9000/api/agent-runs/gone-run", () =>
+        HttpResponse.json(
+          { error: { message: "Run not found", type: "not_found" } },
+          { status: 404 },
+        ),
+      ),
+    );
+    renderRuns("agent-1", false, "section=runs&run=gone-run");
+    expect(
+      await screen.findByRole("link", { name: "Native TUI verification" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "Native TUI verification" }),
+    ).toBeNull();
+  });
   it("keeps what a confirm dialog acts on while the list refreshes, and the runs it skipped selected", async () => {
     const live = { ...createRun(null), title: "Live review" };
     const done = {

@@ -35,7 +35,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { type AgentRunListItem, useAgentRuns } from "@/lib/agent-runtime.query";
+import {
+  type AgentRunListItem,
+  useAgentRunSessionId,
+  useAgentRuns,
+} from "@/lib/agent-runtime.query";
 import { useSession } from "@/lib/auth/auth.query";
 
 /**
@@ -54,13 +58,23 @@ export function AgentRuns({ agentId }: { agentId: string }) {
     error,
     refetch,
   } = useAgentRuns(agentId);
+  // A run is addressed by its session, so a link survives a continued run.
+  // A link that names the current turn's task still matches its row; one that
+  // names an earlier turn is resolved to its session by the run's own read.
+  const linked = searchParams.get("run");
+  const listed = linked
+    ? runs.find((run) => run.sessionId === linked || run.taskId === linked)
+    : undefined;
+  const earlierTurn = useAgentRunSessionId(
+    linked && !isPending && !listed ? linked : null,
+  );
   const runHref = (runId: string | null) => {
     const params = new URLSearchParams(searchParams.toString());
     if (runId) params.set("run", runId);
     else params.delete("run");
     return `${pathname}?${params}`;
   };
-  if (isPending)
+  if (isPending || earlierTurn.isLoading)
     return (
       <AgentRunList
         runs={[]}
@@ -99,12 +113,11 @@ export function AgentRuns({ agentId }: { agentId: string }) {
       />
     );
   // A run that is gone (deleted, or not this Agent's) falls back to the list.
-  // A run is addressed by its session, so a link survives a continued run;
-  // links that name a turn's task still open it.
-  const runId = searchParams.get("run");
-  const selected = runs.find(
-    (run) => run.sessionId === runId || run.taskId === runId,
-  );
+  const selected =
+    listed ??
+    runs.find(
+      (run) => !!earlierTurn.data && run.sessionId === earlierTurn.data,
+    );
   if (!selected)
     return (
       <AgentRunList

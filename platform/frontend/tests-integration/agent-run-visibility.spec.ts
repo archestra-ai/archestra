@@ -167,9 +167,7 @@ test("keeps a long run owner and the access details inside the phone viewport", 
     }
   }
   await stop.click();
-  await expect(
-    page.getByRole("dialog", { name: "Stop this run?" }),
-  ).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Stop run?" })).toBeVisible();
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await fullView.click();
   await expect(page).toHaveURL(`/chat/runs/${run.taskId}`);

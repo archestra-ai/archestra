@@ -192,6 +192,27 @@ export function useMyAgentRun(taskId: string, enabled = true) {
   });
 }
 
+/**
+ * The session a run's task belongs to, for a link that names an earlier turn
+ * of a continued run: lists show only each session's current turn. Null when
+ * the run is gone.
+ */
+export function useAgentRunSessionId(taskId: string | null) {
+  return useQuery({
+    queryKey: [...agentRunQueryKey(taskId ?? undefined), "session"],
+    queryFn: async () => {
+      const { data, error } = await getMyAgentRun({
+        path: { taskId: taskId as string },
+      });
+      throwOnApiError(error, { toastOnError: false, allowNotFound: true });
+      return data?.sessionId ?? null;
+    },
+    enabled: !!taskId,
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
+}
+
 export function useStartAgentRun() {
   const queryClient = useQueryClient();
   return useMutation({

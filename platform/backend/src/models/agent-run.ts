@@ -151,25 +151,110 @@ class AgentRunModel {
       : null;
   }
 
-  /** Every turn's task of a session, current turn included. */
-  static async listSessionTaskIds(
+  /**
+   * `findCurrentSessionForActor` for a batch of ids, in four queries whatever
+   * the batch size: the actor's turns among the ids, their workspaces, then
+   * each session's current turn and its prompt. Keyed by requested id; an id
+   * that names nothing the actor started is left out.
+   */
+  static async findCurrentSessionsForActor(params: {
+    taskIds: string[];
+    actorUserId: string;
+    organizationId: string;
+  }): Promise<Map<string, AgentRunSession>> {
+    const found = new Map<string, AgentRunSession>();
+    if (params.taskIds.length === 0) return found;
+    const actor = actorFromUserId(params.actorUserId);
+    const runs = schema.agentRunsTable;
+    const workspaces = schema.agentWorkspacesTable;
+    const ownedBy = (table: typeof runs | typeof workspaces) => [
+      eq(table.organizationId, params.organizationId),
+      eq(table.actorKind, actor.kind),
+      eq(table.actorId, actor.id),
+    ];
+    // An id names a workspace, or a turn whose workload has one.
+    const turns = await db
+      .select({ taskId: runs.taskId, workloadName: runs.workloadName })
+      .from(runs)
+      .where(and(...ownedBy(runs), inArray(runs.taskId, params.taskIds)));
+    const turnWorkloads = new Map(
+      turns.map((turn) => [turn.taskId, turn.workloadName]),
+    );
+    const workspaceRows = await db
+      .select()
+      .from(workspaces)
+      .where(
+        and(
+          ...ownedBy(workspaces),
+          turnWorkloads.size > 0
+            ? or(
+                inArray(workspaces.id, params.taskIds),
+                inArray(workspaces.workloadName, [
+                  ...new Set(turnWorkloads.values()),
+                ]),
+              )
+            : inArray(workspaces.id, params.taskIds),
+        ),
+      );
+    const workspaceFor = (taskId: string) =>
+      workspaceRows.find(
+        (row) =>
+          row.id === taskId || row.workloadName === turnWorkloads.get(taskId),
+      );
+    const currentTaskIds = new Map(
+      params.taskIds.map((taskId) => [
+        taskId,
+        workspaceFor(taskId)?.lastTaskId ?? taskId,
+      ]),
+    );
+    const sessions = await AgentRunModel.addRunPrompts(
+      await AgentRunModel.selectRunSessionsWhere({
+        conditions: [
+          ...ownedBy(runs),
+          inArray(runs.taskId, [...new Set(currentTaskIds.values())]),
+        ],
+      }),
+    );
+    const byTaskId = new Map(
+      sessions.map((session) => [session.taskId, session]),
+    );
+    for (const taskId of params.taskIds) {
+      const workspace = workspaceFor(taskId);
+      const run = byTaskId.get(currentTaskIds.get(taskId) ?? taskId);
+      if (run && (!workspace || run.workloadName === workspace.workloadName)) {
+        found.set(taskId, run);
+      }
+    }
+    return found;
+  }
+
+  /**
+   * Deletes the task of every turn of a session, which takes its run rows
+   * with it. One statement, so a failure leaves every turn in place, and the
+   * delete can be retried.
+   */
+  static async deleteSession(
     session: Pick<
       AgentRunRecord,
       "workloadName" | "organizationId" | "actorKind" | "actorId"
     >,
-  ): Promise<string[]> {
-    const rows = await db
-      .select({ taskId: schema.agentRunsTable.taskId })
-      .from(schema.agentRunsTable)
-      .where(
-        and(
-          eq(schema.agentRunsTable.workloadName, session.workloadName),
-          eq(schema.agentRunsTable.organizationId, session.organizationId),
-          eq(schema.agentRunsTable.actorKind, session.actorKind),
-          eq(schema.agentRunsTable.actorId, session.actorId),
-        ),
-      );
-    return rows.map((row) => row.taskId);
+  ): Promise<void> {
+    await db.delete(schema.a2aTasksTable).where(
+      inArray(
+        schema.a2aTasksTable.id,
+        db
+          .select({ taskId: schema.agentRunsTable.taskId })
+          .from(schema.agentRunsTable)
+          .where(
+            and(
+              eq(schema.agentRunsTable.workloadName, session.workloadName),
+              eq(schema.agentRunsTable.organizationId, session.organizationId),
+              eq(schema.agentRunsTable.actorKind, session.actorKind),
+              eq(schema.agentRunsTable.actorId, session.actorId),
+            ),
+          ),
+      ),
+    );
   }
 
   /**

@@ -17,7 +17,6 @@ import {
 } from "@/auth/service-account-user-id";
 import logger from "@/logging";
 import {
-  A2ATaskModel,
   AgentModel,
   AgentRunModel,
   AgentWorkspaceModel,
@@ -1061,7 +1060,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         run,
       });
-      await deleteRunSession(run);
+      await AgentRunModel.deleteSession(run);
       request.auditAfter = { deleted: true, workspaceState };
       return reply.send({ deleted: true as const });
     },
@@ -1103,11 +1102,11 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         applyEach: async (run) => {
           await deleteFinishedRunWorkspace({ actor, run });
-          await deleteRunSession(run);
+          await AgentRunModel.deleteSession(run);
         },
         audit: {
           target: request,
-          snapshot: (ids) => snapshotOwnedRuns(request, ids),
+          snapshot: (ids, loaded) => snapshotOwnedRuns(request, ids, loaded),
         },
       });
       return reply.send(outcome);
@@ -1156,7 +1155,8 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         audit: {
           target: request,
-          snapshot: (ids) => snapshotOwnedRunWorkspaces(request, ids),
+          snapshot: (ids, loaded) =>
+            snapshotOwnedRunWorkspaces(request, ids, loaded),
         },
       });
       return reply.send(outcome);
@@ -1202,7 +1202,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         audit: {
           target: request,
-          snapshot: (ids) => snapshotOwnedRuns(request, ids),
+          snapshot: (ids, loaded) => snapshotOwnedRuns(request, ids, loaded),
         },
       });
       return reply.send(outcome);
@@ -1402,77 +1402,80 @@ async function loadOwnedRuns(
   request: { user: { id: string }; organizationId: string },
   ids: string[],
 ): Promise<Map<string, AgentRunSession>> {
+  const found = await AgentRunModel.findCurrentSessionsForActor({
+    taskIds: ids.filter((id) => z.string().uuid().safeParse(id).success),
+    actorUserId: request.user.id,
+    organizationId: request.organizationId,
+  });
   const runs = new Map<string, AgentRunSession>();
   const sessions = new Set<string>();
-  for (const taskId of ids) {
-    if (!z.string().uuid().safeParse(taskId).success) continue;
-    const run = await AgentRunModel.findCurrentSessionForActor({
-      taskId,
-      actorUserId: request.user.id,
-      organizationId: request.organizationId,
-    });
+  for (const id of ids) {
+    const run = found.get(id);
     // Two ids of one session (its id and a turn's) act on it once.
     if (!run || sessions.has(run.taskId)) continue;
     sessions.add(run.taskId);
-    runs.set(taskId, run);
+    runs.set(id, run);
   }
   return runs;
 }
 
 /**
- * Deletes every turn of a session, so no earlier turn is left behind as a
- * run of its own. The current turn goes last: until then the session still
- * resolves, and a failed delete can be retried.
+ * The runs of a batch with their saved files, for its audit snapshots. The
+ * snapshot before the batch reuses the runs it has just loaded; the one after
+ * loads them again, since the batch has changed them.
  */
-async function deleteRunSession(run: AgentRunSession) {
-  const taskIds = await AgentRunModel.listSessionTaskIds(run);
-  for (const taskId of taskIds) {
-    if (taskId !== run.taskId) await A2ATaskModel.delete(taskId);
-  }
-  await A2ATaskModel.delete(run.taskId);
+async function ownedRunsWithWorkspaces(
+  request: { user: { id: string }; organizationId: string },
+  ids: string[],
+  loaded?: Map<string, AgentRunSession>,
+) {
+  const runs = [...(loaded ?? (await loadOwnedRuns(request, ids))).values()];
+  const workspaces = await AgentWorkspaceModel.findByWorkloadNames(
+    runs.map((run) => run.workloadName),
+  );
+  return (
+    runs
+      .map((run) => ({
+        run,
+        workspaceState: workspaces.get(run.workloadName)?.state ?? null,
+      }))
+      // Sorted so an unchanged batch snapshots identically on both sides.
+      .sort((a, b) => a.run.taskId.localeCompare(b.run.taskId))
+  );
 }
 
 /** The saved-files state of a batch's runs, safe to store in the audit log. */
 async function snapshotOwnedRunWorkspaces(
   request: { user: { id: string }; organizationId: string },
   ids: string[],
+  loaded?: Map<string, AgentRunSession>,
 ) {
-  const runs = await loadOwnedRuns(request, ids);
-  const entries = [];
-  for (const run of runs.values()) {
-    const workspace = await AgentWorkspaceModel.findByWorkloadName(
-      run.workloadName,
-    );
-    entries.push({
+  const runs = await ownedRunsWithWorkspaces(request, ids, loaded);
+  return {
+    runs: runs.map(({ run, workspaceState }) => ({
       taskId: run.taskId,
       title: run.title,
-      workspaceState: workspace?.state ?? null,
-    });
-  }
-  // Sorted so an unchanged batch snapshots identically on both sides.
-  return { runs: entries.sort((a, b) => a.taskId.localeCompare(b.taskId)) };
+      workspaceState,
+    })),
+  };
 }
 
 /** What a bulk run action changes, safe to store in the audit log. */
 async function snapshotOwnedRuns(
   request: { user: { id: string }; organizationId: string },
   ids: string[],
+  loaded?: Map<string, AgentRunSession>,
 ) {
-  const runs = await loadOwnedRuns(request, ids);
-  const entries = [];
-  for (const { taskId, agentId, title, state, workloadName } of runs.values()) {
-    const workspace =
-      await AgentWorkspaceModel.findByWorkloadName(workloadName);
-    entries.push({
-      taskId,
-      agentId,
-      title,
-      state,
-      workspaceState: workspace?.state ?? null,
-    });
-  }
-  // Sorted so an unchanged batch snapshots identically on both sides.
-  return { runs: entries.sort((a, b) => a.taskId.localeCompare(b.taskId)) };
+  const runs = await ownedRunsWithWorkspaces(request, ids, loaded);
+  return {
+    runs: runs.map(({ run, workspaceState }) => ({
+      taskId: run.taskId,
+      agentId: run.agentId,
+      title: run.title,
+      state: run.state,
+      workspaceState,
+    })),
+  };
 }
 
 async function requireReadableProject(params: {

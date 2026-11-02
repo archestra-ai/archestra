@@ -97,9 +97,13 @@ export interface PricedBillingUsage {
   /**
    * Every new receipt is `enforce`: it is charged to its budgets. Receipts
    * from releases where settlement was optional can also read `shadow`
-   * (recorded, never charged) or `off`; readers count only `enforce`.
+   * (recorded, never charged) or `off`. A `legacy` receipt freezes only a
+   * default-limit estimate; reports exclude it until explicit recomputation.
    */
-  mode: "off" | "shadow" | "enforce";
+  mode: "off" | "shadow" | "enforce" | "legacy";
+  /** Deleted-agent legacy logs contributed only to environment defaults.
+   * Preserve that scope when their estimate becomes a receipt. */
+  legacyDefaultEnvironmentOnly?: boolean;
   status: "complete" | "incomplete";
   issues: string[];
   components: PricedComponent[];
@@ -257,6 +261,7 @@ export const PRICE_ISSUES = new Set([
   "estimated_model_price",
   "estimated_cache_price",
   "unpriced_usage",
+  "estimated_legacy_cost",
 ]);
 
 /**

@@ -112,7 +112,7 @@ class InteractionCostBackfillModel {
         b.created_at::text as receipt_created_at
       from interactions i
       left join interaction_billing b
-        on b.interaction_id = i.id and ${ENFORCE_RECEIPT}
+        on b.interaction_id = i.id and ${ACCOUNTING_RECEIPT}
       where ${eligible(scope)}
         and ${start}
         and i.created_at < ${toUtcTimestamp(until)}::timestamp
@@ -363,7 +363,7 @@ const PREVIEW_STATEMENT_TIMEOUT_MS = 30_000;
 const BATCH_LOCK_TIMEOUT = "2s";
 const BATCH_STATEMENT_TIMEOUT = "15s";
 
-const ENFORCE_RECEIPT = sql`b.usage->>'mode' = 'enforce'`;
+const ACCOUNTING_RECEIPT = sql`b.usage->>'mode' IN ('enforce', 'legacy')`;
 
 type Tier = keyof TieredTokenSums;
 

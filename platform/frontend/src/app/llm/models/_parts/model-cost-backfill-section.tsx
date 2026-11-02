@@ -158,7 +158,8 @@ export function ModelCostBackfillSection({
         <h3 className="text-sm font-medium">Apply new prices to</h3>
         <p className="text-xs text-muted-foreground">
           Pick past requests to recompute with the prices above. Runs when you
-          save.
+          save. Frozen legacy limit balances without request-level accounting
+          are not changed.
         </p>
       </div>
 

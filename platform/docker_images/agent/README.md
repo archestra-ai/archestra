@@ -107,6 +107,29 @@ image's own, still runs after the hook in the client's non-interactive shells.
 shell tool's command, a process the command starts and a process it leaves
 behind all get 1000, and the client and launcher keep their score.
 
+### Memory warden
+
+With the kubelet's default on cgroup v2 (`memory.oom.group`), a container that
+reaches its memory limit loses every process, the client's session included,
+whatever the scores. `archestra-agent-init` starts `archestra-memory-warden`
+(once per container) for that case. It polls the memory the kernel cannot
+reclaim (anonymous and shared memory, kernel stacks, page tables, sockets,
+unreclaimable slab) every 200 ms, and when that comes within a reserve of the
+limit (7.5% of it, at least 0.3 GiB and at most 1 GiB), or memory pressure
+stalls the container while close to it, it SIGKILLs the agent command with the
+most anonymous memory: a process with score 1000 under the agent's terminal
+(the tmux server on the default socket), with its whole process group when
+every member is one, and only when that frees at least the overshoot (and
+64 MiB), except within the last quarter of the reserve, where any command over
+64 MiB goes: memory held by what it never stops is noted once a minute in
+`memory-warden.notes.log` instead of costing every small command. The client, its launcher, tmux, PID 1 and anything
+detached from the agent's terminal (a dev stack's servers on their own tmux
+socket, PostgreSQL) are never stopped. The command's stderr gets a line saying
+why (appended, without blocking); each stop is a JSON line in `/var/run/archestra/memory-warden.log`, which
+the platform's memory-kill report counts next to the kernel's `oom_kill`. On a node with
+`singleProcessOOMKill` the kernel's own choice backs it up.
+`tests/memory-warden.py` checks the trigger, the victim choice and one stop.
+
 Claude Code personal subscriptions use a token from the configured secrets backend. The wrapper sends inference through the Agent-scoped LLM proxy with a personal passthrough key, so token usage appears in proxy logs. The OAuth token remains the provider credential; subscription requests do not count toward metered cost limits. MCP calls use the Agent-scoped gateway and its tool policies.
 
 Delegated Claude Code assignments stay open until registered background work finishes and the main agent handles its result. This includes shells, subagents and native scheduled monitors. Stop background servers and delete recurring monitors when the assignment is done. Unregistered detached processes are not detected. See the [background-work contract](runtime-contract.md#background-work-in-maintained-images) for lifecycle and failure rules. Codex and OpenCode adapters are not included.

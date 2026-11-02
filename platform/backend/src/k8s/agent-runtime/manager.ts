@@ -87,6 +87,7 @@ import {
   parseMemoryEvents,
   READ_MEMORY_EVENTS_COMMAND,
   splitTurnPoll,
+  turnEndingKill,
 } from "./memory-kill";
 import {
   AGENT_RUNTIME_LEASE_SCOPE,
@@ -1273,7 +1274,9 @@ class AgentRuntimeManager {
             // A turn that ended on its own after a memory kill: the kill is
             // the cause worth naming, ahead of the exit it led to. The
             // counters were read after the result, in the same poll.
-            const killed = memoryKillBetween(running.atStart, poll.memory);
+            const killed = turnEndingKill(
+              memoryKillBetween(running.atStart, poll.memory),
+            );
             return {
               outcome: "failed",
               reason: killed
@@ -1306,7 +1309,9 @@ class AgentRuntimeManager {
           // read the counters.
           const killed =
             pod?.status?.phase === "Running" && running
-              ? memoryKillBetween(running.atStart, running.latest)
+              ? turnEndingKill(
+                  memoryKillBetween(running.atStart, running.latest),
+                )
               : null;
           if (killed) {
             return {
@@ -1329,7 +1334,9 @@ class AgentRuntimeManager {
           ).catch(() => undefined);
           if (params.abortSignal?.aborted) break;
           const killed =
-            now === undefined ? null : memoryKillBetween(running.atStart, now);
+            now === undefined
+              ? null
+              : turnEndingKill(memoryKillBetween(running.atStart, now));
           if (killed) {
             return {
               outcome: "failed",
@@ -1921,6 +1928,7 @@ done`
         taskId: session.taskId,
         podName: running.podName,
         killed: kill.killed,
+        stopped: kill.stopped,
         atLimit: kill.atLimit,
         memoryLimitBytes: kill.events.limitBytes,
         memoryPeakBytes: kill.events.peakBytes,
@@ -1929,7 +1937,9 @@ done`
           tier: null,
         }),
       },
-      "The kernel killed a process of an Agent Runtime run for memory",
+      kill.killed > 0
+        ? "The kernel killed a process of an Agent Runtime run for memory"
+        : "The memory warden stopped a command of an Agent Runtime run near its memory limit",
     );
   }
 

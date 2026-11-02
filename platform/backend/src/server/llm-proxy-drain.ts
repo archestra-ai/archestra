@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { ServerResponse } from "node:http";
 import { setImmediate } from "node:timers/promises";
-import { ApiError } from "@archestra/shared/types";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { ServerDrainingError } from "@/types/server-draining-error";
 import { drainBackgroundWork } from "@/utils/background-work";
 
 /** Tracks admitted handlers, responses and their background persistence. */
@@ -72,7 +72,7 @@ class RequestDrain {
       ) {
         reply.header("Connection", "close").header("Retry-After", "1");
         reply.serializer(JSON.stringify);
-        done(new ApiError(503, "Server is shutting down"));
+        done(new ServerDrainingError());
         return;
       }
       if (isProbe(path) || request.headers.upgrade) return done();
@@ -127,7 +127,7 @@ class RequestDrain {
         if (!admittedReplay && (!continuation || this.active.size <= 1)) {
           reply.header("Connection", "close").header("Retry-After", "1");
           reply.serializer(JSON.stringify);
-          done(new ApiError(503, "Server is shutting down"));
+          done(new ServerDrainingError());
           return;
         }
       }

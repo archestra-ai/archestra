@@ -38,6 +38,8 @@ const BINDINGS: PortBindings = {
   mcpInstallationEvents: () => import("@/websocket"),
   mountedSkillsReadability: () =>
     import("@/skills/assert-mounted-skills-readable"),
+  embeddingFinalization: () =>
+    import("@/task-queue/handlers/batch-embedding-finalizer"),
 };
 
 bindPorts(BINDINGS);

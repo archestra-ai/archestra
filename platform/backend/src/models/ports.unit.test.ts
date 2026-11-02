@@ -59,6 +59,7 @@ function bindings(overrides: Partial<PortBindings> = {}): PortBindings {
     jwksSigningKey: unused,
     mcpInstallationEvents: unused,
     mountedSkillsReadability: unused,
+    embeddingFinalization: unused,
     ...overrides,
   };
 }

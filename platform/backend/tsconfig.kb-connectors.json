@@ -1,0 +1,60 @@
+{
+  // Concrete knowledge connectors and their registry, above shared KB support.
+  "extends": "./tsconfig.source-project.json",
+  "compilerOptions": {
+    "outDir": "./.tsbuild/kb-connectors",
+    "tsBuildInfoFile": "./.tsbuild/kb-connectors.tsbuildinfo"
+  },
+  "files": [
+    "src/knowledge-base/connectors/asana/asana-connector.ts",
+    "src/knowledge-base/connectors/confluence/confluence-connector.ts",
+    "src/knowledge-base/connectors/dropbox/dropbox-connector.ts",
+    "src/knowledge-base/connectors/gdrive/gdrive-connector.ts",
+    "src/knowledge-base/connectors/github/github-connector.ts",
+    "src/knowledge-base/connectors/gitlab/gitlab-connector.ts",
+    "src/knowledge-base/connectors/jira/jira-connector.ts",
+    "src/knowledge-base/connectors/linear/linear-connector.ts",
+    "src/knowledge-base/connectors/mfiles/mfiles-connector.ts",
+    "src/knowledge-base/connectors/notion/notion-connector.ts",
+    "src/knowledge-base/connectors/onedrive/onedrive-connector.ts",
+    "src/knowledge-base/connectors/outline/outline-connector.ts",
+    "src/knowledge-base/connectors/perforce/perforce-connector.ts",
+    "src/knowledge-base/connectors/registry.ts",
+    "src/knowledge-base/connectors/salesforce/salesforce-connector.ts",
+    "src/knowledge-base/connectors/servicenow/servicenow-connector.ts",
+    "src/knowledge-base/connectors/sharepoint/sharepoint-connector.ts",
+    "src/knowledge-base/connectors/web-crawler/web-crawler-connector.ts"
+  ],
+  "include": [
+    "src/ambient/*.d.ts"
+  ],
+  "references": [
+    {
+      "path": "../shared/tsconfig.lib.json"
+    },
+    {
+      "path": "./tsconfig.schema.json"
+    },
+    {
+      "path": "./tsconfig.core.json"
+    },
+    {
+      "path": "./tsconfig.models.json"
+    },
+    {
+      "path": "./tsconfig.models-agents.json"
+    },
+    {
+      "path": "./tsconfig.models-upper.json"
+    },
+    {
+      "path": "./tsconfig.llm-clients.json"
+    },
+    {
+      "path": "./tsconfig.runtime.json"
+    },
+    {
+      "path": "./tsconfig.kb-core.json"
+    }
+  ]
+}

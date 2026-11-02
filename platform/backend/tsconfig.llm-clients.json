@@ -6,6 +6,11 @@
     "tsBuildInfoFile": "./.tsbuild/llm-clients.tsbuildinfo"
   },
   "files": [
+    "src/services/billable-usage.ts",
+    "src/services/fireworks-model.ts",
+    "src/routes/proxy/utils/cost-optimization.ts",
+    "src/routes/chat/normalization/apply-prompt-cache.ts",
+
     "src/clients/anthropic-endpoint.ts",
     "src/clients/azure-media-language-model.ts",
     "src/clients/gemini-client.ts",

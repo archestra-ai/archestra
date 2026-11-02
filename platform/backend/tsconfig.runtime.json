@@ -7,6 +7,10 @@
     "tsBuildInfoFile": "./.tsbuild/runtime.tsbuildinfo"
   },
   "files": [
+    "src/task-queue/index.ts",
+    "src/task-queue/task-queue.ts",
+    "src/task-queue/periodic-tasks.ts",
+
     "src/k8s/agent-runtime/atomic-file-write.ts",
     "src/k8s/agent-runtime/exec.ts",
     "src/k8s/agent-runtime/failure-envelope.ts",

@@ -220,6 +220,12 @@ export function pausesServers(
 export interface CgroupMemory {
   /** Processes of the cgroup an OOM killer killed (`memory.events` oom_kill). */
   oomKills: number;
+  /**
+   * Agent commands the image's memory warden stopped just before the limit
+   * (`archestra-memory-warden`, one line each in its log), so the kernel would
+   * not stop every process in the container.
+   */
+  wardenStops: number;
   /** Times the cgroup reached its memory limit (`memory.events` oom). */
   limitHits: number;
   /** The highest usage seen (`memory.peak`), when the kernel gives it. */
@@ -234,6 +240,7 @@ export interface CgroupMemory {
  */
 export function readCgroupMemory(
   dir: string = ownCgroupDirectory(),
+  wardenLog: string = MEMORY_WARDEN_LOG,
 ): CgroupMemory | null {
   const events = readText(path.join(dir, "memory.events"));
   if (events === null) return null;
@@ -244,8 +251,10 @@ export function readCgroupMemory(
   }
   const oomKills = counters.get("oom_kill");
   if (oomKills === undefined) return null;
+  const stops = readText(wardenLog);
   return {
     oomKills,
+    wardenStops: stops ? stops.split("\n").filter(Boolean).length : 0,
     limitHits: counters.get("oom") ?? 0,
     peakBytes: readBytes(path.join(dir, "memory.peak")),
     limitBytes: readBytes(path.join(dir, "memory.max")),
@@ -273,8 +282,33 @@ export function describeToolMemoryKill(params: {
   env?: NodeJS.ProcessEnv;
 }): string | null {
   const { before, after } = params;
-  if (!before || !after || after.oomKills <= before.oomKills) return null;
+  if (!before || !after) return null;
   const env = params.env ?? process.env;
+  // The warden stopped the command (or another) before the kernel had to.
+  if (
+    after.oomKills <= before.oomKills &&
+    (after.wardenStops ?? 0) > (before.wardenStops ?? 0)
+  ) {
+    const tier = env.ARCHESTRA_AGENT_RUNTIME_TIER?.trim();
+    const near =
+      after.limitBytes !== null
+        ? `this container neared its memory limit of ${formatLimitGibibytes(after.limitBytes)}${tier ? ` at tier ${tier}` : ""}`
+        : "this container neared its memory limit";
+    const what = params.subjectKilled
+      ? `${params.subject} was stopped for memory`
+      : `the memory warden stopped a command in this container while ${params.subject} ran`;
+    const steps = [
+      "Run type checks, test suites and builds one at a time, not side by side.",
+      ...params.steps,
+      largerTierStep(env),
+    ];
+    return [
+      `${params.tool}: ${what}: ${near}, and its memory warden stops the largest command before the kernel stops every process.`,
+      "To fit in memory:",
+      ...steps.map((step) => `  - ${step}`),
+    ].join("\n");
+  }
+  if (after.oomKills <= before.oomKills) return null;
   const killed = after.oomKills - before.oomKills;
   const atLimit = after.limitHits > before.limitHits;
   const tier = env.ARCHESTRA_AGENT_RUNTIME_TIER?.trim();
@@ -424,6 +458,8 @@ function largerTierStep(env: NodeJS.ProcessEnv): string {
 }
 
 const MEMORY_KILL_REPORT = Symbol.for("archestra.memoryKillReport");
+/** Where `archestra-memory-warden` records each command it stopped. */
+const MEMORY_WARDEN_LOG = "/var/run/archestra/memory-warden.log";
 const BYTES_PER_MIB = 1024 ** 2;
 const BYTES_PER_GIB = 1024 ** 3;
 const TYPESCRIPT_DEFAULT_CHECKERS = 4;

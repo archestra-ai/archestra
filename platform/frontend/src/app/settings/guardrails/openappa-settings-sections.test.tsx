@@ -260,7 +260,7 @@ test("an administrator changes the Break the glass settings one at a time", asyn
     "Waive everywhere",
   );
   await change(
-    "Soft block",
+    "Other blocked calls",
     "Keep the block",
     /Waive the block/,
     "Waive the block",
@@ -272,6 +272,12 @@ test("an administrator changes the Break the glass settings one at a time", asyn
     /Record only/,
     "Record only",
   );
+  // The Yell tool comes first of the three.
+  expect(
+    screen
+      .getAllByRole("combobox")
+      .map((box) => box.getAttribute("aria-label")),
+  ).toEqual(["Yell tool", "Human approval", "Other blocked calls"]);
   expect(updates).toEqual([
     { humanApprovalMode: "everywhere" },
     { unapprovableBlockMode: "allow" },
@@ -290,7 +296,7 @@ test.each([
 ])("the Break the glass settings are disabled for %s", async (_name, arrange) => {
   arrange();
   show(<OpenAppaBreakTheGlassSettings />);
-  for (const name of ["Human approval", "Soft block", "Yell tool"])
+  for (const name of ["Yell tool", "Human approval", "Other blocked calls"])
     expect(await screen.findByRole("combobox", { name })).toBeDisabled();
 });
 

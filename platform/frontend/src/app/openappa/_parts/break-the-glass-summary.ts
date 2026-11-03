@@ -23,7 +23,7 @@ export function breakTheGlassSummary(
     });
   if (deployment.unapprovableBlockMode === "allow")
     lines.push({
-      label: "Soft block:",
+      label: "Other blocked calls:",
       value: "waived",
     });
   if (deployment.breakTheGlassEnabled)

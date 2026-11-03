@@ -119,7 +119,8 @@ describe("DELETE /api/llm-models/:id", () => {
       permission: { llmModel: ["read", "update"] },
     });
     await makeMember(manager.id, organizationId, { role: managerRole.role });
-    expect((await remove(model.id, manager.id)).statusCode).toBe(200);
+    const cleanModel = await createModel("unconfigured-model");
+    expect((await remove(cleanModel.id, manager.id)).statusCode).toBe(200);
   });
 
   test.for([
@@ -266,6 +267,143 @@ describe("DELETE /api/llm-models/:id", () => {
     ).toEqual([interaction]);
   });
 
+  test.for([
+    { discoveredViaLlmProxy: false },
+    { promptPricePerToken: "0.000001" },
+    { completionPricePerToken: "0" },
+    { cacheReadPricePerToken: "0" },
+    { cacheWritePricePerToken: "0.000001" },
+    { customPricePerMillionInput: "0" },
+    { customPricePerMillionOutput: "2" },
+    { customPricePerMillionCacheRead: "0" },
+    { customPricePerMillionCacheWrite: "3" },
+    { customContextLength: 4096 },
+    { customOutputLength: 1024 },
+    { configuredParameters: { temperature: 0 } },
+    { ignored: true },
+    {
+      longContextThreshold: 1000,
+      longContextPricePerMillionInput: "1",
+      longContextPricePerMillionOutput: "2",
+      longContextPricePerMillionCacheRead: "0",
+      longContextPricePerMillionCacheWrite: "0",
+    },
+  ])("retains configured model metadata: %j", async (settings) => {
+    const model = await createModel();
+    await db
+      .update(schema.modelsTable)
+      .set(settings)
+      .where(eq(schema.modelsTable.id, model.id));
+    const before = await ModelModel.findById(model.id);
+    const response = await remove(model.id);
+    expect(response.statusCode, response.body).toBe(409);
+    expect(await ModelModel.findById(model.id)).toEqual(before);
+  });
+
+  test("retains provider links and their endpoint pricing", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const model = await createModel();
+    const key = await makeLlmProviderApiKey(
+      organizationId,
+      (await makeSecret()).id,
+      { provider: model.provider },
+    );
+    const [link] = await db
+      .insert(schema.llmProviderApiKeyModelsTable)
+      .values({
+        apiKeyId: key.id,
+        modelId: model.id,
+        isBest: true,
+        providerPricing: {
+          promptPricePerToken: "0.000001",
+          completionPricePerToken: "0.000002",
+          cacheReadPricePerToken: null,
+          cacheWritePricePerToken: null,
+        },
+      })
+      .returning();
+    expect((await remove(model.id)).statusCode).toBe(409);
+    expect(
+      await db
+        .select()
+        .from(schema.llmProviderApiKeyModelsTable)
+        .where(eq(schema.llmProviderApiKeyModelsTable.id, link.id)),
+    ).toEqual([link]);
+    expect(await ModelModel.findById(model.id)).not.toBeNull();
+  });
+
+  test("retains labels and legacy sharing assignments", async ({
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, adminId);
+    const [key] = await db
+      .insert(schema.labelKeysTable)
+      .values({ key: "cleanup-label" })
+      .returning();
+    const [value] = await db
+      .insert(schema.labelValuesTable)
+      .values({ value: "configured" })
+      .returning();
+    const labelled = await createModel("labelled");
+    await db
+      .insert(schema.modelLabelsTable)
+      .values({ modelId: labelled.id, keyId: key.id, valueId: value.id });
+    const teamShared = await createModel("team-shared");
+    await db
+      .insert(schema.modelTeamsTable)
+      .values({ modelId: teamShared.id, teamId: team.id });
+    const userShared = await createModel("user-shared");
+    await db
+      .insert(schema.modelUsersTable)
+      .values({ modelId: userShared.id, userId: adminId });
+    for (const model of [labelled, teamShared, userShared]) {
+      expect((await remove(model.id)).statusCode).toBe(409);
+      expect(await ModelModel.findById(model.id)).not.toBeNull();
+    }
+    expect(
+      await db
+        .select()
+        .from(schema.modelLabelsTable)
+        .where(eq(schema.modelLabelsTable.modelId, labelled.id)),
+    ).toHaveLength(1);
+    expect(
+      await db
+        .select()
+        .from(schema.modelTeamsTable)
+        .where(eq(schema.modelTeamsTable.modelId, teamShared.id)),
+    ).toHaveLength(1);
+    expect(
+      await db
+        .select()
+        .from(schema.modelUsersTable)
+        .where(eq(schema.modelUsersTable.modelId, userShared.id)),
+    ).toHaveLength(1);
+  });
+
+  test("retains edited sharing policies across organizations", async ({
+    makeOrganization,
+  }) => {
+    const model = await createModel();
+    const otherOrganization = await makeOrganization();
+    const key = {
+      organizationId: otherOrganization.id,
+      resource: "llmModel" as const,
+      scope: model.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [],
+    });
+    const before = await ResourcePermissionPolicyModel.find(key);
+    expect((await remove(model.id)).statusCode).toBe(409);
+    expect(await ResourcePermissionPolicyModel.find(key)).toEqual(before);
+    expect(await ModelModel.findById(model.id)).not.toBeNull();
+  });
+
   test("protects pool members including disabled members without blocking another provider", async ({
     makeLlmProviderApiKey,
     makeSecret,
@@ -324,9 +462,7 @@ describe("DELETE /api/llm-models/:id", () => {
       .update(schema.modelCostBackfillsTable)
       .set({ status })
       .where(eq(schema.modelCostBackfillsTable.id, backfill.id));
-    expect((await remove(model.id)).statusCode).toBe(
-      status === "pending" || status === "running" ? 409 : 200,
-    );
+    expect((await remove(model.id)).statusCode).toBe(409);
   });
 });
 
@@ -343,8 +479,8 @@ function createModel(
     inputModalities: ["text"],
     outputModalities: ["text"],
     supportsToolCalling: true,
-    promptPricePerToken: "0",
-    completionPricePerToken: "0",
+    promptPricePerToken: null,
+    completionPricePerToken: null,
     discoveredViaLlmProxy: true,
     lastSyncedAt: new Date(),
   });

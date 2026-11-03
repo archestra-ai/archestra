@@ -251,6 +251,9 @@ describe("ModelsPage", () => {
     await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     const dialog = screen.getByRole("dialog", { name: "Delete model" });
     expect(dialog).toHaveTextContent("Recorded requests and spend will remain");
+    expect(dialog).toHaveTextContent(
+      "Only unconfigured entries observed in requests can be removed",
+    );
     expect(deletes).toBe(0);
     await user.click(within(dialog).getByRole("button", { name: "Delete" }));
     await waitFor(() =>

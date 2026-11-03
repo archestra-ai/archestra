@@ -884,7 +884,7 @@ export default function ModelsPage() {
           if (!open && !deleteModel.isPending) setDeletingModel(null);
         }}
         title="Delete model"
-        description={`Delete ${deletingModel?.modelId ?? "this model"} and its catalog settings for everyone? Recorded requests and spend will remain. A provider refresh or another request can add the model again.`}
+        description={`Remove ${deletingModel?.modelId ?? "this entry"} from Models for everyone? Only unconfigured entries observed in requests can be removed. Recorded requests and spend will remain. Another request can add the entry again.`}
         isPending={deleteModel.isPending}
         onConfirm={() => {
           if (deletingModel)

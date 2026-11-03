@@ -759,19 +759,65 @@ class ModelModel {
     });
   }
 
-  /** Remove catalog metadata only when no live configuration depends on it. */
+  /** Remove an unconfigured proxy-discovered entry, retaining request history. */
   static async deleteUnused(id: string) {
     return withDbTransaction(async (tx) => {
-      // These references use provider model names rather than foreign keys.
-      // Keep their writers out until the check and deletion commit together.
+      // Name references and policy scopes have no model FK. Keep their writers
+      // out until eligibility checks and deletion commit together.
       await tx.execute(sql`LOCK TABLE ${schema.organizationsTable},
-        ${schema.modelPoolMembersTable} IN SHARE ROW EXCLUSIVE MODE`);
+        ${schema.modelPoolMembersTable}, ${schema.resourcePermissionPoliciesTable}
+        IN SHARE ROW EXCLUSIVE MODE`);
       const [model] = await tx
         .select()
         .from(schema.modelsTable)
         .where(eq(schema.modelsTable.id, id))
         .for("update");
       if (!model) return { status: "not_found" } as const;
+
+      // Unknown prices are null, even when the UI displays a fallback. An explicit
+      // zero is still saved pricing and must survive this cleanup operation.
+      const configuredValues = [
+        model.promptPricePerToken,
+        model.completionPricePerToken,
+        model.cacheReadPricePerToken,
+        model.cacheWritePricePerToken,
+        model.customPricePerMillionInput,
+        model.customPricePerMillionOutput,
+        model.customPricePerMillionCacheRead,
+        model.customPricePerMillionCacheWrite,
+        model.longContextThreshold,
+        model.customContextLength,
+        model.customOutputLength,
+        model.configuredParameters,
+      ];
+      if (
+        !model.discoveredViaLlmProxy ||
+        model.ignored ||
+        configuredValues.some((value) => value !== null)
+      ) {
+        return { status: "ineligible" } as const;
+      }
+      const configuredLinks = await tx.execute(sql`
+        SELECT 1 FROM ${schema.llmProviderApiKeyModelsTable} WHERE model_id = ${id}
+        UNION ALL SELECT 1 FROM ${schema.modelLabelsTable} WHERE model_id = ${id}
+        UNION ALL SELECT 1 FROM ${schema.modelTeamsTable} WHERE model_id = ${id}
+        UNION ALL SELECT 1 FROM ${schema.modelUsersTable} WHERE model_id = ${id}
+      `);
+      if (configuredLinks.rows.length) return { status: "ineligible" } as const;
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Only untouched discovery defaults may be cleaned up with the row.
+      const editedPolicies = await tx.execute(sql`
+        SELECT 1 FROM ${schema.resourcePermissionPoliciesTable}
+        WHERE resource = 'llmModel' AND scope = ${id}
+          AND (revision <> 1 OR NOT legacy_sharing_migrated
+            OR legacy_organization_audience
+            OR grants <> '[{"subject":{"type":"organization","id":"*"},"actions":["read","use"]}]'::jsonb)
+      `);
+      if (editedPolicies.rows.length) return { status: "ineligible" } as const;
+      // SPDX-SnippetEnd
 
       // The row lock also serializes new FK references (defaults/backfills)
       // with deletion. Check all organizations: model metadata is global.
@@ -811,9 +857,9 @@ class ModelModel {
           JOIN ${schema.llmProviderApiKeysTable} k ON k.id = m.provider_api_key_id
           WHERE m.model_id = ${model.modelId} AND k.provider = ${model.provider}
         )
-        UNION ALL SELECT 'an active cost recompute' WHERE EXISTS (
+        UNION ALL SELECT 'cost recompute history' WHERE EXISTS (
           SELECT 1 FROM ${schema.modelCostBackfillsTable}
-          WHERE model_id = ${id} AND status IN ('pending', 'running')
+          WHERE model_id = ${id}
         )
       `);
       if (references.rows.length) {

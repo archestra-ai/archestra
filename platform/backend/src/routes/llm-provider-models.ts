@@ -473,7 +473,7 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.DeleteModel,
         description:
-          "Delete unused model catalog metadata. Recorded interactions and spend are retained. Provider sync or another request may rediscover the model.",
+          "Remove an unconfigured model entry observed in proxy requests. Saved pricing, provider links, sharing settings and retained references prevent removal. Recorded interactions and spend are retained. Another request may rediscover the model.",
         tags: ["LLM Models"],
         params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(z.object({ success: z.boolean() })),
@@ -497,10 +497,16 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const result = await ModelModel.deleteUnused(id);
       if (result.status === "not_found")
         throw new ApiError(404, "Model not found");
+      if (result.status === "ineligible") {
+        throw new ApiError(
+          409,
+          "Only unconfigured entries observed in requests can be removed. Models with saved pricing, provider links, settings or sharing changes are protected.",
+        );
+      }
       if (result.status === "in_use") {
         throw new ApiError(
           409,
-          `This model is used by ${result.reason}. Remove that reference before deleting it.`,
+          `This model is used by ${result.reason} and cannot be removed.`,
         );
       }
       return reply.send({ success: true });

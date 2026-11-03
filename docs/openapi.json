@@ -400493,7 +400493,7 @@
         "tags": [
           "LLM Models"
         ],
-        "description": "Delete unused model catalog metadata. Recorded interactions and spend are retained. Provider sync or another request may rediscover the model.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmModel:update`: Sync the model catalog and see every model, including ones not shared with you",
+        "description": "Remove an unconfigured model entry observed in proxy requests. Saved pricing, provider links, sharing settings and retained references prevent removal. Recorded interactions and spend are retained. Another request may rediscover the model.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmModel:update`: Sync the model catalog and see every model, including ones not shared with you",
         "parameters": [
           {
             "schema": {

@@ -7778,7 +7778,7 @@ export const bulkUpdateModels = <ThrowOnError extends boolean = false>(options: 
 });
 
 /**
- * Delete unused model catalog metadata. Recorded interactions and spend are retained. Provider sync or another request may rediscover the model.
+ * Remove an unconfigured model entry observed in proxy requests. Saved pricing, provider links, sharing settings and retained references prevent removal. Recorded interactions and spend are retained. Another request may rediscover the model.
  *
  * Authentication:
  *

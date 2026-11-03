@@ -10,8 +10,8 @@ import { isWellFormedAppaId } from "@/openappa/service";
 import { ApiError } from "@/types";
 import { asRecord } from "@/utils/as-record";
 import type {
-  AppaChildTranscriptPath,
   AppaChildTrajectory,
+  AppaChildTranscriptPath,
   AppaMatchContext,
 } from "../types";
 import { readHeader, withCallerScope, withoutCallerScope } from "../utils";
@@ -45,7 +45,7 @@ export function referencesChildTranscriptPath(params: {
             return false;
           }
           const rest = path.slice(start + prefix.length);
-          const file = rest.replace(/["'`]+$/u, "");
+          const file = rest.replace(/["'`;|&)]+$/u, "");
           if (
             ownOutputId &&
             file.endsWith(suffix) &&

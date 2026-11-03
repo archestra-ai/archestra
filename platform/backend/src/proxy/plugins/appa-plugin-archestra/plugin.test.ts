@@ -5877,6 +5877,18 @@ describe("Claude Code task output reads", () => {
             arguments: { command: `tail -n 50 "${tasks}/bm7fgsz33.output"` },
           },
           {
+            id: "bash-output-chained",
+            name: "Bash",
+            arguments: { command: `cat ${tasks}/bbwoudo32.output&& echo done` },
+          },
+          {
+            id: "bash-output-then-transcript",
+            name: "Bash",
+            arguments: {
+              command: `cat ${tasks}/bbwoudo32.output;cat ${tasks}/aba0d3860dedb562b.output`,
+            },
+          },
+          {
             id: "agent-transcript",
             name: "Read",
             arguments: { file_path: `${tasks}/aba0d3860dedb562b.output` },
@@ -5892,9 +5904,13 @@ describe("Claude Code task output reads", () => {
         evaluateToolCalls.mock.calls.flatMap(([, calls]) =>
           calls.map((call) => call.id),
         ),
-      ).toEqual(["bash-output", "bash-output-tail"]);
+      ).toEqual(["bash-output", "bash-output-tail", "bash-output-chained"]);
       expect(outcome).toMatchObject({
-        blocked: [{ id: "agent-transcript" }, { id: "glob-transcripts" }],
+        blocked: [
+          { id: "bash-output-then-transcript" },
+          { id: "agent-transcript" },
+          { id: "glob-transcripts" },
+        ],
       });
     } finally {
       evaluateToolCalls.mockRestore();

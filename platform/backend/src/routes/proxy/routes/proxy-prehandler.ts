@@ -427,7 +427,20 @@ export async function cleanForwardedBody(
     } catch {
       throw new ApiError(400, "Invalid multipart model request.");
     }
-    await validateBody({ model: form.get("model") });
+    // Ollama uses Go's FormValue: query parameters precede multipart fields.
+    const query = request.url.includes("?")
+      ? request.url.slice(request.url.indexOf("?") + 1)
+      : "";
+    // Go discards malformed query pairs; do not authorize a different fallback
+    // model because URLSearchParams tolerates malformed escapes or semicolons.
+    try {
+      if (query.includes(";")) throw new Error("Ambiguous query");
+      decodeURIComponent(query.replace(/\+/g, " "));
+    } catch {
+      throw new ApiError(400, "Invalid multipart model query.");
+    }
+    const queryModel = new URLSearchParams(query).get("model");
+    await validateBody({ model: queryModel ?? form.get("model") });
     request.body = Readable.from([raw], { objectMode: false });
     return;
   }

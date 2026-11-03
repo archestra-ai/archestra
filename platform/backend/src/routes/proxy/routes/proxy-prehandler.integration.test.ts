@@ -71,7 +71,13 @@ test.for([
       body: request.url?.includes("/api/blobs/")
         ? raw
         : multipart
-          ? { model: multipart.get("model") }
+          ? {
+              model:
+                new URL(
+                  request.url ?? "",
+                  "http://upstream.invalid",
+                ).searchParams.get("model") ?? multipart.get("model"),
+            }
           : JSON.parse(decoded.toString()),
     });
     reply.writeHead(200, { "content-type": "application/json" });
@@ -131,15 +137,15 @@ test.for([
     body: form,
   });
   const multipartBytes = Buffer.from(await multipartRequest.arrayBuffer());
-  const askMultipart = () =>
+  const askMultipart = (query = "", bytes = multipartBytes) =>
     app.inject({
       method: "POST",
-      url: `/v1/${provider}/${agent.id}${provider === "ollama" ? "/audio/transcriptions" : "/v1/audio/transcriptions"}`,
+      url: `/v1/${provider}/${agent.id}${provider === "ollama" ? "/audio/transcriptions" : "/v1/audio/transcriptions"}${query}`,
       headers: {
         "x-archestra-virtual-key": token,
         "content-type": multipartRequest.headers.get("content-type") ?? "",
       },
-      payload: multipartBytes,
+      payload: bytes,
     });
   try {
     for (const path of paths) {
@@ -196,6 +202,22 @@ test.for([
       expect(encoded.statusCode, encoded.body).toBe(403);
       const multipart = await askMultipart();
       expect(multipart.statusCode, multipart.body).toBe(403);
+      // Go's FormValue selects a query model before the multipart field.
+      const visibleOverride = await askMultipart("?model=unknown-custom-model");
+      expect(visibleOverride.statusCode, visibleOverride.body).toBe(200);
+      expect(hits.pop()?.body).toMatchObject({ model: "unknown-custom-model" });
+      for (const query of ["?model=bad%ZZ", "?model=bad;value"]) {
+        const ambiguous = await askMultipart(query);
+        expect(ambiguous.statusCode, ambiguous.body).toBe(400);
+      }
+      const queryOnlyBytes = Buffer.from(
+        multipartBytes.toString().replace(model.modelId, ""),
+      );
+      const queryOnly = await askMultipart(
+        `?model=${encodeURIComponent(model.modelId)}`,
+        queryOnlyBytes,
+      );
+      expect(queryOnly.statusCode, queryOnly.body).toBe(403);
     }
     expect(hits).toHaveLength(0);
     const nativeOllama = provider === "ollama" || provider === "ollama-native";
@@ -224,6 +246,17 @@ test.for([
       const multipart = await askMultipart();
       expect(multipart.statusCode, multipart.body).toBe(200);
       expect(hits.at(-1)?.raw).toEqual(multipartBytes);
+      const hiddenOverrideModel = await ModelModel.create({
+        provider,
+        modelId: "hidden-query-model",
+        externalId: `${provider}/hidden-query-model`,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+      });
+      await ModelModel.update(hiddenOverrideModel.id, { ignored: true });
+      const hiddenOverride = await askMultipart("?model=hidden-query-model");
+      expect(hiddenOverride.statusCode, hiddenOverride.body).toBe(403);
+      expect(hits).toHaveLength(6);
     }
     expect(hits).toHaveLength(nativeOllama ? 6 : 3);
     expect(hits.at(-1)?.body).toMatchObject({

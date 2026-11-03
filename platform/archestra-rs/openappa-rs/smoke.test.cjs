@@ -239,11 +239,21 @@ builtin = "hitl"
 
     const other = scope();
     const otherDenial = await call(other, 'other-held', 'read_untrusted');
-    const attempts = await Promise.all(['attempt-a', 'attempt-b'].map((tool_call_id) => remoteOffer(other, {
+    const attemptIds = ['attempt-a', 'attempt-b'];
+    const attempts = await Promise.allSettled(attemptIds.map((tool_call_id) => remoteOffer(other, {
       tool_call_id, arguments: { offer_id: otherDenial.offers[0].offer_id },
     })));
-    assert.equal(attempts.filter((response) => response.result.isError !== true).length, 1, JSON.stringify(attempts));
-    assert.equal(attempts.filter((response) => response.result.isError === true).length, 1);
+    assert.equal(attempts.filter((response) => response.status === 'fulfilled' && response.value.result.isError !== true).length, 1, JSON.stringify(attempts));
+    const loser = attempts.findIndex((response) => response.status === 'rejected' || response.value.result.isError === true);
+    if (attempts[loser].status === 'rejected') {
+      assert.match(attempts[loser].reason.message, /OpenAPPA remedy is still executing; retry the request/);
+    }
+    // A running claim may ask the competing request to retry. Once the winner
+    // completes, that retry must refuse the spent offer and retain its refusal.
+    const losingEvent = { tool_call_id: attemptIds[loser], arguments: { offer_id: otherDenial.offers[0].offer_id } };
+    const spent = await remoteOffer(other, losingEvent);
+    assert.equal(spent.result.isError, true, JSON.stringify(spent));
+    assert.deepEqual((await remoteOffer(other, losingEvent)).result, spent.result);
   });
 
   await t.test('a block names the yell tool the presentation carries, and only then', async () => {

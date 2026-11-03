@@ -1061,6 +1061,31 @@ describe("agent routes", () => {
       expect(response.json().builtInAgentConfig).toBeNull();
     });
 
+    test("keeps SRE editable while protecting its built-in identity", async ({
+      makeAgent,
+    }) => {
+      const created = await makeAgent({
+        name: "SRE",
+        organizationId,
+        agentType: "agent",
+        authorId: user.id,
+        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.SRE },
+      });
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/agents/${created.id}`,
+        payload: {
+          name: "Operations SRE",
+          builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION },
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        name: "Operations SRE",
+        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.SRE },
+      });
+    });
+
     test("refuses an attempt to clear all teams on a team-scoped agent", async ({
       makeAgent,
       makeTeam,

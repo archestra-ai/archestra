@@ -118,9 +118,11 @@ function AgentEditor({ agent }: { agent: Agent }) {
   const { data: canReadAgentTriggers } = useHasPermissions({
     organizationSettings: ["read"],
   });
+  const isRestrictedBuiltIn =
+    isBuiltIn && agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.SRE;
   const steps = getAgentSetupSteps({
     agentType: agent.agentType,
-    builtIn: isBuiltIn,
+    builtIn: isRestrictedBuiltIn,
   }).filter((entry) => entry.id !== "messaging" || !!canReadAgentTriggers);
   const stepParam = searchParams.get("step");
   const step = steps.find((entry) => entry.id === stepParam)?.id ?? steps[0].id;
@@ -133,7 +135,7 @@ function AgentEditor({ agent }: { agent: Agent }) {
     id === "configuration"
       ? [
           "configuration",
-          ...((runtimeEnabled || agent.runtime != null) && !isBuiltIn
+          ...((runtimeEnabled || agent.runtime != null) && !isRestrictedBuiltIn
             ? (["runtime"] as const)
             : []),
         ]

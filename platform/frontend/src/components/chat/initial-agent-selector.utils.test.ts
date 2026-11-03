@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
+import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import {
   filterAndSortInitialAgents,
   groupInitialAgents,
@@ -10,6 +11,7 @@ const userId = "user-1";
 function makeAgent(
   overrides: Partial<{
     builtIn: boolean;
+    builtInAgentConfig: { name: typeof BUILT_IN_AGENT_IDS.SRE } | null;
     id: string;
     name: string;
     scope: "personal" | "team" | "org";
@@ -29,10 +31,26 @@ function makeAgent(
     systemPrompt: overrides.systemPrompt ?? null,
     runtime: null,
     builtIn: overrides.builtIn ?? false,
+    builtInAgentConfig: overrides.builtInAgentConfig ?? null,
   };
 }
 
 describe("filterAndSortInitialAgents", () => {
+  it("shows the built-in SRE agent when granted to the caller", () => {
+    const sre = makeAgent({
+      id: "sre",
+      builtIn: true,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.SRE },
+    });
+    expect(
+      filterAndSortInitialAgents({
+        allAgents: [sre],
+        currentAgentId: null,
+        search: "",
+        userId,
+      }),
+    ).toEqual([sre]);
+  });
   it("hides built-ins even when selected or matched by search", () => {
     const agents = [
       makeAgent({ id: "builtin", name: "APPA Keeper", builtIn: true }),

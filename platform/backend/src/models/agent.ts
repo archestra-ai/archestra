@@ -226,6 +226,14 @@ type AgentCatalogCandidatePage = {
 };
 
 class AgentModel {
+  /** SRE is built-in for ownership and grants but remains a user-facing agent. */
+  private static isRegularOrSreAgent(): SQL {
+    return or(
+      eq(schema.agentsTable.builtIn, false),
+      sql`${schema.agentsTable.builtInAgentConfig}->>'name' = ${BUILT_IN_AGENT_IDS.SRE}`,
+    ) as SQL;
+  }
+
   /**
    * Process-local cache for {@link AgentModel.resolveIdFromIdOrSlug}. The
    * lookup runs on every MCP-gateway request before auth, so under load it is
@@ -1606,7 +1614,7 @@ class AgentModel {
         and(
           eq(schema.agentsTable.organizationId, organizationId),
           eq(schema.agentsTable.agentType, "agent"),
-          eq(schema.agentsTable.builtIn, false),
+          AgentModel.isRegularOrSreAgent(),
           notDeleted(schema.agentsTable),
         ),
       );
@@ -1740,7 +1748,7 @@ class AgentModel {
   }
 
   /**
-   * Internal agents (not built-in) the user can use, for the agent picker in
+   * Internal agents and the SRE agent the user can use, for the agent picker in
    * Teams/Slack/etc. A channel is shared, so it leaves personal agents out. A
    * direct message is the user's own, so it keeps them.
    */
@@ -1761,7 +1769,7 @@ class AgentModel {
         and(
           eq(schema.agentsTable.organizationId, params.organizationId),
           eq(schema.agentsTable.agentType, "agent"),
-          eq(schema.agentsTable.builtIn, false),
+          AgentModel.isRegularOrSreAgent(),
           notDeleted(schema.agentsTable),
           ResourcePermissionPolicyModel.grantCondition({
             ...principal,
@@ -3425,7 +3433,7 @@ class AgentModel {
    * {@link ToolModel.getMcpToolsAccessibleToUser} — the dynamic surface for
    * `agents.access_all_subagents`. Admins see every internal agent.
    *
-   * Built-in agents back platform machinery and are excluded.
+   * Built-in platform agents are excluded except for the user-facing SRE agent.
    */
   static async findAccessibleDelegationTargets(params: {
     userId: string;
@@ -3450,7 +3458,7 @@ class AgentModel {
     const baseConditions = [
       eq(schema.agentsTable.organizationId, organizationId),
       eq(schema.agentsTable.agentType, "agent"),
-      eq(schema.agentsTable.builtIn, false),
+      AgentModel.isRegularOrSreAgent(),
       ne(schema.agentsTable.id, excludeAgentId),
       environmentId === null
         ? isNull(schema.agentsTable.environmentId)
@@ -4123,7 +4131,7 @@ class AgentModel {
           eq(schema.agentsTable.id, params.id),
           eq(schema.agentsTable.organizationId, params.organizationId),
           eq(schema.agentsTable.agentType, "agent"),
-          eq(schema.agentsTable.builtIn, false),
+          AgentModel.isRegularOrSreAgent(),
           notDeleted(schema.agentsTable),
         ),
       )

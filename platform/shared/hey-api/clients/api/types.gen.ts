@@ -17262,6 +17262,8 @@ export type GetAgentCatalogResponses = {
                     name: 'chat-title-generation-subagent';
                 } | {
                     name: 'app-runtime-llm-agent';
+                } | {
+                    name: 'sre-agent';
                 } | null;
                 builtIn: boolean | null;
                 latestVersion: number;
@@ -17651,6 +17653,8 @@ export type GetAgentsResponses = {
                 name: 'chat-title-generation-subagent';
             } | {
                 name: 'app-runtime-llm-agent';
+            } | {
+                name: 'sre-agent';
             } | null;
             builtIn: boolean | null;
             latestVersion: number;
@@ -17796,6 +17800,8 @@ export type CreateAgentData = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         deletedAt?: unknown;
         labels?: Array<{
@@ -18075,6 +18081,8 @@ export type CreateAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -18409,6 +18417,8 @@ export type GetChatAgentRosterResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         runtime: {
             image: string;
@@ -18552,6 +18562,8 @@ export type GetChatAgentRosterPageResponses = {
                 name: 'chat-title-generation-subagent';
             } | {
                 name: 'app-runtime-llm-agent';
+            } | {
+                name: 'sre-agent';
             } | null;
             runtime: {
                 image: string;
@@ -19333,6 +19345,8 @@ export type GetDefaultMcpGatewayResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -19641,6 +19655,8 @@ export type ImportAgentResponses = {
                 name: 'chat-title-generation-subagent';
             } | {
                 name: 'app-runtime-llm-agent';
+            } | {
+                name: 'sre-agent';
             } | null;
             builtIn: boolean | null;
             latestVersion: number;
@@ -19958,6 +19974,8 @@ export type GetAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -20092,6 +20110,8 @@ export type UpdateAgentData = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         deletedAt?: unknown;
         labels?: Array<{
@@ -20273,6 +20293,8 @@ export type UpdateAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -20862,6 +20884,8 @@ export type RestoreAgentVersionResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -21108,6 +21132,8 @@ export type CloneAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -23593,6 +23619,8 @@ export type RestoreAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -42709,6 +42737,8 @@ export type GetNewChatBootstrapResponses = {
                 name: 'chat-title-generation-subagent';
             } | {
                 name: 'app-runtime-llm-agent';
+            } | {
+                name: 'sre-agent';
             } | null;
             runtime: {
                 image: string;
@@ -42952,6 +42982,8 @@ export type GetNewChatBootstrapResponses = {
                     name: 'chat-title-generation-subagent';
                 } | {
                     name: 'app-runtime-llm-agent';
+                } | {
+                    name: 'sre-agent';
                 } | null;
                 builtIn: boolean | null;
                 latestVersion: number;
@@ -43288,6 +43320,8 @@ export type GetConversationBootstrapResponses = {
                     name: 'chat-title-generation-subagent';
                 } | {
                     name: 'app-runtime-llm-agent';
+                } | {
+                    name: 'sre-agent';
                 } | null;
                 runtime: {
                     image: string;
@@ -43531,6 +43565,8 @@ export type GetConversationBootstrapResponses = {
                         name: 'chat-title-generation-subagent';
                     } | {
                         name: 'app-runtime-llm-agent';
+                    } | {
+                        name: 'sre-agent';
                     } | null;
                     builtIn: boolean | null;
                     latestVersion: number;

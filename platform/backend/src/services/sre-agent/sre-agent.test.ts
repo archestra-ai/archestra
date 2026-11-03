@@ -308,6 +308,59 @@ describe("sreAgentService", () => {
     });
   });
 
+  test("the built-in SRE agent remains available to chat integrations and project defaults", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const { organizationId } = await seedSreAgent({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
+
+    expect(
+      (await AgentModel.findUsableChatopsAgents({
+        organizationId,
+        userId: member.id,
+        includePersonal: false,
+      })).map((agent) => agent.id),
+    ).toContain(SRE_AGENT_ID);
+    expect(
+      await AgentModel.findPinnableProjectDefault({
+        id: SRE_AGENT_ID,
+        organizationId,
+      }),
+    ).toMatchObject({ id: SRE_AGENT_ID });
+    expect(
+      (await AgentModel.findSpawnTargets(organizationId)).map(
+        (agent) => agent.id,
+      ),
+    ).toContain(SRE_AGENT_ID);
+    const delegationTargets = async () =>
+      (
+        await AgentModel.findAccessibleDelegationTargets({
+          userId: member.id,
+          isAdmin: false,
+          organizationId,
+          excludeAgentId: crypto.randomUUID(),
+          environmentId: SRE_ENVIRONMENT_ID,
+        })
+      ).map((agent) => agent.id);
+    expect(await delegationTargets()).toContain(SRE_AGENT_ID);
+    await restrictSreToAdmins(organizationId);
+    expect(
+      (await AgentModel.findUsableChatopsAgents({
+        organizationId,
+        userId: member.id,
+        includePersonal: false,
+      })).map((agent) => agent.id),
+    ).not.toContain(SRE_AGENT_ID);
+    expect(await delegationTargets()).not.toContain(SRE_AGENT_ID);
+  });
+
   test("a member who assigns a Kubernetes tool to their own agent can neither list nor call it", async ({
     makeOrganization,
     makeUser,

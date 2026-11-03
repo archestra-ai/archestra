@@ -1,6 +1,7 @@
 import {
   AGENT_OPTIONS_MAX_IDS,
   AGENT_OPTIONS_MAX_PAGE_SIZE,
+  BUILT_IN_AGENT_IDS,
   type AgentType,
   CursorQuerySchema,
   createCursorPaginatedResponseSchema,
@@ -2276,7 +2277,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Built-in agent guard: restrict which fields can be modified
       let updateData: typeof body;
-      if (existingAgent.builtInAgentConfig) {
+      if (
+        existingAgent.builtInAgentConfig &&
+        existingAgent.builtInAgentConfig.name !== BUILT_IN_AGENT_IDS.SRE
+      ) {
         // Validate builtInAgentConfig if provided
         if (body.builtInAgentConfig) {
           const parsed = BuiltInAgentConfigSchema.safeParse(

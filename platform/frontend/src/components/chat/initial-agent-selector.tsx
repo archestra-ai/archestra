@@ -2,6 +2,7 @@
 
 import {
   ARCHESTRA_MCP_CATALOG_ID,
+  BUILT_IN_AGENT_IDS,
   type archestraApiTypes,
 } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
@@ -284,7 +285,12 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     !displayAgent &&
     (isRosterPending ||
       isCallerResolvingAgent ||
-      (!currentAgentId && allAgents.some((agent) => !agent.builtIn)));
+      (!currentAgentId &&
+        allAgents.some(
+          (agent) =>
+            !agent.builtIn ||
+            agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.SRE,
+        )));
   const effectiveAgentId = displayAgent?.id ?? currentAgentId;
   // The trigger's server and knowledge icons: wanted on screen, not for
   // typing, so they wait for the page's first requests too.

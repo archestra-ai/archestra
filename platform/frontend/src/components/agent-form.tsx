@@ -6,6 +6,7 @@ import {
   type archestraApiTypes,
   BLOCKED_PASSTHROUGH_HEADERS,
   BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
+  BUILT_IN_AGENT_IDS,
   DEFAULT_AGENT_SYSTEM_PROMPT,
   DocsPage,
   E2eTestId,
@@ -1507,7 +1508,10 @@ export function AgentForm({
     agentType === "mcp_gateway"
       ? "The environment this gateway belongs to, controlling which tools and knowledge it can expose to consumers."
       : "The environment for this agent's sandbox (runtime and network egress) and the tools and knowledge sources it can use.";
-  const isBuiltIn = !!agent?.builtIn;
+  // SRE is built-in for identity and grants, but keeps its editable agent setup.
+  const isBuiltIn =
+    !!agent?.builtIn &&
+    agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.SRE;
   const showActivationSkills =
     showToolsSections && isInternalAgent && !isBuiltIn && !!canReadSkills;
   const agentHooksEnabled = useFeature("agentHooksEnabled");

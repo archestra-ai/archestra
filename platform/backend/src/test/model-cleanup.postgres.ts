@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
-import db, { initializeDatabase } from "@/database";
+import db, { initializeDatabase, schema } from "@/database";
+import ConversationModel from "@/models/conversation";
 import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
 
@@ -113,6 +114,106 @@ test("model cleanup serializes with provider catalog refresh", {
       DROP TRIGGER IF EXISTS model_cleanup_pause ON models;
       DROP FUNCTION IF EXISTS model_cleanup_pause();
     `);
+    await gate.query(
+      "DELETE FROM resource_permission_policies WHERE resource = 'llmModel' AND scope = $1",
+      [model.id],
+    );
+    await gate.query("DELETE FROM models WHERE id = $1", [model.id]);
+    gate.release();
+  }
+});
+
+test("model cleanup serializes with chat creation", {
+  timeout: 30_000,
+}, async () => {
+  assert.ok(
+    new URL(process.env.ARCHESTRA_DATABASE_URL ?? "").pathname.endsWith(
+      "_test",
+    ),
+  );
+  await initializeDatabase();
+  const org = await OrganizationModel.getOrCreateDefaultOrganization();
+  const userId = randomUUID();
+  await db.insert(schema.usersTable).values({
+    id: userId,
+    name: "Cleanup test",
+    email: `${userId}@example.com`,
+  });
+  await db.insert(schema.membersTable).values({
+    id: randomUUID(),
+    userId,
+    organizationId: org.id,
+    role: "admin",
+    createdAt: new Date(),
+  });
+  const [agent] = await db
+    .insert(schema.agentsTable)
+    .values({ name: "Cleanup test", organizationId: org.id })
+    .returning();
+  const model = await ModelModel.ensureModelExists(
+    `cleanup-chat-${randomUUID()}`,
+    "openai",
+  );
+  assert.ok(model);
+  const gate = await db.$client.connect();
+  let creation: ReturnType<typeof ConversationModel.create> | undefined;
+  let removal: ReturnType<typeof ModelModel.deleteUnused> | undefined;
+  try {
+    await gate.query("SELECT pg_advisory_lock(2149, 2)");
+    await gate.query(`
+      CREATE FUNCTION model_cleanup_pause() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF NEW.model_id = '${model.id}'::uuid THEN
+          PERFORM pg_advisory_xact_lock(2149, 2);
+        END IF;
+        RETURN NEW;
+      END $$;
+      CREATE TRIGGER zz_model_cleanup_pause AFTER INSERT ON conversations
+        FOR EACH ROW EXECUTE FUNCTION model_cleanup_pause();
+    `);
+    creation = ConversationModel.create({
+      userId,
+      organizationId: org.id,
+      agentId: agent.id,
+      modelId: model.id,
+    });
+    void creation.catch(() => {});
+    await waitForLock('%insert into "conversations"%');
+    removal = ModelModel.deleteUnused(model.id);
+    void removal.catch(() => {});
+    await waitForLock("%models%for update%");
+    await gate.query("SELECT pg_advisory_unlock(2149, 2)");
+    const results = await Promise.allSettled([creation, removal]);
+    for (const result of results) {
+      assert.equal(
+        result.status,
+        "fulfilled",
+        result.status === "rejected"
+          ? String(result.reason.cause ?? result.reason)
+          : undefined,
+      );
+    }
+    assert.equal((await removal)?.status, "in_use");
+    const rows = await gate.query(
+      "SELECT model_id FROM conversations WHERE user_id = $1",
+      [userId],
+    );
+    assert.equal(rows.rows[0]?.model_id, model.id);
+    assert.ok(await ModelModel.findById(model.id));
+  } finally {
+    await gate.query("SELECT pg_advisory_unlock(2149, 2)");
+    await Promise.allSettled([creation, removal]);
+    await gate.query(
+      `DROP TRIGGER IF EXISTS zz_model_cleanup_pause ON conversations; DROP FUNCTION IF EXISTS model_cleanup_pause();`,
+    );
+    await gate.query(
+      "DELETE FROM resource_permission_policies WHERE resource = 'conversation' AND scope IN (SELECT id::text FROM conversations WHERE user_id = $1)",
+      [userId],
+    );
+    await gate.query("DELETE FROM conversations WHERE user_id = $1", [userId]);
+    await gate.query("DELETE FROM agents WHERE id = $1", [agent.id]);
+    await gate.query("DELETE FROM member WHERE user_id = $1", [userId]);
+    await gate.query('DELETE FROM "user" WHERE id = $1', [userId]);
     await gate.query(
       "DELETE FROM resource_permission_policies WHERE resource = 'llmModel' AND scope = $1",
       [model.id],

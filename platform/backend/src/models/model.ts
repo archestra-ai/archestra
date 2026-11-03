@@ -767,14 +767,18 @@ class ModelModel {
       // Name references and policy scopes have no model FK; keep their writers
       // out until eligibility checks and this rare cleanup commit together.
       await tx.execute(sql`LOCK TABLE ${schema.modelsTable},
-        ${schema.organizationsTable}, ${schema.modelPoolMembersTable},
-        ${schema.resourcePermissionPoliciesTable} IN SHARE ROW EXCLUSIVE MODE`);
+        ${schema.organizationsTable}, ${schema.modelPoolMembersTable}
+        IN SHARE ROW EXCLUSIVE MODE`);
       const [model] = await tx
         .select()
         .from(schema.modelsTable)
         .where(eq(schema.modelsTable.id, id))
         .for("update");
       if (!model) return { status: "not_found" } as const;
+      // Chats and agents acquire the model FK row lock before creating their
+      // policy. Let those transactions finish before locking the policy table.
+      await tx.execute(sql`LOCK TABLE ${schema.resourcePermissionPoliciesTable}
+        IN SHARE ROW EXCLUSIVE MODE`);
 
       // Unknown prices are null, even when the UI displays a fallback. An explicit
       // zero is still saved pricing and must survive this cleanup operation.

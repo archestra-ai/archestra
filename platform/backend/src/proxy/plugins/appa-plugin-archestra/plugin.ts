@@ -6011,8 +6011,12 @@ function keepBreakTheGlassReceipts(params: {
     // the last block of a client that joins blocks into one string: text
     // inside another block (a call's quoted arguments, say) never counts.
     const blocks = textBlocks(result.content);
+    // Clients pad a block with whitespace (Claude Code ends it with a newline).
     const receipt = Object.values(WAIVED_REVIEW_RECEIPTS).find((text) =>
-      blocks.some((block) => block === text || block.endsWith(`\n${text}`)),
+      blocks.some((block) => {
+        const trimmed = block.trim();
+        return trimmed === text || trimmed.endsWith(`\n${text}`);
+      }),
     );
     if (!receipt || admitted.includes(receipt)) continue;
     params.toolResultUpdates[result.id] = `${admitted}\n\n${receipt}`;

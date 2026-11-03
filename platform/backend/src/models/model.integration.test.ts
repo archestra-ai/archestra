@@ -51,6 +51,7 @@ describe("resolved model availability", () => {
       "https://registry.ollama.ai/library/llama3.2",
       "1://registry.ollama.ai/library/llama3.2",
       " llama3.2 ",
+      "\u0085 llama3.2 \u0085",
       "llama3.2:local",
       "llama3.2:latest:local",
     ]) {

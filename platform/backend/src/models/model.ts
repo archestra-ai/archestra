@@ -199,10 +199,17 @@ function readOllamaDefaultNumCtx(
  * This is availability matching only; never rewrite the provider-bound model ID.
  */
 function ollamaAvailabilityName(id: string): string | undefined {
-  // ParseRef trims Unicode whitespace (including NEL, absent from JS's \s),
-  // then separates explicit local/cloud source selection from the model tag.
-  const trim = (value: string) =>
-    value.replace(/^[\s\u0085]+|[\s\u0085]+$/g, "");
+  // ParseRef trims Unicode White_Space, then separates explicit local/cloud
+  // source selection from the model tag.
+  const trim = (value: string) => {
+    let from = 0;
+    let to = value.length;
+    // Scan only the ends: a trailing-whitespace regex can backtrack across a
+    // long invalid interior run before the provider rejects the model name.
+    while (from < to && /\p{White_Space}/u.test(value.charAt(from))) from++;
+    while (to > from && /\p{White_Space}/u.test(value.charAt(to - 1))) to--;
+    return value.slice(from, to);
+  };
   const sourceOf = (value: string) => {
     const separator = value.lastIndexOf(":");
     if (separator < 0) return undefined;

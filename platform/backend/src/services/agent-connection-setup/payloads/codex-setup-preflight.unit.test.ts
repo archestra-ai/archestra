@@ -113,6 +113,7 @@ if (args.includes('app-server')) {
 }
 if (args[0] === 'mcp' && args[1] === 'add') fs.appendFileSync(path.join(home, 'config.toml'), '\\n[mcp_servers.test_gateway]\\nurl = "https://example.com/v1/mcp/test"\\n');
 // Like the real CLI, report the clone URL as given, credential included.
+if (args[0] === 'plugin' && args[1] === 'add' && !args.includes('--help') && process.env.FAIL_PLUGIN) { console.error('Plugin download failed'); process.exit(23); }
 if (args[0] === 'plugin' && process.env.FAIL_MARKETPLACE) { console.error('Error: git clone ' + args[3] + ' failed with status exit status: 128'); process.exit(22); }
 // Codex 0.162 keeps one source per marketplace name and refuses another one.
 const marketplace = path.join(process.env.HOME, 'marketplace-source');
@@ -254,9 +255,24 @@ test("a rerun replaces the marketplace an earlier setup registered from another 
   }
 });
 
-test("installer output hides the marketplace credential that Codex echoes from the clone URL", async () => {
-  const cloneUrl =
-    "https://token:archestra_mkt_secret@example.com/skills/marketplace.git";
+test.each([
+  {
+    cloneUrl:
+      "https://token:archestra_mkt_secret@example.com/skills/marketplace.git",
+    maskedUrl: "https://***@example.com/skills/marketplace.git",
+    secret: "archestra_mkt_secret",
+  },
+  {
+    cloneUrl:
+      "https://example.com/skills/m/archestra_skl_fixture_secret/repo.git",
+    maskedUrl: "https://example.com/skills/m/archestra_skl_***/repo.git",
+    secret: "archestra_skl_fixture_secret",
+  },
+])("installer output hides the credential that Codex echoes from $cloneUrl", async ({
+  cloneUrl,
+  maskedUrl,
+  secret,
+}) => {
   for (const failMarketplace of [false, true]) {
     const f = await fixture();
     try {
@@ -272,11 +288,9 @@ test("installer output hides the marketplace credential that Codex echoes from t
       }).catch((error) => error);
       const output = `${result.stdout}${result.stderr}`;
       expect(output).toContain(
-        failMarketplace
-          ? "git clone https://***@example.com/skills/marketplace.git failed"
-          : "from https://***@example.com/skills/marketplace.git",
+        failMarketplace ? `git clone ${maskedUrl} failed` : `from ${maskedUrl}`,
       );
-      expect(output).not.toContain("archestra_mkt_secret");
+      expect(output).not.toContain(secret);
       expect(output).not.toContain("HTTP 502");
       // Codex itself still receives the credential-bearing URL.
       expect(await readFile(path.join(f.home, "calls"), "utf8")).toContain(
@@ -638,6 +652,57 @@ test("a preflight that fails without naming a cause keeps the installer's generi
     // Not the stop status, so the installer adds its own next step.
     expect(result.code).toBe(1);
     expect(await readFile(f.config, "utf8")).toBe(original);
+  } finally {
+    await rm(f.home, { recursive: true, force: true });
+  }
+});
+
+test.each([
+  false,
+  true,
+])("ChatGPT installs the connection plugin in the routing setup (plugin fails: %s)", async (failPlugin) => {
+  const f = await fixture();
+  try {
+    await writeFile(
+      f.script,
+      renderSetupScript({
+        ...ctx,
+        clientId: "chatgpt",
+        skills: {
+          cloneUrl: ctx.skills?.cloneUrl ?? "",
+          marketplaceName: ctx.skills?.marketplaceName ?? "",
+          pluginNames: ["test-skills"],
+          connectionPlugin: true,
+        },
+      }),
+    );
+    const result = await exec("bash", [f.script], {
+      env: { ...f.env, ...(failPlugin ? { FAIL_PLUGIN: "1" } : {}) },
+    }).catch((error) => error);
+    const calls = await readFile(path.join(f.home, "calls"), "utf8");
+    expect(calls).not.toContain("mcp add test_gateway");
+    if (!failPlugin) expect(calls).toContain("mcp get test_gateway --json");
+    expect(calls).toContain(`plugin marketplace add ${ctx.skills?.cloneUrl}`);
+    expect(calls).toContain("plugin add test-skills@test-skills\n");
+    const config = await readFile(f.config, "utf8");
+    expect(config).toContain('model_provider = "test_proxy"');
+    expect(config).not.toContain("[mcp_servers.test_gateway]");
+    if (!failPlugin)
+      expect(config).toContain(
+        '[plugins."test-skills@test-skills".mcp_servers."test_gateway"',
+      );
+    expect(config).toContain('sandbox_mode = "workspace-write"');
+    if (failPlugin) {
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain("Plugin installation failed");
+      expect(result.stderr).toContain("Setup is incomplete");
+      expect(result.stdout).not.toContain("ChatGPT is connected");
+    } else {
+      expect(result.code).toBeUndefined();
+      expect(result.stdout).toContain("ChatGPT is connected");
+      expect(result.stdout).toContain("Restart ChatGPT");
+      expect(result.stdout).not.toContain("run /plugins");
+    }
   } finally {
     await rm(f.home, { recursive: true, force: true });
   }

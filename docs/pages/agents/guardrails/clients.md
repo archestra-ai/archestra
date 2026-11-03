@@ -4,7 +4,7 @@ sidebarTitle: Clients
 description: Make Guardrails check your client, with built-in support or session headers
 order: 3
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-11-01
+lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -58,7 +58,7 @@ Reconnect through the connection page and restart the client to install the ques
 
 ### ChatGPT
 
-Guardrails follow the desktop app's Work and Codex tabs. Both run on your computer and read the Codex settings there, so the Codex setup routes them through the LLM Proxy. On **Connect**, the **ChatGPT** card shows that command under **Set up the desktop app**. See [Use Guardrails in the Desktop App](/docs/integrations/ai-clients/chatgpt#use-guardrails-in-the-desktop-app).
+Guardrails follow the desktop app's Work and Codex tabs. Both run on your computer and read the Codex settings there. On **Connect**, select **ChatGPT** and run its terminal setup command to route model requests through the LLM Proxy. See [Use Guardrails in the Desktop App](/docs/integrations/ai-clients/chatgpt#use-guardrails-in-the-desktop-app).
 
 - **Not covered:** chats and dots run on OpenAI's servers, so their tool calls never reach the proxy.
 - **Approvals:** a review shows as a form from the MCP gateway in the task, as in Codex CLI.

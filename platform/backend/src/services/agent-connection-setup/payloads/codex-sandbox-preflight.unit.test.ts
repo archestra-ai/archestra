@@ -16,21 +16,55 @@ function probe({
   help = "",
   result = { status: 0 },
   distribution,
+  executable,
+  cacheBuilds = ["aaaabbbbccccdddd"],
+  logs = {},
+  locateResult,
+  helpResult,
 }: {
   platform?: string;
   config?: string;
   help?: string;
   result?: ProcessResult;
   distribution?: string;
+  executable?: string;
+  cacheBuilds?: string[];
+  logs?: Record<string, string>;
+  locateResult?: ProcessResult;
+  helpResult?: ProcessResult;
 } = {}) {
   const calls: { command: string; args: string[] }[] = [];
+  const home = "/home/example/.codex";
+  const mappedHome = "/mnt/c/Users/example/.codex";
+  const logRoot = "/localapp/Codex/Logs";
+  const files = {
+    readdirSync: (dir: string, options?: { withFileTypes?: boolean }) => {
+      if (dir === `${home}/bin/wsl`) return cacheBuilds;
+      if (dir !== logRoot || !options?.withFileTypes) return [];
+      return Object.keys(logs).map((name) => ({
+        name,
+        isDirectory: () => false,
+        isFile: () => true,
+      }));
+    },
+    statSync: () => ({ size: 100, mtimeMs: 1 }),
+    readFileSync: (file: string) => logs[file.slice(logRoot.length + 1)],
+  };
   const run = () =>
     runInNewContext(
       `${CODEX_WSL_SETUP_HINT}\n${CODEX_SANDBOX_PREFLIGHT}\nassertSandboxReady("codex");`,
       {
         process: {
           platform,
-          env: { ARCHESTRA_CODEX_WSL_DISTRIBUTION: distribution },
+          env: {
+            ARCHESTRA_CODEX_WSL_DISTRIBUTION: distribution,
+            ARCHESTRA_CODEX_WSL_EXECUTABLE: executable,
+            LOCALAPPDATA: "/localapp",
+          },
+        },
+        require: (name: string) => {
+          if (name !== "node:fs") throw new Error("Unexpected module");
+          return files;
         },
         os: { tmpdir: () => "/tmp", homedir: () => "/home/example" },
         path: { join: (...parts: string[]) => parts.join("/") },
@@ -41,7 +75,20 @@ function probe({
           output.stderr || output.error?.message || "",
         spawnSync: (command: string, args: string[]) => {
           calls.push({ command, args });
-          return args[0] === "help" ? { status: 0, stdout: help } : result;
+          if (args.includes("archestra-wsl-codex")) {
+            const offset = args.indexOf("archestra-wsl-codex");
+            const binary =
+              args[offset + 3] || args[offset + 2].replace(home, mappedHome);
+            return (
+              locateResult ?? {
+                status: 0,
+                stdout: `${mappedHome}\n${binary}\n`,
+              }
+            );
+          }
+          return args.at(-2) === "help" && args.at(-1) === "sandbox"
+            ? (helpResult ?? { status: 0, stdout: help })
+            : result;
         },
       },
     );
@@ -90,8 +137,21 @@ describe("Codex local sandbox prerequisites", () => {
     expect(p.run).toThrow("sudo apt install bubblewrap");
     expect(p.calls[0].command).toBe("wsl.exe");
     expect(p.calls[0].args.slice(0, 3)).toEqual(["--exec", "/bin/sh", "-c"]);
-    expect(p.calls[0].args[3]).toContain("exec bwrap --ro-bind / /");
-    expect(p.calls[0].args[3]).toContain("--unshare-net -- /bin/true");
+    expect(p.calls.at(-1)).toEqual({
+      command: "wsl.exe",
+      args: [
+        "--exec",
+        "env",
+        "CODEX_HOME=/mnt/c/Users/example/.codex",
+        "/mnt/c/Users/example/.codex/bin/wsl/aaaabbbbccccdddd/codex",
+        "sandbox",
+        "-c",
+        'sandbox_mode="read-only"',
+        "--",
+        "/bin/true",
+      ],
+    });
+    expect(p.calls.every((call) => !call.args.includes("bwrap"))).toBe(true);
   });
 
   test("targets the selected WSL distribution without interpreting its name as shell input", () => {
@@ -108,6 +168,120 @@ describe("Codex local sandbox prerequisites", () => {
       "/bin/sh",
       "-c",
     ]);
+  });
+
+  test.each([
+    { help: "Usage: codex sandbox [COMMAND]...", legacy: false },
+    { help: "Commands:\n  linux  Run a command with Landlock\n", legacy: true },
+  ])("runs the desktop executable's WSL sandbox with legacy=$legacy", ({
+    help,
+    legacy,
+  }) => {
+    const p = probe({
+      platform: "win32",
+      config: "[desktop]\nrunCodexInWindowsSubsystemForLinux = true\n",
+      help,
+    });
+    p.run();
+    expect(p.calls.at(-1)?.args).toEqual([
+      "--exec",
+      "env",
+      "CODEX_HOME=/mnt/c/Users/example/.codex",
+      "/mnt/c/Users/example/.codex/bin/wsl/aaaabbbbccccdddd/codex",
+      "sandbox",
+      ...(legacy ? ["linux"] : []),
+      "-c",
+      'sandbox_mode="read-only"',
+      "--",
+      "/bin/true",
+    ]);
+  });
+
+  test("chooses the desktop's most recent logged spawn across cached upgrades", () => {
+    const p = probe({
+      platform: "win32",
+      config: "[desktop]\nrunCodexInWindowsSubsystemForLinux = true\n",
+      cacheBuilds: ["1111222233334444", "aaaabbbbccccdddd"],
+      logs: {
+        "old.log":
+          "2026-01-01T10:00:00.000Z info [StdioConnection] stdio_transport_spawned executablePath=/home/example/.codex/bin/wsl/aaaabbbbccccdddd/codex pid=1 spawnCommand=wsl.exe",
+        "current.log":
+          "2026-01-02T10:00:00.000Z info [StdioConnection] stdio_transport_spawned executablePath=/home/example/.codex/bin/wsl/1111222233334444/codex pid=2 spawnCommand=wsl.exe",
+      },
+    });
+    p.run();
+    expect(p.calls.at(-1)?.args).toContain(
+      "/mnt/c/Users/example/.codex/bin/wsl/1111222233334444/codex",
+    );
+  });
+
+  test("does not substitute an older cache when the desktop's selected binary is missing", () => {
+    const p = probe({
+      platform: "win32",
+      config: "[desktop]\nrunCodexInWindowsSubsystemForLinux = true\n",
+      logs: {
+        "current.log":
+          "2026-01-02T10:00:00.000Z info [StdioConnection] stdio_transport_spawned executablePath=/home/example/.codex/bin/wsl/1111222233334444/codex pid=2 spawnCommand=wsl.exe",
+      },
+    });
+    expect(p.run).toThrow("last selected Linux Codex executable is missing");
+    expect(p.calls).toEqual([]);
+  });
+
+  test("refuses ambiguous desktop versions without probing an unrelated PATH Codex", () => {
+    const p = probe({
+      platform: "win32",
+      config: "[desktop]\nrunCodexInWindowsSubsystemForLinux = true\n",
+      cacheBuilds: ["1111222233334444", "aaaabbbbccccdddd"],
+    });
+    expect(p.run).toThrow("ARCHESTRA_CODEX_WSL_EXECUTABLE");
+    expect(p.calls).toEqual([]);
+  });
+
+  test("passes an explicit executable and distribution as data, not shell source", () => {
+    const executable = "/home/example/Desktop CLI/codex;echo-untrusted";
+    const p = probe({
+      platform: "win32",
+      config: "[desktop]\nrunCodexInWindowsSubsystemForLinux = true\n",
+      cacheBuilds: [],
+      distribution: "Development Linux",
+      executable,
+    });
+    p.run();
+    expect(p.calls.at(-1)?.args).toEqual([
+      "--distribution",
+      "Development Linux",
+      "--exec",
+      "env",
+      "CODEX_HOME=/mnt/c/Users/example/.codex",
+      executable,
+      "sandbox",
+      "-c",
+      'sandbox_mode="read-only"',
+      "--",
+      "/bin/true",
+    ]);
+    expect(p.calls[0].args[5]).not.toContain(executable);
+  });
+
+  test("stops when WSL cannot resolve the desktop executable", () => {
+    const p = probe({
+      platform: "win32",
+      config: "[desktop]\nrunCodexInWindowsSubsystemForLinux = true\n",
+      locateResult: { status: 127, stderr: "desktop CLI unavailable" },
+    });
+    expect(p.run).toThrow("No client configuration was changed");
+    expect(p.calls).toHaveLength(1);
+  });
+
+  test("stops before a sandbox run when the actual desktop CLI cannot report sandbox help", () => {
+    const p = probe({
+      platform: "win32",
+      config: "[desktop]\nrunCodexInWindowsSubsystemForLinux = true\n",
+      helpResult: { status: 2, stderr: "unsupported sandbox" },
+    });
+    expect(p.run).toThrow("Could not check the Codex sandbox");
+    expect(p.calls).toHaveLength(2);
   });
 
   test.each([

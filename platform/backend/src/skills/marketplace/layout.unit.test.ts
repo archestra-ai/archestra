@@ -352,3 +352,60 @@ function makePlugin(
     ],
   };
 }
+
+test.each([
+  false,
+  true,
+])("connection plugin carries its gateway and onboarding with shared skills: %s", (withSkills) => {
+  const request: MaterializeRequest = {
+    ref: { kind: "link", id: "aaaaaaaa-1111-2222-3333-444444444444" },
+    marketplaceName: "test-extensions",
+    ownerName: "Test Org",
+    displayName: "Test Platform",
+    skills: withSkills
+      ? [
+          makeSkill([makeResourceFile("reference/example.md")], {
+            name: "connection-setup",
+          }),
+        ]
+      : [],
+    connection: {
+      appName: "Test Platform",
+      gatewayUrl: "https://example.test/v1/mcp/team",
+      serverName: "team_gateway",
+      frontendUrl: "https://dashboard.example.test",
+      iconLogo: null,
+    },
+  };
+  const files = computeTestLayout(request);
+  const get = (name: string) =>
+    files.find((file) => file.path === `plugins/test-extensions/${name}`)
+      ?.content;
+  const manifest = JSON.parse(get(".codex-plugin/plugin.json") ?? "");
+  expect(manifest.interface.displayName).toBe("Test Platform");
+  expect(get("plugin.json")).toBeUndefined(); // Native Codex silently omits the portable transport.
+  const servers = JSON.parse(get(".mcp.json") ?? "").mcpServers;
+  expect(servers.team_gateway).toEqual({
+    url: request.connection?.gatewayUrl,
+    required: true,
+  });
+  const setup = get(
+    manifest.extensions["com.openai"].onboardingSkill.replace(/^\.\//, ""),
+  );
+  expect(setup).toContain("approved terminal installer");
+  expect(setup).toContain("server exactly named team_gateway");
+  expect(setup).toContain("stop immediately without calling another server");
+  expect(setup).toContain("without a remedy");
+  expect(get("assets/logo.svg")).toContain("<svg");
+  if (withSkills) {
+    expect(manifest.extensions["com.openai"].onboardingSkill).toContain(
+      "connection-setup-2",
+    );
+    expect(get("skills/connection-setup/reference/example.md")).toBe(
+      "contents of reference/example.md",
+    );
+  }
+  expect(new Set(files.map((file) => file.path.toLowerCase())).size).toBe(
+    files.length,
+  );
+});

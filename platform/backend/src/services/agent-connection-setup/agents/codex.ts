@@ -6,7 +6,8 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import { STARTUP_GUARD_INSTALL } from "@archestra/shared/consts";
-import { CODEX_GUARD_CLIENT } from "../guard/clients";
+import { codexGuardClient } from "../guard/clients/codex";
+import { CODEX_WSL_SETUP_HINT } from "../payloads/codex-handoff";
 import { starterPrompt } from "../steps/ending";
 import { describeMarketplaceContents } from "../steps/marketplace-copy";
 import { legacyServerNames } from "../steps/mcp";
@@ -88,17 +89,52 @@ const CODEX_HELPER_APPROVALS_NOTICE =
  *
  * @public — asserted by the setup script unit tests, which knip --production ignores.
  */
-export function codexHelperApprovalTables(mcp: SetupScriptMcpSection): string {
+export function codexHelperApprovalTables(
+  mcp: SetupScriptMcpSection,
+  pluginRef?: string,
+): string {
+  const scope = pluginRef ? `plugins.${tomlBasicString(pluginRef)}.` : "";
   return [...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES, TOOL_ASK_USER_SHORT_NAME]
     .map(
       (name) =>
-        `[mcp_servers.${tomlBasicString(mcp.serverName)}.tools.${tomlBasicString(`${mcp.toolPrefix}${name}`)}]\napproval_mode = "approve"`,
+        `[${scope}mcp_servers.${tomlBasicString(mcp.serverName)}.tools.${tomlBasicString(`${mcp.toolPrefix}${name}`)}]\napproval_mode = "approve"`,
     )
     .join("\n\n");
 }
 
+/** Remove only the skills package recorded by the earlier ChatGPT installer. */
+function legacyConnectionPluginCleanup(ctx: SetupScriptContext): string {
+  return `${CODEX_WSL_SETUP_HINT}
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const { execFileSync } = require('node:child_process');
+const guard = path.join(os.homedir(), '.archestra', ${JSON.stringify(ctx.platform === "windows" ? "codex-startup-guard.ps1.update.json" : "codex-startup-guard.sh.update.json")});
+if (fs.existsSync(guard)) {
+  const state = JSON.parse(fs.readFileSync(guard, 'utf8'));
+  const old = state.context?.skills;
+  if (state.clientId === 'codex' && state.context?.appName === ${JSON.stringify(ctx.appName)} && state.context?.mcp?.url === ${JSON.stringify(ctx.mcp?.url)} && old && !old.connectionPlugin && old.marketplaceName !== ${JSON.stringify(ctx.skills?.marketplaceName)} && old.pluginNames?.length === 1 && old.pluginNames[0] === old.marketplaceName) {
+    const executable = process.argv[process.argv[1] === '-' ? 2 : 1];
+    const shim = /\\.cmd$/i.test(executable);
+    const args = shim ? [path.join(path.dirname(executable), 'node_modules', '@openai', 'codex', 'bin', 'codex.js')] : [];
+    const command = shim ? process.execPath : executable;
+    const home = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
+    const tables = tomlTables(fs.readFileSync(path.join(home, 'config.toml'), 'utf8').split(/\\r?\\n/)).tables;
+    const has = (section, key) => tables.some(table => table.name === section + '\\0' + key || table.name.startsWith(section + '\\0' + key + '\\0'));
+    if (has('plugins', old.marketplaceName + '@' + old.marketplaceName)) execFileSync(command, [...args, 'plugin', 'remove', old.marketplaceName + '@' + old.marketplaceName], { stdio: 'ignore' });
+    if (has('marketplaces', old.marketplaceName)) execFileSync(command, [...args, 'plugin', 'marketplace', 'remove', old.marketplaceName], { stdio: 'ignore' });
+  }
+}`;
+}
+
 function codexBashSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
+  if (ctx.clientId === "chatgpt" && ctx.skills) {
+    sections.push(`if ! cli codex plugin add --help >/dev/null 2>&1; then
+  err "Update the Codex CLI before installing ChatGPT plugins. No client configuration was changed."
+  exit 112
+fi`);
+  }
 
   if (ctx.mcp || ctx.proxy || ctx.skills) {
     // Codex owns config.toml wherever CODEX_HOME points (default ~/.codex),
@@ -113,13 +149,34 @@ if [ -f "$CONFIG" ] && [ ! -f "$CONFIG.archestra-backup" ]; then
 fi`);
   }
 
-  if (ctx.mcp) {
+  if (ctx.mcp && ctx.skills?.connectionPlugin) {
+    sections.push(`cli codex mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
+${legacyServerNames(ctx.mcp)
+  .map((name) => `cli codex mcp remove ${sh(name)} >/dev/null 2>&1 || true`)
+  .join("\n")}`);
+  } else if (ctx.mcp) {
     const stale = legacyServerNames(ctx.mcp)
       .map((name) => `cli codex mcp remove ${sh(name)} >/dev/null 2>&1 || true`)
       .join("\n");
+    // `mcp add` starts OAuth immediately in current Codex builds. ChatGPT
+    // registers the documented TOML entry instead, leaving one sign-in to the
+    // installer ending, whose Windows helper selects the WSL-readable store.
+    const register =
+      ctx.clientId === "chatgpt"
+        ? `umask 077
+cat >> "$CONFIG" <<'ARCHESTRA_MCP'
+
+${codexMcpServerHeader(ctx.mcp.serverName)}
+url = ${JSON.stringify(ctx.mcp.url)}
+ARCHESTRA_MCP
+if ! cli codex mcp list --json >/dev/null; then
+  err "Could not validate the gateway configuration. Restore this setup attempt before retrying."
+  exit 1
+fi`
+        : `cli codex mcp add ${sh(ctx.mcp.serverName)} --url ${sh(ctx.mcp.url)}`;
     sections.push(`say ${sh(`Adding ${ctx.appName} tools as "${ctx.mcp.serverName}"`)}
 cli codex mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true${stale ? `\n${stale}` : ""}
-cli codex mcp add ${sh(ctx.mcp.serverName)} --url ${sh(ctx.mcp.url)}
+${register}
 umask 077
 arch_header=${sh(codexMcpServerHeader(ctx.mcp.serverName))}
 awk -v header="$arch_header" '
@@ -196,8 +253,13 @@ echo "Codex uses your existing ChatGPT or OpenAI API-key login."`
   if (ctx.skills) {
     const installs = (ctx.skills.pluginNames ?? []).map((pluginName) => {
       const ref = `${pluginName}@${ctx.skills?.marketplaceName}`;
-      return `if ! cli codex plugin add ${sh(ref)}; then
-  warn ${sh(`Could not deliver plugin — run 'codex plugin add ${ref}'.`)}
+      return `${ctx.skills?.connectionPlugin ? `cli codex plugin remove ${sh(ref)} >/dev/null 2>&1 || true\n` : ""}if ! cli codex plugin add ${sh(ref)}; then
+  ${
+    ctx.clientId === "chatgpt"
+      ? `err ${sh(`Plugin installation failed. Retry setup after resolving the CLI error.`)}
+  exit 1`
+      : `warn ${sh(`Could not deliver plugin — run 'codex plugin add ${ref}'.`)}`
+  }
 fi`;
     });
     // Each setup gets a new clone URL, and Codex refuses to add a marketplace
@@ -212,11 +274,30 @@ fi
 ${installs.join("\n")}`);
   }
 
-  return withStartupGuardBash(ctx, CODEX_GUARD_CLIENT, sections);
+  if (ctx.mcp && ctx.skills?.connectionPlugin) {
+    sections.push(`cat >> "$CONFIG" <<'ARCHESTRA_PLUGIN_APPROVALS'
+
+${codexHelperApprovalTables(ctx.mcp, `${ctx.skills.marketplaceName}@${ctx.skills.marketplaceName}`)}
+ARCHESTRA_PLUGIN_APPROVALS
+if ! cli codex mcp get ${sh(ctx.mcp.serverName)} --json >/dev/null; then
+  err "The installed plugin did not expose the gateway. Update Codex and retry setup."
+  exit 1
+fi
+node -e ${sh(legacyConnectionPluginCleanup(ctx))} "$(command -v codex)"`);
+  }
+  return withStartupGuardBash(
+    ctx,
+    codexGuardClient(ctx.skills?.connectionPlugin),
+    sections,
+  );
 }
 
 function codexPowerShellSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
+  if (ctx.clientId === "chatgpt" && ctx.skills) {
+    sections.push(`codex plugin add --help *> $null
+if ($LASTEXITCODE -ne 0) { throw 'Update the Codex CLI before installing ChatGPT plugins. No client configuration was changed.' }`);
+  }
 
   if (ctx.mcp || ctx.proxy || ctx.skills) {
     // Codex owns config.toml wherever CODEX_HOME points (default ~/.codex),
@@ -231,17 +312,35 @@ if ((Test-Path $arch_config) -and -not (Test-Path ($arch_config + '.archestra-ba
 }`);
   }
 
-  if (ctx.mcp) {
+  if (ctx.mcp && ctx.skills?.connectionPlugin) {
+    sections.push(`try { codex mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }
+${legacyServerNames(ctx.mcp)
+  .map(
+    (name) =>
+      `try { codex mcp remove ${psq(name)} 2>$null | Out-Null } catch { }`,
+  )
+  .join("\n")}`);
+  } else if (ctx.mcp) {
     const stale = legacyServerNames(ctx.mcp)
       .map(
         (name) =>
           `try { codex mcp remove ${psq(name)} 2>$null | Out-Null } catch { }`,
       )
       .join("\n");
+    const register =
+      ctx.clientId === "chatgpt"
+        ? `Add-Content -Path $arch_config -Encoding utf8 -Value @'
+
+${codexMcpServerHeader(ctx.mcp.serverName)}
+url = ${JSON.stringify(ctx.mcp.url)}
+'@
+codex mcp list --json > $null
+if ($LASTEXITCODE -ne 0) { throw 'Could not validate the gateway configuration. Restore this setup attempt before retrying.' }`
+        : `codex mcp add ${psq(ctx.mcp.serverName)} --url ${psq(ctx.mcp.url)}
+if ($LASTEXITCODE -ne 0) { throw 'Could not register the MCP gateway. Fix the error above and re-run setup.' }`;
     sections.push(`Say ${psq(`Adding ${ctx.appName} tools as "${ctx.mcp.serverName}"`)}
 try { codex mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }${stale ? `\n${stale}` : ""}
-codex mcp add ${psq(ctx.mcp.serverName)} --url ${psq(ctx.mcp.url)}
-if ($LASTEXITCODE -ne 0) { throw 'Could not register the MCP gateway. Fix the error above and re-run setup.' }
+${register}
 $arch_header = ${psq(codexMcpServerHeader(ctx.mcp.serverName))}
 $arch_lines = @(Get-Content -Path $arch_config)
 $arch_found = 0
@@ -326,8 +425,8 @@ Write-Host 'Codex uses your existing ChatGPT or OpenAI API-key login.'`
     const pluginInstalls = (ctx.skills.pluginNames ?? [])
       .map((pluginName) => {
         const ref = `${pluginName}@${ctx.skills?.marketplaceName}`;
-        return `codex plugin add ${psq(ref)}
-if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not deliver plugin — run 'codex plugin add ${ref}'.`)} }`;
+        return `${ctx.skills?.connectionPlugin ? `try { codex plugin remove ${psq(ref)} 2>$null | Out-Null } catch { }\n` : ""}codex plugin add ${psq(ref)}
+if ($LASTEXITCODE -ne 0) { ${ctx.clientId === "chatgpt" ? `throw 'Plugin installation failed. Retry setup after resolving the CLI error.'` : `Warn ${psq(`Could not deliver plugin — run 'codex plugin add ${ref}'.`)}`} }`;
       })
       .join("\n");
     // Remove the earlier registration first, as in the bash script.
@@ -338,7 +437,24 @@ if ($LASTEXITCODE -ne 0) { throw 'Marketplace registration failed. Review the Gi
 ${pluginInstalls}`);
   }
 
-  return withStartupGuardPowerShell(ctx, CODEX_GUARD_CLIENT, sections);
+  if (ctx.mcp && ctx.skills?.connectionPlugin) {
+    sections.push(`Add-Content -Path $arch_config -Encoding utf8 -Value @'
+
+${codexHelperApprovalTables(ctx.mcp, `${ctx.skills.marketplaceName}@${ctx.skills.marketplaceName}`)}
+'@
+codex mcp get ${psq(ctx.mcp.serverName)} --json > $null
+if ($LASTEXITCODE -ne 0) { throw 'The installed plugin did not expose the gateway. Update Codex and retry setup.' }
+$arch_legacy_cleanup = @'
+${legacyConnectionPluginCleanup(ctx)}
+'@
+$arch_legacy_cleanup | & node - (Get-Command codex -CommandType Application -ErrorAction Stop).Source
+if ($LASTEXITCODE -ne 0) { throw 'Could not replace the previous installer-owned skills plugin. Review the connection and retry setup.' }`);
+  }
+  return withStartupGuardPowerShell(
+    ctx,
+    codexGuardClient(ctx.skills?.connectionPlugin),
+    sections,
+  );
 }
 
 function codexEnding(ctx: SetupScriptContext): AgentEnding {

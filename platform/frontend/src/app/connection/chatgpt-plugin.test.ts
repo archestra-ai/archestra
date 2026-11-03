@@ -104,6 +104,11 @@ describe("ChatGPT plugin archive", () => {
     expect(setup).toContain(
       "A Guardrails approval alone is not proof that the command executed",
     );
+    expect(setup).toContain(
+      "Do not discover or load it through gateway skill tools",
+    );
+    expect(setup).toContain("server exactly named gateway");
+    expect(setup).toContain("stop immediately without calling another server");
     expect(result.skillCount).toBe(0);
   });
 

@@ -145,6 +145,7 @@ export const INSTALLER_CLIENT_IDS = [
   "claude-code",
   "cursor",
   "codex",
+  "chatgpt",
   "claude-desktop",
   "copilot-cli",
   "opencode",
@@ -160,6 +161,7 @@ export const INSTALLER_CLIENT_LABELS: Record<InstallerClientId, string> = {
   "claude-desktop": "Claude Desktop",
   cursor: "Cursor",
   codex: "Codex",
+  chatgpt: "ChatGPT",
   pi: "Pi",
   "kimi-code": "Kimi Code",
   "copilot-cli": "Copilot CLI",
@@ -180,6 +182,7 @@ export const INSTALLER_CLIENT_KEY_PROVIDERS: Record<
   "claude-desktop": ["anthropic"],
   cursor: MODEL_ROUTER_SUPPORTED_PROVIDERS,
   codex: ["openai"],
+  chatgpt: ["openai"],
   pi: MODEL_ROUTER_SUPPORTED_PROVIDERS,
   "kimi-code": ["kimi-code", "kimi"],
   "copilot-cli": [
@@ -218,10 +221,26 @@ export function isPlainMcpClientServerName(name: string): boolean {
 export function startupGuardStem(id: string): string | undefined {
   // Pi invokes the guard from its native launcher, not a shell-profile wrapper.
   if (id === "pi") return undefined;
+  if (id === "chatgpt") return startupGuardStem("codex");
   const guard = STARTUP_GUARD_INSTALL[id as keyof typeof STARTUP_GUARD_INSTALL];
   return guard?.scriptRelpath
     .replace(/^\.archestra\//, "")
     .replace(/-startup-guard\.sh$/, "");
+}
+
+/** Repeated cleanup succeeds after the guard removes itself; real failures still fail. */
+export function startupGuardDisconnectCommand(
+  clientId: string,
+  platform: "bash" | "windows",
+): string | null {
+  const guard = startupGuardStem(clientId);
+  if (!guard) return null;
+  if (platform === "windows") {
+    const script = `$HOME\\.archestra\\${guard}-startup-guard.ps1`;
+    return `if (Test-Path -LiteralPath "${script}" -PathType Leaf) { $env:ARCHESTRA_GUARD_ACTION='disconnect'; try { & "${script}"; if ($LASTEXITCODE -ne 0) { throw "Local cleanup failed (exit $LASTEXITCODE)." } } finally { Remove-Item Env:ARCHESTRA_GUARD_ACTION -ErrorAction SilentlyContinue } } else { Write-Host 'No local cleanup script remains.'; $global:LASTEXITCODE=0 }`;
+  }
+  const script = `$HOME/.archestra/${guard}-startup-guard.sh`;
+  return `if [ -f "${script}" ]; then ARCHESTRA_GUARD_ACTION=disconnect bash "${script}"; else printf '%s\\n' 'No local cleanup script remains.'; fi`;
 }
 
 /**
@@ -240,6 +259,11 @@ export const INSTALLER_CLIENT_FOOTPRINT: Record<InstallerClientId, string[]> = {
   codex: [
     "~/.codex/config.toml (gateway, model provider, skills marketplace)",
     "Plugins from the skills marketplace",
+    "Startup check in your shell profile",
+  ],
+  chatgpt: [
+    "~/.codex/config.toml (gateway, model provider, plugins)",
+    "Shared skills installed through the plugin marketplace",
     "Startup check in your shell profile",
   ],
   pi: [
@@ -410,7 +434,11 @@ export function oauthClientIdOf(agentId: string): string | null {
 
 /** Whether revoking an agent signs it out of the gateway. */
 export function revokeSignsOut(agentId: string): boolean {
-  return isOAuthRecognisedClient(agentId) || oauthClientIdOf(agentId) !== null;
+  return (
+    agentId === "chatgpt" ||
+    isOAuthRecognisedClient(agentId) ||
+    oauthClientIdOf(agentId) !== null
+  );
 }
 
 /** A known agent's name; null for one known only from its sign-in. */

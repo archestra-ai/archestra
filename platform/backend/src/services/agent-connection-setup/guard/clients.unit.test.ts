@@ -31,6 +31,7 @@ import {
   KIMI_CODE_GUARD_CLIENT,
   OPENCODE_GUARD_CLIENT,
 } from "./clients";
+import { codexGuardClient } from "./clients/codex";
 import {
   buildStartupGuardInstallSection,
   buildStartupGuardUnshadowSection,
@@ -2265,3 +2266,24 @@ exit 0
     });
   },
 );
+
+describe("ChatGPT plugin disconnect verification", () => {
+  test.each([
+    ['[plugins."acme-skills@acme-skills"]\nenabled = true\n', 7],
+    [
+      '[plugins."acme-skills@acme-skills".mcp_servers.prod_gateway.tools.helper]\napproval_mode = "approve"\n',
+      7,
+    ],
+    ['[marketplaces."acme-skills"]\nsource_type = "git"\n', 7],
+    ['[mcp_servers."prod_gateway"]\nurl = "https://example.test/mcp"\n', 7],
+    [FOREIGN_TABLES, 0],
+  ])("does not claim cleanup succeeded while an owned entry remains: %s", async (configToml, expected) => {
+    const result = await runGuardSnippet({
+      client: codexGuardClient(true),
+      functions: [],
+      files: { ".codex/config.toml": configToml },
+      invoke: `verify() {\n${codexGuardClient(true).mcpDisconnectVerify}\n}\nPLUGIN_NAMES='acme-skills'\nverify || exit 7\n`,
+    });
+    expect(result.code).toBe(expected);
+  });
+});

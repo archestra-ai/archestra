@@ -48,7 +48,9 @@ export function useDownloadChatgptPlugin() {
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       toast.success(
-        `Plugin downloaded with setup guidance and ${skillCount} shared ${skillCount === 1 ? "skill" : "skills"}.`,
+        skillCount > 0
+          ? `Plugin downloaded with ${skillCount} shared ${skillCount === 1 ? "skill" : "skills"}.`
+          : "Plugin downloaded.",
       );
       if (omitted.length)
         toast.info(

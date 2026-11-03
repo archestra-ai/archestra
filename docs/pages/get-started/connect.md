@@ -2,7 +2,7 @@
 title: Connect Your Agents
 description: Connect your AI client to Archestra's tools, models, and shared skills
 order: 2
-lastUpdated: 2026-11-01
+lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -17,7 +17,7 @@ Open **Connect** in the Archestra sidebar and choose how to connect:
 
 - **Coding agents:** for [Claude Code](/docs/integrations/ai-clients/claude-code), Codex, Cursor, Copilot CLI, OpenCode, Kilo Code, and Kimi Code, you run one command in a terminal and approve the connection in your browser.
 - **[Claude Desktop](/docs/integrations/ai-clients/claude-desktop#setup):** a downloadable installer sets up Desktop.
-- **[ChatGPT](/docs/integrations/ai-clients/chatgpt):** a plugin brings your tools and skills. For the desktop app's Work and Codex tabs, the card also shows the Codex setup command, which routes them through the proxy.
+- **[ChatGPT](/docs/integrations/ai-clients/chatgpt):** one terminal command installs the connection plugin and routes the desktop app's local Work and Codex conversations through the proxy. For web chats and dots, download the plugin instead.
 - **[n8n](/docs/integrations/web-ui-and-automation#n8n):** you enter the gateway URL and model settings in your workflow.
 - **Any Client:** any tool that supports MCP or an OpenAI-compatible API. Copy the gateway URL, the proxy base URL, a key, and a Git URL for the shared skills.
 

@@ -5,6 +5,7 @@ import {
   ARCHESTRA_TOKEN_PREFIX,
   STARTUP_GUARD_INSTALL,
 } from "@archestra/shared";
+import { CODEX_WSL_SETUP_HINT } from "../../payloads/codex-handoff";
 import { psq, sh } from "../../steps/quoting";
 import type { StartupGuardClient, StartupGuardContext } from "../startup-guard";
 
@@ -87,6 +88,53 @@ export const CODEX_GUARD_CLIENT: StartupGuardClient = {
       `Removed the ${ctx.appName} provider from the Codex config.toml. If Codex was signed in with an ${ctx.appName} virtual key it has been signed out — run codex login to sign back in with your own account.`,
   },
 };
+
+/** The desktop plugin owns its transport, so removing that transport removes the plugin too. */
+export function codexGuardClient(connectionPlugin = false): StartupGuardClient {
+  if (!connectionPlugin) return CODEX_GUARD_CLIENT;
+  const verify = `${CODEX_WSL_SETUP_HINT}
+const fs = require('node:fs');
+const path = require('node:path');
+const home = process.env.CODEX_HOME || path.join(process.env.USERPROFILE || process.env.HOME, '.codex');
+const file = path.join(home, 'config.toml');
+const offset = process.argv[1] === '-' ? 1 : 0;
+const marketplace = process.argv[1 + offset];
+const server = process.argv[2 + offset];
+const refs = process.argv.slice(3 + offset).map(name => 'plugins\\0' + name + '@' + marketplace);
+const tables = tomlTables(fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split(/\\r?\\n/) : []).tables;
+if (tables.some(table => refs.some(ref => table.name === ref || table.name.startsWith(ref + '\\0')) || table.name === 'marketplaces\\0' + marketplace || (server && (table.name === 'mcp_servers\\0' + server || table.name.startsWith('mcp_servers\\0' + server + '\\0'))))) process.exit(1);
+`;
+  // Logout runs while the plugin still supplies the URL, including both stores
+  // the Windows desktop app may have used before switching to WSL.
+  const logout = `      command codex mcp logout "$MCP_SERVER_NAME" </dev/null >/dev/null 2>&1 || true
+      command codex -c mcp_oauth_credentials_store=file mcp logout "$MCP_SERVER_NAME" </dev/null >/dev/null 2>&1 || true`;
+  const psLogout = `      if ($archRealExe) {
+        try { & $archRealExe.Source mcp logout $McpServerName 2>$null | Out-Null } catch { }
+        try { & $archRealExe.Source -c 'mcp_oauth_credentials_store=file' mcp logout $McpServerName 2>$null | Out-Null } catch { }
+      }`;
+  const verifyBash = `      if ! command -v node >/dev/null 2>&1 || ! node -e ${sh(verify)} "$SKILLS_MARKETPLACE_NAME" "\${MCP_SERVER_NAME:-}" $PLUGIN_NAMES; then
+        printf '%s\\n' 'The connection plugin or marketplace is still configured. Retry disconnect with Node and Codex available.'
+        return 1
+      fi`;
+  const verifyPs = `    if (-not (Get-Command node -ErrorAction SilentlyContinue)) { return $false }
+    [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${Buffer.from(verify).toString("base64")}')) | & node - $SkillsMarketplaceName $McpServerName @PluginNames
+    if ($LASTEXITCODE -ne 0) {
+      $Script:ArchDisconnectReason = 'The connection plugin or marketplace is still configured. Retry disconnect.'
+      return $false
+    }`;
+  return {
+    ...CODEX_GUARD_CLIENT,
+    mcpDisconnectCommands: `${logout}\n${CODEX_GUARD_CLIENT.mcpDisconnectCommands}\n${CODEX_GUARD_CLIENT.skillsDisconnectCommands}`,
+    mcpDisconnectVerify: verifyBash,
+    skillsDisconnectVerify: verifyBash,
+    windows: {
+      ...CODEX_GUARD_CLIENT.windows,
+      mcpDisconnect: `${psLogout}\n${CODEX_GUARD_CLIENT.windows.mcpDisconnect}\n${CODEX_GUARD_CLIENT.windows.skillsDisconnect}`,
+      mcpDisconnectVerify: verifyPs,
+      skillsDisconnectVerify: verifyPs,
+    },
+  };
+}
 
 /**
  * Codex keeps its config where `CODEX_HOME` points, defaulting to `~/.codex`.

@@ -126,6 +126,7 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
   "claude-code": ["anthropic", "bedrock"],
   "claude-desktop": ["anthropic"],
   codex: ["openai"],
+  chatgpt: ["openai"],
   pi: INSTALLER_CLIENT_KEY_PROVIDERS.pi,
   "kimi-code": INSTALLER_CLIENT_KEY_PROVIDERS["kimi-code"],
   // Cursor routes every model through the Model Router with one key that maps
@@ -729,7 +730,9 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           attributePassthrough &&
           (((clientId === "claude-code" || clientId === "claude-desktop") &&
             (provider === "anthropic" || provider === "bedrock")) ||
-            ((clientId === "codex" || clientId === "pi") &&
+            ((clientId === "codex" ||
+              clientId === "chatgpt" ||
+              clientId === "pi") &&
               provider === "openai") ||
             (clientId === "kimi-code" &&
               (provider === "kimi-code" || provider === "kimi")) ||
@@ -869,6 +872,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         !isOpenCodeFamilyClient(clientId) &&
         clientId !== "pi" &&
         clientId !== "kimi-code" &&
+        clientId !== "chatgpt" &&
         organization.connectionPluginsEnabled
       ) {
         const canDeliverPlugins = await userCanDeliverPlugins({
@@ -1190,6 +1194,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           marketplaceRender &&
           marketplaceRender.pluginIds.length === 0 &&
           setup.clientId !== "claude-desktop" &&
+          setup.clientId !== "chatgpt" &&
           setup.clientId !== "pi" &&
           setup.clientId !== "kimi-code"
             ? await SkillMarketplaceRepoModel.ensureForViewer({
@@ -1234,6 +1239,9 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
               await SkillShareLinkModel.create({
                 organizationId: setup.organizationId,
                 createdByUserId: setup.userId,
+                ...(setup.clientId === "chatgpt"
+                  ? { connectionSetupId: setup.id }
+                  : {}),
                 skillIds: marketplaceRender.skillIds,
                 pluginIds: marketplaceRender.pluginIds,
                 pluginClientType: marketplaceRender.pluginClientType,
@@ -1259,6 +1267,9 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
               marketplaceName: marketplaceRender.marketplaceName,
               hasSkills: marketplaceRender.skillIds.length > 0,
               pluginNames: marketplaceRender.pluginNames,
+              ...(setup.clientId === "chatgpt"
+                ? { connectionPlugin: true }
+                : {}),
             };
           }
 
@@ -1312,7 +1323,7 @@ interface MarketplaceRenderContext {
   pluginNames: string[];
   pluginClientType: Exclude<
     ConnectionSetupClientId,
-    OpenCodeFamilyClientId | "pi" | "kimi-code"
+    OpenCodeFamilyClientId | "pi" | "kimi-code" | "chatgpt"
   > | null;
   pluginPlatform: PluginPlatform | null;
   marketplaceName: string;
@@ -1566,25 +1577,33 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
   }
 
   let marketplaceRender: MarketplaceRenderContext | null = null;
-  if (skillIds.length > 0 || pluginIds.length > 0) {
+  if (
+    skillIds.length > 0 ||
+    pluginIds.length > 0 ||
+    setup.clientId === "chatgpt"
+  ) {
     const marketplaceName = await deriveMarketplaceName(
       setup.organizationId,
-      skillIds.length === 0
-        ? "plugins"
-        : pluginIds.length === 0
-          ? "skills"
-          : "extensions",
+      setup.clientId === "chatgpt"
+        ? "extensions"
+        : skillIds.length === 0
+          ? "plugins"
+          : pluginIds.length === 0
+            ? "skills"
+            : "extensions",
     );
     if (isReservedMarketplaceName(marketplaceName)) throw GONE();
     marketplaceRender = {
       skillIds,
       pluginIds,
-      pluginNames,
+      pluginNames:
+        setup.clientId === "chatgpt" ? [marketplaceName] : pluginNames,
       pluginClientType:
         pluginIds.length > 0 &&
         !isOpenCodeFamilyClient(setup.clientId) &&
         setup.clientId !== "pi" &&
-        setup.clientId !== "kimi-code"
+        setup.clientId !== "kimi-code" &&
+        setup.clientId !== "chatgpt"
           ? setup.clientId
           : null,
       pluginPlatform:

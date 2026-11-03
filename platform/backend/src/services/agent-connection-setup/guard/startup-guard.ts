@@ -122,6 +122,7 @@ interface StartupGuardSkillsSection {
   marketplaceName: string;
   cloneUrl: string;
   hasSkills?: boolean;
+  connectionPlugin?: boolean;
   pluginNames?: string[];
 }
 

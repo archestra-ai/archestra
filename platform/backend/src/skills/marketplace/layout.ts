@@ -1,4 +1,5 @@
 import path from "node:path";
+import { chatgptConnectionPluginFiles } from "@archestra/shared/chatgpt-plugin";
 import { dump as dumpYaml } from "js-yaml";
 import logger from "@/logging";
 import { SKILL_MANIFEST_FILENAME } from "@/skills/parser";
@@ -62,6 +63,13 @@ export interface MaterializeRequest {
   displayName: string;
   skills: MaterializeSkillInput[];
   plugins?: MaterializePluginInput[];
+  connection?: {
+    appName: string;
+    gatewayUrl: string | null;
+    serverName: string;
+    frontendUrl: string;
+    iconLogo: string | null;
+  };
 }
 
 export interface MaterializePluginInput {
@@ -81,7 +89,10 @@ export function computeLayout(
   req: MaterializeRequest,
   revisionSequence: number,
 ): RevisionPayloadFile[] {
-  const manifestSkills = req.skills.map<MarketplaceSkillInput>((skill) => ({
+  const skills = req.connection
+    ? req.skills.filter((skill) => !skill.templated && !skill.agentName)
+    : req.skills;
+  const manifestSkills = skills.map<MarketplaceSkillInput>((skill) => ({
     id: skill.id,
     name: skill.name,
     description: skill.description,
@@ -271,7 +282,7 @@ export function computeLayout(
       ),
     ),
   );
-  const skillById = new Map(req.skills.map((s) => [s.id, s]));
+  const skillById = new Map(skills.map((s) => [s.id, s]));
   // Guard against two files whose paths differ only in case: on a
   // case-insensitive filesystem the second write would silently overwrite the
   // first, making the commit SHA depend on host case-sensitivity and breaking
@@ -305,6 +316,49 @@ export function computeLayout(
     }
   }
 
+  if (req.connection) {
+    let setupName = "connection-setup";
+    for (
+      let suffix = 2;
+      resolved.some((skill) => skill.slug === setupName);
+      suffix++
+    )
+      setupName = `connection-setup-${suffix}`;
+    const logoMatch = /^data:image\/(png|jpeg|webp|svg\+xml);base64,(.+)$/.exec(
+      req.connection.iconLogo ?? "",
+    );
+    const logoPath = logoMatch
+      ? `assets/logo.${logoMatch[1] === "svg+xml" ? "svg" : logoMatch[1]}`
+      : undefined;
+    const connectionFiles = chatgptConnectionPluginFiles({
+      ...req.connection,
+      name: req.marketplaceName,
+      version,
+      setupName,
+      desktopConfigured: true,
+      nativeOnly: true,
+      logo: logoPath ? `./${logoPath}` : undefined,
+    });
+    const replacements = new Set(
+      ["plugin.json", ...connectionFiles.map((file) => file.path)].map(
+        (file) => `${pluginRoot}/${file}`,
+      ),
+    );
+    for (let index = files.length - 1; index >= 0; index--)
+      if (replacements.has(files[index].path)) files.splice(index, 1);
+    files.push(
+      ...connectionFiles.map((file) =>
+        textFile(`${pluginRoot}/${file.path}`, file.content),
+      ),
+    );
+    if (logoMatch && logoPath)
+      files.push({
+        path: `${pluginRoot}/${logoPath}`,
+        mode: "100644",
+        encoding: "base64",
+        content: logoMatch[2],
+      });
+  }
   return files;
 }
 

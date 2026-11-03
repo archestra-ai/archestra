@@ -4,7 +4,6 @@
 // apps without an installer or a prompt, such as n8n and Generic client.
 
 import type { ReactNode } from "react";
-import { ChatgptDesktopSetup } from "./chatgpt-desktop-setup";
 import { ChatgptGatewaySetup } from "./chatgpt-gateway-setup";
 import type { ConnectClient } from "./clients";
 import { isInstallerClientId, usesGenericInstructions } from "./clients";
@@ -59,8 +58,6 @@ export function useManualSteps(
   client: ConnectClient | null,
   data: ConnectPageData,
   includeSkills = true,
-  /** The LLM proxy is included; ChatGPT then sets up its desktop app too. */
-  includeProxy = true,
 ): ManualStep[] {
   const marketplaceVisible = useSkillsMarketplaceVisible(client);
   const skillsVisible = data.skillsEnabled && marketplaceVisible;
@@ -71,21 +68,6 @@ export function useManualSteps(
   if (client.id === "chatgpt") {
     const tools = data.partsFor(client).tools;
     return [
-      ...(includeProxy && data.partsFor(client).proxy
-        ? [
-            {
-              key: "desktop",
-              title: "Set up the desktop app",
-              content: (
-                <ChatgptDesktopSetup
-                  data={data}
-                  includeTools={tools && !!gateway}
-                  includeSkills={data.skillsEnabled && includeSkills}
-                />
-              ),
-            },
-          ]
-        : []),
       {
         key: "mcp",
         title: "Install the ChatGPT plugin",

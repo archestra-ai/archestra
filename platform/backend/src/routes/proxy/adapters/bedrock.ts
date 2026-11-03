@@ -30,6 +30,7 @@ import {
   extractCommonMessageText,
   extractCommonToolCallArguments,
 } from "@/types";
+import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { isApprovedAsSent } from "../utils/approved-as-sent";
 import { wordToolCallId } from "../utils/tool-call-ids";
 import {
@@ -1926,7 +1927,10 @@ export const bedrockAdapterFactory: LLMProvider<
     return buildBedrockClient({
       apiKey: apiKey ?? null,
       baseUrl: options?.baseUrl,
-      fetch: fetchWithLlmUpstreamDispatcher,
+      fetch: fetchWithAbortSignal(
+        fetchWithLlmUpstreamDispatcher,
+        options?.abortSignal,
+      ),
     });
   },
 

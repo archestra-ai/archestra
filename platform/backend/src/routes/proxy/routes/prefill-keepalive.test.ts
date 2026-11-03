@@ -451,26 +451,33 @@ describe("prefill SSE keep-alives over HTTP", () => {
     expect(requests).toBe(2);
   });
 
-  test("preserves usage draining when a client disconnects during prefill", async () => {
-    let downstreamClosed = false;
-    app.server.on("connection", (socket) => {
-      socket.on("close", () => {
-        downstreamClosed = true;
+  test("cancels upstream during prefill without recording unreceived usage", async () => {
+    let upstreamClosed = false;
+    const complete = respond;
+    respond = async (raw, payload, path) => {
+      raw.on("close", () => {
+        upstreamClosed = true;
       });
-    });
+      await complete(raw, payload, path);
+    };
     const controller = new AbortController();
     const result = await send("messages", true, controller.signal);
     expect(result.status).toBe(200);
     await received.promise;
     controller.abort();
-    await vi.waitFor(() => expect(downstreamClosed).toBe(true));
+    // The provider has sent headers but no model event. A heartbeat must not
+    // keep the upstream alive after its client leaves.
+    await vi.waitFor(() => expect(upstreamClosed).toBe(true));
     release.resolve();
     await app.close();
     const interactions =
       await InteractionModel.getAllInteractionsForProfile(agentId);
     expect(interactions).toHaveLength(1);
-    expect(interactions[0].inputTokens).toBe(12);
-    expect(interactions[0].outputTokens).toBe(1);
+    expect(interactions[0].inputTokens).toBe(0);
+    expect(interactions[0].outputTokens).toBe(0);
+    expect(interactions[0].response).not.toMatchObject({
+      content: message.content,
+    });
     expect(requests).toBe(1);
   });
 

@@ -85,12 +85,28 @@ export const geminiEmbeddingsAdapterFactory: LLMProvider<
     apiKey: string | undefined,
     options: CreateClientOptions,
   ): GoogleGenAI {
-    return createGoogleGenAIClient(
+    const client = createGoogleGenAIClient(
       apiKey,
       "[GeminiEmbeddingProxy]",
       options.baseUrl,
       options.model ? getGeminiEmbeddingModelId(options.model) : undefined,
     );
+    const embedContent = client.models.embedContent.bind(client.models);
+    client.models.embedContent = (params) =>
+      embedContent({
+        ...params,
+        config: {
+          ...params.config,
+          abortSignal:
+            options.abortSignal && params.config?.abortSignal
+              ? AbortSignal.any([
+                  options.abortSignal,
+                  params.config.abortSignal,
+                ])
+              : (options.abortSignal ?? params.config?.abortSignal),
+        },
+      });
+    return client;
   },
 
   async execute(

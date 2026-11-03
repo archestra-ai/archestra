@@ -33,7 +33,7 @@ import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { cn } from "@/lib/utils/tailwind";
 
 /** What the view needs of a pool, which a pool just created also has. */
-export type ConnectablePool = ConnectablePoolDetails & { id: string };
+export type ConnectablePool = ConnectablePoolDetails;
 
 type Endpoint = "model-router" | "anthropic" | "openai";
 type Credential = "standard" | "oauth";
@@ -69,7 +69,7 @@ const CREDENTIALS: Choice<Credential>[] = [
   {
     value: "oauth",
     label: "OAuth client",
-    description: "A token for a client that maps a member's key",
+    description: "One that maps a member's key, or is granted this pool",
     icon: ShieldCheck,
   },
 ];

@@ -10,7 +10,7 @@ import type { MswControl } from "./helpers/msw-control";
 
 type ModelPool = archestraApiTypes.GetModelPoolsResponses["200"][number];
 type OauthClient =
-  archestraApiTypes.GetLlmOauthClientsResponses["200"]["data"][number];
+  archestraApiTypes.GetOauthClientsResponses["200"]["data"][number];
 
 const POOL_NAME = "fast-chat";
 
@@ -123,6 +123,10 @@ function oauthClient(overrides: Partial<OauthClient>): OauthClient {
     updatedAt: "2026-01-01T00:00:00.000Z",
     billingTeam: null,
     spendCap: null,
+    scopes: ["llm:proxy"],
+    allowedGatewayIds: [],
+    includeFutureProviders: false,
+    modelPoolIds: [],
     ...overrides,
   };
 }
@@ -133,6 +137,13 @@ const oauthClients = [
     clientId: "pool-ci-client",
     name: "CI pipeline",
     providerApiKeys: [mapping(anthropicKey)],
+  }),
+  oauthClient({
+    id: "oauth-granted",
+    clientId: "granted-client",
+    name: "Granted the pool",
+    providerApiKeys: [mapping(geminiKey)],
+    modelPoolIds: [pool.id],
   }),
   oauthClient({
     id: "oauth-unrelated",
@@ -172,9 +183,11 @@ async function mockPool({
       url: "/api/llm-virtual-keys",
       body: makeVirtualKeysList({ keys: virtualKeys }),
     },
-    {
-      method: "get",
-      url: "/api/llm-oauth-clients",
+    // The LLM Proxy page lists clients from the first, the pool dialog from
+    // the second, which carries each client's pool grants.
+    ...["/api/llm-oauth-clients", "/api/oauth-clients"].map((url) => ({
+      method: "get" as const,
+      url,
       body: {
         data: oauthClients,
         pagination: {
@@ -186,7 +199,7 @@ async function mockPool({
           hasPrev: false,
         },
       },
-    },
+    })),
   ]);
 }
 
@@ -242,6 +255,9 @@ test.describe("Model pool Connect dialog", () => {
       page.getByRole("option").filter({ hasText: "CI pipeline" }),
     ).toBeVisible();
     await expect(
+      page.getByRole("option").filter({ hasText: "Granted the pool" }),
+    ).toBeVisible();
+    await expect(
       page.getByRole("option").filter({ hasText: "Gemini batch" }),
     ).toHaveCount(0);
     await page.keyboard.press("Escape");
@@ -252,6 +268,32 @@ test.describe("Model pool Connect dialog", () => {
         "$ARCHESTRA_LLM_ACCESS_TOKEN is the access_token from the token request above.",
       ),
     ).toBeVisible();
+    await expect(dialog.getByText('"model": "fast-chat"')).toBeVisible();
+  });
+
+  test("on the Anthropic endpoint, offers keys mapping any member and asks for no Anthropic key", async ({
+    page,
+    mswControl,
+    request,
+  }) => {
+    await mockPool({ mswControl, request });
+    // The Anthropic member's key belongs to someone else.
+    await mswControl.use({
+      method: "get",
+      url: "/api/llm-provider-api-keys",
+      body: [openaiKey, geminiKey],
+    });
+    const dialog = await openConnectDialog(page);
+
+    await dialog.getByText("Anthropic API", { exact: true }).click();
+    await expect(
+      dialog.getByRole("button", { name: /Add Anthropic key/ }),
+    ).toHaveCount(0);
+    await dialog.getByRole("combobox", { name: "Virtual key" }).click();
+    await expect(
+      page.getByRole("option").filter({ hasText: "Maps a member key" }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
     await expect(dialog.getByText('"model": "fast-chat"')).toBeVisible();
   });
 });

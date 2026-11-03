@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type archestraApiTypes,
   isModelRouterSupportedProvider,
   LLM_PROXY_OAUTH_SCOPE,
   type SupportedProvider,
@@ -61,13 +62,19 @@ import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmOauthClients } from "@/lib/llm-oauth-clients.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useLlmProxy, useUpdateLlmProxy } from "@/lib/llm-proxy.query";
-import { useCreateOauthClient } from "@/lib/oauth-clients.query";
+import {
+  useCreateOauthClient,
+  useOauthClients,
+} from "@/lib/oauth-clients.query";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
 import {
   useAllVirtualApiKeys,
   useFetchVirtualApiKeyValue,
 } from "@/lib/virtual-api-keys.query";
+
+type LlmOauthClient =
+  archestraApiTypes.GetLlmOauthClientsResponses["200"]["data"][number];
 
 /** How callers authenticate to the LLM Proxy. */
 export type LlmAuthMethod = "standard" | "passthrough" | "oauth" | "idp";
@@ -77,6 +84,7 @@ export type LlmAuthMethod = "standard" | "passthrough" | "oauth" | "idp";
  * just created both have it.
  */
 export type ConnectablePoolDetails = {
+  id: string;
   name: string;
   members: Array<{ provider: SupportedProvider; providerApiKeyId: string }>;
   /** Virtual keys that may call the pool by its name. */
@@ -135,11 +143,20 @@ export function LlmConnectSteps({
     enabled: auth === "standard" || auth === "passthrough",
     toastOnError: false,
   });
-  const { data: oauthClients } = useLlmOauthClients({
+  const { data: llmOauthClients } = useLlmOauthClients({
     limit: 100,
-    enabled: auth === "oauth",
+    enabled: auth === "oauth" && !pool,
     toastOnError: false,
   });
+  // This list also says which pools each client is granted outright.
+  const { data: poolOauthClients } = useOauthClients({
+    capability: "llm:proxy",
+    limit: 100,
+    enabled: auth === "oauth" && !!pool,
+    toastOnError: false,
+  });
+  const oauthClients: Array<LlmOauthClient & { modelPoolIds?: string[] }> =
+    (pool ? poolOauthClients : llmOauthClients)?.data ?? [];
   const { data: session } = useSession();
   const { data: canCreateKey } = useHasPermissions({
     llmVirtualKey: ["create"],
@@ -158,13 +175,11 @@ export function LlmConnectSteps({
 
   // A standard key or OAuth client is usable here only if it maps a provider
   // key behind this endpoint; a passthrough key carries none and always fits.
-  // For a pool, the key must be one of the members' on this endpoint, or the
-  // pool must list the virtual key.
-  const poolMappings = pool ? poolKeyMappings(pool, servesTarget) : undefined;
+  // For a pool, the credential must map any member's key, whatever the
+  // endpoint, or the pool must list the virtual key (or grant the client).
+  const poolMappings = pool ? poolKeyMappings(pool) : undefined;
   const memberKeyIds = new Set(
-    (pool?.members ?? [])
-      .filter((member) => servesTarget(member.provider))
-      .map((member) => member.providerApiKeyId),
+    (pool?.members ?? []).map((member) => member.providerApiKeyId),
   );
   const reaches = (
     credential: { providerApiKeys: ProviderApiKeyMappings },
@@ -183,8 +198,8 @@ export function LlmConnectSteps({
       auth === "passthrough" ||
       reaches(key, pool?.virtualApiKeyIds.includes(key.id) ?? false),
   );
-  const clientOptions = (oauthClients?.data ?? []).filter((client) =>
-    reaches(client, false),
+  const clientOptions = oauthClients.filter((client) =>
+    reaches(client, !!pool && !!client.modelPoolIds?.includes(pool.id)),
   );
   const allOptions =
     auth === "oauth"
@@ -257,7 +272,8 @@ export function LlmConnectSteps({
     />
   );
 
-  const hasProviderKey = targetProviderKeys.length > 0;
+  // A pool's members are the provider keys behind it.
+  const hasProviderKey = !!pool || targetProviderKeys.length > 0;
   const [addProviderKeyOpen, setAddProviderKeyOpen] = useState(false);
   // A new key starts with the primary key of each provider this target
   // serves; the create dialog shows and changes them.
@@ -293,7 +309,11 @@ export function LlmConnectSteps({
   ) => (
     <span className="flex flex-wrap gap-1.5">
       {mappings
-        .filter((mapping) => servesTarget(mapping.provider))
+        .filter((mapping) =>
+          pool
+            ? memberKeyIds.has(mapping.providerApiKeyId)
+            : servesTarget(mapping.provider),
+        )
         .map((mapping) => (
           <span
             key={mapping.providerApiKeyId}
@@ -970,17 +990,13 @@ function OauthClientCreateFlow({
 }
 
 /**
- * The members' provider keys on this endpoint, one per provider, as a new
- * credential's starting mapping: a credential mapping any of them can call
- * the pool by name.
+ * The members' provider keys, one per provider, as a new credential's
+ * starting mapping: a credential mapping any of them can call the pool by
+ * name, on any endpoint.
  */
-function poolKeyMappings(
-  pool: ConnectablePoolDetails,
-  servesTarget: (provider: SupportedProvider) => boolean,
-): ProviderApiKeyMappings {
+function poolKeyMappings(pool: ConnectablePoolDetails): ProviderApiKeyMappings {
   const mappings: ProviderApiKeyMappings = [];
   for (const member of pool.members) {
-    if (!servesTarget(member.provider)) continue;
     if (mappings.some((mapping) => mapping.provider === member.provider)) {
       continue;
     }

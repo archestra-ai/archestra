@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 1
-lastUpdated: 2026-11-02
+lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -1483,6 +1483,7 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 - **`ARCHESTRA_OPENAPPA_YELL_ENABLED`** - Lets agents report confusing blocks with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. Reports are stored locally.
   - Default: `true`
   - Values: `true`, `false`
+  - With reports off, the [Break the glass](/docs/agents/guardrails/policies#yells) settings still let calls through, but no yell is recorded and no session is turned off.
 
 - **`ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED`** - Forwards agent reports to the shared OpenAPPA reporting service, independently of [`ARCHESTRA_ANALYTICS`](/docs/reference/configuration#ARCHESTRA_ANALYTICS). Requires [`ARCHESTRA_OPENAPPA_YELL_ENABLED`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_YELL_ENABLED).
   - Default: `false`, including after upgrades. Values: `true`, `false`; unset or empty means off, and invalid values stop startup.

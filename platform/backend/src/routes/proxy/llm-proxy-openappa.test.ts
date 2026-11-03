@@ -1507,6 +1507,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         enabled: false,
         unsupportedClientAction: "bypass",
         breakTheGlassEnabled: true,
+        humanApprovalMode: "block",
+        unapprovableBlockMode: "refuse",
         annotatorModelId: null,
         annotatorLlmApiKeyId: null,
       });
@@ -2580,6 +2582,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             enabled: false,
             unsupportedClientAction: "bypass",
             breakTheGlassEnabled: true,
+            humanApprovalMode: "block",
+            unapprovableBlockMode: "refuse",
             annotatorModelId: null,
             annotatorLlmApiKeyId: null,
           };

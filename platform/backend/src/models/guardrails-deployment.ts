@@ -1,6 +1,10 @@
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { UnsupportedAppaClientAction } from "@/types/guardrails-policy";
+import type {
+  HumanApprovalMode,
+  UnapprovableBlockMode,
+  UnsupportedAppaClientAction,
+} from "@/types/guardrails-policy";
 
 const table = schema.guardrailsDeploymentTable;
 const id = "global";
@@ -13,6 +17,8 @@ class GuardrailsDeploymentModel {
         enabled: false,
         unsupportedClientAction: "bypass" as const,
         breakTheGlassEnabled: true,
+        humanApprovalMode: "unattended" as const,
+        unapprovableBlockMode: "refuse" as const,
         annotatorModelId: null,
         annotatorLlmApiKeyId: null,
       }
@@ -28,6 +34,8 @@ class GuardrailsDeploymentModel {
     enabled?: boolean;
     unsupportedClientAction?: UnsupportedAppaClientAction;
     breakTheGlassEnabled?: boolean;
+    humanApprovalMode?: HumanApprovalMode;
+    unapprovableBlockMode?: UnapprovableBlockMode;
     annotatorModelId?: string | null;
     annotatorLlmApiKeyId?: string | null;
   }) {

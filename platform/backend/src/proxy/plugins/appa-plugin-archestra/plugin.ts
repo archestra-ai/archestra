@@ -37,6 +37,14 @@ import OpenAppaSpawnCorrelationModel, {
 import { reportAgentRuntimeObservedReads } from "@/observability/metrics/agent-runtime";
 import { childSessionId, clientSessionId } from "@/openappa/actor";
 import {
+  isUnattendedRequest,
+  recordWaivedCalls,
+  rememberUnattendedSession,
+  unattendedNoteMatters,
+  type WaivedCall,
+  waiverFor,
+} from "@/openappa/break-the-glass";
+import {
   type AppaChildReturnCompletion,
   collectAndStripChildReturns,
   mintChildReturnMarker,
@@ -154,7 +162,11 @@ import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import { collectDeclaredToolNames } from "@/routes/proxy/utils/declared-tool-names";
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
 import { pendingExports } from "@/services/agent-runtime/pending-exports";
-import { readGuardrailsV2Activation } from "@/services/guardrails-deployment";
+import {
+  breakTheGlassActiveIn,
+  getGuardrailsDeployment,
+  readGuardrailsV2Activation,
+} from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
 import type {
   RuntimeLaunchFailureReason,
@@ -205,6 +217,8 @@ type AppaPluginBinding = {
   chat: boolean;
   compaction: boolean;
   requestHeaders: IncomingHttpHeaders;
+  /** No person is there to answer this request's approvals. */
+  unattended: boolean;
   /** A verified user-question result needs trusted workflow continuation. */
   requiresQuestionContinuation: boolean;
   /** A remedy notice requires an immediate control-tool call. */
@@ -317,6 +331,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       compaction: trustedContext.compaction === true,
       threadContinue: trustedContext.thread === "continue",
       requestHeaders: context.headers,
+      unattended: isUnattendedRequest({
+        headers: context.headers,
+        agentRuntimeRun: trustedContext.agentRuntimeRun === true,
+      }),
       requiresQuestionContinuation: false,
       requiresRemedyContinuation: false,
       pendingHitlReviewOfferIds: [],
@@ -368,13 +386,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       ],
     });
     // The runtime never saw a call the model made while enforcement was off,
-    // so OpenAPPA ignores its result: the result reaches the model as it is.
-    const toolResults = context.toolResults.filter(
-      (result) =>
-        binding.unenforcedCalls.reasons.get(
-          withoutTrajectoryStamp(result.id),
-        ) !== "made",
-    );
+    // nor the run of a denied call Break the glass let through, so OpenAPPA
+    // ignores its result: the result reaches the model as it is.
+    const toolResults = context.toolResults.filter((result) => {
+      const reason = binding.unenforcedCalls.reasons.get(
+        withoutTrajectoryStamp(result.id),
+      );
+      return reason !== "made" && reason !== "waived";
+    });
     const childResultUpdates: Record<string, string> = Object.create(null);
     const results = toolResults.map((result) => {
       const content = binding.adapter?.normalizeChildLaunchResult?.(result);
@@ -1486,6 +1505,21 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
 
     const notice = binding.request.tools?.notice;
+    // Only the ordinary calls the runtime ruled on here can be waived.
+    const evaluatedIds = new Set(rest.map((call) => call.id));
+    // The calls the runtime admitted; a batch that never reaches the client
+    // cancels them, so no call stays open that will never run.
+    const admittedCalls = () =>
+      rest.flatMap((each) =>
+        decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
+      );
+    // Read once for the batch, by the first denial.
+    let breakTheGlass: ReturnType<typeof getGuardrailsDeployment> | undefined;
+    let unattendedNoted = false;
+    // The denied calls Break the glass lets through, recorded together once
+    // the batch is complete.
+    const waived: WaivedCall[] = [];
+    let waiverSuperyell = false;
     // Resolved once for the batch, by the first denial that has no notice tool.
     let pendingServersTool: Promise<string | undefined> | undefined;
     const blocked: { id: string; name: string; reason: string }[] = [];
@@ -1595,6 +1629,54 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           resolution: this.resolution(binding),
         });
         continue;
+      }
+      // Break the glass: a denied ordinary call can run anyway, with a yell.
+      // Runtime, spawn and relay calls need the runtime's own release or
+      // rewrite, so they stay denied. The record is written after the loop,
+      // once the batch is known to reach the client.
+      if (decision.kind === "deny" && evaluatedIds.has(call.id)) {
+        breakTheGlass ??= getGuardrailsDeployment();
+        let settings: Awaited<typeof breakTheGlass>;
+        try {
+          settings = await breakTheGlass;
+        } catch (error) {
+          await cancelCalls(session, admittedCalls(), policy);
+          throw error;
+        }
+        // The gateway decides a remedy plan's review without the runtime
+        // credential or the client's headers, so it learns from the proxy
+        // whether a person answers for this session: noted once per denied
+        // batch, whatever the denied call (a runtime call's review is decided
+        // there too), and only in the mode that reads the note.
+        if (!unattendedNoted && unattendedNoteMatters(settings)) {
+          unattendedNoted = true;
+          await rememberUnattendedSession(binding.session, binding.unattended);
+        }
+        if (
+          runtimeCalls.has(call.id) ||
+          withheldRelayDecisions.has(call.id) ||
+          (binding.adapter && isChildSpawnCall(binding.adapter, call))
+        ) {
+          // A runtime call, a withheld relay or a spawn is never waived here:
+          // the runtime releases those itself.
+        } else {
+          const waiver = waiverFor({
+            decision,
+            settings,
+            unattended: binding.unattended,
+          });
+          if (waiver) {
+            waived.push({
+              toolCallId: call.id,
+              tool: this.policyIdentity(binding, call).name,
+              kind: waiver,
+            });
+            // A platform yell does what the agent's own yell does.
+            waiverSuperyell = breakTheGlassActiveIn(settings);
+            released.push(call);
+            continue;
+          }
+        }
       }
       // The registry pins `blocked` to the wire batch: the entry names the
       // call as given. The identity the runtime ruled on — the dispatch's
@@ -1725,6 +1807,24 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       });
     }
 
+    // The waived calls' markers, yells and session bypass are written in one
+    // transaction, only for a batch that reaches the client: a batch refused
+    // above leaves no record of a call that never ran. A record that fails
+    // keeps the batch from the client too, so no released call runs
+    // unrecorded; the resent batch is ruled again.
+    if (
+      !(await recordWaivedCalls({
+        session,
+        calls: waived,
+        superyell: waiverSuperyell,
+      }))
+    ) {
+      await cancelCalls(session, admittedCalls(), policy);
+      throw new ApiError(
+        503,
+        "OpenAPPA could not record the calls it let through; retry the request",
+      );
+    }
     // Keep turn open while tool calls are awaiting client execution.
     binding.turnOpen = true;
     const stamp = trajectoryStamper(binding, context);

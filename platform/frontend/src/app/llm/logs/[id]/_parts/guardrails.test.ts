@@ -161,6 +161,8 @@ function yell(params: {
     message: `yell ${params.id}`,
     withTrajectory: false,
     superyell: params.superyell ?? false,
+    kind: "agent",
+    count: 1,
     hasArchive: false,
     createdAt: at(params.at),
     reportedAt: null,

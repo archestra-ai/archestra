@@ -163,7 +163,8 @@ function credentialValue(text: string, head: RegExpExecArray): Span {
   }
   let end = at;
   if (separator === "=") {
-    while (end < text.length && !/[\s'"&]/.test(text[end] ?? "")) end++;
+    while (end < text.length && !/[\s'"&]/.test(text[end] ?? ""))
+      end = Math.min(text.length, end + (text[end] === "\\" ? 2 : 1));
     return { start: at, end };
   }
   let line = false;

@@ -1,4 +1,5 @@
 import path from "node:path";
+import { isSpecCompliantSkillName } from "@archestra/shared";
 import { chatgptConnectionPluginFiles } from "@archestra/shared/chatgpt-plugin";
 import { dump as dumpYaml } from "js-yaml";
 import logger from "@/logging";
@@ -90,7 +91,12 @@ export function computeLayout(
   revisionSequence: number,
 ): RevisionPayloadFile[] {
   const skills = req.connection
-    ? req.skills.filter((skill) => !skill.templated && !skill.agentName)
+    ? req.skills.filter(
+        (skill) =>
+          !skill.templated &&
+          !skill.agentName &&
+          isSpecCompliantSkillName(skill.name),
+      )
     : req.skills;
   const manifestSkills = skills.map<MarketplaceSkillInput>((skill) => ({
     id: skill.id,

@@ -92,15 +92,14 @@ export const CODEX_GUARD_CLIENT: StartupGuardClient = {
 /** The desktop plugin owns its transport, so removing that transport removes the plugin too. */
 export function codexGuardClient(connectionPlugin = false): StartupGuardClient {
   if (!connectionPlugin) return CODEX_GUARD_CLIENT;
-  const verify = `${CODEX_WSL_SETUP_HINT}
+  // `node -e` starts arguments at 1; `node -` keeps "-" at 1.
+  const verify = (argumentStart: 1 | 2) => `${CODEX_WSL_SETUP_HINT}
 const fs = require('node:fs');
 const path = require('node:path');
 const home = process.env.CODEX_HOME || path.join(process.env.USERPROFILE || process.env.HOME, '.codex');
 const file = path.join(home, 'config.toml');
-const offset = process.argv[1] === '-' ? 1 : 0;
-const marketplace = process.argv[1 + offset];
-const server = process.argv[2 + offset];
-const refs = process.argv.slice(3 + offset).map(name => 'plugins\\0' + name + '@' + marketplace);
+const [marketplace, server, ...plugins] = process.argv.slice(${argumentStart});
+const refs = plugins.map(name => 'plugins\\0' + name + '@' + marketplace);
 const tables = tomlTables(fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split(/\\r?\\n/) : []).tables;
 if (tables.some(table => refs.some(ref => table.name === ref || table.name.startsWith(ref + '\\0')) || table.name === 'marketplaces\\0' + marketplace || (server && (table.name === 'mcp_servers\\0' + server || table.name.startsWith('mcp_servers\\0' + server + '\\0'))))) process.exit(1);
 `;
@@ -112,12 +111,12 @@ if (tables.some(table => refs.some(ref => table.name === ref || table.name.start
         try { & $archRealExe.Source mcp logout $McpServerName 2>$null | Out-Null } catch { }
         try { & $archRealExe.Source -c 'mcp_oauth_credentials_store=file' mcp logout $McpServerName 2>$null | Out-Null } catch { }
       }`;
-  const verifyBash = `      if ! command -v node >/dev/null 2>&1 || ! node -e ${sh(verify)} "$SKILLS_MARKETPLACE_NAME" "\${MCP_SERVER_NAME:-}" $PLUGIN_NAMES; then
+  const verifyBash = `      if ! command -v node >/dev/null 2>&1 || ! node -e ${sh(verify(1))} "$SKILLS_MARKETPLACE_NAME" "\${MCP_SERVER_NAME:-}" $PLUGIN_NAMES; then
         printf '%s\\n' 'The connection plugin or marketplace is still configured. Retry disconnect with Node and Codex available.'
         return 1
       fi`;
   const verifyPs = `    if (-not (Get-Command node -ErrorAction SilentlyContinue)) { return $false }
-    [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${Buffer.from(verify).toString("base64")}')) | & node - $SkillsMarketplaceName $McpServerName @PluginNames
+    [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${Buffer.from(verify(2)).toString("base64")}')) | & node - $SkillsMarketplaceName $McpServerName @PluginNames
     if ($LASTEXITCODE -ne 0) {
       $Script:ArchDisconnectReason = 'The connection plugin or marketplace is still configured. Retry disconnect.'
       return $false

@@ -409,3 +409,43 @@ test.each([
     files.length,
   );
 });
+
+test("ChatGPT connection packaging omits non-portable skill names without changing other marketplaces", () => {
+  const request: MaterializeRequest = {
+    ref: { kind: "link", id: "aaaaaaaa-1111-2222-3333-444444444444" },
+    marketplaceName: "test-extensions",
+    ownerName: "Test Org",
+    displayName: "Test Platform",
+    skills: [
+      makeSkill([], { id: "valid", name: "valid-skill" }),
+      makeSkill([makeResourceFile("reference/example.md")], {
+        id: "invalid",
+        name: "Not Portable",
+      }),
+    ],
+    connection: {
+      appName: "Test Platform",
+      gatewayUrl: "https://example.test/v1/mcp/team",
+      serverName: "team_gateway",
+      frontendUrl: "https://dashboard.example.test",
+      iconLogo: null,
+    },
+  };
+  const files = computeTestLayout(request);
+  expect(
+    files
+      .filter((file) => file.path.endsWith("/SKILL.md"))
+      .map((file) => file.path),
+  ).toEqual([
+    "plugins/test-extensions/skills/valid-skill/SKILL.md",
+    "plugins/test-extensions/skills/connection-setup/SKILL.md",
+  ]);
+  expect(files.some((file) => file.path.includes("/not-portable/"))).toBe(
+    false,
+  );
+  expect(
+    computeTestLayout({ ...request, connection: undefined }).some((file) =>
+      file.path.endsWith("/skills/not-portable/SKILL.md"),
+    ),
+  ).toBe(true);
+});

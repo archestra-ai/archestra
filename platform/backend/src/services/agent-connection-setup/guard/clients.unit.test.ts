@@ -2268,7 +2268,7 @@ exit 0
 );
 
 describe("ChatGPT plugin disconnect verification", () => {
-  test.each([
+  const entries = [
     ['[plugins."acme-skills@acme-skills"]\nenabled = true\n', 7],
     [
       '[plugins."acme-skills@acme-skills".mcp_servers.prod_gateway.tools.helper]\napproval_mode = "approve"\n',
@@ -2277,7 +2277,11 @@ describe("ChatGPT plugin disconnect verification", () => {
     ['[marketplaces."acme-skills"]\nsource_type = "git"\n', 7],
     ['[mcp_servers."prod_gateway"]\nurl = "https://example.test/mcp"\n', 7],
     [FOREIGN_TABLES, 0],
-  ])("does not claim cleanup succeeded while an owned entry remains: %s", async (configToml, expected) => {
+  ] as const;
+
+  test.each(
+    entries,
+  )("does not claim cleanup succeeded while an owned entry remains: %s", async (configToml, expected) => {
     const result = await runGuardSnippet({
       client: codexGuardClient(true),
       functions: [],
@@ -2286,4 +2290,44 @@ describe("ChatGPT plugin disconnect verification", () => {
     });
     expect(result.code).toBe(expected);
   });
+
+  test.skipIf(!powershellBin).each(entries)(
+    "PowerShell refuses cleanup while an owned entry remains: %s",
+    async (configToml, expected) => {
+      const dir = await mkdtemp(path.join(tmpdir(), "chatgpt-disconnect-ps-"));
+      try {
+        await writeFile(path.join(dir, "config.toml"), configToml);
+        const script = path.join(dir, "verify.ps1");
+        await writeFile(
+          script,
+          [
+            "$ErrorActionPreference = 'Stop'",
+            "$SkillsMarketplaceName = 'acme-skills'",
+            "$McpServerName = 'prod_gateway'",
+            "$PluginNames = @('acme-skills')",
+            "function Test-Disconnect {",
+            codexGuardClient(true).windows.mcpDisconnectVerify,
+            "return $true",
+            "}",
+            "if (-not (Test-Disconnect)) { exit 7 }",
+            "exit 0",
+          ].join("\n"),
+        );
+        const result = spawnSync(
+          powershellBin ?? "pwsh",
+          ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", script],
+          {
+            env: { ...process.env, CODEX_HOME: dir },
+            encoding: "utf8",
+            timeout: 30_000,
+          },
+        );
+        expect(result.error).toBeUndefined();
+        expect(result.stderr).toBe("");
+        expect(result.status).toBe(expected);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+  );
 });

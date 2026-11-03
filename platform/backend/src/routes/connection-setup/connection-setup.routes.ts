@@ -153,8 +153,8 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
 const MULTI_PROVIDER_KEY_CLIENTS: Partial<
   Record<ConnectionSetupClientId, { keyName: string }>
 > = {
-  cursor: { keyName: "Cursor unified model API" },
-  pi: { keyName: "Pi unified model API" },
+  cursor: { keyName: "Cursor model router" },
+  pi: { keyName: "Pi model router" },
   ...openCodeFamilyRecord((client) => ({
     keyName: `${client.label} primary providers`,
   })),

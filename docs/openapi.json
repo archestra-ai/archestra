@@ -436952,7 +436952,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "List OpenAI-compatible model ids available through the unified model API (default LLM proxy)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
+        "description": "List OpenAI-compatible model ids available through the Unified Model API (default LLM proxy)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -437248,7 +437248,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "List OpenAI-compatible model ids available through the unified model API (specific attribution Agent)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
+        "description": "List OpenAI-compatible model ids available through the Unified Model API (specific attribution Agent)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "parameters": [
           {
             "schema": {
@@ -437556,7 +437556,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a response through the OpenAI-compatible unified model API (default LLM proxy)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
+        "description": "Create a response through the OpenAI-compatible Unified Model API (default LLM proxy)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "requestBody": {
           "required": true,
           "content": {
@@ -438143,7 +438143,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a response through the OpenAI-compatible unified model API (specific attribution Agent)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
+        "description": "Create a response through the OpenAI-compatible Unified Model API (specific attribution Agent)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "requestBody": {
           "required": true,
           "content": {
@@ -438740,7 +438740,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create embeddings through the OpenAI-compatible unified model API (default LLM proxy)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
+        "description": "Create embeddings through the OpenAI-compatible Unified Model API (default LLM proxy)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "requestBody": {
           "required": true,
           "content": {
@@ -439124,7 +439124,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create embeddings through the OpenAI-compatible unified model API (specific attribution Agent)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
+        "description": "Create embeddings through the OpenAI-compatible Unified Model API (specific attribution Agent)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "requestBody": {
           "required": true,
           "content": {
@@ -439518,7 +439518,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion through the OpenAI-compatible unified model API (default LLM proxy)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
+        "description": "Create a chat completion through the OpenAI-compatible Unified Model API (default LLM proxy)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "requestBody": {
           "required": true,
           "content": {
@@ -441810,7 +441810,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion through the OpenAI-compatible unified model API (specific attribution Agent)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
+        "description": "Create a chat completion through the OpenAI-compatible Unified Model API (specific attribution Agent)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "requestBody": {
           "required": true,
           "content": {

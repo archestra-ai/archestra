@@ -9158,7 +9158,7 @@ export const modelRouterImagesWithAgent = <ThrowOnError extends boolean = false>
 });
 
 /**
- * List OpenAI-compatible model ids available through the unified model API (default LLM proxy)
+ * List OpenAI-compatible model ids available through the Unified Model API (default LLM proxy)
  *
  * Authentication:
  *
@@ -9167,7 +9167,7 @@ export const modelRouterImagesWithAgent = <ThrowOnError extends boolean = false>
 export const modelRouterListModelsWithDefaultAgent = <ThrowOnError extends boolean = false>(options?: Options<ModelRouterListModelsWithDefaultAgentData, ThrowOnError>) => (options?.client ?? client).get<ModelRouterListModelsWithDefaultAgentResponses, ModelRouterListModelsWithDefaultAgentErrors, ThrowOnError>({ url: '/v1/unified-model/models', ...options });
 
 /**
- * List OpenAI-compatible model ids available through the unified model API (specific attribution Agent)
+ * List OpenAI-compatible model ids available through the Unified Model API (specific attribution Agent)
  *
  * Authentication:
  *
@@ -9176,7 +9176,7 @@ export const modelRouterListModelsWithDefaultAgent = <ThrowOnError extends boole
 export const modelRouterListModelsWithAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterListModelsWithAgentData, ThrowOnError>) => (options.client ?? client).get<ModelRouterListModelsWithAgentResponses, ModelRouterListModelsWithAgentErrors, ThrowOnError>({ url: '/v1/unified-model/{agentId}/models', ...options });
 
 /**
- * Create a response through the OpenAI-compatible unified model API (default LLM proxy)
+ * Create a response through the OpenAI-compatible Unified Model API (default LLM proxy)
  *
  * Authentication:
  *
@@ -9192,7 +9192,7 @@ export const modelRouterResponsesWithDefaultAgent = <ThrowOnError extends boolea
 });
 
 /**
- * Create a response through the OpenAI-compatible unified model API (specific attribution Agent)
+ * Create a response through the OpenAI-compatible Unified Model API (specific attribution Agent)
  *
  * Authentication:
  *
@@ -9208,7 +9208,7 @@ export const modelRouterResponsesWithAgent = <ThrowOnError extends boolean = fal
 });
 
 /**
- * Create embeddings through the OpenAI-compatible unified model API (default LLM proxy)
+ * Create embeddings through the OpenAI-compatible Unified Model API (default LLM proxy)
  *
  * Authentication:
  *
@@ -9224,7 +9224,7 @@ export const modelRouterEmbeddingsWithDefaultAgent = <ThrowOnError extends boole
 });
 
 /**
- * Create embeddings through the OpenAI-compatible unified model API (specific attribution Agent)
+ * Create embeddings through the OpenAI-compatible Unified Model API (specific attribution Agent)
  *
  * Authentication:
  *
@@ -9240,7 +9240,7 @@ export const modelRouterEmbeddingsWithAgent = <ThrowOnError extends boolean = fa
 });
 
 /**
- * Create a chat completion through the OpenAI-compatible unified model API (default LLM proxy)
+ * Create a chat completion through the OpenAI-compatible Unified Model API (default LLM proxy)
  *
  * Authentication:
  *
@@ -9256,7 +9256,7 @@ export const modelRouterChatCompletionsWithDefaultAgent = <ThrowOnError extends 
 });
 
 /**
- * Create a chat completion through the OpenAI-compatible unified model API (specific attribution Agent)
+ * Create a chat completion through the OpenAI-compatible Unified Model API (specific attribution Agent)
  *
  * Authentication:
  *

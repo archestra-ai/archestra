@@ -109,7 +109,7 @@ Most failures come from the model name or from which provider keys your credenti
 | `Model "anthropic:…" is scoped to provider "anthropic", but the Unified Model API virtual key is not mapped to that provider.` | Edit the virtual key, and map a key for that provider to it. |
 | `Virtual API key has no provider API keys configured.` | Map at least one provider key to the virtual key. |
 | `Model … is only served over the Responses API.` | Send the request to `/responses`, not `/chat/completions`. |
-| `Provider "…" is not yet available through the OpenAI-compatible unified model API.` | The Unified Model API does not support that provider. Use the provider's own [proxy endpoint](/docs/llm-proxy#start-using-it). |
+| `Provider "…" is not yet available through the OpenAI-compatible Unified Model API.` | The Unified Model API does not support that provider. Use the provider's own [proxy endpoint](/docs/llm-proxy#start-using-it). |
 | `Unified Model API requests require a mapped virtual API key or LLM OAuth client access token.` | You sent a passthrough key, a provider key, or an identity provider JWT. Use a standard virtual key or an OAuth client token. |
 | `… is per-user: it can only be used through the same user's own personal credential.` | A subscription key, such as GitHub Copilot, works only for the person who added it. Use your personal virtual key. |
 

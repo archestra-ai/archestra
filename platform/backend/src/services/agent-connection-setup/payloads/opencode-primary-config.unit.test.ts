@@ -341,7 +341,7 @@ test("reconnecting restores what an older installer changed and migrates the sin
             name: "Anthropic Personal",
             npm: "@ai-sdk/openai",
             options: {
-              baseURL: "https://proxy.example/v1/unified-model",
+              baseURL: "https://proxy.example/v1/model-router",
               apiKey: "{file:~/.archestra/opencode-primary.key}",
             },
             models: { "claude-test": { id: "anthropic:claude-test" } },

@@ -1544,7 +1544,7 @@ describe("POST /api/connection-setups", () => {
     expect(personalKey.id).not.toBe(mappedKey.id);
   });
 
-  test("Cursor mints one Model Router key with the admin-mapped keys", async ({
+  test("Cursor reuses its existing personal key with the admin-mapped keys", async ({
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
@@ -1594,6 +1594,23 @@ describe("POST /api/connection-setups", () => {
     expect(mappings.map((mapping) => mapping.providerApiKeyId).sort()).toEqual(
       [anthropicKey.id, geminiKey.id].sort(),
     );
+
+    const reconnect = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "cursor",
+        baseUrl: "http://localhost:9000/v1",
+        proxyAuth: "primary-providers",
+      },
+    });
+    expect(reconnect.statusCode, reconnect.body).toBe(200);
+    const reconnectToken = reconnect
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const reconnectSetup =
+      await ConnectionSetupModel.findByToken(reconnectToken);
+    expect(reconnectSetup?.virtualApiKeyId).toBe(setup?.virtualApiKeyId);
   });
 
   test("Cursor falls back to the user's primary keys without a mapping", async ({

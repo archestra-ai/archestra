@@ -307,7 +307,7 @@ const registerRoutes = async (
   fastify: Parameters<FastifyPluginAsyncZod>[0],
   prefix: string,
 ) => {
-  logger.debug("[ModelRouterProxy] Registering unified model API routes");
+  logger.debug("[ModelRouterProxy] Registering Unified Model API routes");
 
   await registerMediaMultipartParser(fastify);
   for (const withAgent of [false, true]) {
@@ -464,7 +464,7 @@ const registerRoutes = async (
       schema: {
         operationId: RouteId.ModelRouterListModelsWithDefaultAgent,
         description:
-          "List OpenAI-compatible model ids available through the unified model API (default LLM proxy)",
+          "List OpenAI-compatible model ids available through the Unified Model API (default LLM proxy)",
         tags: ["LLM Proxy"],
         response: constructResponseSchema(ModelListResponseSchema),
       },
@@ -483,7 +483,7 @@ const registerRoutes = async (
       schema: {
         operationId: RouteId.ModelRouterListModelsWithAgent,
         description:
-          "List OpenAI-compatible model ids available through the unified model API (specific attribution Agent)",
+          "List OpenAI-compatible model ids available through the Unified Model API (specific attribution Agent)",
         tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
@@ -506,7 +506,7 @@ const registerRoutes = async (
       schema: {
         operationId: RouteId.ModelRouterResponsesWithDefaultAgent,
         description:
-          "Create a response through the OpenAI-compatible unified model API (default LLM proxy)",
+          "Create a response through the OpenAI-compatible Unified Model API (default LLM proxy)",
         tags: ["LLM Proxy"],
         body: OpenAi.API.ResponsesRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
@@ -530,7 +530,7 @@ const registerRoutes = async (
       schema: {
         operationId: RouteId.ModelRouterResponsesWithAgent,
         description:
-          "Create a response through the OpenAI-compatible unified model API (specific attribution Agent)",
+          "Create a response through the OpenAI-compatible Unified Model API (specific attribution Agent)",
         tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
@@ -557,7 +557,7 @@ const registerRoutes = async (
       schema: {
         operationId: RouteId.ModelRouterEmbeddingsWithDefaultAgent,
         description:
-          "Create embeddings through the OpenAI-compatible unified model API (default LLM proxy)",
+          "Create embeddings through the OpenAI-compatible Unified Model API (default LLM proxy)",
         tags: ["LLM Proxy"],
         body: OpenAi.API.EmbeddingRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
@@ -581,7 +581,7 @@ const registerRoutes = async (
       schema: {
         operationId: RouteId.ModelRouterEmbeddingsWithAgent,
         description:
-          "Create embeddings through the OpenAI-compatible unified model API (specific attribution Agent)",
+          "Create embeddings through the OpenAI-compatible Unified Model API (specific attribution Agent)",
         tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
@@ -608,7 +608,7 @@ const registerRoutes = async (
       schema: {
         operationId: RouteId.ModelRouterChatCompletionsWithDefaultAgent,
         description:
-          "Create a chat completion through the OpenAI-compatible unified model API (default LLM proxy)",
+          "Create a chat completion through the OpenAI-compatible Unified Model API (default LLM proxy)",
         tags: ["LLM Proxy"],
         body: RouterChatRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
@@ -634,7 +634,7 @@ const registerRoutes = async (
       schema: {
         operationId: RouteId.ModelRouterChatCompletionsWithAgent,
         description:
-          "Create a chat completion through the OpenAI-compatible unified model API (specific attribution Agent)",
+          "Create a chat completion through the OpenAI-compatible Unified Model API (specific attribution Agent)",
         tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
@@ -903,7 +903,7 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   if (isChatCompletionsOnlyRouterProvider(resolution.provider)) {
     throw new ApiError(
       501,
-      `${providerDisplayNames[resolution.provider]} models are available through the unified model API's Chat Completions endpoint only: the Responses translation cannot carry the reasoning their thinking models need on tool-call turns.`,
+      `${providerDisplayNames[resolution.provider]} models are available through the Unified Model API's Chat Completions endpoint only: the Responses translation cannot carry the reasoning their thinking models need on tool-call turns.`,
     );
   }
 
@@ -1001,7 +1001,7 @@ async function routeEmbedding(request: FastifyRequest, reply: FastifyReply) {
  *   OpenAI-compatible embeddings adapter (only the provider name and default
  *   base URL differ; the effective base URL still comes from the mapped key).
  *
- * Providers reach this dispatch only when the unified model API resolved a
+ * Providers reach this dispatch only when the Unified Model API resolved a
  * provider-qualified embedding model registered for them, so unsupported
  * providers surface a clear 501 rather than a misrouted request.
  */
@@ -1029,7 +1029,7 @@ function getModelRouterEmbeddingsProvider(
   }
   throw new ApiError(
     501,
-    `Provider "${provider}" is not yet available through the OpenAI-compatible unified model API embeddings endpoint.`,
+    `Provider "${provider}" is not yet available through the OpenAI-compatible Unified Model API embeddings endpoint.`,
   );
 }
 
@@ -1092,7 +1092,7 @@ function assertModelServesChatCompletions(
   throw new ApiError(
     400,
     `Model "${resolution.requestedModel}" is only served over the Responses API. ` +
-      `Send this request to the unified model API's ${RESPONSES_SUFFIX} endpoint instead of ${CHAT_COMPLETIONS_SUFFIX}.`,
+      `Send this request to the Unified Model API's ${RESPONSES_SUFFIX} endpoint instead of ${CHAT_COMPLETIONS_SUFFIX}.`,
   );
 }
 
@@ -1114,7 +1114,7 @@ function getOpenAiChatProviderForResolution(params: {
 
   throw new ApiError(
     501,
-    `Provider "${params.provider}" is not yet available through the OpenAI-compatible unified model API.`,
+    `Provider "${params.provider}" is not yet available through the OpenAI-compatible Unified Model API.`,
   );
 }
 
@@ -1483,7 +1483,7 @@ function isTranslatedModelRouterProvider(
 }
 
 function assertNever(value: never): never {
-  throw new ApiError(500, `Unhandled unified model API provider "${value}".`);
+  throw new ApiError(500, `Unhandled Unified Model API provider "${value}".`);
 }
 
 /** The pool named `model` when the caller may use it and it has members. */

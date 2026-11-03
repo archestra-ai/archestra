@@ -184,6 +184,28 @@ it("lists what a bookmarked Admin access, Shared with, Owner and Built-in select
   expect(params.get("includeBuiltIn")).toBe("true");
 });
 
+it("includes matching built-in agents when searching by name", async () => {
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams("name=Policy%20Assistant") as unknown as ReturnType<
+      typeof useSearchParams
+    >,
+  );
+  const listRequests: URLSearchParams[] = [];
+  server.use(
+    http.get(`${origin}/api/agent-catalog`, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      if (params.get("pinned") === "false") listRequests.push(params);
+      return HttpResponse.json(makeAgentCatalog());
+    }),
+  );
+
+  renderPage({ defaultAgentId: null, personalChatAgentId: null });
+
+  await waitFor(() => expect(listRequests).toHaveLength(1));
+  expect(listRequests[0].get("name")).toBe("Policy Assistant");
+  expect(listRequests[0].get("includeBuiltIn")).toBe("true");
+});
+
 it("renders the catalog the server streamed without requesting it from the browser", async () => {
   let releaseList!: () => void;
   const listHeld = new Promise<void>((resolve) => {

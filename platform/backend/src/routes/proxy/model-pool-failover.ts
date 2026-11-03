@@ -364,7 +364,7 @@ export async function openThroughModelPool<T>(params: {
         !(error instanceof ApiError) ||
         error.internalCode !== "model_hidden"
       ) {
-        await recordPreviousFailure("failed");
+        await recordPreviousFailure("failed_over");
         throw error;
       }
       hiddenError = error;
@@ -373,7 +373,9 @@ export async function openThroughModelPool<T>(params: {
     try {
       await params.beforeAttempt?.(member);
     } catch (error) {
-      await recordPreviousFailure("failed");
+      // A visible sibling's admission refusal keeps the preceding failover
+      // outcome. Only skipped hidden members leave that failure terminal.
+      await recordPreviousFailure("failed_over");
       throw error;
     }
     attempted++;

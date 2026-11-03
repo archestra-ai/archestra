@@ -160,10 +160,15 @@ class OpenAiResponsesInteraction implements InteractionUtils {
     return messages;
   }
 
+  /**
+   * The request's input items. A plain-string `input` (what most SDK calls
+   * and curl send) is one user message.
+   */
   private getInputItems(): unknown[] {
-    return Array.isArray(this.interaction.request.input)
-      ? this.interaction.request.input
-      : [];
+    const input = this.interaction.request.input as unknown;
+    if (typeof input === "string")
+      return input ? [{ role: "user", content: input }] : [];
+    return Array.isArray(input) ? input : [];
   }
 }
 

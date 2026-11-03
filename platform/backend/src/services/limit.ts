@@ -5,7 +5,9 @@ import LimitModel from "@/models/limit";
 import { ApiError } from "@/types";
 import type { CreateLimit, LimitEntityType, LimitType } from "@/types/limit";
 
-export async function createLimit(data: CreateLimit) {
+export async function createLimit(
+  data: CreateLimit & { teamManaged?: boolean },
+) {
   if (data.entityType === "agent" && data.limitType === "token_cost") {
     const agent = await AgentModel.findById(data.entityId);
     if (agent?.agentType === "llm_proxy") {

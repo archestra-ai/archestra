@@ -469,6 +469,21 @@ export type OpenAiChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -2190,6 +2205,21 @@ export type CerebrasChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -2831,6 +2861,21 @@ export type MistralChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -3350,6 +3395,21 @@ export type PerplexityChatCompletionRequestInput = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -3874,6 +3934,21 @@ export type GroqChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -4392,6 +4467,10 @@ export type OpenrouterChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text' | 'json_object' | 'json_schema';
+        [key: string]: unknown;
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -4413,10 +4492,6 @@ export type OpenrouterChatCompletionRequestInput = {
         include_usage?: boolean;
     } | null;
     user?: string;
-    response_format?: {
-        type: 'text' | 'json_object' | 'json_schema';
-        [key: string]: unknown;
-    };
     reasoning?: {
         enabled?: boolean;
         effort?: string;
@@ -5947,6 +6022,21 @@ export type DeepSeekChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -6467,6 +6557,21 @@ export type ArchestraChatCompletionRequestInput = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -7558,6 +7663,21 @@ export type XaiChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -8146,6 +8266,21 @@ export type OpenAiChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -9869,6 +10004,21 @@ export type CerebrasChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -10510,6 +10660,21 @@ export type MistralChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -11029,6 +11194,21 @@ export type PerplexityChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -11553,6 +11733,21 @@ export type GroqChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -12071,6 +12266,10 @@ export type OpenrouterChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text' | 'json_object' | 'json_schema';
+        [key: string]: unknown;
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -12092,10 +12291,6 @@ export type OpenrouterChatCompletionRequest = {
         include_usage?: boolean;
     } | null;
     user?: string;
-    response_format?: {
-        type: 'text' | 'json_object' | 'json_schema';
-        [key: string]: unknown;
-    };
     reasoning?: {
         enabled?: boolean;
         effort?: string;
@@ -13626,6 +13821,21 @@ export type DeepSeekChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -14146,6 +14356,21 @@ export type ArchestraChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -15235,6 +15460,21 @@ export type XaiChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -16845,6 +17085,7 @@ export type GetAgentCatalogData = {
         selectableOnly?: boolean;
         labels?: string;
         status?: 'active' | 'deleted';
+        runtime?: 'chat' | 'custom' | 'claude-code' | 'codex' | 'opencode' | 'hermes' | 'openclaw' | 'grok' | 'kimi' | 'copilot';
         providerApiKeyId?: string | 'organization-default';
         /**
          * Filter internal agents by the current user's pins. Pinned results exclude external A2A agents and are ordered by newest pin first.
@@ -16958,10 +17199,14 @@ export type GetAgentCatalogResponses = {
                 llmModel: string | null;
                 modelId: string | null;
                 modelPoolId: string | null;
-                fastModelId: string | null;
-                smartModelId: string | null;
                 identityProviderId: string | null;
                 environmentId: string | null;
+                networkPolicy?: {
+                    egressMode: 'off' | 'restricted' | 'unrestricted';
+                    domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                    allowedDomains: Array<string>;
+                    allowedCidrs: Array<string>;
+                } | null;
                 runtime: {
                     image: string;
                     command: Array<string> | null;
@@ -16969,12 +17214,8 @@ export type GetAgentCatalogResponses = {
                     backend: 'kubernetes';
                     steerMode: 'pipe' | 'tmux_keys';
                     privileged: boolean;
-                    resources: {
-                        cpuRequest?: string;
-                        memoryRequest?: string;
-                        cpuLimit?: string;
-                        memoryLimit?: string;
-                    } | null;
+                    tier?: string | null;
+                    maxTier?: string | null;
                     ports?: Array<number>;
                     environment: Array<{
                         key: string;
@@ -17347,10 +17588,14 @@ export type GetAgentsResponses = {
             llmModel: string | null;
             modelId: string | null;
             modelPoolId: string | null;
-            fastModelId: string | null;
-            smartModelId: string | null;
             identityProviderId: string | null;
             environmentId: string | null;
+            networkPolicy?: {
+                egressMode: 'off' | 'restricted' | 'unrestricted';
+                domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                allowedDomains: Array<string>;
+                allowedCidrs: Array<string>;
+            } | null;
             runtime: {
                 image: string;
                 command: Array<string> | null;
@@ -17358,12 +17603,8 @@ export type GetAgentsResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                resources: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
+                tier?: string | null;
+                maxTier?: string | null;
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -17503,10 +17744,14 @@ export type CreateAgentData = {
         llmModel?: string | null;
         modelId?: string | null;
         modelPoolId?: string | null;
-        fastModelId?: string | null;
-        smartModelId?: string | null;
         identityProviderId?: string | null;
         environmentId?: string | null;
+        networkPolicy?: {
+            egressMode?: 'off' | 'restricted' | 'unrestricted';
+            domainPreset?: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains?: Array<string>;
+            allowedCidrs?: Array<string>;
+        } | null;
         runtime?: {
             image: string;
             command: Array<string> | null;
@@ -17514,12 +17759,8 @@ export type CreateAgentData = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -17771,10 +18012,14 @@ export type CreateAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -17782,12 +18027,8 @@ export type CreateAgentResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -18176,12 +18417,8 @@ export type GetChatAgentRosterResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -18323,12 +18560,8 @@ export type GetChatAgentRosterPageResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                resources: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
+                tier?: string | null;
+                maxTier?: string | null;
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -18491,12 +18724,8 @@ export type GetAgentOptionsResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                resources: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
+                tier?: string | null;
+                maxTier?: string | null;
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -18677,12 +18906,8 @@ export type GetAgentOptionsPageResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                resources: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
+                tier?: string | null;
+                maxTier?: string | null;
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -19045,10 +19270,14 @@ export type GetDefaultMcpGatewayResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -19056,12 +19285,8 @@ export type GetDefaultMcpGatewayResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -19353,10 +19578,14 @@ export type ImportAgentResponses = {
             llmModel: string | null;
             modelId: string | null;
             modelPoolId: string | null;
-            fastModelId: string | null;
-            smartModelId: string | null;
             identityProviderId: string | null;
             environmentId: string | null;
+            networkPolicy?: {
+                egressMode: 'off' | 'restricted' | 'unrestricted';
+                domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                allowedDomains: Array<string>;
+                allowedCidrs: Array<string>;
+            } | null;
             runtime: {
                 image: string;
                 command: Array<string> | null;
@@ -19364,12 +19593,8 @@ export type ImportAgentResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                resources: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
+                tier?: string | null;
+                maxTier?: string | null;
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -19670,10 +19895,14 @@ export type GetAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -19681,12 +19910,8 @@ export type GetAgentResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -19808,10 +20033,14 @@ export type UpdateAgentData = {
         llmModel?: string | null;
         modelId?: string | null;
         modelPoolId?: string | null;
-        fastModelId?: string | null;
-        smartModelId?: string | null;
         identityProviderId?: string | null;
         environmentId?: string | null;
+        networkPolicy?: {
+            egressMode?: 'off' | 'restricted' | 'unrestricted';
+            domainPreset?: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains?: Array<string>;
+            allowedCidrs?: Array<string>;
+        } | null;
         runtime?: {
             image: string;
             command: Array<string> | null;
@@ -19819,12 +20048,8 @@ export type UpdateAgentData = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -19985,10 +20210,14 @@ export type UpdateAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -19996,12 +20225,8 @@ export type UpdateAgentResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -20406,14 +20631,6 @@ export type GetAgentVersionResponses = {
                 id: string;
                 externalId: string;
             } | null;
-            fastModel: {
-                id: string;
-                externalId: string;
-            } | null;
-            smartModel: {
-                id: string;
-                externalId: string;
-            } | null;
             llmApiKey: {
                 id: string;
                 name: string;
@@ -20421,6 +20638,12 @@ export type GetAgentVersionResponses = {
             } | null;
             identityProviderId: string | null;
             environmentId: string | null;
+            networkPolicy: {
+                egressMode: 'off' | 'restricted' | 'unrestricted';
+                domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                allowedDomains: Array<string>;
+                allowedCidrs: Array<string>;
+            } | null;
             tools: Array<{
                 toolId: string;
                 name: string;
@@ -20576,10 +20799,14 @@ export type RestoreAgentVersionResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -20587,12 +20814,8 @@ export type RestoreAgentVersionResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -20822,10 +21045,14 @@ export type CloneAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -20833,12 +21060,8 @@ export type CloneAgentResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -23307,10 +23530,14 @@ export type RestoreAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -23318,12 +23545,8 @@ export type RestoreAgentResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -24980,6 +25203,16 @@ export type GetAgentRunsResponses = {
         workloadName: string;
         backend: 'kubernetes';
         runtimeScope: string;
+        runtimeLimits: {
+            tier: string | null;
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+            /**
+             * Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.
+             */
+            workspaceGiB?: number;
+        } | null;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
         gatewayTokenId: string | null;
@@ -24995,7 +25228,12 @@ export type GetAgentRunsResponses = {
         stateChangedAt: string | null;
         hardDeadlineAt: string;
         lastModelActivityAt: string | null;
+        sessionId: string;
         initiatorName: string | null;
+        workspace: {
+            state: 'active' | 'idle' | 'suspending' | 'suspended' | 'resuming' | 'deleting' | 'deleted';
+            expiresAt: string;
+        } | null;
         canAttach?: boolean;
         shareVisibility: 'organization' | 'team' | 'user' | null;
         /**
@@ -25020,6 +25258,14 @@ export type StartAgentRunData = {
             contentType: string;
             contentBase64: string;
         }>;
+        limits?: {
+            tier?: string;
+            minCpu?: number;
+            minMemoryGib?: number;
+            idleTimeoutMinutes?: number;
+            maxDurationHours?: number;
+            maxCostUsd?: number;
+        };
     };
     path: {
         id: string;
@@ -25109,6 +25355,16 @@ export type StartAgentRunResponses = {
         prompt: string;
         projectId: string | null;
         createdAt: string;
+        limits: {
+            tier: string | null;
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+            /**
+             * Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.
+             */
+            workspaceGiB?: number;
+        } | null;
     };
 };
 
@@ -25214,6 +25470,16 @@ export type GetMyAgentRunsResponses = {
             workloadName: string;
             backend: 'kubernetes';
             runtimeScope: string;
+            runtimeLimits: {
+                tier: string | null;
+                idleTimeoutMinutes: number;
+                maxDurationHours: number;
+                maxCostUsd: number | null;
+                /**
+                 * Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.
+                 */
+                workspaceGiB?: number;
+            } | null;
             attentionState: 'input_required' | 'auth_required' | null;
             virtualApiKeyId: string | null;
             gatewayTokenId: string | null;
@@ -25230,6 +25496,10 @@ export type GetMyAgentRunsResponses = {
             hardDeadlineAt: string;
             lastModelActivityAt: string | null;
             sessionId: string;
+            /**
+             * Key of the run's LLM logs (/llm/logs/:id): the session id its runtime sends
+             */
+            llmSessionId: string;
             prompt: string;
             agent: {
                 id: string;
@@ -25436,6 +25706,16 @@ export type GetMyAgentRunResponses = {
         workloadName: string;
         backend: 'kubernetes';
         runtimeScope: string;
+        runtimeLimits: {
+            tier: string | null;
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+            /**
+             * Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.
+             */
+            workspaceGiB?: number;
+        } | null;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
         gatewayTokenId: string | null;
@@ -25452,6 +25732,10 @@ export type GetMyAgentRunResponses = {
         hardDeadlineAt: string;
         lastModelActivityAt: string | null;
         sessionId: string;
+        /**
+         * Key of the run's LLM logs (/llm/logs/:id): the session id its runtime sends
+         */
+        llmSessionId: string;
         prompt: string;
         agent: {
             id: string;
@@ -25583,6 +25867,16 @@ export type UpdateAgentRunResponses = {
         workloadName: string;
         backend: 'kubernetes';
         runtimeScope: string;
+        runtimeLimits: {
+            tier: string | null;
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+            /**
+             * Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.
+             */
+            workspaceGiB?: number;
+        } | null;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
         gatewayTokenId: string | null;
@@ -25599,6 +25893,10 @@ export type UpdateAgentRunResponses = {
         hardDeadlineAt: string;
         lastModelActivityAt: string | null;
         sessionId: string;
+        /**
+         * Key of the run's LLM logs (/llm/logs/:id): the session id its runtime sends
+         */
+        llmSessionId: string;
         prompt: string;
         agent: {
             id: string;
@@ -25709,6 +26007,16 @@ export type ContinueAgentRunResponses = {
         prompt: string;
         projectId: string | null;
         createdAt: string;
+        limits: {
+            tier: string | null;
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+            /**
+             * Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.
+             */
+            workspaceGiB?: number;
+        } | null;
     };
 };
 
@@ -25802,6 +26110,306 @@ export type CancelAgentRunResponses = {
 };
 
 export type CancelAgentRunResponse = CancelAgentRunResponses[keyof CancelAgentRunResponses];
+
+export type BulkDeleteAgentRunsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent-runs/bulk';
+};
+
+export type BulkDeleteAgentRunsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteAgentRunsError = BulkDeleteAgentRunsErrors[keyof BulkDeleteAgentRunsErrors];
+
+export type BulkDeleteAgentRunsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteAgentRunsResponse = BulkDeleteAgentRunsResponses[keyof BulkDeleteAgentRunsResponses];
+
+export type BulkDeleteAgentWorkspacesData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent-runs/bulk/workspace';
+};
+
+export type BulkDeleteAgentWorkspacesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteAgentWorkspacesError = BulkDeleteAgentWorkspacesErrors[keyof BulkDeleteAgentWorkspacesErrors];
+
+export type BulkDeleteAgentWorkspacesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteAgentWorkspacesResponse = BulkDeleteAgentWorkspacesResponses[keyof BulkDeleteAgentWorkspacesResponses];
+
+export type BulkCancelAgentRunsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent-runs/bulk-cancel';
+};
+
+export type BulkCancelAgentRunsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkCancelAgentRunsError = BulkCancelAgentRunsErrors[keyof BulkCancelAgentRunsErrors];
+
+export type BulkCancelAgentRunsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkCancelAgentRunsResponse = BulkCancelAgentRunsResponses[keyof BulkCancelAgentRunsResponses];
 
 export type StartAgentWorkspaceTransferData = {
     body: {
@@ -26011,6 +26619,615 @@ export type UploadAgentWorkspaceTransferResponses = {
 };
 
 export type UploadAgentWorkspaceTransferResponse = UploadAgentWorkspaceTransferResponses[keyof UploadAgentWorkspaceTransferResponses];
+
+export type ListAgentRuntimeTemplatesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime-templates';
+};
+
+export type ListAgentRuntimeTemplatesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListAgentRuntimeTemplatesError = ListAgentRuntimeTemplatesErrors[keyof ListAgentRuntimeTemplatesErrors];
+
+export type ListAgentRuntimeTemplatesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        description: string;
+        icon: string | null;
+        hidden: boolean;
+        position: number;
+        image: string;
+    }>;
+};
+
+export type ListAgentRuntimeTemplatesResponse = ListAgentRuntimeTemplatesResponses[keyof ListAgentRuntimeTemplatesResponses];
+
+export type GetRuntimeTemplateSettingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime-templates/settings';
+};
+
+export type GetRuntimeTemplateSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetRuntimeTemplateSettingsError = GetRuntimeTemplateSettingsErrors[keyof GetRuntimeTemplateSettingsErrors];
+
+export type GetRuntimeTemplateSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        revision: number;
+        templates: Array<{
+            id: string;
+            name: string;
+            description: string;
+            icon: string | null;
+            hidden: boolean;
+            position: number;
+            runtime: {
+                image: string;
+                command: Array<string> | null;
+                inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+                backend: 'kubernetes';
+                steerMode: 'pipe' | 'tmux_keys';
+                privileged: false;
+                tier?: string | null;
+                maxTier?: string | null;
+                ports?: Array<number>;
+                environment: Array<{
+                    key: string;
+                    value: string;
+                }> | null;
+                credentials: Array<{
+                    key: string;
+                    scope: 'shared' | 'per_user';
+                    credentialId?: string;
+                    label: string;
+                    description?: string;
+                    required: boolean;
+                }> | null;
+                allowAgentSuppliedCredentialValues?: boolean;
+                claudeCode?: {
+                    authentication: 'provider' | 'subscription';
+                    model?: string;
+                };
+                ttlHours: number | null;
+                maxCostUsd: number | null;
+                idleTimeoutMinutes: number | null;
+            };
+        }>;
+        popularAgentOverrides: {
+            'claude-code'?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            codex?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            opencode?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            hermes?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            openclaw?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            grok?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            kimi?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            copilot?: {
+                hidden?: boolean;
+                position?: number;
+            };
+        } | null;
+    };
+};
+
+export type GetRuntimeTemplateSettingsResponse = GetRuntimeTemplateSettingsResponses[keyof GetRuntimeTemplateSettingsResponses];
+
+export type SaveRuntimeTemplateSettingsData = {
+    body: {
+        revision: number;
+        templates: Array<{
+            id: string;
+            name: string;
+            description: string;
+            icon: string | null;
+            hidden: boolean;
+            position: number;
+            runtime: {
+                image: string;
+                command: Array<string> | null;
+                inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+                backend: 'kubernetes';
+                steerMode: 'pipe' | 'tmux_keys';
+                privileged: false;
+                tier?: string | null;
+                maxTier?: string | null;
+                ports?: Array<number>;
+                environment: Array<{
+                    key: string;
+                    value: string;
+                }> | null;
+                credentials: Array<{
+                    key: string;
+                    scope: 'shared' | 'per_user';
+                    credentialId?: string;
+                    label: string;
+                    description?: string;
+                    required: boolean;
+                }> | null;
+                allowAgentSuppliedCredentialValues?: boolean;
+                claudeCode?: {
+                    authentication: 'provider' | 'subscription';
+                    model?: string;
+                };
+                ttlHours: number | null;
+                maxCostUsd: number | null;
+                idleTimeoutMinutes: number | null;
+            };
+        }>;
+        popularAgentOverrides: {
+            'claude-code'?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            codex?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            opencode?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            hermes?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            openclaw?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            grok?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            kimi?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            copilot?: {
+                hidden?: boolean;
+                position?: number;
+            };
+        } | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime-templates/settings';
+};
+
+export type SaveRuntimeTemplateSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SaveRuntimeTemplateSettingsError = SaveRuntimeTemplateSettingsErrors[keyof SaveRuntimeTemplateSettingsErrors];
+
+export type SaveRuntimeTemplateSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        revision: number;
+        templates: Array<{
+            id: string;
+            name: string;
+            description: string;
+            icon: string | null;
+            hidden: boolean;
+            position: number;
+            runtime: {
+                image: string;
+                command: Array<string> | null;
+                inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+                backend: 'kubernetes';
+                steerMode: 'pipe' | 'tmux_keys';
+                privileged: false;
+                tier?: string | null;
+                maxTier?: string | null;
+                ports?: Array<number>;
+                environment: Array<{
+                    key: string;
+                    value: string;
+                }> | null;
+                credentials: Array<{
+                    key: string;
+                    scope: 'shared' | 'per_user';
+                    credentialId?: string;
+                    label: string;
+                    description?: string;
+                    required: boolean;
+                }> | null;
+                allowAgentSuppliedCredentialValues?: boolean;
+                claudeCode?: {
+                    authentication: 'provider' | 'subscription';
+                    model?: string;
+                };
+                ttlHours: number | null;
+                maxCostUsd: number | null;
+                idleTimeoutMinutes: number | null;
+            };
+        }>;
+        popularAgentOverrides: {
+            'claude-code'?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            codex?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            opencode?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            hermes?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            openclaw?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            grok?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            kimi?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            copilot?: {
+                hidden?: boolean;
+                position?: number;
+            };
+        } | null;
+    };
+};
+
+export type SaveRuntimeTemplateSettingsResponse = SaveRuntimeTemplateSettingsResponses[keyof SaveRuntimeTemplateSettingsResponses];
+
+export type GetAgentRuntimeTemplateData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agent-runtime-templates/{id}';
+};
+
+export type GetAgentRuntimeTemplateErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentRuntimeTemplateError = GetAgentRuntimeTemplateErrors[keyof GetAgentRuntimeTemplateErrors];
+
+export type GetAgentRuntimeTemplateResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        description: string;
+        icon: string | null;
+        hidden: boolean;
+        position: number;
+        runtime: {
+            image: string;
+            command: Array<string> | null;
+            inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+            backend: 'kubernetes';
+            steerMode: 'pipe' | 'tmux_keys';
+            privileged: false;
+            tier?: string | null;
+            maxTier?: string | null;
+            ports?: Array<number>;
+            environment: Array<{
+                key: string;
+                value: string;
+            }> | null;
+            credentials: Array<{
+                key: string;
+                scope: 'shared' | 'per_user';
+                credentialId?: string;
+                label: string;
+                description?: string;
+                required: boolean;
+            }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
+            ttlHours: number | null;
+            maxCostUsd: number | null;
+            idleTimeoutMinutes: number | null;
+        };
+    };
+};
+
+export type GetAgentRuntimeTemplateResponse = GetAgentRuntimeTemplateResponses[keyof GetAgentRuntimeTemplateResponses];
 
 export type GetAllAgentToolsData = {
     body?: never;
@@ -31857,7 +33074,7 @@ export type GetAuditLogsData = {
         /**
          * Filter by action type (dotted name, e.g. agent.created)
          */
-        action?: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.reviewDecided' | 'agentRun.shared' | 'agentRun.unshared' | 'browserStorageState.deleted' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connectedClient.disconnected' | 'connectionPromptSession.created' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action?: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.shared' | 'agentRun.unshared' | 'browserStorageState.deleted' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connectedClient.disconnected' | 'connectionPromptSession.created' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
         /**
          * Filter by outcome (success, failure, or denied)
          */
@@ -31964,7 +33181,7 @@ export type GetAuditLogsResponses = {
             actorName: string | null;
             actorEmail: string | null;
             impersonatedBy: string | null;
-            action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.reviewDecided' | 'agentRun.shared' | 'agentRun.unshared' | 'browserStorageState.deleted' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connectedClient.disconnected' | 'connectionPromptSession.created' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+            action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.shared' | 'agentRun.unshared' | 'browserStorageState.deleted' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connectedClient.disconnected' | 'connectionPromptSession.created' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -32189,7 +33406,7 @@ export type GetAuditLogResponses = {
         actorName: string | null;
         actorEmail: string | null;
         impersonatedBy: string | null;
-        action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.reviewDecided' | 'agentRun.shared' | 'agentRun.unshared' | 'browserStorageState.deleted' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connectedClient.disconnected' | 'connectionPromptSession.created' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+        action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.shared' | 'agentRun.unshared' | 'browserStorageState.deleted' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connectedClient.disconnected' | 'connectionPromptSession.created' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
         outcome: 'success' | 'failure' | 'denied';
         resourceType: string | null;
         resourceId: string | null;
@@ -32587,6 +33804,7 @@ export type GetAutoRoutingSettingsResponses = {
                 modelId: string;
             } | null;
         };
+        routedAgentCount: number;
         generation: number;
         plannedGeneration: number;
         status: {
@@ -32611,9 +33829,6 @@ export type UpdateAutoRoutingSettingsData = {
     body: {
         enabled?: boolean;
         budgetUsdPerDay?: number;
-        fastModelId?: string;
-        normalModelId?: string;
-        smartModelId?: string;
     };
     path?: never;
     query?: never;
@@ -32712,6 +33927,7 @@ export type UpdateAutoRoutingSettingsResponses = {
                 modelId: string;
             } | null;
         };
+        routedAgentCount: number;
         generation: number;
         plannedGeneration: number;
         status: {
@@ -33071,6 +34287,7 @@ export type ReplanAutoRoutingResponses = {
                 modelId: string;
             } | null;
         };
+        routedAgentCount: number;
         generation: number;
         plannedGeneration: number;
         status: {
@@ -33108,6 +34325,14 @@ export type ReplanAutoRoutingResponse = ReplanAutoRoutingResponses[keyof ReplanA
 export type PreviewAutoRoutingData = {
     body: {
         text: string;
+    } | {
+        /**
+         * An opening Chat Completions, Responses or Anthropic Messages request body. Only its opening user text, system instructions and tool metadata are scored; the request is not executed.
+         */
+        request: {
+            [key: string]: unknown;
+        };
+        client?: string;
     };
     path?: never;
     query?: never;
@@ -35700,6 +36925,21 @@ export type AzureRealtimeTurnWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -36317,6 +37557,21 @@ export type AzureRealtimeTurnWithAgentData = {
                         syntax: 'lark' | 'regex';
                     };
                 };
+            };
+        };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
             };
         };
         temperature?: number | null;
@@ -41088,7 +42343,7 @@ export type GetBootstrapResponses = {
      */
     200: {
         permissions: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
         };
         scopedCapabilities: Array<{
             organizationId: string;
@@ -41116,6 +42371,7 @@ export type GetBootstrapResponses = {
             playwrightMcpEnabled: boolean;
             allowChatFileUploads: boolean;
             allowUnauthenticatedLlmProxyRequests: boolean;
+            keepMediaInLogs: boolean;
             allowToolAutoAssignment: boolean;
             embeddingModel: string | null;
             embeddingDimensions: EmbeddingDimensions | null;
@@ -41219,6 +42475,9 @@ export type GetBootstrapResponses = {
                 allowedDomains: Array<string>;
                 allowedCidrs: Array<string>;
             } | null;
+            agentRuntimeTiers: {
+                [key: string]: unknown;
+            } | null;
             defaultEnvironmentValidationRegex: string | null;
             defaultEnvironmentTrustedImageRegistries: Array<string> | null;
             skillToolsEnabled: boolean;
@@ -41255,11 +42514,6 @@ export type GetBootstrapResponses = {
                     defaultTtlHours: number;
                     defaultIdleTimeoutMinutes: number;
                     allowPrivileged: boolean;
-                    resources: {
-                        cpuRequest: string;
-                        memoryRequest: string;
-                        memoryLimit: string;
-                    };
                 };
                 plugins: boolean;
                 sandboxArtifactBytesLimit: number;
@@ -41463,12 +42717,8 @@ export type GetNewChatBootstrapResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                resources: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
+                tier?: string | null;
+                maxTier?: string | null;
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -41598,6 +42848,17 @@ export type GetNewChatBootstrapResponses = {
                 pricePerMillionCacheRead: string | null;
                 pricePerMillionCacheWrite: string | null;
                 cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+                mediaPricing: {
+                    per: 'million_tokens' | 'million_characters' | 'minute';
+                    input: Array<{
+                        kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                        usd: number;
+                    }>;
+                    output: Array<{
+                        kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                        usd: number;
+                    }>;
+                } | null;
             };
             isBest?: boolean;
             isFree: boolean;
@@ -41628,10 +42889,14 @@ export type GetNewChatBootstrapResponses = {
                 llmModel: string | null;
                 modelId: string | null;
                 modelPoolId: string | null;
-                fastModelId: string | null;
-                smartModelId: string | null;
                 identityProviderId: string | null;
                 environmentId: string | null;
+                networkPolicy?: {
+                    egressMode: 'off' | 'restricted' | 'unrestricted';
+                    domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                    allowedDomains: Array<string>;
+                    allowedCidrs: Array<string>;
+                } | null;
                 runtime: {
                     image: string;
                     command: Array<string> | null;
@@ -41639,12 +42904,8 @@ export type GetNewChatBootstrapResponses = {
                     backend: 'kubernetes';
                     steerMode: 'pipe' | 'tmux_keys';
                     privileged: boolean;
-                    resources: {
-                        cpuRequest?: string;
-                        memoryRequest?: string;
-                        cpuLimit?: string;
-                        memoryLimit?: string;
-                    } | null;
+                    tier?: string | null;
+                    maxTier?: string | null;
                     ports?: Array<number>;
                     environment: Array<{
                         key: string;
@@ -41818,6 +43079,17 @@ export type GetNewChatBootstrapResponses = {
                     pricePerMillionCacheRead: string | null;
                     pricePerMillionCacheWrite: string | null;
                     cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+                    mediaPricing: {
+                        per: 'million_tokens' | 'million_characters' | 'minute';
+                        input: Array<{
+                            kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                            usd: number;
+                        }>;
+                        output: Array<{
+                            kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                            usd: number;
+                        }>;
+                    } | null;
                 };
                 isBest?: boolean;
                 isFree: boolean;
@@ -42024,12 +43296,8 @@ export type GetConversationBootstrapResponses = {
                     backend: 'kubernetes';
                     steerMode: 'pipe' | 'tmux_keys';
                     privileged: boolean;
-                    resources: {
-                        cpuRequest?: string;
-                        memoryRequest?: string;
-                        cpuLimit?: string;
-                        memoryLimit?: string;
-                    } | null;
+                    tier?: string | null;
+                    maxTier?: string | null;
                     ports?: Array<number>;
                     environment: Array<{
                         key: string;
@@ -42159,6 +43427,17 @@ export type GetConversationBootstrapResponses = {
                     pricePerMillionCacheRead: string | null;
                     pricePerMillionCacheWrite: string | null;
                     cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+                    mediaPricing: {
+                        per: 'million_tokens' | 'million_characters' | 'minute';
+                        input: Array<{
+                            kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                            usd: number;
+                        }>;
+                        output: Array<{
+                            kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                            usd: number;
+                        }>;
+                    } | null;
                 };
                 isBest?: boolean;
                 isFree: boolean;
@@ -42189,10 +43468,14 @@ export type GetConversationBootstrapResponses = {
                     llmModel: string | null;
                     modelId: string | null;
                     modelPoolId: string | null;
-                    fastModelId: string | null;
-                    smartModelId: string | null;
                     identityProviderId: string | null;
                     environmentId: string | null;
+                    networkPolicy?: {
+                        egressMode: 'off' | 'restricted' | 'unrestricted';
+                        domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                        allowedDomains: Array<string>;
+                        allowedCidrs: Array<string>;
+                    } | null;
                     runtime: {
                         image: string;
                         command: Array<string> | null;
@@ -42200,12 +43483,8 @@ export type GetConversationBootstrapResponses = {
                         backend: 'kubernetes';
                         steerMode: 'pipe' | 'tmux_keys';
                         privileged: boolean;
-                        resources: {
-                            cpuRequest?: string;
-                            memoryRequest?: string;
-                            cpuLimit?: string;
-                            memoryLimit?: string;
-                        } | null;
+                        tier?: string | null;
+                        maxTier?: string | null;
                         ports?: Array<number>;
                         environment: Array<{
                             key: string;
@@ -42379,6 +43658,17 @@ export type GetConversationBootstrapResponses = {
                         pricePerMillionCacheRead: string | null;
                         pricePerMillionCacheWrite: string | null;
                         cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+                        mediaPricing: {
+                            per: 'million_tokens' | 'million_characters' | 'minute';
+                            input: Array<{
+                                kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                                usd: number;
+                            }>;
+                            output: Array<{
+                                kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                                usd: number;
+                            }>;
+                        } | null;
                     };
                     isBest?: boolean;
                     isFree: boolean;
@@ -50960,11 +52250,6 @@ export type GetConfigResponses = {
                 defaultTtlHours: number;
                 defaultIdleTimeoutMinutes: number;
                 allowPrivileged: boolean;
-                resources: {
-                    cpuRequest: string;
-                    memoryRequest: string;
-                    memoryLimit: string;
-                };
             };
             plugins: boolean;
             sandboxArtifactBytesLimit: number;
@@ -51960,6 +53245,7 @@ export type GetConnectionHealthResponses = {
         mcp?: 'ok' | 'down';
         llm?: 'ok' | 'down';
         guardVersion: number;
+        mcpToolPrefix: string;
     };
 };
 
@@ -51975,6 +53261,7 @@ export type CreateConnectionSetupData = {
         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         proxyAuth?: 'provider-key' | 'virtual-key' | 'primary-providers';
         attributePassthrough?: boolean;
+        providerApiKeyId?: string;
         model?: string;
         skills?: {
             skillIds: Array<string>;
@@ -52768,6 +54055,7 @@ export type ListUserLimitUsageResponses = {
             cleanupInterval: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
             models: Array<string> | null;
             spent: number;
+            estimatedUsage: boolean;
             percent: number | null;
             status: 'ok' | 'near' | 'at';
             customLimitId: string | null;
@@ -58366,6 +59654,21 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -58976,6 +60279,21 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                         syntax: 'lark' | 'regex';
                     };
                 };
+            };
+        };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
             };
         };
         temperature?: number | null;
@@ -62723,7 +64041,11 @@ export type GetInteractionsResponses = {
             attributionLabels: {
                 [key: string]: string;
             } | null;
-            request: GeminiGenerateContentRequest | {
+            request: (GeminiGenerateContentRequest & {
+                input_files?: {
+                    [key: string]: unknown;
+                };
+            }) | {
                 [key: string]: unknown;
             };
             processedRequest?: GeminiGenerateContentRequest | {
@@ -65698,6 +67020,21 @@ export type GetInteractionsResponses = {
                         };
                     };
                 };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                };
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
@@ -66149,6 +67486,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -66763,6 +68115,21 @@ export type GetInteractionsResponses = {
                         };
                     };
                 };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                };
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
@@ -67214,6 +68581,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -67828,6 +69210,21 @@ export type GetInteractionsResponses = {
                         };
                     };
                 };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                };
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
@@ -68279,6 +69676,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -68893,6 +70305,21 @@ export type GetInteractionsResponses = {
                         };
                     };
                 };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                };
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
@@ -69344,6 +70771,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -70220,6 +71662,21 @@ export type GetInteractionsResponses = {
                         };
                     };
                 };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                };
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
@@ -70673,6 +72130,21 @@ export type GetInteractionsResponses = {
                         };
                     };
                 };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                };
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
@@ -70867,6 +72339,7 @@ export type GetInteractionsResponses = {
                     filename: string;
                     mimetype: string;
                     size: number;
+                    duration_seconds?: number;
                 };
             } | {
                 [key: string]: unknown;
@@ -70881,6 +72354,7 @@ export type GetInteractionsResponses = {
                     filename: string;
                     mimetype: string;
                     size: number;
+                    duration_seconds?: number;
                 };
             } | {
                 [key: string]: unknown;
@@ -70892,10 +72366,22 @@ export type GetInteractionsResponses = {
                 content_type: string;
                 bytes: number;
                 usage_available: boolean;
-                cost_available: false;
+                cost_available: boolean;
                 usage?: {
                     [key: string]: unknown;
                 };
+                speech_input?: string;
+                transcript?: string;
+                audio?: {
+                    content_type: string;
+                    data: string;
+                };
+                audio_omitted?: 'too_large';
+                upload?: {
+                    content_type: string;
+                    data: string;
+                };
+                upload_omitted?: 'too_large';
             } | {
                 error: string;
             } | LogContentNotStored | {
@@ -70997,6 +72483,7 @@ export type GetInteractionsResponses = {
                     filename: string;
                     mimetype: string;
                     size: number;
+                    duration_seconds?: number;
                 };
             } | {
                 [key: string]: unknown;
@@ -71011,6 +72498,7 @@ export type GetInteractionsResponses = {
                     filename: string;
                     mimetype: string;
                     size: number;
+                    duration_seconds?: number;
                 };
             } | {
                 [key: string]: unknown;
@@ -71022,10 +72510,22 @@ export type GetInteractionsResponses = {
                 content_type: string;
                 bytes: number;
                 usage_available: boolean;
-                cost_available: false;
+                cost_available: boolean;
                 usage?: {
                     [key: string]: unknown;
                 };
+                speech_input?: string;
+                transcript?: string;
+                audio?: {
+                    content_type: string;
+                    data: string;
+                };
+                audio_omitted?: 'too_large';
+                upload?: {
+                    content_type: string;
+                    data: string;
+                };
+                upload_omitted?: 'too_large';
             } | {
                 error: string;
             } | LogContentNotStored | {
@@ -71179,7 +72679,7 @@ export type GetInteractionsResponses = {
                 reason: string;
                 blockedToolCallCount: number;
             } | null;
-            type: 'azure:images';
+            type: 'azure:images' | 'openai:images';
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
@@ -71939,6 +73439,255 @@ export type GetInteractionsResponses = {
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             externalAgentIdLabel?: string | null;
+        } | {
+            id: string;
+            profileId: string | null;
+            externalAgentId: string | null;
+            runId: string | null;
+            userId: string | null;
+            serviceAccountId: string | null;
+            virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
+            environmentId: string | null;
+            connectorId: string | null;
+            appId: string | null;
+            providerApiKeyId: string | null;
+            modelPoolId: string | null;
+            attempt: number | null;
+            attemptOutcome: string | null;
+            failureReason: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
+            billingMode: 'metered' | 'subscription';
+            authenticatedAppId: string | null;
+            authenticatedAppName: string | null;
+            billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
+            request: {
+                model: string;
+                turn: number;
+                session?: {
+                    [key: string]: unknown;
+                };
+                input_text?: string;
+                input_transcript?: string;
+            } | {
+                [key: string]: unknown;
+            };
+            processedRequest?: {
+                model: string;
+                turn: number;
+                session?: {
+                    [key: string]: unknown;
+                };
+                input_text?: string;
+                input_transcript?: string;
+            } | {
+                [key: string]: unknown;
+            } | null;
+            response: {
+                id: string;
+                status: string;
+                output_transcript?: string;
+                output_audio?: {
+                    format: 'pcm16';
+                    sample_rate: number;
+                    data: string;
+                };
+                output_audio_omitted?: 'too_large';
+                output?: Array<{
+                    [key: string]: unknown;
+                }>;
+                usage?: {
+                    [key: string]: unknown;
+                };
+            } | {
+                error: string;
+            } | LogContentNotStored | {
+                __encryptedChatSealed: string;
+            } | {
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
+            };
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
+            type: 'openai:realtime';
+            model: string | null;
+            baselineModel: string | null;
+            durationMs: number | null;
+            inputTokens: number | null;
+            inputTokensEstimated: boolean;
+            outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
+            createdAt: string;
+            chatErrors?: Array<{
+                id: string;
+                conversationId: string;
+                error: {
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                    message: string;
+                    isRetryable: boolean;
+                    sessionId?: string;
+                    traceId?: string;
+                    spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
+                    authAction?: {
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        providerLabel: string;
+                    };
+                    originalError?: {
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        status?: number;
+                        message?: string;
+                        type?: string;
+                        raw?: unknown;
+                    };
+                };
+                createdAt: string;
+            }>;
+            connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
+        } | {
+            id: string;
+            profileId: string | null;
+            externalAgentId: string | null;
+            runId: string | null;
+            userId: string | null;
+            serviceAccountId: string | null;
+            virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
+            environmentId: string | null;
+            connectorId: string | null;
+            appId: string | null;
+            providerApiKeyId: string | null;
+            modelPoolId: string | null;
+            attempt: number | null;
+            attemptOutcome: string | null;
+            failureReason: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
+            billingMode: 'metered' | 'subscription';
+            authenticatedAppId: string | null;
+            authenticatedAppName: string | null;
+            billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
+            request: {
+                method: string;
+                path: string;
+                query?: string;
+                content_type?: string;
+                content_length?: number;
+                body?: unknown;
+                truncated?: boolean;
+            } | {
+                [key: string]: unknown;
+            };
+            processedRequest?: {
+                method: string;
+                path: string;
+                query?: string;
+                content_type?: string;
+                content_length?: number;
+                body?: unknown;
+                truncated?: boolean;
+            } | {
+                [key: string]: unknown;
+            } | null;
+            response: {
+                status: number;
+                content_type?: string;
+                bytes: number;
+                body?: unknown;
+                truncated?: boolean;
+                streamed?: boolean;
+            } | {
+                error: string;
+            } | LogContentNotStored | {
+                __encryptedChatSealed: string;
+            } | {
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
+            };
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
+            type: 'openai:passthrough' | 'anthropic:passthrough';
+            model: string | null;
+            baselineModel: string | null;
+            durationMs: number | null;
+            inputTokens: number | null;
+            inputTokensEstimated: boolean;
+            outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
+            createdAt: string;
+            chatErrors?: Array<{
+                id: string;
+                conversationId: string;
+                error: {
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                    message: string;
+                    isRetryable: boolean;
+                    sessionId?: string;
+                    traceId?: string;
+                    spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
+                    authAction?: {
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        providerLabel: string;
+                    };
+                    originalError?: {
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        status?: number;
+                        message?: string;
+                        type?: string;
+                        raw?: unknown;
+                    };
+                };
+                createdAt: string;
+            }>;
+            connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -72072,7 +73821,7 @@ export type GetInteractionSummariesResponses = {
             attributionLabels?: {
                 [key: string]: string;
             } | null;
-            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'kimi-code:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'azure:images' | 'azure:audio' | 'openai:audio' | 'azure:realtime' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
+            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'kimi-code:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'azure:images' | 'azure:audio' | 'openai:audio' | 'openai:images' | 'openai:passthrough' | 'anthropic:passthrough' | 'openai:realtime' | 'azure:realtime' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
             externalAgentIdLabel: string | null;
             requestType: 'main' | 'subagent';
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -72547,6 +74296,137 @@ export type GetUniqueUserIdsResponses = {
 };
 
 export type GetUniqueUserIdsResponse = GetUniqueUserIdsResponses[keyof GetUniqueUserIdsResponses];
+
+export type GetInteractionAutoRoutingData = {
+    body?: never;
+    path: {
+        interactionId: string;
+    };
+    query?: never;
+    url: '/api/interactions/{interactionId}/auto-routing';
+};
+
+export type GetInteractionAutoRoutingErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetInteractionAutoRoutingError = GetInteractionAutoRoutingErrors[keyof GetInteractionAutoRoutingErrors];
+
+export type GetInteractionAutoRoutingResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        decision: {
+            id: string;
+            segment: number;
+            tierIndex: number;
+            modelId: string;
+            propensity: number;
+            u: number;
+            planId: string | null;
+            reason: 'planned' | 'cold_start' | 'scorer_error' | 'plan_stale';
+            scorerVersionId: string | null;
+            features: {
+                signals: {
+                    'jev-session': {
+                        version: string;
+                        tier_needed: [
+                            number,
+                            number,
+                            number
+                        ];
+                        p_long: number;
+                    };
+                };
+                client: string;
+            } | null;
+            scorerCost: string | null;
+            featuresSchemaVersion: number;
+            coreVersion: string;
+            planFormatVersion: number | null;
+            lambda: number | null;
+            expectedCostUsd: string | null;
+            createdAt: string;
+            tier: 'fast' | 'normal' | 'smart';
+            model: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            };
+            scorerVersion: {
+                id: string;
+                name: string;
+                model: string;
+                specHash: string;
+            } | null;
+        } | null;
+    };
+};
+
+export type GetInteractionAutoRoutingResponse = GetInteractionAutoRoutingResponses[keyof GetInteractionAutoRoutingResponses];
 
 export type GetInteractionData = {
     body?: never;
@@ -73471,7 +75351,11 @@ export type GetInteractionResponses = {
         attributionLabels: {
             [key: string]: string;
         } | null;
-        request: GeminiGenerateContentRequest | {
+        request: (GeminiGenerateContentRequest & {
+            input_files?: {
+                [key: string]: unknown;
+            };
+        }) | {
             [key: string]: unknown;
         };
         processedRequest?: GeminiGenerateContentRequest | {
@@ -76446,6 +78330,21 @@ export type GetInteractionResponses = {
                     };
                 };
             };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            };
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
@@ -76897,6 +78796,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -77511,6 +79425,21 @@ export type GetInteractionResponses = {
                     };
                 };
             };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            };
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
@@ -77962,6 +79891,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -78576,6 +80520,21 @@ export type GetInteractionResponses = {
                     };
                 };
             };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            };
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
@@ -79027,6 +80986,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -79641,6 +81615,21 @@ export type GetInteractionResponses = {
                     };
                 };
             };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            };
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
@@ -80092,6 +82081,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -80968,6 +82972,21 @@ export type GetInteractionResponses = {
                     };
                 };
             };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            };
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
@@ -81421,6 +83440,21 @@ export type GetInteractionResponses = {
                     };
                 };
             };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            };
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
@@ -81615,6 +83649,7 @@ export type GetInteractionResponses = {
                 filename: string;
                 mimetype: string;
                 size: number;
+                duration_seconds?: number;
             };
         } | {
             [key: string]: unknown;
@@ -81629,6 +83664,7 @@ export type GetInteractionResponses = {
                 filename: string;
                 mimetype: string;
                 size: number;
+                duration_seconds?: number;
             };
         } | {
             [key: string]: unknown;
@@ -81640,10 +83676,22 @@ export type GetInteractionResponses = {
             content_type: string;
             bytes: number;
             usage_available: boolean;
-            cost_available: false;
+            cost_available: boolean;
             usage?: {
                 [key: string]: unknown;
             };
+            speech_input?: string;
+            transcript?: string;
+            audio?: {
+                content_type: string;
+                data: string;
+            };
+            audio_omitted?: 'too_large';
+            upload?: {
+                content_type: string;
+                data: string;
+            };
+            upload_omitted?: 'too_large';
         } | {
             error: string;
         } | LogContentNotStored | {
@@ -81745,6 +83793,7 @@ export type GetInteractionResponses = {
                 filename: string;
                 mimetype: string;
                 size: number;
+                duration_seconds?: number;
             };
         } | {
             [key: string]: unknown;
@@ -81759,6 +83808,7 @@ export type GetInteractionResponses = {
                 filename: string;
                 mimetype: string;
                 size: number;
+                duration_seconds?: number;
             };
         } | {
             [key: string]: unknown;
@@ -81770,10 +83820,22 @@ export type GetInteractionResponses = {
             content_type: string;
             bytes: number;
             usage_available: boolean;
-            cost_available: false;
+            cost_available: boolean;
             usage?: {
                 [key: string]: unknown;
             };
+            speech_input?: string;
+            transcript?: string;
+            audio?: {
+                content_type: string;
+                data: string;
+            };
+            audio_omitted?: 'too_large';
+            upload?: {
+                content_type: string;
+                data: string;
+            };
+            upload_omitted?: 'too_large';
         } | {
             error: string;
         } | LogContentNotStored | {
@@ -81927,7 +83989,7 @@ export type GetInteractionResponses = {
             reason: string;
             blockedToolCallCount: number;
         } | null;
-        type: 'azure:images';
+        type: 'azure:images' | 'openai:images';
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
@@ -82686,6 +84748,255 @@ export type GetInteractionResponses = {
         } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
+        externalAgentIdLabel?: string | null;
+    } | {
+        id: string;
+        profileId: string | null;
+        externalAgentId: string | null;
+        runId: string | null;
+        userId: string | null;
+        serviceAccountId: string | null;
+        virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
+        environmentId: string | null;
+        connectorId: string | null;
+        appId: string | null;
+        providerApiKeyId: string | null;
+        modelPoolId: string | null;
+        attempt: number | null;
+        attemptOutcome: string | null;
+        failureReason: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
+        billingMode: 'metered' | 'subscription';
+        authenticatedAppId: string | null;
+        authenticatedAppName: string | null;
+        billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
+        request: {
+            model: string;
+            turn: number;
+            session?: {
+                [key: string]: unknown;
+            };
+            input_text?: string;
+            input_transcript?: string;
+        } | {
+            [key: string]: unknown;
+        };
+        processedRequest?: {
+            model: string;
+            turn: number;
+            session?: {
+                [key: string]: unknown;
+            };
+            input_text?: string;
+            input_transcript?: string;
+        } | {
+            [key: string]: unknown;
+        } | null;
+        response: {
+            id: string;
+            status: string;
+            output_transcript?: string;
+            output_audio?: {
+                format: 'pcm16';
+                sample_rate: number;
+                data: string;
+            };
+            output_audio_omitted?: 'too_large';
+            output?: Array<{
+                [key: string]: unknown;
+            }>;
+            usage?: {
+                [key: string]: unknown;
+            };
+        } | {
+            error: string;
+        } | LogContentNotStored | {
+            __encryptedChatSealed: string;
+        } | {
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
+        };
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
+        type: 'openai:realtime';
+        model: string | null;
+        baselineModel: string | null;
+        durationMs: number | null;
+        inputTokens: number | null;
+        inputTokensEstimated: boolean;
+        outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
+        createdAt: string;
+        chatErrors?: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    providerLabel: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+        connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
+    } | {
+        id: string;
+        profileId: string | null;
+        externalAgentId: string | null;
+        runId: string | null;
+        userId: string | null;
+        serviceAccountId: string | null;
+        virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
+        environmentId: string | null;
+        connectorId: string | null;
+        appId: string | null;
+        providerApiKeyId: string | null;
+        modelPoolId: string | null;
+        attempt: number | null;
+        attemptOutcome: string | null;
+        failureReason: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
+        billingMode: 'metered' | 'subscription';
+        authenticatedAppId: string | null;
+        authenticatedAppName: string | null;
+        billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
+        request: {
+            method: string;
+            path: string;
+            query?: string;
+            content_type?: string;
+            content_length?: number;
+            body?: unknown;
+            truncated?: boolean;
+        } | {
+            [key: string]: unknown;
+        };
+        processedRequest?: {
+            method: string;
+            path: string;
+            query?: string;
+            content_type?: string;
+            content_length?: number;
+            body?: unknown;
+            truncated?: boolean;
+        } | {
+            [key: string]: unknown;
+        } | null;
+        response: {
+            status: number;
+            content_type?: string;
+            bytes: number;
+            body?: unknown;
+            truncated?: boolean;
+            streamed?: boolean;
+        } | {
+            error: string;
+        } | LogContentNotStored | {
+            __encryptedChatSealed: string;
+        } | {
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
+        };
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
+        type: 'openai:passthrough' | 'anthropic:passthrough';
+        model: string | null;
+        baselineModel: string | null;
+        durationMs: number | null;
+        inputTokens: number | null;
+        inputTokensEstimated: boolean;
+        outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
+        createdAt: string;
+        chatErrors?: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    providerLabel: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+        connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
+        requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     };
 };
@@ -87298,6 +89609,21 @@ export type KimiCodeChatCompletionsWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -87908,6 +90234,21 @@ export type KimiCodeChatCompletionsWithAgentData = {
                         syntax: 'lark' | 'regex';
                     };
                 };
+            };
+        };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
             };
         };
         temperature?: number | null;
@@ -88524,6 +90865,21 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -89134,6 +91490,21 @@ export type KimiChatCompletionsWithAgentData = {
                         syntax: 'lark' | 'regex';
                     };
                 };
+            };
+        };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
             };
         };
         temperature?: number | null;
@@ -96409,7 +98780,9 @@ export type BulkDeleteKnowledgeDirectoriesResponse = BulkDeleteKnowledgeDirector
 export type LimitLabelKeysData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        key?: string;
+    };
     url: '/api/limits/labels/keys';
 };
 
@@ -96494,9 +98867,6 @@ export type LimitLabelValuesData = {
     body?: never;
     path?: never;
     query?: {
-        /**
-         * Filter values by label key
-         */
         key?: string;
     };
     url: '/api/limits/labels/values';
@@ -96677,6 +99047,10 @@ export type GetLimitsResponses = {
         toolName: string | null;
         model?: Array<string> | null;
         reason?: string | null;
+        /**
+         * Whether a team admin created this team limit. Team admins can change or delete only these.
+         */
+        teamManaged: boolean;
         cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
@@ -96697,6 +99071,10 @@ export type GetLimitsResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        /**
+         * Spend limits only: part of the spend is estimated because a model had no price for some of the tokens a request used.
+         */
+        estimatedUsage?: boolean;
         modelUsage?: Array<{
             model: string;
             tokensIn: number;
@@ -96816,6 +99194,10 @@ export type CreateLimitResponses = {
         toolName: string | null;
         model?: Array<string> | null;
         reason?: string | null;
+        /**
+         * Whether a team admin created this team limit. Team admins can change or delete only these.
+         */
+        teamManaged: boolean;
         cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
@@ -97005,6 +99387,10 @@ export type GetLimitResponses = {
         toolName: string | null;
         model?: Array<string> | null;
         reason?: string | null;
+        /**
+         * Whether a team admin created this team limit. Team admins can change or delete only these.
+         */
+        teamManaged: boolean;
         cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
@@ -97025,6 +99411,10 @@ export type GetLimitResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        /**
+         * Spend limits only: part of the spend is estimated because a model had no price for some of the tokens a request used.
+         */
+        estimatedUsage?: boolean;
         modelUsage?: Array<{
             model: string;
             tokensIn: number;
@@ -97046,13 +99436,13 @@ export type UpdateLimitData = {
         model?: Array<string> | null;
         reason?: string | null;
         cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
-        lastCleanup?: unknown;
         labels?: Array<{
             key: string;
             value: string;
             keyId?: string;
             valueId?: string;
         }>;
+        lastCleanup?: null;
     };
     path: {
         id: string;
@@ -97144,6 +99534,10 @@ export type UpdateLimitResponses = {
         toolName: string | null;
         model?: Array<string> | null;
         reason?: string | null;
+        /**
+         * Whether a team admin created this team limit. Team admins can change or delete only these.
+         */
+        teamManaged: boolean;
         cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
@@ -97152,6 +99546,111 @@ export type UpdateLimitResponses = {
 };
 
 export type UpdateLimitResponse = UpdateLimitResponses[keyof UpdateLimitResponses];
+
+export type ResetLimitUsageData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/limits/{id}/reset';
+};
+
+export type ResetLimitUsageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ResetLimitUsageError = ResetLimitUsageErrors[keyof ResetLimitUsageErrors];
+
+export type ResetLimitUsageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment' | 'llm_oauth_client';
+        entityId: string;
+        limitType: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        behavior: 'hard' | 'soft';
+        mcpServerName: string | null;
+        toolName: string | null;
+        model?: Array<string> | null;
+        reason?: string | null;
+        /**
+         * Whether a team admin created this team limit. Team admins can change or delete only these.
+         */
+        teamManaged: boolean;
+        cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        lastCleanup: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type ResetLimitUsageResponse = ResetLimitUsageResponses[keyof ResetLimitUsageResponses];
 
 export type BulkDeleteLimitsData = {
     body: {
@@ -97530,6 +100029,17 @@ export type GetLlmModelsResponses = {
             pricePerMillionCacheRead: string | null;
             pricePerMillionCacheWrite: string | null;
             cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+            mediaPricing: {
+                per: 'million_tokens' | 'million_characters' | 'minute';
+                input: Array<{
+                    kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                    usd: number;
+                }>;
+                output: Array<{
+                    kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                    usd: number;
+                }>;
+            } | null;
         };
         isBest?: boolean;
         isFree: boolean;
@@ -97813,6 +100323,17 @@ export type GetModelsWithApiKeysResponses = {
         pricePerMillionCacheRead: string | null;
         pricePerMillionCacheWrite: string | null;
         cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+        mediaPricing: {
+            per: 'million_tokens' | 'million_characters' | 'minute';
+            input: Array<{
+                kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                usd: number;
+            }>;
+            output: Array<{
+                kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                usd: number;
+            }>;
+        } | null;
         isFree: boolean;
         effectiveContextLength: number | null;
         embeddingClientImageCapable: boolean | null;
@@ -98380,7 +100901,6 @@ export type PreviewModelCostBackfillResponses = {
             users: number;
             recordedCost: number;
             recomputedCost: number;
-            settledRequests: number;
         } | null;
     };
 };
@@ -98908,6 +101428,7 @@ export type GetLlmOauthClientsResponses = {
                 cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
                 limitId: string;
                 currentUsage: number;
+                estimatedUsage: boolean;
             } | null;
         }>;
         pagination: {
@@ -99092,6 +101613,7 @@ export type CreateLlmOauthClientResponses = {
             cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
             limitId: string;
             currentUsage: number;
+            estimatedUsage: boolean;
         } | null;
         clientSecret: string;
     };
@@ -99336,6 +101858,7 @@ export type UpdateLlmOauthClientResponses = {
             cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
             limitId: string;
             currentUsage: number;
+            estimatedUsage: boolean;
         } | null;
     };
 };
@@ -99462,6 +101985,7 @@ export type RotateLlmOauthClientSecretResponses = {
             cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
             limitId: string;
             currentUsage: number;
+            estimatedUsage: boolean;
         } | null;
         clientSecret: string;
     };
@@ -105153,6 +107677,21 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -105763,6 +108302,21 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                         syntax: 'lark' | 'regex';
                     };
                 };
+            };
+        };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
             };
         };
         temperature?: number | null;
@@ -107254,6 +109808,780 @@ export type UpdateModelPoolResponses = {
 
 export type UpdateModelPoolResponse = UpdateModelPoolResponses[keyof UpdateModelPoolResponses];
 
+export type ModelRouterImageEditsWithDefaultAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | unknown;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd' | unknown;
+        background?: 'auto' | 'transparent' | 'opaque' | unknown;
+        output_format?: 'png' | 'jpeg' | 'webp' | unknown;
+        response_format?: 'url' | 'b64_json' | unknown;
+        user?: string;
+        safety_identifier?: unknown;
+        n?: number | unknown;
+        output_compression?: number | unknown;
+        input_fidelity?: 'high' | 'low' | unknown;
+        stream?: false | unknown;
+        /**
+         * PNG/JPEG/WebP reference files, each smaller than 50 MiB.
+         */
+        image: Array<Blob | File>;
+        /**
+         * Optional PNG alpha mask smaller than 4 MiB, matching the first image dimensions.
+         */
+        mask?: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/model-router/images/edits';
+};
+
+export type ModelRouterImageEditsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ModelRouterImageEditsWithDefaultAgentError = ModelRouterImageEditsWithDefaultAgentErrors[keyof ModelRouterImageEditsWithDefaultAgentErrors];
+
+export type ModelRouterImageEditsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type ModelRouterImageEditsWithDefaultAgentResponse = ModelRouterImageEditsWithDefaultAgentResponses[keyof ModelRouterImageEditsWithDefaultAgentResponses];
+
+export type ModelRouterImageEditsWithAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | unknown;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd' | unknown;
+        background?: 'auto' | 'transparent' | 'opaque' | unknown;
+        output_format?: 'png' | 'jpeg' | 'webp' | unknown;
+        response_format?: 'url' | 'b64_json' | unknown;
+        user?: string;
+        safety_identifier?: unknown;
+        n?: number | unknown;
+        output_compression?: number | unknown;
+        input_fidelity?: 'high' | 'low' | unknown;
+        stream?: false | unknown;
+        /**
+         * PNG/JPEG/WebP reference files, each smaller than 50 MiB.
+         */
+        image: Array<Blob | File>;
+        /**
+         * Optional PNG alpha mask smaller than 4 MiB, matching the first image dimensions.
+         */
+        mask?: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/model-router/{agentId}/images/edits';
+};
+
+export type ModelRouterImageEditsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ModelRouterImageEditsWithAgentError = ModelRouterImageEditsWithAgentErrors[keyof ModelRouterImageEditsWithAgentErrors];
+
+export type ModelRouterImageEditsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type ModelRouterImageEditsWithAgentResponse = ModelRouterImageEditsWithAgentResponses[keyof ModelRouterImageEditsWithAgentResponses];
+
+export type ModelRouterAudioSpeechWithDefaultAgentData = {
+    body: {
+        model: string;
+        input: string;
+        voice: string | {
+            id: string;
+        };
+        instructions?: string;
+        response_format?: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm';
+        speed?: number;
+        stream_format?: 'audio' | 'sse';
+        [key: string]: unknown;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/model-router/audio/speech';
+};
+
+export type ModelRouterAudioSpeechWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterAudioSpeechWithAgentData = {
+    body: {
+        model: string;
+        input: string;
+        voice: string | {
+            id: string;
+        };
+        instructions?: string;
+        response_format?: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm';
+        speed?: number;
+        stream_format?: 'audio' | 'sse';
+        [key: string]: unknown;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/model-router/{agentId}/audio/speech';
+};
+
+export type ModelRouterAudioSpeechWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterAudioTranscriptionsWithDefaultAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/model-router/audio/transcriptions';
+};
+
+export type ModelRouterAudioTranscriptionsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterAudioTranscriptionsWithAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/model-router/{agentId}/audio/transcriptions';
+};
+
+export type ModelRouterAudioTranscriptionsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterAudioTranslationsWithDefaultAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/model-router/audio/translations';
+};
+
+export type ModelRouterAudioTranslationsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterAudioTranslationsWithAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/model-router/{agentId}/audio/translations';
+};
+
+export type ModelRouterAudioTranslationsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterImagesWithDefaultAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | null;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd';
+        background?: 'auto' | 'transparent' | 'opaque';
+        output_format?: 'png' | 'jpeg' | 'webp';
+        response_format?: 'url' | 'b64_json';
+        user?: string;
+        safety_identifier?: string | null;
+        n?: number | null;
+        output_compression?: number | null;
+        moderation?: 'auto' | 'low';
+        style?: 'vivid' | 'natural';
+        stream?: false;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/model-router/images/generations';
+};
+
+export type ModelRouterImagesWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ModelRouterImagesWithDefaultAgentError = ModelRouterImagesWithDefaultAgentErrors[keyof ModelRouterImagesWithDefaultAgentErrors];
+
+export type ModelRouterImagesWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type ModelRouterImagesWithDefaultAgentResponse = ModelRouterImagesWithDefaultAgentResponses[keyof ModelRouterImagesWithDefaultAgentResponses];
+
+export type ModelRouterImagesWithAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | null;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd';
+        background?: 'auto' | 'transparent' | 'opaque';
+        output_format?: 'png' | 'jpeg' | 'webp';
+        response_format?: 'url' | 'b64_json';
+        user?: string;
+        safety_identifier?: string | null;
+        n?: number | null;
+        output_compression?: number | null;
+        moderation?: 'auto' | 'low';
+        style?: 'vivid' | 'natural';
+        stream?: false;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/model-router/{agentId}/images/generations';
+};
+
+export type ModelRouterImagesWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ModelRouterImagesWithAgentError = ModelRouterImagesWithAgentErrors[keyof ModelRouterImagesWithAgentErrors];
+
+export type ModelRouterImagesWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type ModelRouterImagesWithAgentResponse = ModelRouterImagesWithAgentResponses[keyof ModelRouterImagesWithAgentResponses];
+
 export type ModelRouterListModelsWithDefaultAgentData = {
     body?: never;
     path?: never;
@@ -107884,7 +111212,7 @@ export type ModelRouterEmbeddingsWithDefaultAgentResponses = {
         object: 'list';
         data: Array<{
             object: 'embedding';
-            embedding: Array<number>;
+            embedding: Array<number> | string;
             index?: number;
         }>;
         model: string;
@@ -107997,7 +111325,7 @@ export type ModelRouterEmbeddingsWithAgentResponses = {
         object: 'list';
         data: Array<{
             object: 'embedding';
-            embedding: Array<number>;
+            embedding: Array<number> | string;
             index?: number;
         }>;
         model: string;
@@ -108437,6 +111765,21 @@ export type ModelRouterChatCompletionsWithDefaultAgentData = {
                         syntax: 'lark' | 'regex';
                     };
                 };
+            };
+        };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
             };
         };
         temperature?: number | null;
@@ -109055,6 +112398,21 @@ export type ModelRouterChatCompletionsWithAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -109566,6 +112924,7 @@ export type GetOauthClientsResponses = {
                 cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
                 limitId: string;
                 currentUsage: number;
+                estimatedUsage: boolean;
             } | null;
             scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
             allowedGatewayIds: Array<string>;
@@ -109764,6 +113123,7 @@ export type CreateOauthClientResponses = {
             cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
             limitId: string;
             currentUsage: number;
+            estimatedUsage: boolean;
         } | null;
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
@@ -110022,6 +113382,7 @@ export type UpdateOauthClientResponses = {
             cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
             limitId: string;
             currentUsage: number;
+            estimatedUsage: boolean;
         } | null;
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
@@ -110152,6 +113513,7 @@ export type RotateOauthClientSecretResponses = {
             cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
             limitId: string;
             currentUsage: number;
+            estimatedUsage: boolean;
         } | null;
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
@@ -111655,6 +115017,520 @@ export type OpenAiAudioTranslationsWithAgentResponses = {
     200: unknown;
 };
 
+export type OpenAiImagesWithDefaultAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | null;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd';
+        background?: 'auto' | 'transparent' | 'opaque';
+        output_format?: 'png' | 'jpeg' | 'webp';
+        response_format?: 'url' | 'b64_json';
+        user?: string;
+        safety_identifier?: string | null;
+        n?: number | null;
+        output_compression?: number | null;
+        moderation?: 'auto' | 'low';
+        style?: 'vivid' | 'natural';
+        stream?: false;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/openai/images/generations';
+};
+
+export type OpenAiImagesWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAiImagesWithDefaultAgentError = OpenAiImagesWithDefaultAgentErrors[keyof OpenAiImagesWithDefaultAgentErrors];
+
+export type OpenAiImagesWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type OpenAiImagesWithDefaultAgentResponse = OpenAiImagesWithDefaultAgentResponses[keyof OpenAiImagesWithDefaultAgentResponses];
+
+export type OpenAiImagesWithAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | null;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd';
+        background?: 'auto' | 'transparent' | 'opaque';
+        output_format?: 'png' | 'jpeg' | 'webp';
+        response_format?: 'url' | 'b64_json';
+        user?: string;
+        safety_identifier?: string | null;
+        n?: number | null;
+        output_compression?: number | null;
+        moderation?: 'auto' | 'low';
+        style?: 'vivid' | 'natural';
+        stream?: false;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/images/generations';
+};
+
+export type OpenAiImagesWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAiImagesWithAgentError = OpenAiImagesWithAgentErrors[keyof OpenAiImagesWithAgentErrors];
+
+export type OpenAiImagesWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type OpenAiImagesWithAgentResponse = OpenAiImagesWithAgentResponses[keyof OpenAiImagesWithAgentResponses];
+
+export type OpenAiImageEditsWithDefaultAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | unknown;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd' | unknown;
+        background?: 'auto' | 'transparent' | 'opaque' | unknown;
+        output_format?: 'png' | 'jpeg' | 'webp' | unknown;
+        response_format?: 'url' | 'b64_json' | unknown;
+        user?: string;
+        safety_identifier?: unknown;
+        n?: number | unknown;
+        output_compression?: number | unknown;
+        input_fidelity?: 'high' | 'low' | unknown;
+        stream?: false | unknown;
+        /**
+         * PNG/JPEG/WebP reference files, each smaller than 50 MiB.
+         */
+        image: Array<Blob | File>;
+        /**
+         * Optional PNG alpha mask smaller than 4 MiB, matching the first image dimensions.
+         */
+        mask?: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/openai/images/edits';
+};
+
+export type OpenAiImageEditsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAiImageEditsWithDefaultAgentError = OpenAiImageEditsWithDefaultAgentErrors[keyof OpenAiImageEditsWithDefaultAgentErrors];
+
+export type OpenAiImageEditsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type OpenAiImageEditsWithDefaultAgentResponse = OpenAiImageEditsWithDefaultAgentResponses[keyof OpenAiImageEditsWithDefaultAgentResponses];
+
+export type OpenAiImageEditsWithAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | unknown;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd' | unknown;
+        background?: 'auto' | 'transparent' | 'opaque' | unknown;
+        output_format?: 'png' | 'jpeg' | 'webp' | unknown;
+        response_format?: 'url' | 'b64_json' | unknown;
+        user?: string;
+        safety_identifier?: unknown;
+        n?: number | unknown;
+        output_compression?: number | unknown;
+        input_fidelity?: 'high' | 'low' | unknown;
+        stream?: false | unknown;
+        /**
+         * PNG/JPEG/WebP reference files, each smaller than 50 MiB.
+         */
+        image: Array<Blob | File>;
+        /**
+         * Optional PNG alpha mask smaller than 4 MiB, matching the first image dimensions.
+         */
+        mask?: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/images/edits';
+};
+
+export type OpenAiImageEditsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAiImageEditsWithAgentError = OpenAiImageEditsWithAgentErrors[keyof OpenAiImageEditsWithAgentErrors];
+
+export type OpenAiImageEditsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type OpenAiImageEditsWithAgentResponse = OpenAiImageEditsWithAgentResponses[keyof OpenAiImageEditsWithAgentResponses];
+
 export type OpenAiEmbeddingsWithDefaultAgentData = {
     body: {
         model: string;
@@ -111753,7 +115629,7 @@ export type OpenAiEmbeddingsWithDefaultAgentResponses = {
         object: 'list';
         data: Array<{
             object: 'embedding';
-            embedding: Array<number>;
+            embedding: Array<number> | string;
             index?: number;
         }>;
         model: string;
@@ -111866,7 +115742,7 @@ export type OpenAiEmbeddingsWithAgentResponses = {
         object: 'list';
         data: Array<{
             object: 'embedding';
-            embedding: Array<number>;
+            embedding: Array<number> | string;
             index?: number;
         }>;
         model: string;
@@ -118581,7 +122457,7 @@ export type GetRolesResponses = {
             name: string;
             description: string | null;
             permission: {
-                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
             };
             createdAt: string;
             updatedAt: string | null;
@@ -118605,7 +122481,7 @@ export type CreateRoleData = {
         name: string;
         description?: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
         };
     };
     path?: never;
@@ -118692,7 +122568,7 @@ export type CreateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -118884,7 +122760,7 @@ export type GetRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -118899,7 +122775,7 @@ export type UpdateRoleData = {
         name?: string;
         description?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
         };
     };
     path: {
@@ -118991,7 +122867,7 @@ export type UpdateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -119100,6 +122976,7 @@ export type GetOrganizationResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -119203,6 +123080,9 @@ export type GetOrganizationResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
+        } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -119213,6 +123093,118 @@ export type GetOrganizationResponses = {
 };
 
 export type GetOrganizationResponse = GetOrganizationResponses[keyof GetOrganizationResponses];
+
+export type GetOrganizationDefaultModelData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/default-model';
+};
+
+export type GetOrganizationDefaultModelErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOrganizationDefaultModelError = GetOrganizationDefaultModelErrors[keyof GetOrganizationDefaultModelErrors];
+
+export type GetOrganizationDefaultModelResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        model: {
+            id: string;
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+            displayName: string;
+        } | null;
+        autoRouting: {
+            active: false;
+        } | {
+            active: true;
+            tiers: {
+                fast: {
+                    id: string;
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    displayName: string;
+                };
+                normal: {
+                    id: string;
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    displayName: string;
+                };
+                smart: {
+                    id: string;
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    displayName: string;
+                };
+            };
+        };
+    };
+};
+
+export type GetOrganizationDefaultModelResponse = GetOrganizationDefaultModelResponses[keyof GetOrganizationDefaultModelResponses];
 
 export type GetAppearanceSettingsData = {
     body?: never;
@@ -119441,6 +123433,7 @@ export type UpdateAppearanceSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -119544,6 +123537,9 @@ export type UpdateAppearanceSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
+        } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -119560,6 +123556,7 @@ export type UpdateSecuritySettingsData = {
         playwrightMcpEnabled?: boolean;
         allowChatFileUploads?: boolean;
         allowUnauthenticatedLlmProxyRequests?: boolean;
+        keepMediaInLogs?: boolean;
         newAppsDisabledByDefault?: boolean;
         newAppsLockedByDefault?: boolean;
         allowToolAutoAssignment?: boolean;
@@ -119661,6 +123658,7 @@ export type UpdateSecuritySettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -119763,6 +123761,9 @@ export type UpdateSecuritySettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -119878,6 +123879,7 @@ export type UpdateMcpSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -119980,6 +123982,9 @@ export type UpdateMcpSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -120094,6 +124099,7 @@ export type UpdateSkillsSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -120197,6 +124203,9 @@ export type UpdateSkillsSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
+        } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -120208,8 +124217,125 @@ export type UpdateSkillsSettingsResponses = {
 
 export type UpdateSkillsSettingsResponse = UpdateSkillsSettingsResponses[keyof UpdateSkillsSettingsResponses];
 
+export type GetAgentRuntimeTiersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/agent-runtime-tiers';
+};
+
+export type GetAgentRuntimeTiersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentRuntimeTiersError = GetAgentRuntimeTiersErrors[keyof GetAgentRuntimeTiersErrors];
+
+export type GetAgentRuntimeTiersResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        tiers: Array<{
+            name: string;
+            cpuRequest: number;
+            cpuLimit: number | null;
+            warmSpares: number;
+            /**
+             * Whether the tier keeps spare containers ready for its runs
+             */
+            pooled: boolean;
+            memoryRequestMiB: number;
+            memoryLimitMiB: number;
+            /**
+             * Size of a run's workspace volume in GiB; null means the deployment's default
+             */
+            workspaceGiB: number | null;
+        }>;
+        defaultTier: string;
+        /**
+         * The deployment's workspace volume size in GiB, which a tier that sets none gives its runs
+         */
+        defaultWorkspaceGiB: number;
+    };
+};
+
+export type GetAgentRuntimeTiersResponse = GetAgentRuntimeTiersResponses[keyof GetAgentRuntimeTiersResponses];
+
 export type UpdateAgentSettingsData = {
     body: {
+        agentRuntimeTiers?: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                pooled: boolean;
+                workspaceGiB?: number | null;
+                previousName?: string;
+            }>;
+            defaultTier: string;
+        } | null;
         defaultModelId?: string | null;
         defaultLlmApiKeyId?: string | null;
         defaultAgentId?: string | null;
@@ -120313,6 +124439,7 @@ export type UpdateAgentSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -120415,6 +124542,9 @@ export type UpdateAgentSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -120552,6 +124682,7 @@ export type UpdateConnectionSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -120654,6 +124785,9 @@ export type UpdateConnectionSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -120816,6 +124950,7 @@ export type UpdateIntegrationSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -120918,6 +125053,9 @@ export type UpdateIntegrationSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -121042,6 +125180,7 @@ export type UpdateDefaultEnvironmentResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -121144,6 +125283,9 @@ export type UpdateDefaultEnvironmentResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -121263,6 +125405,7 @@ export type UpdateAuthSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -121365,6 +125508,9 @@ export type UpdateAuthSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -121486,6 +125632,7 @@ export type UpdateKnowledgeSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -121588,6 +125735,9 @@ export type UpdateKnowledgeSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -121699,6 +125849,7 @@ export type DropEmbeddingConfigResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -121801,6 +125952,9 @@ export type DropEmbeddingConfigResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -122274,6 +126428,7 @@ export type CompleteOnboardingResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -122376,6 +126531,9 @@ export type CompleteOnboardingResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -127794,6 +131952,16 @@ export type GetProjectRunsResponses = {
         workloadName: string;
         backend: 'kubernetes';
         runtimeScope: string;
+        runtimeLimits: {
+            tier: string | null;
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+            /**
+             * Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.
+             */
+            workspaceGiB?: number;
+        } | null;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
         gatewayTokenId: string | null;
@@ -127810,6 +131978,10 @@ export type GetProjectRunsResponses = {
         hardDeadlineAt: string;
         lastModelActivityAt: string | null;
         sessionId: string;
+        /**
+         * Key of the run's LLM logs (/llm/logs/:id): the session id its runtime sends
+         */
+        llmSessionId: string;
         prompt: string;
         agent: {
             id: string;
@@ -138403,6 +142575,242 @@ export type GetSkillUsageResponses = {
 
 export type GetSkillUsageResponse = GetSkillUsageResponses[keyof GetSkillUsageResponses];
 
+export type GetModelUsageData = {
+    body?: never;
+    path?: never;
+    query: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        model: string;
+        groupBy?: 'person' | 'key' | 'agent' | 'client';
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/statistics/model-usage';
+};
+
+export type GetModelUsageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetModelUsageError = GetModelUsageErrors[keyof GetModelUsageErrors];
+
+export type GetModelUsageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            name: string;
+            requests: number;
+            totalTokens: number;
+            cacheReadTokens: number;
+            cacheWriteTokens: number;
+            billedCost: number;
+            subscriptionCost: number;
+            timeSeries: Array<{
+                timestamp: string;
+                requests: number;
+                totalTokens: number;
+                cacheReadTokens: number;
+                cacheWriteTokens: number;
+                billedCost: number;
+                subscriptionCost: number;
+            }>;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetModelUsageResponse = GetModelUsageResponses[keyof GetModelUsageResponses];
+
+export type GetMyModelUsageData = {
+    body?: never;
+    path?: never;
+    query: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        model: string;
+        groupBy?: 'person' | 'key' | 'agent' | 'client';
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/statistics/me/model-usage';
+};
+
+export type GetMyModelUsageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMyModelUsageError = GetMyModelUsageErrors[keyof GetMyModelUsageErrors];
+
+export type GetMyModelUsageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            name: string;
+            requests: number;
+            totalTokens: number;
+            cacheReadTokens: number;
+            cacheWriteTokens: number;
+            billedCost: number;
+            subscriptionCost: number;
+            timeSeries: Array<{
+                timestamp: string;
+                requests: number;
+                totalTokens: number;
+                cacheReadTokens: number;
+                cacheWriteTokens: number;
+                billedCost: number;
+                subscriptionCost: number;
+            }>;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetMyModelUsageResponse = GetMyModelUsageResponses[keyof GetMyModelUsageResponses];
+
 export type GetTeamsData = {
     body?: never;
     path?: never;
@@ -138514,6 +142922,7 @@ export type GetTeamsResponses = {
                 userId: string;
                 role: string;
                 syncedFromSso: boolean;
+                roleSyncedFromSso: boolean;
                 createdAt: string;
             }>;
             labels?: Array<{
@@ -138649,6 +143058,7 @@ export type CreateTeamResponses = {
             userId: string;
             role: string;
             syncedFromSso: boolean;
+            roleSyncedFromSso: boolean;
             createdAt: string;
         }>;
         labels?: Array<{
@@ -138858,6 +143268,7 @@ export type GetTeamResponses = {
             userId: string;
             role: string;
             syncedFromSso: boolean;
+            roleSyncedFromSso: boolean;
             createdAt: string;
         }>;
         labels?: Array<{
@@ -138985,6 +143396,7 @@ export type UpdateTeamResponses = {
             userId: string;
             role: string;
             syncedFromSso: boolean;
+            roleSyncedFromSso: boolean;
             createdAt: string;
         }>;
         labels?: Array<{
@@ -139190,6 +143602,7 @@ export type GetTeamMembersResponses = {
         userId: string;
         role: string;
         syncedFromSso: boolean;
+        roleSyncedFromSso: boolean;
         createdAt: string;
         name: string | null;
         email: string;
@@ -139289,6 +143702,7 @@ export type AddTeamMemberResponses = {
         userId: string;
         role: string;
         syncedFromSso: boolean;
+        roleSyncedFromSso: boolean;
         createdAt: string;
     };
 };
@@ -139311,6 +143725,10 @@ export type GetTeamMembersPageData = {
          * Return only these users (comma-separated, at most 100), to check which of them are members. With search, a user must match both.
          */
         userIds?: Array<string>;
+        /**
+         * Return only members with this team role.
+         */
+        role?: 'admin' | 'member';
     };
     url: '/api/teams/{id}/members/page';
 };
@@ -139394,6 +143812,7 @@ export type GetTeamMembersPageResponses = {
             userId: string;
             role: string;
             syncedFromSso: boolean;
+            roleSyncedFromSso: boolean;
             createdAt: string;
             name: string | null;
             email: string;
@@ -139591,6 +144010,7 @@ export type UpdateTeamMemberResponses = {
         userId: string;
         role: string;
         syncedFromSso: boolean;
+        roleSyncedFromSso: boolean;
         createdAt: string;
     };
 };
@@ -139855,6 +144275,8 @@ export type GetTeamExternalGroupsResponses = {
         id: string;
         teamId: string;
         groupIdentifier: string;
+        identityProviderId: string | null;
+        role: 'admin' | 'member';
         createdAt: string;
     }>;
 };
@@ -139864,6 +144286,14 @@ export type GetTeamExternalGroupsResponse = GetTeamExternalGroupsResponses[keyof
 export type AddTeamExternalGroupData = {
     body: {
         groupIdentifier: string;
+        /**
+         * Match the group only for sign-ins through this identity provider. Omit to match it from any provider.
+         */
+        identityProviderId?: string | null;
+        /**
+         * The team role members of this group receive.
+         */
+        role?: 'admin' | 'member';
     };
     path: {
         id: string;
@@ -139948,6 +144378,8 @@ export type AddTeamExternalGroupResponses = {
         id: string;
         teamId: string;
         groupIdentifier: string;
+        identityProviderId: string | null;
+        role: 'admin' | 'member';
         createdAt: string;
     };
 };
@@ -140427,7 +144859,7 @@ export type GetUserPermissionSourcesResponses = {
             name: string;
         } | null;
         permissions: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
         };
     }>;
 };
@@ -140514,7 +144946,7 @@ export type GetUserPermissionsResponses = {
      * Default Response
      */
     200: {
-        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
     };
 };
 
@@ -141212,6 +145644,7 @@ export type GetAllVirtualApiKeysResponses = {
                 cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
                 limitId: string;
                 currentUsage: number;
+                estimatedUsage: boolean;
             } | null;
         }>;
         pagination: {
@@ -141394,6 +145827,7 @@ export type CreateVirtualApiKeyResponses = {
             cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
             limitId: string;
             currentUsage: number;
+            estimatedUsage: boolean;
         } | null;
     };
 };
@@ -141615,6 +146049,7 @@ export type GetVirtualApiKeyResponses = {
             cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
             limitId: string;
             currentUsage: number;
+            estimatedUsage: boolean;
         } | null;
     };
 };
@@ -141769,6 +146204,7 @@ export type UpdateVirtualApiKeyResponses = {
             cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
             limitId: string;
             currentUsage: number;
+            estimatedUsage: boolean;
         } | null;
     };
 };
@@ -145278,6 +149714,10 @@ export type SearchInitialPermissionSubjectsData = {
     };
     query?: {
         query?: string;
+        /**
+         * Exclude already selected recipients, using comma-separated subject keys.
+         */
+        exclude?: Array<string>;
     };
     url: '/api/resource-permissions/{resource}/creation-subjects';
 };
@@ -145475,6 +149915,10 @@ export type SearchResourcePermissionSubjectsData = {
     };
     query?: {
         query?: string;
+        /**
+         * Exclude already selected recipients, using comma-separated subject keys.
+         */
+        exclude?: Array<string>;
     };
     url: '/api/resource-permissions/{resource}/{scope}/subjects';
 };

@@ -173,7 +173,7 @@ export async function fetchXaiModels(
     // rotated refresh token instead of discarding it — the issuer invalidates
     // the predecessor, so a discarded rotation leaves the stored token dead.
     bearer = await xaiSubscriptionTokenManager.getAccessToken({
-      refreshToken: subscriptionCredential.refreshToken,
+      credential: subscriptionCredential,
       providerApiKeyId: opts?.providerApiKeyId,
     });
     requestHeaders = {

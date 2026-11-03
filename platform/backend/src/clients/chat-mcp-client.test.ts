@@ -317,6 +317,26 @@ describe("normalizeJsonSchema", () => {
     ).toEqual({ type: "object", additionalProperties: true });
   });
 
+  test("keeps the values of a map of anything unconstrained (z.record(z.string(), z.unknown()))", () => {
+    const result = normalizeJsonSchema({
+      type: "object",
+      properties: {
+        tool_args: {
+          type: "object",
+          propertyNames: { type: "string" },
+          additionalProperties: {},
+        },
+      },
+    });
+    expect(
+      (result.properties as Record<string, Record<string, unknown>>).tool_args,
+    ).toEqual({
+      type: "object",
+      propertyNames: { type: "string" },
+      additionalProperties: true,
+    });
+  });
+
   test("does not mutate the original schema", () => {
     const schema = {
       type: "object",

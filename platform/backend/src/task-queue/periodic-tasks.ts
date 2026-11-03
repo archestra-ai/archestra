@@ -64,6 +64,8 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
   // read, so this tick is what keeps the catalog current.
   { taskType: "llm_model_sync", intervalSeconds: 60, payload: {} },
   { taskType: "audit_log_cleanup", intervalSeconds: 86400, payload: {} },
+  // Hourly so a busy deployment's backlog drains within the per-tick batch cap.
+  { taskType: "headless_sandbox_cleanup", intervalSeconds: 3600, payload: {} },
   // Enqueues an auto-routing plan fit per organization whose settings changed
   // since its last fit, or whose last fit is a day old, and purges routing
   // history past retention once a day. The minute tick bounds how long a

@@ -73,6 +73,10 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "azure:images",
   "azure:audio",
   "openai:audio",
+  "openai:images",
+  "openai:passthrough",
+  "anthropic:passthrough",
+  "openai:realtime",
   "azure:realtime",
   "github-copilot:chatCompletions",
   "github-copilot:responses",
@@ -1129,9 +1133,8 @@ export function stripClaudeContextVariantSuffix(modelId: string): string {
  * (`/v1/responses`), so the chat client must route them to the Responses
  * transport instead of `/v1/chat/completions`:
  *
- * - "pro" reasoning models: `/chat/completions` returns `api_not_found_error`
- *   ("not a chat model"). "pro" is matched as a hyphen/slash-delimited token,
- *   so dated snapshots (`gpt-5.5-pro-2026-01-01`) are covered.
+ * - models without a chat-completions endpoint at all, see
+ *   `lacksOpenAiChatCompletions`.
  * - every gpt-5.6 and gpt-6 model (sol/terra/luna/astra and any other
  *   variant): reasoning is on by default and `/chat/completions` rejects
  *   function tools with any reasoning effort (400 api_validation_error: "use
@@ -1140,14 +1143,32 @@ export function stripClaudeContextVariantSuffix(modelId: string): string {
  *   including calls without tools. "gpt-5.6" and "gpt-6" are matched up to a
  *   `-`/`.`/end boundary so tiers, point releases (`gpt-6.1-sol`) and dated
  *   snapshots are covered without matching e.g. `gpt-5.61` or `gpt-60`.
- * - Codex models: OpenAI serves the coding-specialized `gpt-*-codex` family
- *   through Responses rather than Chat Completions. The suffix boundary also
- *   covers variants such as `-mini`, `-max`, and dated snapshots.
  */
 export function requiresOpenAiResponsesApi(modelId: string): boolean {
   return (
+    lacksOpenAiChatCompletions(modelId) ||
+    /(?:^|\/)gpt-(?:5\.6|6)(?:$|[-.])/i.test(modelId)
+  );
+}
+
+/**
+ * True for OpenAI models that `/v1/chat/completions` does not serve at all
+ * (OpenAI answers 404), so a client that sends one there can only be told to
+ * use `/v1/responses`:
+ *
+ * - "pro" reasoning models: `/chat/completions` returns `api_not_found_error`
+ *   ("not a chat model"). "pro" is matched as a hyphen/slash-delimited token,
+ *   so dated snapshots (`gpt-5.5-pro-2026-01-01`) are covered.
+ * - Codex models: OpenAI serves the coding-specialized `gpt-*-codex` family
+ *   through Responses rather than Chat Completions. The suffix boundary also
+ *   covers variants such as `-mini`, `-max`, and dated snapshots.
+ *
+ * gpt-5.6 and gpt-6 are not here: OpenAI answers their chat completions and
+ * rejects only function tools, with its own error naming the fix.
+ */
+export function lacksOpenAiChatCompletions(modelId: string): boolean {
+  return (
     /(?:^|[-/])pro(?:[-/]|$)/i.test(modelId) ||
-    /(?:^|\/)gpt-(?:5\.6|6)(?:$|[-.])/i.test(modelId) ||
     /(?:^|\/)gpt-[^/]+-codex(?:$|[-.])/i.test(modelId)
   );
 }

@@ -1,5 +1,6 @@
 import config from "@/config";
-import { HookFileModel, SkillSandboxModel } from "@/models";
+import { HookFileModel } from "@/models";
+import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { SKILL_SANDBOX_HOME } from "@/skills-sandbox/runtime-image";
 import type { HookEvent } from "@/types/hook";
 import type { HookRunDetail } from "./hook-run-parts";
@@ -8,7 +9,9 @@ import { runHookScript } from "./hook-runner";
 /** @public — consumed by the chat route + MCP client wiring (Task 8). */
 export interface FireParams {
   event: HookEvent;
-  conversationId: string;
+  conversationId?: string;
+  /** Headless run scope (A2A, ChatOps, schedules, email) when there is no conversation. */
+  isolationKey?: string;
   agentId: string;
   organizationId: string;
   userId: string;
@@ -38,11 +41,13 @@ class HookDispatcherService {
   }
 
   /**
-   * Fire one lifecycle event's hooks against the conversation's default sandbox.
+   * Fire one lifecycle event's hooks against the run's default sandbox (the
+   * conversation's, or the headless execution's).
    *
    * Mirrors the run_command tool handler: resolve the default sandbox via
-   * `findOrCreateDefault`, then run each hook script via `runHookScript`.
-   * Cheap no-op when the agent has no matching hooks. Runner fails open —
+   * `getOrCreateRunDefault`, then run each hook script via `runHookScript`.
+   * Cheap no-op when the agent has no matching hooks or the run has no sandbox
+   * scope. Runner fails open —
    * errors and timeouts map to outcome "error" → proceed.
    *
    * Scripts run in fileName order (the order `listEnabledByAgentAndEvent`
@@ -58,18 +63,20 @@ class HookDispatcherService {
     });
     if (scripts.length === 0) return { decision: "proceed", runs: [] };
 
-    const sandbox = await SkillSandboxModel.findOrCreateDefault({
+    const sandbox = await executionSandboxRegistry.getOrCreateRunDefault({
       organizationId: params.organizationId,
       userId: params.userId,
-      conversationId: params.conversationId,
+      conversationId: params.conversationId ?? null,
+      isolationKey: params.isolationKey ?? null,
       defaultCwd: SKILL_SANDBOX_HOME,
     });
+    if (!sandbox) return { decision: "proceed", runs: [] };
 
     const hookEventName = HOOK_EVENT_NAMES[params.event];
 
     const payload = {
       ...params.fields,
-      session_id: params.conversationId,
+      session_id: params.conversationId ?? params.isolationKey,
       cwd: SKILL_SANDBOX_HOME,
       permission_mode: "default",
       hook_event_name: hookEventName,

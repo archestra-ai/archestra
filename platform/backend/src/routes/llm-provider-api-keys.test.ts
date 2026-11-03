@@ -17,7 +17,7 @@ import type { User } from "@/types";
 import { ApiError } from "@/types";
 
 // Mock the Vertex AI check
-vi.mock("@/clients/gemini-client", () => ({
+vi.mock("@/clients/gemini-vertex-ai", () => ({
   isVertexAiEnabled: vi.fn(),
 }));
 
@@ -78,7 +78,7 @@ vi.mock("@/services/model-sync", () => ({
 import { hasPermission, userHasPermission } from "@/auth";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
-import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import { testProviderApiKey } from "@/routes/chat/model-fetchers/registry";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { ResourcePermissions } from "@/services/resource-permissions";

@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import { betterAuth } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
@@ -131,6 +131,80 @@ describe("team routes", () => {
     expect(deleted.statusCode, deleted.body).toBe(200);
 
     expect(loadMembers).not.toHaveBeenCalled();
+  });
+
+  test("links a group for one identity provider with a team role, and audits it", async ({
+    makeTeam,
+    makeIdentityProvider,
+    makeOrganization,
+  }) => {
+    const team = await makeTeam(organizationId, adminUser.id);
+    const okta = await makeIdentityProvider(organizationId);
+    const elsewhere = await makeIdentityProvider((await makeOrganization()).id);
+
+    const linked = await app.inject({
+      method: "POST",
+      url: `/api/teams/${team.id}/external-groups`,
+      payload: {
+        groupIdentifier: "Platform-Leads",
+        identityProviderId: okta.id,
+        role: "admin",
+      },
+    });
+    expect(linked.statusCode, linked.body).toBe(200);
+    expect(linked.json()).toMatchObject({
+      groupIdentifier: "platform-leads",
+      identityProviderId: okta.id,
+      role: "admin",
+    });
+
+    // The same group may be linked again for any provider, but not twice
+    // for the same one.
+    const anyProvider = await app.inject({
+      method: "POST",
+      url: `/api/teams/${team.id}/external-groups`,
+      payload: { groupIdentifier: "platform-leads" },
+    });
+    expect(anyProvider.statusCode, anyProvider.body).toBe(200);
+    expect(anyProvider.json()).toMatchObject({
+      identityProviderId: null,
+      role: "member",
+    });
+    const duplicate = await app.inject({
+      method: "POST",
+      url: `/api/teams/${team.id}/external-groups`,
+      payload: {
+        groupIdentifier: "platform-leads",
+        identityProviderId: okta.id,
+      },
+    });
+    expect(duplicate.statusCode).toBe(409);
+
+    const foreignProvider = await app.inject({
+      method: "POST",
+      url: `/api/teams/${team.id}/external-groups`,
+      payload: { groupIdentifier: "ops", identityProviderId: elsewhere.id },
+    });
+    expect(foreignProvider.statusCode).toBe(400);
+
+    const audit = await AuditLogModel.findPaginated({
+      organizationId,
+      limit: 10,
+      offset: 0,
+      resourceId: team.id,
+    });
+    expect(audit.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: "team.updated",
+          after: expect.objectContaining({
+            externalGroups: expect.arrayContaining([
+              `platform-leads [admin via ${okta.id}]`,
+            ]),
+          }),
+        }),
+      ]),
+    );
   });
 
   describe("PUT /api/teams/:id", () => {

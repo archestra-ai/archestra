@@ -3,7 +3,6 @@ import type OpenAI from "openai";
 import { toFile } from "openai";
 import { z } from "zod";
 import { isAzureOpenAiV1BaseUrl } from "@/clients/azure-url";
-import config from "@/config";
 import logger from "@/logging";
 import { LimitValidationService } from "@/models/limit";
 import ProxyProviderFileModel, {
@@ -47,11 +46,6 @@ export async function createAzureProviderFile(
   reply: FastifyReply,
 ) {
   const context = await resourceContext(request, reply);
-  if (config.llmProxy.usageAccountingMode === "enforce")
-    throw new ApiError(
-      422,
-      "Authoritative provider file storage accounting is unavailable.",
-    );
   const violation = await LimitValidationService.checkLimitsBeforeRequest({
     ...context.credential.limitContext,
     agentId: context.credential.agent.id,

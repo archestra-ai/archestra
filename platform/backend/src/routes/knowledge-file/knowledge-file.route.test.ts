@@ -752,6 +752,14 @@ describe("knowledge file routes", () => {
         .select()
         .from(schema.kbUploadConnectorsTable);
       expect(uploadConnectors).toHaveLength(1);
+      const [connector] = await db
+        .select()
+        .from(schema.knowledgeBaseConnectorsTable);
+      expect(connector).toMatchObject({
+        connectorType: "file_upload",
+        schedule: "",
+        secretId: null,
+      });
     });
 
     test("a directory selection only indexes files the caller can see", async ({

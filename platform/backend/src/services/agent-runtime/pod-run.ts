@@ -36,7 +36,7 @@ import type {
   AgentRunRecord,
   ResolvedAgentRuntime,
 } from "@/types";
-import { ApiError } from "@/types";
+import { type AgentRunLimits, ApiError } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
 import {
   prepareAgentRuntimeBackendDriver,
@@ -60,6 +60,11 @@ import {
   runtimeOpenAppaSession,
   stampRuntimeBinding,
 } from "./runtime-identity";
+import {
+  organizationAgentRuntimeTiers,
+  resolveAgentRunLimits,
+  resolveRunWorkspaceGiB,
+} from "./runtime-tiers";
 import { generateAgentRunTitle } from "./title";
 import { agentRunTranscriptStore } from "./transcript-store";
 
@@ -77,6 +82,8 @@ import { agentRunTranscriptStore } from "./transcript-store";
  */
 async function startAgentRunSession(params: {
   runtime: ResolvedAgentRuntime;
+  /** The caller's resolved limits; absent means the Agent's own. */
+  limits?: AgentRunLimits | null;
   taskId: string;
   agentId: string;
   actor: A2AActor;
@@ -110,6 +117,7 @@ async function startAgentRunSession(params: {
   });
   const effectiveNetworkPolicy = await resolveEffectiveNetworkPolicy({
     organizationId: params.organizationId,
+    agentNetworkPolicy: params.runtime.agentNetworkPolicy,
     environmentId: params.runtime.environmentId,
     environmentNetworkPolicy: environment?.networkPolicy,
     defaultNetworkPolicy: organization?.defaultNetworkPolicy,
@@ -156,9 +164,28 @@ async function startAgentRunSession(params: {
     task = promptWithContract(task, contract);
   }
 
+  // A continuation keeps the first turn's tier and limits; its workspace
+  // already has that size and that expiry.
+  const tiers = await organizationAgentRuntimeTiers(params.organizationId);
+  const chosen =
+    priorRun?.runtimeLimits ??
+    params.limits ??
+    resolveAgentRunLimits({ runtime: params.runtime, tiers });
+  const limits = withWorkspaceSize({
+    limits: chosen,
+    // The volume a run is told about is the one it has: a new run's comes
+    // from the tiers its volume is sized from, read once here; a
+    // continuation's was recorded when its workspace was created, and a
+    // workspace from before sizes were recorded has none.
+    workspaceGiB: priorRun
+      ? priorRun.runtimeLimits?.workspaceGiB
+      : resolveRunWorkspaceGiB(chosen.tier, tiers),
+  });
   const { spec, virtualApiKeyId, gatewayTokenId } =
     await buildAgentRunLaunchSpec({
       runtime: params.runtime,
+      limits,
+      tiers,
       taskId: params.taskId,
       runId,
       agentId: params.agentId,
@@ -193,6 +220,8 @@ async function startAgentRunSession(params: {
       Math.ceil((workspace.expiresAt.getTime() - Date.now()) / 1000),
     );
   }
+  // The image sends this value as X-Archestra-Session-Id; it is the key of
+  // the run's LLM session (see agentRunLlmSessionId).
   spec.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID = spec.frozenName;
 
   // The row lands before the workload: it is what teardown reads to find the
@@ -217,6 +246,7 @@ async function startAgentRunSession(params: {
     backend: backend.name,
     runtimeScope,
     activeDeadlineSeconds: spec.activeDeadlineSeconds,
+    runtimeLimits: limits,
     virtualApiKeyId,
     gatewayTokenId,
     completionTarget: params.completionTarget,
@@ -226,6 +256,7 @@ async function startAgentRunSession(params: {
     trackBackgroundWork(
       generateAgentRunTitle({
         taskId: params.taskId,
+        workloadName: spec.frozenName,
         prompt: params.task ?? "Run",
         organizationId: params.organizationId,
         userId: params.titleUserId,
@@ -379,7 +410,12 @@ async function startAgentRunSession(params: {
 export function resolveAgentRuntime(
   agent: Pick<
     Agent,
-    "id" | "organizationId" | "environmentId" | "runtime" | "runtimeSecretId"
+    | "id"
+    | "organizationId"
+    | "environmentId"
+    | "runtime"
+    | "runtimeSecretId"
+    | "networkPolicy"
   >,
 ): ResolvedAgentRuntime | null {
   if (!agent.runtime) {
@@ -395,6 +431,7 @@ export function resolveAgentRuntime(
     organizationId: agent.organizationId,
     environmentId: agent.environmentId,
     secretId: agent.runtimeSecretId,
+    agentNetworkPolicy: agent.networkPolicy ?? null,
   };
 }
 
@@ -410,6 +447,7 @@ export function resolveAgentRuntime(
  */
 export async function runTaskInAgentRuntime(params: {
   runtime: ResolvedAgentRuntime;
+  limits?: AgentRunLimits | null;
   taskId: string;
   agentId: string;
   actor: A2AActor;
@@ -866,4 +904,15 @@ async function notifyRuntimeSessionCreated(
       "Could not announce the Agent Runtime session",
     );
   }
+}
+
+/** The limits with the run's workspace size, or without one when it is unknown. */
+function withWorkspaceSize(params: {
+  limits: AgentRunLimits;
+  workspaceGiB: number | undefined;
+}): AgentRunLimits {
+  const { workspaceGiB: _recorded, ...rest } = params.limits;
+  return params.workspaceGiB === undefined
+    ? rest
+    : { ...rest, workspaceGiB: params.workspaceGiB };
 }

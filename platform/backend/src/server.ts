@@ -16,6 +16,8 @@ if (isMainModule) {
   await import("./observability/tracing/sdk");
 }
 
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
 import { isWorker } from "node:cluster";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -46,18 +48,22 @@ import {
   renewEmailSubscriptionIfNeeded,
 } from "@/agents/incoming-email";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { fastifyAuthPlugin } from "@/auth";
 import { revokeBasicAuthOnlySessions } from "@/auth/basic-auth-lockout";
+import { authPlugin as fastifyAuthPlugin } from "@/auth/fastify-plugin";
+import { applyPendingNormalTiers } from "@/auto-routing/pending-normal-tier";
 import { cacheManager } from "@/cache-manager";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { registerMcpClientHibernationInvalidation } from "@/clients/mcp-client";
+import mcpClient, {
+  registerMcpClientHibernationInvalidation,
+} from "@/clients/mcp-client";
 // SPDX-SnippetEnd
 import config, {
   resolveAllowedOrigins,
   shouldRunWebServer,
   shouldRunWorker,
+  validateShutdownPodGrace,
 } from "@/config";
 import { verifyEncryptedChatConfig } from "@/content-encryption/encrypted-chat-escrow";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
@@ -72,7 +78,6 @@ import {
   dropContentTrgmIndexesUnderEncryption,
   dropLegacyPayloadTrgmIndexes,
 } from "@/database/index-maintenance";
-import { seedRequiredStartingData } from "@/database/seed";
 import { enterpriseTier } from "@/enterprise-tier";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -93,8 +98,9 @@ import { PlaywrightRuntimeModel } from "@/models";
 import InteractionSessionHeadModel from "@/models/interaction-session-head";
 import OrganizationModel from "@/models/organization";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
-import { initializeObservabilityMetrics, metrics } from "@/observability";
+import { initializeObservabilityMetrics } from "@/observability";
 import { classifyErrorForTracking } from "@/observability/error-tracking-policy";
+import { activeUsersMetricCollector } from "@/observability/metrics/active-users";
 import { reportAbnormalPreviousTermination } from "@/observability/previous-termination-report";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
 import { rumExporter } from "@/observability/rum/exporter.ee";
@@ -128,6 +134,7 @@ import { mcpImageUpdateChecker } from "@/services/mcp-image-update-checker";
 import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { initializeManagedPlaywrightRuntime } from "@/services/playwright-runtime";
 import { ensureScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
+import { seedRequiredStartingData } from "@/services/seed";
 import { sreAgentService } from "@/services/sre-agent";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
@@ -176,7 +183,28 @@ import {
   READY_PATH,
   SKILL_MARKETPLACE_PREFIX,
 } from "./routes/route-paths";
-import { beginLlmProxyDrain } from "./server/llm-proxy-drain";
+import {
+  beginLlmProxyDrain,
+  drainLlmProxyRequests,
+} from "./server/llm-proxy-drain";
+import { drainBackgroundWork } from "./utils/background-work";
+
+async function flushShutdownTelemetry(): Promise<void> {
+  if (isMainModule)
+    await (await import("./observability/tracing/sdk")).shutdownTelemetry();
+}
+
+function shutdownTimeoutMs(): number {
+  return (
+    (Math.max(
+      config.shutdown.drainSeconds,
+      config.kb.taskWorkerShutdownTimeoutSeconds,
+    ) +
+      config.shutdown.cleanupSeconds) *
+    1000
+  );
+}
+
 import {
   UserConfigFieldDefaultSchema,
   UserConfigFieldSchema,
@@ -194,11 +222,16 @@ export {
 const SHUTDOWN_CLEANUP_TIMEOUT_MS = 3000;
 const ACTIVE_CHAT_RUN_REAPER_INTERVAL_MS = 60 * 1000;
 
+import { assertPortsBound } from "@/models/ports";
 // Enterprise routes are always loaded. Access is gated at request time by the
 // EnterpriseTierService, which auto-enables enterprise features for teams below
 // the small-team threshold even when no enterprise license env var is set.
 // biome-ignore lint/style/noRestrictedImports: dual-licensed at request time
 import * as eeRoutes from "./routes/index.ee";
+
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
+assertPortsBound();
 
 const {
   api: {
@@ -956,6 +989,12 @@ const startWebServer = async () => {
     await ensureScopedResourcePermissionCutover();
     // SPDX-SnippetEnd
 
+    // Finish the org-trio migration's normal tiers that waited for the Agent
+    // Runtime check; auto routing stays disabled for them meanwhile.
+    void applyPendingNormalTiers().catch((error) => {
+      logger.error({ err: error }, "Failed to apply pending normal tiers");
+    });
+
     // Initialize metrics with keys of custom agent labels
     // Set OpenMetrics content type to enable exemplar support on histograms
     const promClient = await import("prom-client");
@@ -973,7 +1012,7 @@ const startWebServer = async () => {
     // Only the API process collects it: the value is derived from the shared
     // database, so extra replicas would repeat the same query for the same
     // answer.
-    metrics.activeUsers.activeUsersMetricCollector.start();
+    activeUsersMetricCollector.start();
 
     // Register sandbox proxy route on the main server (single-port setup).
     // Iframe isolation comes from the sandbox attribute (no allow-same-origin → opaque origin).
@@ -1311,16 +1350,20 @@ function registerWebServerShutdown(
     shuttingDown = true;
     fastify.log.info(`Received ${signal}, shutting down gracefully...`);
     beginLlmProxyDrain(fastify);
-    // Leave time after the 60s proxy drain for dependency cleanup, but never
-    // let unrelated long-lived connections or cleanup exceed the supervisor.
+    if (publicEndpointsServerInstance)
+      beginLlmProxyDrain(publicEndpointsServerInstance);
+    // Reserve cleanup time beyond HTTP draining and any worker task shutdown.
     const shutdownDeadline = setTimeout(() => {
       fastify.log.error("Graceful shutdown timed out");
       process.exit(1);
-    }, 80_000);
+    }, shutdownTimeoutMs());
     shutdownDeadline.unref();
 
     // Stop accepting new runs before snapshotting, so nothing created after this
     // point escapes the cleanup below.
+    const stoppedWorker = shouldRunWorker
+      ? taskQueueService.stopWorker()
+      : Promise.resolve();
     activeChatRunService.beginShutdown();
     agentRunReconciler.stop();
     // SPDX-SnippetBegin
@@ -1354,6 +1397,13 @@ function registerWebServerShutdown(
     ]);
 
     try {
+      await Promise.all([
+        drainLlmProxyRequests(fastify),
+        publicEndpointsServerInstance
+          ? drainLlmProxyRequests(publicEndpointsServerInstance)
+          : Promise.resolve(),
+        stoppedWorker,
+      ]);
       if (intervalIds.activeChatRunReaperIntervalId) {
         clearInterval(intervalIds.activeChatRunReaperIntervalId);
       }
@@ -1369,6 +1419,7 @@ function registerWebServerShutdown(
 
       await fastify.close();
       fastify.log.info("Main server closed");
+      await drainBackgroundWork();
 
       websocketService.stop();
 
@@ -1379,17 +1430,11 @@ function registerWebServerShutdown(
         clearInterval(intervalIds.processedEmailCleanupIntervalId);
       }
 
-      cacheManager.shutdown();
-
       // Flush any buffered exceptions before exit (internally time-bounded).
       await posthogErrorTrackingService.shutdown();
 
       // Stop accepting new skill-sandbox runs
       await skillSandboxRuntimeService.shutdown();
-
-      if (shouldRunWorker) {
-        await taskQueueService.stopWorker();
-      }
 
       mcpToolsRefreshManager.stop();
 
@@ -1402,7 +1447,7 @@ function registerWebServerShutdown(
       // Flush any buffered RUM events before the process exits.
       await rumExporter.shutdown();
 
-      metrics.activeUsers.activeUsersMetricCollector.stop();
+      activeUsersMetricCollector.stop();
 
       const completedCleanups = new Set<
         "emailProvider" | "chatOps" | "ngrok"
@@ -1440,6 +1485,11 @@ function registerWebServerShutdown(
         );
       }
 
+      await drainBackgroundWork();
+      await mcpClient.disconnectAll();
+      await drainBackgroundWork();
+      cacheManager.shutdown();
+      await flushShutdownTelemetry();
       clearTimeout(shutdownDeadline);
       process.exit(0);
     } catch (error) {
@@ -1608,30 +1658,34 @@ const startWorker = async () => {
       `Worker server started on port ${port} with ${labelKeys.length} agent label keys`,
     );
 
+    let shuttingDown = false;
     const gracefulShutdown = async (signal: string) => {
+      if (shuttingDown) return;
+      shuttingDown = true;
       logger.info(`Worker received ${signal}, shutting down...`);
-
-      // Force exit if cleanup takes too long (e.g., long-running task doesn't respect cancellation).
-      // Must exceed taskWorkerShutdownTimeoutSeconds so stopWorker() has time to drain
-      // in-flight tasks and release them back to the queue.
-      const forceExitTimeoutMs =
-        (config.kb.taskWorkerShutdownTimeoutSeconds + 5) * 1000;
+      beginLlmProxyDrain(healthServer);
       const forceExitTimeout = setTimeout(() => {
         logger.warn("Worker shutdown timed out, forcing exit");
         process.exit(1);
-      }, forceExitTimeoutMs);
+      }, shutdownTimeoutMs());
+      const stoppedWorker = taskQueueService.stopWorker();
 
       try {
+        await Promise.all([drainLlmProxyRequests(healthServer), stoppedWorker]);
         await healthServer.close();
+        await drainBackgroundWork();
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
         mcpActiveUseTracker.stop();
         // SPDX-SnippetEnd
-        cacheManager.shutdown();
         await posthogErrorTrackingService.shutdown();
         await skillSandboxRuntimeService.shutdown();
-        await taskQueueService.stopWorker();
+        await drainBackgroundWork();
+        await mcpClient.disconnectAll();
+        await drainBackgroundWork();
+        cacheManager.shutdown();
+        await flushShutdownTelemetry();
         clearTimeout(forceExitTimeout);
         process.exit(0);
       } catch (error) {
@@ -1678,9 +1732,20 @@ process.on("unhandledRejection", (reason) => {
  * This allows other scripts to import helper functions without starting the server
  */
 if (isMainModule) {
-  if (shouldRunWorker && !shouldRunWebServer) {
-    startWorker();
-  } else if (shouldRunWebServer) {
-    startWebServer();
+  try {
+    validateShutdownPodGrace(
+      config.shutdown.podGraceSeconds,
+      config.shutdown.drainSeconds,
+      config.shutdown.cleanupSeconds,
+      config.kb.taskWorkerShutdownTimeoutSeconds,
+    );
+    if (shouldRunWorker && !shouldRunWebServer) {
+      await startWorker();
+    } else if (shouldRunWebServer) {
+      await startWebServer();
+    }
+  } catch (error) {
+    logger.error({ err: error }, "Server failed to start");
+    process.exit(1);
   }
 }

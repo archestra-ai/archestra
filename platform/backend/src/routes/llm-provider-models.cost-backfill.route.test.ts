@@ -139,11 +139,120 @@ describe("model cost backfill routes", () => {
           after: expect.objectContaining({
             id: started.json().id,
             since: "2026-09-01T00:00:00.000Z",
-            pricing: expect.objectContaining({ pricePerMillionInput: "2.00" }),
+            pricing: expect.objectContaining({
+              pricePerMillionInput: "2.00000000",
+            }),
           }),
         }),
       ]),
     );
+  });
+
+  test("preview, save and start agree on eight-decimal prices and detect a one-unit stale edit", async ({
+    makeMember,
+    makeAgent,
+    makeInteraction,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+    const model = await createModel();
+    const agent = await makeAgent();
+    await makeInteraction(agent.id, {
+      type: "anthropic:messages",
+      model: model.modelId,
+      inputTokens: 1_000_000,
+      outputTokens: 0,
+      cost: "1.0000000000",
+    });
+    const prices = {
+      input: "0.000000015",
+      output: "0.123456785",
+      cacheRead: null,
+      cacheWrite: null,
+    };
+    const preview = await ctx.app.inject({
+      method: "POST",
+      url: `/api/llm-models/${model.id}/cost-backfill/preview`,
+      payload: { timeZone: "UTC", since: "1970-01-01T00:00:00.000Z", prices },
+    });
+    expect(preview.statusCode, preview.body).toBe(200);
+    expect(preview.json().window.recomputedCost).toBe(0.00000002);
+    const saved = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/llm-models/${model.id}`,
+      payload: {
+        customPricePerMillionInput: prices.input,
+        customPricePerMillionOutput: prices.output,
+      },
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect(saved.json()).toMatchObject({
+      customPricePerMillionInput: "0.00000002",
+      customPricePerMillionOutput: "0.12345679",
+    });
+    const stale = await ctx.app.inject({
+      method: "POST",
+      url: `/api/llm-models/${model.id}/cost-backfill`,
+      payload: { since: null, prices: { ...prices, input: "0.00000003" } },
+    });
+    expect(stale.statusCode, stale.body).toBe(409);
+    const started = await ctx.app.inject({
+      method: "POST",
+      url: `/api/llm-models/${model.id}/cost-backfill`,
+      payload: { since: null, prices },
+    });
+    expect(started.statusCode, started.body).toBe(200);
+    const audit = await AuditLogModel.findPaginated({
+      organizationId: ctx.organizationId,
+      limit: 10,
+      offset: 0,
+    });
+    expect(audit.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: "llmModel.updated",
+          outcome: "success",
+          after: expect.objectContaining({
+            pricePerMillionInput: "0.00000002",
+          }),
+        }),
+        expect.objectContaining({
+          action: "llmModel.cost_backfill_started",
+          outcome: "success",
+          after: expect.objectContaining({
+            pricing: expect.objectContaining({
+              pricePerMillionInput: "0.00000002",
+              pricePerMillionOutput: "0.12345679",
+            }),
+          }),
+        }),
+      ]),
+    );
+  });
+
+  test("preview and start reject prices outside the model price contract", async ({
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+    const model = await createModel();
+    for (const input of [
+      "99999999.990000001",
+      "100000000",
+      "-1e-999",
+      "1usd",
+    ]) {
+      for (const endpoint of ["cost-backfill/preview", "cost-backfill"]) {
+        const response = await ctx.app.inject({
+          method: "POST",
+          url: `/api/llm-models/${model.id}/${endpoint}`,
+          payload: {
+            since: null,
+            ...(endpoint.endsWith("preview") ? { timeZone: "UTC" } : {}),
+            prices: { input, output: "0", cacheRead: null, cacheWrite: null },
+          },
+        });
+        expect(response.statusCode, `${endpoint}: ${input}`).toBe(400);
+      }
+    }
   });
 
   test("accepts named time zones and rejects anything else", async ({

@@ -2,12 +2,25 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 6
-lastUpdated: 2026-10-28
+lastUpdated: 2026-10-31
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Archestra reads these environment variables at startup. Pass them with `-e` to `docker run`, or set them under `archestra.env` in the Helm values. The Docker quickstart and the Helm chart run with none set. See [Helm](/docs/admin/deployment/helm) for Kubernetes installation.
+
+## Shutdown
+
+Give long model requests and MCP tool calls time to finish when a replica stops.
+
+- **`ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS`** — Seconds after a stop signal for admitted requests, handlers and background persistence to finish. Default `60`; integer `1`–`86400`.
+- **`ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS`** — Extra time for persistence, dependency cleanup and telemetry. Default `20`; integer `5`–`86400`. The backend deadline is `max(request drain, worker task shutdown timeout) + cleanup`. The unified container gives the backend another 10 seconds before forcing it to stop.
+
+- **`ARCHESTRA_SERVER_POD_GRACE_SECONDS`** — Injected by Helm from the rendered pod grace period. At server startup, checks the resolved environment values, including Secret and ConfigMap imports, against `max(drain, worker timeout) + cleanup + 40`. Insufficient grace prevents startup. Leave unset outside Helm unless you want this validation.
+
+The Helm chart derives web and worker pod grace periods from settings it can read, reserving 40 seconds beyond the backend deadline. The `archestra.shutdown` values default to `null`, preserving existing `envFrom`, `envFromSecrets` and `envWithValueFrom` settings. Explicit chart settings override imported values; literal `archestra.env` values take precedence over the chart settings.
+
+Helm cannot read timeout values inside a Secret or ConfigMap. When importing longer durations, set `archestra.terminationGracePeriodSeconds` high enough for the resolved values. For example, an imported worker timeout of 90 seconds with default drain and cleanup requires at least 150 seconds of pod grace. Both servers validate that budget before accepting requests.
 
 ## Database
 
@@ -568,11 +581,6 @@ These variables set each provider's deployment-wide endpoint and authentication.
 
 ## LLM Proxy
 
-- **`ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE`** - Controls settlement of provider billing components, including advisor and compaction inference.
-  - Default: `off`
-  - Values: `off` (legacy accounting), `shadow` (record candidate charges while applying legacy usage), `enforce` (apply settled charges to budgets and reports)
-  - Set it on both web and worker pods. Requests retain their starting mode.
-
 - **`ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`** - Maximum number of virtual keys per provider API key.
   - Default: `10`
   - See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
@@ -592,6 +600,9 @@ These variables set each provider's deployment-wide endpoint and authentication.
   - Values: `0` turns it off
   - Keep it below the shortest stall timeout of your clients. Claude Code reports a stall after 20 seconds.
   - Bedrock and Ollama native streams get no keep-alive.
+  - OpenAI Chat Completions and Responses, OpenAI-compatible chat providers using the shared transport, and Anthropic Messages also receive comments before the first event, once the upstream has accepted the HTTP request. No additional setting is needed.
+  - Comments cannot cover a provider or ingress that delays its HTTP response headers. They do not extend upstream timeouts or absolute request deadlines; intervening proxies must forward streaming bytes without buffering.
+  - [Model pools](/docs/llm-proxy/model-pools) wait until a member is selected so failover and final pool headers remain accurate. Buffered policy responses keep their existing commit behavior. Other transports keep their existing behavior until the first client event.
 
 - **`ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT`** - Records traffic sent with a subscription credential, such as a Claude Pro or Max login, as subscription usage with $0 billed spend.
   - Default: `true`
@@ -781,6 +792,11 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
 - **`ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES`** - Namespaces the platform service account has permissions in, offered as a dropdown in the [environment](/docs/admin/environments) editor.
   - Default: unset (the editor takes free text)
   - Values: comma-separated namespaces, for example `staging,production`
+
+- **`ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS`** - Cluster resolver addresses that [environment](/docs/admin/environments) egress policies allow DNS to.
+  - Default: unset (discovery reads the `kube-system/kube-dns` Service when permitted, then falls back to the platform pod's `/etc/resolv.conf` when running in-cluster)
+  - Values: comma-separated IP addresses, for example `172.20.0.10`. Helm also accepts a list under `archestra.orchestrator.kubernetes.clusterDnsIps`.
+  - Set verified resolver addresses when discovery fails or workloads use a different resolver from the platform pod, such as custom or NodeLocal DNS. Explicit addresses bypass discovery.
 
 - **`ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN`** - Cluster DNS domain used to build in-cluster Service addresses.
   - Default: `cluster.local`
@@ -972,6 +988,9 @@ Archestra creates one Dagger engine per organization and per environment. Each e
   - Default: `52428800` (50 MiB), equal to the [`ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT`](/docs/admin/deployment/configuration#ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT) default
   - Chat still stores a larger attachment; it is not staged in the sandbox.
 
+- **`ARCHESTRA_SKILLS_SANDBOX_HEADLESS_RETENTION_DAYS`** - Days a sandbox from a run without a conversation, such as an A2A task, is kept after its last command, upload or skill mount before it is deleted. Files it exported are kept. `0` keeps them forever.
+  - Default: `7`
+
 - **`ARCHESTRA_DAGGER_RUNTIME_CLI_BIN`** - Path to the Dagger CLI executable used by the sandbox.
   - Default: unset (uses the bundled or discovered CLI)
 
@@ -995,26 +1014,16 @@ Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox con
   - Default: [`ARCHESTRA_INTERNAL_API_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_INTERNAL_API_BASE_URL)
   - When neither is set, runs fail to start.
 
-- **`ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS`** - Default maximum lifetime of a run, in hours.
-  - Default: `72`
+- **`ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS`** - Default maximum duration of a run, in hours. A run's files are kept for the same time.
+  - Default: `24`
 
 - **`ARCHESTRA_AGENT_RUNTIME_DEFAULT_IDLE_TIMEOUT_MINUTES`** - Default time an idle run waits for the next instruction before it stops, in minutes.
-  - Default: `180`
+  - Default: `60`
   - Custom images must implement the wait, using the `ARCHESTRA_AGENT_RUNTIME_IDLE_TIMEOUT_SECONDS` variable passed to the pod.
 
-- **`ARCHESTRA_AGENT_RUNTIME_CPU_REQUEST`** - Default CPU request for a run's pod. Runs have no CPU limit.
-  - Default: `500m`
-  - Values: Kubernetes quantity
+- **Runtime tiers** - A run's pod gets the CPU and memory of its [runtime tier](/docs/agents/runtime/setup#runtime-tiers). The tiers are stored with the organization, not in environment variables. The pod sees its tier in `ARCHESTRA_AGENT_RUNTIME_TIER`, the agent's scaleup tier in `ARCHESTRA_AGENT_RUNTIME_MAX_TIER`, the tiers it may move to with their sizes as JSON in `ARCHESTRA_AGENT_RUNTIME_TIERS`, and its size in `ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST`, `ARCHESTRA_AGENT_RUNTIME_POD_CPU_LIMIT` (set only when the tier has a CPU limit), `ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_REQUEST` and `ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT`. `ARCHESTRA_AGENT_RUNTIME_POD_CPUS` is the number of whole CPUs to work in parallel: the CPU limit, else the request, rounded up. A pod with no CPU limit sees every CPU of its node, so the pod also gets `GOMAXPROCS`, `CARGO_BUILD_JOBS` and `RAYON_NUM_THREADS` set to that number, for Go programs such as the TypeScript 7 compiler, and for Cargo and Rayon. An agent's own environment can set these three to other values; `ARCHESTRA_AGENT_RUNTIME_SIZED_ENV` lists the ones the platform set. When a run is served from a larger tier's warm pool, the pod's values and the listed toolchain values follow the larger tier, and the agent's own values stay. The former `ARCHESTRA_AGENT_RUNTIME_CPU_REQUEST`, `ARCHESTRA_AGENT_RUNTIME_MEMORY_REQUEST` and `ARCHESTRA_AGENT_RUNTIME_MEMORY_LIMIT` variables are no longer read.
 
-- **`ARCHESTRA_AGENT_RUNTIME_MEMORY_REQUEST`** - Default memory request for a run's pod.
-  - Default: `1Gi`
-  - Values: Kubernetes quantity
-
-- **`ARCHESTRA_AGENT_RUNTIME_MEMORY_LIMIT`** - Default memory limit for a run's pod.
-  - Default: `4Gi`
-  - Values: Kubernetes quantity
-
-- **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`** - Size of each run's persistent volume, which holds `/home/node` and, for privileged runs, `/var/lib/docker`.
+- **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`** - Size of a run's persistent volume, which holds `/home/node` and, for privileged runs, `/var/lib/docker`. A [runtime tier](/docs/agents/runtime/setup#runtime-tiers) with a **Workspace** size of its own overrides it for that tier's runs.
   - Default: `20Gi`
   - Values: Kubernetes quantity
 

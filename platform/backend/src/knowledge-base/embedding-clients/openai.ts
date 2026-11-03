@@ -1,4 +1,4 @@
-import { isNomicModel } from "@archestra/shared";
+import { acceptsEmbeddingDimensionsParameter } from "@archestra/shared";
 import OpenAI from "openai";
 import type { EmbeddingApiResponse, EmbeddingInput } from "./types";
 
@@ -56,8 +56,8 @@ export async function callOpenAIEmbedding(params: {
       // base64 decode garbles the float arrays that providers ignoring
       // `encoding_format` send back. `decodeEmbedding` accepts both shapes.
       encoding_format: "base64",
-      // Nomic models do not support the `dimensions` parameter.
-      ...(dimensions !== undefined && !isNomicModel(model)
+      // Nomic models and ada-002 reject the `dimensions` parameter.
+      ...(dimensions !== undefined && acceptsEmbeddingDimensionsParameter(model)
         ? { dimensions }
         : {}),
     });

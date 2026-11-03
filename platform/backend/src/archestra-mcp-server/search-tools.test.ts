@@ -208,7 +208,8 @@ describe("search_tools", () => {
       const execute = remedyTools.find((tool) =>
         tool.toolName.endsWith("execute_remedy_plan"),
       );
-      expect(execute?.params).toContain("offer_id!:string");
+      // Optional: a call without it declares a subagent's return.
+      expect(execute?.params).toContain("offer_id?:string");
       for (const tool of remedyTools) {
         expect(tool.params).not.toMatch(
           /execution|protected|payload|signature|offers|JWS|RFC 7515/,
@@ -675,12 +676,12 @@ describe("search_tools", () => {
       userId: user.id,
     };
 
-    // "guardrails policy" matches only the guardrails policy tools, all of
+    // "guardrails" matches only the guardrails tools, all of
     // which require permissions this agent:read role lacks, so RBAC filters
     // them all out before ranking.
     const result = await executeArchestraTool(
       TOOL_SEARCH_TOOLS_FULL_NAME,
-      { query: "guardrails policy", limit: 10 },
+      { query: "guardrails", limit: 10 },
       context,
     );
 
@@ -689,7 +690,7 @@ describe("search_tools", () => {
       total: 0,
       matchCount: 0,
       truncated: false,
-      hint: "No tools matched. Try broader or different keywords, or switch mode. No tool text matches these query terms: guardrails, policy.",
+      hint: "No tools matched. Try broader or different keywords, or switch mode. No tool text matches these query terms: guardrails.",
       tools: [],
     });
   });

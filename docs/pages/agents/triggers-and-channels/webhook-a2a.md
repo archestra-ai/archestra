@@ -32,10 +32,13 @@ Send a bearer token in the `Authorization` header of every request. A2A takes th
 | Personal token | Click your name in the sidebar to open **Personal Settings** | You |
 | Team token | **Settings → Teams**, then the team's token | The team |
 | Organization token | **Settings → Auth** | The organization |
+| Service account API key | **Settings → Service Accounts**, then the account's API key | The account |
 | OAuth access token | An [OAuth client](/docs/mcp/authentication/applications) with **A2A** enabled that lists the agent | The client, or the signed-in user |
 | Identity provider JWT | Bind the agent to an [identity provider](/docs/admin/identity) | The user in the JWT |
 
 For OAuth, request `scope=a2a` when obtaining the token. Other enabled capabilities can share the same client credentials.
+
+Use a service account API key for automations. Team and organization tokens get no code sandbox: the agent cannot run commands, attached files it cannot read inline are dropped, and large tool results are truncated.
 
 What to know:
 

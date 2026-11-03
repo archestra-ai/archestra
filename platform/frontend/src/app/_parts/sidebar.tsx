@@ -592,7 +592,15 @@ export function AppSidebar() {
               return { ...item, url: "/openappa/yells" };
             }
             if (item.url === "/llm/costs") {
-              return { ...item, url: getCostsNavigationUrl(permissionMap) };
+              return {
+                ...item,
+                title:
+                  permissionMap?.["/llm/costs"] === false &&
+                  permissionMap?.["/llm/limits"]
+                    ? "Limits"
+                    : item.title,
+                url: getCostsNavigationUrl(permissionMap),
+              };
             }
             // Same reason one row over: /settings is a stub that forwards to
             // the first permitted tab, so following it costs a second route

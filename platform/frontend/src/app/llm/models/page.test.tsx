@@ -100,6 +100,7 @@ const model = {
   longContextPricePerMillionCacheRead: null,
   longContextPricePerMillionCacheWrite: null,
   cachePriceSource: "models_dev",
+  mediaPricing: null,
   isFree: false,
   effectiveContextLength: 200_000,
   embeddingClientImageCapable: null,
@@ -111,6 +112,20 @@ let modelRequests = 0;
 const routerPush = vi.fn();
 
 const server = setupServer(
+  http.get(`${API_ORIGIN}/api/llm-provider-models/labels/keys`, () =>
+    HttpResponse.json([]),
+  ),
+  http.get(`${API_ORIGIN}/api/llm-models/:modelId/cost-backfill`, () =>
+    HttpResponse.json(null),
+  ),
+  http.post(`${API_ORIGIN}/api/llm-models/:modelId/cost-backfill/preview`, () =>
+    HttpResponse.json({
+      availability: "available",
+      instancePriced: false,
+      days: [],
+      window: null,
+    } satisfies archestraApiTypes.PreviewModelCostBackfillResponses["200"]),
+  ),
   http.get(`${API_ORIGIN}/api/llm-models`, () => {
     modelRequests += 1;
     return HttpResponse.json(keyCreated ? [model] : []);
@@ -189,7 +204,7 @@ afterAll(() => {
 });
 
 describe("ModelsPage", () => {
-  it("lets users set, view, and reset cache prices when no cache price is known", async () => {
+  it("round-trips precise price defaults while setting and resetting unknown cache prices", async () => {
     keyCreated = true;
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
@@ -200,7 +215,17 @@ describe("ModelsPage", () => {
       archestraApiTypes.GetModelsWithApiKeysResponses["200"][number];
     let currentModel: Omit<PricingModel, "cachePriceSource"> & {
       cachePriceSource: PricingModel["cachePriceSource"] | null;
-    } = { ...model, cachePriceSource: null };
+    } = {
+      ...model,
+      cachePriceSource: null,
+      customPricePerMillionInput: "2.50000000",
+      customPricePerMillionOutput: "0.00600000",
+      longContextThreshold: 200_000,
+      longContextPricePerMillionInput: "10.00000000",
+      longContextPricePerMillionOutput: "99999999.98999998",
+      longContextPricePerMillionCacheRead: "0.00000001",
+      longContextPricePerMillionCacheWrite: "0.00000000",
+    };
     const updates: archestraApiTypes.UpdateModelData["body"][] = [];
     server.use(
       http.get(`${API_ORIGIN}/api/llm-models`, () =>
@@ -234,6 +259,15 @@ describe("ModelsPage", () => {
           currentModel = {
             ...currentModel,
             ...body,
+            // The API returns custom rates padded to the database scale.
+            customPricePerMillionCacheRead:
+              body.customPricePerMillionCacheRead === null
+                ? null
+                : "0.25000000",
+            customPricePerMillionCacheWrite:
+              body.customPricePerMillionCacheWrite === null
+                ? null
+                : "0.00000000",
             cachePriceSource:
               body.customPricePerMillionCacheRead !== null ||
               body.customPricePerMillionCacheWrite !== null
@@ -255,6 +289,15 @@ describe("ModelsPage", () => {
       ),
     );
     await user.click(screen.getByRole("button", { name: "Pricing" }));
+    expect(screen.getByLabelText("Input")).toHaveValue("2.50");
+    expect(screen.getByLabelText("Output")).toHaveValue("0.006");
+    expect(screen.getByLabelText("Long input")).toHaveValue("10.00");
+    expect(screen.getByLabelText("Long output")).toHaveValue(
+      "99999999.98999998",
+    );
+    expect(screen.getByLabelText("Long cache read")).toHaveValue("0.00000001");
+    expect(screen.getByLabelText("Long cache write")).toHaveValue("0.00");
+    expect(updates).toHaveLength(0);
     expect(screen.getByLabelText("Cache read")).toHaveValue("");
     expect(screen.getByLabelText("Cache write")).toHaveValue("");
     await user.type(screen.getByLabelText("Cache read"), "0,25");
@@ -272,8 +315,14 @@ describe("ModelsPage", () => {
     await waitFor(() =>
       expect(updates).toEqual([
         expect.objectContaining({
+          customPricePerMillionInput: "2.50",
+          customPricePerMillionOutput: "0.006",
           customPricePerMillionCacheRead: "0.25",
           customPricePerMillionCacheWrite: "0",
+          longContextPricePerMillionInput: "10.00",
+          longContextPricePerMillionOutput: "99999999.98999998",
+          longContextPricePerMillionCacheRead: "0.00000001",
+          longContextPricePerMillionCacheWrite: "0.00",
         }),
       ]),
     );
@@ -289,7 +338,7 @@ describe("ModelsPage", () => {
     );
     await user.click(screen.getByRole("button", { name: "Pricing" }));
     expect(screen.getByLabelText("Cache read")).toHaveValue("0.25");
-    expect(screen.getByLabelText("Cache write")).toHaveValue("0");
+    expect(screen.getByLabelText("Cache write")).toHaveValue("0.00");
     await user.click(screen.getByRole("button", { name: "Reset" }));
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
     await waitFor(() => expect(updates).toHaveLength(2));
@@ -577,6 +626,40 @@ describe("ModelsPage", () => {
     expect(screen.queryByText("$/M Output")).not.toBeInTheDocument();
   });
 
+  it("shows a media model's media rates in place of the fallback token price", async () => {
+    keyCreated = true;
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-models`, () =>
+        HttpResponse.json([
+          {
+            ...model,
+            id: "model-tts",
+            externalId: "openai/tts-1",
+            provider: "openai",
+            modelId: "tts-1",
+            inputModalities: ["text"],
+            outputModalities: ["audio"],
+            pricePerMillionInput: "50.00",
+            pricePerMillionOutput: "50.00",
+            priceSource: "default",
+            pricePerMillionCacheRead: "12.50",
+            pricePerMillionCacheWrite: null,
+            mediaPricing: {
+              per: "million_characters",
+              input: [{ kind: "text", usd: 15 }],
+              output: [],
+            },
+          },
+        ]),
+      ),
+    );
+    renderPage();
+
+    expect(await screen.findByText("$15.00 / 1M chars")).toBeVisible();
+    expect(screen.queryByText("$50.00 / $50.00")).not.toBeInTheDocument();
+    expect(screen.queryByText("$12.50 / -")).not.toBeInTheDocument();
+  });
+
   it("loads the selected instance's prices and keeps an unknown cache direction visible", async () => {
     keyCreated = true;
     vi.mocked(useSearchParams).mockReturnValue(
@@ -599,8 +682,11 @@ describe("ModelsPage", () => {
       }),
     );
     renderPage();
-    expect(await screen.findByText("$2.00 / $8.00")).toBeVisible();
-    expect(screen.getByText("$0.50 / -")).toBeVisible();
+    // Key discovery can refetch the table and replace a row after it is found.
+    await waitFor(() => {
+      expect(screen.getByText("$2.00 / $8.00")).toBeVisible();
+      expect(screen.getByText("$0.50 / -")).toBeVisible();
+    });
   });
 
   it("hydrates filter state from the URL query params", async () => {

@@ -280,6 +280,7 @@ function row(overrides: Partial<UsageRow> & Pick<UsageRow, "userId" | "name">) {
     cleanupInterval: "calendar_month",
     models: null,
     spent,
+    estimatedUsage: false,
     percent: limitValue ? (spent / limitValue) * 100 : null,
     status: "ok",
     customLimitId: null,

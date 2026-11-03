@@ -4,6 +4,9 @@ import type { ScorerSpec } from "./spec";
 export interface PreRunInput {
   firstUserText: string;
   client: string | null;
+  systemPrompt?: string;
+  /** Names only: never descriptions, parameter schemas or tool results. */
+  tools?: { name: string }[];
 }
 
 export interface SignalSourceContext {
@@ -27,6 +30,7 @@ type SignalSourceErrorReason =
   | "timeout"
   | "http"
   | "invalid_response"
+  | "input_too_large"
   | "no_credentials";
 
 export class SignalSourceError extends Error {

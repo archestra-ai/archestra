@@ -2,7 +2,7 @@
 title: Agent Runtime Metrics
 description: Track agent run outcomes, startup time, delivery, and runtime health.
 order: 4
-lastUpdated: 2026-10-28
+lastUpdated: 2026-10-31
 ---
 
 Track agent runs from startup through completion and identify tasks waiting for attention.
@@ -23,9 +23,15 @@ Track agent runs from startup through completion and identify tasks waiting for 
 | <span id="agent_runtime_health_age_seconds"></span>`agent_runtime_health_age_seconds` | Gauge | `agent_id`, `backend`, `condition` | Age of the oldest task per condition |
 | <span id="agent_runtime_health_collection_timestamp_seconds"></span>`agent_runtime_health_collection_timestamp_seconds` | Gauge | | Time of the last health snapshot |
 
+## Boundary Refusal Reasons
+
 Filter `agent_runtime_crossing_refusals_total` by `reason` to identify missing session proofs, rejected clients, refused launches, or held runtime output.
 
+## Health Conditions
+
 `agent_runtime_health_tasks` conditions are `working`, `submitted`, `input_required`, `auth_required`, `failed_recent` (the last 15 minutes), and `completion_pending`. Conditions overlap: a task waiting for authentication also counts as `working`. `agent_runtime_health_age_seconds` conditions are `heartbeat`, `submitted`, and `completion_pending`.
+
+## Replica Aggregation and Freshness
 
 Every replica reports the same health gauge values, so aggregate them with `max`, not `sum`. Alert on failed scrapes too, because missing samples do not mean healthy runs. A fresh heartbeat shows the orchestration is alive, not that the agent is making progress.
 
@@ -38,3 +44,14 @@ max by (agent_id, backend) (
 ```
 
 Add a pending period (`for: 5m`) to skip transient spikes.
+
+## Kubernetes Collection
+
+Pod and cluster resource metrics come from Kubernetes collectors, separately from Archestra's runtime metrics:
+
+| Collector | Signals |
+| --- | --- |
+| kubelet `/metrics/cadvisor` | Container CPU usage and memory working set |
+| kube-state-metrics | Pod phase, readiness, restart counts, termination reasons, and node allocatable capacity |
+
+Scrape both sources and preserve `cluster`, `namespace`, `pod`, and `container` labels so resource series can be scoped to runtime workloads. Missing collectors produce no resource samples; they do not imply zero resource use.

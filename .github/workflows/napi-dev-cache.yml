@@ -1,0 +1,112 @@
+name: Native Addon Dev Cache
+
+# Publishes the five napi addons, built exactly as Tilt builds them
+# (`pnpm build:dev`), for every main tree of platform/archestra-rs. Dev stacks
+# whose tree matches install them with platform/scripts/napi-prebuilt.mjs
+# instead of compiling them. The build runs on Debian bookworm so the binaries
+# load on the agent images (glibc 2.36) and on newer Linux distributions.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "platform/archestra-rs/**"
+      - "platform/rust-toolchain.toml"
+      - "platform/pnpm-lock.yaml"
+      - "platform/scripts/napi-prebuilt.mjs"
+      - ".github/workflows/napi-dev-cache.yml"
+  workflow_dispatch:
+    inputs:
+      republish:
+        description: "Build and publish even if an entry for this key exists"
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: napi-dev-cache-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish prebuilt dev addons
+    runs-on: ubicloud-standard-16-ubuntu-2404
+    timeout-minutes: 45
+    permissions:
+      contents: read # Check out the addon sources.
+      id-token: write # Required for Workload Identity Federation.
+    env:
+      REPOSITORY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/napi-dev-cache
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Compute cache key
+        id: key
+        run: echo "value=$(node platform/scripts/napi-prebuilt.mjs --key)" >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate to Google Artifact Registry
+        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        with:
+          # The development deploy identity, as on-commits-to-main passes it to
+          # the image workflows; GCP_* secrets exist only in release environments.
+          service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          registry: europe-west1-docker.pkg.dev
+
+      - name: Check for a published entry
+        id: published
+        env:
+          KEY: ${{ steps.key.outputs.value }}
+          REPUBLISH: ${{ inputs.republish }}
+        run: |
+          if [ "$REPUBLISH" != "true" ] && docker manifest inspect "$REPOSITORY:$KEY" >/dev/null 2>&1; then
+            echo "Already published: $REPOSITORY:$KEY"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The agent image takes Rust from the same rust:1.93.0-bookworm image.
+      - name: Build the addons on Debian bookworm
+        if: steps.published.outputs.exists != 'true'
+        run: |
+          docker build --tag "napi-dev-builder:${GITHUB_RUN_ID}" - <<'EOF'
+          FROM rust:1.93.0-bookworm@sha256:d0a4aa3ca2e1088ac0c81690914a0d810f2eee188197034edf366ed010a2b382 AS rust
+          FROM node:24-bookworm@sha256:e7add2a490bb17d97b485b8641bd88455fff7839ade0f5eba493c3508124d413
+          COPY --from=rust /usr/local/cargo /usr/local/cargo
+          COPY --from=rust /usr/local/rustup /usr/local/rustup
+          ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo PATH=/usr/local/cargo/bin:$PATH
+          EOF
+          mkdir -p "$RUNNER_TEMP/napi"
+          # rustup installs rust-toolchain.toml's components once before the
+          # parallel builds, which would otherwise race for them.
+          docker run --rm -e CI=true -v "$PWD:/src" -v "$RUNNER_TEMP/napi:/out" -w /src/platform "napi-dev-builder:${GITHUB_RUN_ID}" \
+            bash -euo pipefail -c '
+              git config --global --add safe.directory /src
+              corepack enable
+              rustup show active-toolchain
+              pnpm install --frozen-lockfile --filter "./archestra-rs/**"
+              pnpm --filter @archestra/app-runtime-rs --filter @archestra/image-rs --filter @archestra/openappa-rs \
+                --filter @archestra/router-rs --filter @archestra/sandbox-rs build:dev
+              node scripts/napi-prebuilt.mjs --pack /out
+            '
+
+      - name: Publish
+        if: steps.published.outputs.exists != 'true'
+        env:
+          KEY: ${{ steps.key.outputs.value }}
+        run: |
+          test "$(jq -r .key "$RUNNER_TEMP/napi/manifest.json")" = "$KEY"
+          docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --tag "$REPOSITORY:$KEY" --push --file - "$RUNNER_TEMP/napi" <<'EOF'
+          FROM scratch
+          COPY . /
+          EOF
+          echo "Published $REPOSITORY:$KEY"

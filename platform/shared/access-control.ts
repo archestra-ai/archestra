@@ -28,7 +28,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   ...(defaultStatements as unknown as Record<string, Action[]>),
 
   // Agents
-  agent: ["read", "create", "delete"],
+  agent: ["read", "create", "delete", "configure-runtime"],
   skill: ["read", "create", "delete"],
   plugin: ["read", "create", "update", "delete"],
   app: ["read", "create"],
@@ -339,6 +339,8 @@ export const permissionDescriptions: Record<string, string> = {
   "agent:read":
     "Open Agents, and use the code sandboxes and files of agents you can use",
   "agent:create": "Create new agents",
+  "agent:configure-runtime":
+    "Create runtime-backed agents and change or remove their runtime configuration",
   "agent:delete": "Open the trash of deleted agents",
   "skill:read": "Open Skills",
   "skill:create": "Create new agent skills",
@@ -483,6 +485,20 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.OpenAiAudioTranslationsWithAgent]: {},
   [RouteId.AzureImagesWithDefaultAgent]: {},
   [RouteId.AzureImagesWithAgent]: {},
+  [RouteId.OpenAiImagesWithDefaultAgent]: {},
+  [RouteId.OpenAiImagesWithAgent]: {},
+  [RouteId.OpenAiImageEditsWithDefaultAgent]: {},
+  [RouteId.OpenAiImageEditsWithAgent]: {},
+  [RouteId.ModelRouterImagesWithDefaultAgent]: {},
+  [RouteId.ModelRouterImagesWithAgent]: {},
+  [RouteId.ModelRouterImageEditsWithDefaultAgent]: {},
+  [RouteId.ModelRouterImageEditsWithAgent]: {},
+  [RouteId.ModelRouterAudioSpeechWithDefaultAgent]: {},
+  [RouteId.ModelRouterAudioSpeechWithAgent]: {},
+  [RouteId.ModelRouterAudioTranscriptionsWithDefaultAgent]: {},
+  [RouteId.ModelRouterAudioTranscriptionsWithAgent]: {},
+  [RouteId.ModelRouterAudioTranslationsWithDefaultAgent]: {},
+  [RouteId.ModelRouterAudioTranslationsWithAgent]: {},
   [RouteId.AzureImageEditsWithDefaultAgent]: {},
   [RouteId.AzureImageEditsWithAgent]: {},
   [RouteId.AzureCreateFile]: {},
@@ -525,6 +541,14 @@ export const requiredEndpointPermissionsMap: Partial<
    * authenticated but no specific permission.
    */
   [RouteId.GetOrganization]: {},
+  // The tiers' names and sizes: the agent form shows them to anyone who may edit an agent.
+  [RouteId.GetAgentRuntimeTiers]: {},
+  [RouteId.ListAgentRuntimeTemplates]: {},
+  [RouteId.GetAgentRuntimeTemplate]: {}, // Scoped create/update check in the handler.
+  [RouteId.GetRuntimeTemplateSettings]: { organizationSettings: ["update"] },
+  [RouteId.SaveRuntimeTemplateSettings]: { organizationSettings: ["update"] },
+  /** Names the default model for every member, so "Organization default" reads the same for all. */
+  [RouteId.GetOrganizationDefaultModel]: {},
 
   // Agent Runtime belongs to Agents. Read access is enough to view
   // runs and manage one's own declared credentials; shared credential writes
@@ -571,6 +595,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DownloadAgentWorkspaceTransfer]: {},
   [RouteId.UploadAgentWorkspaceTransfer]: {},
   [RouteId.DeleteAgentRun]: {},
+  // Like the single-run routes: each run is checked against its owner.
+  [RouteId.BulkDeleteAgentRuns]: {},
+  [RouteId.BulkCancelAgentRuns]: {},
+  [RouteId.BulkDeleteAgentWorkspaces]: {},
   // Completing onboarding flips an org-wide flag, so gate it on admin-level
   // organization-settings update, like the other org-settings routes.
   [RouteId.CompleteOnboarding]: { organizationSettings: ["update"] },
@@ -743,6 +771,9 @@ export const requiredEndpointPermissionsMap: Partial<
     log: ["read"],
   },
   [RouteId.GetInteraction]: {
+    log: ["read"],
+  },
+  [RouteId.GetInteractionAutoRouting]: {
     log: ["read"],
   },
   [RouteId.GetUniqueExternalAgentIds]: {
@@ -1194,26 +1225,16 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgentA2aDelegations]: {},
   [RouteId.SyncAgentA2aDelegations]: {},
   [RouteId.GetAllDelegationConnections]: {},
-  [RouteId.GetLimits]: {
-    llmLimit: ["read"],
-  },
-  [RouteId.GetLimitLabelKeys]: { llmLimit: ["read"] },
-  [RouteId.GetLimitLabelValues]: { llmLimit: ["read"] },
-  [RouteId.CreateLimit]: {
-    llmLimit: ["create"],
-  },
-  [RouteId.GetLimit]: {
-    llmLimit: ["read"],
-  },
-  [RouteId.UpdateLimit]: {
-    llmLimit: ["update"],
-  },
-  [RouteId.DeleteLimit]: {
-    llmLimit: ["delete"],
-  },
-  [RouteId.BulkDeleteLimits]: {
-    llmLimit: ["delete"],
-  },
+  // Handlers also allow a team admin for only their own team's limits.
+  [RouteId.GetLimits]: {},
+  [RouteId.GetLimitLabelKeys]: {},
+  [RouteId.GetLimitLabelValues]: {},
+  [RouteId.CreateLimit]: {},
+  [RouteId.GetLimit]: {},
+  [RouteId.UpdateLimit]: {},
+  [RouteId.ResetLimitUsage]: {},
+  [RouteId.DeleteLimit]: {},
+  [RouteId.BulkDeleteLimits]: {},
   [RouteId.ListDefaultUserLimits]: {
     llmLimit: ["read"],
   },
@@ -1378,7 +1399,7 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   // Returns only the CALLER'S own decoded token claims (never another user's,
   // never provider configuration), so team admins can find their group value
-  // while configuring external group sync.
+  // while linking groups in Team Sync.
   [RouteId.GetIdentityProviderLatestIdTokenClaims]: {
     team: ["read"],
   },
@@ -1433,6 +1454,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetTeamStatistics]: {
     llmCost: ["read"],
   },
+  [RouteId.GetModelUsage]: { llmCost: ["read"] },
+  [RouteId.GetMyModelUsage]: {},
   [RouteId.GetProxyCostStatistics]: { llmCost: ["read"] },
   [RouteId.GetAgentStatistics]: {
     llmCost: ["read"],

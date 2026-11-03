@@ -13,11 +13,11 @@ import {
   preflightArchestraToolCall,
 } from "@/archestra-mcp-server";
 import config from "@/config";
+import { AgentExcludedToolModel, AgentModel, ToolModel } from "@/models";
 import {
   syncBuiltInAgents,
   syncOpenAppaConfigAgentCapabilities,
-} from "@/database/seed";
-import { AgentExcludedToolModel, AgentModel, ToolModel } from "@/models";
+} from "@/services/seed";
 import { beforeEach, describe, expect, test } from "@/test";
 import { createAgentServer } from "./utils";
 

@@ -1,6 +1,6 @@
 {
   "name": "@archestra/shared",
-  "version": "1.5.0-rc.13",
+  "version": "1.5.0-rc.20",
   "description": "",
   "type": "module",
   "sideEffects": false,
@@ -43,14 +43,14 @@
     "lint": "biome check",
     "lint:fix": "biome check --write",
     "lint:fix:unsafe": "biome check --write --unsafe",
-    "type-check": "tsc --noEmit",
-    "test": "vitest",
+    "type-check": "tsx ../scripts/type-check.ts --noEmit",
+    "test": "node ../scripts/check-workspace.mjs test",
     "codegen:api-client": "tsx hey-api/openapi-ts.ts && biome check --write ./hey-api/clients",
     "codegen:theme-css": "tsx ./themes/generate-theme-css.ts",
     "codegen": "pnpm codegen:api-client && pnpm codegen:theme-css",
-    "check:ci": "concurrently --kill-others-on-fail --group --names type-check,test,knip,biome 'pnpm type-check' 'pnpm test' 'pnpm knip' 'biome ci'",
-    "check:commit": "concurrently --kill-others-on-fail --group --names type-check,knip,biome 'pnpm type-check' 'pnpm knip' 'biome ci'",
-    "knip": "knip"
+    "check:ci": "node ../scripts/check-workspace.mjs ci",
+    "check:commit": "node ../scripts/check-workspace.mjs commit",
+    "knip": "tsx ../scripts/heavy-lane.ts --label \"knip (shared)\" -- knip"
   },
   "keywords": [],
   "author": "",
@@ -63,7 +63,7 @@
   "devDependencies": {
     "@hey-api/openapi-ts": "^0.97.3",
     "@types/node": "^25",
-    "knip": "^5.85.0",
+    "knip": "^6.43.0",
     "typescript": "catalog:",
     "typescript-7": "catalog:",
     "vitest": "^4.1.11"

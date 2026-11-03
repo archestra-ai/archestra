@@ -48,6 +48,27 @@ test("exports both virtual-key identities without exposing credential values", a
   });
 });
 
+test("encrypted request errors cannot export prompt text through span status", async () => {
+  await expect(
+    startActiveLlmSpan({
+      operationName: "chat",
+      provider: "openai",
+      model: "gpt-4o",
+      stream: true,
+      suppressContent: true,
+      callback: async () => {
+        throw new Error("private prompt echoed by provider");
+      },
+    }),
+  ).rejects.toThrow("private prompt");
+  const [span] = exporter.getFinishedSpans();
+  expect(span.status.code).toBe(2);
+  expect(span.status.message).toBeUndefined();
+  expect(
+    JSON.stringify({ attributes: span.attributes, events: span.events }),
+  ).not.toContain("private prompt");
+});
+
 test("exports OAuth application attribution with no virtual-key identity", async () => {
   await startActiveLlmSpan({
     operationName: "chat",

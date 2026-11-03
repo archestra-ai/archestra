@@ -25,6 +25,7 @@ import { useMswServer } from "@/test/msw";
 import modelRouterRoutes from "./routes/model-router";
 
 const native = vi.hoisted(() => ({
+  collectOpenappaMetrics: vi.fn(() => ""),
   initializeOpenappa: vi.fn(),
   dispatchHook: vi.fn(),
   loadChildReturns: vi.fn(

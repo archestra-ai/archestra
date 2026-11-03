@@ -49,7 +49,6 @@ test("managed Vault stores the token remotely and deletes it on disconnect", asy
     privileged: false,
     environment: [],
     credentials: [],
-    resources: null,
     ttlHours: null,
     idleTimeoutMinutes: null,
     maxCostUsd: null,

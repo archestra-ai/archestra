@@ -1,3 +1,5 @@
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -20,6 +22,11 @@ import {
 import { getAllArchestraMcpTools } from "@/archestra-mcp-server";
 import { TOOL_PERMISSIONS } from "@/archestra-mcp-server/rbac";
 import logger from "@/logging";
+import { assertPortsBound } from "@/models/ports";
+
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
+assertPortsBound();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -74,6 +81,10 @@ const groupLabel = new Map<ArchestraToolGroupId, string>(
  * with no entry has no requirement beyond its RBAC permission.
  */
 const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
+  get_agent_skill_policy:
+    "Also requires [`skill:read`](/docs/reference/permissions#skill:read). Returns an internal agent's skill activation policy.",
+  patch_agent_skill_policy:
+    "Also requires [`skill:read`](/docs/reference/permissions#skill:read). Requires the current revision and an update grant on the agent. Only skills the caller can access may be added.",
   // Membership mutations gate on `team:read`, then require the caller to be an
   // organization-level team manager (holds `team:create`) OR an admin
   // (team-member role) of the target team.

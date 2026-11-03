@@ -20,6 +20,7 @@ import {
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_START_AGENT_RUN_SHORT_NAME,
 } from "@archestra/shared";
 import {
   type McpUiToolMeta,
@@ -56,7 +57,7 @@ import {
   readKbChunksFromToolResult,
 } from "@/knowledge-base/quote-verification";
 import logger from "@/logging";
-import { ToolModel } from "@/models";
+import { McpToolCallModel, ToolModel } from "@/models";
 import { metrics } from "@/observability";
 import {
   ATTR_MCP_IS_ERROR_RESULT,
@@ -66,10 +67,10 @@ import {
 import { remedyCallNeedsHumanReview } from "@/openappa/a2a-hitl-review";
 import type { SubagentBinding } from "@/openappa/subagent-binding";
 import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
-import type { A2AOAuthExecution } from "@/routes/mcp-gateway/utils";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import type { Tool as CatalogTool } from "@/types";
 import { agentOwner } from "@/types";
+import type { A2AOAuthExecution } from "@/types/a2a-actor";
 
 /** Gateway token selected for the current call (see selectMCPGatewayToken). */
 export interface McpGatewayToken {
@@ -111,6 +112,10 @@ export interface ChatToolContext {
   sessionId?: string;
   delegationChain?: string;
   scheduleTriggerRunId?: string;
+  /** The calling agent run's task ID or run ID, when dispatched from a runtime container or chat. */
+  runId?: string;
+  /** Explicit runtime tier of the calling instance, when available. */
+  agentRuntimeTier?: string;
   abortSignal?: AbortSignal;
   elicitation?: ChatMcpElicitationBridge;
   /** User identity for OTEL span attributes */
@@ -280,6 +285,8 @@ export function buildMcpGatewayTool(params: {
                 organizationId: ctx.organizationId,
                 sessionId: ctx.sessionId,
                 scheduleTriggerRunId: ctx.scheduleTriggerRunId,
+                runId: ctx.runId,
+                agentRuntimeTier: ctx.agentRuntimeTier,
                 abortSignal: ctx.abortSignal,
                 elicitation: ctx.elicitation,
                 // EncryptedChat: never detach into a durable task — task rows
@@ -315,6 +322,7 @@ export function buildMcpGatewayTool(params: {
                   userId: ctx.userId,
                   llmSessionId: ctx.sessionId,
                   llmToolCallId: options.toolCallId,
+                  runId: ctx.runId,
                 }),
               },
             );
@@ -340,6 +348,59 @@ export function buildMcpGatewayTool(params: {
                 mcpTool.name,
                 toolArguments,
               );
+            } else if (!ctx.runId) {
+              const targetToolName = resolveRunToolTargetName(
+                mcpTool.name,
+                toolArguments,
+              );
+              const isStartAgentRun =
+                archestraMcpBranding.getToolShortName(targetToolName) ===
+                  TOOL_START_AGENT_RUN_SHORT_NAME ||
+                targetToolName === TOOL_START_AGENT_RUN_SHORT_NAME;
+              const launchedRunId = isStartAgentRun
+                ? (
+                    archestraResponse.structuredContent as
+                      | { run?: { run_id?: unknown } }
+                      | undefined
+                  )?.run?.run_id
+                : undefined;
+              if (
+                typeof launchedRunId === "string" &&
+                launchedRunId.length > 0
+              ) {
+                ctx.runId = launchedRunId;
+                const sessionId = ctx.conversationId ?? ctx.sessionId ?? null;
+                if (sessionId) {
+                  try {
+                    await McpToolCallModel.create({
+                      agentId: ctx.agentId,
+                      mcpServerName: archestraMcpBranding.serverName,
+                      method: "tools/call",
+                      durationMs: Math.max(0, Date.now() - startTime),
+                      toolCall: {
+                        id: options.toolCallId,
+                        name: mcpTool.name,
+                        arguments: toolArguments || {},
+                      },
+                      toolResult: ctx.suppressContentLogging
+                        ? { redacted: true }
+                        : archestraResponse,
+                      userId: ctx.userId ?? null,
+                      runId: launchedRunId,
+                      sessionId,
+                      llmToolCallId: options.toolCallId ?? null,
+                      authMethod: null,
+                      oauthClientId: ctx.mcpGwToken?.oauthClientId ?? null,
+                      source: "chat",
+                    });
+                  } catch (dbError) {
+                    logger.info(
+                      { err: dbError },
+                      "Failed to persist archestra run launch tool call",
+                    );
+                  }
+                }
+              }
             }
 
             // Verifiable citations (#7161): capture the returned KB chunks
@@ -450,6 +511,8 @@ export function buildAgentDelegationTool(params: {
     chatOpsPinnedAgentId: ctx.chatOpsPinnedAgentId,
     sessionId: ctx.sessionId,
     scheduleTriggerRunId: ctx.scheduleTriggerRunId,
+    runId: ctx.runId,
+    agentRuntimeTier: ctx.agentRuntimeTier,
     delegationChain: ctx.delegationChain,
     openappaSubagent: ctx.appaSubagent,
     abortSignal: ctx.abortSignal,
@@ -457,6 +520,7 @@ export function buildAgentDelegationTool(params: {
       mcpGwToken: ctx.mcpGwToken,
       organizationId: ctx.organizationId,
       userId: ctx.userId,
+      runId: ctx.runId,
     }),
   };
 
@@ -1484,6 +1548,7 @@ function buildTokenAuthContext({
   userId,
   llmSessionId,
   llmToolCallId,
+  runId,
 }: {
   mcpGwToken: McpGatewayToken | null;
   organizationId: string;
@@ -1492,6 +1557,7 @@ function buildTokenAuthContext({
   llmSessionId?: string;
   /** The model's id for the tool call this context executes. */
   llmToolCallId?: string;
+  runId?: string;
 }): TokenAuthContext | undefined {
   if (!mcpGwToken) {
     return undefined;
@@ -1507,6 +1573,7 @@ function buildTokenAuthContext({
     serviceAccountId: mcpGwToken.serviceAccountId,
     oauthClientId: mcpGwToken.oauthClientId,
     oauthExecution: mcpGwToken.oauthExecution,
+    ...(runId && { runId }),
     ...(llmSessionId && { llmSessionId }),
     ...(llmToolCallId && { llmToolCallId }),
   };
@@ -1554,16 +1621,18 @@ function reportToolMetrics(params: {
 }
 
 /**
- * Context needed to fire the PreToolUse / PostToolUse lifecycle hooks against a
- * conversation's default sandbox. Hooks require a conversationId (the sandbox
- * session key) and the conversation's user id, so the caller passes both.
+ * Context needed to fire the PreToolUse / PostToolUse lifecycle hooks against
+ * the run's default sandbox: the conversation's in chat, the execution's
+ * (keyed by scopeKey) in headless runs.
  */
 interface ToolHookContext {
   agentId: string;
   organizationId: string;
-  /** Conversation user id — the default sandbox is keyed per org/user/conversation. */
+  /** Run user id — the default sandbox is keyed per org/user/run scope. */
   userId: string;
   conversationId?: string;
+  /** Per-run scope key; locates the execution's sandbox in headless runs. */
+  scopeKey?: string;
   /** Encrypted chats: hook dispatch is skipped (payloads persist). */
   suppressContentLogging?: boolean;
   /**
@@ -1578,7 +1647,7 @@ interface ToolHookContext {
  * Fires the PreToolUse lifecycle hook before a tool executes. Returns a block
  * reason string when a hook blocks (the caller must NOT execute the tool and
  * should return a tool-result describing the block); returns null to proceed.
- * Cheap no-op when no conversation context or no hooks. Fails open on error.
+ * Cheap no-op when the run has no sandbox scope or no hooks. Fails open on error.
  */
 async function firePreToolUseHook(params: {
   ctx: ToolHookContext;
@@ -1587,7 +1656,7 @@ async function firePreToolUseHook(params: {
   toolCallId?: string;
 }): Promise<string | null> {
   const { ctx, toolName, toolInput, toolCallId } = params;
-  if (!ctx.conversationId || ctx.suppressContentLogging) {
+  if ((!ctx.conversationId && !ctx.scopeKey) || ctx.suppressContentLogging) {
     // EncryptedChat: hook dispatch would hand tool args to the hook sandbox,
     // which persists its payloads into the durable replay log in plaintext.
     return null;
@@ -1596,6 +1665,7 @@ async function firePreToolUseHook(params: {
     const result = await hookDispatcherService.fire({
       event: "pre_tool_use",
       conversationId: ctx.conversationId,
+      isolationKey: ctx.scopeKey,
       agentId: ctx.agentId,
       organizationId: ctx.organizationId,
       userId: ctx.userId,
@@ -1698,7 +1768,7 @@ const POST_TOOL_USE_RESPONSE_CAP = 50_000;
  * Fires the PostToolUse lifecycle hook after a tool executes. When a hook blocks
  * and supplies a reason, returns hook feedback to append to the tool result;
  * otherwise returns null (return the result unchanged). Cheap no-op without
- * conversation context or hooks. Fails open on error.
+ * a run scope or hooks. Fails open on error.
  */
 async function firePostToolUseHook(params: {
   ctx: ToolHookContext;
@@ -1708,7 +1778,7 @@ async function firePostToolUseHook(params: {
   toolCallId?: string;
 }): Promise<string | null> {
   const { ctx, toolName, toolInput, toolResponse, toolCallId } = params;
-  if (!ctx.conversationId || ctx.suppressContentLogging) {
+  if ((!ctx.conversationId && !ctx.scopeKey) || ctx.suppressContentLogging) {
     // EncryptedChat: see firePreToolUseHook — hook payloads persist in plaintext.
     return null;
   }
@@ -1716,6 +1786,7 @@ async function firePostToolUseHook(params: {
     const result = await hookDispatcherService.fire({
       event: "post_tool_use",
       conversationId: ctx.conversationId,
+      isolationKey: ctx.scopeKey,
       agentId: ctx.agentId,
       organizationId: ctx.organizationId,
       userId: ctx.userId,
@@ -1862,7 +1933,12 @@ function ensureExplicitSchemaTypes(
   for (const key of SINGLE_SUBSCHEMA_KEYS) {
     const sub = result[key];
     if (isRecord(sub)) {
-      result[key] = ensureExplicitSchemaTypes(sub);
+      // `{}` and `true` both accept any member value; typing the bare node
+      // would narrow every map value to an object.
+      result[key] =
+        key === "additionalProperties" && Object.keys(sub).length === 0
+          ? true
+          : ensureExplicitSchemaTypes(sub);
     }
   }
 

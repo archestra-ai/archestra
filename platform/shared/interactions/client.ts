@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { type ClientMark, KIMI_MARK, PI_MARK } from "../client-mark";
+import {
+  type ClientMark,
+  COPILOT_CLI_MARK,
+  KIMI_MARK,
+  PI_MARK,
+} from "../client-mark";
 import type { SupportedProvider } from "../model-constants";
 import {
   OPENCODE_FAMILY_CLIENTS,
@@ -503,7 +508,10 @@ const CLIENT_FAMILIES: ReadonlyArray<ClientFamily> = [
   {
     filter: COPILOT_CLI_CLIENT_FILTER,
     label: COPILOT_CLI_CLIENT_LABEL,
+    // The client's own mark, as on its Connect tile: the GitHub Copilot
+    // provider logo would read as the provider, not the CLI.
     provider: "github-copilot",
+    mark: COPILOT_CLI_MARK,
     agentIds: COPILOT_CLI_CLIENT_AGENT_IDS,
     isClientAgentId: isCopilotCliClientAgentId,
   },

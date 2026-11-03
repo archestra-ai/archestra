@@ -416,7 +416,7 @@ describe("TeamModel", () => {
   });
 
   // ==========================================
-  // External Group Sync Tests
+  // Team Sync Tests
   // ==========================================
 
   describe("getExternalGroups", () => {
@@ -436,7 +436,7 @@ describe("TeamModel", () => {
   });
 
   describe("addExternalGroup", () => {
-    test("should add an external group mapping", async ({
+    test("should add a Team Sync group link", async ({
       makeUser,
       makeOrganization,
       makeTeam,
@@ -445,7 +445,10 @@ describe("TeamModel", () => {
       const org = await makeOrganization();
       const team = await makeTeam(org.id, user.id);
 
-      const group = await TeamModel.addExternalGroup(team.id, "engineering");
+      const group = await TeamModel.addExternalGroup({
+        teamId: team.id,
+        groupIdentifier: "engineering",
+      });
 
       expect(group.id).toBeDefined();
       expect(group.teamId).toBe(team.id);
@@ -463,8 +466,14 @@ describe("TeamModel", () => {
       const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
       const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
 
-      const group1 = await TeamModel.addExternalGroup(team1.id, "admins");
-      const group2 = await TeamModel.addExternalGroup(team2.id, "admins");
+      const group1 = await TeamModel.addExternalGroup({
+        teamId: team1.id,
+        groupIdentifier: "admins",
+      });
+      const group2 = await TeamModel.addExternalGroup({
+        teamId: team2.id,
+        groupIdentifier: "admins",
+      });
 
       expect(group1.groupIdentifier).toBe("admins");
       expect(group2.groupIdentifier).toBe("admins");
@@ -473,7 +482,7 @@ describe("TeamModel", () => {
   });
 
   describe("removeExternalGroup", () => {
-    test("should remove an external group mapping", async ({
+    test("should remove a Team Sync group link", async ({
       makeUser,
       makeOrganization,
       makeTeam,
@@ -482,7 +491,10 @@ describe("TeamModel", () => {
       const org = await makeOrganization();
       const team = await makeTeam(org.id, user.id);
 
-      await TeamModel.addExternalGroup(team.id, "engineering");
+      await TeamModel.addExternalGroup({
+        teamId: team.id,
+        groupIdentifier: "engineering",
+      });
 
       // Verify group was added
       let groups = await TeamModel.getExternalGroups(team.id);
@@ -513,7 +525,7 @@ describe("TeamModel", () => {
   });
 
   describe("removeExternalGroupById", () => {
-    test("should remove an external group mapping by ID", async ({
+    test("should remove a Team Sync group link by ID", async ({
       makeUser,
       makeOrganization,
       makeTeam,
@@ -522,7 +534,10 @@ describe("TeamModel", () => {
       const org = await makeOrganization();
       const team = await makeTeam(org.id, user.id);
 
-      const group = await TeamModel.addExternalGroup(team.id, "engineering");
+      const group = await TeamModel.addExternalGroup({
+        teamId: team.id,
+        groupIdentifier: "engineering",
+      });
 
       // Verify group was added
       let groups = await TeamModel.getExternalGroups(team.id);
@@ -546,7 +561,10 @@ describe("TeamModel", () => {
       const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
 
       // Add group to team2
-      const group = await TeamModel.addExternalGroup(team2.id, "engineering");
+      const group = await TeamModel.addExternalGroup({
+        teamId: team2.id,
+        groupIdentifier: "engineering",
+      });
 
       // Try to delete using team1's ID but team2's group ID - should fail
       const result = await TeamModel.removeExternalGroupById(
@@ -572,8 +590,14 @@ describe("TeamModel", () => {
       const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
       const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
 
-      await TeamModel.addExternalGroup(team1.id, "engineering");
-      await TeamModel.addExternalGroup(team2.id, "engineering");
+      await TeamModel.addExternalGroup({
+        teamId: team1.id,
+        groupIdentifier: "engineering",
+      });
+      await TeamModel.addExternalGroup({
+        teamId: team2.id,
+        groupIdentifier: "engineering",
+      });
 
       const teams = await TeamModel.findTeamsByExternalGroup(
         org.id,
@@ -595,7 +619,10 @@ describe("TeamModel", () => {
       const org = await makeOrganization();
       const team = await makeTeam(org.id, user.id);
 
-      await TeamModel.addExternalGroup(team.id, "engineering");
+      await TeamModel.addExternalGroup({
+        teamId: team.id,
+        groupIdentifier: "engineering",
+      });
 
       const teams = await TeamModel.findTeamsByExternalGroup(
         org.id,
@@ -617,8 +644,14 @@ describe("TeamModel", () => {
       const team1 = await makeTeam(org1.id, user.id, { name: "Team in Org 1" });
       const team2 = await makeTeam(org2.id, user.id, { name: "Team in Org 2" });
 
-      await TeamModel.addExternalGroup(team1.id, "shared-group");
-      await TeamModel.addExternalGroup(team2.id, "shared-group");
+      await TeamModel.addExternalGroup({
+        teamId: team1.id,
+        groupIdentifier: "shared-group",
+      });
+      await TeamModel.addExternalGroup({
+        teamId: team2.id,
+        groupIdentifier: "shared-group",
+      });
 
       const teamsInOrg1 = await TeamModel.findTeamsByExternalGroup(
         org1.id,
@@ -648,14 +681,23 @@ describe("TeamModel", () => {
       const team2 = await makeTeam(org.id, user.id, { name: "Product" });
       const team3 = await makeTeam(org.id, user.id, { name: "Design" });
 
-      await TeamModel.addExternalGroup(team1.id, "engineering");
-      await TeamModel.addExternalGroup(team2.id, "product");
-      await TeamModel.addExternalGroup(team3.id, "design");
+      await TeamModel.addExternalGroup({
+        teamId: team1.id,
+        groupIdentifier: "engineering",
+      });
+      await TeamModel.addExternalGroup({
+        teamId: team2.id,
+        groupIdentifier: "product",
+      });
+      await TeamModel.addExternalGroup({
+        teamId: team3.id,
+        groupIdentifier: "design",
+      });
 
-      const groupToTeams = await TeamModel.findTeamsByExternalGroups(org.id, [
-        "engineering",
-        "product",
-      ]);
+      const groupToTeams = await TeamModel.findTeamsByExternalGroups({
+        organizationId: org.id,
+        groupIdentifiers: ["engineering", "product"],
+      });
 
       expect(groupToTeams.size).toBe(2);
       expect(groupToTeams.get("engineering")).toHaveLength(1);
@@ -668,10 +710,10 @@ describe("TeamModel", () => {
     }) => {
       const org = await makeOrganization();
 
-      const groupToTeams = await TeamModel.findTeamsByExternalGroups(
-        org.id,
-        [],
-      );
+      const groupToTeams = await TeamModel.findTeamsByExternalGroups({
+        organizationId: org.id,
+        groupIdentifiers: [],
+      });
 
       expect(groupToTeams.size).toBe(0);
     });
@@ -685,14 +727,18 @@ describe("TeamModel", () => {
       const org = await makeOrganization();
       const team = await makeTeam(org.id, user.id, { name: "Operations" });
 
-      await TeamModel.addExternalGroup(team.id, "ops-admins");
+      await TeamModel.addExternalGroup({
+        teamId: team.id,
+        groupIdentifier: "ops-admins",
+      });
 
-      const groupToTeams = await TeamModel.findTeamsByExternalGroups(org.id, [
-        "Ops-Admins",
-      ]);
+      const groupToTeams = await TeamModel.findTeamsByExternalGroups({
+        organizationId: org.id,
+        groupIdentifiers: ["Ops-Admins"],
+      });
 
       expect(groupToTeams.size).toBe(1);
-      expect(groupToTeams.get("ops-admins")?.[0]?.id).toBe(team.id);
+      expect(groupToTeams.get("ops-admins")?.[0]?.team.id).toBe(team.id);
     });
   });
 
@@ -1079,6 +1125,167 @@ describe("TeamModel", () => {
   });
 
   describe("syncUserTeams", () => {
+    test("grants each linked group's team role, Admin when any matching group grants it", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const owner = await makeUser();
+      const org = await makeOrganization();
+      const platform = await makeTeam(org.id, owner.id, { name: "Platform" });
+      const product = await makeTeam(org.id, owner.id, { name: "Product" });
+      await TeamModel.addExternalGroup({
+        teamId: platform.id,
+        groupIdentifier: "engineering",
+      });
+      await TeamModel.addExternalGroup({
+        teamId: platform.id,
+        groupIdentifier: "platform-leads",
+        role: "admin",
+      });
+      await TeamModel.addExternalGroup({
+        teamId: product.id,
+        groupIdentifier: "engineering",
+      });
+      const user = await makeUser({ email: "lead@test.com" });
+
+      await TeamModel.syncUserTeams({
+        userId: user.id,
+        organizationId: org.id,
+        ssoGroups: ["engineering", "platform-leads"],
+      });
+
+      expect(await TeamModel.getMemberRole(platform.id, user.id)).toBe("admin");
+      expect(await TeamModel.getMemberRole(product.id, user.id)).toBe("member");
+    });
+
+    test("keeps synced members' roles in step with their groups and leaves manual members alone", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const owner = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, owner.id, { name: "Platform" });
+      await TeamModel.addExternalGroup({
+        teamId: team.id,
+        groupIdentifier: "platform-leads",
+        role: "admin",
+      });
+      const synced = await makeUser({ email: "synced@test.com" });
+      const manual = await makeUser({ email: "manual@test.com" });
+      await TeamModel.addMember(team.id, synced.id, "member", true);
+      await TeamModel.addMember(team.id, manual.id, "member", false);
+
+      const result = await TeamModel.syncUserTeams({
+        userId: synced.id,
+        organizationId: org.id,
+        ssoGroups: ["platform-leads"],
+      });
+      await TeamModel.syncUserTeams({
+        userId: manual.id,
+        organizationId: org.id,
+        ssoGroups: ["platform-leads"],
+      });
+
+      expect(result.roleChanged).toEqual([team.id]);
+      expect(await TeamModel.getMemberRole(team.id, synced.id)).toBe("admin");
+      expect(await TeamModel.getMemberRole(team.id, manual.id)).toBe("member");
+    });
+
+    test("demotes an Admin only when sync made them one, never one promoted by hand", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const owner = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, owner.id, { name: "Platform" });
+      await TeamModel.addExternalGroup({
+        teamId: team.id,
+        groupIdentifier: "engineering",
+      });
+      await TeamModel.addExternalGroup({
+        teamId: team.id,
+        groupIdentifier: "platform-leads",
+        role: "admin",
+      });
+      // Joined through sync before links had roles, then promoted by hand.
+      const promotedByHand = await makeUser({ email: "lead@test.com" });
+      await TeamModel.addMember(team.id, promotedByHand.id, "member", true);
+      await TeamModel.updateMemberRole({
+        teamId: team.id,
+        userId: promotedByHand.id,
+        role: "admin",
+      });
+      const syncedLead = await makeUser({ email: "synced-lead@test.com" });
+      await TeamModel.syncUserTeams({
+        userId: syncedLead.id,
+        organizationId: org.id,
+        ssoGroups: ["engineering", "platform-leads"],
+      });
+      expect(await TeamModel.getMemberRole(team.id, syncedLead.id)).toBe(
+        "admin",
+      );
+
+      // Both are now only in the Member group.
+      for (const userId of [promotedByHand.id, syncedLead.id]) {
+        await TeamModel.syncUserTeams({
+          userId,
+          organizationId: org.id,
+          ssoGroups: ["engineering"],
+        });
+      }
+
+      expect(await TeamModel.getMemberRole(team.id, promotedByHand.id)).toBe(
+        "admin",
+      );
+      expect(await TeamModel.getMemberRole(team.id, syncedLead.id)).toBe(
+        "member",
+      );
+    });
+
+    test("matches a provider's groups only for sign-ins through that provider", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeIdentityProvider,
+    }) => {
+      const owner = await makeUser();
+      const org = await makeOrganization();
+      const okta = await makeIdentityProvider(org.id);
+      const entra = await makeIdentityProvider(org.id);
+      const scoped = await makeTeam(org.id, owner.id, { name: "Scoped" });
+      const anyProvider = await makeTeam(org.id, owner.id, { name: "Any" });
+      await TeamModel.addExternalGroup({
+        teamId: scoped.id,
+        groupIdentifier: "engineering",
+        identityProviderId: okta.id,
+      });
+      await TeamModel.addExternalGroup({
+        teamId: anyProvider.id,
+        groupIdentifier: "engineering",
+      });
+      const viaEntra = await makeUser({ email: "entra@test.com" });
+      const viaOkta = await makeUser({ email: "okta@test.com" });
+
+      const entraSync = await TeamModel.syncUserTeams({
+        userId: viaEntra.id,
+        organizationId: org.id,
+        ssoGroups: ["engineering"],
+        identityProviderId: entra.id,
+      });
+      const oktaSync = await TeamModel.syncUserTeams({
+        userId: viaOkta.id,
+        organizationId: org.id,
+        ssoGroups: ["engineering"],
+        identityProviderId: okta.id,
+      });
+
+      expect(entraSync.added).toEqual([anyProvider.id]);
+      expect(oktaSync.added.sort()).toEqual([scoped.id, anyProvider.id].sort());
+    });
+
     test("should add user to teams based on their SSO groups", async ({
       makeUser,
       makeOrganization,
@@ -1091,13 +1298,16 @@ describe("TeamModel", () => {
       // Create a new user to sync
       const newUser = await makeUser({ email: "sso-user@test.com" });
 
-      await TeamModel.addExternalGroup(team.id, "engineering");
+      await TeamModel.addExternalGroup({
+        teamId: team.id,
+        groupIdentifier: "engineering",
+      });
 
-      const { added, removed } = await TeamModel.syncUserTeams(
-        newUser.id,
-        org.id,
-        ["engineering"],
-      );
+      const { added, removed } = await TeamModel.syncUserTeams({
+        userId: newUser.id,
+        organizationId: org.id,
+        ssoGroups: ["engineering"],
+      });
 
       expect(added).toContain(team.id);
       expect(removed).toHaveLength(0);
@@ -1120,13 +1330,16 @@ describe("TeamModel", () => {
       const newUser = await makeUser({ email: "existing@test.com" });
       await TeamModel.addMember(team.id, newUser.id);
 
-      await TeamModel.addExternalGroup(team.id, "engineering");
+      await TeamModel.addExternalGroup({
+        teamId: team.id,
+        groupIdentifier: "engineering",
+      });
 
-      const { added, removed } = await TeamModel.syncUserTeams(
-        newUser.id,
-        org.id,
-        ["engineering"],
-      );
+      const { added, removed } = await TeamModel.syncUserTeams({
+        userId: newUser.id,
+        organizationId: org.id,
+        ssoGroups: ["engineering"],
+      });
 
       expect(added).toHaveLength(0);
       expect(removed).toHaveLength(0);
@@ -1142,8 +1355,14 @@ describe("TeamModel", () => {
       const team1 = await makeTeam(org.id, user.id, { name: "Engineering" });
       const team2 = await makeTeam(org.id, user.id, { name: "Product" });
 
-      await TeamModel.addExternalGroup(team1.id, "engineering");
-      await TeamModel.addExternalGroup(team2.id, "product");
+      await TeamModel.addExternalGroup({
+        teamId: team1.id,
+        groupIdentifier: "engineering",
+      });
+      await TeamModel.addExternalGroup({
+        teamId: team2.id,
+        groupIdentifier: "product",
+      });
 
       // Create user with both groups initially
       const ssoUser = await makeUser({ email: "sso@test.com" });
@@ -1151,11 +1370,11 @@ describe("TeamModel", () => {
       await TeamModel.addMember(team2.id, ssoUser.id, MEMBER_ROLE_NAME, true);
 
       // Sync with only one group (simulating group membership change)
-      const { added, removed } = await TeamModel.syncUserTeams(
-        ssoUser.id,
-        org.id,
-        ["engineering"],
-      );
+      const { added, removed } = await TeamModel.syncUserTeams({
+        userId: ssoUser.id,
+        organizationId: org.id,
+        ssoGroups: ["engineering"],
+      });
 
       expect(added).toHaveLength(0);
       expect(removed).toContain(team2.id);
@@ -1174,7 +1393,10 @@ describe("TeamModel", () => {
       const org = await makeOrganization();
       const team = await makeTeam(org.id, user.id, { name: "Engineering" });
 
-      await TeamModel.addExternalGroup(team.id, "engineering");
+      await TeamModel.addExternalGroup({
+        teamId: team.id,
+        groupIdentifier: "engineering",
+      });
 
       // Add user manually (syncedFromSso = false)
       const manualUser = await makeUser({ email: "manual@test.com" });
@@ -1186,11 +1408,11 @@ describe("TeamModel", () => {
       );
 
       // Sync with empty groups - should NOT remove manually added member
-      const { added, removed } = await TeamModel.syncUserTeams(
-        manualUser.id,
-        org.id,
-        [],
-      );
+      const { added, removed } = await TeamModel.syncUserTeams({
+        userId: manualUser.id,
+        organizationId: org.id,
+        ssoGroups: [],
+      });
 
       expect(added).toHaveLength(0);
       expect(removed).toHaveLength(0);
@@ -1210,14 +1432,22 @@ describe("TeamModel", () => {
       const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
 
       // Both teams linked to the same external group
-      await TeamModel.addExternalGroup(team1.id, "admins");
-      await TeamModel.addExternalGroup(team2.id, "admins");
+      await TeamModel.addExternalGroup({
+        teamId: team1.id,
+        groupIdentifier: "admins",
+      });
+      await TeamModel.addExternalGroup({
+        teamId: team2.id,
+        groupIdentifier: "admins",
+      });
 
       const ssoUser = await makeUser({ email: "admin@test.com" });
 
-      const { added } = await TeamModel.syncUserTeams(ssoUser.id, org.id, [
-        "admins",
-      ]);
+      const { added } = await TeamModel.syncUserTeams({
+        userId: ssoUser.id,
+        organizationId: org.id,
+        ssoGroups: ["admins"],
+      });
 
       expect(added).toHaveLength(2);
       expect(added.sort()).toEqual([team1.id, team2.id].sort());
@@ -1233,12 +1463,16 @@ describe("TeamModel", () => {
       const team = await makeTeam(org.id, user.id, { name: "Operations" });
       const ssoUser = await makeUser({ email: "ops-user@test.com" });
 
-      await TeamModel.addExternalGroup(team.id, "ops-admins");
+      await TeamModel.addExternalGroup({
+        teamId: team.id,
+        groupIdentifier: "ops-admins",
+      });
 
-      const result = await TeamModel.syncUserTeams(ssoUser.id, org.id, [
-        "Ops-Admins",
-        "Unmapped-Group",
-      ]);
+      const result = await TeamModel.syncUserTeams({
+        userId: ssoUser.id,
+        organizationId: org.id,
+        ssoGroups: ["Ops-Admins", "Unmapped-Group"],
+      });
 
       expect(result.added).toEqual([team.id]);
       expect(result.removed).toHaveLength(0);

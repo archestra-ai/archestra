@@ -1,3 +1,4 @@
+import { withoutLoggedMedia } from "@archestra/shared";
 import type { Span } from "@opentelemetry/api";
 import { SpanStatusCode } from "@opentelemetry/api";
 import config from "@/config";
@@ -224,10 +225,20 @@ export function setSessionId(
   }
 }
 
-export function setSpanError(span: Span, error: unknown): void {
+export function setSpanError({
+  span,
+  error,
+  includeMessage = true,
+}: {
+  span: Span;
+  error: unknown;
+  includeMessage?: boolean;
+}): void {
   span.setStatus({
     code: SpanStatusCode.ERROR,
-    message: error instanceof Error ? error.message : "Unknown error",
+    ...(includeMessage
+      ? { message: error instanceof Error ? error.message : "Unknown error" }
+      : {}),
   });
   span.setAttribute(
     ATTR_ERROR_TYPE,
@@ -235,8 +246,14 @@ export function setSpanError(span: Span, error: unknown): void {
   );
 }
 
+/**
+ * Content for a span attribute: without media bytes, which a trace has no use
+ * for (an image's base64 would fill the attribute's budget), then cut to the
+ * configured length.
+ */
 export function truncateContent(content: unknown): string {
-  const str = typeof content === "string" ? content : JSON.stringify(content);
+  const kept = withoutLoggedMedia(content);
+  const str = typeof kept === "string" ? kept : JSON.stringify(kept);
   if (str.length <= contentMaxLength) {
     return str;
   }

@@ -1,4 +1,3 @@
-export * as activeUsers from "./active-users";
 export * as agentRun from "./agent-run";
 export * as agentRuntime from "./agent-runtime";
 export * as audit from "./audit";
@@ -7,7 +6,9 @@ export * as database from "./database";
 export * as fileStorage from "./file-storage";
 export * as limit from "./limit";
 export * as llm from "./llm";
+export * as llmProxy from "./llm-proxy";
 export * as mcp from "./mcp";
+export * as openappa from "./openappa";
 export * as rag from "./rag";
 export * as sandbox from "./sandbox";
 export * as scheduleTrigger from "./schedule-trigger";

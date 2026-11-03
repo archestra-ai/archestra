@@ -21,10 +21,8 @@ import type {
 } from "@archestra/shared";
 import type { GoogleGenAI } from "@google/genai";
 import { get } from "lodash-es";
-import {
-  createGoogleGenAIClient,
-  isVertexAiEnabled,
-} from "@/clients/gemini-client";
+import { createGoogleGenAIClient } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import config from "@/config";
 import type {
   CreateClientOptions,

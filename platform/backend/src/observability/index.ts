@@ -1,5 +1,6 @@
 import AgentLabelModel from "@/models/agent-label";
 import * as metrics from "./metrics";
+import { initializeActiveUsersMetrics } from "./metrics/active-users";
 import { agentRuntimeHealthMetrics } from "./metrics/agent-runtime-health";
 
 export async function initializeObservabilityMetrics(params?: {
@@ -11,6 +12,7 @@ export async function initializeObservabilityMetrics(params?: {
   const labelKeys = await AgentLabelModel.getAllKeys();
 
   metrics.llm.initializeMetrics(labelKeys);
+  metrics.llmProxy.initializeLlmProxyMetrics();
 
   if (includeMcpMetrics) {
     metrics.mcp.initializeMcpMetrics(labelKeys);
@@ -28,11 +30,12 @@ export async function initializeObservabilityMetrics(params?: {
   metrics.taskQueue.initializeTaskQueueMetrics();
   metrics.audit.initializeAuditMetrics();
   metrics.limit.initializeLimitMetrics();
+  metrics.openappa.initializeOpenappaMetrics();
   metrics.chat.initializeChatMetrics();
   metrics.agentRuntime.initializeAgentRuntimeMetrics();
   agentRuntimeHealthMetrics.initialize();
   metrics.skill.initializeSkillMetrics();
-  metrics.activeUsers.initializeActiveUsersMetrics();
+  initializeActiveUsersMetrics();
 
   return labelKeys;
 }

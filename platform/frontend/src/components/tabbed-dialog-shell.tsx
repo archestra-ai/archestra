@@ -29,6 +29,8 @@ import { cn } from "@/lib/utils/tailwind";
 export interface TabbedDialogNavItem<TSection extends string> {
   id: TSection;
   label: string;
+  /** Keep unavailable sections visible while preventing selection. */
+  disabled?: boolean;
   /** A short state line under the label, e.g. "2 providers". */
   status?: string;
   /** Compact context beside the tab label, such as a status tooltip. */
@@ -127,6 +129,7 @@ export function TabbedDialogShell<TSection extends string>({
                 key={navItem.id}
                 type="button"
                 variant="ghost"
+                disabled={navItem.disabled}
                 data-testid={getNavItemTestId?.(navItem.id)}
                 aria-label={
                   navItem.status || navItem.indicator
@@ -214,10 +217,21 @@ export function TabbedDialogShell<TSection extends string>({
                 </SelectTrigger>
                 <SelectContent>
                   {navItems.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      <span className="flex items-center gap-2">
-                        {item.label}
-                        {item.indicator}
+                    <SelectItem
+                      key={item.id}
+                      value={item.id}
+                      disabled={item.disabled}
+                    >
+                      <span className="flex flex-col items-start gap-0.5">
+                        <span className="flex items-center gap-2">
+                          <span>{item.label}</span>
+                          {item.indicator}
+                        </span>
+                        {item.status && (
+                          <span className="text-xs text-muted-foreground">
+                            {item.status}
+                          </span>
+                        )}
                       </span>
                     </SelectItem>
                   ))}

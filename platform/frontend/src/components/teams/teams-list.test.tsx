@@ -364,6 +364,7 @@ function makeTeamMember(
     userId: "user-1",
     role: "member",
     syncedFromSso: false,
+    roleSyncedFromSso: false,
     createdAt: "2026-01-01T00:00:00.000Z",
     ...overrides,
   };

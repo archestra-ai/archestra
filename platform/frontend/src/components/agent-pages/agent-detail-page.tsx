@@ -48,6 +48,7 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -176,7 +177,7 @@ export function AgentDetailPage({
       title={config.singular}
       description=""
       backLink={backLink}
-      maxWidth="wizard"
+      maxWidth={pageWidth(kind)}
       minWidth="phone"
     >
       {children}
@@ -557,9 +558,7 @@ function AgentDetails({
 
   return (
     <PageLayout
-      // The wizard's column, so a record reads and edits in the same one it
-      // was created in.
-      maxWidth="wizard"
+      maxWidth={pageWidth(kind)}
       minWidth="phone"
       // A scrolling box would trap the sticky save footer, so it could not
       // pin to the bottom of the window. Only the wide sections, such as
@@ -579,14 +578,18 @@ function AgentDetails({
           {audience && (
             // The owner rides in the chip: who it reaches and who to ask,
             // read together. A built-in record belongs to nobody.
-            <AudienceChip
-              compact={kind === "agent"}
-              audience={audience}
-              owner={isBuiltIn ? null : agent.createdBy}
-            />
+            <span className="hidden sm:contents">
+              <AudienceChip
+                compact={kind === "agent"}
+                audience={audience}
+                owner={isBuiltIn ? null : agent.createdBy}
+              />
+            </span>
           )}
           {hasAgentRuntime && (
-            <RuntimeCapableIndicator variant="icon" runtime={agent.runtime} />
+            <span className="hidden sm:contents">
+              <RuntimeCapableIndicator variant="icon" runtime={agent.runtime} />
+            </span>
           )}
           {kind === "mcp_gateway" && environmentName && (
             <Badge variant="outline" className="font-normal">
@@ -598,20 +601,27 @@ function AgentDetails({
       documentTitle={agent.name}
       backLink={<PageBackLink href={backHref}>{backLabel}</PageBackLink>}
       description={
-        isBuiltIn && agent.description ? (
-          <>
-            {agent.description.replace(/\.?$/, ".")}{" "}
-            <ExternalDocsLink
-              href={getDocsUrl(DocsPage.PlatformBuiltInSubagents)}
-              className="underline"
-              showIcon={false}
-            >
-              Learn more
-            </ExternalDocsLink>
-          </>
-        ) : (
-          (agent.description ?? "")
-        )
+        // A description has no length limit, and the header stays on screen
+        // on every tab: it keeps to one line, two on a phone.
+        <span
+          className="line-clamp-2 sm:line-clamp-1"
+          title={agent.description ?? undefined}
+        >
+          {isBuiltIn && agent.description ? (
+            <>
+              {agent.description.replace(/\.?$/, ".")}{" "}
+              <ExternalDocsLink
+                href={getDocsUrl(DocsPage.PlatformBuiltInSubagents)}
+                className="underline"
+                showIcon={false}
+              >
+                Learn more
+              </ExternalDocsLink>
+            </>
+          ) : (
+            (agent.description ?? "")
+          )}
+        </span>
       }
       tabs={
         // A single-section page is not a tabbed one: a built-in record has
@@ -634,15 +644,41 @@ function AgentDetails({
         // that act on it as a whole.
         <div className="flex shrink-0 items-center gap-2">
           {overviewOnly && !isGone && (
-            <Button variant="outline" size="sm" asChild>
-              <Link href={agentEditHref(agent.id)}>
-                <Pencil className="h-4 w-4" />
-                <span>{canEdit ? "Edit" : "View settings"}</span>
-              </Link>
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="icon-sm"
+                className="sm:hidden"
+                asChild
+              >
+                <Link
+                  href={agentEditHref(agent.id)}
+                  aria-label={canEdit ? "Edit" : "View settings"}
+                  title={canEdit ? "Edit" : "View settings"}
+                >
+                  <Pencil className="size-4" />
+                </Link>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="hidden sm:inline-flex"
+                asChild
+              >
+                <Link href={agentEditHref(agent.id)}>
+                  <Pencil className="h-4 w-4" />
+                  <span>{canEdit ? "Edit" : "View settings"}</span>
+                </Link>
+              </Button>
+            </>
           )}
           {chatAction.visible && chatAction.href && (
-            <Button variant="outline" size="sm" asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className={chatAction.startsRun ? "hidden sm:inline-flex" : ""}
+              asChild
+            >
               <Link href={chatAction.href}>
                 {chatAction.startsRun ? (
                   <TerminalSquare className="h-4 w-4" />
@@ -661,6 +697,19 @@ function AgentDetails({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              {chatAction.visible &&
+                chatAction.href &&
+                chatAction.startsRun && (
+                  <>
+                    <DropdownMenuItem className="sm:hidden" asChild>
+                      <Link href={chatAction.href}>
+                        <TerminalSquare className="size-4" />
+                        <span>{chatAction.label}</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator className="sm:hidden" />
+                  </>
+                )}
               {/* Every item this family offers is here whether or not the
                   reader may take it: an action that vanishes leaves them
                   nothing to read, and a menu whose items all vanish opens on
@@ -787,40 +836,42 @@ function AgentDetails({
                   readOnly,
                 }) => {
                   const isSaving = formSaving || savingPermissions;
+                  const saveForm = fieldsDirty && !readOnly;
                   // Share the create flow's sticky row and primary-action
                   // alignment so saving stays in reach on long forms.
                   // Nothing to save onto once the record is gone; the PUT would
                   // only come back 404. A reader who cannot change it has no
-                  // save row at all — the alert above already says why.
-                  const row = readOnly ? null : (
-                    <WizardFooter className="sm:justify-end">
-                      <Button
-                        // With only the grants changed there is no form to
-                        // submit, so the button saves them directly.
-                        type={fieldsDirty ? "submit" : "button"}
-                        size="sm"
-                        form={fieldsDirty ? formId : undefined}
-                        onClick={
-                          fieldsDirty ? undefined : () => void savePermissions()
-                        }
-                        disabled={
-                          isGone ||
-                          isSaving ||
-                          (fieldsDirty ? !canSubmit : !permissionsDirty)
-                        }
-                        data-testid={E2eTestId.AgentSetupSubmitButton}
-                      >
-                        {isSaving ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            <span>Saving...</span>
-                          </>
-                        ) : (
-                          <span>Save changes</span>
-                        )}
-                      </Button>
-                    </WizardFooter>
-                  );
+                  // save row unless they can change the resource permissions.
+                  const row =
+                    readOnly && !permissionsDirty ? null : (
+                      <WizardFooter className="sm:justify-end">
+                        <Button
+                          // With only the grants changed there is no form to
+                          // submit, so the button saves them directly.
+                          type={saveForm ? "submit" : "button"}
+                          size="sm"
+                          form={saveForm ? formId : undefined}
+                          onClick={
+                            saveForm ? undefined : () => void savePermissions()
+                          }
+                          disabled={
+                            isGone ||
+                            isSaving ||
+                            (saveForm ? !canSubmit : !permissionsDirty)
+                          }
+                          data-testid={E2eTestId.AgentSetupSubmitButton}
+                        >
+                          {isSaving ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <span>Saving...</span>
+                            </>
+                          ) : (
+                            <span>Save changes</span>
+                          )}
+                        </Button>
+                      </WizardFooter>
+                    );
                   // Below the permissions block when it is on this tab.
                   if (showPermissions)
                     return footerSlot ? createPortal(row, footerSlot) : null;
@@ -936,6 +987,15 @@ function AgentDetails({
  * reason out of reach of exactly the users it is written for. The refusal is
  * enforced by preventing the select and the click instead.
  */
+
+/**
+ * An Agent's page holds its Runs table, so it takes the list pages' width,
+ * like the Agents, Skills and MCP Registry pages. An MCP Gateway's page is a
+ * settings form, which keeps the column it was created in.
+ */
+function pageWidth(kind: AgentPageKind) {
+  return kind === "agent" ? "wide" : "wizard";
+}
 
 /**
  * What a section is called on this record's page. Connect is the exception:

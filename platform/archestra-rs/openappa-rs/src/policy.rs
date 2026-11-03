@@ -159,6 +159,7 @@ fn config_failure(error: &ConfigError) -> BindingFailure {
         | ConfigError::ZeroTimeout
         | ConfigError::ZeroReviewTimeout
         | ConfigError::ZeroByteCap
+        | ConfigError::ContextHintTooLong { .. }
         | ConfigError::ModelLimitTooSmall { .. }
         | ConfigError::InvalidLlmProvider { .. }
         | ConfigError::ImplementationChoice { .. }
@@ -1307,7 +1308,7 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
             ResolvedBattery {
             entry: GITHUB_ENTRY.into(),
             name: "github".into(),
-            policy: "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/github/get_file_contents\"\ndelta = {}\n[externals.context.github]\ncommand = [\"python3\", \"context.py\"]\n".into(),
+            policy: "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/github/get_file_contents\"\ndelta = {}\n[externals.context.github]\ncommand = [\"python3\", \"context.py\"]\nhint = \"Read visibility first.\"\n".into(),
             target: Some("[policy]\nversion = 2\n[[policy.annotator]]\nname = \"github.visibility\"\nranks = [\"suspicious\"]\naudiences = [\"internal\"]\nmarks = []\n[[policy.tool]]\nname = \"mcp/github/list_issues\"\nannotator = \"github.visibility\"\n[externals.annotators.\"github.visibility\"]\ncommand = [\"python3\", \"visibility.py\"]\ntoken_env = \"APPA_PROVIDER_GITHUB_TOKEN\"\n".into()),
             helpers: Some(HelperBinding {
                 url_base: url_base.into(),
@@ -1328,6 +1329,12 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
             );
             assert_eq!(binding["token_env"].as_str(), Some(BRIDGE_TOKEN_ENV));
         }
+        // The provider's reading hint survives the rebinding, and the runtime loads it.
+        assert_eq!(
+            document["externals"]["context"]["github"]["hint"].as_str(),
+            Some("Read visibility first.")
+        );
+        assert_eq!(reloaded_without_result_cap(&composed), composed);
         let rules: Vec<&str> = policy_entries(&document, "tool")
             .iter()
             .filter_map(|rule| rule.get("name")?.as_str())
@@ -1636,7 +1643,7 @@ command = ["python3", "judge.py"]
                 HookDecision::Ack
             } else {
                 HookDecision::ReplaceOutput {
-                    output: "[appa] the result was not carried; nothing was admitted".into(),
+                    output: "[appa] the tool ran, but its output is not shown: it is over the 64-byte limit".into(),
                 }
             };
             assert_eq!(

@@ -2,6 +2,7 @@ import {
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
   isDefaultBrandedAppName,
   providerDisplayNames,
+  type ResolvedAgentRuntimeTiers,
   type ResourcePermissionGrant,
   RUN_ID_HEADER,
   resolveClaudeContextVariant,
@@ -40,7 +41,11 @@ import type {
   EffectiveNetworkPolicy,
   ResolvedAgentRuntime,
 } from "@/types";
-import { AgentRuntimeCredentialsRequiredError, ApiError } from "@/types";
+import {
+  type AgentRunLimits,
+  AgentRuntimeCredentialsRequiredError,
+  ApiError,
+} from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import type { AgentRunLaunchSpec } from "./backends";
 import { resolveAgentRuntimeCredentials } from "./credentials";
@@ -49,10 +54,39 @@ import {
   getClaudeCodeCloudProvider,
   preflightAgentRuntimeModelCompatibility,
 } from "./model-compatibility";
+import { agentRunUrl } from "./run-handle";
 import {
+  AGENT_RUNTIME_CPU_LIMIT_ENV,
+  AGENT_RUNTIME_CPU_REQUEST_ENV,
+  AGENT_RUNTIME_CPUS_ENV,
+  AGENT_RUNTIME_MAX_TIER_ENV,
+  AGENT_RUNTIME_MEMORY_LIMIT_ENV,
+  AGENT_RUNTIME_MEMORY_REQUEST_ENV,
+  AGENT_RUNTIME_SIZED_ENV,
   AGENT_RUNTIME_STEER_FIFO,
+  AGENT_RUNTIME_SYSTEM_PROMPT_ENV,
+  AGENT_RUNTIME_TIER_ENV,
+  AGENT_RUNTIME_TIERS_ENV,
   constructStableRunName,
 } from "./runtime-contract";
+import {
+  agentRuntimeAllowedTiers,
+  agentRuntimeMaxTier,
+  definedEnv,
+  describeScaleupDisabledPrompt,
+  organizationAgentRuntimeTiers,
+  type RuntimeSystemPromptParts,
+  resolveRunResources,
+  resolveRunWorkspaceStorageSize,
+  runtimeSystemPrompt,
+  runtimeTiersEnv,
+  sizedToolchainEnv,
+  tierResourceEnv,
+  tierResources,
+  tierWorkspaceGiB,
+  tierWorkspaceStorageSize,
+  warmTierCandidates,
+} from "./runtime-tiers";
 
 /**
  * Everything a runtime backend needs to carry one A2A task, resolved for
@@ -65,9 +99,19 @@ import {
  */
 export async function buildAgentRunLaunchSpec(params: {
   runtime: ResolvedAgentRuntime;
+  /** The run's tier and limits, resolved against the Agent's settings. */
+  limits: AgentRunLimits;
+  /**
+   * The organization's tiers, when the caller read them already: the run's
+   * volume and the size it is told then come from the same read.
+   */
+  tiers?: ResolvedAgentRuntimeTiers;
   /** The A2A task this run carries; its id names the workload. */
   taskId: string;
-  /** The user-facing Agent run id used by /chat/runs/:id and telemetry. */
+  /**
+   * This turn's run record id. It names the turn's service-account token; the
+   * run's own id (`ARCHESTRA_AGENT_RUNTIME_RUN_ID`) is its workspace id.
+   */
   runId: string;
   /** Agent the task belongs to, for the proxy and gateway routes. */
   agentId: string;
@@ -240,13 +284,13 @@ export async function buildAgentRunLaunchSpec(params: {
         requiredSubscriptionKind: isCodexRuntime ? "chatgpt" : null,
       });
   const virtualKeyValue = virtualKey?.value ?? "";
-  if (params.runtime.maxCostUsd && virtualKey) {
+  if (params.limits.maxCostUsd && virtualKey) {
     try {
       await LimitModel.create({
         entityType: "virtual_key",
         entityId: virtualKey.virtualKey.id,
         limitType: "token_cost",
-        limitValue: params.runtime.maxCostUsd,
+        limitValue: params.limits.maxCostUsd,
         model: null,
         cleanupInterval: "1m",
       });
@@ -283,7 +327,22 @@ export async function buildAgentRunLaunchSpec(params: {
   const modelOutputLength = selectedModel
     ? ModelModel.resolveEffectiveOutputLength(selectedModel)
     : null;
+  const tiers =
+    params.tiers ??
+    (await organizationAgentRuntimeTiers(params.organizationId));
+  const resources = resolveRunResources(params.limits.tier, tiers);
+  const maxTier = agentRuntimeMaxTier(params.runtime, tiers);
+  const allowedTiers = agentRuntimeAllowedTiers(params.runtime, tiers);
+  const sizeEnv = tierResourceEnv(resources);
+  // The run's stable id: its page, its workspace and the run tools' run_id.
+  const stableRunId = boundWorkspace?.id ?? params.taskId;
   const nonSecretEnv: Record<string, string> = {
+    // Toolchain thread counts follow the run's size unless the Agent's own
+    // environment, next, sets them.
+    ...sizedToolchainEnv({
+      resources,
+      agentEnvKeys: (params.runtime.environment ?? []).map(({ key }) => key),
+    }),
     // The Agent Runtime run's own environment goes first: the addresses below must win.
     // An entry overriding ANTHROPIC_BASE_URL would be exactly the bypass the
     // platform-URL guard above exists to prevent.
@@ -294,7 +353,11 @@ export async function buildAgentRunLaunchSpec(params: {
     ),
     ARCHESTRA_AGENT_RUNTIME_AGENT_ID: params.runtime.agentId,
     ARCHESTRA_AGENT_RUNTIME_AGENT_NAME: agent.name,
-    ARCHESTRA_AGENT_RUNTIME_RUN_ID: params.runId,
+    // The run's id for its page (/chat/runs/:id) and the run tools' run_id:
+    // the first turn's task id, which names its workspace. Every turn keeps it.
+    ARCHESTRA_AGENT_RUNTIME_RUN_ID: stableRunId,
+    // Nothing else in the Pod names the Archestra address a person opens.
+    ARCHESTRA_AGENT_RUNTIME_RUN_URL: agentRunUrl(stableRunId),
     ARCHESTRA_AGENT_RUNTIME_TASK_ID: params.taskId,
     ARCHESTRA_AGENT_RUNTIME_MODEL: runtimeModel,
     // Native CLIs use provider-published model slugs for local metadata and
@@ -321,9 +384,20 @@ export async function buildAgentRunLaunchSpec(params: {
     // The finish contract: a session that has done its work parks this long
     // for further direction, then exits so the run and task settle.
     ARCHESTRA_AGENT_RUNTIME_IDLE_TIMEOUT_SECONDS: String(
-      (params.runtime.idleTimeoutMinutes ??
-        config.agentRuntime.defaultIdleTimeoutMinutes) * 60,
+      params.limits.idleTimeoutMinutes * 60,
     ),
+    // The run's size and the sizes it may move to, so the agent can tell by
+    // the numbers when its work needs a larger run of the same Agent.
+    ...(params.limits.tier
+      ? { [AGENT_RUNTIME_TIER_ENV]: params.limits.tier }
+      : {}),
+    [AGENT_RUNTIME_MAX_TIER_ENV]: maxTier,
+    [AGENT_RUNTIME_TIERS_ENV]: runtimeTiersEnv(
+      allowedTiers,
+      params.limits.tier,
+      params.limits.workspaceGiB,
+    ),
+    ...definedEnv(sizeEnv.pod),
     ARCHESTRA_LLM_PROXY_URL: proxyUrl,
     ARCHESTRA_LLM_PROXY_PROTOCOL: params.runtime.inferenceProtocol,
     // Clients that hide tools from the wire (Codex's tool search and code
@@ -355,7 +429,7 @@ export async function buildAgentRunLaunchSpec(params: {
         1,
         Math.ceil((boundWorkspace.expiresAt.getTime() - Date.now()) / 1000),
       )
-    : (params.runtime.ttlHours ?? config.agentRuntime.defaultTtlHours) * 3600;
+    : params.limits.maxDurationHours * 3600;
   let accountToken: Awaited<
     ReturnType<typeof ServiceAccountModel.createToken>
   > | null = null;
@@ -381,6 +455,36 @@ export async function buildAgentRunLaunchSpec(params: {
     if (virtualKey) await VirtualApiKeyModel.delete(virtualKey.virtualKey.id);
     throw error;
   }
+  // The volume sentence sits between two fixed parts, so a run served from a
+  // larger tier's warm pool can be told its volume without editing any other
+  // text, the Agent's own prompt included.
+  const systemPromptParts = runtimeSystemPromptParts({
+    lead: [
+      agent.systemPrompt,
+      skillPreview,
+      "Skills configured for this Agent are available through its MCP gateway, " +
+        "not necessarily in this client's native skill directories. " +
+        `Use ${archestraMcpBranding.getToolName(TOOL_LIST_SKILLS_SHORT_NAME)} ` +
+        "to discover available skills and " +
+        `${archestraMcpBranding.getToolName(TOOL_LOAD_SKILL_SHORT_NAME)} ` +
+        "to load matching instructions and bundled resources. " +
+        "If these tools are not directly listed, discover them through the gateway's tool search. " +
+        "Save bundled resources with their relative paths before running them locally; " +
+        "decode resources marked base64 with a shell decoder, not a text-file tool. " +
+        "Paths advertised as code-sandbox mounts belong to that separate sandbox, " +
+        "not this runtime's filesystem.",
+      // Static text, so the prompt stays the same for every run of the Agent.
+      "ARCHESTRA_AGENT_RUNTIME_RUN_URL is this run's page, and ARCHESTRA_AGENT_RUNTIME_RUN_ID is its id, " +
+        "which the run tools take as run_id; follow-ups keep both. " +
+        "Read a variable by name (printenv NAME): the environment also holds this run's credentials.",
+    ],
+    runtime: params.runtime,
+    // After the workspace facts: kept as written when the volume sentence
+    // is rebuilt for a served tier.
+    trail: [
+      describeScaleupDisabledPrompt(params.runtime, tiers, params.limits.tier),
+    ],
+  });
   const secretEnv: Record<string, string> = {
     ARCHESTRA_MCP_GATEWAY_TOKEN: gatewayToken,
     ...(claudeCodeToken ? { CLAUDE_CODE_OAUTH_TOKEN: claudeCodeToken } : {}),
@@ -395,24 +499,10 @@ export async function buildAgentRunLaunchSpec(params: {
           OPENAI_API_KEY: virtualKeyValue,
         }
       : {}),
-    ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT: [
-      agent.systemPrompt,
-      skillPreview,
-      "Skills configured for this Agent are available through its MCP gateway, " +
-        "not necessarily in this client's native skill directories. " +
-        `Use ${archestraMcpBranding.getToolName(TOOL_LIST_SKILLS_SHORT_NAME)} ` +
-        "to discover available skills and " +
-        `${archestraMcpBranding.getToolName(TOOL_LOAD_SKILL_SHORT_NAME)} ` +
-        "to load matching instructions and bundled resources. " +
-        "If these tools are not directly listed, discover them through the gateway's tool search. " +
-        "Save bundled resources with their relative paths before running them locally; " +
-        "decode resources marked base64 with a shell decoder, not a text-file tool. " +
-        "Paths advertised as code-sandbox mounts belong to that separate sandbox, " +
-        "not this runtime's filesystem.",
-      describeRuntimeWorkspace(params.runtime),
-    ]
-      .filter(Boolean)
-      .join("\n\n"),
+    [AGENT_RUNTIME_SYSTEM_PROMPT_ENV]: runtimeSystemPrompt(
+      systemPromptParts,
+      params.limits.workspaceGiB,
+    ),
     ...(task ? { ARCHESTRA_AGENT_RUNTIME_TASK: task } : {}),
     ...withNativeClientCredentialAliases(credentials.env),
     ...(isClaudeCodeBedrock
@@ -446,21 +536,29 @@ export async function buildAgentRunLaunchSpec(params: {
       image: params.runtime.image,
       command: params.runtime.command ?? null,
       privileged: params.runtime.privileged,
-      resources: params.runtime.resources ?? {
-        cpuRequest: config.agentRuntime.resources.cpuRequest,
-        memoryRequest: config.agentRuntime.resources.memoryRequest,
-        memoryLimit: config.agentRuntime.resources.memoryLimit,
-      },
+      resources,
+      tier: params.limits.tier,
+      warmTiers: params.limits.tier
+        ? warmTierCandidates(params.limits.tier, maxTier, tiers).map(
+            (tier) => ({
+              tier: tier.name,
+              resources: tierResources(tier),
+              workspaceStorageSize: tierWorkspaceStorageSize(tier),
+              workspaceGiB: tierWorkspaceGiB(tier),
+            }),
+          )
+        : [],
       env: nonSecretEnv,
       secretEnv,
+      systemPromptParts,
       ...(Object.keys(credentials.renewableCredentials).length
         ? { renewableCredentials: credentials.renewableCredentials }
         : {}),
-      activeDeadlineSeconds:
-        (params.runtime.ttlHours ?? config.agentRuntime.defaultTtlHours) *
-        60 *
-        60,
-      workspaceStorageSize: config.agentRuntime.workspaceStorageSize,
+      activeDeadlineSeconds: params.limits.maxDurationHours * 60 * 60,
+      workspaceStorageSize: resolveRunWorkspaceStorageSize(
+        params.limits.tier,
+        tiers,
+      ),
       workspaceStorageClass: config.agentRuntime.workspaceStorageClass,
       nodeSelector: config.agentRuntime.nodeSelector,
       imagePullSecrets: params.imagePullSecrets ?? [],
@@ -485,6 +583,15 @@ function runBanner(appName: string): string {
 }
 
 const RESERVED_RUNTIME_ENV_KEYS = new Set([
+  AGENT_RUNTIME_TIER_ENV,
+  AGENT_RUNTIME_MAX_TIER_ENV,
+  AGENT_RUNTIME_TIERS_ENV,
+  AGENT_RUNTIME_CPU_REQUEST_ENV,
+  AGENT_RUNTIME_CPU_LIMIT_ENV,
+  AGENT_RUNTIME_MEMORY_REQUEST_ENV,
+  AGENT_RUNTIME_MEMORY_LIMIT_ENV,
+  AGENT_RUNTIME_CPUS_ENV,
+  AGENT_RUNTIME_SIZED_ENV,
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_AUTH_TOKEN",
   "ANTHROPIC_BASE_URL",
@@ -509,6 +616,7 @@ const RESERVED_RUNTIME_ENV_KEYS = new Set([
   "ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL",
   "ARCHESTRA_AGENT_RUNTIME_OPENAPPA",
   "ARCHESTRA_AGENT_RUNTIME_RUN_ID",
+  "ARCHESTRA_AGENT_RUNTIME_RUN_URL",
   "ARCHESTRA_AGENT_RUNTIME_STEER_FIFO",
   "ARCHESTRA_AGENT_RUNTIME_TASK_ID",
   "ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT",
@@ -694,24 +802,35 @@ function virtualKeyVisibility(actor: A2AActor): {
 }
 
 /**
- * Workspace facts the platform owns, whatever the image installs: what
- * survives between turns, and which ports a user can open from it. The image
+ * The system prompt around its volume sentence: the Agent's prompt and the
+ * platform's notes first, then the workspace facts the platform owns,
+ * whatever the image installs: what survives between turns, how large the
+ * volume is (added by `runtimeSystemPrompt`), and which ports a user can open
+ * from it; then the trailing notes, such as a fixed scaleup. The image
  * describes its own tools; see `docker_images/agent/environment.md`.
  */
-function describeRuntimeWorkspace(
-  runtime: Pick<ResolvedAgentRuntime, "ports">,
-): string {
-  const ports = [...new Set(runtime.ports ?? [])];
-  return [
-    "Files under /home/node persist across this conversation's turns; " +
-      "other paths reset when the container is replaced.",
-    ports.length > 0 &&
-      `The user can forward ${ports.length === 1 ? "port" : "ports"} ` +
-        `${ports.join(", ")} from this workspace to a browser; serve anything ` +
-        "they should open there.",
-  ]
-    .filter(Boolean)
-    .join(" ");
+function runtimeSystemPromptParts(params: {
+  lead: Array<string | null | undefined>;
+  runtime: Pick<ResolvedAgentRuntime, "ports">;
+  trail: Array<string | null | undefined>;
+}): RuntimeSystemPromptParts {
+  const ports = [...new Set(params.runtime.ports ?? [])];
+  const trail = params.trail.filter(Boolean);
+  return {
+    beforeVolume: [
+      ...params.lead,
+      "Files under /home/node persist across this conversation's turns; " +
+        "other paths reset when the container is replaced.",
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+    afterVolume:
+      (ports.length > 0
+        ? ` The user can forward ${ports.length === 1 ? "port" : "ports"} ` +
+          `${ports.join(", ")} from this workspace to a browser; serve anything ` +
+          "they should open there."
+        : "") + trail.map((part) => `\n\n${part}`).join(""),
+  };
 }
 
 function withNativeClientCredentialAliases(

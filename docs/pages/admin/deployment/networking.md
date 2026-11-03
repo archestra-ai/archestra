@@ -2,7 +2,7 @@
 title: Networking
 description: Configure public endpoints, streaming, and workload network isolation
 order: 4
-lastUpdated: 2026-10-28
+lastUpdated: 2026-10-30
 ---
 
 Give users and clients an HTTPS endpoint, then configure the routes and public URLs to match it.
@@ -13,10 +13,22 @@ Route gateway traffic directly to the backend, and keep the web app and sign-in 
 
 1. Configure DNS and TLS for your Archestra host.
 2. Set [`ARCHESTRA_FRONTEND_URL`](/docs/admin/deployment/configuration#ARCHESTRA_FRONTEND_URL) to the public UI URL and [`ARCHESTRA_API_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_API_BASE_URL) to every public backend or gateway URL. API base URLs accept a comma-separated list. Use `https://` even when TLS terminates at a load balancer.
-3. Route `/v1` and `/v2` to backend port **9000**, and `/` to frontend port **3000**. Keep `/api/auth` on the frontend.
+3. Route `/v1` and `/v2` with `pathType: Prefix` and `/openapi.json` with `pathType: Exact` to backend port **9000**. Route `/` to frontend port **3000**. Keep `/api/auth` on the frontend.
 4. [Connect a client](/docs/get-started/connect) through the public endpoint and test a streaming model request and an MCP tool call.
 
-The chart applies this split for `archestra.ingress.hosts`. A complete `archestra.ingress.spec` or external routing layer must apply it explicitly.
+The chart applies this split for `archestra.ingress.hosts` when `archestra.ingress.routeBackendApisDirectly` is enabled, preserving explicitly configured routes. A complete `archestra.ingress.spec` or external routing layer must apply it explicitly. Include this path in each combined UI/API host's rules, replacing the service name with your release's service:
+
+```yaml
+- path: /openapi.json
+  pathType: Exact
+  backend:
+    service:
+      name: my-release-archestra-platform
+      port:
+        number: 9000
+```
+
+Terraform model-pool writes check this endpoint before sending changes. Verify `curl -i https://archestra.example.com/openapi.json` returns HTTP 200 and an OpenAPI JSON document. If this returns HTML or a 404, check that the exact path routes to the backend.
 
 Gateway OAuth discovery uses the configured public URLs. An unconfigured host falls back to the request scheme, which can advertise HTTP behind a TLS-terminating proxy. [`ARCHESTRA_TRUST_PROXY`](/docs/admin/deployment/configuration#ARCHESTRA_TRUST_PROXY) does not change that rule.
 
@@ -56,9 +68,9 @@ Domain rules need an FQDN policy provider; plain Kubernetes `NetworkPolicy` supp
 | GKE | Kubernetes NetworkPolicy, when enabled | FQDNNetworkPolicy with Dataplane V2 and FQDN policy enabled. |
 | Cilium clusters | Kubernetes or Cilium policy | CiliumNetworkPolicy. |
 
-Check your provider's setup: [Kubernetes](https://kubernetes.io/docs/concepts/services-networking/network-policies/), [Cilium](https://docs.cilium.io/en/latest/security/dns/), [GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/fqdn-network-policies), or [EKS Auto Mode](https://docs.aws.amazon.com/eks/latest/userguide/auto-net-pol.html). Archestra adds the cluster-DNS bootstrap rule required by Auto Mode policies.
+Check your provider's setup: [Kubernetes](https://kubernetes.io/docs/concepts/services-networking/network-policies/), [Cilium](https://docs.cilium.io/en/latest/security/dns/), [GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/fqdn-network-policies), or [EKS Auto Mode](https://docs.aws.amazon.com/eks/latest/userguide/auto-net-pol.html). Archestra allows DNS bootstrap traffic only to the discovered cluster resolver. If discovery fails, Auto Mode policies omit that exception; domain lookups can fail until you restore discovery or configure the resolver. See [Helm DNS discovery](/docs/admin/deployment/helm#dns-discovery) for resolver overrides and the optional Service read grant.
 
-Public internet mode blocks private, metadata, loopback, and reserved destinations. Add only the private ranges a workload needs under **Additional allowed CIDRs**, or use an allowlist to restrict all outbound access. DNS to the cluster resolver remains allowed.
+Public internet mode blocks private, metadata, loopback, and reserved destinations. Add only the private ranges a workload needs under **Additional allowed CIDRs**, or use an allowlist to restrict all outbound access. DNS to a known cluster resolver remains allowed.
 
 ## Code Sandbox Requirements
 

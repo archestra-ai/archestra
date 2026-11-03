@@ -301,8 +301,15 @@ export function McpAppEntryContent({
   surface = "inline",
 }: McpAppSectionProps) {
   const resourceKey = `${agentId}:${uiResourceUri}`;
-  const { displayMode, setDisplayMode, toggleFullscreen, reloadNonce, reload } =
-    useAppRuntimeControls();
+  const {
+    displayMode,
+    setDisplayMode,
+    toggleFullscreen,
+    reloadNonce,
+    isReloading,
+    reload,
+    completeReload,
+  } = useAppRuntimeControls();
   const [size, setSize] = useState<{ width: number; height: number } | null>(
     null,
   );
@@ -498,7 +505,9 @@ export function McpAppEntryContent({
       // which the runtime gates on a non-null version.
       appVersion={appVersion ?? ownedApp?.latestVersion ?? null}
       reloadNonce={reloadNonce}
+      isReloading={isReloading}
       onReload={reload}
+      onReloadComplete={completeReload}
       instanceId={appId ?? toolCallId}
       // Owned apps only: their file store is what agent-side copy_file writes
       // into, and their SDK is what reports display state back.
@@ -517,7 +526,11 @@ export function McpAppEntryContent({
     <McpAppTopBar
       left={
         <>
-          <McpAppRefreshButton onClick={reload} size="bar" />
+          <McpAppRefreshButton
+            onClick={reload}
+            isReloading={isReloading}
+            size="bar"
+          />
           <span className="min-w-0 truncate px-1 text-sm font-medium">
             {headerName}
           </span>
@@ -567,13 +580,17 @@ export function McpAppEntryContent({
   );
 
   // Frameless inline (item 4): no top bar — chat context identifies the app.
-  // The fullscreen toggle floats as a hover overlay in both directions; the
-  // open-in-right-panel control is a labeled button below the app instead.
+  // The reload and fullscreen controls float as a hover overlay in both
+  // directions; the open-in-right-panel control is a labeled button below the
+  // app instead.
   const inlineOverlay = (
-    <McpAppFullscreenButton
-      isFullscreen={displayMode === "fullscreen"}
-      onClick={toggleFullscreen}
-    />
+    <>
+      <McpAppRefreshButton onClick={reload} isReloading={isReloading} />
+      <McpAppFullscreenButton
+        isFullscreen={displayMode === "fullscreen"}
+        onClick={toggleFullscreen}
+      />
+    </>
   );
 
   const liveSurface = (

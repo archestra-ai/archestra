@@ -1286,10 +1286,10 @@ describe("team routes", () => {
   });
 
   // ===================================================================
-  // External Group Mappings (Enterprise Feature)
+  // Team Sync group links (Enterprise Feature)
   // ===================================================================
 
-  describe("external group mappings", () => {
+  describe("Team Sync group links", () => {
     test("lists external groups for a team", async ({ makeTeam }) => {
       const team = await makeTeam(organizationId, adminUser.id);
 
@@ -1359,7 +1359,7 @@ describe("team routes", () => {
       expect(response.statusCode).toBe(403);
     });
 
-    test("adds an external group mapping", async ({ makeTeam }) => {
+    test("adds a Team Sync group link", async ({ makeTeam }) => {
       const team = await makeTeam(organizationId, adminUser.id);
 
       const response = await app.inject({
@@ -1374,7 +1374,7 @@ describe("team routes", () => {
       expect(group.id).toBeDefined();
     });
 
-    test("removes an external group mapping", async ({ makeTeam }) => {
+    test("removes a Team Sync group link", async ({ makeTeam }) => {
       const team = await makeTeam(organizationId, adminUser.id);
 
       // Add a group first
@@ -1402,7 +1402,7 @@ describe("team routes", () => {
       expect(listResponse.json()).toEqual([]);
     });
 
-    test("prevents duplicate external group mappings", async ({ makeTeam }) => {
+    test("prevents duplicate Team Sync group links", async ({ makeTeam }) => {
       const team = await makeTeam(organizationId, adminUser.id);
 
       await app.inject({
@@ -1419,7 +1419,7 @@ describe("team routes", () => {
 
       expect(duplicateResponse.statusCode).toBe(409);
       expect(duplicateResponse.json().error.message).toContain(
-        "already mapped",
+        "already linked",
       );
     });
 
@@ -1436,7 +1436,7 @@ describe("team routes", () => {
       expect(response.json().groupIdentifier).toBe("engineering-team");
     });
 
-    test("team admin member can add external group mappings", async ({
+    test("team admin member can add Team Sync group links", async ({
       makeTeam,
       makeUser,
       makeMember,
@@ -1478,7 +1478,7 @@ describe("team routes", () => {
       await teamAdminApp.close();
     });
 
-    test("team admin member can remove external group mappings", async ({
+    test("team admin member can remove Team Sync group links", async ({
       makeTeam,
       makeUser,
       makeMember,

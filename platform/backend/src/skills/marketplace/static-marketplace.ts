@@ -1,5 +1,4 @@
 import { CONNECTION_SETUP_MAX_SKILLS } from "@archestra/shared/connection-setup";
-import { auth as betterAuth } from "@/auth/better-auth";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import logger from "@/logging";
 import {
@@ -11,6 +10,7 @@ import {
   UserModel,
   UserTokenModel,
 } from "@/models";
+import { port } from "@/models/ports";
 import type { MaterializeSkillInput } from "./layout";
 
 /**
@@ -206,8 +206,10 @@ async function resolveCredential(
   }
 
   let apiKeyUserId: string | null = null;
+  // Outside the try below, which reads any failure as an invalid key.
+  const authSessions = await port("authSessions");
   try {
-    const result = await betterAuth.api.verifyApiKey({
+    const result = await authSessions.verifyApiKey({
       body: { key: credential },
     });
     apiKeyUserId = result?.valid ? (result.key?.referenceId ?? null) : null;

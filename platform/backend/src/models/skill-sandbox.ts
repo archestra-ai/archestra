@@ -1,4 +1,14 @@
-import { and, desc, eq } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  notExists,
+  sql,
+} from "drizzle-orm";
 import {
   ownerColumnsFromUserId,
   userIdFromOwnerColumns,
@@ -246,6 +256,50 @@ class SkillSandboxModel {
         ),
       );
     return row ?? null;
+  }
+
+  /**
+   * Delete up to `batchSize` headless sandboxes (no conversation, no app)
+   * created more than `retentionDays` ago with no replay activity since then.
+   * Children cascade; exported files keep their rows with `sandbox_id` nulled.
+   *
+   * The cutoff is computed in SQL: `created_at` is `timestamp without time
+   * zone` stamped by the database, so a JS Date would shift by its offset.
+   */
+  static async deleteStaleHeadless(params: {
+    retentionDays: number;
+    batchSize: number;
+  }): Promise<number> {
+    const sandboxes = schema.skillSandboxesTable;
+    const events = schema.skillSandboxReplayEventsTable;
+    const cutoff = sql`now()::timestamp - make_interval(days => ${params.retentionDays})`;
+    const stale = db
+      .select({ id: sandboxes.id })
+      .from(sandboxes)
+      .where(
+        and(
+          isNull(sandboxes.conversationId),
+          isNull(sandboxes.appId),
+          lt(sandboxes.createdAt, cutoff),
+          notExists(
+            db
+              .select({ one: sql`1` })
+              .from(events)
+              .where(
+                and(
+                  eq(events.sandboxId, sandboxes.id),
+                  gte(events.createdAt, cutoff),
+                ),
+              ),
+          ),
+        ),
+      )
+      .limit(params.batchSize);
+    const deleted = await db
+      .delete(sandboxes)
+      .where(inArray(sandboxes.id, stale))
+      .returning({ id: sandboxes.id });
+    return deleted.length;
   }
 }
 

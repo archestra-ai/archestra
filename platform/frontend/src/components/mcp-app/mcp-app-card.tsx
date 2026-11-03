@@ -113,7 +113,7 @@ export function McpAppCard({
       {topBar}
 
       {overlay && (
-        <div className="absolute top-2 right-2 z-20 flex items-center gap-0.5 rounded-md border border-border/50 bg-background/80 p-0.5 opacity-0 shadow-sm backdrop-blur-sm transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+        <div className="absolute top-2 right-2 z-30 flex items-center gap-0.5 rounded-md border border-border/50 bg-background/80 p-0.5 opacity-0 shadow-sm backdrop-blur-sm transition-opacity focus-within:opacity-100 group-hover:opacity-100 has-[[aria-busy=true]]:opacity-100">
           {overlay}
         </div>
       )}

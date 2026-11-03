@@ -8,6 +8,7 @@ import {
   CLAUDE_METADATA_SESSION_SOURCE,
   CODEX_CLIENT_FILTER,
   CODEX_CLIENT_ID,
+  COPILOT_CLI_CLIENT_ID,
 } from "@archestra/shared";
 import { eq, inArray, type SQL } from "drizzle-orm";
 import db, { schema } from "@/database";
@@ -2841,6 +2842,139 @@ describe("InteractionModel", () => {
       expect(sessions.data[0].lastUserMessagePreview).toBe("Hi from codex cli");
     });
 
+    test("shows a Copilot CLI session by the person's prompt, not the notes Copilot adds", async ({
+      makeAdmin,
+      makeAgent,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent({ name: "Agent" });
+      const text = (value: string) => [{ type: "input_text", text: value }];
+      // Copilot opens each user message with a datetime line, and sends its
+      // deferred-tools reminder and background-agent notices as user messages
+      // after the person's prompt.
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "copilot-responses-session",
+        externalAgentId: COPILOT_CLI_CLIENT_ID,
+        request: {
+          model: "gpt-6.1-sol",
+          input: [
+            { type: "message", role: "system", content: "You are Copilot." },
+            {
+              type: "message",
+              role: "user",
+              content: text(
+                "<current_datetime>2026-11-01T00:42:10.436+04:00</current_datetime>\n\nUse the task tool to start a subagent.",
+              ),
+            },
+            {
+              type: "message",
+              role: "user",
+              content: text(
+                "<system_reminder>\nIMPORTANT: The tools listed below are deferred.\n</system_reminder>",
+              ),
+            },
+            {
+              type: "function_call",
+              call_id: "c1",
+              name: "task",
+              arguments: "{}",
+            },
+            { type: "function_call_output", call_id: "c1", output: "done" },
+            {
+              role: "user",
+              content: text(
+                '<system_notification>\nAgent "pwd-runner" (task) has finished processing and is now idle.\n</system_notification>',
+              ),
+            },
+          ],
+        } as unknown as InsertInteraction["request"],
+        response: {
+          id: "r1",
+          object: "response",
+          created: Date.now(),
+          model: "gpt-6.1-sol",
+        } as unknown as InsertInteraction["response"],
+        type: "github-copilot:responses",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "copilot-responses-session" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].lastUserMessagePreview).toBe(
+        "Use the task tool to start a subagent.",
+      );
+    });
+
+    test.for([
+      {
+        name: "a Copilot CLI prompt with an attached image",
+        parts: [
+          {
+            type: "input_text",
+            text: '<current_datetime>2026-11-01T02:00:40.896+04:00</current_datetime>\n\nRun "echo appa-publish --target staging" in the shell.',
+          },
+          {
+            type: "input_text",
+            text: "Image file at path C:\\Users\\mark\\AppData\\Local\\Temp\\copilot-image-c552fb.png",
+          },
+          {
+            type: "input_image",
+            image_url: "data:image/png;base64,iVBORw0KGgo=",
+            detail: "auto",
+          },
+        ],
+        expected: 'Run "echo appa-publish --target staging" in the shell.',
+      },
+      {
+        name: "a prompt followed by an image without a label",
+        parts: [
+          { type: "input_text", text: "What does this screenshot show?" },
+          {
+            type: "input_image",
+            image_url: "data:image/png;base64,iVBORw0KGgo=",
+          },
+        ],
+        expected: "What does this screenshot show?",
+      },
+    ])("names a session by $name, not by an attachment's label", async ({
+      parts,
+      expected,
+    }, { makeAdmin, makeAgent }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent({ name: "Agent" });
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "responses-attachment-session",
+        externalAgentId: COPILOT_CLI_CLIENT_ID,
+        request: {
+          model: "gpt-6.1-sol",
+          input: [{ type: "message", role: "user", content: parts }],
+        } as unknown as InsertInteraction["request"],
+        response: {
+          id: "r1",
+          object: "response",
+          created: Date.now(),
+          model: "gpt-6.1-sol",
+        } as unknown as InsertInteraction["response"],
+        type: "github-copilot:responses",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "responses-attachment-session" },
+      );
+
+      expect(sessions.data[0].lastUserMessagePreview).toBe(expected);
+    });
+
     test("skips prompt suggestion generator requests when deriving the preview", async ({
       makeAdmin,
       makeAgent,
@@ -4356,14 +4490,19 @@ describe("InteractionModel", () => {
       makeMember,
       makeAdmin,
       makeTeam,
+      makeTeamMember,
     }) => {
       const org = await makeOrganization();
       const admin = await makeAdmin();
       await makeMember(admin.id, org.id, { role: "admin" });
       const team = await makeTeam(org.id, admin.id);
-      const agent = await makeAgent({ access: { teams: [team.id] } });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        access: { teams: [team.id] },
+      });
       // Team limits follow the agent's team assignment, not its grants.
       await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+      await makeTeamMember(team.id, admin.id);
 
       const agentLimit = await LimitModel.create({
         entityType: "agent",
@@ -4391,6 +4530,7 @@ describe("InteractionModel", () => {
 
       await InteractionModel.create({
         profileId: agent.id,
+        userId: admin.id,
         model: "gpt-4o",
         inputTokens: 80,
         outputTokens: 160,
@@ -4436,15 +4576,20 @@ describe("InteractionModel", () => {
       makeMember,
       makeAdmin,
       makeTeam,
+      makeTeamMember,
     }) => {
       const org = await makeOrganization();
       const admin = await makeAdmin();
       await makeMember(admin.id, org.id, { role: "admin" });
       const team = await makeTeam(org.id, admin.id);
-      const agent = await makeAgent({ access: { teams: [team.id] } });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        access: { teams: [team.id] },
+      });
 
       // Also assign via agent_team table (like production)
       await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+      await makeTeamMember(team.id, admin.id);
 
       const teamLimit = await LimitModel.create({
         entityType: "team",
@@ -4456,6 +4601,7 @@ describe("InteractionModel", () => {
 
       await InteractionModel.create({
         profileId: agent.id,
+        userId: admin.id,
         model: "gpt-4o",
         inputTokens: 80,
         outputTokens: 160,
@@ -4487,6 +4633,7 @@ describe("InteractionModel", () => {
       makeMember,
       makeAdmin,
       makeTeam,
+      makeTeamMember,
     }) => {
       const org = await makeOrganization();
       const admin = await makeAdmin();
@@ -4494,11 +4641,14 @@ describe("InteractionModel", () => {
       const team1 = await makeTeam(org.id, admin.id);
       const team2 = await makeTeam(org.id, admin.id);
       const agent = await makeAgent({
+        organizationId: org.id,
         access: { teams: [team1.id, team2.id] },
       });
 
       // Assign to both teams
       await AgentTeamModel.assignTeamsToAgent(agent.id, [team1.id, team2.id]);
+      await makeTeamMember(team1.id, admin.id);
+      await makeTeamMember(team2.id, admin.id);
 
       // Create all-models limit for ONLY team1
       const team1Limit = await LimitModel.create({
@@ -4520,6 +4670,7 @@ describe("InteractionModel", () => {
 
       await InteractionModel.create({
         profileId: agent.id,
+        userId: admin.id,
         model: "gpt-4o",
         inputTokens: 100,
         outputTokens: 200,
@@ -4724,6 +4875,7 @@ describe("InteractionModel", () => {
       await makeMember(admin.id, org.id, { role: "admin" });
       const team = await makeTeam(org.id, admin.id);
       const agent = await makeAgent({
+        organizationId: org.id,
         access: { teams: [team.id] },
       });
 
@@ -4821,6 +4973,7 @@ describe("InteractionModel", () => {
         makeMember,
         makeAdmin,
         makeTeam,
+        makeTeamMember,
         makeUser,
         makeVirtualApiKey,
       }) => {
@@ -4836,6 +4989,8 @@ describe("InteractionModel", () => {
         });
         await AgentTeamModel.assignTeamsToAgent(agent.id, [team1.id, team2.id]);
         const user = await makeUser();
+        await makeTeamMember(team1.id, user.id);
+        await makeTeamMember(team2.id, user.id);
         const virtualKey = await makeVirtualApiKey(org.id);
         const passthroughKey = await makeVirtualApiKey(org.id);
         const environment = await EnvironmentModel.create({

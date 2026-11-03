@@ -1,4 +1,5 @@
 import type { ClientMark } from "@archestra/shared";
+import Image from "next/image";
 import { cn } from "@/lib/utils/tailwind";
 
 /**
@@ -18,6 +19,17 @@ export function ClientMarkTile({
   size: number;
   className?: string;
 }) {
+  if (mark.imageSrc) {
+    return (
+      <Image
+        src={mark.imageSrc}
+        alt={`${label} logo`}
+        width={size}
+        height={size}
+        className={cn("shrink-0 object-contain", className)}
+      />
+    );
+  }
   return (
     <div
       className={cn(

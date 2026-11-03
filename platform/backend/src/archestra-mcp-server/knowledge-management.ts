@@ -668,7 +668,7 @@ async function handleQueryKnowledgeSources(params: {
         // Environment isolation: drop directly-assigned connectors from other envs.
         .filter((connector) => connector.environmentId === agentEnvironmentId);
 
-      const connectorIdsFromVisibleKbs = visibleKbs.length
+      const connectorsFromVisibleKbs = visibleKbs.length
         ? (
             await Promise.all(
               visibleKbs.map((kb) =>
@@ -682,15 +682,29 @@ async function handleQueryKnowledgeSources(params: {
                 }),
               ),
             )
-          )
-            .flat()
-            .map((connector) => connector.id)
+          ).flat()
         : [];
+      const connectors = [
+        ...connectorsFromVisibleKbs,
+        ...visibleDirectConnectors,
+      ];
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Uploaded files use their own grants through an assigned, published KB.
+      // Other connectors must themselves be published to the organization.
+      const visibleConnectors = access
+        ? connectors
+        : await knowledgeSourceAccessControlService.filterQueryableConnectorsForOrganization(
+            {
+              organizationId,
+              connectors,
+              knowledgeBaseIds: visibleKbs.map((kb) => kb.id),
+            },
+          );
+      // SPDX-SnippetEnd
       connectorIds = [
-        ...new Set([
-          ...connectorIdsFromVisibleKbs,
-          ...visibleDirectConnectors.map((connector) => connector.id),
-        ]),
+        ...new Set(visibleConnectors.map((connector) => connector.id)),
       ];
 
       if (visibleKbs.length === 0 && visibleDirectConnectors.length === 0) {

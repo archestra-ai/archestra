@@ -34,14 +34,18 @@ export class ThroughputError extends Error {
 export class LlmThroughput {
   private reservation: ThroughputReceipt | null = null;
   private admitted = false;
+  private attemptSpend: LlmThroughput | undefined;
 
   constructor(
     private readonly scope: {
       entities: Array<{ entityType: LimitEntityType; entityId: string }>;
       model: string;
+      modelAliases?: string[];
       provider?: SupportedProvider;
       subscription?: boolean;
       rules?: Limit[];
+      /** Pools meter each selected member separately from logical request/token quotas. */
+      attemptSpendRules?: Limit[];
     },
   ) {}
 
@@ -78,10 +82,35 @@ export class LlmThroughput {
     }
   }
 
+  async admitSpendForModel(
+    model: string,
+    subscription: boolean,
+    modelAliases?: string[],
+  ): Promise<void> {
+    if (!this.scope.attemptSpendRules) return;
+    // Failed attempts settle before the next member replaces this receipt.
+    // Spend admission reserves no request capacity; internal retries reuse it.
+    this.attemptSpend = undefined;
+    const attempt = new LlmThroughput({
+      ...this.scope,
+      model,
+      modelAliases,
+      subscription,
+      rules: this.scope.attemptSpendRules,
+      attemptSpendRules: undefined,
+    });
+    await attempt.admit();
+    this.attemptSpend = attempt;
+  }
+
   async settleSpend(
     cost: string | number | null | undefined,
     billingMode?: "metered" | "subscription",
   ): Promise<void> {
+    if (this.scope.attemptSpendRules) {
+      await this.attemptSpend?.settleSpend(cost, billingMode);
+      return;
+    }
     if (!this.reservation || cost == null) return;
     try {
       await LlmThroughputModel.reconcile({
@@ -98,6 +127,7 @@ export class LlmThroughput {
   }
 
   async cancelBeforeSend(): Promise<void> {
+    await this.attemptSpend?.cancelBeforeSend();
     if (!this.reservation) return;
     try {
       await LlmThroughputModel.reconcile({

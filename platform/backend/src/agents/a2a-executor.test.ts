@@ -5,9 +5,9 @@ import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import { REPEAT_CALL_TERMINATION_CEILING } from "@/clients/tool-call-repeat-tracker";
 import ModelModel from "@/models/model";
 import { expect, test } from "@/test";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 import type { StageResult } from "./a2a/stage-attachments";
 import {
-  type A2AAttachment,
   buildUserContent,
   createLiveSubagentToolCallEmitter,
   emitSubagentToolCalls,
@@ -186,6 +186,55 @@ describe("buildUserContent", () => {
 
     expect(content).toBeNull();
     expect(note).toContain("report.docx");
+  });
+
+  test("attributes an unreadable file to the missing sandbox when the credential cannot have one", async () => {
+    const attachments: A2AAttachment[] = [
+      {
+        contentType: "application/zip",
+        contentBase64: "AAAA",
+        name: "bundle.zip",
+      },
+    ];
+
+    const withoutSandbox = await buildUserContent("Read this", attachments, {
+      ...geminiOpts(PDF_AND_IMAGES),
+      credentialHasNoSandbox: true,
+    });
+    const regular = await buildUserContent(
+      "Read this",
+      attachments,
+      geminiOpts(PDF_AND_IMAGES),
+    );
+
+    expect(withoutSandbox.rejected).toEqual([
+      { name: "bundle.zip", reason: "credential_has_no_sandbox" },
+    ]);
+    expect(regular.rejected).toEqual([
+      { name: "bundle.zip", reason: "unsupported_type" },
+    ]);
+  });
+
+  test("keeps the original reason for a file no sandbox would accept", async () => {
+    const { rejected } = await buildUserContent(
+      "Read this",
+      [
+        {
+          contentType: "application/zip",
+          contentBase64: "AAAAAAAA",
+          name: "huge.zip",
+        },
+      ],
+      {
+        ...geminiOpts(PDF_AND_IMAGES),
+        sandboxByteLimit: 3,
+        credentialHasNoSandbox: true,
+      },
+    );
+
+    expect(rejected).toEqual([
+      { name: "huge.zip", reason: "unsupported_type" },
+    ]);
   });
 
   test("keeps images regardless of the readable mime set, including image/jpg", async () => {
@@ -745,6 +794,46 @@ describe("executeA2AMessage current turn assembly", () => {
 
     const config = mockStreamText.mock.calls[0]?.[0];
     expect(config.messages).toMatchObject(history);
+  });
+
+  test("a self-fork follows its parent's auto routing unless it asks for fast or smart", async ({
+    makeOrganization,
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
+    const routable: Record<string, boolean> = {};
+    for (const tier of [undefined, "normal", "fast", "smart"] as const) {
+      primeStreamMocks();
+      mockCreateLLMModelForAgent.mockClear();
+      await executeA2AMessage({
+        agentId: agent.id,
+        message: "fork task",
+        organizationId: org.id,
+        userId: actor.id,
+        conversationId: "conv-1",
+        parentDelegationChain: agent.id,
+        selfFork: true,
+        tier,
+      });
+      routable[tier ?? "omitted"] =
+        mockCreateLLMModelForAgent.mock.calls[0]?.[0].autoRoutable;
+    }
+
+    expect(routable).toEqual({
+      omitted: true,
+      normal: true,
+      fast: false,
+      smart: false,
+    });
   });
 
   test("stops the run once the model repeatedly calls a tool outside the tool list", async ({

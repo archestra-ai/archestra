@@ -156,7 +156,7 @@ Inspect, then suggest; change nothing.
 2. Open with one sentence: how many of the inspected tools a specific rule covers, and that the rest run as they do now. Name at most two of the riskiest uncovered tools: ones that send data out, change or delete data, or read private data. The tools **Keep agents working** names are not uncovered risks; suggest restricting them only when the operator names them.
 3. Report each included battery that is not \`active\`, what is wrong, and how to fix it.
 4. Under **Available batteries**, give one line per battery that fits and would cover at least one more tool: its sentence from **Propose a battery**, how many tools it would cover, and whether it needs a token.
-5. End with up to three numbered changes ranked by impact, such as fixing a battery, adding batteries, or adding rules, so the operator can reply with a number.
+5. End with up to three numbered changes ranked by impact, such as fixing a battery, adding batteries, adding rules, or adding the deployment hint as **The deployment hint** in \`references/archestra.md\` describes, so the operator can reply with a number.
 
 Leave out server health, unavailable deployments, and failed inspections unless they change a suggestion; then say only "I could not read <server>'s tools". Never quote an inspection's internal error or placeholder text.
 
@@ -183,7 +183,7 @@ When the operator asks why a scheduled task run failed or was blocked, read the 
 // white-label-ok: applyBuiltInSkillBranding rebrands bundled references at reconcile
 export const CLIENTS_REFERENCE = `# Connected CLI clients
 
-This applies when the skill runs in, or the policy covers, a client connected to Archestra such as Claude Code, Codex, or OpenCode. \`references/archestra.md\` has the full tool-name, subagent, and provider-hosted reference.
+This applies when the skill runs in, or the policy covers, a client connected to Archestra such as Claude Code, Codex, OpenCode, or the Copilot CLI. \`references/archestra.md\` has the full tool-name, subagent, and provider-hosted reference.
 
 ## Running the skill from a client
 
@@ -192,7 +192,7 @@ This applies when the skill runs in, or the policy covers, a client connected to
 
 ## Native tools
 
-MCP inventory never lists native client tools. Claude Code sends \`Task\` or \`Agent\` for subagents, OpenCode lowercase \`task\`, and Codex \`spawn_agent\`; each is evaluated under the client's own name, canonical \`host/archestra/<name>\`. Names are case-sensitive: a capitalized \`Task\` rule does not match OpenCode's \`task\`. Match the evaluated name instead of copying another client's rule.
+MCP inventory never lists native client tools. Claude Code sends \`Task\` or \`Agent\` for subagents, OpenCode and the Copilot CLI lowercase \`task\`, and Codex \`spawn_agent\`; each is evaluated under the client's own name, canonical \`host/archestra/<name>\`. Names are case-sensitive: a capitalized \`Task\` rule does not match OpenCode's \`task\`. Match the evaluated name instead of copying another client's rule.
 
 ## Subagent returns
 

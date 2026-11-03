@@ -332,6 +332,11 @@ describe("shortGithubAppError", () => {
         "My Org Copilot isn't installed on my-org. Install it on the organization on GitHub, then try again.",
       ),
     ).toBe("My Org Copilot isn't installed on my-org.");
+    expect(
+      shortGithubAppError(
+        "my-org doesn't allow Copilot requests from GitHub Apps. It needs Copilot Business or Enterprise, with requests from Apps allowed by an owner of the organization or its enterprise.",
+      ),
+    ).toBe("The organization doesn't allow Copilot requests from Apps.");
     expect(shortGithubAppError("Something else broke.")).toBe(
       "Something else broke.",
     );

@@ -1,10 +1,13 @@
-import { E2eTestId } from "@archestra/shared";
-import { render, screen } from "@testing-library/react";
+import { archestraApiClient, E2eTestId } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useProfile } from "@/lib/agent.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { AgentEditPage } from "./agent-edit-page";
@@ -13,10 +16,14 @@ vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/hooks/use-app-name");
-vi.mock("@/lib/agent.query", () => ({ useProfile: vi.fn() }));
+vi.mock("@/lib/agent.query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/agent.query")>()),
+  useProfile: vi.fn(),
+}));
 
 // The form has its own tests. Here it reports what the page mounted and
 // showed, and hands back a dirty marker so saving and the guard can be driven.
+let realPermissions = false;
 const formMounts = vi.fn();
 vi.mock("@/components/agent-form", async () => {
   const { useEffect } = await import("react");
@@ -50,7 +57,7 @@ vi.mock("@/components/agent-form", async () => {
             formId: "form",
             isCreate: false,
             isSaving: false,
-            isDirty: true,
+            isDirty: !props.readOnly,
             canSubmit: true,
             readOnly: !!props.readOnly,
             hasRuntime: false,
@@ -60,10 +67,21 @@ vi.mock("@/components/agent-form", async () => {
     },
   };
 });
-vi.mock("@/components/resource-permissions", async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  ResourcePermissions: () => <div data-testid="resource-permissions" />,
-}));
+vi.mock("@/components/resource-permissions", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/components/resource-permissions")>();
+  return {
+    ...actual,
+    ResourcePermissions: (
+      props: React.ComponentProps<typeof actual.ResourcePermissions>,
+    ) =>
+      realPermissions ? (
+        <actual.ResourcePermissions {...props} />
+      ) : (
+        <div data-testid="resource-permissions" />
+      ),
+  };
+});
 
 let access = {
   resource: "agent",
@@ -109,6 +127,7 @@ describe("AgentEditPage", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    realPermissions = false;
     access = { ...access, canEdit: true, isBuiltIn: false };
     vi.mocked(useAppName).mockReturnValue("Archestra");
     vi.mocked(useFeature).mockReturnValue(true);
@@ -187,6 +206,109 @@ describe("AgentEditPage", () => {
 
     expect(screen.getByText(/discard unsaved changes\?/i)).toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it("saves real permission edits when the agent configuration is read-only", async () => {
+    Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+    Element.prototype.setPointerCapture = vi.fn();
+    Element.prototype.scrollIntoView = vi.fn();
+    realPermissions = true;
+    access = { ...access, canEdit: false };
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "me" } },
+    } as ReturnType<typeof useSession>);
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+      isPending: false,
+    } as ReturnType<typeof useHasPermissions>);
+    const origin = "http://localhost:9000";
+    archestraApiClient.setConfig({ baseUrl: origin });
+    let grants = [
+      {
+        subject: { type: "user", id: "me" },
+        name: "Creator",
+        actions: ["read", "use", "update", "delete", "manage-permissions"],
+      },
+      {
+        subject: { type: "team", id: "other-team" },
+        name: "Partner Team",
+        actions: ["read"],
+      },
+    ];
+    let saved = false;
+    const policy = () => ({
+      resource: "agent",
+      scope: "a1",
+      name: "Support Agent",
+      ownerId: "me",
+      revision: 1,
+      grants,
+      inheritedGrants: [],
+      effectiveActions: [
+        "read",
+        "use",
+        "update",
+        "delete",
+        "manage-permissions",
+      ],
+      canShareOrganizationWide: false,
+      actorSubjects: [{ type: "user", id: "me" }],
+    });
+    const server = setupServer(
+      http.get(`${origin}/api/resource-permissions/agent/a1`, () =>
+        HttpResponse.json(policy()),
+      ),
+      http.get(`${origin}/api/resource-permissions`, () =>
+        HttpResponse.json([]),
+      ),
+      http.put(
+        `${origin}/api/resource-permissions/agent/a1`,
+        async ({ request }) => {
+          const body = (await request.json()) as { grants: typeof grants };
+          expect(body.grants).toContainEqual({
+            subject: { type: "team", id: "other-team" },
+            actions: ["read", "use"],
+          });
+          saved = true;
+          grants = body.grants.map((grant) => ({
+            ...grant,
+            name: grant.subject.type === "team" ? "Partner Team" : "Creator",
+          }));
+          return HttpResponse.json({ ...policy(), revision: 2 });
+        },
+      ),
+    );
+    server.listen({ onUnhandledRequest: "error" });
+    try {
+      const user = userEvent.setup();
+      render(
+        <QueryClientProvider
+          client={
+            new QueryClient({ defaultOptions: { queries: { retry: false } } })
+          }
+        >
+          <AgentEditPage id="a1" />
+        </QueryClientProvider>,
+      );
+      await user.click(
+        await screen.findByRole("combobox", {
+          name: "Permission for Partner Team",
+        }),
+      );
+      await user.click(await screen.findByRole("option", { name: "Can use" }));
+      await user.click(
+        await screen.findByRole("button", {
+          name: "Save changes",
+        }),
+      );
+      await waitFor(() => expect(saved).toBe(true));
+      expect(
+        screen.getByText(/you can view this agent's configuration/i),
+      ).toBeVisible();
+    } finally {
+      server.close();
+      archestraApiClient.setConfig({ baseUrl: "" });
+    }
   });
 
   it("offers a reader who cannot change it the settings without a save", () => {

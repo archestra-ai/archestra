@@ -1896,7 +1896,10 @@ describe("handleAfterHook", () => {
       const team = await makeTeam(org.id, user.id, {
         name: "Engineering Sync Control",
       });
-      await TeamModel.addExternalGroup(team.id, "engineering");
+      await TeamModel.addExternalGroup({
+        teamId: team.id,
+        groupIdentifier: "engineering",
+      });
 
       const provider = await makeIdentityProvider(org.id, {
         providerId: "downstream-sync-enabled",
@@ -1957,7 +1960,10 @@ describe("handleAfterHook", () => {
       const team = await makeTeam(org.id, user.id, {
         name: "Engineering Sync Linked",
       });
-      await TeamModel.addExternalGroup(team.id, "engineering");
+      await TeamModel.addExternalGroup({
+        teamId: team.id,
+        groupIdentifier: "engineering",
+      });
 
       // Same demote-on-match mapping as the control test above, but the
       // provider is a linked-token-only downstream IdP.
@@ -2262,7 +2268,10 @@ describe("handleAfterHook", () => {
       });
 
       // Link an external group to the team
-      await TeamModel.addExternalGroup(team.id, "engineering");
+      await TeamModel.addExternalGroup({
+        teamId: team.id,
+        groupIdentifier: "engineering",
+      });
 
       const ctx = createMockContext({
         path: "/sso/callback/keycloak-local",
@@ -2317,7 +2326,10 @@ describe("handleAfterHook", () => {
       });
 
       // Link an external group to the team
-      await TeamModel.addExternalGroup(team.id, "developers");
+      await TeamModel.addExternalGroup({
+        teamId: team.id,
+        groupIdentifier: "developers",
+      });
 
       const ctx = createMockContext({
         path: "/sso/callback/keycloak-local-2",
@@ -2374,7 +2386,10 @@ describe("handleAfterHook", () => {
       });
 
       // Link an external group to the team
-      await TeamModel.addExternalGroup(team.id, "staff");
+      await TeamModel.addExternalGroup({
+        teamId: team.id,
+        groupIdentifier: "staff",
+      });
 
       const ctx = createMockContext({
         path: "/sign-in", // Regular sign-in, not SSO callback
@@ -2453,7 +2468,10 @@ describe("handleAfterHook", () => {
         idToken: null,
       });
 
-      await TeamModel.addExternalGroup(team.id, "engineering");
+      await TeamModel.addExternalGroup({
+        teamId: team.id,
+        groupIdentifier: "engineering",
+      });
       vi.spyOn(cacheManager, "getAndDelete").mockResolvedValue({
         groups: ["engineering"],
         organizationId: org.id,
@@ -2516,7 +2534,10 @@ describe("handleAfterHook", () => {
         }),
       });
 
-      await TeamModel.addExternalGroup(team.id, "engineering");
+      await TeamModel.addExternalGroup({
+        teamId: team.id,
+        groupIdentifier: "engineering",
+      });
 
       const ctx = createMockContext({
         path: "/sso/callback/:providerId",
@@ -2571,7 +2592,10 @@ describe("handleAfterHook", () => {
       });
 
       // Link an external group to the team
-      await TeamModel.addExternalGroup(team.id, "old-group");
+      await TeamModel.addExternalGroup({
+        teamId: team.id,
+        groupIdentifier: "old-group",
+      });
 
       // Add user to team via SSO sync initially
       await TeamModel.addMember(team.id, user.id, "member", true); // syncedFromSso = true

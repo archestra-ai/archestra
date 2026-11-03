@@ -20,6 +20,10 @@ import {
 import type { AgentActivationSkillPolicyRule } from "@/models/agent-activation-skill-rule";
 import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import { agentKnowledgeSourceExclusionsService } from "@/services/agent-knowledge-source-exclusions";
+import {
+  assertCanWriteAgentNetworkPolicy,
+  sameNetworkPolicy,
+} from "@/services/agent-network-policy";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import {
   assignToolToAgent,
@@ -42,7 +46,6 @@ import {
 import type { AgentConfigSnapshot } from "@/types/agent-version";
 import type { InsertHookFile } from "@/types/hook";
 import { InsertHookFileSchema } from "@/types/hook";
-import { assertModelTrioTiers } from "@/utils/llm-resolution";
 
 /**
  * Restore an agent's config to an earlier version by replaying its immutable
@@ -486,6 +489,19 @@ async function planScalars(params: {
     scalars.environmentId = snapshot.environmentId;
   }
 
+  const snapshotNetworkPolicy = snapshot.networkPolicy ?? null;
+  if (
+    !sameNetworkPolicy(snapshotNetworkPolicy, current.networkPolicy ?? null)
+  ) {
+    await assertCanWriteAgentNetworkPolicy({
+      userId,
+      organizationId,
+      before: current.networkPolicy ?? null,
+      after: snapshotNetworkPolicy,
+    });
+    scalars.networkPolicy = snapshotNetworkPolicy;
+  }
+
   // A model and its API key are a pair: written whole or not at all, the
   // invariant the update route enforces. The existence check is stricter than
   // that route, which validates neither — but writing a dangling FK would 500
@@ -517,31 +533,6 @@ async function planScalars(params: {
     }
     scalars.modelId = snapshotModelId;
     scalars.llmApiKeyId = snapshotKeyId;
-  }
-
-  // Tiers ride on the key, so they are re-checked against the key being
-  // restored whenever either changes, and refuse the restore like the pair.
-  const fastModelId = snapshot.fastModel?.id ?? null;
-  const smartModelId = snapshot.smartModel?.id ?? null;
-  if (
-    "llmApiKeyId" in scalars ||
-    fastModelId !== (current.fastModelId ?? null) ||
-    smartModelId !== (current.smartModelId ?? null)
-  ) {
-    try {
-      await assertModelTrioTiers({
-        apiKeyId: snapshotKeyId,
-        fastModelId,
-        smartModelId,
-      });
-    } catch (error) {
-      if (error instanceof ApiError && error.statusCode === 400) {
-        throw unrestorable(`its fast or smart model (${error.message})`);
-      }
-      throw error;
-    }
-    scalars.fastModelId = fastModelId;
-    scalars.smartModelId = smartModelId;
   }
 
   // identityProviderId is captured but deliberately not replayed: migration

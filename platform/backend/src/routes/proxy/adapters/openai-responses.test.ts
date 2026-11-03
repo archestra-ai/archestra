@@ -129,6 +129,34 @@ describe("responsesToOpenaiChat", () => {
       { role: "user", content: "Open the pull request." },
     ]);
   });
+
+  test("keeps the text of a tool result sent as an array of content parts", () => {
+    const request = {
+      model: "vllm:qwen",
+      input: [
+        {
+          type: "function_call",
+          call_id: "call_1",
+          name: "list_documents",
+          arguments: "{}",
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_1",
+          output: [
+            { type: "input_text", text: '{"items":[]}' },
+            { type: "input_text", text: "second block" },
+          ],
+        },
+      ],
+    } as unknown as OpenAi.Types.ResponsesRequest;
+
+    expect(responsesToOpenaiChat(request).chatBody.messages.at(-1)).toEqual({
+      role: "tool",
+      tool_call_id: "call_1",
+      content: '{"items":[]}\nsecond block',
+    });
+  });
 });
 
 describe("OpenAI Responses execution terminal guard", () => {
@@ -354,7 +382,7 @@ describe("OpenAI Responses compaction", () => {
 function parseSse(data: string | Uint8Array | null): unknown {
   if (data === null) throw new Error("expected an SSE event");
   const text = typeof data === "string" ? data : Buffer.from(data).toString();
-  return JSON.parse(text.replace(/^data: /, "").trim());
+  return JSON.parse(text.replace(/^(?:event: .*\n)?data: /, "").trim());
 }
 
 describe("OpenAiResponsesRequestAdapter.getMessages", () => {
@@ -841,7 +869,7 @@ describe("OpenAiResponsesStreamAdapter synthesized frame identity", () => {
         .filter(Boolean)
         .map(
           (frame) =>
-            JSON.parse(frame.replace(/^data: /, "")) as {
+            JSON.parse(frame.replace(/^(?:event: .*\n)?data: /, "")) as {
               sequence_number?: number;
               item?: { id?: string };
             },
@@ -1403,7 +1431,7 @@ describe("OpenAiResponsesStreamAdapter.toProviderResponse", () => {
           (typeof frame === "string"
             ? frame
             : new TextDecoder().decode(frame)
-          ).replace(/^data: /, ""),
+          ).replace(/^(?:event: .*\n)?data: /, ""),
         ),
       );
     const added = replay.find(
@@ -1434,7 +1462,7 @@ describe("OpenAiResponsesStreamAdapter.toProviderResponse", () => {
         (typeof frame === "string"
           ? frame
           : new TextDecoder().decode(frame)
-        ).replace(/^data: /, ""),
+        ).replace(/^(?:event: .*\n)?data: /, ""),
       ),
     );
     expect(
@@ -1558,7 +1586,7 @@ describe("OpenAiResponsesStreamAdapter.toProviderResponse", () => {
           (typeof frame === "string"
             ? frame
             : new TextDecoder().decode(frame)
-          ).replace(/^data: /, ""),
+          ).replace(/^(?:event: .*\n)?data: /, ""),
         ),
       );
     expect(enriched).toHaveLength(3);
@@ -1902,7 +1930,9 @@ describe("OpenAiResponsesStreamAdapter.toProviderResponse", () => {
       typeof terminalFrame === "string"
         ? terminalFrame
         : new TextDecoder().decode(terminalFrame);
-    const completion = JSON.parse(terminalText.replace(/^data: /, "")) as {
+    const completion = JSON.parse(
+      terminalText.replace(/^(?:event: .*\n)?data: /, ""),
+    ) as {
       response: { output: unknown };
     };
     expect(completion.response.output).toEqual(response.output);
@@ -1981,7 +2011,8 @@ describe("OpenAiResponsesStreamAdapter hosted tool calls", () => {
   ] as unknown as Chunk[];
   const frameTypes = (frames: (string | Uint8Array)[]) =>
     frames.map(
-      (frame) => JSON.parse(String(frame).replace(/^data: /, "")).type,
+      (frame) =>
+        JSON.parse(String(frame).replace(/^(?:event: .*\n)?data: /, "")).type,
     );
 
   test.each([
@@ -2486,7 +2517,7 @@ describe("OpenAiResponsesStreamAdapter hosted tool calls", () => {
     const response = adapter.toProviderResponse();
     const output = response.output;
     const completedFrame = JSON.parse(
-      String(frames.at(-1)).replace(/^data: /, ""),
+      String(frames.at(-1)).replace(/^(?:event: .*\n)?data: /, ""),
     ) as { response: typeof response };
     expect(completedFrame.response).toEqual(response);
     expect(JSON.stringify(completedFrame.response)).toContain(prefix);
@@ -2501,7 +2532,7 @@ describe("OpenAiResponsesStreamAdapter hosted tool calls", () => {
     const addedFrame = frames
       .map(
         (frame) =>
-          JSON.parse(String(frame).replace(/^data: /, "")) as {
+          JSON.parse(String(frame).replace(/^(?:event: .*\n)?data: /, "")) as {
             type: string;
             output_index?: number;
             item?: { id?: string };
@@ -2564,7 +2595,7 @@ describe("OpenAiResponsesStreamAdapter hosted tool calls", () => {
         },
       ]) ?? [];
     const completion = JSON.parse(
-      String(frames.at(-1)).replace(/^data: /, ""),
+      String(frames.at(-1)).replace(/^(?:event: .*\n)?data: /, ""),
     ) as { response: { output: unknown[] } };
     const clientResponse = structuredClone(completion.response);
     const recordedResponse = adapter.toProviderResponse();

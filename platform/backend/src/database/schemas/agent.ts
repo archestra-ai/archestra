@@ -25,6 +25,7 @@ import type {
 } from "@/types/agent";
 import type { AgentActivationSkillMode } from "@/types/agent-activation-skill-policy";
 import type { AgentRuntime } from "@/types/agent-runtime";
+import type { NetworkPolicy } from "@/types/environment";
 import environmentsTable from "./environment";
 import identityProvidersTable from "./identity-provider";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
@@ -117,14 +118,6 @@ const agentsTable = softDeletablePgTable(
     modelPoolId: uuid("model_pool_id").references(() => modelPoolsTable.id, {
       onDelete: "set null",
     }),
-    /** Optional `fast` / `smart` tiers of the agent's trio, on `llmApiKeyId`. */
-    fastModelId: uuid("fast_model_id").references(() => modelsTable.id, {
-      onDelete: "set null",
-    }),
-    smartModelId: uuid("smart_model_id").references(() => modelsTable.id, {
-      onDelete: "set null",
-    }),
-
     /**
      * Auto routing (the org's `llm_proxy` row only). Server-managed: written
      * under the routing-plan lock, which also bumps `autoRoutingGeneration`.
@@ -136,18 +129,6 @@ const agentsTable = softDeletablePgTable(
       precision: 12,
       scale: 2,
     }),
-    autoRoutingFastModelId: uuid("auto_routing_fast_model_id").references(
-      () => modelsTable.id,
-      { onDelete: "set null" },
-    ),
-    autoRoutingNormalModelId: uuid("auto_routing_normal_model_id").references(
-      () => modelsTable.id,
-      { onDelete: "set null" },
-    ),
-    autoRoutingSmartModelId: uuid("auto_routing_smart_model_id").references(
-      () => modelsTable.id,
-      { onDelete: "set null" },
-    ),
     autoRoutingScorerVersionId: uuid(
       "auto_routing_scorer_version_id",
     ).references(() => routingScorerVersionsTable.id),
@@ -183,6 +164,14 @@ const agentsTable = softDeletablePgTable(
       () => environmentsTable.id,
       { onDelete: "set null" },
     ),
+
+    /**
+     * Optional egress policy for this agent's own runtimes (Agent Runtime pods,
+     * their warm pools, and its Code Sandbox engine). Null inherits the
+     * environment's policy, then the organization default. MCP servers keep
+     * following their environment.
+     */
+    networkPolicy: jsonb("network_policy").$type<NetworkPolicy>(),
 
     /**
      * Optional dedicated runtime for durable and delegated work. Invocation
@@ -330,29 +319,12 @@ const agentsTable = softDeletablePgTable(
     index("agents_environment_id_idx").on(table.environmentId),
     index("agents_author_id_idx").on(table.authorId),
     index("agents_scope_idx").on(table.scope),
-    // Deleting a model clears these columns through their foreign keys, one
-    // lookup per deleted model and column. Without an index every lookup read
-    // the whole table, so removing a provider key's models outran the
-    // statement timeout. Partial: the tier and auto-routing columns are
-    // empty on most rows.
+    // Deleting a model clears this column through its foreign key, one
+    // lookup per deleted model. Without an index every lookup read the whole
+    // table, so removing a provider key's models outran the statement timeout.
     index("agents_model_id_idx")
       .on(table.modelId)
       .where(sql`${table.modelId} IS NOT NULL`),
-    index("agents_fast_model_id_idx")
-      .on(table.fastModelId)
-      .where(sql`${table.fastModelId} IS NOT NULL`),
-    index("agents_smart_model_id_idx")
-      .on(table.smartModelId)
-      .where(sql`${table.smartModelId} IS NOT NULL`),
-    index("agents_auto_routing_fast_model_id_idx")
-      .on(table.autoRoutingFastModelId)
-      .where(sql`${table.autoRoutingFastModelId} IS NOT NULL`),
-    index("agents_auto_routing_normal_model_id_idx")
-      .on(table.autoRoutingNormalModelId)
-      .where(sql`${table.autoRoutingNormalModelId} IS NOT NULL`),
-    index("agents_auto_routing_smart_model_id_idx")
-      .on(table.autoRoutingSmartModelId)
-      .where(sql`${table.autoRoutingSmartModelId} IS NOT NULL`),
     // Agent lists: walk visible agents in name or creation order and stop at
     // the page. The name indexes also carry the columns the list's
     // visibility filter reads, so the list's count is an index-only scan.

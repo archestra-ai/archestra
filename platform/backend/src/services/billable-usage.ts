@@ -2,10 +2,17 @@ import {
   CACHE_PRICE_MULTIPLIERS,
   type SupportedProvider,
 } from "@archestra/shared/model-constants";
+import { modelsDevClient } from "@/clients/models-dev-client";
+import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
+import {
+  fireworksModelAliases,
+  isFireworksEndpoint,
+} from "@/services/fireworks-model";
 import type { UsageView } from "@/types/llm-provider";
 import {
+  estimateMissingPrices,
   formatMoney,
   moneyUnits,
   type PricedBillingUsage,
@@ -28,23 +35,85 @@ export async function resolvePricingQuote(params: {
   provider: SupportedProvider;
   usage: UsageView;
   providerApiKeyId?: string;
+  billingEndpoint?: "fireworks" | "other";
+  requestedModel?: string;
 }): Promise<PricingQuote> {
   const { model, provider, usage, providerApiKeyId } = params;
+  const key =
+    params.billingEndpoint === undefined && providerApiKeyId
+      ? await LlmProviderApiKeyModel.findById(providerApiKeyId)
+      : null;
+  const fireworks =
+    params.billingEndpoint === "fireworks" ||
+    (params.billingEndpoint === undefined &&
+      isFireworksEndpoint(key?.inferenceBaseUrl ?? key?.baseUrl));
+  let registryPromise:
+    | ReturnType<typeof modelsDevClient.fetchModelsFromApi>
+    | undefined;
   const breakdown = usage.billingUsage ?? primaryBillingUsage(usage, model);
   const rows = await ModelModel.findByProviderAndModelIds(provider, [
-    ...new Set([model, ...breakdown.components.map((item) => item.model)]),
+    ...new Set([
+      model,
+      ...(params.requestedModel ? [params.requestedModel] : []),
+      ...breakdown.components.map((item) => item.model),
+    ]),
   ]);
   const instancePrices =
     await LlmProviderApiKeyModelLinkModel.findProviderPricing({
       apiKeyId: providerApiKeyId,
       modelIds: [...rows.values()].map((row) => row.id),
     });
-  const quote = (modelId: string, size: number): QuotedPrices => {
-    const row = rows.get(modelId);
+  const quote = async (
+    modelId: string,
+    componentUsage: UsageView,
+  ): Promise<QuotedPrices> => {
+    const size = promptTokens(componentUsage);
+    let row = rows.get(modelId);
+    const requested =
+      modelId === model && params.requestedModel
+        ? rows.get(params.requestedModel)
+        : undefined;
+    if (requested && requested.modelId !== modelId) {
+      row = {
+        ...(row ?? requested),
+        modelId,
+        customPricePerMillionInput:
+          requested.customPricePerMillionInput ??
+          row?.customPricePerMillionInput ??
+          null,
+        customPricePerMillionOutput:
+          requested.customPricePerMillionOutput ??
+          row?.customPricePerMillionOutput ??
+          null,
+        customPricePerMillionCacheRead:
+          requested.customPricePerMillionCacheRead ??
+          row?.customPricePerMillionCacheRead ??
+          null,
+        customPricePerMillionCacheWrite:
+          requested.customPricePerMillionCacheWrite ??
+          row?.customPricePerMillionCacheWrite ??
+          null,
+        ...(requested.longContextThreshold != null
+          ? {
+              longContextThreshold: requested.longContextThreshold,
+              longContextPricePerMillionInput:
+                requested.longContextPricePerMillionInput,
+              longContextPricePerMillionOutput:
+                requested.longContextPricePerMillionOutput,
+              longContextPricePerMillionCacheRead:
+                requested.longContextPricePerMillionCacheRead,
+              longContextPricePerMillionCacheWrite:
+                requested.longContextPricePerMillionCacheWrite,
+            }
+          : {}),
+      };
+    }
+    const instance =
+      (requested && requested.modelId !== modelId
+        ? instancePrices.get(requested.id)
+        : null) ?? (row ? instancePrices.get(row.id) : null);
     const projected = row
-      ? ModelModel.withProviderPricing(row, [
-          instancePrices.get(row.id) ?? null,
-        ])
+      ? ModelModel.withProviderPricing(row, [instance ?? null])
       : null;
     const pricing = ModelModel.getEffectivePricing(
       projected,
@@ -52,7 +121,82 @@ export async function resolvePricingQuote(params: {
       provider,
       size,
     );
-    return quotedPrices({
+    if (
+      fireworks &&
+      !(row?.longContextThreshold != null && size > row.longContextThreshold)
+    ) {
+      // Configured rates must not depend on registry availability. Fetch only
+      // for missing base rates or cache directions this usage actually needs.
+      const needsPublished = instance
+        ? pricing.pricePerMillionInput === null ||
+          pricing.pricePerMillionOutput === null
+        : pricing.source !== "custom" ||
+          ((componentUsage.cacheReadTokens ?? 0) > 0 &&
+            row?.customPricePerMillionCacheRead == null) ||
+          ((componentUsage.cacheWriteTokens ?? 0) > 0 &&
+            row?.customPricePerMillionCacheWrite == null);
+      if (needsPublished && !registryPromise)
+        registryPromise = modelsDevClient
+          .fetchModelsFromApi()
+          .catch(() => ({}));
+      const registry = needsPublished ? await registryPromise : null;
+      const cost = registry?.["fireworks-ai"]?.models[modelId]?.cost;
+      const rate = (value: number | undefined): string | null =>
+        value !== undefined && Number.isFinite(value) && value >= 0
+          ? String(value)
+          : null;
+      const published = {
+        pricePerMillionInput: rate(cost?.input),
+        pricePerMillionOutput: rate(cost?.output),
+        pricePerMillionCacheRead:
+          row?.customPricePerMillionCacheRead ?? rate(cost?.cache_read),
+        pricePerMillionCacheWrite:
+          row?.customPricePerMillionCacheWrite ?? rate(cost?.cache_write),
+        source: "models_dev" as const,
+        cacheSource: "models_dev" as const,
+      };
+      // Custom base prices do not establish cache prices. Resolve each cache
+      // direction from the selected endpoint, preserving explicit custom zeroes.
+      const selected = instance
+        ? pricing
+        : pricing.source === "custom"
+          ? {
+              ...published,
+              pricePerMillionInput: pricing.pricePerMillionInput,
+              pricePerMillionOutput: pricing.pricePerMillionOutput,
+              source: pricing.source,
+              cacheSource:
+                row?.customPricePerMillionCacheRead != null ||
+                row?.customPricePerMillionCacheWrite != null
+                  ? ("custom" as const)
+                  : published.cacheSource,
+            }
+          : published;
+      const quoted = quotedPrices({
+        model: modelId,
+        provider,
+        pricing: selected,
+        instancePriced: Boolean(instance),
+      });
+      // A paid endpoint's missing rates use the existing conservative estimate,
+      // never the transport's self-hosted zero fallback.
+      const fallback = ModelModel.getEffectivePricing(
+        null,
+        modelId,
+        "openai",
+        size,
+      );
+      return {
+        ...quoted,
+        catalog: {
+          input:
+            published.pricePerMillionInput ?? fallback.pricePerMillionInput,
+          output:
+            published.pricePerMillionOutput ?? fallback.pricePerMillionOutput,
+        },
+      };
+    }
+    const quoted = quotedPrices({
       model: modelId,
       provider,
       pricing,
@@ -60,18 +204,37 @@ export async function resolvePricingQuote(params: {
         projected?.providerPricing !== undefined &&
         projected.providerPricing !== "conflicting",
     });
+    if (projected?.providerPricing === undefined) return quoted;
+    const catalog = ModelModel.getEffectivePricing(
+      row ?? null,
+      modelId,
+      provider,
+      size,
+    );
+    return {
+      ...quoted,
+      catalog: {
+        input: catalog.pricePerMillionInput,
+        output: catalog.pricePerMillionOutput,
+      },
+    };
   };
+  const [request, components] = await Promise.all([
+    quote(model, usage),
+    Promise.all(
+      breakdown.components.map(
+        async (item) => [item.id, await quote(item.model, item)] as const,
+      ),
+    ),
+  ]);
   return {
     model,
     provider,
     providerApiKeyId,
-    request: quote(model, promptTokens(usage)),
-    components: new Map(
-      breakdown.components.map((item) => [
-        item.id,
-        quote(item.model, promptTokens(item)),
-      ]),
-    ),
+    billingEndpoint: fireworks ? "fireworks" : "other",
+    requestedModel: params.requestedModel,
+    request,
+    components: new Map(components),
   };
 }
 
@@ -109,17 +272,22 @@ export function quotedPrices(params: {
 }
 
 /** The request's quote, resolved once and retained on its usage snapshot. */
-export async function quoteUsagePricing(params: {
+async function quoteUsagePricing(params: {
   model: string;
   provider: SupportedProvider;
   usage: UsageView;
   providerApiKeyId?: string;
+  billingEndpoint?: "fireworks" | "other";
+  requestedModel?: string;
 }): Promise<PricingQuote> {
   const memo = params.usage.billingQuote?.pricing;
   if (
     memo?.model === params.model &&
     memo.provider === params.provider &&
-    memo.providerApiKeyId === params.providerApiKeyId
+    memo.providerApiKeyId === params.providerApiKeyId &&
+    (params.billingEndpoint === undefined ||
+      memo.billingEndpoint === params.billingEndpoint) &&
+    memo.requestedModel === params.requestedModel
   )
     return memo;
   const pricing = await resolvePricingQuote(params);
@@ -134,6 +302,8 @@ export async function priceBillingUsage(params: {
   usage: UsageView;
   mode: PricedBillingUsage["mode"];
   providerApiKeyId?: string;
+  billingEndpoint?: "fireworks" | "other";
+  requestedModel?: string;
 }): Promise<PricedBillingUsage> {
   const { provider, usage, model, mode } = params;
   const pricing = await quoteUsagePricing(params);
@@ -160,28 +330,33 @@ export async function priceBillingUsage(params: {
     ) {
       issues.push("estimated_model_price");
     }
+    // A missing rate is estimated, never left unpriced: an unpriced request
+    // would leave its budgets unable to say what was spent.
+    const estimate = estimateMissingPrices({
+      usage: component,
+      prices,
+      provider,
+      fallback: quoted.catalog,
+    });
+    if (!authoritative && estimate.model) issues.push("estimated_model_price");
+    if (!authoritative && estimate.cache) issues.push("estimated_cache_price");
     let cost = "0.0000000000";
     try {
-      const missing =
-        (component.inputTokens > 0 && prices.input === null) ||
-        (component.outputTokens > 0 && prices.output === null) ||
-        (component.cacheReadTokens > 0 && prices.cacheRead === null) ||
-        (component.cacheWriteTokens > component.cacheWrite1hTokens &&
-          prices.cacheWrite === null) ||
-        (component.cacheWrite1hTokens > 0 && prices.cacheWrite1h === null);
-      if (missing && !authoritative) issues.push("unpriced_usage");
-      cost = priceTokens(component, {
-        ...prices,
-        input: prices.input ?? "0",
-        output: prices.output ?? "0",
-        cacheRead: prices.cacheRead ?? "0",
-        cacheWrite: prices.cacheWrite ?? "0",
-        cacheWrite1h: prices.cacheWrite1h ?? "0",
-      });
+      cost = priceTokens(component, estimate.prices);
     } catch {
-      if (!authoritative) issues.push("unpriced_usage");
+      if (!authoritative) issues.push("invalid_token_count");
     }
-    components.push({ ...component, provider, prices, cost });
+    // The receipt keeps the rates that were known; the estimate is in the cost.
+    components.push({
+      ...component,
+      modelAliases:
+        pricing.billingEndpoint === "fireworks"
+          ? fireworksModelAliases(component.model)
+          : undefined,
+      provider,
+      prices,
+      cost,
+    });
   }
   if (usage.inputTokensEstimated) issues.push("estimated_input_tokens");
   if (usage.providerReportedCost !== undefined) {

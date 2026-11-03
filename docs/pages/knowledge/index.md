@@ -2,7 +2,7 @@
 title: Knowledge (RAG)
 description: Give agents and MCP clients cited answers from connected sources and uploaded documents
 order: 5
-lastUpdated: 2026-10-28
+lastUpdated: 2026-10-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -96,7 +96,7 @@ Search results count as sensitive data. [Guardrails](/docs/agents/guardrails) ca
 
 ## Permissions
 
-Search always runs as the person who asks. An agent or MCP client never finds a document that person could not find without it.
+Search uses the identity behind the request. Personal credentials use the person’s access; service-account credentials use that account’s access.
 
 Who may read each document depends on where it comes from:
 
@@ -112,6 +112,7 @@ Set **Can use** in the permissions of each connector, file, or Knowledge Base. S
 
 - Sharing a Knowledge Base does not share its connectors or files. Each one needs its own grant.
 - Grant changes apply at once. Source permission changes apply at the connector's next permission sync.
-- A team or organization token has no person behind it. It finds only sources shared with everyone in the organization.
+- An [OAuth application](/docs/mcp/authentication/applications#oauth-client-credentials-applications) without a service-account binding searches only explicitly assigned sources shared with **Everyone in the organization** at **Can use**, through MCP or A2A. The Knowledge Base and each connector or uploaded file need that grant; directly assigned connectors need it too. Source permissions still exclude private documents.
+- Applications without a service-account binding do not inherit the client creator’s personal or team access. Bind a service account when the application needs access granted to a particular account.
 
 Granular access and permission sync are Enterprise features. See [Pricing Model](/docs/get-started/pricing-model).

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { ApiError } from "@archestra/shared/types";
 import type { Anthropic, OpenAi, UsageView } from "@/types";
 import { assertModelRouterCacheControls } from "../model-router-cache-controls";
+import { assertUnstructuredResponseFormat } from "../translated-response-format";
 import type { OpenAiStreamUsage } from "./openai-sse-chunk";
 import {
   type NormalizedContentPart,
@@ -48,6 +49,7 @@ export function openaiToAnthropic(req: OpenAiRequest): {
   anthropicBody: AnthropicRequest;
   openaiContext: AnthropicOpenaiContext;
 } {
+  assertUnstructuredResponseFormat(req, "the Anthropic translation");
   assertModelRouterCacheControls("anthropic", req);
   const loose = req as OpenAiRequest & {
     stop?: string | string[] | null;

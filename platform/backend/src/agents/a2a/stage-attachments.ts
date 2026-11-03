@@ -1,7 +1,5 @@
 import crypto from "node:crypto";
-import type { A2AAttachment } from "@/agents/a2a-executor";
 import logger from "@/logging";
-import { SkillSandboxModel } from "@/models";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { SKILL_SANDBOX_HOME } from "@/skills-sandbox/runtime-image";
 import {
@@ -9,6 +7,7 @@ import {
   skillSandboxRuntimeService,
 } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { asSandboxId, type SkillSandbox } from "@/types";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 
 /** A staged attachment's in-sandbox path, or an error marker for that slot. */
 export type StageResult = { path: string } | { error: true };
@@ -43,19 +42,15 @@ export async function stageAttachmentsIntoSandbox(params: {
 
   let sandbox: SkillSandbox;
   try {
-    sandbox = conversationId
-      ? await SkillSandboxModel.findOrCreateDefault({
-          organizationId,
-          userId,
-          conversationId,
-          defaultCwd: SKILL_SANDBOX_HOME,
-        })
-      : await executionSandboxRegistry.getOrCreateDefault({
-          organizationId,
-          userId,
-          isolationKey,
-          defaultCwd: SKILL_SANDBOX_HOME,
-        });
+    const resolved = await executionSandboxRegistry.getOrCreateRunDefault({
+      organizationId,
+      userId,
+      conversationId,
+      isolationKey,
+      defaultCwd: SKILL_SANDBOX_HOME,
+    });
+    if (!resolved) throw new Error("run has no sandbox scope");
+    sandbox = resolved;
   } catch (error) {
     logger.error(
       { err: error, agentId, conversationId, isolationKey },

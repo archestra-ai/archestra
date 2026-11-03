@@ -40,9 +40,10 @@ const QUERY_KEY = ["default-user-limits"] as const;
 // Under "limits" so custom user limit mutations (limits.query.ts) refresh it.
 const USER_USAGE_KEY = ["limits", "user-usage"] as const;
 
-export function useDefaultUserLimits() {
+export function useDefaultUserLimits(enabled = true) {
   return useQuery({
     queryKey: QUERY_KEY,
+    enabled,
     queryFn: async () => {
       const { data, error } = await listDefaultUserLimits();
       throwOnApiError(error);

@@ -3,7 +3,11 @@ import { Exec, KubeConfig } from "@kubernetes/client-node";
 import { stdSerializers } from "pino";
 import { expect, test } from "vitest";
 import { WebSocketServer } from "ws";
-import { execAgentRuntimeCommand, streamAgentRuntimeCommand } from "./exec";
+import {
+  AgentRuntimeExecConnectionError,
+  execAgentRuntimeCommand,
+  streamAgentRuntimeCommand,
+} from "./exec";
 
 for (const streaming of [false, true]) {
   test.for([
@@ -36,9 +40,11 @@ for (const streaming of [false, true]) {
       );
       expect(JSON.stringify(serialized)).not.toContain("synthetic-token");
       // Diagnostics must not silently opt denied access or server failures
-      // into the completion monitor's existing retry policy.
+      // into the completion monitor's existing retry policy. The monitor only
+      // asks whether the container is still there.
       expect(error).not.toHaveProperty("code");
-      expect(error.constructor).toBe(Error);
+      expect(error.constructor).toBe(AgentRuntimeExecConnectionError);
+      expect(error.name).toBe("Error");
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

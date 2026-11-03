@@ -47,11 +47,6 @@ export function makeConfig(
         defaultTtlHours: 24,
         defaultIdleTimeoutMinutes: 60,
         allowPrivileged: false,
-        resources: {
-          cpuRequest: "500m",
-          memoryRequest: "1Gi",
-          memoryLimit: "4Gi",
-        },
       },
       plugins: false,
       sandboxArtifactBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,

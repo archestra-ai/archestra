@@ -1,7 +1,7 @@
+import { CONNECTION_SETUP_TOKEN_TTL_MS } from "@archestra/shared/connection-setup";
 import { withDbTransaction } from "@/database";
 import ConnectionSetupModel, {
   CONNECTION_SETUP_TOKEN_PREFIX,
-  CONNECTION_SETUP_TOKEN_TTL_MS,
 } from "@/models/connection-setup";
 import { describe, expect, test } from "@/test";
 

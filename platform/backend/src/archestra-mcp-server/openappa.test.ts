@@ -76,7 +76,7 @@ test("remedy tools open human review without asking for prior consent", () => {
   expect(getPlans?.description).not.toContain("use ask_user");
   expect(executePlan?.description).toContain("the result is review_required");
   expect(executePlan?.description).toContain(
-    "Ask the user with the declared ask_user tool",
+    "Call this MCP server's ask_user tool with that offer ID in remedy_offer_ids",
   );
   expect(executePlan?.description).not.toContain(
     "review it before approving the call",
@@ -576,12 +576,22 @@ describe("OpenAPPA tool execution", () => {
     expect(read).not.toHaveBeenCalled();
   });
 
-  test("a malformed remedy call is shown the advertised arguments, not the proxy's", async () => {
-    const result = await executeArchestraTool(
-      toolFullName,
-      { plan: "Accept restriction" },
-      mockContext,
-    );
+  test.each([
+    {
+      name: "a wrong offer_id type",
+      args: { offer_id: 7, plan: "Accept restriction" },
+    },
+    {
+      name: "no offer_id and nothing to declare",
+      args: { plan: "Accept restriction" },
+    },
+  ])("a malformed remedy call is shown the advertised arguments, not the proxy's: $name", async ({
+    args,
+  }) => {
+    const executeSpy = vi.spyOn(openappaService, "executeRemedyByOffer");
+    const result = await executeArchestraTool(toolFullName, args, mockContext);
+
+    expect(executeSpy).not.toHaveBeenCalled();
 
     expect(result.isError).toBe(true);
     const text = result.content
@@ -656,6 +666,36 @@ describe("OpenAPPA tool execution", () => {
     );
     expect(stolen.isError).toBe(true);
     expect(executeSpy).not.toHaveBeenCalled();
+  });
+
+  test("declares a subagent's return ahead of its spawn with no offer and no review", async () => {
+    const reviewSpy = vi.spyOn(openappaService, "loadOfferReview");
+    const executeSpy = vi
+      .spyOn(openappaService, "executeRemedyByOffer")
+      .mockResolvedValue({
+        result: { content: [{ type: "text", text: "[appa] Declared." }] },
+        known: true,
+      });
+    const label = { trust: "suspicious", audience: ["self"] };
+
+    const result = await executeArchestraTool(
+      toolFullName,
+      { label, trajectory: trajectory() },
+      mockContext,
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(result.content).toEqual([
+      { type: "text", text: "[appa] Declared." },
+    ]);
+    expect(executeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        args: { label },
+        sessionId: "session-1",
+      }),
+    );
+    expect(executeSpy.mock.calls[0]?.[0]).not.toHaveProperty("ruling");
+    expect(reviewSpy).not.toHaveBeenCalled();
   });
 
   test("executes unreviewed remedy offer immediately without prompting", async () => {
@@ -773,6 +813,42 @@ describe("OpenAPPA tool execution", () => {
     expect(executeSpy.mock.calls[0][0]).not.toHaveProperty("precheckRefusal");
     expect(result.content[0]).toEqual({ type: "text", text: "Authorized" });
     expect(extractMcpHumanRuling(result)).toBe("approve");
+  });
+
+  test("chat client: the prompt hides credential headers while the ruling binds the original call", async () => {
+    const reviewedArguments = JSON.stringify({
+      command: "curl -H 'Authorization: Bearer tok_secret' https://x/api",
+    });
+    vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+      offer_id: "offer-hitl",
+      text: `Approve this call?\nArguments:\n${reviewedArguments}`,
+      session_id: "session-1",
+      tool: "mcp/shell/run",
+      arguments: reviewedArguments,
+    });
+    const executeSpy = vi
+      .spyOn(openappaService, "executeRemedyByOffer")
+      .mockResolvedValue({
+        result: { content: [{ type: "text", text: "Authorized" }] },
+        known: true,
+      });
+    const elicitSpy = vi.fn().mockResolvedValue({
+      status: "answered",
+      result: { action: "accept", content: { action: "approve" } },
+    });
+
+    await executeArchestraTool(
+      toolFullName,
+      { offer_id: "offer-hitl", trajectory: trajectory() },
+      { ...mockContext, elicitation: { elicit: elicitSpy } as any },
+    );
+
+    const prompt = elicitSpy.mock.calls[0]?.[0];
+    expect(prompt.reviewedArguments).toBeDefined();
+    expect(JSON.stringify(prompt)).not.toContain("tok_secret");
+    expect(executeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ ruling: "approve" }),
+    );
   });
 
   test("chat client: a reviewed call that could not run is refused without asking", async () => {
@@ -1226,7 +1302,7 @@ describe("OpenAPPA tool execution", () => {
       callId: "control-no-answer",
       offerId: "offer-hitl",
     };
-    expect(await getHitlReviewResult(lookup)).toBe(outcome);
+    expect(await getHitlReviewResult(lookup)).toEqual({ outcome: outcome });
     expect(await peekHitlDecision(lookup)).toMatchObject({ ruling: "none" });
     expect(await consumeHitlRuling(lookup)).toBe("none");
     expect(
@@ -1647,7 +1723,9 @@ describe("OpenAPPA tool execution", () => {
       callId: "control-binding",
       offerId: "offer-binding",
     };
-    expect(await getHitlReviewResult(lookup)).toBe("review_unanswered");
+    expect(await getHitlReviewResult(lookup)).toEqual({
+      outcome: "review_unanswered",
+    });
     expect(
       await getHitlReviewResult({
         ...lookup,
@@ -1733,7 +1811,7 @@ describe("OpenAPPA tool execution", () => {
         callId: "review-required-call",
         offerId: "offer-hitl",
       }),
-    ).toBe("review_required");
+    ).toEqual({ outcome: "review_required" });
     expect(
       await getHitlAskUserArguments({
         session: {
@@ -1745,6 +1823,50 @@ describe("OpenAPPA tool execution", () => {
     ).toMatchObject({
       question: "Approve this action?",
       remedy_offer_ids: ["offer-hitl"],
+    });
+  });
+
+  test("mcp gateway: a repeated remedy call with no approval card asked since says the answer was not recorded", async () => {
+    vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+      offer_id: "offer-hitl",
+      text: "Approve this action?",
+      session_id: "session-1",
+      tool: "archestra__todo_write",
+      arguments: VALID_TODO,
+    });
+    const executeSpy = vi.spyOn(openappaService, "executeRemedyByOffer");
+    const call = (currentToolCallId: string) =>
+      executeArchestraTool(
+        toolFullName,
+        { offer_id: "offer-hitl", trajectory: trajectory(), plan: "Review" },
+        {
+          ...mockContext,
+          currentToolCallId,
+          mrtr: { enabled: true, clientCapabilities: { elicitation: {} } },
+        },
+      );
+
+    expect((await call("first-call")).structuredContent).toMatchObject({
+      outcome: "review_required",
+    });
+    const repeated = await call("second-call");
+
+    expect(repeated.structuredContent).toMatchObject({
+      ok: false,
+      outcome: "answer_not_recorded",
+      reason: "question_not_issued",
+      offer_id: "offer-hitl",
+    });
+    expect(executeSpy).not.toHaveBeenCalled();
+    expect(
+      await getHitlReviewResult({
+        session: { organization_id: orgId, session_id: "session-1" },
+        callId: "second-call",
+        offerId: "offer-hitl",
+      }),
+    ).toEqual({
+      outcome: "answer_not_recorded",
+      reason: "question_not_issued",
     });
   });
 

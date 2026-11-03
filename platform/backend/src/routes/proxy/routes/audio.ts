@@ -13,9 +13,11 @@ import {
 import { makeAudioAdapterFactory } from "../adapters/audio";
 import { PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
+import { audioDurationSeconds } from "../utils/audio-duration";
 import { getAzureProxyIngress } from "../utils/azure-ingress";
 import {
   type MediaMultipartFile,
+  mediaUploadType,
   parseMediaMultipart,
   registerMediaMultipartParser,
 } from "../utils/media-multipart";
@@ -68,10 +70,11 @@ export async function parseAudioUploadRequest(
     ].includes(extension)
   )
     throw new ApiError(400, "Unsupported audio filename extension");
+  const uploadType = mediaUploadType(file);
   if (
-    !file.mimetype.startsWith("audio/") &&
+    !uploadType.startsWith("audio/") &&
     !["application/octet-stream", "video/mp4", "video/webm"].includes(
-      file.mimetype,
+      uploadType,
     )
   )
     throw new ApiError(415, "Unsupported audio content type");
@@ -138,6 +141,7 @@ export function handleAudioProxy(params: {
 }) {
   const { body, request, reply, provider, operation } = params;
   const { file, ...parameters } = body;
+  const audioSeconds = file ? audioDurationSeconds(file.data) : undefined;
   const safe: AudioAuditRequest = {
     model: body.model,
     operation,
@@ -154,8 +158,11 @@ export function handleAudioProxy(params: {
       ? {
           file: {
             filename: file.filename,
-            mimetype: file.mimetype,
+            mimetype: mediaUploadType(file),
             size: file.data.length,
+            ...(audioSeconds !== undefined && {
+              duration_seconds: Number(audioSeconds.toFixed(3)),
+            }),
           },
         }
       : {}),
@@ -165,7 +172,13 @@ export function handleAudioProxy(params: {
     safe,
     request,
     reply,
-    makeAudioAdapterFactory({ provider, operation, parameters, file }),
+    makeAudioAdapterFactory({
+      provider,
+      operation,
+      parameters,
+      file,
+      audioSeconds,
+    }),
   );
 }
 

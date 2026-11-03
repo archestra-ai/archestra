@@ -66,6 +66,30 @@ class ExecutionSandboxRegistry {
     return await entry.defaultSandbox;
   }
 
+  /**
+   * The default sandbox `run_command` targets: the conversation's when there is
+   * one, otherwise the execution's. Null when the run has neither scope.
+   */
+  async getOrCreateRunDefault(params: {
+    organizationId: string;
+    userId: string;
+    conversationId: string | null;
+    isolationKey: string | null;
+    defaultCwd: string;
+  }): Promise<SkillSandbox | null> {
+    const { conversationId, isolationKey, ...owner } = params;
+    if (conversationId) {
+      return SkillSandboxModel.findOrCreateDefault({
+        ...owner,
+        conversationId,
+      });
+    }
+    if (isolationKey) {
+      return this.getOrCreateDefault({ ...owner, isolationKey });
+    }
+    return null;
+  }
+
   /** The execution's default sandbox if one was created, without creating. */
   async findDefault(params: {
     organizationId: string;

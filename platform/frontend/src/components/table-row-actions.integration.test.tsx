@@ -68,6 +68,44 @@ describe("TableRowActions with the real PermissionButton", () => {
     expect(onRowClick).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { kind: "plain", permissions: undefined },
+    { kind: "permitted", permissions: { agent: ["update"] } },
+  ] as const)("runs a $kind row action inside a form without submitting the form", ({
+    permissions,
+  }) => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    const onSubmit = vi.fn((event: React.FormEvent) => event.preventDefault());
+    const onRemove = vi.fn();
+
+    render(
+      <TooltipProvider>
+        <form onSubmit={onSubmit}>
+          <TableRowActions
+            itemName="Ada"
+            actions={[
+              {
+                icon: <span>icon</span>,
+                label: "Remove",
+                onClick: onRemove,
+                permissions,
+              },
+            ]}
+            dropdownActions={[{ icon: <span>icon</span>, label: "Rename" }]}
+          />
+        </form>
+      </TooltipProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove Ada" }));
+    fireEvent.click(screen.getByRole("button", { name: "More actions Ada" }));
+
+    expect(onRemove).toHaveBeenCalledTimes(1);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it("neither navigates nor runs the handler for a refused link action", () => {
     // An action carrying href, permissions and onClick at once: the href would
     // navigate past the refusal on its own, and the handler would run past it

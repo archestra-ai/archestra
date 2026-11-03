@@ -10,6 +10,8 @@ export const OPENAI_HANDLED_ENDPOINT_SUFFIXES = [
   RESPONSES_SUFFIX,
   RESPONSES_COMPACT_SUFFIX,
   EMBEDDINGS_SUFFIX,
+  "/images/generations",
+  "/images/edits",
   "/audio/speech",
   "/audio/transcriptions",
   "/audio/translations",

@@ -90,7 +90,7 @@ it.each([
       <AgentRunChatSession taskId="session" />
     </QueryClientProvider>,
   );
-  await screen.findByRole("button", { name: "Resume" });
+  await screen.findAllByRole("button", { name: "Resume" });
   const notice = screen.getByRole(
     state === "TASK_STATE_FAILED" ? "alert" : "status",
   );
@@ -157,12 +157,15 @@ it("leaves the completed turn immediately after resume is accepted, even while s
       <AgentRunChatSession taskId="session" />
     </QueryClientProvider>,
   );
-  await user.click(await screen.findByRole("button", { name: "Resume" }));
+  await user.click(
+    (await screen.findAllByRole("button", { name: "Resume" }))[0],
+  );
   await waitFor(() => expect(requests).toBe(1));
   expect(body).toEqual({});
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  const resuming = screen.getByRole("button", { name: "Resuming…" });
-  expect(resuming).toBeDisabled();
+  const resumingButtons = screen.getAllByRole("button", { name: "Resuming…" });
+  for (const button of resumingButtons) expect(button).toBeDisabled();
+  const resuming = resumingButtons[0];
   await user.click(resuming);
   expect(requests).toBe(1);
   release();
@@ -198,13 +201,17 @@ it("allows retry after a resume request fails", async () => {
       <AgentRunChatSession taskId="session" />
     </QueryClientProvider>,
   );
-  await user.click(await screen.findByRole("button", { name: "Resume" }));
+  await user.click(
+    (await screen.findAllByRole("button", { name: "Resume" }))[0],
+  );
   await waitFor(() => expect(requests).toBe(1));
   await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Resume" })).toBeEnabled(),
+    screen.getAllByRole("button", { name: "Resume" }).forEach((button) => {
+      expect(button).toBeEnabled();
+    }),
   );
   expect(screen.getByText("Saved output")).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Resume" }));
+  await user.click(screen.getAllByRole("button", { name: "Resume" })[0]);
   await waitFor(() => expect(requests).toBe(2));
   client.clear();
 });

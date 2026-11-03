@@ -5397,12 +5397,9 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     },
     ...FLOOR_PUBLIC_EGRESS,
   ];
-  // AWS ApplicationNetworkPolicy floor: cannot express selector peers, and with
-  // no resolved ClusterIP the DNS bootstrap allows :53 to any IP.
-  const AWS_FLOOR_EGRESS = [
-    { to: [{ ipBlock: { cidr: "0.0.0.0/0" } }], ports: DNS_PORTS },
-    ...FLOOR_PUBLIC_EGRESS,
-  ];
+  // Without a known resolver, AWS keeps the public floor without adding DNS
+  // access to private destinations.
+  const AWS_FLOOR_EGRESS = FLOOR_PUBLIC_EGRESS;
 
   test("applies the SSRF floor as a plain NetworkPolicy for an unrestricted policy", async () => {
     const { api, policies } = makeStatefulNetworkingApi();

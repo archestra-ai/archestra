@@ -1,6 +1,7 @@
 import config from "@/config";
 import A2aRemoteAgentModel from "@/models/a2a-remote-agent";
 import AgentModel from "@/models/agent";
+import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import AppModel from "@/models/app";
@@ -53,49 +54,7 @@ import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { findConnectedClientForAudit } from "@/services/connected-client";
 import { type AuditEventName, AuditEventNameSchema } from "@/types/audit-log";
-
-export type AuditResourceIdSource =
-  | "organizationContext"
-  | "currentUser"
-  | "currentUserPersonalToken";
-
-export type AuditableRouteConfig = {
-  resourceType: string;
-  /**
-   * Name of the route param that identifies the resource for `fetchById` and
-   * `resource_id` (default: `id`). Use `agentId` for `/api/agents/:agentId/...`,
-   * `roleId` for `/api/roles/:roleId`, etc.
-   */
-  resourceIdParam?: string;
-  /**
-   * When set, the audited resource id is not taken from route params.
-   * - `organizationContext`: `request.organizationId` (org settings, bulk org routes).
-   * - `currentUser`: `request.user.id` for personal account-level actions.
-   * - `currentUserPersonalToken`: the caller's personal token row in the current org.
-   */
-  resourceIdSource?: AuditResourceIdSource;
-  fetchById?: (
-    id: string,
-    organizationId: string,
-    routeParams?: Record<string, unknown>,
-  ) => Promise<Record<string, unknown> | null>;
-  /**
-   * Hard-coded action name; wins over actionByMethod and method-derivation.
-   * Use for routes whose HTTP verb does not map to the semantic action
-   * (rotations, syncs, imports, reinstalls, bulk ops).
-   */
-  action?: AuditEventName;
-  /**
-   * Per-method action override; falls through to deriveAction when absent.
-   * Useful when a single route pattern handles multiple verbs with different
-   * semantics.
-   */
-  actionByMethod?: Partial<
-    Record<"POST" | "PUT" | "PATCH" | "DELETE", AuditEventName>
-  >;
-  /** Skip unsuccessful attempts; the route sets `auditSkip` for no-op successes. */
-  onlyWhenChanged?: boolean;
-};
+import type { AuditableRouteConfig } from "@/types/audit-route-config";
 
 /**
  * Return value of `resolveAuditableRouteConfig`.  `viaWalkUp` is true when the
@@ -250,6 +209,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "hook",
     fetchById: (id, organizationId) =>
       HookFileModel.findByIdForAudit(id, organizationId),
+  },
+  "/api/agent-runtime-templates/settings": {
+    resourceType: "organization",
+    resourceIdSource: "organizationContext",
+    action: "organization.updated",
+    fetchById: (id) => AgentRuntimeTemplateModel.findByIdForAudit(id),
   },
   // Agents
   "/api/agents": {
@@ -717,6 +682,13 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   },
   "/api/limits/:id": {
     resourceType: "limit",
+    fetchById: (id, orgId) => LimitModel.findByIdForAudit(id, orgId),
+  },
+  // A reset changes only the window start, so before/after shows lastCleanup
+  // moving.
+  "/api/limits/:id/reset": {
+    resourceType: "limit",
+    action: "limit.reset",
     fetchById: (id, orgId) => LimitModel.findByIdForAudit(id, orgId),
   },
 
@@ -1316,7 +1288,7 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdSource: "organizationContext",
   },
 
-  // Team membership & external-group mappings live in join tables the team
+  // Team membership & Team Sync group links live in join tables the team
   // snapshot reflects; the parent team survives member/mapping removal, so pin
   // team.updated on both the POST (add) and the per-child DELETE.
   "/api/teams/:id/members": {
@@ -1540,6 +1512,21 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "role",
     resourceIdSource: "organizationContext",
     actionByMethod: { DELETE: "role.bulk_deleted" },
+  },
+  "/api/agent-runs/bulk": {
+    resourceType: "agentRun",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { DELETE: "agentRun.bulk_deleted" },
+  },
+  "/api/agent-runs/bulk/workspace": {
+    resourceType: "agentRun",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { DELETE: "agentRun.bulk_files_deleted" },
+  },
+  "/api/agent-runs/bulk-cancel": {
+    resourceType: "agentRun",
+    resourceIdSource: "organizationContext",
+    action: "agentRun.bulk_canceled",
   },
   "/api/teams/bulk": {
     resourceType: "team",

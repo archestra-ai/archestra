@@ -6,7 +6,7 @@ import {
 import { and, eq, inArray, isNull, ne, or } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import { constructFrozenMcpDeploymentName } from "@/k8s/shared";
+import { constructFrozenMcpDeploymentName } from "@/k8s/deployment-names";
 import { SRE_ENVIRONMENT_ID } from "@/services/sre-agent/definition";
 import type { McpServer, ToolOwner } from "@/types";
 import AgentModel from "./agent";

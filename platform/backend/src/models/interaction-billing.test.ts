@@ -1,13 +1,10 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { priceBillingUsage } from "@/services/billable-usage";
 import { expect, test } from "@/test";
 import type { InsertInteraction } from "@/types/interaction";
-import {
-  normalizeAnthropicUsage,
-  type PricedBillingUsage,
-} from "@/utils/billable-usage";
+import { normalizeAnthropicUsage } from "@/utils/billable-usage";
 import { uuidv7 } from "@/utils/uuid";
 import EnvironmentModel from "./environment";
 import EnvironmentDefaultUserLimitModel from "./environment-default-user-limit";
@@ -20,7 +17,6 @@ import StatisticsModel from "./statistics";
 async function record(params: {
   agent: { id: string; organizationId: string; environmentId: string | null };
   userId?: string;
-  mode?: PricedBillingUsage["mode"];
   cacheOnly?: boolean;
 }): Promise<InsertInteraction> {
   for (const model of ["executor", "advisor"])
@@ -53,7 +49,7 @@ async function record(params: {
     model: "executor",
     usage,
     provider: "anthropic",
-    mode: params.mode ?? "enforce",
+    mode: "enforce",
   });
   return {
     id: uuidv7(),
@@ -88,6 +84,99 @@ async function record(params: {
     },
   };
 }
+
+test("verified aliases settle canonical rows once and count toward default user caps", async ({
+  makeAgent,
+  makeOrganization,
+  makeUser,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  const agent = await makeAgent({ organizationId: org.id });
+  const canonical = "accounts/fireworks/models/glm-5p3-flash";
+  const alias = "glm-5p3-flash";
+  const caps = [];
+  for (const model of [[alias], [canonical], [alias, canonical], ["other"]]) {
+    caps.push(
+      await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1,
+        model,
+        lastCleanup: new Date(),
+      }),
+    );
+  }
+  await EnvironmentDefaultUserLimitModel.create({
+    organizationId: org.id,
+    environmentId: null,
+    limitValue: 1,
+    model: [alias, canonical],
+    cleanupInterval: "1w",
+  });
+  const data = await record({ agent, userId: user.id, cacheOnly: true });
+  const component = data.billingUsage?.components[0];
+  if (!component || !data.billingUsage) throw new Error("Missing usage");
+  component.model = canonical;
+  component.modelAliases = [alias];
+  component.cost = "0.6000000000";
+  data.billingUsage.cost = component.cost;
+  data.cost = component.cost;
+  data.model = canonical;
+  await InteractionModel.create(data);
+  await InteractionModel.create(data);
+  const breakdowns = await LimitModel.getModelUsageBreakdowns(
+    caps.map((cap) => cap.id),
+  );
+  for (const cap of caps.slice(0, 3)) {
+    expect(breakdowns.get(cap.id)?.filter((row) => row.cost > 0)).toEqual([
+      expect.objectContaining({ model: canonical, cost: 0.6 }),
+    ]);
+  }
+  expect(breakdowns.get(caps[3].id)?.every((row) => row.cost === 0)).toBe(true);
+  const charges = await db
+    .select()
+    .from(schema.limitBillingUsageTable)
+    .where(
+      inArray(
+        schema.limitBillingUsageTable.limitId,
+        caps.map((cap) => cap.id),
+      ),
+    );
+  expect(charges).toHaveLength(3);
+  for (const charge of charges) {
+    expect(charge.model).toBe(canonical);
+    expect(Number(charge.cost)).toBe(0.6);
+  }
+  const check = () =>
+    LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+      userId: user.id,
+      model: canonical,
+      modelAliases: [alias],
+    });
+  // Listing both names must not double a single component's 60-cent charge.
+  expect(await check()).toBeNull();
+  // The second distinct receipt brings both explicit and inherited caps over $1.
+  data.id = uuidv7();
+  await InteractionModel.create(data);
+  expect((await check())?.[2]).toMatchObject({ source: "default_user" });
+  expect(
+    await LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+      model: canonical,
+      modelAliases: [alias],
+    }),
+  ).not.toBeNull();
+  // Alias-only inherited caps must count the stored canonical components too.
+  const inherited = await EnvironmentDefaultUserLimitModel.findGlobal(org.id);
+  if (!inherited) throw new Error("Missing default limit");
+  await EnvironmentDefaultUserLimitModel.patch(inherited.id, {
+    model: [alias],
+  });
+  expect((await check())?.[2]).toMatchObject({ source: "default_user" });
+});
 
 test("settles once across replay, keeps historical rates, and replay after reset cannot charge a new window", async ({
   makeAgent,
@@ -216,7 +305,6 @@ test("cache-only spend survives metadata-only logs, retention and mode changes",
   await db
     .delete(schema.interactionsTable)
     .where(eq(schema.interactionsTable.id, data.id as string));
-  config.llmProxy.usageAccountingMode = "off";
   await EnvironmentDefaultUserLimitModel.create({
     organizationId: org.id,
     environmentId: null,
@@ -281,7 +369,7 @@ test("default model-scoped caps include advisor charges while subscription and t
   ).not.toBeNull();
 });
 
-test("mixed shadow and enforced completions preserve uncovered legacy usage, including after reset", async ({
+test("legacy counters from an older release still count beside settled charges until a reset", async ({
   makeAgent,
   makeOrganization,
 }) => {
@@ -294,19 +382,23 @@ test("mixed shadow and enforced completions preserve uncovered legacy usage, inc
     limitValue: 100,
     model: null,
   });
-  const enforce = await record({ agent });
-  const shadow = structuredClone(enforce);
-  shadow.id = uuidv7();
-  if (shadow.billingUsage) shadow.billingUsage.mode = "shadow";
-  await InteractionModel.create(enforce);
-  await InteractionModel.create(shadow);
+  // An older release posts only the executor's token counts.
+  const legacy = () =>
+    LimitModel.recordInteractionTokenUsage({
+      agentId: agent.id,
+      teamIds: [],
+      entities: [],
+      model: "executor",
+      inputTokens: 300,
+      outputTokens: 50,
+    });
+  await InteractionModel.create(await record({ agent }));
+  await legacy();
   let rows =
     (await LimitModel.getModelUsageBreakdowns([cap.id])).get(cap.id) ?? [];
   expect(rows.reduce((sum, row) => sum + row.cost, 0)).toBeCloseTo(3.0011, 10);
   await LimitModel.resetLimitsUsage([cap.id]);
-  const lateShadow = structuredClone(shadow);
-  lateShadow.id = uuidv7();
-  await InteractionModel.create(lateShadow);
+  await legacy();
   rows = (await LimitModel.getModelUsageBreakdowns([cap.id])).get(cap.id) ?? [];
   expect(rows.reduce((sum, row) => sum + row.cost, 0)).toBeCloseTo(0.00055, 10);
 });

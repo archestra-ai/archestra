@@ -3,6 +3,7 @@
 import { ADMIN_ROLE_NAME, DocsPage, getDocsUrl } from "@archestra/shared";
 import { Info } from "lucide-react";
 import { useMemo, useState } from "react";
+import { EstimatedSpendBadge } from "@/components/estimated-spend-badge";
 import {
   CLEANUP_INTERVAL_LABELS,
   type LimitCleanupInterval,
@@ -78,6 +79,7 @@ export function BudgetFields({
   showBillingTeam = true,
   capLocked = false,
   currentUsage = null,
+  estimatedUsage = false,
   idPrefix,
   layout = "card",
 }: {
@@ -93,6 +95,8 @@ export function BudgetFields({
   capLocked?: boolean;
   /** Spend counted against the saved cap so far in its window. */
   currentUsage?: number | null;
+  /** Part of `currentUsage` is estimated. */
+  estimatedUsage?: boolean;
   idPrefix: string;
   /**
    * "inline" is the create dialog's: a "Budget" heading over the payer and
@@ -210,11 +214,12 @@ export function BudgetFields({
   const capNotes = (
     <>
       {currentUsage !== null && spendCap && (
-        <p className="text-xs text-muted-foreground">
+        <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
           <span>
             {formatWholeDollars(currentUsage)} spent{" "}
             {describeWindow(spendCap.cleanupInterval)}.
           </span>
+          {estimatedUsage && <EstimatedSpendBadge />}
         </p>
       )}
       {capLocked && (

@@ -9,14 +9,17 @@ import {
   SupportedEmbeddingDimensionsSchema,
   SupportedProvidersSchema,
 } from "@archestra/shared";
-import { isValidModelPrice } from "@archestra/shared/model-price";
+import {
+  isValidModelPrice,
+  normalizeModelPrice,
+} from "@archestra/shared/model-price";
 import {
   createInsertSchema,
   createSelectSchema,
   createUpdateSchema,
 } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { LabelWithDetailsSchema } from "./label";
 import { RetiredSharingUpdateFieldSchema } from "./visibility";
 
@@ -169,6 +172,25 @@ export const PriceSourceSchema = z.enum([
 ]);
 export type PriceSource = z.infer<typeof PriceSourceSchema>;
 
+const MediaRateSchema = z.object({
+  /** What the rate meters: text, image or audio, or text and image together. */
+  kind: z.enum(["text", "image", "audio", "text_and_image"]),
+  usd: z.number(),
+});
+
+/**
+ * A media model's rates as its vendor publishes them: per million tokens (image
+ * and audio tokens priced apart from text), per million characters of speech
+ * input, or per minute of transcribed audio. These are the rates the proxy
+ * charges media calls by; the per-token chat prices do not apply to them.
+ */
+export const MediaPricingSchema = z.object({
+  per: z.enum(["million_tokens", "million_characters", "minute"]),
+  input: z.array(MediaRateSchema),
+  output: z.array(MediaRateSchema),
+});
+export type MediaPricing = z.infer<typeof MediaPricingSchema>;
+
 /**
  * Model capabilities for API responses.
  * Derived from SelectModelSchema with computed price fields.
@@ -204,6 +226,8 @@ export const ModelCapabilitiesSchema = SelectModelSchema.pick({
   pricePerMillionCacheWrite: z.string().nullable(),
   /** Source of the effective cache price (null when cache is unpriced) */
   cachePriceSource: PriceSourceSchema.nullable(),
+  /** Media rates, for an image, speech or transcription model; else null */
+  mediaPricing: MediaPricingSchema.nullable(),
 });
 export type ModelCapabilities = z.infer<typeof ModelCapabilitiesSchema>;
 
@@ -220,9 +244,19 @@ const CustomModelTokenLimitSchema = z
   .nullable()
   .optional();
 
-/**
- * Schema for updating model details (pricing + modalities) from the edit dialog.
- */
+/** Canonicalize validated prices before passing them to PostgreSQL. */
+const CustomModelPriceSchema = z
+  .string()
+  .refine(
+    isValidModelPrice,
+    "Prices must be decimal numbers between 0 and 99999999.99",
+  )
+  .transform(normalizeModelPrice)
+  .pipe(z.string())
+  .nullable()
+  .optional();
+
+/** Schema for updating model details (pricing + modalities) from the edit dialog. */
 export const PatchModelBodySchema = createUpdateSchema(
   schema.modelsTable,
   fieldsToExtend,
@@ -246,10 +280,10 @@ export const PatchModelBodySchema = createUpdateSchema(
     configuredParameters: true,
   })
   .extend({
-    customPricePerMillionInput: z.string().nullable().optional(),
-    customPricePerMillionOutput: z.string().nullable().optional(),
-    customPricePerMillionCacheRead: z.string().nullable().optional(),
-    customPricePerMillionCacheWrite: z.string().nullable().optional(),
+    customPricePerMillionInput: CustomModelPriceSchema,
+    customPricePerMillionOutput: CustomModelPriceSchema,
+    customPricePerMillionCacheRead: CustomModelPriceSchema,
+    customPricePerMillionCacheWrite: CustomModelPriceSchema,
     longContextThreshold: z
       .number()
       .int("Must be a whole number of tokens")
@@ -257,10 +291,10 @@ export const PatchModelBodySchema = createUpdateSchema(
       .max(MAX_CUSTOM_MODEL_TOKEN_LIMIT)
       .nullable()
       .optional(),
-    longContextPricePerMillionInput: z.string().nullable().optional(),
-    longContextPricePerMillionOutput: z.string().nullable().optional(),
-    longContextPricePerMillionCacheRead: z.string().nullable().optional(),
-    longContextPricePerMillionCacheWrite: z.string().nullable().optional(),
+    longContextPricePerMillionInput: CustomModelPriceSchema,
+    longContextPricePerMillionOutput: CustomModelPriceSchema,
+    longContextPricePerMillionCacheRead: CustomModelPriceSchema,
+    longContextPricePerMillionCacheWrite: CustomModelPriceSchema,
     /**
      * Admin-set context window / max output tokens, overriding whatever the
      * provider reported (including nothing at all). `null` clears the override
@@ -362,26 +396,6 @@ export const PatchModelBodySchema = createUpdateSchema(
       message:
         "Long-context threshold and all four long-context prices must be set together or all be null",
     },
-  )
-  .refine(
-    (data) => {
-      for (const value of [
-        data.customPricePerMillionInput,
-        data.customPricePerMillionOutput,
-        data.customPricePerMillionCacheRead,
-        data.customPricePerMillionCacheWrite,
-        data.longContextPricePerMillionInput,
-        data.longContextPricePerMillionOutput,
-        data.longContextPricePerMillionCacheRead,
-        data.longContextPricePerMillionCacheWrite,
-      ]) {
-        if (value != null) {
-          if (!isValidModelPrice(value)) return false;
-        }
-      }
-      return true;
-    },
-    { message: "Prices must be decimal numbers between 0 and 99999999.99" },
   );
 export type PatchModelBody = z.infer<typeof PatchModelBodySchema>;
 
@@ -441,6 +455,8 @@ export const ModelWithApiKeysSchema = SelectModelSchema.extend({
   pricePerMillionCacheWrite: z.string().nullable(),
   /** Source of the effective cache price (null when cache is unpriced) */
   cachePriceSource: PriceSourceSchema.nullable(),
+  /** Media rates, for an image, speech or transcription model; else null */
+  mediaPricing: MediaPricingSchema.nullable(),
   /** True when the provider charges nothing for this model (both raw prices are zero). */
   isFree: z.boolean(),
   /**

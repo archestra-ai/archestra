@@ -63,7 +63,27 @@ describe("buildPreToolUseBlockedResult", () => {
 // firePreToolUseHook
 // ---------------------------------------------------------------------------
 describe("firePreToolUseHook", () => {
-  test("returns null (proceed) when conversationId is absent", async () => {
+  test("fires against the run scope in a headless run (no conversationId)", async () => {
+    const spy = vi
+      .spyOn(hookDispatcherService, "fire")
+      .mockResolvedValueOnce({ decision: "proceed" });
+
+    const result = await firePreToolUseHook({
+      ctx: { ...BASE_CTX, conversationId: undefined, scopeKey: "run-xyz" },
+      toolName: "my_tool",
+      toolInput: {},
+    });
+
+    expect(result).toBeNull();
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: undefined,
+        isolationKey: "run-xyz",
+      }),
+    );
+  });
+
+  test("returns null (proceed) without firing when the run has no scope", async () => {
     const spy = vi.spyOn(hookDispatcherService, "fire");
 
     const result = await firePreToolUseHook({
@@ -163,7 +183,28 @@ describe("firePreToolUseHook", () => {
 // firePostToolUseHook
 // ---------------------------------------------------------------------------
 describe("firePostToolUseHook", () => {
-  test("returns null (proceed) when conversationId is absent", async () => {
+  test("fires against the run scope in a headless run (no conversationId)", async () => {
+    const spy = vi
+      .spyOn(hookDispatcherService, "fire")
+      .mockResolvedValueOnce({ decision: "proceed" });
+
+    const result = await firePostToolUseHook({
+      ctx: { ...BASE_CTX, conversationId: undefined, scopeKey: "run-xyz" },
+      toolName: "my_tool",
+      toolInput: {},
+      toolResponse: "ok",
+    });
+
+    expect(result).toBeNull();
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: undefined,
+        isolationKey: "run-xyz",
+      }),
+    );
+  });
+
+  test("returns null (proceed) without firing when the run has no scope", async () => {
     const spy = vi.spyOn(hookDispatcherService, "fire");
 
     const result = await firePostToolUseHook({

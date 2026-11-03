@@ -7,7 +7,7 @@ import {
   slackHandleFor,
   TimeInMs,
 } from "@archestra/shared";
-import { WebClient } from "@slack/web-api";
+import { WebClient, type WebClientOptions } from "@slack/web-api";
 import sharp from "sharp";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
@@ -364,14 +364,18 @@ class SlackAppFactory {
    */
   async ensureManifestScopes(
     bot: SlackDbConfig | SlackAgentBotConfig,
+    clientOptions?: WebClientOptions,
   ): Promise<void> {
     if (!bot.appId || !(bot.managed || bot.clientId)) return;
     const key = `${bot.appId}:${SLACK_REQUIRED_BOT_SCOPES.join(",")}:${SLACK_BOT_EVENTS.join(",")}`;
     if (this.manifestsWithScopes.has(key)) return;
     try {
       if (!(await this.hasTokenFor(bot))) return;
-      const token = await this.getAccessToken(bot.configTokenUserId);
-      const client = new WebClient();
+      const token = await this.getAccessToken(
+        bot.configTokenUserId,
+        clientOptions,
+      );
+      const client = new WebClient(undefined, clientOptions);
       const exported = await client.apps.manifest.export({
         token,
         app_id: bot.appId,
@@ -647,7 +651,10 @@ class SlackAppFactory {
    * A live configuration token, renewed when it is close to expiring: the
    * user's own, or without a user the organization-wide one.
    */
-  private async getAccessToken(userId?: string): Promise<string> {
+  private async getAccessToken(
+    userId?: string,
+    clientOptions?: WebClientOptions,
+  ): Promise<string> {
     const saved = await ChatOpsConfigModel.getSlackAppConfigToken(userId);
     if (!saved) {
       throw new Error(
@@ -657,7 +664,8 @@ class SlackAppFactory {
     if (saved.expiresAt - Date.now() > ROTATE_BEFORE_EXPIRY_MS) {
       return saved.accessToken;
     }
-    return (await this.rotate(saved.refreshToken, userId)).accessToken;
+    return (await this.rotate(saved.refreshToken, userId, clientOptions))
+      .accessToken;
   }
 
   /** Whether the token that manages this bot's app is still saved. */
@@ -738,8 +746,12 @@ class SlackAppFactory {
   private async rotate(
     refreshToken: string,
     userId?: string,
+    clientOptions?: WebClientOptions,
   ): Promise<SlackAppConfigToken> {
-    const rotated = await new WebClient().tooling.tokens.rotate({
+    const rotated = await new WebClient(
+      undefined,
+      clientOptions,
+    ).tooling.tokens.rotate({
       refresh_token: refreshToken,
     });
     if (!rotated.ok || !rotated.token || !rotated.refresh_token) {

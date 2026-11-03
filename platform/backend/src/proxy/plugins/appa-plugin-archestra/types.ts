@@ -105,6 +105,15 @@ export type AppaSpawnPromptField = {
 
 export type AppaSpawnResultDisposition = "pending" | "failed";
 
+/**
+ * What a spawn call needs so its child runs on a model this proxy routes:
+ * arguments to add to the released call, or a refusal for a call that names
+ * a model this proxy does not route.
+ */
+export type AppaSpawnModel =
+  | { stamp: Record<string, unknown> }
+  | { refusal: string };
+
 export type AppaClientAdapter = {
   readonly id: string;
   /** Prefix for this client's native spawn/child namespace. */
@@ -121,10 +130,23 @@ export type AppaClientAdapter = {
    */
   nativeQuestion?: {
     toolName: string;
+    /** Gateway questions need this form when the client has no MCP elicitation. */
+    requiresNativeForm?: boolean;
     /** False when the client would refuse the tool, from its headers or request. */
     isAvailable?(headers: IncomingHttpHeaders, requestBody?: unknown): boolean;
     supportsMultiple?: boolean;
+    /** Keep questions with more choices on the gateway; never discard options. */
+    maxOptions?: number;
+    /** Total gateway choices a converter can show across bounded native cards. */
+    maxConvertedOptions?: number;
     fromAskUser?(args: AskUserArguments): Record<string, unknown>;
+    /** Repairs an oversized ordinary native question before host validation. */
+    fromNativeQuestion?(args: unknown): AskUserArguments | undefined;
+    /** Reads an ordinary converted question, never an approval review. */
+    ordinaryResultFromAskUser?(
+      result: NativeQuestionResult,
+      asked: AskUserArguments,
+    ): string;
     /**
      * Approve or Deny from the tool's result. `asked` is the question the
      * platform wrote for the review; the ruling is read against it, never
@@ -195,6 +217,12 @@ export type AppaClientAdapter = {
   extractSessionIdentity?(
     context: AppaMatchContext,
   ): AppaSessionIdentity | undefined;
+  /**
+   * The prompt a child's opening message carries, as the spawner handed it:
+   * without the preamble this client puts in front of it. A delegation
+   * marker closes that prompt, so its digest is taken over this text.
+   */
+  childOpeningPrompt?(text: string): string;
   /** Native parent named by a spawn-prepared child request, if any. */
   nativeSpawnParentId?(
     context: AppaMatchContext,
@@ -214,6 +242,16 @@ export type AppaClientAdapter = {
   isChildCompletionResult?(result: CommonToolResult): boolean;
   /** Returns bounded launch metadata and strips arbitrary acknowledgment text. */
   normalizeChildLaunchResult?(result: CommonToolResult): string | undefined;
+  /**
+   * The client resumes the parent's conversation by itself when a child it
+   * launched in the background finishes, and hands the parent its return
+   * then (Copilot CLI: a system notification and its own read_agent call).
+   * A reply to a request whose last tool round holds the launch result does
+   * not end the turn: the child may not have started yet, and a turn end
+   * closes the spawn of a child that has not started. A child that runs
+   * keeps its spawn open across turns by itself.
+   */
+  readonly resumesForBackgroundReturns?: true;
   /**
    * Reads a native message between agents of one session, such as a
    * teammate writing to its lead. `to` is the recipient as the client names
@@ -285,6 +323,20 @@ export type AppaClientAdapter = {
     namespace?: string;
     arguments: unknown;
   }): string[] | undefined;
+  /**
+   * Keeps a spawn's child on a model this proxy routes. A client that runs a
+   * subagent on its own default model unless the call names one (Copilot CLI
+   * signed in to GitHub) would otherwise start the child on a model whose
+   * requests never reach this proxy, out of Guardrails' sight. Undefined when
+   * the call needs nothing.
+   */
+  spawnModel?(params: {
+    requestBody: unknown;
+    /** The model this request asked the proxy for. */
+    model: string;
+    name: string;
+    arguments: Record<string, unknown>;
+  }): AppaSpawnModel | undefined;
   /** Native conversation ID that child subagents report as their parent. */
   nativeConversationId(context: AppaMatchContext): string | undefined;
   /**

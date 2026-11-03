@@ -96,6 +96,7 @@ export function TableRowActions({
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
                   <Button
+                    type="button"
                     variant="outline"
                     size={buttonSize}
                     aria-label={accessibleActionLabel("More actions", itemName)}
@@ -187,6 +188,7 @@ function ActionButton({
 
     return (
       <PermissionButton
+        type="button"
         permissions={action.permissions as Permissions}
         permissionScope={action.permissionScope}
         tooltip={tooltipText}
@@ -227,6 +229,7 @@ function ActionButton({
       </Button>
     ) : (
       <Button
+        type="button"
         aria-label={accessibleLabel}
         variant="outline"
         size={size}

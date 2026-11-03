@@ -15,6 +15,7 @@ import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
 import { InteractionModel, VirtualApiKeyModel } from "@/models";
 import LimitModel from "@/models/limit";
+import OrganizationModel from "@/models/organization";
 import { test as baseTest, expect } from "@/test";
 import azureRoutes from "./azure";
 
@@ -103,6 +104,10 @@ const test = baseTest.extend<{
     config.llm.azure.baseUrl = "https://unselected.example/openai/v1";
     config.llmProxy.plugins = [];
     const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    // Logs keep media only when the organization turns it on.
+    await OrganizationModel.patch(agent.organizationId, {
+      keepMediaInLogs: true,
+    });
     const secret = await makeSecret({
       secret: { apiKey: "fixture-image-provider-key" },
     });
@@ -192,17 +197,19 @@ test("real SDK edits preserve multiple inputs and a mask with governed credentia
     model: "gpt-image-1",
     inputTokens: 2,
     outputTokens: 3,
-    cost: null,
     request: {
       input_files: {
-        images: [{ filename: "one.png" }, { filename: "two.webp" }],
-        mask: { filename: "mask.png" },
+        // The row keeps each upload, and the mask, so Logs can show them.
+        images: [
+          { filename: "one.png", data: media.image.toString("base64") },
+          { filename: "two.webp", data: second.toString("base64") },
+        ],
+        mask: { filename: "mask.png", data: media.image.toString("base64") },
       },
     },
   });
-  expect(JSON.stringify(interactions[0].request)).not.toContain(
-    media.image.toString("base64"),
-  );
+  // gpt-image-1's published tariff: 2 text tokens at $5/M, 3 image tokens at $40/M.
+  expect(Number(interactions[0].cost)).toBe(0.00013);
   expect(JSON.stringify(interactions[0].request)).not.toContain(
     "fixture-image-provider-key",
   );
@@ -344,10 +351,10 @@ test("missing provider usage stays null rather than becoming zero tokens or free
   });
 });
 
-test("blocks image edits before dispatch under an applicable financial budget", async ({
+test("counts a priced image edit against a financial budget, and a spent one blocks it before dispatch", async ({
   media,
 }) => {
-  await LimitModel.create({
+  const budget = await LimitModel.create({
     entityType: "agent",
     entityId: media.agentId,
     limitType: "token_cost",
@@ -355,14 +362,18 @@ test("blocks image edits before dispatch under an applicable financial budget", 
     model: ["gpt-image-1"],
     lastCleanup: new Date(),
   });
-  await expect(
+  const edit = async () =>
     media.client.images.edit({
       model: "gpt-image-1",
       prompt: "A circle.",
       image: await toFile(media.image, "one.png"),
-    }),
-  ).rejects.toMatchObject({ status: 422 });
-  expect(media.requests).toHaveLength(0);
+    });
+  expect((await edit()).data).toHaveLength(1);
+  expect(media.requests).toHaveLength(1);
+
+  await LimitModel.patch(budget.id, { limitValue: 0 });
+  await expect(edit()).rejects.toMatchObject({ status: 402 });
+  expect(media.requests).toHaveLength(1);
 });
 
 test("native Azure SDK deployment path overrides form model and preserves api-version", async ({
@@ -433,7 +444,7 @@ test("client cancellation aborts the in-flight image provider request without re
   expect(media.requests).toHaveLength(1);
 });
 
-test("rejects unauthenticated calls and enforced accounting before any upstream request", async ({
+test("rejects unauthenticated calls before any upstream request", async ({
   media,
 }) => {
   const request = {
@@ -444,11 +455,22 @@ test("rejects unauthenticated calls and enforced accounting before any upstream 
   await expect(
     media.client.withOptions({ apiKey: "invalid-key" }).images.edit(request),
   ).rejects.toMatchObject({ status: 401 });
-  config.llmProxy.usageAccountingMode = "enforce";
-  await expect(media.client.images.edit(request)).rejects.toMatchObject({
-    status: 422,
-  });
   expect(media.requests).toHaveLength(0);
+});
+
+test("settles a priced edit", async ({ media }) => {
+  const priced = await media.client.images.edit({
+    model: "gpt-image-1",
+    prompt: "A circle.",
+    image: await toFile(media.image, "one.png"),
+  });
+  expect(priced.data).toHaveLength(1);
+  expect(media.requests).toHaveLength(1);
+  const [row] = await InteractionModel.getAllInteractionsForProfile(
+    media.agentId,
+  );
+  // gpt-image-1's published tariff: 2 text tokens at $5/M, 3 image tokens at $40/M.
+  expect(Number(row.cost)).toBe(0.00013);
 });
 
 test("rejects unsupported stream/partial fields, duplicate masks, invalid MIME and malformed multipart before upstream", async ({
@@ -564,6 +586,57 @@ test.for([
     });
     expect(media.requests).toHaveLength(1);
   }
+});
+
+test.for([
+  0, 1, 2,
+])("returns a large base64 image with %i padding bytes without retrying", async (padding, {
+  media,
+}) => {
+  // Exercise all padding cases with an output large enough to overflow a
+  // repeated-group base64 regex, using only synthetic image bytes.
+  const bytes = 6_000_000 - padding;
+  const output = Buffer.alloc(bytes, 0xa5).toString("base64");
+  media.respond((_request, response) => {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ created: 1, data: [{ b64_json: output }] }));
+  });
+  const result = await media.client.images.edit({
+    model: "gpt-image-1",
+    prompt: "A circle.",
+    image: await toFile(media.image, "one.png"),
+  });
+  expect(result.data?.[0].b64_json).toBe(output);
+  expect(media.requests).toHaveLength(1);
+});
+
+test.for([
+  "",
+  "AAA",
+  "A===",
+  "AA=A",
+  "====",
+  "AAA_",
+  "AAA\n",
+  "AAA\r",
+  "AAA ",
+  "AAAé",
+  `${"AAAA".repeat(2_000_000)}AA=A`,
+])("rejects malformed base64 provider output (case %#) without retrying", async (output, {
+  media,
+}) => {
+  media.respond((_request, response) => {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ created: 1, data: [{ b64_json: output }] }));
+  });
+  await expect(
+    media.client.images.edit({
+      model: "gpt-image-1",
+      prompt: "A circle.",
+      image: await toFile(media.image, "one.png"),
+    }),
+  ).rejects.toMatchObject({ status: 502 });
+  expect(media.requests).toHaveLength(1);
 });
 
 test.for([

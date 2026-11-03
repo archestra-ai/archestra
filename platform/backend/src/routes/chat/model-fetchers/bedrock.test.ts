@@ -113,8 +113,8 @@ describe("fetchBedrockModels", () => {
     const models = await fetchBedrockModels("test-api-key");
 
     // Only the text-generation model survives the chat picker; image/video
-    // generators, rerank, and not-yet-supported embeddings (cohere.embed,
-    // twelvelabs) are dropped so a member can't pick one and break chat. Chat
+    // generators, rerank, and embeddings (cohere.embed, twelvelabs) are kept
+    // out of chat so a member can't pick one and break it. Chat
     // families that merely resemble excluded ones (e.g. nova-lite) must NOT be
     // filtered.
     expect(chatOnly(models).map((model) => model.id)).toEqual([
@@ -441,6 +441,73 @@ describe("fetchBedrockModels", () => {
       (m) => m.id === "cohere.embed-multilingual-v3",
     );
     expect(multilingual?.capabilities?.embeddingDimensions).toBe(1024);
+  });
+
+  test("lists Cohere Embed v4 through its cross-region inference profiles", async () => {
+    // Embed v4 is invocable in-region in only a few regions; everywhere else it
+    // is reachable solely through its geo/global inference profiles.
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          inferenceProfileSummaries: [
+            {
+              inferenceProfileId: "us.cohere.embed-v4:0",
+              inferenceProfileName: "US Cohere Embed v4",
+              status: "ACTIVE",
+              models: [
+                {
+                  modelArn:
+                    "arn:aws:bedrock:us-east-1::foundation-model/cohere.embed-v4:0",
+                },
+              ],
+            },
+            {
+              inferenceProfileId: "global.cohere.embed-v4:0",
+              inferenceProfileName: "Global Cohere Embed v4",
+              status: "ACTIVE",
+            },
+          ],
+        }),
+    });
+
+    const models = await fetchBedrockModels("test-api-key");
+
+    const us = models.find((m) => m.id === "us.cohere.embed-v4:0");
+    expect(us?.capabilities?.embeddingDimensions).toBe(1536);
+    const global = models.find((m) => m.id === "global.cohere.embed-v4:0");
+    expect(global?.capabilities?.embeddingDimensions).toBe(1536);
+    // Not injected by its bare id: outside its in-region regions that id fails.
+    expect(models.some((m) => m.id === "cohere.embed-v4:0")).toBe(false);
+  });
+
+  test("lists Cohere Embed v4 by its bare id where it is offered on demand", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ inferenceProfileSummaries: [] }),
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          modelSummaries: [
+            {
+              modelId: "cohere.embed-v4:0",
+              modelName: "Embed v4",
+              providerName: "Cohere",
+              inputModalities: ["TEXT", "IMAGE"],
+              outputModalities: ["EMBEDDING"],
+              inferenceTypesSupported: ["ON_DEMAND", "INFERENCE_PROFILE"],
+              modelLifecycle: { status: "ACTIVE" },
+            },
+          ],
+        }),
+    });
+
+    const models = await fetchBedrockModels("test-api-key");
+
+    const bare = models.find((m) => m.id === "cohere.embed-v4:0");
+    expect(bare?.capabilities?.embeddingDimensions).toBe(1536);
   });
 
   test("drops an application inference profile wrapping an embedding model", async () => {

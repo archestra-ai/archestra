@@ -1,7 +1,9 @@
 import { eq } from "drizzle-orm";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { SkillSandboxModel } from "@/models";
+import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { SKILL_SANDBOX_HOME } from "@/skills-sandbox/runtime-image";
 import { afterAll, beforeEach, describe, expect, test } from "@/test";
 import {
@@ -167,6 +169,85 @@ describe("capChatToolResult", () => {
         toolCallId: "call-spill",
       });
       expect(await sandboxUploads(sandbox.id)).toHaveLength(1);
+    },
+  );
+
+  sandboxTest.for(["user", "service account"] as const)(
+    "saves an oversized result to the execution sandbox in a headless run (%s caller)",
+    async (caller, { spillContext, makeServiceAccount, makeCustomRole }) => {
+      const { conversationId: _, ...headless } = spillContext;
+      const isolationKey = crypto.randomUUID();
+      let userId = headless.userId;
+      if (caller === "service account") {
+        const role = await makeCustomRole(headless.organizationId, {
+          permission: { agent: ["read"] },
+        });
+        const account = await makeServiceAccount(headless.organizationId, {
+          role: role.role,
+        });
+        userId = serviceAccountUserId(account.id);
+      }
+      const context = { ...headless, userId, scopeKey: isolationKey };
+
+      try {
+        const capped = await capChatToolResult({
+          result: { content: oversized },
+          hookFeedback: null,
+          context,
+          toolCallId: "call-headless-spill",
+        });
+
+        const marker = readCappedToolResult(capped);
+        const sandbox = await executionSandboxRegistry.findDefault({
+          organizationId: context.organizationId,
+          userId: context.userId,
+          isolationKey,
+        });
+        if (!sandbox) throw new Error("expected an execution sandbox");
+        expect(sandbox.conversationId).toBeNull();
+        const files = await sandboxUploads(sandbox.id);
+        expect(files).toHaveLength(1);
+        expect(files[0].path).toBe(marker?.path);
+        expect(Buffer.from(files[0].data ?? "").toString("utf8")).toBe(
+          oversized,
+        );
+      } finally {
+        executionSandboxRegistry.release(isolationKey);
+      }
+    },
+  );
+
+  sandboxTest(
+    "truncates without creating a sandbox when the result exceeds the upload limit",
+    async ({ spillContext: context }) => {
+      const originalLimit = config.skillsSandbox.artifactBytesLimit;
+      (
+        config.skillsSandbox as { artifactBytesLimit: number }
+      ).artifactBytesLimit = oversized.length - 1;
+      try {
+        const capped = await capChatToolResult({
+          result: { content: oversized },
+          hookFeedback: null,
+          context,
+          toolCallId: "call-too-big",
+        });
+
+        expectTruncatedWithoutPath(capped);
+        const sandboxes = await db
+          .select()
+          .from(schema.skillSandboxesTable)
+          .where(
+            eq(
+              schema.skillSandboxesTable.conversationId,
+              context.conversationId,
+            ),
+          );
+        expect(sandboxes).toHaveLength(0);
+      } finally {
+        (
+          config.skillsSandbox as { artifactBytesLimit: number }
+        ).artifactBytesLimit = originalLimit;
+      }
     },
   );
 

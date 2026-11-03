@@ -336,6 +336,13 @@ if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" && -n "${ARCHESTRA_AGENT_R
   # instruction, while keeping terminal input available for live steering.
   terminal_command=(opencode run --interactive "${resume_args[@]}" --auto --model "archestra/${model}" -- "$(cat "${task_file}")")
 fi
+# The client's shell commands take the highest OOM score; the client and this
+# launcher keep the container's (archestra-command-oom-score.sh). Set last, so
+# nothing the launcher started before gets it. An earlier BASH_ENV still runs.
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export ARCHESTRA_AGENT_RUNTIME_BASH_ENV="${ARCHESTRA_AGENT_RUNTIME_BASH_ENV-${BASH_ENV:-}}"
+export BASH_ENV="${script_dir}/archestra-command-oom-score.sh"
+
 case "${runtime_mode}" in
   interactive)
     exec "${terminal_command[@]}"
@@ -351,7 +358,6 @@ case "${runtime_mode}" in
         -- "$(cat "${task_file}")"
     fi
 
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     exec "${script_dir}/archestra-tui-run" \
       "${runtime_dir}/turn-complete" \
       "${runtime_dir}/final-answer.txt" \

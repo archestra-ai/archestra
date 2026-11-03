@@ -13,6 +13,7 @@ import ResourcePermissionSubjectModel, {
   type GrantPrincipal,
   type PrincipalSource,
 } from "./resource-permission-subject";
+import TeamModel from "./team";
 import TeamLabelModel from "./team-label";
 
 class AgentTeamModel {
@@ -169,6 +170,27 @@ class AgentTeamModel {
     return (
       (await AgentTeamModel.getTeamsForAgents([agentId])).get(agentId) ?? []
     );
+  }
+
+  /**
+   * The agent's teams a call belongs to: those the caller is in, directly or
+   * through a sub-team. Team limits and usage use this, so another team's
+   * limit on a shared agent never applies to the caller.
+   */
+  static async getCallerTeamsForAgent(params: {
+    agentId: string;
+    userId: string | null | undefined;
+    teamSource?: AgentTeamSource;
+  }): Promise<string[]> {
+    if (!params.userId) return [];
+    const [agentTeamIds, callerTeamIds] = await Promise.all([
+      params.teamSource
+        ? params.teamSource.agentTeamIds(params.agentId)
+        : AgentTeamModel.getTeamsForAgent(params.agentId),
+      TeamModel.getUserTeamIds(params.userId),
+    ]);
+    const callerTeams = new Set(callerTeamIds);
+    return agentTeamIds.filter((teamId) => callerTeams.has(teamId));
   }
 
   /**

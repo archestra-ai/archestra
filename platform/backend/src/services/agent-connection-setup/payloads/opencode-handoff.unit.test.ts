@@ -23,6 +23,7 @@ const ctx: StartupGuardContext = {
   skills: null,
   mcp: {
     serverName: "gateway",
+    toolPrefix: "archestra__",
     url: "https://example.com/mcp",
     ref: "gateway",
   },

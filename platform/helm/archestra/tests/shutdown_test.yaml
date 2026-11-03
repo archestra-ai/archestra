@@ -1,0 +1,151 @@
+suite: coordinated shutdown budgets
+templates:
+  - archestra-platform.yaml
+  - archestra-worker.yaml
+  - migration-job.yaml
+tests:
+  - it: derives matching web and worker grace for long requests
+    set:
+      archestra.worker.enabled: true
+      archestra.shutdown.requestDrainSeconds: 200
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 260
+        template: archestra-platform.yaml
+        documentIndex: 1
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 260
+        template: archestra-worker.yaml
+  - it: rejects a pod limit shorter than its application budgets
+    template: migration-job.yaml
+    set:
+      archestra.shutdown.requestDrainSeconds: 180
+      archestra.terminationGracePeriodSeconds: 120
+    asserts:
+      - failedTemplate:
+          errorMessage: terminationGracePeriodSeconds must be at least 240 for the configured shutdown budgets
+  - it: honors literal environment overrides in both budget and runtime
+    set:
+      archestra.env.ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS: "180"
+      archestra.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS: "240"
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 300
+        template: archestra-platform.yaml
+        documentIndex: 1
+  - it: rejects fractional drain seconds
+    template: migration-job.yaml
+    set:
+      archestra.shutdown.requestDrainSeconds: 1.5
+    asserts:
+      - failedTemplate:
+          errorMessage: requestDrainSeconds must be integer seconds between 1 and 86400
+  - it: rejects zero environment overrides
+    template: migration-job.yaml
+    set:
+      archestra.env.ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS: 0
+    asserts:
+      - failedTemplate:
+          errorMessage: requestDrainSeconds must be integer seconds between 1 and 86400
+
+  - it: preserves unprefixed bulk imports without overriding timeout keys
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.envFrom:
+        - configMapRef:
+            name: shutdown-times
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            configMapRef:
+              name: shutdown-times
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS
+          any: true
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS
+          any: true
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_SERVER_POD_GRACE_SECONDS
+            value: "120"
+  - it: preserves individual secret and config map timeout references
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.terminationGracePeriodSeconds: 300
+      archestra.envFromSecrets:
+        - name: ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS
+          secretName: runtime-times
+          secretKey: worker-seconds
+      archestra.envWithValueFrom:
+        - name: ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS
+          valueFrom:
+            configMapKeyRef:
+              name: runtime-times
+              key: drain-seconds
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS
+            valueFrom:
+              secretKeyRef:
+                name: runtime-times
+                key: worker-seconds
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS
+            valueFrom:
+              configMapKeyRef:
+                name: runtime-times
+                key: drain-seconds
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_SERVER_POD_GRACE_SECONDS
+            value: "300"
+
+  - it: preserves the default budget when an older values file has no shutdown block
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.shutdown: null
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 120
+
+  - it: permits a shorter imported budget and checks its actual values at startup
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.terminationGracePeriodSeconds: 60
+      archestra.envFrom:
+        - configMapRef:
+            name: short-timeouts
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 60
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_SERVER_POD_GRACE_SECONDS
+            value: "60"

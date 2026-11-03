@@ -1,6 +1,6 @@
 import { isIP } from "node:net";
 import type * as k8s from "@kubernetes/client-node";
-import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
+import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends/types";
 import {
   AGENT_RUNTIME_ATTACH_SCRIPT,
   AGENT_RUNTIME_ATTACHMENTS_DIR,
@@ -23,6 +23,7 @@ import {
   agentRuntimeNames,
 } from "./naming";
 import { buildSandboxSupervisorScript } from "./sandbox-supervisor";
+import { buildWorkspaceExitTrapScript } from "./workspace-exit";
 
 const DNS_PORTS = [
   { protocol: "UDP" as const, port: 53 },
@@ -163,6 +164,7 @@ export type KubernetesAgentRunLaunchSpec = Omit<
 function buildAgentRuntimeBootstrapScript(): string {
   return [
     "set -eu",
+    buildWorkspaceExitTrapScript(),
     `mkdir -p ${AGENT_RUNTIME_DIR}`,
     buildAgentRuntimeTerminalIntegrationScript(),
     `mkdir -p ${AGENT_RUNTIME_ATTACHMENTS_DIR}`,

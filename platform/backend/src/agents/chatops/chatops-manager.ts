@@ -5,13 +5,13 @@ import {
   type MessagingChannelId,
   providerDisplayNames,
   type ResourceVisibilityScope,
+  subscriptionKindForProvider,
   TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME,
   toPlaceholderTitle,
 } from "@archestra/shared";
 import type { UIMessageChunk } from "ai";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { A2AManager, type A2ASystemParams } from "@/agents/a2a/a2a-manager";
-import type { A2AAttachment } from "@/agents/a2a-executor";
 import { watchTaskCompletion } from "@/agents/task-completion-watcher";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { agentCredentialSetupUrl } from "@/archestra-mcp-server/helpers";
@@ -74,6 +74,7 @@ import type {
   IncomingChatMessage,
   SkippedAttachment,
 } from "@/types";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 import { AgentRuntimeCredentialsRequiredError } from "@/types/agent-runtime";
 import type { ChatOpsChannelBinding } from "@/types/chatops-channel-binding";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
@@ -121,7 +122,8 @@ import {
 } from "./constants";
 import { parseJiraApprovalCommand } from "./jira-message";
 import JiraProvider from "./jira-provider";
-import MSTeamsProvider from "./ms-teams-provider";
+import { isMsTeamsConfigured } from "./ms-teams-config";
+import type MSTeamsProvider from "./ms-teams-provider";
 import {
   assertRuntimeAcknowledgementSettled,
   sendRuntimeReplyWithAnchor,
@@ -633,7 +635,16 @@ export class ChatOpsManager {
     });
 
     // Create providers with their config
-    if (msTeamsConfig && !hiddenChannels.has("ms-teams")) {
+    if (
+      msTeamsConfig &&
+      isMsTeamsConfigured(msTeamsConfig) &&
+      !hiddenChannels.has("ms-teams")
+    ) {
+      // Loaded only here: the provider imports the Microsoft Graph SDKs,
+      // about 90 MB that a deployment without Teams never needs. A stored
+      // configuration that is disabled or incomplete gets no provider, as
+      // none was configured.
+      const { default: MSTeamsProvider } = await import("./ms-teams-provider");
       this.msTeamsProvider = new MSTeamsProvider(msTeamsConfig);
       this.msTeamsProvider.setEventHandler(this);
     }
@@ -3295,10 +3306,26 @@ export class ChatOpsManager {
 
     // A per-user provider the user hasn't linked yet → a friendly prompt
     // with a link to connect (chatops can't render the interactive flow).
-    if (error instanceof LlmProviderAuthRequiredError) {
+    const providerAuth =
+      error instanceof LlmProviderAuthRequiredError
+        ? error
+        : error instanceof ProviderError
+          ? error.chatErrorResponse.authAction
+          : undefined;
+    if (providerAuth) {
+      const { provider: authProvider, providerLabel } = providerAuth;
+      const subscriptionKind = subscriptionKindForProvider(authProvider);
+      const setupPath = subscriptionKind
+        ? `/llm/model-providers?reconnect=${encodeURIComponent(subscriptionKind)}`
+        : `/llm/model-providers?create=${encodeURIComponent(authProvider)}`;
       await provider.sendReply({
         originalMessage: message,
-        text: `This agent uses ${error.providerLabel}, which is per-user. Connect your own ${error.providerLabel} account, then try again: ${config.frontendBaseUrl}/settings`,
+        text: [
+          error instanceof ProviderError
+            ? error.chatErrorResponse.message
+            : `This agent uses ${providerLabel}, which is per-user. Connect your own ${providerLabel} account, then try again.`,
+          `[${error instanceof ProviderError ? "Reconnect account" : "Connect account"}](${config.frontendBaseUrl}${setupPath})`,
+        ].join("\n\n"),
         footer: footer(),
         conversationReference: message.metadata?.conversationReference,
       });
@@ -3333,13 +3360,24 @@ export class ChatOpsManager {
     // x-api-key"). Users rarely realize the bot resolves its model/key the
     // same way in-app chat does, so name the key that was used and where to
     // fix it instead of leaving only the provider's cryptic one-liner.
-    if (isLlmProviderAuthError(errMsg)) {
+    if (
+      isLlmProviderAuthError(errMsg) ||
+      (error instanceof ProviderError &&
+        error.chatErrorResponse.code === ChatErrorCode.Authentication)
+    ) {
       const usedLlm = llmContext
         ? await this.describeLlmUsedForRun({
             ...llmContext,
             agentId: isSubagentError ? error.subagentId : llmContext.agentId,
           })
         : null;
+      const rejectedProvider =
+        error instanceof ProviderError
+          ? error.chatErrorResponse.originalError?.provider
+          : undefined;
+      const setupPath = rejectedProvider
+        ? `/llm/model-providers?create=${encodeURIComponent(rejectedProvider)}`
+        : "/llm/model-providers";
       await provider.sendReply({
         originalMessage: message,
         text: [
@@ -3348,7 +3386,7 @@ export class ChatOpsManager {
           usedLlm ??
             "Check the API key configured for this agent (or your organization's LLM settings).",
           "",
-          `Update the key or configure a different one, then try again: ${config.frontendBaseUrl}/llm/model-providers`,
+          `Update the key or configure a different one, then try again. [Configure provider](${config.frontendBaseUrl}${setupPath})`,
         ].join("\n"),
         footer: footer(sourcedErrorDetail),
         conversationReference: message.metadata?.conversationReference,

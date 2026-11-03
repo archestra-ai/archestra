@@ -148,8 +148,9 @@ describe("createGithubCopilotFetch with a GitHub App credential", () => {
     const body = (await response.json()) as { error: { message: string } };
 
     expect(response.status).toBe(401);
+    // An enterprise can hold the plan and the policy; never claim a missing plan.
     expect(body.error.message).toContain(
-      "my-org doesn't allow Copilot requests from GitHub Apps",
+      "my-org doesn't allow Copilot requests from GitHub Apps. It needs Copilot Business or Enterprise, with requests from Apps allowed by an owner of the organization or its enterprise.",
     );
     expect(body.error.message).toContain(
       'GitHub said: "Copilot requests from GitHub App installations are not enabled for this organization"',

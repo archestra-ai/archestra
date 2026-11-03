@@ -8,25 +8,28 @@ import {
   STARTUP_GUARD_INSTALL,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
+import {
+  REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
+  TOOL_ASK_USER_SHORT_NAME,
+  TOOL_RUN_TOOL_SHORT_NAME,
+} from "@archestra/shared/archestra-mcp-server";
 import { renderPowerShellJsonWriter } from "../../steps/powershell-json";
 import { psq, sh } from "../../steps/quoting";
 import type { StartupGuardClient, StartupGuardContext } from "../startup-guard";
 import { jsonMemberGoneVerify, windowsJsonMemberGoneVerify } from "./verify";
 
 /**
- * Drop installer-owned Claude Code `permissions.allow` rules for the MCP server
- * being disconnected. The installer records only rules it newly added in
- * `~/.archestra/claude-appa-permissions.json` (`serverName` -> `string[]`);
- * preexisting user rules never enter that ledger. Settings honor
- * `CLAUDE_CONFIG_DIR` (else `~/.claude`). Custom profiles keep their ledger
- * under `$CLAUDE_CONFIG_DIR/.archestra`. Invalid JSON or types stay untouched.
- * Invoked from the
- * MCP disconnect arm only — not proxy disconnect — via `python3 -c` so the
- * guard engine's case-arm parser never sees an indented heredoc.
+ * The gateway tools connect pre-approves in Claude Code, without the tool
+ * prefix: the tool runner, the APPA helpers, and `ask_user`.
  */
-const CLAUDE_APPA_PERMISSION_CLEANUP_PY = `import json, os, pathlib, tempfile
+export const CLAUDE_APPA_PERMISSION_TOOL_NAMES: readonly string[] = [
+  TOOL_RUN_TOOL_SHORT_NAME,
+  ...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
+  TOOL_ASK_USER_SHORT_NAME,
+];
 
-def load_json(path):
+/** JSON helpers shared by the guard's Claude Code permission scripts. */
+const CLAUDE_JSON_HELPERS_PY = `def load_json(path):
     try:
         raw = path.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -70,6 +73,27 @@ def write_json(path, data):
             pass
         raise
 
+def claude_paths():
+    home = pathlib.Path(os.path.expanduser("~"))
+    state_root = pathlib.Path(os.environ["CLAUDE_CONFIG_DIR"]) if os.environ.get("CLAUDE_CONFIG_DIR") else home
+    config_dir = os.environ.get("CLAUDE_CONFIG_DIR") or str(home / ".claude")
+    return state_root / ".archestra" / "claude-appa-permissions.json", pathlib.Path(config_dir) / "settings.json"`;
+
+/**
+ * Drop installer-owned Claude Code `permissions.allow` rules for the MCP server
+ * being disconnected. The installer records only rules it newly added in
+ * `~/.archestra/claude-appa-permissions.json` (`serverName` -> `string[]`);
+ * preexisting user rules never enter that ledger. Settings honor
+ * `CLAUDE_CONFIG_DIR` (else `~/.claude`). Custom profiles keep their ledger
+ * under `$CLAUDE_CONFIG_DIR/.archestra`. Invalid JSON or types stay untouched.
+ * Invoked from the
+ * MCP disconnect arm only — not proxy disconnect — via `python3 -c` so the
+ * guard engine's case-arm parser never sees an indented heredoc.
+ */
+const CLAUDE_APPA_PERMISSION_CLEANUP_PY = `import json, os, pathlib, tempfile
+
+${CLAUDE_JSON_HELPERS_PY}
+
 def drop_ledger_key(ledger_path, ledger, server):
     ledger.pop(server, None)
     if ledger:
@@ -84,17 +108,13 @@ def main():
     server = os.environ.get("MCP_SERVER_NAME") or ""
     if not server:
         return
-    home = pathlib.Path(os.path.expanduser("~"))
-    state_root = pathlib.Path(os.environ["CLAUDE_CONFIG_DIR"]) if os.environ.get("CLAUDE_CONFIG_DIR") else home
-    ledger_path = state_root / ".archestra" / "claude-appa-permissions.json"
+    ledger_path, settings_path = claude_paths()
     status, ledger = load_json(ledger_path)
     if status != "ok" or server not in ledger:
         return
     owned = string_list(ledger.get(server))
     if owned is None:
         return
-    config_dir = os.environ.get("CLAUDE_CONFIG_DIR") or str(home / ".claude")
-    settings_path = pathlib.Path(config_dir) / "settings.json"
     settings_status, settings = load_json(settings_path)
     if settings_status == "invalid":
         return
@@ -123,11 +143,108 @@ except Exception:
 `;
 
 /**
- * PowerShell 5.1 twin of {@link CLAUDE_APPA_PERMISSION_CLEANUP_PY}. Uses plain
- * JSON values to preserve arrays. Defined and called from the MCP arm only.
+ * Move installer-owned allow rules to the tool prefix the instance reports, so a
+ * prefix change (white-labeling on or off) does not leave them matching no
+ * tool. Only rules the ledger owns move, each to the same tool under the new
+ * prefix; a ledger rule the user already removed from settings is dropped, not
+ * added back. A new-prefix rule the user already has stays theirs, and a rule
+ * the user asks about or denies under its old name is not moved. Writes
+ * nothing when no owned rule is stale. Reads `ARCH_TOOL_SERVER` and
+ * `ARCH_TOOL_PREFIX`, and checks both before use.
  */
-const CLAUDE_APPA_PERMISSION_CLEANUP_PS = `function Remove-ArchClaudeAppaPermissions {
-  function ConvertFrom-ArchClaudeJson([string]$Raw) {
+const CLAUDE_APPA_PERMISSION_PREFIX_SYNC_PY = `import json, os, pathlib, re, tempfile
+
+${CLAUDE_JSON_HELPERS_PY}
+
+NAMES = sorted(${JSON.stringify(CLAUDE_APPA_PERMISSION_TOOL_NAMES)}, key=len, reverse=True)
+
+def covers(rule, name):
+    """Does a Claude Code permission rule match this tool name, exactly or as a trailing wildcard?"""
+    return rule == name or (rule.endswith("*") and name.startswith(rule[:-1]))
+
+def main():
+    server = os.environ.get("ARCH_TOOL_SERVER") or ""
+    prefix = os.environ.get("ARCH_TOOL_PREFIX") or ""
+    if not re.fullmatch(r"[a-zA-Z0-9_.-]+", server) or not re.fullmatch(r"[a-zA-Z0-9_]+__", prefix):
+        return
+    ledger_path, settings_path = claude_paths()
+    status, ledger = load_json(ledger_path)
+    if status != "ok":
+        return
+    owned = string_list(ledger.get(server))
+    if not owned:
+        return
+    base = "mcp__" + server + "__"
+    moves = {}
+    for rule in owned:
+        rest = rule[len(base):] if rule.startswith(base) else ""
+        for name in NAMES:
+            old = rest[:-len(name)]
+            if rest.endswith(name) and re.fullmatch(r"[a-zA-Z0-9_]+__", old):
+                if old != prefix:
+                    moves[rule] = base + prefix + name
+                break
+    if not moves:
+        return
+    settings_status, settings = load_json(settings_path)
+    # With no allow list, no owned rule is in effect: the stale ones leave the ledger.
+    permissions, allow = None, []
+    if settings_status == "ok":
+        permissions = settings.get("permissions")
+    elif settings_status not in ("missing", "empty"):
+        return
+    if permissions is not None:
+        if not isinstance(permissions, dict):
+            return
+        if permissions.get("allow") is not None:
+            allow = string_list(permissions.get("allow"))
+            if allow is None:
+                return
+        guards = []
+        for key in ("ask", "deny"):
+            if permissions.get(key) is None:
+                continue
+            listed = string_list(permissions.get(key))
+            if listed is None:
+                return
+            guards += listed
+        # A rule the user asks about or denies under its old name, and not under the new one,
+        # keeps the old name: moved, it would allow calls the user's rule no longer covers.
+        moves = {old: new for old, new in moves.items() if not any(covers(guard, old) and not covers(guard, new) for guard in guards)}
+        if not moves:
+            return
+    kept, added = [], set()
+    for rule in allow:
+        target = moves.get(rule)
+        if target is None:
+            kept.append(rule)
+        elif target not in allow and target not in added:
+            kept.append(target)
+            added.add(target)
+    new_owned = list(dict.fromkeys(moves.get(rule, rule) for rule in owned if rule not in moves or moves[rule] in added))
+    if kept != allow:
+        # Own old and new rules until settings change, so an interrupted write stays recoverable.
+        ledger[server] = list(dict.fromkeys(owned + new_owned))
+        write_json(ledger_path, ledger)
+        permissions["allow"] = kept
+        write_json(settings_path, settings)
+    if new_owned:
+        ledger[server] = new_owned
+    else:
+        ledger.pop(server, None)
+    write_json(ledger_path, ledger)
+
+try:
+    main()
+except Exception:
+    pass
+`;
+
+/**
+ * JSON helpers shared by the guard's PowerShell permission functions, defined
+ * inside each function that uses them.
+ */
+const CLAUDE_JSON_HELPERS_PS = `  function ConvertFrom-ArchClaudeJson([string]$Raw) {
     $parsed = $null
     $ok = $false
     try {
@@ -185,13 +302,37 @@ const CLAUDE_APPA_PERMISSION_CLEANUP_PS = `function Remove-ArchClaudeAppaPermiss
       throw
     }
   }
+  # Index into a real array so a single element stays a JSON array. A bare
+  # one-element list is unwrapped by Windows PowerShell 5.1.
+  function ConvertTo-ArchClaudeArray($Items) {
+    $list = @($Items)
+    $value = New-Object object[] $list.Count
+    for ($i = 0; $i -lt $list.Count; $i++) { $value[$i] = [string]$list[$i] }
+    return ,$value
+  }
+  function Get-ArchClaudePaths {
+    $stateRoot = $env:USERPROFILE
+    if ($env:CLAUDE_CONFIG_DIR) { $stateRoot = $env:CLAUDE_CONFIG_DIR }
+    $configDir = Join-Path $env:USERPROFILE '.claude'
+    if ($env:CLAUDE_CONFIG_DIR) { $configDir = $env:CLAUDE_CONFIG_DIR }
+    return @{
+      Ledger = Join-Path (Join-Path $stateRoot '.archestra') 'claude-appa-permissions.json'
+      Settings = Join-Path $configDir 'settings.json'
+    }
+  }`;
+
+/**
+ * PowerShell 5.1 twin of {@link CLAUDE_APPA_PERMISSION_CLEANUP_PY}. Uses plain
+ * JSON values to preserve arrays. Defined and called from the MCP arm only.
+ */
+const CLAUDE_APPA_PERMISSION_CLEANUP_PS = `function Remove-ArchClaudeAppaPermissions {
+${CLAUDE_JSON_HELPERS_PS}
   $ErrorActionPreference = 'Stop'
   try {
     if (-not $env:USERPROFILE) { return }
     if ([string]::IsNullOrEmpty($McpServerName)) { return }
-    $stateRoot = $env:USERPROFILE
-    if ($env:CLAUDE_CONFIG_DIR) { $stateRoot = $env:CLAUDE_CONFIG_DIR }
-    $ledgerPath = Join-Path (Join-Path $stateRoot '.archestra') 'claude-appa-permissions.json'
+    $paths = Get-ArchClaudePaths
+    $ledgerPath = $paths.Ledger
     if (-not (Test-Path -LiteralPath $ledgerPath)) { return }
     $ledgerRaw = Get-Content -Raw -LiteralPath $ledgerPath -Encoding UTF8
     if (-not ($ledgerRaw -and $ledgerRaw.Trim())) { return }
@@ -203,9 +344,7 @@ const CLAUDE_APPA_PERMISSION_CLEANUP_PS = `function Remove-ArchClaudeAppaPermiss
     if ($null -eq $matchedKey) { return }
     $ownedParsed = ConvertTo-ArchClaudeStringArray $ledger[$matchedKey]
     if (-not $ownedParsed.Ok) { return }
-    $configDir = Join-Path $env:USERPROFILE '.claude'
-    if ($env:CLAUDE_CONFIG_DIR) { $configDir = $env:CLAUDE_CONFIG_DIR }
-    $settingsPath = Join-Path $configDir 'settings.json'
+    $settingsPath = $paths.Settings
     if (Test-Path -LiteralPath $settingsPath) {
       $settingsRaw = Get-Content -Raw -LiteralPath $settingsPath -Encoding UTF8
       if ($settingsRaw -and $settingsRaw.Trim()) {
@@ -230,11 +369,7 @@ const CLAUDE_APPA_PERMISSION_CLEANUP_PS = `function Remove-ArchClaudeAppaPermiss
               else { [void]$kept.Add([string]$rule) }
             }
             if ($removed -gt 0) {
-              # Index into a real array so a single remaining rule stays a JSON
-              # array. A bare one-element list is unwrapped by Windows PowerShell 5.1.
-              $allowValue = New-Object object[] $kept.Count
-              for ($i = 0; $i -lt $kept.Count; $i++) { $allowValue[$i] = [string]$kept[$i] }
-              $permissions[$allowKey] = $allowValue
+              $permissions[$allowKey] = ConvertTo-ArchClaudeArray $kept
               Write-ArchClaudeJsonAtomic $settingsPath $settings
             }
           }
@@ -247,6 +382,129 @@ const CLAUDE_APPA_PERMISSION_CLEANUP_PS = `function Remove-ArchClaudeAppaPermiss
     } else {
       Write-ArchClaudeJsonAtomic $ledgerPath $ledger
     }
+  } catch { }
+}`;
+
+/**
+ * Shell `case` patterns for the ledger's quoted rules that already use the
+ * reported prefix, one per owned tool name. Quoted, so the server and prefix
+ * match literally.
+ */
+const CURRENT_PREFIX_RULE_PATTERNS = CLAUDE_APPA_PERMISSION_TOOL_NAMES.map(
+  (name) => `"\\"mcp__\${arch_tool_server}__\${arch_tool_prefix}${name}\\""`,
+).join("|");
+
+/**
+ * PowerShell 5.1 twin of {@link CLAUDE_APPA_PERMISSION_PREFIX_SYNC_PY}. Reads
+ * `$McpServerName` and the reported `$archToolPrefix`.
+ */
+const CLAUDE_APPA_PERMISSION_PREFIX_SYNC_PS = `function Sync-ArchClaudeAppaPermissions {
+${CLAUDE_JSON_HELPERS_PS}
+  function Test-ArchClaudeCovers([string]$Rule, [string]$Name) {
+    if ($Rule -ceq $Name) { return $true }
+    return $Rule.EndsWith('*', [StringComparison]::Ordinal) -and $Name.StartsWith($Rule.Substring(0, $Rule.Length - 1), [StringComparison]::Ordinal)
+  }
+  $ErrorActionPreference = 'Stop'
+  try {
+    if (-not $env:USERPROFILE) { return }
+    if ($McpServerName -cnotmatch '^[a-zA-Z0-9_.-]+$' -or $archToolPrefix -cnotmatch '^[a-zA-Z0-9_]+__$') { return }
+    $paths = Get-ArchClaudePaths
+    if (-not (Test-Path -LiteralPath $paths.Ledger)) { return }
+    $ledgerParsed = ConvertFrom-ArchClaudeJson (Get-Content -Raw -LiteralPath $paths.Ledger -Encoding UTF8)
+    if (-not $ledgerParsed.Ok -or $ledgerParsed.Value -isnot [System.Collections.IDictionary]) { return }
+    $ledger = $ledgerParsed.Value
+    $ledgerKey = Find-ArchClaudeKey $ledger $McpServerName
+    if ($null -eq $ledgerKey) { return }
+    $ownedParsed = ConvertTo-ArchClaudeStringArray $ledger[$ledgerKey]
+    if (-not $ownedParsed.Ok -or $ownedParsed.Items.Count -eq 0) { return }
+    $names = @(${[...CLAUDE_APPA_PERMISSION_TOOL_NAMES]
+      .sort((a, b) => b.length - a.length)
+      .map(psq)
+      .join(", ")})
+    $base = 'mcp__' + $McpServerName + '__'
+    $moves = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)
+    foreach ($rule in $ownedParsed.Items) {
+      if (-not $rule.StartsWith($base, [StringComparison]::Ordinal)) { continue }
+      $rest = $rule.Substring($base.Length)
+      foreach ($name in $names) {
+        if (-not $rest.EndsWith($name, [StringComparison]::Ordinal)) { continue }
+        $old = $rest.Substring(0, $rest.Length - $name.Length)
+        if ($old -cnotmatch '^[a-zA-Z0-9_]+__$') { continue }
+        if ($old -cne $archToolPrefix) { $moves[$rule] = $base + $archToolPrefix + $name }
+        break
+      }
+    }
+    if ($moves.Count -eq 0) { return }
+    # With no allow list, no owned rule is in effect: the stale ones leave the ledger.
+    $permissions = $null
+    $allow = @()
+    if (Test-Path -LiteralPath $paths.Settings) {
+      $settingsRaw = Get-Content -Raw -LiteralPath $paths.Settings -Encoding UTF8
+      if ($null -ne $settingsRaw -and $settingsRaw.Trim()) {
+        $settingsParsed = ConvertFrom-ArchClaudeJson $settingsRaw
+        if (-not $settingsParsed.Ok -or $settingsParsed.Value -isnot [System.Collections.IDictionary]) { return }
+        $settings = $settingsParsed.Value
+        $permKey = Find-ArchClaudeKey $settings 'permissions'
+        if ($null -ne $permKey -and $null -ne $settings[$permKey]) {
+          if ($settings[$permKey] -isnot [System.Collections.IDictionary]) { return }
+          $permissions = $settings[$permKey]
+        }
+      }
+    }
+    if ($null -ne $permissions) {
+      $allowKey = Find-ArchClaudeKey $permissions 'allow'
+      if ($null -ne $allowKey -and $null -ne $permissions[$allowKey]) {
+        $allowParsed = ConvertTo-ArchClaudeStringArray $permissions[$allowKey]
+        if (-not $allowParsed.Ok) { return }
+        $allow = $allowParsed.Items
+      }
+      $guards = New-Object System.Collections.Generic.List[string]
+      foreach ($guardName in @('ask', 'deny')) {
+        $guardKey = Find-ArchClaudeKey $permissions $guardName
+        if ($null -eq $guardKey -or $null -eq $permissions[$guardKey]) { continue }
+        $guardParsed = ConvertTo-ArchClaudeStringArray $permissions[$guardKey]
+        if (-not $guardParsed.Ok) { return }
+        foreach ($guard in $guardParsed.Items) { [void]$guards.Add($guard) }
+      }
+      # A rule the user asks about or denies under its old name, and not under the new one,
+      # keeps the old name: moved, it would allow calls the user's rule no longer covers.
+      foreach ($old in @($moves.Keys)) {
+        $new = $moves[$old]
+        foreach ($guard in $guards) {
+          if ((Test-ArchClaudeCovers $guard $old) -and -not (Test-ArchClaudeCovers $guard $new)) {
+            [void]$moves.Remove($old)
+            break
+          }
+        }
+      }
+      if ($moves.Count -eq 0) { return }
+    }
+    $kept = New-Object System.Collections.Generic.List[string]
+    $added = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+    foreach ($rule in $allow) {
+      if (-not $moves.ContainsKey($rule)) { [void]$kept.Add($rule); continue }
+      $target = $moves[$rule]
+      if ($allow -cnotcontains $target -and $added.Add($target)) { [void]$kept.Add($target) }
+    }
+    $newOwned = New-Object System.Collections.Generic.List[string]
+    foreach ($rule in $ownedParsed.Items) {
+      $owns = $null
+      if (-not $moves.ContainsKey($rule)) { $owns = $rule }
+      elseif ($added.Contains($moves[$rule])) { $owns = $moves[$rule] }
+      if ($null -ne $owns -and -not $newOwned.Contains($owns)) { [void]$newOwned.Add($owns) }
+    }
+    if (($kept -join [char]10) -cne ($allow -join [char]10)) {
+      # Own old and new rules until settings change, so an interrupted write stays recoverable.
+      $both = New-Object System.Collections.Generic.List[string]
+      foreach ($rule in @($ownedParsed.Items) + @($newOwned)) { if (-not $both.Contains($rule)) { [void]$both.Add($rule) } }
+      $ledger[$ledgerKey] = ConvertTo-ArchClaudeArray $both
+      Write-ArchClaudeJsonAtomic $paths.Ledger $ledger
+      $permissions[$allowKey] = ConvertTo-ArchClaudeArray $kept
+      Write-ArchClaudeJsonAtomic $paths.Settings $settings
+    }
+    if ($newOwned.Count -gt 0) { $ledger[$ledgerKey] = ConvertTo-ArchClaudeArray $newOwned }
+    else { $ledger.Remove($ledgerKey) | Out-Null }
+    Write-ArchClaudeJsonAtomic $paths.Ledger $ledger
   } catch { }
 }`;
 
@@ -284,6 +542,20 @@ export const CLAUDE_CODE_GUARD_CLIENT: StartupGuardClient = {
         export MCP_SERVER_NAME
         command python3 -c ${sh(CLAUDE_APPA_PERMISSION_CLEANUP_PY)} >/dev/null 2>&1 || true
       fi`,
+  toolPrefixSync: `  arch_ledger="\${CLAUDE_CONFIG_DIR:-$HOME}/.archestra/claude-appa-permissions.json"
+  [ -f "$arch_ledger" ] || return 0
+  # Python starts only when an owned rule names this gateway under another prefix.
+  arch_stale=0
+  for arch_rule in $(grep -oE '"mcp__[A-Za-z0-9_.-]+__[A-Za-z0-9_]+"' "$arch_ledger" 2>/dev/null); do
+    case "$arch_rule" in
+      ${CURRENT_PREFIX_RULE_PATTERNS}) ;;
+      "\\"mcp__\${arch_tool_server}__"*) arch_stale=1 ;;
+    esac
+  done
+  [ "$arch_stale" = 1 ] || return 0
+  if command -v python3 >/dev/null 2>&1; then
+    ARCH_TOOL_SERVER="$arch_tool_server" ARCH_TOOL_PREFIX="$arch_tool_prefix" command python3 -c ${sh(CLAUDE_APPA_PERMISSION_PREFIX_SYNC_PY)} >/dev/null 2>&1 || true
+  fi`,
   skillsDisconnectCommands: `      printf '%s\n' "$PLUGIN_NAMES" | while IFS= read -r arch_plugin; do
         [ -n "$arch_plugin" ] || continue
         command claude plugin uninstall "$arch_plugin@$SKILLS_MARKETPLACE_NAME" </dev/null >/dev/null 2>&1 || true
@@ -319,6 +591,8 @@ export const CLAUDE_CODE_GUARD_CLIENT: StartupGuardClient = {
       }
 ${CLAUDE_APPA_PERMISSION_CLEANUP_PS}
       try { Remove-ArchClaudeAppaPermissions } catch { }`,
+    toolPrefixSync: `${CLAUDE_APPA_PERMISSION_PREFIX_SYNC_PS}
+  try { Sync-ArchClaudeAppaPermissions } catch { }`,
     skillsDisconnect: `      if ($archRealExe) {
         foreach ($archPlugin in $PluginNames) {
           try { & $archRealExe.Source plugin uninstall ($archPlugin + '@' + $SkillsMarketplaceName) 2>$null | Out-Null } catch { }

@@ -13,7 +13,7 @@ import {
   createUpdateSchema,
 } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 
 const extendedFields = {
   oidcConfig: IdentityProviderOidcConfigSchema.optional(),
@@ -57,7 +57,7 @@ export const PublicIdentityProviderSchema = SelectIdentityProviderSchema.pick({
 });
 
 /**
- * Identity provider projection for the team External Group Sync section:
+ * Identity provider projection for the team Team Sync section:
  * enough to pick a provider and understand how group identifiers are
  * extracted, without exposing any provider configuration or secrets.
  */

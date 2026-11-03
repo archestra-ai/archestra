@@ -2,6 +2,7 @@ import { delay, HttpResponse, http } from "msw";
 import config from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
+import { scoringContext } from "../scoring-context";
 import { JevSessionSource } from "./jev-session";
 import { JEV_SESSION_SPEC } from "./spec";
 import { SignalSourceError } from "./types";
@@ -207,5 +208,122 @@ describe("JevSessionSource", () => {
     expect(state).toEqual({
       prompt: `${redacted.slice(0, 3000)}\n…[${redacted.length - 4000} chars omitted]…\n${redacted.slice(-1000)}`,
     });
+  });
+
+  test("sends independently bounded, redacted agent context without displacing the user task", async () => {
+    let state: Record<string, string> = {};
+    server.use(
+      http.post(TYPESAFE_ENDPOINT, async ({ request }) => {
+        state = ((await request.json()) as { state: Record<string, string> })
+          .state;
+        return HttpResponse.json(ANSWERS);
+      }),
+    );
+    const secret = `sk-${"a".repeat(30)}`;
+    await source.read(
+      {
+        ...INPUT,
+        ...scoringContext({
+          system: `Use ${secret}. ${"instruction ".repeat(1000)} End of instructions.`,
+          tools: Array.from({ length: 100 }, (_, index) => ({
+            name: `tool_${index}`,
+            description: `Use ${secret}. ${"description ".repeat(1000)}`,
+          })),
+        }),
+      },
+      ctx(),
+    );
+
+    expect(state.prompt).toBe(INPUT.firstUserText);
+    expect(state.system_prompt).toContain("Use <redacted>.");
+    expect(state.system_prompt).toContain("chars omitted");
+    expect(state.system_prompt).toMatch(/End of instructions\.$/);
+    expect(state.system_prompt.length).toBeLessThan(2100);
+    expect(state.tools).toBe(
+      `Available tools: 100\n${Array.from(
+        { length: 100 },
+        (_, index) => `tool_${index}`,
+      )
+        .sort()
+        .join("\n")}`,
+    );
+    expect(state.tools).not.toContain("description");
+    expect(JSON.stringify(state)).not.toContain(secret);
+  });
+
+  test("sends all tool names in a stable order without descriptions", async () => {
+    let state: Record<string, string> = {};
+    server.use(
+      http.post(TYPESAFE_ENDPOINT, async ({ request }) => {
+        state = ((await request.json()) as { state: Record<string, string> })
+          .state;
+        return HttpResponse.json(ANSWERS);
+      }),
+    );
+    await source.read(
+      {
+        ...INPUT,
+        ...scoringContext({
+          tools: [
+            { name: "z_lookup", description: `${"word ".repeat(100)}END` },
+            { name: "a_search" },
+          ],
+        }),
+      },
+      ctx(),
+    );
+    expect(state.tools).toBe("Available tools: 2\na_search\nz_lookup");
+  });
+
+  test("preserves MCP tool identifiers while redacting prefixed and opaque credentials", async () => {
+    let state: Record<string, string> = {};
+    server.use(
+      http.post(TYPESAFE_ENDPOINT, async ({ request }) => {
+        state = ((await request.json()) as { state: Record<string, string> })
+          .state;
+        return HttpResponse.json(ANSWERS);
+      }),
+    );
+    const name =
+      "mcp__example__inspect_database_migration_execution_permissions";
+    await source.read(
+      {
+        ...INPUT,
+        tools: [
+          { name },
+          { name: `sk-${"b".repeat(30)}` },
+          { name: "a1b2".repeat(16) },
+          { name: "c2Vuc2l0aXZl".repeat(6) },
+          { name: `mcp__example__sk-${"b".repeat(30)}` },
+        ],
+      },
+      ctx(),
+    );
+    expect(state.tools).toBe(
+      `Available tools: 5\n<redacted>\n<redacted>\n<redacted>\nmcp__example__<redacted>\n${name}`,
+    );
+  });
+
+  test("rejects oversized name lists before the scorer call instead of silently taking a prefix", async () => {
+    let calls = 0;
+    server.use(
+      http.post(TYPESAFE_ENDPOINT, () => {
+        calls += 1;
+        return HttpResponse.json(ANSWERS);
+      }),
+    );
+    await expectSourceError(
+      source.read(
+        {
+          ...INPUT,
+          tools: Array.from({ length: 10_000 }, (_, index) => ({
+            name: `tool_${index}`,
+          })),
+        },
+        ctx(),
+      ),
+      "input_too_large",
+    );
+    expect(calls).toBe(0);
   });
 });

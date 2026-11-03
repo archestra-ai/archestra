@@ -10,9 +10,11 @@
 //! its file goes on. A policy naming an external authority or sanitizer is refused as a
 //! whole.
 use appa_runtime::{
-    api::{ConsultRecord, ConsultRecorder, ExternalOutcome, ExternalRole, OfferKind, Runtime},
+    api::{
+        ConsultRecord, ConsultRecorder, ExternalOutcome, ExternalRole, OfferKind, Remedies, Runtime,
+    },
     config::{Config, HostDefaults, Implementation},
-    replay::{self, Got, StepOutcome, Trace, TraceReport, Verdict},
+    replay::{self, Got, StepOutcome, Taken, Trace, TraceReport, Verdict},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -246,10 +248,14 @@ fn replay_runtime(request: &Request, defaults: HostDefaults) -> Result<Replaying
     let unanswered = Arc::new(Unanswered::default());
     // The deployment `appa replay` runs, under the Archestra adapter: no person is asked,
     // since every authority and sanitizer is answered in process.
-    let runtime =
-        Runtime::open_in_memory_as(config.with_do_something(), None, crate::adapter::adapter())
-            .map_err(|error| error.to_string())?
-            .recording(unanswered.clone());
+    let runtime = Runtime::open_in_memory_as(
+        config.with_do_something(),
+        None,
+        crate::adapter::adapter(),
+        Remedies::StandIn,
+    )
+    .map_err(|error| error.to_string())?
+    .recording(unanswered.clone());
     let runtime = match &request.annotator_context {
         Some(context) => runtime.with_archestra_context(context.clone()),
         None => runtime,
@@ -332,7 +338,14 @@ fn result(trace: &Trace, report: TraceReport) -> FileResult {
             let expected = step.check.to_string();
             let released = match &step.outcome {
                 StepOutcome::Passed { got, taken } | StepOutcome::Observed { got, taken } => {
-                    *got == Got::Allowed || matches!(taken, Some(OfferKind::Accept))
+                    *got == Got::Allowed
+                        || matches!(
+                            taken,
+                            Some(Taken {
+                                offer: OfferKind::Accept,
+                                ..
+                            })
+                        )
                 }
                 StepOutcome::Mismatch { got, .. } => *got == Got::Allowed,
                 StepOutcome::CannotRun(_) => false,
@@ -341,7 +354,7 @@ fn result(trace: &Trace, report: TraceReport) -> FileResult {
                 StepOutcome::Passed { got, taken } | StepOutcome::Observed { got, taken } => {
                     let actual = match taken {
                         Some(kind) => {
-                            Got::Blocked(std::collections::BTreeSet::from([kind])).to_string()
+                            Got::Blocked(std::collections::BTreeSet::from([kind.offer])).to_string()
                         }
                         None => got.to_string(),
                     };

@@ -37,6 +37,9 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "agentRun.canceled": "Agent run canceled",
   "agentRun.updated": "Agent run renamed",
   "agentRun.deleted": "Agent run deleted",
+  "agentRun.bulk_canceled": "Agent runs bulk canceled",
+  "agentRun.bulk_deleted": "Agent runs bulk deleted",
+  "agentRun.bulk_files_deleted": "Agent run saved files bulk deleted",
   "agentRun.reviewDecided": "OpenAPPA review decided",
   "agentRun.shared": "Agent run shared",
   "agentRun.unshared": "Agent run unshared",
@@ -131,6 +134,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   // Limit
   "limit.created": "Limit created",
   "limit.updated": "Limit updated",
+  "limit.reset": "Limit usage reset",
   "limit.deleted": "Limit deleted",
   "limit.bulk_deleted": "Limits deleted",
   // LLM model

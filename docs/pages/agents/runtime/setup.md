@@ -4,7 +4,7 @@ sidebarTitle: Setup
 description: Prepare Kubernetes nodes, storage, and the Agent Sandbox controller for Agent Runtime
 order: 1
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-27
+lastUpdated: 2026-10-31
 ---
 
 Prepare your cluster once, and every agent can get a dedicated runtime. Each run becomes a pod with its own persistent volume, created by the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/).
@@ -64,6 +64,20 @@ Keep Archestra on Fargate and place runtime containers on EC2 nodes:
 4. Exclude runtime namespaces and labels from Fargate profiles.
 5. Install the controller above and start a run.
 
+## Runtime Tiers
+
+Runtime tiers allocate CPU, memory, and workspace storage to agent runtimes so every run receives predictable resources. Configure your organization's tiers under **Settings → Agents → Runtime tiers**.
+
+![The Runtime tiers table in Settings](/docs/automated_screenshots/agents-runtime-setup_runtime-tiers.webp)
+
+Memory scales automatically with CPU at 2 GiB per requested CPU. The memory limit is twice the memory request, or 2 GiB per CPU of the CPU limit when that is lower. A new organization starts with `S` (2 CPU, 4 GiB), `M` (4 CPU, 8 GiB), and `L` (8 CPU, 16 GiB), with `M` as the default.
+
+**Workspace** sets the size of each run's persistent volume in GiB. The volume holds the run's home directory and, for a [privileged agent](#privileged-containers), its Docker data. A blank size uses [`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE). Runs that build container images or run Kubernetes in Docker need about 60 GiB.
+
+Agents do not configure CPU, memory, or storage directly. Each agent selects a [**Default tier**](/docs/agents/runtime#limits) for standard runs and an optional **Scaleup tier** for larger workloads. Choose **Disable autoscaling** to disable scaling up. When an agent permits scaling, a run can request any tier up to that scaleup tier.
+
+**Pooled** tier enables [Warm Pool](#warm-pools) of ready spare agent runtime instances of this tier to eliminate cold starts for new runs. Each spare holds a volume of the tier's workspace size.
+
 ## Warm Pools
 
 A warm pool keeps spare containers ready, so runs start faster. Agents in the same environment share a pool when their image, resources, storage, placement, and network policy match. Images tagged `:latest` always start fresh. Spares reserve CPU, memory, and storage, but hold no credentials or network access until a run takes them.
@@ -71,6 +85,8 @@ A warm pool keeps spare containers ready, so runs start faster. Agents in the sa
 After installing the controller extensions above, set [`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE=1`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE) to keep one spare per group. Up to four groups are prepared by default; change this with [`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS).
 
 Pools go to the Agents with the most recent runs. Agents with no run in the last 7 days get no spare, so idle Agents don't hold cluster capacity.
+
+Each runtime tier is pooled or not, under **Pools** in **Settings → Agents → Runtime tiers**. A pooled tier keeps [`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE) spares per group; a tier that is not pooled starts every run in a new container. A new organization pools `S` and `M` but not `L`: a large run is rare and an idle spare holds its full size.
 
 Assigned containers never return to the pool. Without a spare, a run starts a new container. Setting the size to `0` removes unused spares and preserves assigned runs.
 

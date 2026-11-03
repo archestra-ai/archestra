@@ -185,6 +185,51 @@ describe("clone agent route", () => {
     ).toEqual([excludedTarget.id]);
   });
 
+  test("clones Auto tools and subagents without a restorable mixed policy", async ({
+    makeInternalAgent,
+  }) => {
+    const excludedTarget = await makeInternalAgent({
+      organizationId,
+      name: "Excluded Sub Agent",
+    });
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "All Subagents Source",
+    });
+    await AgentModel.update(sourceAgent.id, {
+      accessAllTools: true,
+      accessAllSubagents: true,
+    });
+    await AgentExcludedSubagentModel.replaceForAgent(sourceAgent.id, [
+      excludedTarget.id,
+    ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+    expect(cloned.accessAllTools).toBe(true);
+    expect(cloned.accessAllSubagents).toBe(true);
+    const history = await db
+      .select({ snapshot: schema.agentVersionsTable.snapshot })
+      .from(schema.agentVersionsTable)
+      .where(eq(schema.agentVersionsTable.agentId, cloned.id));
+    // A restorable Auto-tools/Manual-subagents version does not match the
+    // source and must never appear between the closed and final clone states.
+    expect(
+      history.map(({ snapshot }) => ({
+        accessAllTools: snapshot.accessAllTools,
+        accessAllSubagents: snapshot.accessAllSubagents,
+      })),
+    ).not.toContainEqual({ accessAllTools: true, accessAllSubagents: false });
+    expect(
+      await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(cloned.id),
+    ).toEqual([excludedTarget.id]);
+  });
+
   test("does not force-assign creation-default built-ins the source agent lacked", async ({
     makeInternalAgent,
     makeTool,

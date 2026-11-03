@@ -103,3 +103,46 @@ it("keeps secondary actions unambiguous and usable when the dialog changes betwe
   await user.click(screen.getByTestId("remove-item"));
   expect(remove).toHaveBeenCalledTimes(2);
 });
+
+it("prevents selecting unavailable sections from the sidebar and mobile picker", async () => {
+  vi.stubGlobal("matchMedia", () => new EventTarget());
+  vi.stubGlobal("innerWidth", 390);
+  const user = userEvent.setup();
+  const changeSection = vi.fn();
+  render(
+    <TabbedDialogShell
+      open
+      onOpenChange={vi.fn()}
+      title="Edit item"
+      sidebarLabel="Item"
+      sidebarDescription="Settings"
+      sidebarIcon={null}
+      activeSection="general"
+      navItems={[
+        { id: "general", label: "General" },
+        {
+          id: "sync",
+          label: "Team Sync",
+          disabled: true,
+          status: "Enterprise license required",
+        },
+      ]}
+      onActiveSectionChange={changeSection}
+      onSubmit={vi.fn()}
+      footer={<Button>Close</Button>}
+    >
+      <p>General settings</p>
+    </TabbedDialogShell>,
+  );
+  const sync = screen.getByRole("button", { name: "Team Sync" });
+  expect(sync).toBeDisabled();
+  expect(sync).toHaveAccessibleDescription("Enterprise license required");
+  await user.click(sync);
+  expect(changeSection).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("combobox", { name: "Dialog section" }));
+  const option = screen.getByRole("option", { name: /Team Sync/ });
+  expect(option).toHaveAttribute("aria-disabled", "true");
+  expect(option).toHaveTextContent("Enterprise license required");
+  await user.click(option);
+  expect(changeSection).not.toHaveBeenCalled();
+});

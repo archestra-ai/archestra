@@ -16,8 +16,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { formatCurrency } from "@/lib/utils/format-currency";
 import { cn } from "@/lib/utils/tailwind";
+import { formatModelCost } from "./model-cost-format";
 
 /** One calendar day of a model's history, at local midnight. */
 export interface ChartDay {
@@ -366,11 +366,11 @@ export function CostChart({
                 hovered.zero && "text-amber-700 dark:text-amber-400",
               )}
             >
-              {formatCurrency(hovered.recordedCost)}
+              {formatModelCost(hovered.recordedCost)}
             </span>
             <span>{" → "}</span>
             <span className="text-foreground">
-              {formatCurrency(hovered.recomputedCost)}
+              {formatModelCost(hovered.recomputedCost)}
             </span>
           </span>
         ) : (
@@ -543,5 +543,5 @@ function ZeroCostLine({
 function sliderValueText(since: Date, bar: Bar | undefined): string {
   const start = format(since, "MMM d, yyyy, h:mm a");
   if (!bar) return start;
-  return `${start}. ${barLabel(bar)}: ${formatCurrency(bar.recordedCost)} recorded, ${formatCurrency(bar.recomputedCost)} at the new prices`;
+  return `${start}. ${barLabel(bar)}: ${formatModelCost(bar.recordedCost)} recorded, ${formatModelCost(bar.recomputedCost)} at the new prices`;
 }

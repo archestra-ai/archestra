@@ -414,7 +414,8 @@ async function dispatchTool({
     // Envelope repair against the built-in's published input schema, so the
     // handler's strict zod validation sees the repaired args. Delegations
     // (agent-<id>) have no published JSON schema — the lookup returns
-    // undefined and nothing is repaired.
+    // undefined and nothing is repaired. The LLM proxy applies this repair
+    // before policy, so only calls that bypass it still arrive enveloped.
     const { repairedParams, toolArgs } = repairEnvelopedToolArgs({
       toolArgs: args.tool_args ?? {},
       schema: getArchestraToolInputSchema(resolvedName),
@@ -521,8 +522,8 @@ async function dispatchTool({
 
   // Schema-aware envelope repair: unwrap single-key wrapper objects (any key)
   // and the two-key {type:"text",text} content block around params the schema
-  // declares scalar/array (see repairEnvelopedToolArgs). Disclosed via a note
-  // appended to the result.
+  // declares scalar/array (see repairEnvelopedToolArgs). Disclosed on the
+  // result by appendEnvelopeRepairNote.
   const { repairedParams, toolArgs: toolInput } = repairEnvelopedToolArgs({
     toolArgs: args.tool_args ?? {},
     schema: targetSchema,
@@ -869,9 +870,13 @@ function reachedArgValidation(result: CallToolResult): boolean {
   return isRecord(result._meta) && "archestraValidation" in result._meta;
 }
 
+const UNWRAPPED_TOOL_ARGS_META_KEY = "archestra/unwrappedToolArgs";
+
 /**
- * Disclose a fired envelope repair on the tool result (success or failure),
- * so the model sees what was attempted and self-corrects in-context.
+ * Disclose a fired envelope repair on the tool result. A success records it in
+ * `_meta` and leaves `content` exactly as the tool returned it, since clients
+ * join and parse text blocks; a failure carries a text note so the model sees
+ * what was attempted and self-corrects in-context.
  */
 function appendEnvelopeRepairNote(
   result: CallToolResult,
@@ -879,6 +884,15 @@ function appendEnvelopeRepairNote(
 ): CallToolResult {
   if (repairedParams.length === 0) {
     return result;
+  }
+  if (!result.isError) {
+    return {
+      ...result,
+      _meta: {
+        ...result._meta,
+        [UNWRAPPED_TOOL_ARGS_META_KEY]: repairedParams,
+      },
+    };
   }
   const names = repairedParams.map((name) => `"${name}"`).join(", ");
   return {

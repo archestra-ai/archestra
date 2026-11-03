@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { isIP } from "node:net";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,6 +25,7 @@ import {
   DEFAULT_VAULT_TOKEN,
   getAgentCatalogImages,
   getAgentCatalogImageTag,
+  gibFromMiB,
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
   type LogContentMode,
@@ -48,7 +50,6 @@ import {
   type EmailProviderType,
   EmailProviderTypeSchema,
 } from "@/types/email-provider-type";
-import { parseUsageAccountingMode } from "@/utils/billable-usage";
 import { isValidCidr } from "@/utils/network";
 
 type ProcessType = "web" | "worker" | "all";
@@ -93,6 +94,13 @@ const appVersion = getAppVersion();
 const devAutoAuthenticateEmail = isProduction
   ? undefined
   : process.env.ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL?.trim() || undefined;
+
+// Settlement is no longer optional; an old deployment may still set the mode.
+if (process.env.ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE !== undefined) {
+  logger.warn(
+    "[config] ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE is no longer used: every request is settled and charged to its budgets. Remove it from your configuration.",
+  );
+}
 
 if (devAutoAuthenticateEmail) {
   logger.warn(
@@ -1857,8 +1865,53 @@ export const parseSreApiServerCidrs = (
 };
 
 /**
+ * Parses `ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS`: the cluster resolver
+ * address(es) MCP, agent and sandbox egress policies allow DNS to. Each entry
+ * becomes a single-host ipBlock on port 53, so anything that is not one IP
+ * address (a CIDR, a hostname) is dropped loudly rather than widening the rule.
+ *
+ * @public — exported for testability
+ */
+export const parseClusterDnsIps = (envValue: string | undefined): string[] => {
+  const entries = parseCommaSeparatedList(envValue ?? "");
+  const invalid = entries.filter((entry) => isIP(entry) === 0);
+  if (invalid.length > 0) {
+    logger.error(
+      `ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS ignoring entries that are not IP addresses: ${invalid.join(", ")}`,
+    );
+  }
+  return entries.filter((entry) => isIP(entry) !== 0);
+};
+
+/**
+ * The default workspace volume of Agent Runtime runs, read once: the
+ * Kubernetes quantity a volume claim takes, and the same size in GiB.
+ *
+ * @public — exported for testability
+ */
+export function agentRuntimeWorkspaceStorage(value: string | undefined): {
+  workspaceStorageSize: string;
+  workspaceStorageGiB: number;
+} {
+  const workspaceStorageSize = parseK8sResourceQuantity({
+    envName: "ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE",
+    value,
+    validator: isValidK8sMemoryQuantity,
+    defaultValue: "20Gi",
+  });
+  // The validator and the parser accept the same suffixes, so a validated
+  // quantity always has a byte count.
+  const bytes = k8sMemoryQuantityToBytes(workspaceStorageSize) ?? 0;
+  return {
+    workspaceStorageSize,
+    workspaceStorageGiB: gibFromMiB(bytes / 1024 ** 2),
+  };
+}
+
+/**
  * Bytes in a Kubernetes memory quantity (`4Gi`, `512Mi`, `1G`, `1048576`), or
- * undefined when it is not one.
+ * undefined when it is not one. Reads every suffix `isValidK8sMemoryQuantity`
+ * accepts, so a validated setting always has a byte count.
  *
  * @public — exported for testability
  */
@@ -1867,17 +1920,22 @@ export const k8sMemoryQuantityToBytes = (
 ): number | undefined => {
   const match = quantity
     .trim()
-    .match(/^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|k|M|G|T)?$/);
+    .match(/^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|Pi|Ei|k|K|M|G|T|P|E)?$/);
   if (!match) return undefined;
   const multipliers: Record<string, number> = {
     Ki: 1024,
     Mi: 1024 ** 2,
     Gi: 1024 ** 3,
     Ti: 1024 ** 4,
+    Pi: 1024 ** 5,
+    Ei: 1024 ** 6,
     k: 1000,
+    K: 1000,
     M: 1000 ** 2,
     G: 1000 ** 3,
     T: 1000 ** 4,
+    P: 1000 ** 5,
+    E: 1000 ** 6,
   };
   // Floored because the only consumers are a cgroup limit and a byte
   // comparison, neither of which takes a fraction.
@@ -2248,7 +2306,64 @@ const llmProxyPlugins = parseLlmProxyPlugins(
   process.env.ARCHESTRA_LLM_PROXY_PLUGINS,
 );
 
+/** @public — validated directly by configuration tests. */
+export function parseShutdownSeconds(
+  value: string | undefined,
+  fallback: number,
+  minimum = 1,
+  maximum = 86400,
+): number {
+  if (value === undefined) return fallback;
+  if (
+    !/^\d+$/.test(value) ||
+    !Number.isSafeInteger(Number(value)) ||
+    Number(value) < minimum ||
+    Number(value) > maximum
+  ) {
+    throw new Error(
+      `Shutdown durations must be integer seconds between ${minimum} and ${maximum}`,
+    );
+  }
+  return Number(value);
+}
+
+/** Validate resolved Secret/ConfigMap values before the server accepts work. */
+export function validateShutdownPodGrace(
+  podGraceSeconds: number | undefined,
+  drainSeconds: number,
+  cleanupSeconds: number,
+  workerSeconds: number,
+): void {
+  if (podGraceSeconds === undefined) return;
+  const required = Math.max(drainSeconds, workerSeconds) + cleanupSeconds + 40;
+  if (podGraceSeconds < required) {
+    throw new Error(
+      `Pod shutdown grace is ${podGraceSeconds}s but resolved shutdown durations require at least ${required}s. Increase archestra.terminationGracePeriodSeconds or reduce the configured shutdown durations.`,
+    );
+  }
+}
+
 const config = {
+  shutdown: {
+    podGraceSeconds:
+      process.env.ARCHESTRA_SERVER_POD_GRACE_SECONDS === undefined
+        ? undefined
+        : parseShutdownSeconds(
+            process.env.ARCHESTRA_SERVER_POD_GRACE_SECONDS,
+            120,
+            1,
+            Number.MAX_SAFE_INTEGER,
+          ),
+    drainSeconds: parseShutdownSeconds(
+      process.env.ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS,
+      60,
+    ),
+    cleanupSeconds: parseShutdownSeconds(
+      process.env.ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS,
+      20,
+      5,
+    ),
+  },
   openappa,
   frontendBaseUrl,
   api: {
@@ -2423,7 +2538,7 @@ const config = {
     /** Fallback lifetime cap for Agent Runtime runs whose agent sets none. */
     defaultTtlHours: parsePositiveInt(
       process.env.ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS,
-      72,
+      24,
     ),
     /**
      * Fallback idle stop for Agent Runtime runs whose agent sets none. An idle run is
@@ -2432,28 +2547,14 @@ const config = {
      */
     defaultIdleTimeoutMinutes: parsePositiveInt(
       process.env.ARCHESTRA_AGENT_RUNTIME_DEFAULT_IDLE_TIMEOUT_MINUTES,
-      180,
+      60,
     ),
-    resources: {
-      cpuRequest:
-        process.env.ARCHESTRA_AGENT_RUNTIME_CPU_REQUEST?.trim() || "500m",
-      memoryRequest:
-        process.env.ARCHESTRA_AGENT_RUNTIME_MEMORY_REQUEST?.trim() || "1Gi",
-      /**
-       * No CPU limit by default, matching the MCP server runtime: throttling
-       * an agent mid-turn surfaces as confusing timeouts rather than
-       * back-pressure. Memory is limited because a runaway agent process
-       * should die rather than take the node with it.
-       */
-      memoryLimit:
-        process.env.ARCHESTRA_AGENT_RUNTIME_MEMORY_LIMIT?.trim() || "4Gi",
-    },
-    workspaceStorageSize: parseK8sResourceQuantity({
-      envName: "ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE",
-      value: process.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE,
-      validator: isValidK8sMemoryQuantity,
-      defaultValue: "20Gi",
-    }),
+    // `workspaceStorageSize` (the quantity a volume claim takes) and
+    // `workspaceStorageGiB` (the same size in GiB, which runs and the tier
+    // settings are told): the volume of a run whose tier sets none.
+    ...agentRuntimeWorkspaceStorage(
+      process.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE,
+    ),
     workspaceStorageClass:
       process.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS?.trim() ||
       undefined,
@@ -3185,6 +3286,11 @@ const config = {
       clusterDomain:
         process.env.ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN ||
         "cluster.local",
+      // Cluster resolver IP(s) for egress-policy DNS rules. When set, they are
+      // used instead of discovering the kube-dns Service.
+      clusterDnsIps: parseClusterDnsIps(
+        process.env.ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS,
+      ),
       // Namespaces the platform ServiceAccount is granted RBAC in (Helm
       // rbac.environmentNamespaces). Surfaced to the UI so the environment
       // editor can offer a namespace dropdown instead of free text.
@@ -3253,6 +3359,14 @@ const config = {
     artifactBytesLimit: parsePositiveInt(
       process.env.ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT,
       DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
+    ),
+    /**
+     * Days a headless (conversation-less, non-app) sandbox is kept after its
+     * last activity before the sweep deletes it. 0 keeps them forever.
+     */
+    headlessRetentionDays: parseNonNegativeInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_HEADLESS_RETENTION_DAYS,
+      7,
     ),
   },
   /**
@@ -3483,9 +3597,6 @@ const config = {
     modelPoolsEnabled: betaFeatureEnabled(
       process.env.ARCHESTRA_LLM_MODEL_POOLS_ENABLED,
     ),
-    usageAccountingMode: parseUsageAccountingMode(
-      process.env.ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE,
-    ),
     plugins: llmProxyPlugins,
     maxVirtualKeysPerApiKey: parsePositiveInt(
       process.env.ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS,
@@ -3660,7 +3771,7 @@ const config = {
         .ARCHESTRA_KNOWLEDGE_BASE_PERMISSION_SYNC_WORKER_MAX_CONCURRENT,
       1,
     ),
-    taskWorkerShutdownTimeoutSeconds: parsePositiveInt(
+    taskWorkerShutdownTimeoutSeconds: parseShutdownSeconds(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS,
       30,
     ),

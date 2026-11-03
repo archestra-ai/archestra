@@ -81,6 +81,20 @@ import {
  * limits table renders below it.
  */
 export function UserLimitsOverview({
+  enabled = true,
+  limitsTable,
+}: {
+  enabled?: boolean;
+  limitsTable: ReactNode;
+}) {
+  return enabled ? (
+    <OrganizationUserLimitsOverview limitsTable={limitsTable} />
+  ) : (
+    limitsTable
+  );
+}
+
+function OrganizationUserLimitsOverview({
   limitsTable,
 }: {
   limitsTable: ReactNode;

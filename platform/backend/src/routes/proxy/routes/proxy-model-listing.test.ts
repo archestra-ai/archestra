@@ -628,6 +628,45 @@ describe("provider-specific proxy GET /models (virtual-key-aware)", () => {
     }
   });
 
+  test("openai: keeps synced image and audio models out of the client model list", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    vi.mocked(fetchOpenAiModels).mockResolvedValue([
+      ...OPENAI_MODELS,
+      ...["gpt-image-1", "tts-1", "whisper-1"].map((id) => ({
+        id,
+        displayName: id,
+        provider: "openai" as const,
+      })),
+    ]);
+    const app = await buildApp(openAiProxyRoutes);
+
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "sk-openai-real" } });
+    const providerKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      name: "vk-openai-media",
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: providerKey.id },
+      ],
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/openai/models",
+      headers: { authorization: `Bearer ${value}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(
+      response.json().data.map((model: { id: string }) => model.id),
+    ).toEqual(["gpt-5.4"]);
+  });
+
   test("openai: default-agent route lists models", async ({
     makeOrganization,
     makeSecret,

@@ -27,6 +27,13 @@ import logger from "@/logging";
 import MemberModel from "@/models/member";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaYellModel from "@/models/openappa-yell";
+import {
+  observeOpenappaDispatch,
+  setOpenappaEngineMetricsCollector,
+} from "@/observability/metrics/openappa";
+import { getActiveSessionId } from "@/observability/request-context";
+import { traceOpenappaDispatch } from "@/observability/tracing/openappa";
+import { clientSessionId } from "@/openappa/actor";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { normalizeToolArgumentsForPolicy } from "@/openappa/command-normalization";
 import { compositionView } from "@/openappa/composition-view";
@@ -60,10 +67,13 @@ import {
   isGuardrailsV2Active,
 } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
+import type { OpenAppaSession } from "@/types/openappa-session";
 import { policyView } from "./result-view";
+import { toolCallArgumentsText } from "./tool-call-arguments";
 import type { DeclaredToolSpelling } from "./wire";
 
 export { APPA_PARENT_HEADER, APPA_SESSION_HEADER };
+export type { OpenAppaSession } from "@/types/openappa-session";
 export const APPA_CHAT_SOURCES = [
   "chat",
   "chat:tool_call_repair",
@@ -75,18 +85,6 @@ const ATTEST_SCHEMA_SANITIZER = "attest-schema";
 type ExecutionOutcome = "success" | "failure" | "unknown";
 type OutputSource = "tool" | "runtime";
 type RuntimeReason = string;
-export type OpenAppaSession = {
-  organization_id: string;
-  caller_id?: string;
-  session_id: string;
-  parent_id?: string;
-  /**
-   * The session this one forks, on a new session whose history the proxy
-   * traced to it: its first event opens a root of its own seeded from that
-   * session's labels.
-   */
-  fork_of?: string;
-};
 
 const ResultDecisionFields = {
   approved_output: z.string().optional(),
@@ -547,6 +545,7 @@ async function binding() {
           }
         : undefined,
     );
+    setOpenappaEngineMetricsCollector(module.collectOpenappaMetrics);
     return module;
   })().catch((error) => {
     native = undefined;
@@ -579,26 +578,33 @@ async function dispatchWithPrincipal(params: {
   principal: { principal?: string };
 }) {
   const { session, event, policy, principal } = params;
-  return withRuntime(
-    session.organization_id,
-    (module, policy) =>
-      withOpenappaContentEncryption(
-        session.organization_id,
-        session.session_id,
-        (encryption) =>
-          module.dispatchHook(
-            JSON.stringify({
-              ...session,
-              ...event,
-              ...principal,
-              // Last, so nothing spread above can override the host's reading.
-              withhold_consult_content: withholdConsultContent(),
-            }),
-            policy,
-            encryption,
-          ),
+  return traceOpenappaDispatch(
+    getActiveSessionId() ?? clientSessionId(session.session_id),
+    event.event,
+    () =>
+      observeOpenappaDispatch(event.event, () =>
+        withRuntime(
+          session.organization_id,
+          (module, policy) =>
+            withOpenappaContentEncryption(
+              session.organization_id,
+              session.session_id,
+              (encryption) =>
+                module.dispatchHook(
+                  JSON.stringify({
+                    ...session,
+                    ...event,
+                    ...principal,
+                    // Last, so nothing spread above can override the host's reading.
+                    withhold_consult_content: withholdConsultContent(),
+                  }),
+                  policy,
+                  encryption,
+                ),
+            ),
+          policy,
+        ),
       ),
-    policy,
   );
 }
 
@@ -1107,6 +1113,11 @@ export async function processProxyResults(params: {
    * remedy never ran, and the model reads what the client returned.
    */
   isControlResult?: (result: CommonToolResult) => boolean;
+  /**
+   * Whether the proxy verified this result as a child return against the
+   * crossing the runtime retained, and replaced its content with that return.
+   */
+  isVerifiedChildReturn?: (result: CommonToolResult) => boolean;
   /** Canonical status for this session's server-staged, still-pending review. */
   pendingReviewResult?: (
     result: CommonToolResult,
@@ -1174,6 +1185,21 @@ export async function processProxyResults(params: {
       policy,
       principal,
     });
+    // A client can read a crossed child return with a call it made itself:
+    // Copilot CLI reads a finished background agent with read_agent when it
+    // announces the agent is idle. The runtime released no such call, but
+    // the return was verified against the crossing the runtime retained, so
+    // that verified text goes through.
+    if (
+      approved.code === UNRELEASED_CALL_CODE &&
+      params.isVerifiedChildReturn?.(result) === true
+    ) {
+      updates[result.id] = {
+        content: resultOutput(result),
+        outputSource: "runtime",
+      };
+      continue;
+    }
     const pendingReview =
       approved.code === UNRELEASED_CALL_CODE
         ? await params.pendingReviewResult?.(result)
@@ -1262,7 +1288,10 @@ export async function evaluateToolCalls(
       throw new ApiError(400, "OpenAPPA requires distinct tool-call IDs");
     }
     ids.add(call.id);
-    if (typeof call.arguments === "string" && !isJson(call.arguments)) {
+    if (
+      typeof call.arguments === "string" &&
+      !isJson(toolCallArgumentsText(call.arguments))
+    ) {
       malformedIds.add(call.id);
     }
   }
@@ -1676,6 +1705,22 @@ export async function returnRuntimeValue(params: {
     : { kind: "held", reason: outcome.content };
 }
 
+/** The runtime's refusal of a report that its spawn call can no longer take. */
+const OUTCOME_MISMATCH_REASON =
+  "this outcome does not match the open dispatch; it is not reported";
+
+/**
+ * The runtime would not report a child's return against its spawn call: the
+ * call no longer takes that outcome. A turn end closes every call still open,
+ * a spawn whose child runs in the background included, so a return that
+ * arrives after it is refused this way. Nothing crossed into the parent.
+ */
+export class SpawnReturnNotReported extends ApiError {
+  constructor(message: string) {
+    super(409, message);
+  }
+}
+
 /**
  * Verifies that a parent carrier contains bytes admitted through ChildEnd.
  *
@@ -1708,6 +1753,9 @@ export async function approveSpawnReturn(params: {
         "OpenAPPA spawn dispatch already closed; child return matches the retained crossing",
       );
       return;
+    }
+    if (decision.reason === OUTCOME_MISMATCH_REASON) {
+      throw new SpawnReturnNotReported(msg);
     }
     throw new ApiError(409, msg);
   }

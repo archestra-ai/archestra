@@ -12,6 +12,9 @@ import { createXai } from "@ai-sdk/xai";
 import type { InteractionSource } from "@archestra/shared";
 import {
   APP_ID_HEADER,
+  APPA_PARENT_HEADER,
+  APPA_SESSION_HEADER,
+  AUTO_ROUTABLE_HEADER,
   anthropicThinksByDefault,
   CHAT_API_KEY_ID_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
@@ -62,10 +65,8 @@ import {
   getBedrockRegion,
   isBedrockIamAuthEnabled,
 } from "@/clients/bedrock-credentials";
-import {
-  isVertexAiEnabled,
-  resolveVertexLocation,
-} from "@/clients/gemini-client";
+import { resolveVertexLocation } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import {
   guardrailCallHeader,
   internalCallHeader,
@@ -75,14 +76,10 @@ import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import { createResponseHealingFetch } from "@/clients/openrouter-response-healing";
 import config from "@/config";
 import { ENCRYPTED_CHAT_KEY_HEADER } from "@/content-encryption/encrypted-chat";
+import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import ModelModel from "@/models/model";
 import UserTokenModel from "@/models/user-token";
-import {
-  APPA_PARENT_HEADER,
-  APPA_SESSION_HEADER,
-  openappaEnabled,
-} from "@/openappa/service";
 import { APPA_SUBAGENT_BINDING_HEADER } from "@/openappa/subagent-binding";
 import {
   type AzureModelCapabilities,
@@ -150,11 +147,13 @@ export function createDirectLLMModel({
   apiKey,
   modelName,
   baseUrl,
+  chatApiKeyId,
 }: {
   provider: SupportedProvider;
   apiKey: string | undefined;
   modelName: string;
   baseUrl: string | null;
+  chatApiKeyId?: string;
 }): LLMModel {
   const cfg = providerModelConfigs[provider];
   if (!cfg) {
@@ -194,7 +193,7 @@ export function createDirectLLMModel({
         provider === "openrouter" ? createResponseHealingFetch() : undefined,
       direct: true,
     }),
-    { provider, modelName },
+    { provider, modelName, chatApiKeyId },
   );
 }
 
@@ -218,6 +217,8 @@ export function createLLMModel(params: {
   chatApiKeyId?: string;
   /** The model pool the chat was set to; see MODEL_POOL_ID_HEADER. */
   modelPoolId?: string | null;
+  /** The call may be auto routed; see AUTO_ROUTABLE_HEADER. */
+  autoRoutable?: boolean;
   /**
    * Encrypted chat key. Forwarded so the proxy can store this
    * interaction's content encrypted under it instead of redacting it. The
@@ -269,12 +270,12 @@ export function createLLMModel(params: {
     clientHeaders[SESSION_ID_HEADER] = sessionId;
     // A platform guardrail call is filed under the chat's session for logs,
     // but must not become a turn of that chat's OpenAPPA trajectory.
-    if (openappaEnabled() && !params.internalCall)
+    if (enterpriseTier.isOpenappaActive() && !params.internalCall)
       clientHeaders[APPA_SESSION_HEADER] = sessionId;
   }
-  if (openappaEnabled() && params.appaParentId)
+  if (enterpriseTier.isOpenappaActive() && params.appaParentId)
     clientHeaders[APPA_PARENT_HEADER] = params.appaParentId;
-  if (openappaEnabled() && params.appaSubagentToken)
+  if (enterpriseTier.isOpenappaActive() && params.appaSubagentToken)
     clientHeaders[APPA_SUBAGENT_BINDING_HEADER] = params.appaSubagentToken;
   if (source) {
     clientHeaders[SOURCE_HEADER] = source;
@@ -295,6 +296,9 @@ export function createLLMModel(params: {
   }
   if (params.modelPoolId) {
     clientHeaders[MODEL_POOL_ID_HEADER] = params.modelPoolId;
+  }
+  if (params.autoRoutable) {
+    clientHeaders[AUTO_ROUTABLE_HEADER] = "true";
   }
   // App runtime completions attribute their spend to the calling app; the proxy
   // re-validates this against the executing agent's organization.
@@ -328,7 +332,7 @@ export function createLLMModel(params: {
       supportedEndpoints,
       azureCapabilities: params.azureCapabilities,
     }),
-    { provider, modelName },
+    { provider, modelName, chatApiKeyId },
   );
 }
 
@@ -350,6 +354,8 @@ export async function createLLMModelForAgent(params: {
   agentLlmApiKeyId?: string | null;
   /** The conversation's model pool; its turns go to the pool's members. */
   modelPoolId?: string | null;
+  /** No pool or explicit tier: the call may be auto routed. */
+  autoRoutable?: boolean;
   /**
    * Encrypted chat key, forwarded to the proxy so this turn's
    * interaction content is stored encrypted rather than redacted.
@@ -508,6 +514,7 @@ export async function createLLMModelForAgent(params: {
     baseUrl,
     chatApiKeyId,
     modelPoolId: params.modelPoolId,
+    autoRoutable: params.autoRoutable,
     encryptedChatKey: params.encryptedChatKey,
     appaSubagentToken: params.appaSubagentToken,
     supportedEndpoints,
@@ -1414,7 +1421,11 @@ function createOllamaNativeFetch(
  */
 function withCatalogOutputBudget(
   model: LLMModel,
-  target: { provider: SupportedProvider; modelName: string },
+  target: {
+    provider: SupportedProvider;
+    modelName: string;
+    chatApiKeyId?: string;
+  },
 ): LLMModel {
   // Plain ids and v2 providers (Ollama) keep their provider default.
   if (typeof model === "string" || model.specificationVersion !== "v3")

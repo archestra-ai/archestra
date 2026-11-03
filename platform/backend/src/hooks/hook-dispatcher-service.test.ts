@@ -10,6 +10,7 @@ vi.mock("@/skills-sandbox/skill-sandbox-runtime-service", () => ({
 
 import config from "@/config";
 import { HookFileModel, SkillSandboxModel } from "@/models";
+import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { SKILL_SANDBOX_HOME } from "@/skills-sandbox/runtime-image";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -466,5 +467,98 @@ describe("hookDispatcherService", () => {
       conversationId,
       defaultCwd: "/home/sandbox",
     });
+  });
+
+  // -----------------------------------------------------------------------
+  // 7. Headless run (no conversation) → hooks run in the execution's sandbox
+  // -----------------------------------------------------------------------
+  test("headless run fires hooks in the execution sandbox keyed by isolationKey", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const isolationKey = crypto.randomUUID();
+
+    await HookFileModel.create({
+      organizationId: org.id,
+      agentId: agent.id,
+      event: "pre_tool_use",
+      fileName: "audit.py",
+      content: "print('ok')",
+      requirements: [],
+    });
+    vi.mocked(skillSandboxRuntimeService.runCommand).mockResolvedValueOnce({
+      commandId: "cmd-1",
+      sandboxId: "s" as never,
+      command: "",
+      cwd: null,
+      stdout: "",
+      stderr: "",
+      exitCode: 0,
+      durationMs: 5,
+      timedOut: false,
+      truncated: false,
+      binaryStripped: false,
+      stagingNotices: [],
+    });
+
+    try {
+      const result = await hookDispatcherService.fire({
+        event: "pre_tool_use",
+        isolationKey,
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+        fields: { tool_name: "bash", tool_input: {} },
+      });
+
+      const sandbox = await executionSandboxRegistry.findDefault({
+        organizationId: org.id,
+        userId: user.id,
+        isolationKey,
+      });
+      expect(sandbox?.conversationId).toBeNull();
+      expect(result.decision).toBe("proceed");
+      expect(result.runs?.map((r) => r.payload.session_id)).toEqual([
+        isolationKey,
+      ]);
+      expect(skillSandboxRuntimeService.runCommand).toHaveBeenCalledWith(
+        expect.objectContaining({ sandboxId: sandbox?.id }),
+      );
+    } finally {
+      executionSandboxRegistry.release(isolationKey);
+    }
+  });
+
+  test("run with neither conversationId nor isolationKey → proceed without running hooks", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    await HookFileModel.create({
+      organizationId: org.id,
+      agentId: agent.id,
+      event: "pre_tool_use",
+      fileName: "audit.py",
+      content: "print('ok')",
+      requirements: [],
+    });
+
+    const result = await hookDispatcherService.fire({
+      event: "pre_tool_use",
+      agentId: agent.id,
+      organizationId: org.id,
+      userId: user.id,
+      fields: { tool_name: "bash", tool_input: {} },
+    });
+
+    expect(result).toEqual({ decision: "proceed", runs: [] });
+    expect(skillSandboxRuntimeService.runCommand).not.toHaveBeenCalled();
   });
 });

@@ -28,6 +28,7 @@ vi.mock("@/lib/teams/team.query", () => ({
 vi.mock("@archestra/shared", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@archestra/shared")>()),
   archestraApiSdk: {
+    addTeamMember: vi.fn(),
     getTeamMembers: vi.fn(),
     getTeamMembersPage: vi.fn(),
     removeTeamMember: vi.fn(),
@@ -53,6 +54,15 @@ async function findRoleTrigger(label: RegExp) {
     if (!trigger) throw new Error(`No combobox showing ${label}`);
     return trigger;
   });
+}
+
+// The summary line ("45 members · 1 admin · …") spans several elements.
+async function findSummary(text: RegExp) {
+  return await screen.findByText(
+    (_, element) =>
+      element?.tagName === "P" &&
+      text.test((element.textContent ?? "").replace(/\s*·\s*/g, " · ")),
+  );
 }
 
 async function setupUserEvent() {
@@ -115,6 +125,10 @@ beforeEach(() => {
     data: {},
     // biome-ignore lint/suspicious/noExplicitAny: partial sdk result stub
   } as any);
+  vi.mocked(archestraApiSdk.addTeamMember).mockResolvedValue({
+    data: {},
+    // biome-ignore lint/suspicious/noExplicitAny: partial sdk result stub
+  } as any);
   vi.mocked(archestraApiSdk.removeTeamMember).mockResolvedValue({
     data: {},
     // biome-ignore lint/suspicious/noExplicitAny: partial sdk result stub
@@ -143,6 +157,7 @@ function serveMembers(
       offset?: number;
       search?: string;
       userIds?: string[];
+      role?: string;
     };
   }) => {
     if (query?.search && holdSearch) await holdSearch;
@@ -152,7 +167,8 @@ function serveMembers(
       (member) =>
         (!query?.search ||
           member.name.toLowerCase().includes(query.search.toLowerCase())) &&
-        (!query?.userIds || query.userIds.includes(member.userId)),
+        (!query?.userIds || query.userIds.includes(member.userId)) &&
+        (!query?.role || member.role === query.role),
     );
     return {
       data: {
@@ -184,13 +200,19 @@ function largeRoster(size: number): RosterMember[] {
 }
 
 describe("TeamManagementDialog member roles", () => {
-  it("shows labels without an Advanced section", async () => {
+  it("keeps inherited roles visible and reveals parent and labels in Advanced", async () => {
+    const user = await setupUserEvent();
     renderDialog();
-
-    expect(screen.getByLabelText("Label key")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Advanced" }),
+      screen.getByRole("combobox", { name: "Inherited Roles" }),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Label key")).not.toBeVisible();
+    expect(
+      screen.queryByRole("combobox", { name: "Parent Team" }),
     ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    expect(screen.getByLabelText("Label key")).toBeVisible();
+    expect(screen.getByRole("combobox", { name: "Parent Team" })).toBeVisible();
   });
 
   it("offers valid parent paths and excludes the current team's descendants", async () => {
@@ -205,6 +227,7 @@ describe("TeamManagementDialog member roles", () => {
     const user = await setupUserEvent();
     renderDialog();
 
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
     await user.click(screen.getByRole("combobox", { name: "Parent Team" }));
 
     const listbox = screen.getAllByRole("dialog").at(-1)!;
@@ -219,29 +242,25 @@ describe("TeamManagementDialog member roles", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("labels the role control by what it grants, never as an RBAC role name", async () => {
+  it("shows team Admin and Member roles with their responsibilities", async () => {
     const user = await setupUserEvent();
     renderDialog();
     await user.click(screen.getByRole("button", { name: "Members" }));
 
-    const trigger = await findRoleTrigger(/not able to edit team/i);
+    const trigger = await findRoleTrigger(/^Member$/i);
     await user.click(trigger);
 
     const listbox = await screen.findByRole("listbox");
     expect(
-      within(listbox).getByRole("option", { name: "Able to edit team" }),
+      within(listbox).getByRole("option", { name: "Admin" }),
     ).toBeInTheDocument();
     expect(
-      within(listbox).getByRole("option", { name: "Not able to edit team" }),
+      within(listbox).getByRole("option", { name: "Member" }),
     ).toBeInTheDocument();
 
-    // The two stored values share their names with organization-wide RBAC
-    // roles. Surfacing those names here is the confusion this wording exists
-    // to prevent, so no option may be labelled with one.
-    for (const option of within(listbox).getAllByRole("option")) {
-      expect(option).not.toHaveAccessibleName("Admin");
-      expect(option).not.toHaveAccessibleName("Member");
-    }
+    expect(
+      within(listbox).getByText(/its members and LLM limits/),
+    ).toBeInTheDocument();
   });
 
   it("still sends the stored role value when the new label is chosen", async () => {
@@ -249,10 +268,8 @@ describe("TeamManagementDialog member roles", () => {
     renderDialog();
     await user.click(screen.getByRole("button", { name: "Members" }));
 
-    await user.click(await findRoleTrigger(/not able to edit team/i));
-    await user.click(
-      await screen.findByRole("option", { name: "Able to edit team" }),
-    );
+    await user.click(await findRoleTrigger(/^Member$/i));
+    await user.click(await screen.findByRole("option", { name: "Admin" }));
     await user.click(screen.getByRole("button", { name: /save changes/i }));
 
     await waitFor(() => {
@@ -263,29 +280,24 @@ describe("TeamManagementDialog member roles", () => {
     });
   });
 
-  it("explains what syncs and what does not, and jumps to External Group Sync", async () => {
+  it("keeps unlicensed group sync disabled with its reason in the sidebar", async () => {
     const user = await setupUserEvent();
     renderDialog();
-    await user.click(screen.getByRole("button", { name: "Members" }));
-
-    const note = (await screen.findByText(/add members manually/i)).closest(
-      "p",
-    );
-    // The docs link appends screen-reader-only text, so match around it.
-    expect(note).toHaveTextContent(
-      /External Group Sync to sync membership. Configure roles through Role Mapping/,
-    );
-
-    await user.click(
-      within(note as HTMLElement).getByRole("button", {
-        name: "External Group Sync",
-      }),
-    );
-    // The section behind the jump is enterprise-gated in this harness, so the
-    // license fallback standing in for it proves the navigation happened.
+    const syncTab = screen.getByRole("button", { name: "Team Sync" });
+    expect(syncTab).toBeDisabled();
+    expect(syncTab).toHaveAccessibleDescription("Enterprise license required");
+    await user.click(syncTab);
     expect(
-      await screen.findByText(/Team Sync is an enterprise feature/i),
-    ).toBeInTheDocument();
+      screen.getByRole("combobox", { name: "Inherited Roles" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(/Activate an Enterprise license/),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Members" }));
+    expect(await findSummary(/^1 member · 0 admins$/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Synced groups/ }),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -296,8 +308,8 @@ describe("TeamManagementDialog members of a large team", () => {
     renderDialog();
     await user.click(screen.getByRole("button", { name: "Members" }));
 
-    expect(await screen.findByText("Current Members (45)")).toBeInTheDocument();
-    expect(screen.getByText("Member 20")).toBeInTheDocument();
+    expect(await findSummary(/^45 members · 0 admins$/)).toBeInTheDocument();
+    expect(await screen.findByText("Member 20")).toBeInTheDocument();
     expect(screen.queryByText("Member 21")).not.toBeInTheDocument();
 
     await user.click(
@@ -310,14 +322,14 @@ describe("TeamManagementDialog members of a large team", () => {
       screen.getByRole("textbox", { name: "Search members" }),
       "member 4",
     );
-    expect(
-      await screen.findByText("Current Members (6 matching)"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Member 45")).toBeInTheDocument();
+    expect(await screen.findByText("Member 45")).toBeInTheDocument();
+    expect(screen.queryByText("Member 21")).not.toBeInTheDocument();
+    // The summary still describes the whole team, not the search.
+    expect(await findSummary(/^45 members/)).toBeInTheDocument();
     expect(archestraApiSdk.getTeamMembers).not.toHaveBeenCalled();
   });
 
-  it("keeps the header on the shown members while a search loads", async () => {
+  it("dims the shown members while a search loads", async () => {
     let releaseSearch = () => {};
     serveMembers(largeRoster(45), {
       holdSearch: new Promise<void>((resolve) => {
@@ -327,8 +339,8 @@ describe("TeamManagementDialog members of a large team", () => {
     const user = await setupUserEvent();
     renderDialog();
     await user.click(screen.getByRole("button", { name: "Members" }));
-    expect(await screen.findByText("Current Members (45)")).not.toHaveClass(
-      "opacity-60",
+    expect((await screen.findByText("Member 01")).closest(".opacity-60")).toBe(
+      null,
     );
 
     await user.type(
@@ -336,16 +348,15 @@ describe("TeamManagementDialog members of a large team", () => {
       "member 4",
     );
     await waitFor(() =>
-      expect(screen.getByText("Current Members (45)")).toHaveClass(
-        "opacity-60",
+      expect(screen.getByText("Member 01").closest(".opacity-60")).not.toBe(
+        null,
       ),
     );
-    expect(screen.queryByText(/matching/)).not.toBeInTheDocument();
 
     releaseSearch();
-    expect(
-      await screen.findByText("Current Members (6 matching)"),
-    ).not.toHaveClass("opacity-60");
+    const match = await screen.findByText("Member 45");
+    expect(match.closest(".opacity-60")).toBe(null);
+    expect(screen.queryByText("Member 01")).not.toBeInTheDocument();
   });
 
   it("keeps member changes staged on other pages and saves them all", async () => {
@@ -356,27 +367,27 @@ describe("TeamManagementDialog members of a large team", () => {
     await screen.findByText("Member 01");
 
     // Page 1: promote the first member.
-    await user.click(await findRoleTrigger(/not able to edit team/i));
-    await user.click(
-      await screen.findByRole("option", { name: "Able to edit team" }),
-    );
+    await user.click(await findRoleTrigger(/^Member$/i));
+    await user.click(await screen.findByRole("option", { name: "Admin" }));
     // Page 2: remove its first member.
     await user.click(
       screen.getAllByRole("button", { name: "Go to next page" })[0],
     );
     await screen.findByText("Member 21");
     await user.click(
-      screen.getAllByRole("button", { name: "Remove member" })[0],
+      screen.getByRole("button", { name: "Remove from team Member 21" }),
     );
     expect(screen.queryByText("Member 21")).not.toBeInTheDocument();
-    expect(screen.getByText("Current Members (44)")).toBeInTheDocument();
+    expect(await findSummary(/^44 members · 1 admin/)).toBeInTheDocument();
+    // The pager repeats it in its (CSS-hidden) mobile layout.
+    expect(screen.getAllByText("2 unsaved changes")[0]).toBeInTheDocument();
 
     // Back on page 1 the promotion is still staged.
     await user.click(
       screen.getAllByRole("button", { name: "Go to previous page" })[0],
     );
-    expect(await findRoleTrigger(/^able to edit team/i)).toBeInTheDocument();
-    expect(screen.getByText("pending")).toBeInTheDocument();
+    expect(await findRoleTrigger(/^Admin/i)).toBeInTheDocument();
+    expect(screen.getByText("Changed")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /save changes/i }));
     await waitFor(() => {
@@ -407,8 +418,9 @@ describe("TeamManagementDialog members of a large team", () => {
     await user.click(screen.getByRole("button", { name: "Members" }));
     await screen.findByText("Member 01");
 
+    await user.click(screen.getByRole("button", { name: "Add members" }));
     // A combobox takes no accessible name from its content.
-    await user.click(screen.getByText("Select a user"));
+    await user.click(screen.getByText("Choose people to add"));
 
     await waitFor(() => {
       expect(screen.getByRole("option", { name: /Member 30/ })).toHaveAttribute(
@@ -419,5 +431,48 @@ describe("TeamManagementDialog members of a large team", () => {
     expect(
       screen.getByRole("option", { name: /Nadia Okafor/ }),
     ).not.toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("adds several people at once with the chosen team role", async () => {
+    vi.mocked(useMemberSearch).mockReturnValue({
+      users: [
+        { userId: "u-98", name: "Ola Berg", email: "ola@example.com" },
+        { userId: "u-99", name: "Nadia Okafor", email: "nadia@example.com" },
+      ],
+      isSearching: false,
+      onSearchQueryChange: vi.fn(),
+      emptyMessage: "",
+      // biome-ignore lint/suspicious/noExplicitAny: partial hook result stub
+    } as any);
+    const user = await setupUserEvent();
+    renderDialog();
+    await user.click(screen.getByRole("button", { name: "Members" }));
+    await screen.findByText("Rosa Lindqvist");
+
+    await user.click(screen.getByRole("button", { name: "Add members" }));
+    await user.click(screen.getByText("Choose people to add"));
+    await user.click(await screen.findByRole("option", { name: /Ola Berg/ }));
+    await user.click(screen.getByRole("option", { name: /Nadia Okafor/ }));
+    await user.keyboard("{Escape}");
+    await user.click(
+      screen.getByRole("combobox", { name: "Team role for new members" }),
+    );
+    await user.click(await screen.findByRole("option", { name: /^Admin/ }));
+    await user.click(screen.getByRole("button", { name: "Add 2" }));
+
+    expect(screen.getAllByText("New")).toHaveLength(2);
+    expect(await findSummary(/^3 members · 2 admins/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+    await waitFor(() => {
+      for (const userId of ["u-98", "u-99"]) {
+        expect(archestraApiSdk.addTeamMember).toHaveBeenCalledWith(
+          expect.objectContaining({
+            path: { id: "team-1" },
+            body: expect.objectContaining({ userId, role: "admin" }),
+          }),
+        );
+      }
+    });
   });
 });

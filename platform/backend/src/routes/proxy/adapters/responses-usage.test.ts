@@ -57,7 +57,7 @@ function completedUsage(
   const text = Array.isArray(sse) ? sse.map(decode).join("") : decode(sse);
   const frame = text
     .split("\n\n")
-    .map((block) => block.replace(/^data: /, "").trim())
+    .map((block) => block.replace(/^(?:event: .*\n)?data: /, "").trim())
     .filter((block) => block.startsWith("{"))
     .map((block) => JSON.parse(block) as Record<string, unknown>)
     .find((event) => event.type === "response.completed");
@@ -237,6 +237,6 @@ describe("translated Responses complete after the policy verdict", () => {
     expect(upstream.sseData).not.toContain("response.completed");
     const wire = `${upstream.sseData ?? ""}${adapter.formatEndSSE()}`;
     expect(wire.match(/"type":"response.completed"/g)).toHaveLength(1);
-    expect(adapter.formatEndSSE()).toBe("data: [DONE]\n\n");
+    expect(adapter.formatEndSSE()).toBe("");
   });
 });

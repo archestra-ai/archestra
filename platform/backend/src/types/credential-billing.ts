@@ -15,6 +15,11 @@ export const CredentialSpendCapSchema = CredentialSpendCapInputSchema.extend({
   limitId: z.string(),
   /** Billed spend in the current window, in dollars. */
   currentUsage: z.number(),
+  /**
+   * Some of that spend is estimated: a model had no price for some of the
+   * tokens a request used.
+   */
+  estimatedUsage: z.boolean(),
 });
 
 export const CredentialBillingTeamSchema = z.object({

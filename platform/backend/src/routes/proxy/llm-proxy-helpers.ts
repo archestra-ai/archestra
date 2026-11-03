@@ -1,6 +1,5 @@
 import {
   priceBillingUsage,
-  quoteUsagePricing,
   resolvePricingQuote,
 } from "@/services/billable-usage";
 import { ThroughputError } from "@/services/llm-throughput";
@@ -47,8 +46,10 @@ import {
 import { isNativeAnthropicModelShape } from "@/clients/anthropic-endpoint";
 import logger from "@/logging";
 import { metrics } from "@/observability";
+import type { ProxyRequestFailure } from "@/observability/llm-proxy-request";
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import type { SpanTeamInfo, SpanUserInfo } from "@/observability/tracing";
+import { toolCallArgumentsText } from "@/openappa/tool-call-arguments";
 import type { LlmProxyToolCallRefusal } from "@/proxy/plugins/registry";
 import { getTokenizer } from "@/tokenizers";
 import type {
@@ -130,9 +131,10 @@ export function normalizeToolCallsForPolicy(
     let args: unknown;
     let argsString: string;
     if (typeof tc.arguments === "string") {
+      const text = toolCallArgumentsText(tc.arguments);
       try {
-        args = JSON.parse(tc.arguments);
-        argsString = tc.arguments;
+        args = JSON.parse(text);
+        argsString = text;
       } catch {
         args = undefined;
         argsString = JSON.stringify({ raw: tc.arguments });
@@ -279,7 +281,7 @@ export function planDispatchModeToolCallRewrites(params: {
     // shape and dispatch something the model did not ask for.
     let toolArgs: unknown;
     try {
-      toolArgs = JSON.parse(toolCall.arguments || "{}");
+      toolArgs = JSON.parse(toolCallArgumentsText(toolCall.arguments));
     } catch {
       return toolCall;
     }
@@ -357,54 +359,34 @@ function isAlwaysDirectlyCallableBuiltIn(toolName: string): boolean {
   );
 }
 
-function usageCostTokens(usage: UsageView) {
-  return {
-    inputTokens: usage.inputTokens,
-    outputTokens: usage.outputTokens,
-    readTokens: usage.cacheReadTokens ?? 0,
-    writeTokens: usage.cacheWriteTokens ?? 0,
-    write1hTokens: usage.cacheWrite1hTokens ?? 0,
-  };
-}
-
 /**
  * The cost recorded for a response: what the provider says it billed when it
  * reports one (OpenRouter does on every response), otherwise the all-in cost
- * computed from the request's pricing quote.
+ * of every billed component at the request's quote, with any missing rate
+ * estimated.
  */
 export async function calculateUsageCost(params: {
   model: string;
   usage: UsageView;
   provider: SupportedProvider;
-  usageAccountingMode?: PricedBillingUsage["mode"];
   providerApiKeyId?: string;
+  billingEndpoint?: "fireworks" | "other";
+  requestedModel?: string;
 }): Promise<number | undefined> {
   const { model, usage, provider } = params;
   if (usage.usageUnavailable || usage.costUnavailable) return undefined;
-  if (params.usageAccountingMode === "enforce")
-    return Number(
-      (
-        await priceBillingUsage({
-          model,
-          usage,
-          provider,
-          mode: "enforce",
-          providerApiKeyId: params.providerApiKeyId,
-        })
-      ).cost,
-    );
-  if (usage.providerReportedCost !== undefined) {
-    return usage.providerReportedCost;
-  }
-  const pricing = await quoteUsagePricing({
-    model,
-    usage,
-    provider,
-    providerApiKeyId: params.providerApiKeyId,
-  });
-  return utils.costOptimization.costFromQuote(
-    pricing.request,
-    usageCostTokens(usage),
+  return Number(
+    (
+      await priceBillingUsage({
+        model,
+        usage,
+        provider,
+        mode: "enforce",
+        providerApiKeyId: params.providerApiKeyId,
+        billingEndpoint: params.billingEndpoint,
+        requestedModel: params.requestedModel,
+      })
+    ).cost,
   );
 }
 
@@ -415,14 +397,16 @@ export interface InteractionBaseline {
 }
 
 /**
- * Calculate the costs recorded on an interaction.
+ * Calculate the costs recorded on an interaction, and the settled usage that
+ * charges its budgets.
  */
 export async function calculateInteractionCosts(params: {
   actualModel: string;
   usage: UsageView;
   providerName: SupportedProvider;
-  usageAccountingMode?: PricedBillingUsage["mode"];
   providerApiKeyId?: string;
+  billingEndpoint?: "fireworks" | "other";
+  requestedModel?: string;
   autoRouting?: AutoRoutingRequestContext;
 }): Promise<{
   billingUsage?: PricedBillingUsage;
@@ -440,76 +424,36 @@ export async function calculateInteractionCosts(params: {
       cacheReadSavings: undefined,
     };
   }
-  const billingUsage =
-    params.usageAccountingMode && params.usageAccountingMode !== "off"
-      ? await priceBillingUsage({
-          model: params.actualModel,
-          usage: params.usage,
-          provider: params.providerName,
-          mode: params.usageAccountingMode,
-          providerApiKeyId: params.providerApiKeyId,
-        })
-      : undefined;
-  const actualCost =
-    billingUsage?.mode === "enforce"
-      ? Number(billingUsage.cost)
-      : await calculateUsageCost({
-          model: params.actualModel,
-          usage: params.usage,
-          provider: params.providerName,
-          providerApiKeyId: params.providerApiKeyId,
-        });
-  const tokens = usageCostTokens(params.usage);
-  const cacheBreakdown =
-    billingUsage?.mode === "enforce" ||
-    (!tokens.readTokens && !tokens.writeTokens)
-      ? undefined
-      : utils.costOptimization.cacheCostFromQuote(
-          (
-            await quoteUsagePricing({
-              model: params.actualModel,
-              usage: params.usage,
-              provider: params.providerName,
-              providerApiKeyId: params.providerApiKeyId,
-            })
-          ).request,
-          tokens,
-        );
-  const componentsCache =
-    billingUsage?.mode === "enforce"
-      ? billingUsage.components.map(componentCacheCosts)
-      : undefined;
+  const billingUsage = await priceBillingUsage({
+    model: params.actualModel,
+    usage: params.usage,
+    provider: params.providerName,
+    mode: "enforce",
+    providerApiKeyId: params.providerApiKeyId,
+    billingEndpoint: params.billingEndpoint,
+    requestedModel: params.requestedModel,
+  });
+  const actualCost = Number(billingUsage.cost);
+  const componentsCache = billingUsage.components.map(componentCacheCosts);
   const smartCost = params.autoRouting
     ? await smartBaselineCost({
         smart: params.autoRouting.smartModel,
         usage: params.usage,
-        billingUsage:
-          billingUsage?.mode === "enforce" ? billingUsage : undefined,
+        billingUsage,
       })
     : null;
+  const cached =
+    (params.usage.cacheReadTokens ?? 0) > 0 ||
+    (params.usage.cacheWriteTokens ?? 0) > 0;
+  const total = (key: keyof (typeof componentsCache)[number]) =>
+    componentsCache.reduce((sum, item) => sum + item[key], 0);
   return {
     billingUsage,
     actualCost,
-    ...(componentsCache
-      ? {
-          cacheCost: componentsCache.reduce(
-            (sum, item) => sum + item.cacheCost,
-            0,
-          ),
-          cacheSavings: componentsCache.reduce(
-            (sum, item) => sum + item.cacheSavings,
-            0,
-          ),
-          cacheReadSavings: componentsCache.reduce(
-            (sum, item) => sum + item.cacheReadSavings,
-            0,
-          ),
-        }
-      : {
-          cacheCost: cacheBreakdown?.cacheCost,
-          cacheSavings: cacheBreakdown?.cacheSavings,
-          cacheReadSavings: cacheBreakdown?.cacheReadSavings,
-        }),
+    // A request that used no cache records no cache figures.
+    cacheCost: cached ? total("cacheCost") : undefined,
+    cacheSavings: cached ? total("cacheSavings") : undefined,
+    cacheReadSavings: cached ? total("cacheReadSavings") : undefined,
     ...(params.autoRouting && smartCost !== null
       ? {
           baseline: {
@@ -523,36 +467,16 @@ export async function calculateInteractionCosts(params: {
 
 /**
  * What a routed request would have cost on the smart tier, on the same usage.
- * In enforce mode only the executor's components are repriced, whatever model
+ * Only the executor's components are repriced, whatever model
  * id the provider reported for them; advisor components keep their own prices.
  * Null when the smart tier has no configured or synced price for that usage.
  */
 async function smartBaselineCost(params: {
   smart: AutoRoutingRequestContext["smartModel"];
   usage: UsageView;
-  billingUsage?: PricedBillingUsage;
+  billingUsage: PricedBillingUsage;
 }): Promise<string | null> {
   const { smart, usage, billingUsage } = params;
-  if (!billingUsage) {
-    const quote = await resolvePricingQuote({
-      model: smart.modelId,
-      provider: smart.provider,
-      providerApiKeyId: smart.providerApiKeyId,
-      usage: { ...usage, billingUsage: undefined, billingQuote: undefined },
-    });
-    const tokens = usageCostTokens(usage);
-    const cost = utils.costOptimization.costFromQuote(quote.request, tokens);
-    return cost !== undefined &&
-      smartPriceKnown(quote.request, {
-        inputTokens: tokens.inputTokens,
-        outputTokens: tokens.outputTokens,
-        cacheReadTokens: tokens.readTokens,
-        cacheWriteTokens: tokens.writeTokens,
-        cacheWrite1hTokens: tokens.write1hTokens,
-      })
-      ? cost.toFixed(10)
-      : null;
-  }
   const routed = billingUsage.components
     .filter(servedByExecutor)
     .map((item) => ({
@@ -715,6 +639,8 @@ export async function estimateCutOffAttemptUsage(params: {
     provider?: SupportedProvider;
     modelId?: string;
     providerApiKeyId?: string;
+    billingEndpoint?: "fireworks" | "other";
+    requestedModel?: string;
   };
 }): Promise<{ inputTokens: number; cost: string | null } | undefined> {
   const { member } = params;
@@ -735,6 +661,8 @@ export async function estimateCutOffAttemptUsage(params: {
     usage: { inputTokens, outputTokens: 0 },
     provider: member.provider,
     providerApiKeyId: member.providerApiKeyId,
+    billingEndpoint: member.billingEndpoint,
+    requestedModel: member.requestedModel,
   });
   return { inputTokens, cost: cost?.toFixed(10) ?? null };
 }
@@ -1032,6 +960,52 @@ export function isRetryableUpstreamConnectionFailure(error: unknown): boolean {
   return (
     code === "upstream_connection_closed" || code === "upstream_unreachable"
   );
+}
+
+/** Final request classification, using the same status/transport rules as the error response. */
+export function classifyProxyFailure(error: unknown): ProxyRequestFailure {
+  const explicitStatus = explicitHttpStatus(error);
+  const transportFailure =
+    explicitStatus === undefined && !isClientAbortError(error)
+      ? classifyUpstreamTransportFailure(error)
+      : undefined;
+  const statusCode =
+    explicitStatus ??
+    (isClientAbortError(error) ? 499 : transportFailure?.status) ??
+    500;
+  const origin =
+    statusCode === 499
+      ? "client"
+      : error instanceof ThroughputError ||
+          (error instanceof ApiError && !error.upstream)
+        ? "archestra"
+        : error instanceof ObservedProviderUsageError ||
+            transportFailure ||
+            explicitStatus !== undefined ||
+            (error instanceof ApiError && error.upstream) ||
+            (error instanceof Error &&
+              (hasProviderHttpErrorShape(error) ||
+                hasUpstreamErrorPayload(error)))
+          ? "provider"
+          : "archestra";
+  return {
+    statusCode,
+    origin,
+    outcome:
+      statusCode === 499
+        ? "cancelled"
+        : statusCode === 429
+          ? "throttled"
+          : origin === "archestra" && (statusCode === 402 || statusCode === 403)
+            ? "denied"
+            : origin === "provider" &&
+                (statusCode === 503 || statusCode === 529)
+              ? "overloaded"
+              : origin === "provider" &&
+                  (statusCode === 408 || statusCode === 504)
+                ? "timeout"
+                : "error",
+  };
 }
 
 export function handleError(

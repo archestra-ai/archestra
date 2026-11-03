@@ -1,5 +1,5 @@
 import { count, eq, inArray } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import type { InsertSecret, SelectSecret, UpdateSecret } from "@/types";
 import {
   decryptSecretValue,
@@ -21,8 +21,11 @@ class SecretModel {
   /**
    * Create a new secret entry
    */
-  static async create(input: InsertSecret): Promise<SelectSecret> {
-    const [secret] = await db
+  static async create(
+    input: InsertSecret,
+    tx?: Transaction,
+  ): Promise<SelectSecret> {
+    const [secret] = await (tx ?? db)
       .insert(schema.secretsTable)
       .values({ ...input, secret: encryptSecretValue(input.secret) })
       .returning();
@@ -33,8 +36,11 @@ class SecretModel {
   /**
    * Find a secret by ID
    */
-  static async findById(id: string): Promise<SelectSecret | null> {
-    const [secret] = await db
+  static async findById(
+    id: string,
+    tx?: Transaction,
+  ): Promise<SelectSecret | null> {
+    const [secret] = await (tx ?? db)
       .select()
       .from(schema.secretsTable)
       .where(eq(schema.secretsTable.id, id));
@@ -43,10 +49,30 @@ class SecretModel {
   }
 
   /**
+   * Find a secret by ID inside `tx` and lock its row (SELECT ... FOR UPDATE)
+   * until the transaction ends, so a concurrent writer waits for it.
+   */
+  static async findByIdForUpdate(
+    id: string,
+    tx: Transaction,
+  ): Promise<SelectSecret | null> {
+    const [secret] = await tx
+      .select()
+      .from(schema.secretsTable)
+      .where(eq(schema.secretsTable.id, id))
+      .for("update");
+
+    return decryptSecretRow(secret ?? null);
+  }
+
+  /**
    * Find a secret by name
    */
-  static async findByName(name: string): Promise<SelectSecret | null> {
-    const [secret] = await db
+  static async findByName(
+    name: string,
+    tx?: Transaction,
+  ): Promise<SelectSecret | null> {
+    const [secret] = await (tx ?? db)
       .select()
       .from(schema.secretsTable)
       .where(eq(schema.secretsTable.name, name));
@@ -72,12 +98,13 @@ class SecretModel {
   static async update(
     id: string,
     input: UpdateSecret,
+    tx?: Transaction,
   ): Promise<SelectSecret | null> {
     const values = input.secret
       ? { ...input, secret: encryptSecretValue(input.secret) }
       : input;
 
-    const [updatedSecret] = await db
+    const [updatedSecret] = await (tx ?? db)
       .update(schema.secretsTable)
       .set(values)
       .where(eq(schema.secretsTable.id, id))

@@ -309,7 +309,7 @@ export function copilotAppErrorMessage(params: {
     case "missing_permission":
       return `The App can't make Copilot requests. Check that it has the Copilot Requests permission and that ${org} approved it.${quoted}`;
     case "apps_disabled":
-      return `${org} doesn't allow Copilot requests from GitHub Apps. An owner can allow them in the organization's Copilot policies.${quoted}`;
+      return `${org} doesn't allow Copilot requests from GitHub Apps. It needs Copilot Business or Enterprise, with requests from Apps allowed by an owner of the organization or its enterprise.${quoted}`;
     default:
       return `GitHub Copilot answered ${params.status}.${quoted}`;
   }

@@ -5,6 +5,7 @@ export { default as a2aRemoteAgentRoutes } from "./a2a-remote-agent/a2a-remote-a
 export { default as agentRoutes } from "./agent";
 export { default as agentCatalogRoutes } from "./agent-catalog/agent-catalog.routes";
 export { default as agentRuntimeRoutes } from "./agent-runtime/agent-runtime.routes";
+export { default as agentRuntimeTemplateRoutes } from "./agent-runtime-template/agent-runtime-template.routes";
 export { default as agentToolRoutes } from "./agent-tool";
 export { default as apiKeyRoutes } from "./api-key";
 export { default as appRoutes } from "./app/app.routes";

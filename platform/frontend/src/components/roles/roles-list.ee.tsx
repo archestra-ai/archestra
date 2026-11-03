@@ -554,7 +554,7 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
         onOpenChange={setCreateDialogOpen}
         title="Create role"
         size="large"
-        className="h-[min(46rem,90dvh)] max-w-4xl"
+        className="h-[min(46rem,90dvh)] max-w-5xl"
         headerClassName="text-left"
       >
         <DialogForm
@@ -602,7 +602,7 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
         title="Edit role"
         description="Changes apply to everyone with this role, including through a team."
         size="large"
-        className="h-[min(46rem,90dvh)] max-w-4xl"
+        className="h-[min(46rem,90dvh)] max-w-5xl"
         headerClassName="text-left"
       >
         <DialogForm
@@ -668,7 +668,7 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
             : undefined
         }
         size="large"
-        className="h-[min(40rem,90dvh)] max-w-4xl"
+        className="h-[min(40rem,90dvh)] max-w-5xl"
         headerClassName="text-left"
       >
         {viewPermissionsRole && (

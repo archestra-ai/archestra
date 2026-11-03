@@ -742,42 +742,35 @@ test.describe("Identity Provider Team Sync E2E", () => {
       description: "Team for testing SSO group sync",
     });
 
-    // STEP 3: Link external group to the team. External group sync lives in
-    // the tabbed team management dialog (opened via the row's Edit action),
-    // under the "External Group Sync" section.
+    // STEP 3: Link the group to the team in the Team Sync section of the
+    // tabbed team management dialog (opened via the row's Edit action).
     await clickTeamActionButton({
       page,
       teamName,
       actionName: "Edit",
     });
 
-    // Wait for the dialog and switch to the External Group Sync section.
-    // Scope to the section navigation: the Members info box renders an inline
-    // "External Group Sync" jump button with the same accessible name.
     const teamDialog = page.getByRole("dialog");
     await expect(teamDialog).toBeVisible();
     await teamDialog
       .getByRole("navigation")
-      .getByRole("button", { name: "External Group Sync" })
+      .getByRole("button", { name: "Team Sync" })
       .click();
 
-    // Add the external group mapping
-    await page.getByPlaceholder(/archestra-admins/).fill(externalGroup);
-    await clickButton({ page, options: { name: "Add" } });
+    await teamDialog.getByRole("button", { name: /Link a group/ }).click();
+    await teamDialog
+      .getByRole("textbox", { name: "Group identifier" })
+      .fill(externalGroup);
+    await teamDialog.getByRole("button", { name: "Link group" }).click();
 
     // Wait for the success toast to confirm the API call completed
     // This is critical - the group must be saved to the database before SSO login
-    await expect(page.getByText("External group mapping added")).toBeVisible({
+    await expect(page.getByText("Group linked")).toBeVisible({
       timeout: 10000,
     });
-
-    // Also verify the group appears in the current mappings list (not just the
-    // input). Scope to the mapping row: the dialog also shows the "Latest ID
-    // Token Claims" debug panel, whose decoded claims JSON can contain the same
-    // group name and would make a dialog-wide text match strict-mode ambiguous.
     await expect(
       page
-        .getByTestId(E2eTestId.TeamExternalGroupMappingRow)
+        .getByTestId(E2eTestId.TeamSyncGroupRow)
         .filter({ hasText: externalGroup }),
     ).toBeVisible({ timeout: 5000 });
 

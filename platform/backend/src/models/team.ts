@@ -6,6 +6,8 @@ import {
   getTableColumns,
   ilike,
   inArray,
+  isNull,
+  or,
   type SQL,
   type SQLWrapper,
   sql,
@@ -465,8 +467,9 @@ class TeamModel {
     offset: number;
     search?: string;
     userIds?: string[];
+    role?: TeamMemberRole;
   }): Promise<{ data: TeamMemberListItem[]; total: number }> {
-    const { teamId, limit, offset, search, userIds } = params;
+    const { teamId, limit, offset, search, userIds, role } = params;
     const searchFilter = buildTokenizedSearchFilter({
       query: search,
       columns: [schema.usersTable.name, schema.usersTable.email],
@@ -474,6 +477,7 @@ class TeamModel {
     const filters = and(
       eq(schema.teamMembersTable.teamId, teamId),
       ...(userIds ? [inArray(schema.teamMembersTable.userId, userIds)] : []),
+      ...(role ? [eq(schema.teamMembersTable.role, role)] : []),
       ...(searchFilter ? [searchFilter] : []),
     );
 
@@ -589,6 +593,7 @@ class TeamModel {
         userId,
         role,
         syncedFromSso,
+        roleSyncedFromSso: syncedFromSso,
         createdAt: now,
       })
       .returning();
@@ -604,6 +609,8 @@ class TeamModel {
     teamId: string;
     userId: string;
     role: TeamMemberRole;
+    /** Team Sync chose this role; a manual change leaves it unset. */
+    fromSync?: boolean;
   }): Promise<TeamMember | null> {
     const { teamId, userId, role } = params;
     logger.debug(
@@ -613,7 +620,7 @@ class TeamModel {
 
     const [member] = await db
       .update(schema.teamMembersTable)
-      .set({ role })
+      .set({ role, roleSyncedFromSso: params.fromSync ?? false })
       .where(
         and(
           eq(schema.teamMembersTable.teamId, teamId),
@@ -996,7 +1003,10 @@ class TeamModel {
     return teamIds;
   }
 
-  static async getUserAdminTeamIds(userId: string): Promise<string[]> {
+  static async getUserAdminTeamIds(
+    userId: string,
+    organizationId?: string,
+  ): Promise<string[]> {
     logger.debug(
       { userId },
       "TeamModel.getUserAdminTeamIds: fetching admin team IDs",
@@ -1008,6 +1018,19 @@ class TeamModel {
         and(
           eq(schema.teamMembersTable.userId, userId),
           eq(schema.teamMembersTable.role, ADMIN_ROLE_NAME),
+          ...(organizationId
+            ? [
+                inArray(
+                  schema.teamMembersTable.teamId,
+                  db
+                    .select({ id: schema.teamsTable.id })
+                    .from(schema.teamsTable)
+                    .where(
+                      eq(schema.teamsTable.organizationId, organizationId),
+                    ),
+                ),
+              ]
+            : []),
         ),
       );
 
@@ -1112,7 +1135,7 @@ class TeamModel {
   }
 
   // ==========================================
-  // External Group Sync Methods
+  // Team Sync Methods
   // ==========================================
 
   /**
@@ -1134,15 +1157,44 @@ class TeamModel {
     return groups;
   }
 
+  /** Whether an identity provider exists in the organization, for scoping group mappings. */
+  static async isIdentityProviderInOrganization(params: {
+    identityProviderId: string;
+    organizationId: string;
+  }): Promise<boolean> {
+    const [provider] = await db
+      .select({ id: schema.identityProvidersTable.id })
+      .from(schema.identityProvidersTable)
+      .where(
+        and(
+          eq(schema.identityProvidersTable.id, params.identityProviderId),
+          eq(
+            schema.identityProvidersTable.organizationId,
+            params.organizationId,
+          ),
+        ),
+      );
+    return !!provider;
+  }
+
   /**
-   * Add an external group mapping to a team
+   * Link an identity provider group to a team for Team Sync. Without an identity provider the
+   * group matches sign-ins from any provider.
    */
-  static async addExternalGroup(
-    teamId: string,
-    groupIdentifier: string,
-  ): Promise<TeamExternalGroup> {
+  static async addExternalGroup(params: {
+    teamId: string;
+    groupIdentifier: string;
+    identityProviderId?: string | null;
+    role?: TeamMemberRole;
+  }): Promise<TeamExternalGroup> {
+    const {
+      teamId,
+      groupIdentifier,
+      identityProviderId = null,
+      role = MEMBER_ROLE_NAME,
+    } = params;
     logger.debug(
-      { teamId, groupIdentifier },
+      { teamId, groupIdentifier, identityProviderId, role },
       "TeamModel.addExternalGroup: adding external group",
     );
     const id = crypto.randomUUID();
@@ -1153,6 +1205,8 @@ class TeamModel {
         id,
         teamId,
         groupIdentifier,
+        identityProviderId,
+        role,
       })
       .returning();
 
@@ -1164,7 +1218,7 @@ class TeamModel {
   }
 
   /**
-   * Remove an external group mapping from a team
+   * Remove a Team Sync group link from a team
    */
   static async removeExternalGroup(
     teamId: string,
@@ -1193,7 +1247,7 @@ class TeamModel {
   }
 
   /**
-   * Remove an external group mapping by ID.
+   * Remove a Team Sync group link by ID.
    * Requires both the groupId and teamId to prevent IDOR attacks.
    */
   static async removeExternalGroupById(
@@ -1264,15 +1318,23 @@ class TeamModel {
   }
 
   /**
-   * Find all teams in an organization that have any of the given external groups mapped.
-   * Used during SSO login to find which teams a user should be added to based on their groups.
+   * Find the teams in an organization mapped to any of the given external
+   * groups, with the team role each mapping grants. Mappings scoped to another
+   * identity provider are skipped; unscoped mappings match any provider.
+   * Used during SSO login to find which teams a user should be in.
    */
-  static async findTeamsByExternalGroups(
-    organizationId: string,
-    groupIdentifiers: string[],
-  ): Promise<Map<string, Team[]>> {
+  static async findTeamsByExternalGroups(params: {
+    organizationId: string;
+    groupIdentifiers: string[];
+    identityProviderId?: string;
+  }): Promise<Map<string, Array<{ team: Team; role: TeamMemberRole }>>> {
+    const { organizationId, groupIdentifiers, identityProviderId } = params;
     logger.debug(
-      { organizationId, groupCount: groupIdentifiers.length },
+      {
+        organizationId,
+        identityProviderId,
+        groupCount: groupIdentifiers.length,
+      },
       "TeamModel.findTeamsByExternalGroups: fetching teams",
     );
     if (groupIdentifiers.length === 0) {
@@ -1285,11 +1347,13 @@ class TeamModel {
 
     // Normalize group identifiers to lowercase for case-insensitive matching
     const normalizedGroups = groupIdentifiers.map((g) => g.toLowerCase());
+    const providerColumn = schema.teamExternalGroupsTable.identityProviderId;
 
     const results = await db
       .select({
         team: schema.teamsTable,
         groupIdentifier: schema.teamExternalGroupsTable.groupIdentifier,
+        role: schema.teamExternalGroupsTable.role,
       })
       .from(schema.teamExternalGroupsTable)
       .innerJoin(
@@ -1303,33 +1367,27 @@ class TeamModel {
             normalizedGroups,
           ),
           eq(schema.teamsTable.organizationId, organizationId),
+          identityProviderId
+            ? or(isNull(providerColumn), eq(providerColumn, identityProviderId))
+            : isNull(providerColumn),
         ),
       );
 
-    // Group results by team ID to avoid duplicates
-    const teamMap = new Map<string, Team>();
+    const groupToTeams = new Map<
+      string,
+      Array<{ team: Team; role: TeamMemberRole }>
+    >();
     for (const result of results) {
-      if (!teamMap.has(result.team.id)) {
-        teamMap.set(result.team.id, {
-          ...result.team,
-          members: [],
-        });
-      }
-    }
-
-    // Return map of group -> teams for debugging/logging
-    const groupToTeams = new Map<string, Team[]>();
-    for (const result of results) {
-      const team = teamMap.get(result.team.id);
-      if (team) {
-        const existing = groupToTeams.get(result.groupIdentifier) || [];
-        existing.push(team);
-        groupToTeams.set(result.groupIdentifier, existing);
-      }
+      const existing = groupToTeams.get(result.groupIdentifier) ?? [];
+      existing.push({
+        team: { ...result.team, members: [] },
+        role: result.role,
+      });
+      groupToTeams.set(result.groupIdentifier, existing);
     }
 
     logger.debug(
-      { organizationId, teamsFound: teamMap.size },
+      { organizationId, matchedGroups: groupToTeams.size },
       "TeamModel.findTeamsByExternalGroups: completed",
     );
     return groupToTeams;
@@ -1376,48 +1434,59 @@ class TeamModel {
 
   /**
    * Synchronize a user's team memberships based on their SSO groups.
-   * - Adds user to teams mapped to their groups (if not already a member)
+   * - Adds user to teams mapped to their groups, with the mapping's team role
+   *   (Admin when any matching mapping grants Admin)
+   * - Promotes SSO-synced members an Admin link covers, and demotes only an
+   *   Admin that sync promoted; a role changed by hand is left alone
    * - Removes user from teams they were previously synced to but no longer have groups for
-   * - Does NOT remove manually added memberships (syncedFromSso = false)
+   * - Does NOT touch manually added memberships (syncedFromSso = false)
    *
-   * @returns Object containing added and removed team IDs
+   * @returns Object containing added, re-roled, and removed team IDs
    */
-  static async syncUserTeams(
-    userId: string,
-    organizationId: string,
-    ssoGroups: string[],
-  ): Promise<{
+  static async syncUserTeams(params: {
+    userId: string;
+    organizationId: string;
+    ssoGroups: string[];
+    /** The provider the user signed in with; scopes provider-specific mappings. */
+    identityProviderId?: string;
+  }): Promise<{
     added: string[];
+    roleChanged: string[];
     removed: string[];
     matchedExternalGroupCount: number;
     matchedTeamCount: number;
     unmappedGroupCount: number;
   }> {
+    const { userId, organizationId, ssoGroups, identityProviderId } = params;
     logger.debug(
       { userId, organizationId, groupCount: ssoGroups.length },
       "TeamModel.syncUserTeams: starting sync",
     );
     const added: string[] = [];
+    const roleChanged: string[] = [];
     const removed: string[] = [];
 
     // Get all teams in this organization the user should be in based on SSO groups
-    const groupToTeams = await TeamModel.findTeamsByExternalGroups(
+    const groupToTeams = await TeamModel.findTeamsByExternalGroups({
       organizationId,
-      ssoGroups,
-    );
+      groupIdentifiers: ssoGroups,
+      identityProviderId,
+    });
 
-    // Flatten to unique team IDs
-    const shouldBeInTeamIds = new Set<string>();
-    for (const teams of groupToTeams.values()) {
-      for (const team of teams) {
-        shouldBeInTeamIds.add(team.id);
+    // The role per team: Admin wins when several matching mappings disagree.
+    const desiredRoles = new Map<string, TeamMemberRole>();
+    for (const mappings of groupToTeams.values()) {
+      for (const { team, role } of mappings) {
+        if (desiredRoles.get(team.id) !== ADMIN_ROLE_NAME) {
+          desiredRoles.set(team.id, role);
+        }
       }
     }
     const distinctGroups = new Set(
       ssoGroups.map((group) => group.toLowerCase()),
     );
     const matchedExternalGroupCount = groupToTeams.size;
-    const matchedTeamCount = shouldBeInTeamIds.size;
+    const matchedTeamCount = desiredRoles.size;
     const unmappedGroupCount = distinctGroups.size - matchedExternalGroupCount;
 
     // Get user's current SSO-synced team memberships in this organization
@@ -1425,20 +1494,39 @@ class TeamModel {
       userId,
       organizationId,
     );
+    const syncedByTeamId = new Map(
+      currentSyncedMemberships.map((membership) => [
+        membership.teamMember.teamId,
+        membership.teamMember,
+      ]),
+    );
 
-    // Add user to teams they should be in but aren't
-    for (const teamId of shouldBeInTeamIds) {
-      // Check if user is already a member (synced or manual)
-      const isAlreadyMember = await TeamModel.isUserInTeam(teamId, userId);
-      if (!isAlreadyMember) {
-        await TeamModel.addMember(teamId, userId, MEMBER_ROLE_NAME, true);
+    for (const [teamId, role] of desiredRoles) {
+      const synced = syncedByTeamId.get(teamId);
+      if (synced) {
+        // Sync always grants Admin, but demotes only an Admin it made: a
+        // role someone set by hand is theirs to change.
+        if (
+          synced.role !== role &&
+          (role === ADMIN_ROLE_NAME || synced.roleSyncedFromSso)
+        ) {
+          await TeamModel.updateMemberRole({
+            teamId,
+            userId,
+            role,
+            fromSync: true,
+          });
+          roleChanged.push(teamId);
+        }
+      } else if (!(await TeamModel.isUserInTeam(teamId, userId))) {
+        await TeamModel.addMember(teamId, userId, role, true);
         added.push(teamId);
       }
     }
 
     // Remove user from teams they were synced to but should no longer be in
     for (const membership of currentSyncedMemberships) {
-      if (!shouldBeInTeamIds.has(membership.teamMember.teamId)) {
+      if (!desiredRoles.has(membership.teamMember.teamId)) {
         await TeamModel.removeMember(membership.teamMember.teamId, userId);
         removed.push(membership.teamMember.teamId);
       }
@@ -1449,6 +1537,7 @@ class TeamModel {
         userId,
         organizationId,
         added: added.length,
+        roleChanged: roleChanged.length,
         removed: removed.length,
         matchedExternalGroupCount,
         matchedTeamCount,
@@ -1458,6 +1547,7 @@ class TeamModel {
     );
     return {
       added,
+      roleChanged,
       removed,
       matchedExternalGroupCount,
       matchedTeamCount,
@@ -1524,7 +1614,12 @@ class TeamModel {
       parentId: team.parentId,
       // Include role so a member role change (not just add/remove) diffs.
       members: members.map((m) => `${m.name} (${m.email}) [${m.role}]`).sort(),
-      externalGroups: externalGroups.map((g) => g.groupIdentifier).sort(),
+      externalGroups: externalGroups
+        .map(
+          (g) =>
+            `${g.groupIdentifier} [${g.role}${g.identityProviderId ? ` via ${g.identityProviderId}` : ""}]`,
+        )
+        .sort(),
       labels: labels.map((l) => `${l.key}:${l.value}`).sort(),
       createdBy: team.createdBy,
       createdAt: team.createdAt.toISOString(),

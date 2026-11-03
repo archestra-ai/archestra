@@ -521,6 +521,10 @@ unset keep_alive_ms keep_alive_invalid
 # Set up signal handlers now that all initialization is complete
 trap cleanup SIGTERM SIGINT
 
+# Derive the supervisor limit from the same durations as the backend.
+ARCHESTRA_SERVER_SUPERVISOR_STOP_SECONDS="$(node /app/shutdown-budget.mjs)"
+export ARCHESTRA_SERVER_SUPERVISOR_STOP_SECONDS
+
 # Start supervisord in foreground but allow signal handling
 # Run in background and wait so trap can catch signals
 /usr/bin/supervisord -c /etc/supervisord.conf &

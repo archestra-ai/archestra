@@ -171,15 +171,15 @@ describe("ConnectionSettingsForm", () => {
       screen.queryByRole("button", { name: "Add an agent back to Connect" }),
     ).not.toBeInTheDocument();
     await user.click(
-      screen.getByRole("button", { name: "Remove Codex from Connect" }),
+      screen.getByRole("button", { name: "Remove Codex CLI from Connect" }),
     );
-    expect(agentOrder()).not.toContain("Codex");
+    expect(agentOrder()).not.toContain("Codex CLI");
     expect(screen.getByText("1 hidden")).toBeVisible();
     await user.click(
       screen.getByRole("button", { name: "Add an agent back to Connect" }),
     );
-    await user.click(screen.getByRole("option", { name: /Codex$/ }));
-    expect(agentOrder().at(-1)).toBe("Codex");
+    await user.click(screen.getByRole("option", { name: /Codex CLI$/ }));
+    expect(agentOrder().at(-1)).toBe("Codex CLI");
     expect(
       screen.queryByRole("button", { name: "Add an agent back to Connect" }),
     ).not.toBeInTheDocument();
@@ -205,7 +205,7 @@ describe("ConnectionSettingsForm", () => {
       screen.getByRole("button", { name: "Add an agent back to Connect" });
     await user.click(addBack());
     await user.click(screen.getByRole("option", { name: /Cursor$/ }));
-    expect(agentOrder()).toEqual(["Codex", "Cursor"]);
+    expect(agentOrder()).toEqual(["Codex CLI", "Cursor"]);
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(mutate).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -214,14 +214,14 @@ describe("ConnectionSettingsForm", () => {
       }),
     );
     await user.click(
-      screen.getByRole("button", { name: "Remove Codex from Connect" }),
+      screen.getByRole("button", { name: "Remove Codex CLI from Connect" }),
     );
     expect(agentOrder()).toEqual(["Cursor"]);
     await user.click(screen.getByRole("button", { name: "Discard" }));
-    expect(agentOrder()).toEqual(["Codex"]);
+    expect(agentOrder()).toEqual(["Codex CLI"]);
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     await user.click(
-      screen.getByRole("button", { name: "Remove Codex from Connect" }),
+      screen.getByRole("button", { name: "Remove Codex CLI from Connect" }),
     );
     expect(
       screen.getByText("No agents on Connect. Add one back below."),
@@ -234,8 +234,8 @@ describe("ConnectionSettingsForm", () => {
       }),
     );
     await user.click(addBack());
-    await user.click(screen.getByRole("option", { name: /Codex$/ }));
-    expect(agentOrder()).toEqual(["Codex"]);
+    await user.click(screen.getByRole("option", { name: /Codex CLI$/ }));
+    expect(agentOrder()).toEqual(["Codex CLI"]);
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 

@@ -85,7 +85,6 @@ import {
   UserModel,
 } from "@/models";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
-import type { A2AOAuthExecution } from "@/routes/mcp-gateway/utils";
 import { discoverOAuthEndpoints, refreshOAuthToken } from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
 import { llmProxyTiming } from "@/server/llm-proxy-timing";
@@ -140,6 +139,7 @@ import type {
   ToolOwner,
 } from "@/types";
 import { agentOwner } from "@/types";
+import type { A2AOAuthExecution } from "@/types/a2a-actor";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
@@ -2520,7 +2520,11 @@ class McpClient {
         const installs = serverLookup
           ? (serverLookup.byCatalogId.get(catalogItem.id) ?? [])
           : await McpServerModel.findByCatalogId(catalogItem.id);
-        const resolved = await this.pickInstallForCaller(installs, tokenAuth);
+        const resolved = await this.pickInstallForCaller(
+          installs,
+          tokenAuth,
+          serverLookup,
+        );
         if (resolved) {
           return {
             targetMcpServerId: resolved.id,
@@ -2639,6 +2643,7 @@ class McpClient {
     const resolvedServer = await this.pickInstallForCaller(
       allServers,
       tokenAuth,
+      serverLookup,
     );
     if (resolvedServer) {
       logger.info(
@@ -2706,6 +2711,7 @@ class McpClient {
   private async pickInstallForCaller(
     allServers: McpServer[],
     tokenAuth: InstallCallerContext | undefined,
+    serverLookup?: ListingServerLookup,
   ): Promise<McpServer | undefined> {
     if (tokenAuth?.userId) {
       const userServer = allServers.find(
@@ -2713,13 +2719,22 @@ class McpClient {
       );
       if (userServer) return userServer;
 
-      const userTeamIds = new Set(
-        await TeamModel.getUserTeamIds(tokenAuth.userId),
-      );
-      const teamServer = allServers.find(
-        (s) => s.teamId && userTeamIds.has(s.teamId),
-      );
-      if (teamServer) return teamServer;
+      // Only team-owned installs require membership. Share that lookup across
+      // this listing's catalogs, never across calls or authenticated callers.
+      if (allServers.some((server) => server.teamId)) {
+        let membership = serverLookup?.userTeamIds.get(tokenAuth.userId);
+        if (!membership) {
+          membership = TeamModel.getUserTeamIds(tokenAuth.userId);
+          const userId = tokenAuth.userId;
+          serverLookup?.userTeamIds.set(userId, membership);
+          membership.catch(() => serverLookup?.userTeamIds.delete(userId));
+        }
+        const userTeamIds = new Set(await membership);
+        const teamServer = allServers.find(
+          (s) => s.teamId && userTeamIds.has(s.teamId),
+        );
+        if (teamServer) return teamServer;
+      }
 
       const orgServer = allServers.find((s) => s.scope === "org");
       if (orgServer) return orgServer;
@@ -6254,21 +6269,6 @@ function isMethodNotFoundError(error: unknown): boolean {
 const mcpClient = new McpClient();
 export default mcpClient;
 
-// Clean up connections on process exit
-process.on("exit", () => {
-  mcpClient.disconnectAll().catch(logger.error);
-});
-
-process.on("SIGINT", () => {
-  mcpClient.disconnectAll().catch(logger.error);
-  process.exit(0);
-});
-
-process.on("SIGTERM", () => {
-  mcpClient.disconnectAll().catch(logger.error);
-  process.exit(0);
-});
-
 /**
  * Format an actionable auth error message that strongly encourages the LLM
  * to display the URL to the user. The wording is intentionally directive
@@ -6592,6 +6592,7 @@ function buildDefaultAuthorizationHeaders(
 }
 
 type ListingServerLookup = {
+  userTeamIds: Map<string, Promise<string[]>>;
   byId: ReadonlyMap<string, McpServer>;
   byCatalogId: ReadonlyMap<string, McpServer[]>;
 };
@@ -6609,6 +6610,7 @@ function buildListingServerLookup(
     byCatalogId.set(server.catalogId, siblings);
   }
   return {
+    userTeamIds: new Map(),
     byId: new Map(
       [...catalogServers, ...pinnedServers].map((server) => [
         server.id,

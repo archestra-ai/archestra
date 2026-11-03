@@ -384,6 +384,15 @@ class WorkflowContractTests(unittest.TestCase):
         checkout = step_source(source.split("  merge-manifests:\n", 1)[1], "Checkout repository")
         self.assertIn("inputs.checkout_ref", checkout)
 
+    def test_executing_pull_request_runs_are_not_cancelled_by_a_sibling_event(self):
+        # Release Please fires `synchronize` and `edited` for one head; an
+        # executing run that gets cancelled leaves failed gate contexts on
+        # that commit. A merely pending sibling may still be replaced.
+        source = (ROOT / ".github/workflows/docker-image-scanning.yml").read_text()
+        concurrency = source.split("\nconcurrency:\n", 1)[1].split("\njobs:\n", 1)[0]
+        self.assertIn("cancel-in-progress: ${{ github.event_name != 'pull_request' }}", concurrency)
+        self.assertNotIn("cancel-in-progress: true", concurrency)
+
     def test_release_security_gate_is_always_run_and_contexts_depend_on_its_result(self):
         source = (ROOT / ".github/workflows/docker-image-scanning.yml").read_text()
         gate = source.split("  release-image-security:\n", 1)[1].split("  required-contexts:\n", 1)[0]

@@ -101,6 +101,7 @@ import kimiCodeProxyRoutes from "./routes/kimi-code";
 import openAiProxyRoutes from "./routes/openai";
 
 const native = vi.hoisted(() => ({
+  collectOpenappaMetrics: vi.fn(() => ""),
   initializeOpenappa: vi.fn(),
   dispatchHook: vi.fn(),
   loadChildReturns: vi.fn(
@@ -597,7 +598,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     });
     expect(
       await getHitlReviewResult({ session: runtimeSession, callId, offerId }),
-    ).toBe(outcome);
+    ).toEqual({ outcome: outcome });
     expect(
       await getHitlReviewResult({
         session: runtimeSession,
@@ -1207,6 +1208,1093 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       "RAW DENIED PI RESPONSES RESULT",
     );
     expect(JSON.stringify(sent[1])).toContain("Tool output denied");
+  });
+
+  const COPILOT_KEY = "efeab99e17779df23bb5d2437f3c8f8f";
+  const copilotHeaders = {
+    "user-agent": "OpenAI/JS 5.20.1",
+    "x-archestra-agent-id": "github_copilot_cli",
+    "x-initiator": "user",
+    "x-interaction-type": "conversation-user",
+  };
+
+  test.for([
+    "deny",
+    "result",
+    "undeclared",
+  ] as const)("Copilot CLI Responses %s roots on the prompt cache key and checks native calls", async (outcome, {
+    seedAndAssignArchestraTools,
+  }) => {
+    if (outcome === "undeclared") await seedAndAssignArchestraTools(agent.id);
+    await app.register(openAiProxyRoutes);
+    await ModelModel.upsert({
+      externalId: "openai/gpt-5.5",
+      provider: "openai",
+      modelId: "gpt-5.5",
+      inputModalities: null,
+      outputModalities: null,
+      lastSyncedAt: new Date(),
+    });
+    const sent: unknown[] = [];
+    const call = {
+      type: "function_call",
+      id: "fc_copilot",
+      call_id: "call_copilot_bash",
+      name: "bash",
+      arguments: JSON.stringify({ command: "echo test", description: "echo" }),
+      status: "completed",
+    };
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockReturnValue({
+      responses: {
+        create: async (params: unknown) => {
+          sent.push(structuredClone(params));
+          return {
+            id: "resp_copilot",
+            object: "response",
+            created_at: 1,
+            status: "completed",
+            model: "gpt-5.5",
+            output: [call],
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          };
+        },
+      },
+    } as never);
+    // Copilot's opening turn: a user message with its datetime preamble, no
+    // session header, and the session named by prompt_cache_key only.
+    const input = [
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: "<current_datetime>2026-10-28T23:02:45.235+04:00</current_datetime>\n\nRun the tool",
+          },
+        ],
+      },
+    ];
+    const send = (items: unknown[]) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/responses`,
+        headers: {
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformKey,
+          ...copilotHeaders,
+        },
+        payload: {
+          model: "gpt-5.5",
+          stream: false,
+          store: false,
+          prompt_cache_key: COPILOT_KEY,
+          parallel_tool_calls: true,
+          input: items,
+          tools: [
+            {
+              type: "function",
+              name: "bash",
+              parameters: {
+                type: "object",
+                properties: {
+                  command: { type: "string" },
+                  description: { type: "string" },
+                },
+              },
+            },
+            ...(outcome === "undeclared"
+              ? [
+                  {
+                    type: "function",
+                    // Copilot spells an MCP tool <server>-<advertised name>.
+                    name: "prod_gateway-archestra__get_remedy_plans",
+                    description: attestToolDescription({
+                      organizationId: agent.organizationId,
+                      gatewayId: agent.id,
+                      advertisedName: "archestra__get_remedy_plans",
+                      kind: "b",
+                      description: "Read the blocked ruling",
+                    }),
+                    parameters: { type: "object", properties: {} },
+                  },
+                  {
+                    type: "function",
+                    name: "prod_gateway-archestra__execute_remedy_plan",
+                    description: attestToolDescription({
+                      organizationId: agent.organizationId,
+                      gatewayId: agent.id,
+                      advertisedName: "archestra__execute_remedy_plan",
+                      kind: "b",
+                      description: "Apply a remedy",
+                    }),
+                    parameters: { type: "object", properties: {} },
+                  },
+                ]
+              : []),
+          ],
+        },
+      });
+    block = outcome === "deny";
+    if (outcome === "undeclared") {
+      const dispatch = native.dispatchHook.getMockImplementation();
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        if (JSON.parse(raw).event === "tool_call")
+          throw Object.assign(new Error("private native diagnostic"), {
+            code: "undeclared_tool",
+          });
+        return dispatch?.(raw);
+      });
+    }
+    const first = await send(input);
+    expect(first.statusCode, first.body).toBe(200);
+    // The root is the Copilot session, not a per-request session.
+    const started = events.filter((event) => event.event === "session_start");
+    expect(started).toHaveLength(1);
+    expect(String(started[0].session_id).endsWith(COPILOT_KEY)).toBe(true);
+    expect(started[0].parent_id ?? null).toBeNull();
+    const calls = first.json().output;
+    if (outcome === "undeclared") {
+      const notice = calls.find(
+        (item: { type?: string }) => item.type === "function_call",
+      );
+      expect(notice?.name, first.body).toBe(
+        "prod_gateway-archestra__get_remedy_plans",
+      );
+      expect(notice.arguments).toContain("No remedy plan is available");
+      expect(first.body).not.toContain("private native diagnostic");
+      return;
+    }
+    if (outcome === "deny") {
+      expect(
+        calls.some((item: { name?: string }) => item.name === "bash"),
+      ).toBe(false);
+      return;
+    }
+    expect(calls.some((item: { name?: string }) => item.name === "bash")).toBe(
+      true,
+    );
+    const dispatch = native.dispatchHook.getMockImplementation();
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      if (event.event !== "tool_result") return dispatch?.(raw);
+      events.push(event);
+      return JSON.stringify({
+        decision: "deny_call",
+        feedback: "Tool output denied",
+        approved_output: "Tool output denied",
+        output_source: "runtime",
+      });
+    });
+    // The continuation replays the stamped call and its result, as Copilot does.
+    const next = await send([
+      ...input,
+      ...calls,
+      {
+        type: "function_call_output",
+        call_id: call.call_id,
+        output:
+          "RAW DENIED COPILOT RESULT\n<shellId: 0 completed with exit code 0>",
+      },
+    ]);
+    expect(next.statusCode, next.body).toBe(200);
+    expect(events.some((event) => event.event === "tool_result")).toBe(true);
+    // The continuation stays on the same root: no session opens under another id.
+    for (const event of events.filter((e) => e.event === "session_start")) {
+      expect(String(event.session_id).endsWith(COPILOT_KEY)).toBe(true);
+    }
+    expect(sent).toHaveLength(2);
+    expect(JSON.stringify(sent[1])).not.toContain("RAW DENIED COPILOT RESULT");
+    expect(JSON.stringify(sent[1])).toContain("Tool output denied");
+  });
+
+  test("Copilot CLI subagents bind through the task prompt's delegation marker and are refused without one", async () => {
+    config.openappa.offerSigningSecret = "copilot-subagent-marker-test";
+    await app.register(openAiProxyRoutes);
+    await ModelModel.upsert({
+      externalId: "openai/gpt-5.5",
+      provider: "openai",
+      modelId: "gpt-5.5",
+      inputModalities: null,
+      outputModalities: null,
+      lastSyncedAt: new Date(),
+    });
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockReturnValue({
+      responses: {
+        create: async () => ({
+          id: "resp_copilot_child",
+          object: "response",
+          created_at: 1,
+          status: "completed",
+          model: "gpt-5.5",
+          output: [
+            {
+              id: "msg_child",
+              type: "message",
+              role: "assistant",
+              status: "completed",
+              content: [
+                { type: "output_text", text: "child done", annotations: [] },
+              ],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        }),
+      },
+    } as never);
+    const prompt = "Say hi from the child";
+    const marker = mintDelegationMarker({
+      organizationId: agent.organizationId,
+      callerId: `user:${userId}`,
+      parentId: COPILOT_KEY,
+      spawnerNativeId: COPILOT_KEY,
+      prompt,
+      spawnCallId: "call_spawn",
+    });
+    const send = (opening: string, subagent: boolean) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/responses`,
+        headers: {
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformKey,
+          ...copilotHeaders,
+          ...(subagent
+            ? {
+                "x-initiator": "agent",
+                "x-interaction-type": "conversation-subagent",
+              }
+            : {}),
+        },
+        payload: {
+          model: "gpt-5.5",
+          stream: false,
+          store: false,
+          // Copilot's subagents share the parent's key and carry no id of their own.
+          prompt_cache_key: COPILOT_KEY,
+          input: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "input_text",
+                  text: `<current_datetime>2026-10-28T23:02:45.311+04:00</current_datetime>\n\n${opening}`,
+                },
+              ],
+            },
+          ],
+          tools: [
+            {
+              type: "function",
+              name: "bash",
+              parameters: { type: "object", properties: {} },
+            },
+          ],
+        },
+      });
+    const child = await send(`${prompt}\n\n${marker}`, true);
+    expect(child.statusCode, child.body).toBe(200);
+    const childStart = events.find(
+      (event) =>
+        event.event === "session_start" &&
+        String(event.session_id).endsWith(`${COPILOT_KEY}:call_spawn`),
+    );
+    expect(childStart, JSON.stringify(events)).toBeDefined();
+    expect(String(childStart?.parent_id).endsWith(COPILOT_KEY)).toBe(true);
+
+    const unmarked = await send(prompt, true);
+    expect(unmarked.statusCode, unmarked.body).toBe(400);
+    expect(unmarked.body).toContain(
+      "carries no delegation marker from a task call",
+    );
+
+    // The parent's own turn with the same key stays a root.
+    events.length = 0;
+    const parent = await send("Delegate", false);
+    expect(parent.statusCode, parent.body).toBe(200);
+    const parentStart = events.find((event) => event.event === "session_start");
+    expect(String(parentStart?.session_id).endsWith(COPILOT_KEY)).toBe(true);
+    expect(parentStart?.parent_id ?? null).toBeNull();
+  });
+
+  test("Copilot CLI reads a governed background agent's return with a read_agent call it made itself", async () => {
+    config.openappa.offerSigningSecret = "copilot-read-agent-test";
+    await app.register(openAiProxyRoutes);
+    await ModelModel.upsert({
+      externalId: "openai/gpt-5.5",
+      provider: "openai",
+      modelId: "gpt-5.5",
+      inputModalities: null,
+      outputModalities: null,
+      lastSyncedAt: new Date(),
+    });
+    const sent: unknown[] = [];
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockReturnValue({
+      responses: {
+        create: async (params: unknown) => {
+          sent.push(structuredClone(params));
+          return {
+            id: "resp_copilot_parent",
+            object: "response",
+            created_at: 1,
+            status: "completed",
+            model: "gpt-5.5",
+            output: [
+              {
+                id: "msg_parent",
+                type: "message",
+                role: "assistant",
+                status: "completed",
+                content: [
+                  {
+                    type: "output_text",
+                    text: "It ran in the lab.",
+                    annotations: [],
+                  },
+                ],
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          };
+        },
+      },
+    } as never);
+    const value = "C:\\Users\\mark\\appa-root-flow\\lab";
+    const agentId = "5ef9a71d-f2c6-47f4-abe6-3d0adb3141ef";
+    // Copilot makes this call itself when it announces the agent is idle.
+    const readCall = "d2a07213-03ad-49a9-a289-6acec57aba87";
+    const prompt = "Run pwd and report it.";
+    const parent = `user:${userId}|${COPILOT_KEY}`;
+    const marker = mintDelegationMarker({
+      organizationId: agent.organizationId,
+      callerId: `user:${userId}`,
+      parentId: COPILOT_KEY,
+      spawnerNativeId: COPILOT_KEY,
+      prompt,
+      spawnCallId: "call_spawn",
+    });
+    // The child ran through the proxy and crossed its return. Copilot's
+    // subagents report no id of their own.
+    native.loadChildReturns.mockImplementation(
+      async (_organizationId: string, parentSessionId: string) =>
+        parentSessionId === parent
+          ? [
+              {
+                childSessionId: `${parent}:call_spawn`,
+                spawnCallId: "call_spawn",
+                value,
+              },
+            ]
+          : [],
+    );
+    const defaultDispatch = native.dispatchHook.getMockImplementation();
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      if (event.event === "tool_result" && event.spawned_id) {
+        events.push(event);
+        return JSON.stringify({ decision: "ack" });
+      }
+      // The runtime released no read_agent call, as for the real binding.
+      if (event.event === "tool_result" && event.tool_call_id === readCall) {
+        events.push(event);
+        return JSON.stringify({
+          decision: "replace_output",
+          code: "unreleased_call",
+          output_source: "runtime",
+          approved_output:
+            "[appa] Tool output withheld: this result has no record of releasing a call.",
+        });
+      }
+      if (!defaultDispatch) throw new Error("missing native mock");
+      return defaultDispatch(raw);
+    });
+    events.length = 0;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      headers: {
+        authorization: "Bearer test-key",
+        "x-archestra-virtual-key": platformKey,
+        ...copilotHeaders,
+      },
+      payload: {
+        model: "gpt-5.5",
+        stream: false,
+        store: false,
+        prompt_cache_key: COPILOT_KEY,
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: "<current_datetime>2026-11-01T00:43:06.768+04:00</current_datetime>\n\nStart a subagent in the background that runs pwd, then read its result.",
+              },
+            ],
+          },
+          {
+            type: "function_call",
+            id: "fc_spawn",
+            call_id: "call_spawn",
+            name: "task",
+            status: "completed",
+            arguments: JSON.stringify({
+              agent_type: "task",
+              description: "Run pwd",
+              mode: "background",
+              name: "pwd-runner",
+              prompt: `${prompt}\n\n${marker}`,
+              model: "archestra/gpt-5.5",
+            }),
+          },
+          {
+            type: "function_call_output",
+            call_id: "call_spawn",
+            output: `Agent started in background with agent_id: ${agentId}. You'll be notified when it completes.`,
+          },
+          {
+            type: "message",
+            role: "assistant",
+            content: [{ type: "output_text", text: "Waiting for it." }],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: '<system_notification>\nAgent "pwd-runner" (task) has finished processing and is now idle.\n</system_notification>',
+              },
+            ],
+          },
+          {
+            type: "function_call",
+            id: "fc_read",
+            call_id: readCall,
+            name: "read_agent",
+            status: "completed",
+            arguments: JSON.stringify({ agent_id: agentId, since_turn: 0 }),
+          },
+          {
+            type: "function_call_output",
+            call_id: readCall,
+            output: `Agent is idle (waiting for messages). agent_id: ${agentId}, agent_type: task, status: idle, description: Run pwd, elapsed: 3s, total_turns: 1\n\n[Turn 0]\n${value}\n\n${mintChildReturnMarker(
+              {
+                organizationId: agent.organizationId,
+                callerId: `user:${userId}`,
+                parentId: parent,
+                childId: `${parent}:call_spawn`,
+                spawnCallId: "call_spawn",
+                value,
+              },
+            )}`,
+          },
+        ],
+        tools: [
+          {
+            type: "function",
+            name: "task",
+            parameters: {
+              type: "object",
+              properties: { prompt: { type: "string" } },
+            },
+          },
+          {
+            type: "function",
+            name: "read_agent",
+            parameters: {
+              type: "object",
+              properties: { agent_id: { type: "string" } },
+            },
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.body).not.toContain("OpenAPPA blocked");
+    expect(sent).toHaveLength(1);
+    const upstream = (sent[0] as { input: Array<Record<string, unknown>> })
+      .input;
+    // The model reads the verified return, without the client's status line.
+    expect(
+      upstream.find(
+        (item) =>
+          item.type === "function_call_output" && item.call_id === readCall,
+      )?.output,
+    ).toBe(value);
+    expect(JSON.stringify(upstream)).not.toContain("finished subagent");
+    expect(
+      events
+        .filter((event) => event.spawned_id)
+        .map((event) => event.tool_call_id),
+    ).toEqual(["call_spawn"]);
+  });
+
+  describe("Copilot CLI background agents across a turn", () => {
+    const value = "C:\\Users\\mark\\appa-root-flow\\lab";
+    const agentId = "23ec0773-4acb-4200-92a9-4e643870c94d";
+    // Copilot makes this call itself when it announces the agent is idle.
+    const readCall = "c613c943-fe02-4c1c-9c4c-2f6f0ad0a9d1";
+    const prompt = "Run pwd and report it.";
+    const OUTCOME_MISMATCH =
+      "this outcome does not match the open dispatch; it is not reported";
+    /**
+     * Spawn calls the stand-in runtime holds open, those whose subagent
+     * started, and those it closed.
+     */
+    let open: Set<string>;
+    let started: Set<string>;
+    let closed: Set<string>;
+    let sent: Array<{ input: Array<Record<string, unknown>> }>;
+    const intrinsicReadCalls = new Set<string>();
+
+    const parent = () => `user:${userId}|${COPILOT_KEY}`;
+    const launched = () => [
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: "<current_datetime>2026-11-01T02:57:47.037+04:00</current_datetime>\n\nStart a subagent in the background with the task tool that runs pwd, then read its result with read_agent.",
+          },
+        ],
+      },
+      {
+        type: "function_call",
+        id: "fc_spawn",
+        call_id: "call_spawn",
+        name: "task",
+        status: "completed",
+        arguments: JSON.stringify({
+          agent_type: "task",
+          description: "Print current working directory",
+          mode: "background",
+          name: "pwd-agent",
+          prompt: `${prompt}\n\n${mintDelegationMarker({
+            organizationId: agent.organizationId,
+            callerId: `user:${userId}`,
+            parentId: COPILOT_KEY,
+            spawnerNativeId: COPILOT_KEY,
+            prompt,
+            spawnCallId: "call_spawn",
+          })}`,
+          model: "archestra/gpt-5.5",
+        }),
+      },
+      {
+        type: "function_call_output",
+        call_id: "call_spawn",
+        output: `Agent started in background with agent_id: ${agentId}. You'll be notified when it completes. Tell the user you're waiting and end your response, or continue unrelated work until notified.`,
+      },
+    ];
+    const reported = () => [
+      ...launched(),
+      {
+        type: "message",
+        role: "assistant",
+        content: [
+          {
+            type: "output_text",
+            text: "The background subagent has started; I'm waiting for its result.",
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: '<system_notification>\nAgent "pwd-agent" (task) has finished processing and is now idle.\n</system_notification>',
+          },
+        ],
+      },
+      {
+        type: "function_call",
+        id: "fc_read",
+        call_id: readCall,
+        name: "read_agent",
+        status: "completed",
+        arguments: JSON.stringify({ agent_id: agentId, since_turn: 0 }),
+      },
+      {
+        type: "function_call_output",
+        call_id: readCall,
+        output: `Agent is idle (waiting for messages). agent_id: ${agentId}, agent_type: task, status: idle, description: Print current working directory, elapsed: 5s, total_turns: 1, model: archestra/gpt-5.5\n\n[Turn 0]\n${value}\n\n${mintChildReturnMarker(
+          {
+            organizationId: agent.organizationId,
+            callerId: `user:${userId}`,
+            parentId: parent(),
+            childId: `${parent()}:call_spawn`,
+            spawnCallId: "call_spawn",
+            value,
+          },
+        )}`,
+      },
+    ];
+    const send = (input: unknown[]) => {
+      for (const call of input as Array<{
+        type?: string;
+        name?: string;
+        call_id?: string;
+      }>) {
+        if (
+          call.type === "function_call" &&
+          call.name === "read_agent" &&
+          call.call_id
+        )
+          intrinsicReadCalls.add(call.call_id);
+      }
+      return app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/responses`,
+        headers: {
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformKey,
+          ...copilotHeaders,
+        },
+        payload: {
+          model: "gpt-5.5",
+          stream: false,
+          store: false,
+          prompt_cache_key: COPILOT_KEY,
+          input,
+          tools: [
+            {
+              type: "function",
+              name: "task",
+              parameters: {
+                type: "object",
+                properties: { prompt: { type: "string" } },
+              },
+            },
+            {
+              type: "function",
+              name: "read_agent",
+              parameters: {
+                type: "object",
+                properties: { agent_id: { type: "string" } },
+              },
+            },
+            // The gateway's remedy tools: with them the proxy governs the
+            // session's turns, and ends a turn the model closes.
+            ...(
+              [
+                ["archestra__get_remedy_plans", "Read the blocked ruling"],
+                ["archestra__execute_remedy_plan", "Apply a remedy"],
+              ] as const
+            ).map(([advertisedName, description]) => ({
+              type: "function",
+              // Copilot spells an MCP tool <server>-<advertised name>.
+              name: `prod_gateway-${advertisedName}`,
+              description: attestToolDescription({
+                organizationId: agent.organizationId,
+                gatewayId: agent.id,
+                advertisedName,
+                kind: "b",
+                description,
+              }),
+              parameters: { type: "object", properties: {} },
+            })),
+          ],
+        },
+      });
+    };
+    const readOutput = () =>
+      sent
+        .at(-1)
+        ?.input.find(
+          (item) =>
+            item.type === "function_call_output" && item.call_id === readCall,
+        )?.output;
+    const readAgain = (
+      input: unknown[],
+      {
+        callId = "call_reread",
+        childId = agentId,
+        output = (reported().at(-1) as { output: string }).output,
+      }: { callId?: string; childId?: string; output?: string } = {},
+    ) => [
+      ...input,
+      {
+        type: "message",
+        role: "assistant",
+        content: [
+          { type: "output_text", text: `The agent reported ${value}.` },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: "Read the background agent's result again.",
+          },
+        ],
+      },
+      {
+        type: "function_call",
+        id: `fc_${callId}`,
+        call_id: callId,
+        name: "read_agent",
+        status: "completed",
+        arguments: JSON.stringify({ agent_id: childId }),
+      },
+      { type: "function_call_output", call_id: callId, output },
+    ];
+
+    beforeEach(async ({ seedAndAssignArchestraTools }) => {
+      await seedAndAssignArchestraTools(agent.id);
+      config.openappa.offerSigningSecret = "copilot-background-turn-test";
+      await app.register(openAiProxyRoutes);
+      await ModelModel.upsert({
+        externalId: "openai/gpt-5.5",
+        provider: "openai",
+        modelId: "gpt-5.5",
+        inputModalities: null,
+        outputModalities: null,
+        lastSyncedAt: new Date(),
+      });
+      sent = [];
+      intrinsicReadCalls.clear();
+      vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockReturnValue({
+        responses: {
+          create: async (params: unknown) => {
+            sent.push(structuredClone(params) as (typeof sent)[number]);
+            return {
+              id: "resp_copilot_parent",
+              object: "response",
+              created_at: 1,
+              status: "completed",
+              model: "gpt-5.5",
+              output: [
+                {
+                  id: "msg_parent",
+                  type: "message",
+                  role: "assistant",
+                  status: "completed",
+                  content: [
+                    { type: "output_text", text: "Done.", annotations: [] },
+                  ],
+                },
+              ],
+              usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+            };
+          },
+        },
+      } as never);
+      // The child ran through the proxy and crossed its return.
+      native.loadChildReturns.mockImplementation(
+        async (_organizationId: string, parentSessionId: string) =>
+          parentSessionId === parent()
+            ? [
+                {
+                  childSessionId: `${parent()}:call_spawn`,
+                  spawnCallId: "call_spawn",
+                  value,
+                },
+              ]
+            : [],
+      );
+      // As appa-runtime's on_turn_end does, a turn end closes the calls still
+      // open but a spawn whose subagent started, which stays open for its
+      // result. A later report against a closed call is refused, as
+      // decide_outcome does.
+      open = new Set(["call_spawn"]);
+      started = new Set(["call_spawn"]);
+      closed = new Set();
+      const defaultDispatch = native.dispatchHook.getMockImplementation();
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw);
+        if (event.event === "turn_end") {
+          events.push(event);
+          for (const id of open) {
+            if (started.has(id)) continue;
+            closed.add(id);
+            open.delete(id);
+          }
+          return JSON.stringify({ decision: "ack" });
+        }
+        if (event.event === "tool_result" && event.spawned_id) {
+          events.push(event);
+          if (closed.has(event.tool_call_id)) {
+            return JSON.stringify({
+              decision: "block",
+              reason: OUTCOME_MISMATCH,
+              output_source: "runtime",
+              approved_output: `[appa] Tool output withheld: ${OUTCOME_MISMATCH}`,
+            });
+          }
+          open.delete(event.tool_call_id);
+          return JSON.stringify({ decision: "ack" });
+        }
+        // The runtime released no read_agent call, as for the real binding.
+        if (
+          event.event === "tool_result" &&
+          intrinsicReadCalls.has(event.tool_call_id)
+        ) {
+          events.push(event);
+          return JSON.stringify({
+            decision: "replace_output",
+            code: "unreleased_call",
+            output_source: "runtime",
+            approved_output:
+              "[appa] Tool output withheld: this result has no record of releasing a call.",
+          });
+        }
+        if (!defaultDispatch) throw new Error("missing native mock");
+        return defaultDispatch(raw);
+      });
+      events.length = 0;
+    });
+
+    test("keeps the turn open until the agent's return arrives, so the return is reported", async () => {
+      // The model tells the user it waits and ends its response.
+      const waiting = await send(launched());
+      expect(waiting.statusCode, waiting.body).toBe(200);
+      expect(events.filter((event) => event.event === "turn_end")).toEqual([]);
+      expect(open.has("call_spawn")).toBe(true);
+
+      // Copilot comes back by itself with its read_agent report.
+      const returned = await send(reported());
+      expect(returned.statusCode, returned.body).toBe(200);
+      expect(readOutput()).toBe(value);
+      expect(JSON.stringify(sent.at(-1))).not.toContain("finished subagent");
+      const order = events.flatMap((event) =>
+        event.event === "turn_end"
+          ? ["turn_end"]
+          : event.event === "tool_result" && event.spawned_id
+            ? [`return:${event.tool_call_id}`]
+            : [],
+      );
+      // The return is reported against the open spawn, then the turn ends.
+      expect(order).toEqual(["return:call_spawn", "turn_end"]);
+    });
+
+    test("holds only the turn that answers the launch, so an agent that never reports holds nothing later", async () => {
+      const waiting = await send(launched());
+      expect(waiting.statusCode, waiting.body).toBe(200);
+      expect(events.filter((event) => event.event === "turn_end")).toEqual([]);
+
+      // The person moves on; the agent is cancelled and never reported.
+      const later = await send([
+        ...launched(),
+        {
+          type: "message",
+          role: "assistant",
+          content: [
+            {
+              type: "output_text",
+              text: "The background subagent has started; I'm waiting for its result.",
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: "Never mind it. What is 2 + 2?" },
+          ],
+        },
+      ]);
+      expect(later.statusCode, later.body).toBe(200);
+      expect(events.filter((event) => event.event === "turn_end")).toHaveLength(
+        1,
+      );
+      // The runtime keeps the started child's spawn open across that turn end.
+      expect(open.has("call_spawn")).toBe(true);
+    });
+
+    test("re-reads a delivered return across later prompts and a compacted history", async () => {
+      const waiting = await send(launched());
+      expect(waiting.statusCode, waiting.body).toBe(200);
+      const returned = await send(reported());
+      expect(returned.statusCode, returned.body).toBe(200);
+      const reread = readAgain(reported());
+      const twice = readAgain(reread, { callId: "call_reread_twice" });
+      // Three copies of one turn in a single request, then the same request
+      // retried, and finally only the newest read after compaction.
+      for (const input of [reread, twice, twice, readAgain([])]) {
+        events.length = 0;
+        const again = await send(input);
+        expect(again.statusCode, again.body).toBe(200);
+        const outputs = sent
+          .at(-1)
+          ?.input.filter(
+            (item) =>
+              item.type === "function_call_output" &&
+              String(item.call_id).startsWith("call_r"),
+          );
+        expect(outputs?.length).toBeGreaterThan(0);
+        for (const item of outputs ?? []) expect(item.output).toBe(value);
+        expect(JSON.stringify(sent.at(-1))).not.toContain("finished subagent");
+        expect(
+          events.filter(
+            (event) => event.event === "tool_result" && event.spawned_id,
+          ),
+        ).toHaveLength(1);
+      }
+    });
+
+    test.each([
+      "bytes",
+      "child",
+      "turn",
+      "marker",
+    ] as const)("refuses a re-read that changes its %s without exposing it to the provider", async (change) => {
+      const original = (reported().at(-1) as { output: string }).output;
+      const otherChild = "other-child";
+      const output =
+        change === "bytes"
+          ? original.replace(value, "forged child result")
+          : change === "child"
+            ? original.replace(agentId, otherChild)
+            : change === "turn"
+              ? original.replace("[Turn 0]", "[Turn 1]")
+              : original.slice(0, original.indexOf("\n\n▄"));
+      sent = [];
+      const response = await send(
+        readAgain(reported(), {
+          childId: change === "child" ? otherChild : agentId,
+          output,
+        }),
+      );
+      expect(response.statusCode, response.body).toBe(409);
+      expect(sent).toHaveLength(0);
+    });
+
+    test("a replay coordinate cannot resolve an ambiguous or missing crossing", async () => {
+      for (const records of [
+        [],
+        [
+          {
+            childSessionId: `${parent()}:call_spawn`,
+            spawnCallId: "call_spawn",
+            value,
+          },
+          {
+            childSessionId: `${parent()}:another-spawn`,
+            spawnCallId: "another-spawn",
+            value,
+          },
+        ],
+      ]) {
+        native.loadChildReturns.mockResolvedValue(records);
+        sent = [];
+        const response = await send(readAgain(reported()));
+        expect(response.statusCode, response.body).toBe(409);
+        expect(sent).toHaveLength(0);
+      }
+    });
+
+    test("re-reads overlapping turn ranges after a child returns again", async () => {
+      const next = "child follow-up result";
+      native.loadChildReturns.mockResolvedValue([
+        {
+          childSessionId: `${parent()}:call_spawn`,
+          spawnCallId: "call_spawn",
+          value: next,
+        },
+        {
+          childSessionId: `${parent()}:call_spawn`,
+          spawnCallId: "call_spawn",
+          value,
+        },
+      ]);
+      const original = (reported().at(-1) as { output: string }).output;
+      const nextTurn = `[Turn 1]\n${next}\n\n${mintChildReturnMarker({
+        organizationId: agent.organizationId,
+        callerId: `user:${userId}`,
+        parentId: parent(),
+        childId: `${parent()}:call_spawn`,
+        spawnCallId: "call_spawn",
+        value: next,
+      })}`;
+      const allTurns = `${original}\n\n${nextTurn}`;
+      const history = readAgain(reported(), { output: allTurns });
+      const response = await send(
+        readAgain(history, {
+          callId: "call_read_latest",
+          output:
+            original.slice(0, original.indexOf("\n\n[Turn")) +
+            "\n\n" +
+            nextTurn,
+        }),
+      );
+      expect(response.statusCode, response.body).toBe(200);
+      expect(
+        sent
+          .at(-1)
+          ?.input.find(
+            (item) =>
+              item.type === "function_call_output" &&
+              item.call_id === "call_reread",
+          )?.output,
+      ).toBe(`[Turn 0]\n${value}\n\n[Turn 1]\n${next}`);
+      expect(
+        sent
+          .at(-1)
+          ?.input.find(
+            (item) =>
+              item.type === "function_call_output" &&
+              item.call_id === "call_read_latest",
+          )?.output,
+      ).toBe(next);
+    });
+
+    test.each([
+      "same bytes",
+      "empty",
+    ] as const)("preserves both turns when a later return has %s", async (kind) => {
+      const next = kind === "same bytes" ? value : "";
+      const crossing = {
+        childSessionId: `${parent()}:call_spawn`,
+        spawnCallId: "call_spawn",
+        value,
+      };
+      native.loadChildReturns.mockResolvedValue(
+        kind === "same bytes" ? [crossing, crossing] : [crossing],
+      );
+      const original = (reported().at(-1) as { output: string }).output;
+      const output = `${original}\n\n[Turn 1]\n${next}\n\n${mintChildReturnMarker(
+        {
+          organizationId: agent.organizationId,
+          callerId: `user:${userId}`,
+          parentId: parent(),
+          childId: `${parent()}:call_spawn`,
+          spawnCallId: "call_spawn",
+          value: next,
+        },
+      )}`;
+      const response = await send(readAgain(reported(), { output }));
+      expect(response.statusCode, response.body).toBe(200);
+      expect(
+        sent
+          .at(-1)
+          ?.input.find(
+            (item) =>
+              item.type === "function_call_output" &&
+              item.call_id === "call_reread",
+          )?.output,
+      ).toBe(`[Turn 0]\n${value}\n\n[Turn 1]\n${next}`);
+    });
+
+    test("withholds a return its spawn call no longer takes, and the session goes on", async () => {
+      // A new prompt's first call settled the turn before the subagent
+      // started, so the runtime closed the spawn.
+      open.clear();
+      started.clear();
+      closed.add("call_spawn");
+
+      for (const attempt of [1, 2]) {
+        const response = await send(reported());
+        expect(
+          response.statusCode,
+          `attempt ${attempt}: ${response.body}`,
+        ).toBe(200);
+        expect(readOutput()).toBe(
+          "[appa] Tool output withheld: this subagent returned after its call was closed, so its result does not reach this session. Start the subagent again if you still need it.",
+        );
+        expect(JSON.stringify(sent.at(-1))).not.toContain(value);
+      }
+    });
   });
 
   /** The notice call the client received, arguments included. */
@@ -2898,6 +3986,199 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
   });
 
+  test.each([
+    { count: 2, multiple: false, stream: false, direct: false, skip: false },
+    { count: 4, multiple: false, stream: false, direct: false, skip: false },
+    { count: 5, multiple: false, stream: false, direct: false, skip: false },
+    { count: 5, multiple: false, stream: true, direct: false, skip: false },
+    { count: 12, multiple: false, stream: false, direct: false, skip: false },
+    { count: 12, multiple: true, stream: false, direct: false, skip: false },
+    { count: 5, multiple: false, stream: false, direct: true, skip: false },
+    { count: 5, multiple: false, stream: true, direct: true, skip: false },
+    { count: 5, multiple: false, stream: false, direct: false, skip: true },
+  ])("Claude Desktop returns all-choice native answers to the provider (choices=$count, multiple=$multiple, stream=$stream, direct=$direct, skip=$skip)", async ({
+    count,
+    multiple,
+    stream,
+    direct,
+    skip,
+  }) => {
+    block = false;
+    const name = "mcp__archestra__archestra__ask_user";
+    const labels = Array.from(
+      { length: count },
+      (_, index) => `Color ${index + 1}`,
+    );
+    const question = {
+      question: "Which color do you prefer?",
+      options: labels.map((label) => ({ label })),
+      allowMultiple: multiple,
+    };
+    const tool = direct
+      ? {
+          name: "AskUserQuestion",
+          input: {
+            questions: [
+              {
+                question: question.question,
+                header: "Color",
+                options: question.options,
+                multiSelect: multiple,
+              },
+            ],
+          },
+        }
+      : { name, input: question };
+    options = stream
+      ? {
+          includeToolUse: true,
+          streamingToolUse: tool,
+          streamStopReason: "tool_use",
+        }
+      : { nonStreamingToolUse: tool };
+    const body = payload(false);
+    const tools = [
+      ...body.tools.map((definition) => ({
+        ...definition,
+        description: definition.name.startsWith("archestra__")
+          ? attestToolDescription({
+              organizationId: agent.organizationId,
+              gatewayId: agent.id,
+              advertisedName: definition.name,
+              kind: "b",
+              description: definition.description,
+            })
+          : definition.description,
+      })),
+      {
+        name,
+        description: attestToolDescription({
+          organizationId: agent.organizationId,
+          gatewayId: agent.id,
+          advertisedName: "archestra__ask_user",
+          kind: "b",
+          description: "Ask the user to choose.",
+        }),
+        input_schema: { type: "object", properties: {} },
+      },
+      {
+        name: "AskUserQuestion",
+        description: "Ask a native question.",
+        input_schema: { type: "object", properties: {} },
+      },
+    ];
+    const clientHeaders = {
+      ...internalCallHeader(),
+      ...externalClientHeaders(),
+      "x-archestra-agent-id": "anthropic_claude_desktop",
+      "x-claude-code-session-id": "desktop-native-choice-session",
+    };
+    const messages = [
+      {
+        role: "user",
+        content: "Use only Archestra's ask_user tool. Keep every color.",
+      },
+    ];
+    const asked = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: clientHeaders,
+      payload: { ...body, tools, stream, messages },
+    });
+    expect(asked.statusCode, asked.body).toBe(200);
+    const released = noticeFrom(asked.body, stream);
+    const initialGuidance = JSON.stringify(providerRequests.at(-1));
+    expect(released.name).toBe("AskUserQuestion");
+    const groups = released.input.questions as Array<{
+      question: string;
+      options: { label: string }[];
+    }>;
+    expect(groups.length).toBeLessThanOrEqual(4);
+    for (const group of groups)
+      expect(group.options.length).toBeLessThanOrEqual(4);
+    expect(
+      groups.flatMap((group) =>
+        group.options
+          .map((option) => option.label)
+          .filter((label) => labels.includes(label)),
+      ),
+    ).toEqual(labels);
+    const selected = skip
+      ? []
+      : multiple
+        ? [labels[0], labels.at(-1)]
+        : [labels.at(-1)];
+    const answers = Object.fromEntries(
+      groups.map((group) => {
+        const picked = group.options
+          .map((option) => option.label)
+          .filter((label) => selected.includes(label));
+        return [
+          group.question,
+          picked.length > 0 ? picked : [group.options.at(-1)?.label],
+        ];
+      }),
+    );
+    options = {};
+    const history = [
+      ...messages,
+      {
+        role: "assistant",
+        content: [{ type: "tool_use", ...released }],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: released.id,
+            content: JSON.stringify({ answers }),
+          },
+        ],
+      },
+    ];
+    // A replica may read the same answer again on a retry or resumed history.
+    for (let replay = 0; replay < 2; replay++) {
+      providerRequests.length = 0;
+      const answered = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: clientHeaders,
+        payload: { ...body, tools, messages: history },
+      });
+      expect(answered.statusCode, answered.body).toBe(200);
+      const sent = providerRequests.at(-1) as {
+        messages: { content: unknown }[];
+      };
+      const forwarded = sent.messages
+        .flatMap((message) =>
+          Array.isArray(message.content) ? message.content : [],
+        )
+        .find(
+          (part) =>
+            part.type === "tool_result" && part.tool_use_id === released.id,
+        );
+      const result = JSON.parse(forwarded.content);
+      expect(result).toMatchObject({
+        ...(skip ? { error: "unconfirmed_answer" } : { action: "accept" }),
+        selected,
+        archestra_presentation: {
+          requested_tool: { name: direct ? "AskUserQuestion" : name },
+          rendered_with: "AskUserQuestion",
+          translation: direct
+            ? "native_question_grouping"
+            : "gateway_question_to_native_form",
+        },
+      });
+      if (skip) expect(result).not.toHaveProperty("action", "accept");
+    }
+    expect(initialGuidance).toContain(
+      "Honor the user's explicit choice of question tool.",
+    );
+  });
+
   test("block mode governs Claude Desktop sessions, isolates headerless Chat conversations, and rejects headerless requests without a conversation identity", async () => {
     await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
     options = { includeToolUse: false, streamStopReason: "end_turn" };
@@ -3484,9 +4765,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           question: questionText,
           header: "Tool call",
           options: [
+            { label: "Inspect", description: "Show the full review in chat." },
             { label: "Allow", description: "This exact call." },
             { label: "Deny", description: "Keep it blocked." },
-            { label: "Inspect", description: "Show the full review in chat." },
           ],
           multiSelect: false,
         },
@@ -3613,12 +4894,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             question: 'Approve this call?\nmcp/example/write {"value":1}',
             header: "Tool call",
             options: [
-              { label: "Allow", description: "This exact call." },
-              { label: "Deny", description: "Keep it blocked." },
               {
                 label: "Inspect",
                 description: "Show the full review in chat.",
               },
+              { label: "Allow", description: "This exact call." },
+              { label: "Deny", description: "Keep it blocked." },
             ],
             multiSelect: false,
           },
@@ -3629,17 +4910,14 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     test.each([
       true,
       false,
-    ])("presents the model's own ask_user question as AskUserQuestion and returns the answer as its result (stream=%s)", async (stream) => {
+    ])("preserves the gateway question and returns its answer as the tool result (stream=%s)", async (stream) => {
       config.openappa = { ...config.openappa, offerSigningSecret: "" };
       const askUser = {
         name: "archestra__ask_user",
         input: {
           question: "Which report format?",
           header: "Format",
-          options: [
-            { label: "Short", preview: "model-written preview" },
-            { label: "Long" },
-          ],
+          options: [{ label: "Short" }, { label: "Long" }],
         },
       };
       options = {
@@ -3648,7 +4926,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         nonStreamingToolUse: askUser,
         streamingToolUse: askUser,
       };
-      const opening = [{ role: "user", content: "Write the report" }];
+      const opening = [
+        {
+          role: "user",
+          content: "Write the report. Ask me with archestra__ask_user.",
+        },
+      ];
 
       const asked = await app.inject({
         method: "POST",
@@ -3661,26 +4944,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(asked.statusCode, asked.body).toBe(200);
       expect(asked.body).not.toContain("is not loaded in this session");
       const question = noticeFrom(asked.body, stream);
-      expect(question.name).toBe("AskUserQuestion");
-      // The model wrote these options, so they carry no preview.
-      expect(question.input).toEqual({
-        questions: [
-          {
-            question: "Which report format?",
-            header: "Format",
-            options: [
-              { label: "Short", description: "Short" },
-              { label: "Long", description: "Long" },
-            ],
-            multiSelect: false,
-          },
-        ],
-      });
+      expect(question.name).toBe(askUser.name);
+      expect(question.input).toEqual(askUser.input);
 
       options = { includeToolUse: false, streamStopReason: "end_turn" };
       providerRequests.length = 0;
-      const answer =
-        'Your questions have been answered: "Which report format?"="Long". You can now continue with the user\'s answers in mind.';
+      const answer = JSON.stringify({ action: "accept", selected: ["Long"] });
       const answered = await app.inject({
         method: "POST",
         url: url(),
@@ -3810,9 +5079,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           }
         ).questions;
         expect(question.options.map((option) => option.label)).toEqual([
+          "Inspect",
           "Allow",
           "Deny",
-          "Inspect",
         ]);
         return { body: response.body, card, question: question.question };
       };
@@ -15160,6 +16429,114 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     "user-agent": "opencode/1.18.29",
   });
 
+  test.each(
+    ["opencode", "kilo"].flatMap((client) =>
+      [false, true].map((multiple) => ({ client, multiple })),
+    ),
+  )("returns ordinary gateway question answers through the $client native form (multiple=$multiple)", async ({
+    client,
+    multiple,
+  }) => {
+    const labels = Array.from(
+      { length: multiple ? 12 : 2 },
+      (_, i) => `Format ${i + 1}`,
+    );
+    const questionText = "Which report format?";
+    let calls = [
+      {
+        id: "call_format",
+        name: "archestra__ask_user",
+        arguments: JSON.stringify({
+          question: questionText,
+          options: labels.map((label) => ({ label })),
+          allowMultiple: multiple,
+        }),
+      },
+    ];
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(() => {
+      const provider = createOpenAiTestClient({ nonStreamingToolCalls: calls });
+      const create = provider.chat.completions.create;
+      provider.chat.completions.create = async (params) => {
+        providerBodies.push(structuredClone(params));
+        return create(params);
+      };
+      return provider as never;
+    });
+    const body = openCodePayload();
+    const tools = [
+      ...body.tools,
+      ...["archestra__ask_user", "question"].map((name) => ({
+        type: "function",
+        function: {
+          name,
+          description: name,
+          parameters: { type: "object", properties: {} },
+        },
+      })),
+    ];
+    const headers = {
+      ...internalCallHeader(),
+      ...openCodeHeaders(),
+      "user-agent": `${client}/1.18.29`,
+      "x-session-id": OPENCODE_SESSION,
+    };
+    const messages = [{ role: "user", content: "Choose a report format." }];
+    const asked = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers,
+      payload: { ...body, stream: false, tools, messages },
+    });
+    expect(asked.statusCode, asked.body).toBe(200);
+    const question = asked.json().choices[0].message.tool_calls[0];
+    expect(question.function.name).toBe("question");
+    expect(JSON.parse(question.function.arguments)).toEqual({
+      questions: [
+        {
+          question: questionText,
+          header: expect.any(String),
+          options: labels.map((label) => ({ label, description: label })),
+          multiple,
+        },
+      ],
+    });
+    const selected = multiple ? [labels[0], labels.at(-1)] : [labels.at(-1)];
+    const answer = `User has answered your questions: "${questionText}"="${selected.join(", ")}". You can now continue with the user's answers in mind.`;
+    calls = [];
+    providerBodies.length = 0;
+    const answered = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers,
+      payload: {
+        ...body,
+        stream: false,
+        tools,
+        messages: [
+          ...messages,
+          { role: "assistant", content: null, tool_calls: [question] },
+          { role: "tool", tool_call_id: question.id, content: answer },
+        ],
+      },
+    });
+    expect(answered.statusCode, answered.body).toBe(200);
+    const sent = providerBodies.at(-1) as {
+      messages: Array<{
+        role: string;
+        tool_call_id?: string;
+        content: unknown;
+      }>;
+    };
+    expect(
+      sent.messages.find(
+        (message) =>
+          message.role === "tool" && message.tool_call_id === question.id,
+      ),
+    ).toMatchObject({ content: answer });
+  });
+
   test.for(
     ["incomplete", "content_filter", "failed", "eof"].flatMap((terminal) =>
       [false, true].flatMap((stream) =>
@@ -15619,7 +16996,9 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
               frame.type === "response.custom_tool_call_input.delta",
           ),
         ).toBe(false);
-        expect(response.body).toContain("data: [DONE]");
+        // The failed terminal ends the stream, as OpenAI's does: no `[DONE]`.
+        expect(frames.at(-1)?.type).toBe(`response.${status}`);
+        expect(response.body).not.toContain("[DONE]");
       }
       const released = stream
         ? frames.find((frame) => frame.type === `response.${status}`).response

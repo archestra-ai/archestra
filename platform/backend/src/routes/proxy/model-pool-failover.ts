@@ -53,6 +53,9 @@ export const MODEL_POOL_MAX_RESPONSE_TIMEOUT_MS = 30 * 60_000;
 
 /** What a request's interaction rows record about the attempt that wrote them. */
 export interface UpstreamAttempt {
+  modelAliases?: string[];
+  billingEndpoint?: "fireworks" | "other";
+  requestedModel?: string;
   providerApiKeyId?: string;
   modelPoolId?: string;
   attempt?: number;
@@ -290,6 +293,8 @@ export async function openThroughModelPool<T>(params: {
     member: PlannedMember,
     signal: AbortSignal,
   ) => Promise<MemberTransport>;
+  /** Request-level checks run outside provider timeouts and failover handling. */
+  beforeAttempt?: (member: PlannedMember) => Promise<void>;
   open: (transport: MemberTransport) => Promise<T>;
   /**
    * How long a member that isn't the last may take for `open` to resolve: the
@@ -315,6 +320,7 @@ export async function openThroughModelPool<T>(params: {
     attempt.failureReason = undefined;
     attempt.cutOff = undefined;
     attempt.startedAt = index > 0 ? Date.now() : undefined;
+    await params.beforeAttempt?.(member);
     const isLast = index === plan.members.length - 1;
     const abort = new AbortController();
     try {

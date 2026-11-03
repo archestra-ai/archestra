@@ -13,11 +13,11 @@
  */
 
 import { CHAT_API_KEY_ID_HEADER } from "@archestra/shared";
+import { logs } from "@opentelemetry/api-logs";
 import { sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import OpenAI from "openai";
 import { afterEach, beforeEach, vi } from "vitest";
-import config from "@/config";
 import db from "@/database";
 import { createFastifyInstance } from "@/fastify-instance";
 import { ModelModel } from "@/models";
@@ -188,6 +188,39 @@ describe("Responses upstream failures", () => {
       ),
     );
 
+  test("an output-token stop is an incomplete outcome rather than a provider error", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const emit = vi.fn();
+    vi.spyOn(logs, "getLogger").mockReturnValue({ emit, enabled: () => true });
+    upstreamEvents = [
+      ...STREAM_START,
+      {
+        ...COMPLETED_TERMINAL,
+        type: "response.incomplete",
+        response: {
+          ...COMPLETED_TERMINAL.response,
+          status: "incomplete",
+          incomplete_details: { reason: "max_output_tokens" },
+        },
+      },
+    ];
+    const events = await streamTurn({ makeAgent, makeMember, makeUser });
+    expect(terminals(events)[0].type).toBe("response.incomplete");
+    const records = emit.mock.calls
+      .map(([record]) => record)
+      .filter((record) => record.eventName === "archestra.llm_proxy.request");
+    expect(records).toHaveLength(1);
+    expect(records[0].attributes).toMatchObject({
+      "archestra.proxy.outcome": "incomplete",
+      "archestra.proxy.error_origin": "none",
+      "http.response.status_code": 200,
+    });
+    expect(records[0].attributes["error.type"]).toBeUndefined();
+  });
+
   test("a policy block the upstream reports as an error event reaches Codex as a failed turn", async ({
     makeAgent,
     makeMember,
@@ -257,9 +290,8 @@ describe("Responses upstream failures", () => {
     makeUser,
   }) => {
     // A text-only turn releases `response.completed` as it arrives; usage
-    // settles only afterwards, and in enforce mode its failure still ends the
-    // stream with an error.
-    config.llmProxy.usageAccountingMode = "enforce";
+    // settles only afterwards, and its failure still ends the stream with an
+    // error.
     upstreamEvents = [...STREAM_START, COMPLETED_TERMINAL];
     await db.execute(
       sql`ALTER TABLE interaction_billing ADD CONSTRAINT reject_test_settlement CHECK (false)`,

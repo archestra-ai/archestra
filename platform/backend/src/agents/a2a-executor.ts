@@ -35,6 +35,7 @@ import {
 } from "@/agents/openai-reasoning-summary";
 import { createStepContextGuard } from "@/agents/step-context-guard";
 import { subagentRunTracker } from "@/agents/subagent-run-tracker";
+import { resolveSubagentTierSelection } from "@/agents/subagent-tiers";
 import { canUseAgent } from "@/auth/permission-gated";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
@@ -48,7 +49,11 @@ import {
 } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
 import logger from "@/logging";
-import { AgentModel, ModelModel } from "@/models";
+import {
+  AgentModel,
+  LlmProviderApiKeyModelLinkModel,
+  ModelModel,
+} from "@/models";
 import type { SubagentBinding } from "@/openappa/subagent-binding";
 import {
   formatUnavailableToolErrorDetails,
@@ -70,11 +75,8 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import type { ChatMessage } from "@/types";
-import {
-  type ModelTrioTiers,
-  resolveForkParentSelection,
-  resolveSubagentTierSelection,
-} from "@/utils/llm-resolution";
+import type { A2AAttachment } from "@/types/a2a-attachment";
+import { resolveForkParentSelection } from "@/utils/llm-resolution";
 import {
   stripThinkingBlocks,
   THINKING_ONLY_NOTICE,
@@ -83,20 +85,6 @@ import {
   type StageResult,
   stageAttachmentsIntoSandbox,
 } from "./a2a/stage-attachments";
-
-/**
- * Source-agnostic attachment for A2A execution.
- * Callers (email, Slack, Teams, etc.) should transform their provider-specific
- * attachment types into this format before passing to executeA2AMessage.
- */
-export interface A2AAttachment {
-  /** MIME content type (e.g., 'image/png', 'application/pdf') */
-  contentType: string;
-  /** Base64-encoded content */
-  contentBase64: string;
-  /** Optional filename for context */
-  name?: string;
-}
 
 /**
  * Longest delegation chain (root agent + delegated descendants) allowed before
@@ -190,6 +178,8 @@ interface A2AExecuteParamsBase {
   chatOpsPinnedAgentId?: string;
   /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
+  /** The calling agent run's task ID or run ID, when dispatched from a runtime container or chat. */
+  runId?: string;
 
   /**
    * History of UI messages needed for persistance at new UIMessage generation
@@ -373,6 +363,11 @@ export async function executeA2AMessage(
   const llmApiKeyId = resolvedApiKeyId ?? agent.llmApiKeyId;
   // An agent set to a pool runs on it; a fork runs on its parent's model.
   const modelPoolId = params.selfFork ? null : agent.modelPoolId;
+  // A fork that asked for fast or smart runs on it, never auto routed; one on
+  // normal follows its parent's routing.
+  const autoRoutable =
+    !modelPoolId &&
+    !(params.selfFork && (params.tier === "fast" || params.tier === "smart"));
 
   // Track subagent run so the browser preview can skip screenshots
   // while subagents are active (prevents flickering from tab switching).
@@ -403,6 +398,7 @@ export async function executeA2AMessage(
       isolationKey,
       abortSignal,
       scheduleTriggerRunId,
+      runId: params.runId,
       // Forward the same bridge so a nested delegation's tool calls surface too,
       // attributed to the nested delegation call (recursion through the chain).
       subagentToolStream,
@@ -460,6 +456,7 @@ export async function executeA2AMessage(
       externalAgentId: delegationChain,
       agentLlmApiKeyId: llmApiKeyId,
       modelPoolId,
+      autoRoutable,
       appaSubagentToken: params.appaSubagent?.token,
     });
     const authorizeModel = (model: typeof providerModel) =>
@@ -519,6 +516,7 @@ export async function executeA2AMessage(
                 agentId,
               })
           : undefined,
+        credentialHasNoSandbox: userId === "system",
       },
     );
     const currentTurnText = message + note;
@@ -543,9 +541,10 @@ export async function executeA2AMessage(
     const maxOutputTokens = resolveAgentMaxOutputTokens({
       // Resolved, so an admin-set max-output override on a model whose provider
       // reports no limit is what the turn asks for.
-      outputLength: modelRow
-        ? ModelModel.resolveEffectiveOutputLength(modelRow)
-        : null,
+      outputLength: await LlmProviderApiKeyModelLinkModel.resolveOutputLength(
+        modelRow,
+        chatApiKeyId,
+      ),
       ceiling: config.chat.maxOutputTokensCeiling,
       rateMeteredCeiling: config.chat.rateMeteredMaxOutputTokensCeiling,
       provider,
@@ -644,6 +643,7 @@ export async function executeA2AMessage(
                 externalAgentId: delegationChain,
                 agentLlmApiKeyId: llmApiKeyId,
                 modelPoolId,
+                autoRoutable,
                 appaSubagentToken: params.appaSubagent?.token,
               })
             ).model,
@@ -981,6 +981,11 @@ type StageAttachmentsFn = (
   attachments: A2AAttachment[],
 ) => Promise<StageResult[]>;
 
+/** Team and organization tokens run as "system", which never gets a sandbox. */
+type A2AAttachmentRejectionReason =
+  | ChatUploadRejectionReason
+  | "credential_has_no_sandbox";
+
 /**
  * Surface a child run's tool calls while it runs: each call when its input is
  * ready, again when it settles. The final-message pass in
@@ -1113,8 +1118,14 @@ export async function buildUserContent(
     ingestibleMimeTypes: Set<string>;
     sandboxByteLimit?: number;
     stageAttachments?: StageAttachmentsFn;
+    /** The caller's credential cannot have a sandbox, so `stageAttachments` is absent. */
+    credentialHasNoSandbox?: boolean;
   },
-): Promise<{ content: UserContent | null; note: string }> {
+): Promise<{
+  content: UserContent | null;
+  note: string;
+  rejected: Array<{ name: string; reason: A2AAttachmentRejectionReason }>;
+}> {
   // `A2AAttachment.contentType` is typed non-optional, but every value
   // originates from an external source (A2A protocol parts, chat-platform or
   // email uploads) and stays populated only because each ingestion path defaults
@@ -1156,7 +1167,7 @@ export async function buildUserContent(
   const toStage: A2AAttachment[] = [];
   const rejected: Array<{
     att: A2AAttachment;
-    reason: ChatUploadRejectionReason;
+    reason: A2AAttachmentRejectionReason;
   }> = [];
   for (const att of nonImageAttachments) {
     const reason = chatUploadRejectionReason({
@@ -1167,7 +1178,14 @@ export async function buildUserContent(
       sandboxByteLimit,
     });
     if (reason) {
-      rejected.push({ att, reason });
+      rejected.push({
+        att,
+        reason:
+          opts.credentialHasNoSandbox &&
+          estimateAttachmentBytes(att) <= sandboxByteLimit
+            ? "credential_has_no_sandbox"
+            : reason,
+      });
     } else if (canInlineAttachment(att, opts.ingestibleMimeTypes)) {
       inlineNonImage.push(att);
     } else {
@@ -1240,9 +1258,13 @@ export async function buildUserContent(
       .join(", ")}. Use the run_command tool to read or process them.]`;
   }
 
+  const rejectedSummary = rejected.map((r) => ({
+    name: r.att.name ?? "unnamed",
+    reason: r.reason,
+  }));
   const keptAttachments = [...validImageAttachments, ...inlineNonImage];
   if (keptAttachments.length === 0) {
-    return { content: null, note };
+    return { content: null, note, rejected: rejectedSummary };
   }
 
   // Hand the inline attachments to the chat provider-normalization pipeline as a
@@ -1273,7 +1295,7 @@ export async function buildUserContent(
   ] as unknown as Omit<UIMessage, "id">[]);
 
   const content = (modelMessages[0]?.content ?? null) as UserContent | null;
-  return { content, note };
+  return { content, note, rejected: rejectedSummary };
 }
 
 // ============================================================================
@@ -1288,7 +1310,7 @@ async function resolveRunLlmSelection(params: {
   agent: {
     llmApiKeyId: string | null;
     modelId: string | null;
-  } & ModelTrioTiers;
+  };
   organizationId: string;
   userId: string;
   parentLlm?: ModelSelection;
@@ -1305,8 +1327,8 @@ async function resolveRunLlmSelection(params: {
     ? resolveSubagentTierSelection({
         tier: params.tier,
         parent: base,
-        agentTrio: params.agent,
         organizationId: params.organizationId,
+        userId: params.userId,
       })
     : base;
 }
@@ -1334,7 +1356,7 @@ function canInlineAttachment(
   return ingestibleMimeTypes.has(att.contentType);
 }
 
-function rejectionText(reason: ChatUploadRejectionReason): string {
+function rejectionText(reason: A2AAttachmentRejectionReason): string {
   switch (reason) {
     case "text_too_large":
       return "text too large to inline";
@@ -1346,6 +1368,8 @@ function rejectionText(reason: ChatUploadRejectionReason): string {
       return "too large to store";
     case "unsupported_type":
       return "type not supported by this model";
+    case "credential_has_no_sandbox":
+      return "not readable inline, and this credential has no code sandbox to stage it in; use a service account API key";
   }
 }
 

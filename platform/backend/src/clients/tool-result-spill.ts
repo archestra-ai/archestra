@@ -1,6 +1,7 @@
+import config from "@/config";
 import logger from "@/logging";
-import { SkillSandboxModel } from "@/models";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
+import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { SKILL_SANDBOX_HOME } from "@/skills-sandbox/runtime-image";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { asSandboxId } from "@/types";
@@ -18,7 +19,7 @@ type ToolResult = string | { content: string; [key: string]: unknown };
 /**
  * Bounds a chat tool result to {@link MAX_TOOL_RESULT_CONTEXT_BYTES} of
  * model-facing text, appending PostToolUse `hookFeedback` when present. An
- * oversized result is saved in full to the conversation's default sandbox so
+ * oversized result is saved in full to the run's default sandbox so
  * the model can grep it with `run_command`; when that is not possible the
  * result is just truncated. Rich fields other than `content` stay intact for
  * the UI and the result is marked so history replay sends the capped text only.
@@ -32,11 +33,12 @@ export async function capChatToolResult(params: {
   const { result, hookFeedback, context, toolCallId } = params;
   const text = typeof result === "string" ? result : result.content;
   const suffix = hookFeedback ? `\n\n[hook feedback] ${hookFeedback}` : "";
-  if (utf8Length(text + suffix) <= MAX_TOOL_RESULT_CONTEXT_BYTES) {
+  const textBytes = utf8Length(text);
+  if (textBytes + utf8Length(suffix) <= MAX_TOOL_RESULT_CONTEXT_BYTES) {
     return withContent(result, text + suffix);
   }
 
-  const path = await spillToSandbox({ context, toolCallId, text });
+  const path = await spillToSandbox({ context, toolCallId, text, textBytes });
   const content = capToolResultText({ text, path, suffix });
   if (typeof result === "string") return content;
   const marker: CappedToolResult = {
@@ -58,6 +60,8 @@ interface SpillContext {
   userId: string;
   agentId: string;
   conversationId?: string;
+  /** Headless runs (A2A, ChatOps, schedules) scope their sandbox by this. */
+  scopeKey?: string;
   /** Encrypted chat: the sandbox would hold the result in plaintext. */
   suppressContentLogging?: boolean;
 }
@@ -66,12 +70,12 @@ async function spillToSandbox(params: {
   context: SpillContext;
   toolCallId: string | undefined;
   text: string;
+  textBytes: number;
 }): Promise<string | null> {
-  const { context, toolCallId, text } = params;
-  const { conversationId } = context;
-  if (!conversationId || !toolCallId || context.suppressContentLogging) {
-    return null;
-  }
+  const { context, toolCallId, text, textBytes } = params;
+  const { conversationId, scopeKey } = context;
+  if (!toolCallId || context.suppressContentLogging) return null;
+  if (textBytes > config.skillsSandbox.artifactBytesLimit) return null;
   try {
     const available = await isSkillSandboxAvailableForAgent({
       userId: context.userId,
@@ -80,15 +84,17 @@ async function spillToSandbox(params: {
     });
     if (!available) return null;
 
-    // Same tuple run_command resolves its default target from, so the file
-    // lands where the model's next command runs.
-    const sandbox = await SkillSandboxModel.findOrCreateDefault({
+    // run_command's default target, so the file lands where the model's next
+    // command runs.
+    const sandbox = await executionSandboxRegistry.getOrCreateRunDefault({
       organizationId: context.organizationId,
       userId: context.userId,
-      conversationId,
+      conversationId: conversationId ?? null,
+      isolationKey: scopeKey ?? null,
       defaultCwd: SKILL_SANDBOX_HOME,
     });
-    const fileId = uuidv5(toolCallId, conversationId);
+    if (!sandbox) return null;
+    const fileId = uuidv5(toolCallId, sandbox.id);
     const path = `${SKILL_SANDBOX_HOME}/tool-results/${fileId}.txt`;
     await skillSandboxRuntimeService.uploadFile({
       sandboxId: asSandboxId(sandbox.id),
@@ -101,7 +107,7 @@ async function spillToSandbox(params: {
     return path;
   } catch (error) {
     logger.warn(
-      { err: error, conversationId, toolCallId },
+      { err: error, conversationId, scopeKey, toolCallId },
       "Could not save oversized tool result to the sandbox; truncating it",
     );
     return null;

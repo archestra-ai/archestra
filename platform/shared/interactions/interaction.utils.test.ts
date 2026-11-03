@@ -311,3 +311,30 @@ describe("calculateCostSavings", () => {
     expect(result.savingsPercent).toBe(0);
   });
 });
+
+describe.each([
+  "azure:images",
+  "openai:images",
+])("%s image audit rendering", (type) => {
+  it("shows the image as an image, never as text or a tool call", () => {
+    const interaction = new DynamicInteraction({
+      id: "image-audit",
+      type,
+      model: "image-alias",
+      request: { model: "image-alias", prompt: "Draw a blue circle." },
+      response: { created: 1, data: [{ b64_json: "aW1hZ2UtYnl0ZXM=" }] },
+    } as unknown as Interaction);
+    expect(interaction.getLastUserMessage()).toBe("Draw a blue circle.");
+    expect(interaction.getLastAssistantResponse()).toBe("1 image");
+    expect(interaction.getToolNamesUsed()).toEqual([]);
+    const reply = interaction.mapToUiMessages().at(-1);
+    expect(reply?.parts).toEqual([
+      {
+        type: "file",
+        mediaType: "image/png",
+        url: "data:image/png;base64,aW1hZ2UtYnl0ZXM=",
+        filename: "PNG",
+      },
+    ]);
+  });
+});

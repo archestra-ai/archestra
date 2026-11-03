@@ -1,6 +1,10 @@
 import sharp from "sharp";
 import { describe, expect, test } from "vitest";
-import { validateImageEditUploads } from "./image-edit-input";
+import {
+  loggedUploadMetadata,
+  validateImageEditUploads,
+} from "./image-edit-input";
+import { LOGGED_MEDIA_MAX_BYTES } from "./logged-media";
 
 async function image(fieldname = "image[]", width = 16, alpha = 0) {
   return {
@@ -41,6 +45,32 @@ describe("image edit uploads", () => {
     expect(result.metadata.images[0].sha256).toHaveLength(64);
   });
 
+  test("keeps each upload and the mask for the log row, and marks one past the limit", async () => {
+    const first = await image();
+    const mask = await image("mask");
+    const uploads = await validateImageEditUploads([first, mask]);
+    const large = Buffer.alloc(LOGGED_MEDIA_MAX_BYTES + 1);
+    const logged = loggedUploadMetadata({
+      ...uploads,
+      images: [...uploads.images, { ...first, data: large }],
+      metadata: {
+        ...uploads.metadata,
+        images: [...uploads.metadata.images, uploads.metadata.images[0]],
+      },
+    });
+    expect(logged.images[0]).toMatchObject({
+      filename: "reference.png",
+      data: first.data.toString("base64"),
+    });
+    expect(logged.images[1]).toMatchObject({ data_omitted: "too_large" });
+    expect(logged.images[1]).not.toHaveProperty("data");
+    expect(logged.mask).toMatchObject({ data: mask.data.toString("base64") });
+    // What the provider and plugins see stays metadata only.
+    expect(JSON.stringify(uploads.metadata)).not.toContain(
+      first.data.toString("base64"),
+    );
+  });
+
   test("accepts JPEG input without reencoding it", async () => {
     const file = await image("image");
     file.data = await sharp(file.data).jpeg().toBuffer();
@@ -48,6 +78,14 @@ describe("image edit uploads", () => {
     const result = await validateImageEditUploads([file]);
     expect(result.images[0].data).toBe(file.data);
     expect(result.metadata.images[0].mime_type).toBe("image/jpeg");
+  });
+
+  test("accepts an image part sent without its own content type", async () => {
+    // The multipart parser reports such a part as text/plain; Python
+    // `requests` uploads files that way by default, and OpenAI accepts them.
+    const file = { ...(await image("image")), mimetype: "text/plain" };
+    const result = await validateImageEditUploads([file]);
+    expect(result.metadata.images[0].mime_type).toBe("image/png");
   });
 
   test("rejects invalid file counts, duplicate masks, unsupported file fields and empty files", async () => {

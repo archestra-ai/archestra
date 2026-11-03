@@ -4,6 +4,51 @@ import { enrichOpenApiWithRbac } from "./enrich-openapi-with-rbac";
 
 describe("enrichOpenApiWithRbac", () => {
   it.each([
+    RouteId.GetLimits,
+    RouteId.GetLimit,
+    RouteId.CreateLimit,
+    RouteId.UpdateLimit,
+    RouteId.ResetLimitUsage,
+    RouteId.DeleteLimit,
+  ])("documents %s as dynamically authorized for team admins", (operationId) => {
+    const spec = { paths: { "/api/example": { get: { operationId } } } };
+    const operation = enrichOpenApiWithRbac(spec).paths["/api/example"].get as {
+      description?: string;
+      "x-required-permissions"?: { kind: string; note: string };
+    };
+    expect(operation["x-required-permissions"]).toMatchObject({
+      kind: "dynamic",
+      note: expect.stringContaining("team admin"),
+    });
+    expect(operation.description).toContain("team admin");
+  });
+  it.each([
+    RouteId.ModelRouterImagesWithDefaultAgent,
+    RouteId.ModelRouterImageEditsWithAgent,
+    RouteId.ModelRouterAudioTranscriptionsWithAgent,
+  ])("documents mapped Bearer credentials for %s", (operationId) => {
+    const spec = {
+      paths: {
+        "/v1/model-router/media": {
+          post: { operationId, tags: ["LLM Proxy"] },
+        },
+      },
+    };
+    const operation = enrichOpenApiWithRbac(spec).paths[
+      "/v1/model-router/media"
+    ].post as { description?: string };
+    expect(operation.description).toContain(
+      "mapped standard Virtual API Key or LLM OAuth access token",
+    );
+    expect(operation.description).toContain(
+      "Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted",
+    );
+    expect(operation.description).not.toContain(
+      "either an LLM provider API key",
+    );
+  });
+
+  it.each([
     RouteId.AzureCreateFile,
     RouteId.AzureFileContentWithAgent,
     RouteId.AzureDeleteFile,

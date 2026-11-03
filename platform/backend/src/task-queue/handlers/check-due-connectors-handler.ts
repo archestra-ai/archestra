@@ -23,7 +23,9 @@ export async function handleCheckDueConnectors(): Promise<void> {
   );
 
   for (const connector of connectors) {
-    if (!connector.schedule) continue;
+    // Uploads are indexed by the files workflow. Older rows inherited a cron.
+    if (connector.connectorType === "file_upload" || !connector.schedule)
+      continue;
 
     try {
       const cron = new Cron(connector.schedule);

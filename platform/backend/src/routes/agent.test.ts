@@ -331,7 +331,6 @@ describe("agent routes", () => {
         backend: "kubernetes",
         steerMode: "pipe",
         privileged: false,
-        resources: null,
         environment: [{ key: "WORK_MODE", value: "background" }],
         credentials: null,
         ttlHours: 24,
@@ -405,7 +404,6 @@ describe("agent routes", () => {
               backend: "kubernetes",
               steerMode: "pipe",
               privileged: false,
-              resources: null,
               environment: null,
               credentials: null,
               ttlHours: null,
@@ -468,7 +466,6 @@ describe("agent routes", () => {
               backend: "kubernetes",
               steerMode: "pipe",
               privileged: false,
-              resources: null,
               environment: null,
               credentials: null,
               ttlHours: null,
@@ -524,6 +521,8 @@ describe("agent routes", () => {
           method: "PUT",
           url: `/api/agents/${agent.id}`,
           payload: {
+            llmApiKeyId: providerKey.id,
+            modelId: unlinkedModel.id,
             runtime: {
               image: "example.com/coding-agent:latest",
               command: null,
@@ -531,7 +530,6 @@ describe("agent routes", () => {
               backend: "kubernetes",
               steerMode: "pipe",
               privileged: false,
-              resources: null,
               environment: null,
               credentials: null,
               ttlHours: null,
@@ -543,6 +541,111 @@ describe("agent routes", () => {
 
         expect(response.statusCode).toBe(400);
         expect(response.json().error.message).toContain("linked and available");
+      } finally {
+        sandboxInstalled.mockRestore();
+      }
+    });
+
+    test("a runtime-only update keeps a model the caller cannot use and still checks the runtime against it", async ({
+      makeAgent,
+      makeLlmProviderApiKey,
+      makeSecret,
+      makeUser,
+    }) => {
+      const sandboxInstalled = vi
+        .spyOn(agentSandboxApi, "isInstalled", "get")
+        .mockReturnValue(true);
+      try {
+        // Another member's own key, linked to an Anthropic model and usable by
+        // nobody else. A release that moves this agent to a new image runs as
+        // a service account in the same position.
+        const stranger = await makeUser();
+        const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+        const privateKey = await makeLlmProviderApiKey(
+          organizationId,
+          secret.id,
+          { provider: "anthropic", userId: stranger.id },
+        );
+        const model = await ModelModel.create({
+          externalId: "anthropic/runtime-only-update-test",
+          provider: "anthropic",
+          modelId: "runtime-only-update-test",
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          supportsToolCalling: true,
+          lastSyncedAt: new Date(),
+        });
+        await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+          privateKey.id,
+          [model.id],
+        );
+        const runtime = {
+          image: "example.com/coding-agent:v1",
+          command: null,
+          inferenceProtocol: "anthropic" as const,
+          backend: "kubernetes" as const,
+          steerMode: "pipe" as const,
+          privileged: false,
+          resources: null,
+          environment: null,
+          credentials: null,
+          ttlHours: null,
+          maxCostUsd: null,
+          idleTimeoutMinutes: null,
+        };
+        const agent = await makeAgent({
+          organizationId,
+          authorId: user.id,
+          agentType: "agent",
+          access: "personal",
+          llmApiKeyId: privateKey.id,
+          modelId: model.id,
+          runtime,
+        });
+
+        // The image moves; the model and key stay the agent's.
+        const moved = await app.inject({
+          method: "PUT",
+          url: `/api/agents/${agent.id}`,
+          payload: {
+            runtime: { ...runtime, image: "example.com/coding-agent:v2" },
+          },
+        });
+        expect(moved.statusCode, moved.body).toBe(200);
+        expect(moved.json()).toMatchObject({
+          llmApiKeyId: privateKey.id,
+          modelId: model.id,
+          runtime: { image: "example.com/coding-agent:v2" },
+        });
+
+        // The stored pair, not the caller's own default, is what the runtime
+        // is checked against: Codex cannot serve an Anthropic model.
+        const incompatible = await app.inject({
+          method: "PUT",
+          url: `/api/agents/${agent.id}`,
+          payload: {
+            runtime: {
+              ...runtime,
+              command: ["archestra-codex"],
+              inferenceProtocol: "openai_responses",
+            },
+          },
+        });
+        expect(incompatible.statusCode).toBe(409);
+        expect(incompatible.json().error.message).toContain(
+          "Codex runtime requires an OpenAI",
+        );
+
+        // Naming the pair is choosing it, and the caller cannot use that key.
+        const reselected = await app.inject({
+          method: "PUT",
+          url: `/api/agents/${agent.id}`,
+          payload: { runtime, llmApiKeyId: privateKey.id, modelId: model.id },
+        });
+        expect(reselected.statusCode).toBe(400);
+        expect(reselected.json().error.message).toContain(
+          "linked and available",
+        );
       } finally {
         sandboxInstalled.mockRestore();
       }
@@ -566,7 +669,6 @@ describe("agent routes", () => {
               backend: "kubernetes",
               steerMode: "pipe",
               privileged: false,
-              resources: null,
               environment: null,
               credentials: null,
               ttlHours: null,
@@ -602,7 +704,6 @@ describe("agent routes", () => {
               backend: "kubernetes",
               steerMode: "pipe",
               privileged: false,
-              resources: null,
               environment: null,
               credentials: null,
               ttlHours: null,
@@ -640,7 +741,6 @@ describe("agent routes", () => {
               backend: "kubernetes",
               steerMode: "pipe",
               privileged: true,
-              resources: null,
               environment: null,
               credentials: null,
               ttlHours: null,

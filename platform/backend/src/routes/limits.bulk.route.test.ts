@@ -1,5 +1,4 @@
-import { ADMIN_ROLE_NAME, MAX_BULK_IDS, RouteId } from "@archestra/shared";
-import { requiredEndpointPermissionsMap } from "@archestra/shared/access-control";
+import { ADMIN_ROLE_NAME, MAX_BULK_IDS } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
@@ -125,10 +124,14 @@ describe("DELETE /api/limits/bulk", () => {
     expect(await LimitModel.findById(limit.id)).not.toBeNull();
   });
 
-  test("requires the llmLimit delete permission", () => {
-    expect(requiredEndpointPermissionsMap[RouteId.BulkDeleteLimits]).toEqual({
-      llmLimit: ["delete"],
-    });
+  test("ordinary members cannot bulk-delete limits", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "member" });
+    const response = await bulkDelete([crypto.randomUUID()]);
+    expect(response.statusCode).toBe(403);
   });
 
   test("writes one organization-context audit record and cascades model usage", async ({

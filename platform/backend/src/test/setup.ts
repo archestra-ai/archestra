@@ -14,14 +14,21 @@
  * - https://dev.to/benjamindaniel/how-to-test-your-nodejs-postgres-app-using-drizzle-pglite-4fb3
  */
 
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
 import fs from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { vector } from "@electric-sql/pglite/vector";
 import { drizzle } from "drizzle-orm/pglite";
 import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
+import { assertPortsBound } from "@/models/ports";
 // Dependency-free by design — safe to import before test files apply mocks.
 import { clearRegisteredProcessLocalCaches } from "@/process-local-cache-registry";
 import { getMigrationsSql, SNAPSHOT_PATH_ENV } from "./migrations-helper.js";
+
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
+assertPortsBound();
 
 // Disable Sentry for tests - set BEFORE any config modules are loaded
 process.env.ARCHESTRA_SENTRY_BACKEND_DSN = "";

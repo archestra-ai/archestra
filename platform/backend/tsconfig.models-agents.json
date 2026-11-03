@@ -1,0 +1,40 @@
+{
+  // The models-agents layer (layers.mjs): the agent models and what they
+  // import back, which import each other. Every file is pinned.
+  "extends": "./tsconfig.source-project.json",
+  "compilerOptions": {
+    "outDir": "./.tsbuild/models-agents",
+    "tsBuildInfoFile": "./.tsbuild/models-agents.tsbuildinfo"
+  },
+  "files": [
+    "src/auth/permission-gated.ts",
+    "src/auth/utils.ts",
+    "src/enterprise-tier.ts",
+    "src/models/agent-access-context.ts",
+    "src/models/agent-excluded-skill.ts",
+    "src/models/agent-skill.ts",
+    "src/models/agent-team.ts",
+    "src/models/agent-tool.ts",
+    "src/models/agent.ts",
+    "src/models/entity-labels.ts",
+    "src/models/internal-mcp-catalog.ts",
+    "src/models/limit.ts",
+    "src/models/mcp-catalog-team.ts",
+    "src/models/mcp-server.ts",
+    "src/models/proxy-request-context.ts",
+    "src/models/service-account.ts",
+    "src/models/skill.ts",
+    "src/models/tool.ts",
+    "src/models/user.ts",
+    "src/skills/appa-guide.ts",
+    "src/skills/built-in-skills.ts",
+    "src/skills/runtime-handoff.ts"
+  ],
+  "include": ["src/ambient/*.d.ts"],
+  "references": [
+    { "path": "../shared/tsconfig.lib.json" },
+    { "path": "./tsconfig.schema.json" },
+    { "path": "./tsconfig.core.json" },
+    { "path": "./tsconfig.models.json" }
+  ]
+}

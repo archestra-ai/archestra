@@ -711,7 +711,10 @@ describe("team tool execution", () => {
     const team = await makeTeam(organizationId, adminUserId, {
       name: "Synced",
     });
-    await TeamModel.addExternalGroup(team.id, "okta-engineering");
+    await TeamModel.addExternalGroup({
+      teamId: team.id,
+      groupIdentifier: "okta-engineering",
+    });
 
     const result = await executeArchestraTool(
       toolName("list_team_external_groups"),
@@ -752,7 +755,10 @@ describe("team tool execution", () => {
     const team = await makeTeam(organizationId, adminUserId, {
       name: "Dup Sync",
     });
-    await TeamModel.addExternalGroup(team.id, "okta-engineering");
+    await TeamModel.addExternalGroup({
+      teamId: team.id,
+      groupIdentifier: "okta-engineering",
+    });
 
     const result = await executeArchestraTool(
       toolName("add_team_external_group"),
@@ -761,7 +767,7 @@ describe("team tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "already mapped to this team",
+      "already linked to this team",
     );
   });
 
@@ -786,8 +792,14 @@ describe("team tool execution", () => {
     const team = await makeTeam(organizationId, adminUserId, {
       name: "Unsync",
     });
-    const first = await TeamModel.addExternalGroup(team.id, "okta-first");
-    await TeamModel.addExternalGroup(team.id, "okta-second");
+    const first = await TeamModel.addExternalGroup({
+      teamId: team.id,
+      groupIdentifier: "okta-first",
+    });
+    await TeamModel.addExternalGroup({
+      teamId: team.id,
+      groupIdentifier: "okta-second",
+    });
 
     const byId = await executeArchestraTool(
       toolName("remove_team_external_group"),
@@ -812,7 +824,7 @@ describe("team tool execution", () => {
     );
     expect(missing.isError).toBe(true);
     expect((missing.content[0] as any).text).toContain(
-      "External group mapping not found",
+      "Team Sync group link not found",
     );
   });
 
@@ -847,7 +859,7 @@ describe("team tool execution", () => {
     }
   });
 
-  test("a plain team member cannot manage external group sync", async ({
+  test("a plain team member cannot manage Team Sync", async ({
     makeTeam,
     makeUser,
     makeMember,
@@ -872,7 +884,7 @@ describe("team tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "manage this team's external group sync",
+      "manage this team's Team Sync",
     );
   });
 

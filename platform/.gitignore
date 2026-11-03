@@ -4,6 +4,9 @@ node_modules
 build
 target
 *.node
+*.node.tmp
+# scripts/napi-prebuilt.mjs: which prebuilt addon a package holds, and its lock
+.napi-prebuilt*
 .next
 .next-*
 next-env.d.ts
@@ -79,7 +82,9 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 docker/prev-static-assets/*
 !docker/prev-static-assets/.gitkeep
 
-tsconfig.tsbuildinfo
+*.tsbuildinfo
+# Declarations and build state of TypeScript project builds (backend/tsconfig.json)
+.tsbuild/
 benchmark-config.env
 archestra-rs/sandbox-rs/index.js
 archestra-rs/app-runtime-rs/index.js

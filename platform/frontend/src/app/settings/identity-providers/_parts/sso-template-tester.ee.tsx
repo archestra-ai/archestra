@@ -220,7 +220,7 @@ export function SsoTemplateTester({
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {result?.groups?.length
-                        ? "Use these identifiers in each team’s External Group Sync settings."
+                        ? "Link these groups to teams in each team’s Team Sync settings."
                         : "This sign-in data does not produce any group identifiers."}
                     </p>
                     <div className="space-y-1.5">

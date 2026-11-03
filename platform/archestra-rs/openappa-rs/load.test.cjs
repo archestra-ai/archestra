@@ -1,6 +1,8 @@
 "use strict";
 const assert = require("node:assert/strict");
-const { initializeOpenappa, getOpenappaStatus, dispatchHook, loadOfferReview, openappaRootKinds } = require("./index.cjs");
+const { collectOpenappaMetrics, initializeOpenappa, getOpenappaStatus, dispatchHook, loadOfferReview, openappaRootKinds } = require("./index.cjs");
+assert.equal(typeof collectOpenappaMetrics, "function");
+assert.equal(collectOpenappaMetrics(), "");
 assert.equal(typeof initializeOpenappa, "function");
 assert.equal(typeof getOpenappaStatus, "function");
 assert.equal(typeof dispatchHook, "function");

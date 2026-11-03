@@ -401,42 +401,17 @@ jobs:
           retention-days: 1
           compression-level: 0 # Already gzipped
 
-      # Share the exact slim runtime once per run. Host-side E2E consumers
-      # download this one-day artifact instead of each pulling GAR layers.
-      # Keep the registry publication for Kind/VM consumers and byte scans.
-      - name: Export trusted slim platform image
-        if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
-        env:
-          PLATFORM_IMAGE: ${{ format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
-        shell: bash
-        run: |
-          docker pull "${PLATFORM_IMAGE}"
-          docker save "${PLATFORM_IMAGE}" | gzip -1 > /tmp/platform-image.tar.gz
-
-      - name: Upload trusted slim platform image
-        if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
-        uses: $/.github/actions/github-upload-artifact
-        with:
-          name: platform-slim-docker-image
-          # Keep the name stable for consumer-only reruns; replace it when
-          # rerunning the producer so immutable artifact names do not collide.
-          overwrite: "true"
-          path: /tmp/platform-image.tar.gz
-          if-no-files-found: error
-          retention-days: 1
-          compression-level: 0
-
   # Start screenshot compute only once the queue's exact images are published.
   # This removes the second full platform build from the independent docs job.
   docs-screenshot-capture:
     name: Capture Docs Screenshots (validation)
     needs: [platform-e2e-build]
-    if: github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'run-e2e')
     runs-on: ubicloud-standard-8-ubuntu-2404
     timeout-minutes: 25
     permissions:
       contents: read
-      actions: read # Required for the same-run platform image artifact.
+      actions: read # Required for private mirrors' same-run platform image artifact.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -446,7 +421,7 @@ jobs:
         id: platform-image
         uses: $/.github/actions/load-platform-image
         with:
-          source: artifact
+          source: ${{ env.UNTRUSTED_PR == 'true' && 'artifact' || 'registry' }}
           artifact-name: ${{ env.UNTRUSTED_PR == 'true' && 'platform-docker-image' || 'platform-slim-docker-image' }}
           image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
           wait-timeout-seconds: "60"
@@ -871,14 +846,14 @@ jobs:
       # The -slim variant: this environment runs with the code runtime
       # disabled (see e2e-lite-platform.env), so the Dagger engine tar
       # is dead weight here. Untrusted PRs use their existing full-image
-      # artifact; trusted jobs share the slim artifact published once per run.
+      # artifact; trusted jobs pull the slim image by this run's SHA.
       # The build dependency guarantees publication before allocating this
       # runner; retry only transient errors.
       - name: Load platform image
         id: load-platform-image
         uses: $/.github/actions/load-platform-image
         with:
-          source: artifact
+          source: ${{ env.UNTRUSTED_PR == 'true' && 'artifact' || 'registry' }}
           artifact-name: ${{ env.UNTRUSTED_PR == 'true' && 'platform-docker-image' || 'platform-slim-docker-image' }}
           image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
           wait-timeout-seconds: "60"
@@ -1054,12 +1029,13 @@ jobs:
 
       # The -slim image, as in the lite job (the code runtime is off in that
       # stack). Untrusted PRs load the one image that travels as an artifact —
-      # the full one — which the quickstart half below then reuses.
+      # the full one — which the quickstart half below then reuses. Trusted
+      # runs pull the exact SHA-tagged slim image directly from the registry.
       - name: Load OpenAPPA platform image
         id: load-openappa-image
         uses: $/.github/actions/load-platform-image
         with:
-          source: artifact
+          source: ${{ env.UNTRUSTED_PR == 'true' && 'artifact' || 'registry' }}
           artifact-name: ${{ env.UNTRUSTED_PR == 'true' && 'platform-docker-image' || 'platform-slim-docker-image' }}
           image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
           wait-timeout-seconds: "60"

@@ -485,7 +485,7 @@ export function EditModelDialog({
           <div className="space-y-1">
             <span className="text-sm font-medium">Availability</span>
             <p className="text-sm text-muted-foreground">
-              Whether this model is offered anywhere {appName} lists models.
+              Whether this model can be selected or used through {appName}.
             </p>
           </div>
 
@@ -499,8 +499,9 @@ export function EditModelDialog({
                     <FormLabel>Hide this model</FormLabel>
                     <p className="text-sm text-muted-foreground">
                       Hidden models remain synced and editable in this catalog,
-                      but they are excluded anywhere {appName} offers model
-                      selection.
+                      but cannot be selected or used through {appName},
+                      including direct API requests. Show the model to enable it
+                      again.
                     </p>
                   </div>
                   <FormControl>

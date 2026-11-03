@@ -2,6 +2,7 @@ import {
   CACHE_PRICE_MULTIPLIERS,
   PROVIDERS_BILLING_NO_TOKEN_RATE,
   type SupportedProvider,
+  stripClaudeContextVariantSuffix,
 } from "@archestra/shared";
 import type { AzureModelEvidence } from "@archestra/shared/azure-models";
 import {
@@ -29,6 +30,7 @@ import type {
   PatchModelBody,
   PriceSource,
 } from "@/types";
+import { ApiError } from "@/types";
 import type {
   ProviderModelPricing,
   ProviderPricedModel,
@@ -193,7 +195,124 @@ function readOllamaDefaultNumCtx(
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/** Ollama's local model name: default host/library/latest and case-insensitive parts.
+ * This is availability matching only; never rewrite the provider-bound model ID.
+ */
+function ollamaAvailabilityName(id: string): string | undefined {
+  // ParseRef trims Unicode White_Space, then separates explicit local/cloud
+  // source selection from the model tag.
+  const trim = (value: string) => {
+    let from = 0;
+    let to = value.length;
+    // Scan only the ends: a trailing-whitespace regex can backtrack across a
+    // long invalid interior run before the provider rejects the model name.
+    while (from < to && /\p{White_Space}/u.test(value.charAt(from))) from++;
+    while (to > from && /\p{White_Space}/u.test(value.charAt(to - 1))) to--;
+    return value.slice(from, to);
+  };
+  const sourceOf = (value: string) => {
+    const separator = value.lastIndexOf(":");
+    if (separator < 0) return undefined;
+    const suffix = trim(value.slice(separator + 1));
+    const lower = suffix.toLowerCase();
+    if (lower === "local" || lower === "cloud")
+      return { base: value.slice(0, separator), cloud: lower === "cloud" };
+    if (!suffix.includes("/") && lower.endsWith("-cloud"))
+      return {
+        base: value.slice(0, separator + 1) + suffix.slice(0, -6),
+        cloud: true,
+      };
+    return undefined;
+  };
+  id = trim(id);
+  const source = sourceOf(id);
+  if (source && sourceOf(source.base)) return undefined;
+  id = source?.base ?? id;
+  // ParseName ignores the scheme for local identity; it does not validate it as
+  // a URL scheme. Registry, namespace, model and tag remain distinct.
+  const scheme = id.indexOf("://");
+  const parts = id.slice(scheme < 0 ? 0 : scheme + 3).split("/");
+  if (parts.length > 3 || (scheme >= 0 && parts.length !== 3)) return undefined;
+  const leaf = parts.at(-1) ?? "";
+  const separator = leaf.lastIndexOf(":");
+  const model = separator < 0 ? leaf : leaf.slice(0, separator);
+  const tag = separator < 0 ? "latest" : leaf.slice(separator + 1);
+  const namespace = parts.length > 1 ? parts.at(-2) : "library";
+  const host = parts.length === 3 ? parts[0] : "registry.ollama.ai";
+  if (
+    !/^[a-z0-9_][a-z0-9_.-]{0,79}$/i.test(model) ||
+    !/^[a-z0-9_][a-z0-9_.-]{0,79}$/i.test(tag) ||
+    !namespace ||
+    !/^[a-z0-9_][a-z0-9_-]{0,79}$/i.test(namespace) ||
+    !/^[a-z0-9_][a-z0-9_.:-]{0,349}$/i.test(host)
+  )
+    return undefined;
+  return `${source?.cloud ? "cloud" : "local"}:${host}/${namespace}/${model}:${tag}`.toLowerCase();
+}
+
 class ModelModel {
+  /** Check the resolved provider/model immediately before starting an execution. */
+  static async assertAvailable(params: {
+    provider: SupportedProvider;
+    modelId: string;
+    /** Equivalent spellings supplied only by a trusted endpoint resolver. */
+    aliases?: string[];
+  }): Promise<void> {
+    const modelId = stripClaudeContextVariantSuffix(params.modelId);
+    // Read current state, not a cached catalog or the request's admission snapshot:
+    // a request may have waited for throughput or for another pool member.
+    // Gemini's native and OpenAI-compatible adapters accept both spellings.
+    const providerAliases =
+      params.provider === "gemini"
+        ? [
+            modelId.replace(/^models\//, ""),
+            `models/${modelId.replace(/^models\//, "")}`,
+          ]
+        : [];
+    let hidden: Pick<Model, "modelId"> | undefined;
+    if (params.provider === "ollama" || params.provider === "ollama-native") {
+      const ids = new Set([modelId, ...(params.aliases ?? [])]);
+      const canonicalNames = new Set(
+        [...ids]
+          .map(ollamaAvailabilityName)
+          .filter((name) => name !== undefined),
+      );
+      // Only hidden IDs are needed. Compare both names using Ollama's defaults;
+      // exact-only lookup lets omitted tags/default registries bypass Hidden.
+      const hiddenModels = await db
+        .select({ modelId: schema.modelsTable.modelId })
+        .from(schema.modelsTable)
+        .where(
+          and(
+            eq(schema.modelsTable.provider, params.provider),
+            eq(schema.modelsTable.ignored, true),
+          ),
+        );
+      hidden = hiddenModels.find(
+        (model) =>
+          ids.has(model.modelId) ||
+          canonicalNames.has(ollamaAvailabilityName(model.modelId) ?? ""),
+      );
+    } else {
+      const models = await ModelModel.findByProviderModelIds(
+        [
+          ...new Set([modelId, ...providerAliases, ...(params.aliases ?? [])]),
+        ].map((id) => ({
+          provider: params.provider,
+          modelId: id,
+        })),
+      );
+      hidden = [...models.values()].find((model) => model.ignored);
+    }
+    if (hidden) {
+      throw new ApiError(
+        403,
+        `Model ${hidden.modelId} is hidden and cannot be used. Show the model in the model catalog to enable it.`,
+        "model_hidden",
+      );
+    }
+  }
+
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

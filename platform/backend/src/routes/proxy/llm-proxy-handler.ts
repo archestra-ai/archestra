@@ -10,6 +10,7 @@ import type { BillingAttribution } from "@/utils/billable-usage";
 import { primaryBillingUsage } from "@/utils/billable-usage";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
 import { UpstreamStreamIncompleteError } from "@/utils/upstream-stream-incomplete-error";
+import { uuidv7 } from "@/utils/uuid";
 /**
  * Generic LLM Proxy Handler
  *
@@ -345,12 +346,15 @@ export interface LLMProxyContext<TRequest> {
 /** How a request is spread across its model pool's members. */
 export interface ModelPoolRouting {
   plan: ModelPoolPlan;
+  prepareAttempt: (member: PlannedMember) => Promise<void>;
   checkLimits: (member: PlannedMember) => Promise<void>;
   transportFor: (
     member: PlannedMember,
     signal: AbortSignal,
   ) => Promise<MemberTransport>;
-  recordFailedAttempt: (attempt: UpstreamAttempt) => Promise<void>;
+  prepareFailedAttempt: (
+    attempt: UpstreamAttempt,
+  ) => Promise<(outcome: "failed" | "failed_over") => Promise<void>>;
   setResponseHeaders: (attempt: UpstreamAttempt) => void;
 }
 
@@ -1603,6 +1607,16 @@ async function handleObservedLLMProxy<
       );
     }
 
+    // A pool name is not a provider model. Its selected member is checked at
+    // dispatch; direct and automatically routed calls already have an identity.
+    if (!modelPoolPlan) {
+      await ModelModel.assertAvailable({
+        provider: autoRoutedMember?.provider ?? providerName,
+        modelId: autoRoutedMember?.modelId ?? actualModel,
+        aliases: autoRoutedMember ? undefined : modelAliases,
+      });
+    }
+
     // The catalog identity and independent metadata were read together after
     // authentication. A first sighting still creates/enriches the model here.
     // A pool's name is not a provider model; each member's own model is priced
@@ -2172,7 +2186,11 @@ async function handleObservedLLMProxy<
       modelPoolPlan && poolWire
         ? {
             plan: modelPoolPlan,
-            checkLimits: async (member) => {
+            prepareAttempt: async (member) => {
+              await ModelModel.assertAvailable({
+                provider: member.provider,
+                modelId: member.modelId,
+              });
               try {
                 preparedMember = { value: await memberCredential(member) };
               } catch (error) {
@@ -2186,6 +2204,15 @@ async function handleObservedLLMProxy<
               );
               const model = stripClaudeContextVariantSuffix(member.modelId);
               upstreamAttempt.modelId = model;
+              await ModelModel.assertAvailable({
+                provider: member.provider,
+                modelId: model,
+                aliases: upstreamAttempt.modelAliases,
+              });
+            },
+            checkLimits: async (member) => {
+              if (!preparedMember || "error" in preparedMember) return;
+              const model = stripClaudeContextVariantSuffix(member.modelId);
               const violation =
                 await LimitValidationService.checkLimitsBeforeRequest({
                   ...limitContext,
@@ -2221,7 +2248,7 @@ async function handleObservedLLMProxy<
                 preparedMember.value,
               );
             },
-            recordFailedAttempt: async (attempt) => {
+            prepareFailedAttempt: async (attempt) => {
               const cutOff = attempt.cutOff
                 ? await estimateCutOffAttemptUsage({
                     provider: providerName,
@@ -2230,47 +2257,57 @@ async function handleObservedLLMProxy<
                     member: attempt,
                   })
                 : undefined;
+              const interactionId = uuidv7();
+              const record: InsertInteraction = {
+                id: interactionId,
+                profileId: resolvedAgent.id,
+                externalAgentId,
+                runId,
+                userId,
+                serviceAccountId,
+                virtualKeyId,
+                passthroughVirtualKeyId,
+                appId: attributedAppId,
+                sessionId,
+                sessionSource,
+                source,
+                authMethod,
+                authenticatedAppId: authenticatedApp?.id,
+                authenticatedAppName: authenticatedApp?.name,
+                billingTeamId,
+                type: provider.interactionType,
+                request:
+                  requestAdapter.getOriginalRequest() as InteractionRequest,
+                processedRequest: null,
+                response: { error: attempt.failureReason ?? "failed" },
+                model: actualModel,
+                baselineModel: actualModel,
+                // A refused attempt is free. One we cut off had read the
+                // prompt, so it carries that input as an estimate.
+                inputTokens: cutOff?.inputTokens ?? 0,
+                inputTokensEstimated: cutOff !== undefined,
+                outputTokens: 0,
+                cost: cutOff ? cutOff.cost : "0",
+                baselineCost: cutOff?.cost,
+                billingMode,
+              };
+              // Persist the attempt and settle minute spend before admitting
+              // the next member. Mark failover only when a non-hidden choice opens.
               await persistProxyInteraction({
-                record: {
-                  profileId: resolvedAgent.id,
-                  externalAgentId,
-                  runId,
-                  userId,
-                  serviceAccountId,
-                  virtualKeyId,
-                  passthroughVirtualKeyId,
-                  appId: attributedAppId,
-                  sessionId,
-                  sessionSource,
-                  source,
-                  authMethod,
-                  authenticatedAppId: authenticatedApp?.id,
-                  authenticatedAppName: authenticatedApp?.name,
-                  billingTeamId,
-                  type: provider.interactionType,
-                  request:
-                    requestAdapter.getOriginalRequest() as InteractionRequest,
-                  processedRequest: null,
-                  response: { error: attempt.failureReason ?? "failed" },
-                  model: actualModel,
-                  baselineModel: actualModel,
-                  // A refused attempt is free. One we cut off had read the
-                  // prompt, so it carries that input as an estimate.
-                  inputTokens: cutOff?.inputTokens ?? 0,
-                  inputTokensEstimated: cutOff !== undefined,
-                  outputTokens: 0,
-                  cost: cutOff ? cutOff.cost : "0",
-                  baselineCost: cutOff?.cost,
-                  billingMode,
-                },
+                record,
                 encryptedChat,
                 streamTiming,
                 attributionLabels,
                 throughput,
-                // A failed attempt has no usage to attribute to its routing decision.
                 autoRouting: undefined,
-                upstreamAttempt: attempt,
+                upstreamAttempt: { ...attempt, attemptOutcome: "failed" },
               });
+              return async (outcome) => {
+                if (outcome === "failed_over")
+                  await InteractionModel.markPoolAttemptFailedOver(
+                    interactionId,
+                  );
+              };
             },
             setResponseHeaders: (attempt) => {
               if (reply.raw.headersSent) return;
@@ -2527,6 +2564,7 @@ async function handleObservedLLMProxy<
         lifecycleError.quota,
       );
     if (
+      upstreamAttempt.interactionRecorded ||
       (lifecycleError instanceof ObservedProviderUsageError &&
         lifecycleError.billingRecorded) ||
       (lifecycleError instanceof ThroughputError &&
@@ -3123,6 +3161,7 @@ async function handleStreaming<
         };
         const stream = await openUpstream({
           ctx,
+          providerName,
           transport: ownTransport(provider, client, onAccepted),
           onAccepted,
           open: async (transport) => {
@@ -3758,7 +3797,8 @@ async function handleStreaming<
     // A stream that fails before any usage arrives (e.g. a provider 400
     // rejecting the request, or a mid-stream failure once SSE headers and
     // content are already on the wire) still has to reach interaction history.
-    if (!observedUsage()) {
+    if (ctx.upstreamAttempt.interactionRecorded) accountingFinalized = true;
+    if (!observedUsage() && !ctx.upstreamAttempt.interactionRecorded) {
       const errorMessage = upstreamErrorMessage(
         lifecycleError,
         provider.extractErrorMessage,
@@ -3944,6 +3984,7 @@ async function handleNonStreaming<
         }
         result = await openUpstream({
           ctx,
+          providerName,
           transport: ownTransport(provider, client),
           open: async (transport) =>
             (await llmProxyTiming.upstream(reply, () =>
@@ -4925,6 +4966,7 @@ function planDispatchRewrites(params: {
  * `ctx.providerApiKeyId`.
  */
 async function openUpstream<TRequest, T>(params: {
+  providerName: SupportedProvider;
   ctx: LLMProxyContext<TRequest>;
   transport: MemberTransport;
   /** Bound to a routed tier's stream the way `transport` binds its own. */
@@ -4940,12 +4982,38 @@ async function openUpstream<TRequest, T>(params: {
     error: unknown;
   }) => void;
 }): Promise<T> {
-  const { ctx, transport, onAccepted, open, memberTimeoutMs, ...retry } =
-    params;
+  const {
+    ctx,
+    providerName,
+    transport,
+    onAccepted,
+    open,
+    memberTimeoutMs,
+    ...retry
+  } = params;
   ctx.getUpstreamStreamUsage = undefined;
   let dispatched = false;
   const authorizedOpen = async (attemptTransport: MemberTransport) => {
     await ctx.authorizeA2AOAuthAttempt?.();
+    try {
+      await ModelModel.assertAvailable({
+        provider: ctx.upstreamAttempt.provider ?? providerName,
+        modelId: ctx.upstreamAttempt.modelId ?? ctx.actualModel,
+        aliases:
+          (ctx.upstreamAttempt.billingEndpoint ?? ctx.billingEndpoint) ===
+          "fireworks"
+            ? fireworksModelAliases(
+                ctx.upstreamAttempt.modelId ?? ctx.actualModel,
+              )
+            : undefined,
+      });
+    } catch (error) {
+      // A queued request can become unavailable after admission. It never
+      // reached the provider, so release its reservation before recording it.
+      if (!dispatched && !ctx.modelPool)
+        await ctx.throughput?.cancelBeforeSend();
+      throw error;
+    }
     dispatched = true;
     // Replace on every attempt so a failed member cannot leak usage to its sibling.
     ctx.getUpstreamStreamUsage = attemptTransport.getStreamUsage;
@@ -4981,14 +5049,15 @@ async function openUpstream<TRequest, T>(params: {
       plan: pool.plan,
       attempt: ctx.upstreamAttempt,
       transportFor: pool.transportFor,
-      beforeAttempt: (member) => {
+      prepareAttempt: (member) => {
         // Preparation can fail before authorizedOpen installs the next getter.
         ctx.getUpstreamStreamUsage = undefined;
-        return pool.checkLimits(member);
+        return pool.prepareAttempt(member);
       },
+      beforeAttempt: (member) => pool.checkLimits(member),
       open: authorizedOpen,
       memberTimeoutMs,
-      recordFailedAttempt: pool.recordFailedAttempt,
+      prepareFailedAttempt: pool.prepareFailedAttempt,
       ...retry,
     });
   } catch (error) {

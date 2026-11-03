@@ -7758,7 +7758,7 @@ export const getLlmModelIdsByKey = <ThrowOnError extends boolean = false>(option
 export const getLlmModelOptions = <ThrowOnError extends boolean = false>(options?: Options<GetLlmModelOptionsData, ThrowOnError>) => (options?.client ?? client).get<GetLlmModelOptionsResponses, GetLlmModelOptionsErrors, ThrowOnError>({ url: '/api/llm-models/options', ...options });
 
 /**
- * Update several LLM models in one request. Today the only bulk-editable field is `ignored`, which hides a model from the pickers without deleting anything. Ids that match no model are reported in `failed` and leave the rest of the batch applied.
+ * Update several LLM models in one request. Today the only bulk-editable field is `ignored`, which hides a model from pickers and blocks new executions, including direct provider requests, without deleting it. Ids that match no model are reported in `failed` and leave the rest of the batch applied.
  *
  * Authentication:
  *

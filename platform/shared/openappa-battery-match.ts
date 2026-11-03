@@ -32,9 +32,7 @@ export function matchBatteries(
       strong.push({ battery: rule.battery, evidence: "host" });
     else if (
       image !== null &&
-      rule.images.some(
-        (known) => image === known || image.startsWith(`${known}/`),
-      )
+      rule.images.some((known) => imageMatches(image, known))
     )
       strong.push({ battery: rule.battery, evidence: "image" });
     else if (rule.names.some((alias) => name.includes(` ${alias} `)))
@@ -47,7 +45,11 @@ type BatteryMatchRule = {
   battery: string;
   /** Server URL hosts, matched exactly or as a parent domain. */
   hosts: string[];
-  /** Container image repositories without a tag, matched exactly or as a prefix path. */
+  /**
+   * Container image repositories without a tag, matched exactly or as a prefix
+   * path. One with a registry also matches its path under any other registry,
+   * as a mirror serves it.
+   */
   images: string[];
   /** Normalized catalog-name fragments (lower case, single spaces), matched on word boundaries. */
   names: string[];
@@ -68,7 +70,8 @@ const BATTERY_MATCH_RULES: BatteryMatchRule[] = [
   },
   {
     battery: "github",
-    hosts: ["api.githubcopilot.com", "github.com"],
+    // ghe.com hosts GitHub Enterprise Cloud's remote server (copilot-api.<tenant>.ghe.com).
+    hosts: ["api.githubcopilot.com", "github.com", "ghe.com"],
     images: ["ghcr.io/github/github-mcp-server", "mcp/github"],
     names: ["github"],
   },
@@ -138,6 +141,12 @@ const BATTERY_MATCH_RULES: BatteryMatchRule[] = [
     names: ["slack"],
   },
 ];
+
+function imageMatches(image: string, known: string): boolean {
+  if (image === known || image.startsWith(`${known}/`)) return true;
+  const [registry, ...path] = known.split("/");
+  return registry.includes(".") && image.endsWith(`/${path.join("/")}`);
+}
 
 function urlHost(serverUrl: string | null | undefined): string | null {
   if (!serverUrl) return null;

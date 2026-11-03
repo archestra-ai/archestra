@@ -126,6 +126,60 @@ describe("matchBatteries", () => {
     ).toEqual([{ battery: "monday", evidence: "name" }]);
   });
 
+  test("GitHub Enterprise servers match by the ghe.com host or a mirrored official image", () => {
+    expect(
+      matchBatteries(
+        {
+          name: "Source control",
+          serverUrl: "https://copilot-api.octocorp.ghe.com/mcp",
+          localConfig: null,
+        },
+        available,
+      ),
+    ).toEqual([{ battery: "github", evidence: "host" }]);
+    const enterpriseServer = (dockerImage: string) => ({
+      name: "Source control",
+      serverUrl: null,
+      localConfig: {
+        dockerImage,
+        command: "/server/github-mcp-server",
+        arguments: ["stdio"],
+        environment: [
+          {
+            key: "GITHUB_HOST",
+            type: "plain_text" as const,
+            value: "https://code.example.com",
+            promptOnInstallation: false,
+          },
+        ],
+      },
+    });
+    for (const dockerImage of [
+      "registry.example.com/github/github-mcp-server:v0.30.1",
+      "harbor.example.com/ghcr-proxy/github/github-mcp-server@sha256:e47f6ccc5347e1ea6be495d8d9ab55ac8a995fe87800fb984fa770cebe14ad44",
+    ])
+      expect(matchBatteries(enterpriseServer(dockerImage), available)).toEqual([
+        { battery: "github", evidence: "image" },
+      ]);
+    for (const dockerImage of [
+      "registry.example.com/acme/github-mcp-server",
+      "registry.example.com/github/github-mcp-server-fork",
+    ])
+      expect(matchBatteries(enterpriseServer(dockerImage), available)).toEqual(
+        [],
+      );
+    expect(
+      matchBatteries(
+        {
+          name: "Source control",
+          serverUrl: "https://ghe.com.example.com/mcp",
+          localConfig: null,
+        },
+        available,
+      ),
+    ).toEqual([]);
+  });
+
   test("only available batteries and no false positives", () => {
     expect(
       matchBatteries(

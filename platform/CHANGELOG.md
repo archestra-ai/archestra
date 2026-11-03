@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.80](https://github.com/archestra-ai/archestra/compare/platform-v1.3.79...platform-v1.3.80) (2026-11-03)
+
+
+### Bug Fixes
+
+* **bedrock:** guard oversized Converse prompts before inference [1.3] ([#10163](https://github.com/archestra-ai/archestra/issues/10163)) ([8a66ab7](https://github.com/archestra-ai/archestra/commit/8a66ab72eeacc628cd18ac8a7daf61f8012e318e))
+* **mcp:** apply zero-delay searches synchronously ([#9827](https://github.com/archestra-ai/archestra/issues/9827)) ([b4ef5a6](https://github.com/archestra-ai/archestra/commit/b4ef5a6236e784717e2e4b505af8306c945f5d3c))
+* **mcp:** filter registry search before URL transitions ([#9828](https://github.com/archestra-ai/archestra/issues/9828)) ([1107634](https://github.com/archestra-ai/archestra/commit/11076344f86389b4bcba7877ebd5bf550a4bcb17))
+* **security:** backport auth and redirect fixes to 1.3 ([#10173](https://github.com/archestra-ai/archestra/issues/10173)) ([fbac9bb](https://github.com/archestra-ai/archestra/commit/fbac9bbd5d6ba6a39cba91802764d6e757bbe244))
+* **security:** patch 1.3 image CVEs and scan images on release candidates only ([#9760](https://github.com/archestra-ai/archestra/issues/9760)) ([3bdbd53](https://github.com/archestra-ai/archestra/commit/3bdbd537fe77a9b289ca39696ad46863a1883f8b))
+
 ## [1.3.79](https://github.com/archestra-ai/archestra/compare/platform-v1.3.78...platform-v1.3.79) (2026-10-24)
 
 

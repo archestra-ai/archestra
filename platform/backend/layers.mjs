@@ -799,6 +799,7 @@ const layerTable = [
           "src/routes/proxy/routes/model-router.ts",
           "src/routes/proxy/stream-keepalive.ts",
           "src/routes/proxy/upstream-connection-retry.ts",
+          "src/routes/proxy/utils/bedrock-prompt-budget.ts",
           "src/routes/proxy/utils/client-gateway-bindings.ts",
           "src/routes/proxy/utils/delegation-markers.ts",
         ],

@@ -84,6 +84,10 @@ Claude Code, Codex, and OpenCode can protect native CLI subagent returns through
 
 This protection is for native CLI subagents. Loading a skill runs in the current session, not a child. OpenAPPA-protected Archestra Chat does not support subagent delegation. The trusted client and executor must isolate raw child transcripts and control artifacts from model tools. Proxy checks for known transcript paths are defense in depth, not a shell or filesystem sandbox. Do not propose live reads of private transcripts to test the boundary.
 
+## The deployment hint
+
+\`[policy.deployment] hint\` is the operator's statement about the deployment, which every model annotator reads. The starting policy states that this deployment's own host is first-party, so an annotator does not treat fetching a link one of its tools returned as sending data to a third party. A saved policy keeps the hint it was saved with and gains none later. When \`suggestedDeploymentHint\` from \`archestra__get_guardrails_policy\` is not null and the policy's \`[policy.deployment]\` has no \`hint\`, propose adding it as \`hint = <that text as a TOML string>\` under that table, adding the \`[policy.deployment]\` table when the policy has none. Keep an existing hint unless the operator asks to change it, and do not add a hint that names a host the operator has not confirmed as the organization's own.
+
 ## Provider-hosted tools
 
 Known provider-hosted declarations, including Claude's advisor, run inside the model provider. OpenAPPA accepts them but cannot check each call before it executes. Unknown tool types and client-run types without a call gate are refused instead of assumed hosted. OpenAI Responses web search is different: its result can be withheld and ruled on before the client receives it. Azure Responses hosted web search is refused because its result cannot be withheld. Deferred tools are governed: \`tool_search\` declarations, Anthropic's provider-run tool-search types and \`defer_loading\` tools are accepted. A call to a tool the request does not declare, because the client has not loaded it, is refused with the instruction to search for it and call it again.

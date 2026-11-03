@@ -9,7 +9,11 @@ import { verifyDelegatedPrompt } from "@/openappa/delegation";
 import { isWellFormedAppaId } from "@/openappa/service";
 import { ApiError } from "@/types";
 import { asRecord } from "@/utils/as-record";
-import type { AppaChildTrajectory, AppaMatchContext } from "../types";
+import type {
+  AppaChildTrajectory,
+  AppaChildTranscriptPath,
+  AppaMatchContext,
+} from "../types";
 import { readHeader, withCallerScope, withoutCallerScope } from "../utils";
 
 /** Validates opaque native IDs before any fallback or minted child binding. */
@@ -27,21 +31,33 @@ export function nativeId(
 /** Recognizes native transcript paths even when their child id is a glob. */
 export function referencesChildTranscriptPath(params: {
   arguments: unknown;
-  pathPatterns: ReadonlyArray<{ prefix: string; suffix: string }>;
+  pathPatterns: ReadonlyArray<AppaChildTranscriptPath>;
 }): boolean {
   const visit = (value: unknown): boolean => {
     if (typeof value === "string") {
       // Tokenizes once to prevent quadratic scanning.
       // Normalizes path separators and relative segments before inspection.
       return value.split(/\s+/u).some((token) => {
-        const path = posix.normalize(token.replaceAll("\\", "/"));
-        return params.pathPatterns.some(({ prefix, suffix }) => {
+        const raw = token.replaceAll("\\", "/");
+        const path = posix.normalize(raw);
+        return params.pathPatterns.some(({ prefix, suffix, ownOutputId }) => {
           const start = path.indexOf(prefix);
-          return (
-            start >= 0 &&
-            (start === 0 || path.charAt(start - 1) === "/") &&
-            path.indexOf(suffix, start + prefix.length) >= 0
-          );
+          if (start < 0 || (start > 0 && path.charAt(start - 1) !== "/")) {
+            return false;
+          }
+          const rest = path.slice(start + prefix.length);
+          const file = rest.replace(/["'`;|&)]+$/u, "");
+          // Normalization can drop segments that name a child, so only an
+          // already-normal token is exempt.
+          if (
+            ownOutputId &&
+            path === raw &&
+            file.endsWith(suffix) &&
+            ownOutputId.test(file.slice(0, -suffix.length))
+          ) {
+            return false;
+          }
+          return rest.includes(suffix);
         });
       });
     }
@@ -72,7 +88,7 @@ export function localToolName(name: string): string {
 export function namesChildrenFromArguments(params: {
   rootId: string;
   arguments: unknown;
-  pathPatterns: ReadonlyArray<{ prefix: string; suffix: string }>;
+  pathPatterns: ReadonlyArray<AppaChildTranscriptPath>;
   idKeys?: readonly string[];
 }): string[] {
   const agents: string[] = [];
@@ -555,7 +571,7 @@ function correlationError(message: string): ApiError {
 function collectNamedChildren(
   value: unknown,
   agents: string[],
-  pathPatterns: ReadonlyArray<{ prefix: string; suffix: string }>,
+  pathPatterns: ReadonlyArray<AppaChildTranscriptPath>,
   idKeys: readonly string[] | undefined,
 ): void {
   if (typeof value === "string") {

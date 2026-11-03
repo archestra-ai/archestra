@@ -5302,6 +5302,83 @@ describe("AppaPluginArchestra", () => {
   });
 });
 
+describe("Claude Code task output reads", () => {
+  test("releases a background command's output and withholds a child agent's transcript", async () => {
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({ sessionId: "task-output-reads" });
+    context.headers = { "user-agent": "claude-cli/2.1.300 (external, cli)" };
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async (_session, calls) =>
+        calls.map(() => ({ kind: "allow" }) as const),
+      );
+    const tasks = "/private/tmp/claude-501/project/session/tasks";
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "bash-output",
+            name: "Read",
+            arguments: { file_path: `${tasks}/bwu1ccoiy.output` },
+          },
+          {
+            id: "bash-output-tail",
+            name: "Bash",
+            arguments: { command: `tail -n 50 "${tasks}/bm7fgsz33.output"` },
+          },
+          {
+            id: "bash-output-chained",
+            name: "Bash",
+            arguments: { command: `cat ${tasks}/bbwoudo32.output&& echo done` },
+          },
+          {
+            id: "bash-output-then-transcript",
+            name: "Bash",
+            arguments: {
+              command: `cat ${tasks}/bbwoudo32.output;cat ${tasks}/aba0d3860dedb562b.output`,
+            },
+          },
+          {
+            id: "transcript-behind-dot-dot",
+            name: "Bash",
+            arguments: {
+              command: `cat $(<${tasks}/aba0d3860dedb562b.output)/../..${tasks}/bbwoudo32.output`,
+            },
+          },
+          {
+            id: "agent-transcript",
+            name: "Read",
+            arguments: { file_path: `${tasks}/aba0d3860dedb562b.output` },
+          },
+          {
+            id: "glob-transcripts",
+            name: "Bash",
+            arguments: { command: `cat ${tasks}/*.output` },
+          },
+        ],
+      });
+      expect(
+        evaluateToolCalls.mock.calls.flatMap(([, calls]) =>
+          calls.map((call) => call.id),
+        ),
+      ).toEqual(["bash-output", "bash-output-tail", "bash-output-chained"]);
+      expect(outcome).toMatchObject({
+        blocked: [
+          { id: "bash-output-then-transcript" },
+          { id: "transcript-behind-dot-dot" },
+          { id: "agent-transcript" },
+          { id: "glob-transcripts" },
+        ],
+      });
+    } finally {
+      evaluateToolCalls.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+});
+
 describe("withoutRemedySections", () => {
   test("keeps the block and its reasons, and drops the plans and the delegation advice", () => {
     expect(withoutRemedySections(NARROWING_RULING)).toBe(

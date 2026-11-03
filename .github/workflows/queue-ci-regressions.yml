@@ -1,0 +1,28 @@
+name: Queue CI Regressions
+
+on:
+  pull_request:
+    paths:
+      - .github/scripts/*queue*.py
+      - .github/scripts/e2e-test-inputs.py
+      - .github/scripts/*docs_screenshot_result.py
+      - .github/scripts/check-docs-screenshot-result.py
+      - .github/workflows/platform-e2e-tests.yml
+      - .github/workflows/cancel-obsolete-queue-runs.yml
+      - .github/workflows/queue-ci-regressions.yml
+
+permissions: {}
+jobs:
+  regression-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Exercise cancellation races and required-check gates
+        run: |
+          python3 -m unittest discover -s .github/scripts -p 'test_queue_*.py'
+          python3 -m unittest discover -s .github/scripts -p 'test_docs_screenshot_result.py'

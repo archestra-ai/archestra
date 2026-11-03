@@ -65,6 +65,40 @@ env:
   UNTRUSTED_PR: ${{ github.event.repository.private || (github.event_name == 'pull_request' && (github.event.pull_request.head.repo.fork == true || github.event.pull_request.user.login == 'dependabot[bot]')) }}
 
 jobs:
+  platform-e2e-inputs:
+    name: Detect E2E Inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      run: ${{ steps.diff.outputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'merge_group'
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Classify merge-group inputs
+        id: diff
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+        run: |
+          set -euo pipefail
+          run=true
+          if [ "$EVENT_NAME" = merge_group ]; then
+            # shellcheck disable=SC2016
+            git -c credential.helper= \
+                -c credential.helper='!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f' \
+                fetch --depth=1 origin "$BASE_SHA"
+            run=$(python3 .github/scripts/e2e-test-inputs.py "$BASE_SHA" "$HEAD_SHA")
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "Run full E2E: $run" >> "$GITHUB_STEP_SUMMARY"
+
   # NOTE: there are deliberately NO same-named "placeholder" jobs for the
   # NON-MATRIX checks below. GitHub treats a SKIPPED check run as satisfying a
   # required status check, so on plain PR pushes the real jobs (whose `if` is
@@ -78,15 +112,18 @@ jobs:
   # expands, so it reports as the literal "Build ${{ matrix.name }} Image" —
   # the required "Build Platform Image" / "Build MCP Server Base Image"
   # contexts would wait forever on ordinary PR pushes. Its placeholder is safe
-  # because, skipped on merge_group, it reports under the unexpanded name and
-  # cannot mask a real matrix-job failure. Docker scan PR placeholders live in
+  # because on full merge_group runs it reports under the unexpanded name
+  # and cannot mask a real matrix-job failure. A successful input classifier
+  # can instead expand it for an intentional queue skip; the report gate
+  # independently verifies classification and skipped test results. Docker scan PR placeholders live in
   # docker-image-scanning.yml; do not duplicate those check names here.
   platform-e2e-build-placeholder:
+    needs: [platform-e2e-inputs]
     name: Build ${{ matrix.name }} Image
     runs-on: ubuntu-latest
-    # The explicit run-e2e label runs the real builder; every other PR event
-    # gets the required check names without paying for an image build.
-    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e') }}
+    # Expand the named required checks for PR entry and a classified queue skip.
+    # On a full queue run this placeholder matrix stays unexpanded.
+    if: ${{ !cancelled() && needs.platform-e2e-inputs.result == 'success' && ((github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e')) || (github.event_name == 'merge_group' && needs.platform-e2e-inputs.outputs.run == 'false')) }}
     strategy:
       fail-fast: false
       matrix:
@@ -100,9 +137,10 @@ jobs:
   # the e2e jobs can pull layers directly instead of downloading a tarball artifact.
   # Untrusted PRs still fall back to artifacts because they do not receive OIDC-backed secrets.
   platform-e2e-build:
+    needs: [platform-e2e-inputs]
     name: Build ${{ matrix.name }} Image
     runs-on: ${{ matrix.runner }}
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'run-e2e') }}
+    if: ${{ needs.platform-e2e-inputs.outputs.run == 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'run-e2e')) }}
     permissions:
       contents: read # Required to checkout the repository and build images for E2E jobs.
       packages: write # Trusted CI publishes images and caches to GHCR.
@@ -460,7 +498,7 @@ jobs:
 
   docs-screenshot-validation:
     name: Docs Screenshot Validation
-    needs: [docs-screenshot-capture]
+    needs: [platform-e2e-inputs, docs-screenshot-capture]
     if: always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -474,6 +512,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           VALIDATION_ONLY: "true"
+          E2E_REQUIRED: ${{ needs.platform-e2e-inputs.outputs.run }}
           CAPTURE_RESULT: ${{ needs.docs-screenshot-capture.result }}
         run: python3 .github/scripts/check-docs-screenshot-result.py
 
@@ -1539,6 +1578,8 @@ jobs:
     name: Merge E2E Test Reports
     needs:
       [
+        platform-e2e-inputs,
+        platform-e2e-build,
         platform-e2e-k8s-tests,
         platform-e2e-hibernation-tests,
         platform-e2e-lite-tests,
@@ -1559,12 +1600,27 @@ jobs:
       # shipped while apps.spec.ts failed every queue run.
       - name: Fail if any e2e job failed
         env:
+          INPUT_RESULT: ${{ needs.platform-e2e-inputs.result }}
+          RUN_E2E: ${{ needs.platform-e2e-inputs.outputs.run }}
+          BUILD_RESULT: ${{ needs.platform-e2e-build.result }}
           K8S_RESULT: ${{ needs.platform-e2e-k8s-tests.result }}
           HIBERNATION_RESULT: ${{ needs.platform-e2e-hibernation-tests.result }}
           LITE_RESULT: ${{ needs.platform-e2e-lite-tests.result }}
           QUICKSTART_RESULT: ${{ needs.platform-quickstart-e2e-tests.result }}
           RUN_HIBERNATION: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e' }}
         run: |
+          if [ "$INPUT_RESULT" != success ]; then
+            echo "::error::E2E input classification failed."
+            exit 1
+          fi
+          if [ "$RUN_E2E" = false ]; then
+            for result in "$BUILD_RESULT" "$K8S_RESULT" "$LITE_RESULT" "$QUICKSTART_RESULT" "$HIBERNATION_RESULT"; do
+              [ "$result" = skipped ] || exit 1
+            done
+            echo "No E2E inputs changed; full E2E intentionally skipped."
+            exit 0
+          fi
+          [ "$RUN_E2E" = true ] && [ "$BUILD_RESULT" = success ] || exit 1
           failed=0
           for pair in "k8s:$K8S_RESULT" "lite:$LITE_RESULT" "quickstart:$QUICKSTART_RESULT"; do
             name="${pair%%:*}"; result="${pair##*:}"
@@ -1602,12 +1658,13 @@ jobs:
     name: Publish E2E Report
     needs:
       [
+        platform-e2e-inputs,
         platform-e2e-k8s-tests,
         platform-e2e-hibernation-tests,
         platform-e2e-lite-tests,
         platform-quickstart-e2e-tests,
       ]
-    if: ${{ always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
+    if: ${{ !cancelled() && needs.platform-e2e-inputs.outputs.run == 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

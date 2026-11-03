@@ -12,7 +12,12 @@ def main():
     ) or (
         event == "pull_request" and os.environ.get("REQUIRE_LABELED_CAPTURE") == "true"
     )
-    if required:
+    if event == "merge_group" and os.environ.get("E2E_REQUIRED") == "false":
+        if result != "skipped":
+            print("Unexpected capture on an intentionally skipped E2E run.", file=sys.stderr)
+            return 1
+        message = "No E2E inputs changed; screenshot capture intentionally skipped."
+    elif required:
         if result != "success":
             print(f"Screenshot capture must succeed; got {result!r}.", file=sys.stderr)
             return 1

@@ -60,8 +60,11 @@ export function isClaudeCodeFamilyAdapter(
 const CHILD_SPAWN_TOOLS = new Set(["Agent", "Task"]);
 const HANDBACK_TOOLS = new Set(["SubagentHandback"]);
 const HANDBACK_VALUE_KEYS = ["message", "result", "content", "output"] as const;
+// A background Bash command's output (`tasks/b<8 base36>.output`) shares the
+// directory with agent transcripts (`tasks/a<hex>.output`) and is the
+// caller's own output. Any other id, or a glob, may name a child.
 const CHILD_PATHS = [
-  { prefix: "tasks/", suffix: ".output" },
+  { prefix: "tasks/", suffix: ".output", ownOutputId: /^b[0-9a-z]{8}$/u },
   { prefix: "subagents/agent-", suffix: ".jsonl" },
 ] as const;
 const ASYNC_LAUNCH_STATUS = "Async agent launched successfully.";

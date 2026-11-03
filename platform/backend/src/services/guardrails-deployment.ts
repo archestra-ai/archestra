@@ -9,11 +9,7 @@ import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model
 import UserModel from "@/models/user";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError } from "@/types";
-import type {
-  HumanApprovalMode,
-  UnapprovableBlockMode,
-  UnsupportedAppaClientAction,
-} from "@/types/guardrails-policy";
+import type { UnsupportedAppaClientAction } from "@/types/guardrails-policy";
 
 export type GuardrailsV2Activation = "active" | "inactive";
 

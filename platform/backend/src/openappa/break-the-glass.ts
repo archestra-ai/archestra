@@ -309,6 +309,24 @@ export async function recordWaivedReview(params: {
 
 const REFUSED_PLAN = Symbol("the runtime refused the plan");
 
+/**
+ * What the agent reads after a review the platform approved in place of a
+ * person. The gateway appends one of these to the remedy result as its own
+ * text block, and the proxy carries exactly these texts (nothing else) across
+ * 1.4's runtime rendering.
+ */
+export const WAIVED_REVIEW_RECEIPTS: Record<
+  Exclude<WaivedReviewRecord, "refused">,
+  string
+> = {
+  recorded:
+    "[appa] Break the glass receipt: this plan needed a person's approval, and Human approval is waived for this session, so the platform approved the review itself and recorded a yell in Guardrails → Yells. No human ruled. Follow the runtime outcome above. If a retry is authorized and still requested, copy its exact arguments without reconstructing or changing them.",
+  reports_off:
+    "[appa] Break the glass receipt: this plan needed a person's approval, and Human approval is waived for this session, so the platform approved the review itself. No human ruled. Yell reports are off in this deployment, so no yell was recorded. Follow the runtime outcome above. If a retry is authorized and still requested, copy its exact arguments without reconstructing or changing them.",
+  failed:
+    "[appa] Break the glass receipt: this plan needed a person's approval, and Human approval is waived for this session, so the platform approved the review itself. No human ruled. Guardrails could not record the yell for it: tell the user. Follow the runtime outcome above.",
+};
+
 // ===
 
 async function recordWaiver(

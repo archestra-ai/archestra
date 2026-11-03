@@ -41,6 +41,7 @@ import {
   recordWaivedCalls,
   rememberUnattendedSession,
   unattendedNoteMatters,
+  WAIVED_REVIEW_RECEIPTS,
   type WaivedCall,
   waiverFor,
 } from "@/openappa/break-the-glass";
@@ -5982,7 +5983,8 @@ function isClaudeProgressLabelRequest(
  * when the platform approved its review in place of a person. Release 1.4's
  * runtime admits a remedy result as its own rendering, which leaves that
  * second block out, so the agent would not learn that no person ruled. Put
- * it back on the remedy tool's admitted text. Only the gateway writes it.
+ * it back on the remedy tool's admitted text: one of the gateway's own
+ * receipts, matched exactly, never other text.
  */
 function keepBreakTheGlassReceipts(params: {
   binding: AppaPluginBinding;
@@ -6005,17 +6007,29 @@ function keepBreakTheGlassReceipts(params: {
       )
     )
       continue;
-    const original =
-      typeof result.content === "string"
-        ? result.content
-        : JSON.stringify(result.content);
-    const receipt = BREAK_THE_GLASS_RECEIPT.exec(original)?.[0];
+    // Only one of the gateway's own receipts, as a whole text block: text
+    // inside another block (a call's quoted arguments, say) never counts.
+    const blocks = textBlocks(result.content);
+    const receipt = Object.values(WAIVED_REVIEW_RECEIPTS).find((text) =>
+      blocks.includes(text),
+    );
     if (!receipt || admitted.includes(receipt)) continue;
     params.toolResultUpdates[result.id] = `${admitted}\n\n${receipt}`;
   }
 }
 
-const BREAK_THE_GLASS_RECEIPT = /\[appa\] Break the glass receipt: [^\n"]*/;
+function textBlocks(content: unknown): string[] {
+  if (typeof content === "string") return [content];
+  if (!Array.isArray(content)) return [];
+  return content.flatMap((block) =>
+    block &&
+    typeof block === "object" &&
+    "text" in block &&
+    typeof block.text === "string"
+      ? [block.text]
+      : [],
+  );
+}
 
 async function pendingNativeHitlOfferIds(params: {
   binding: AppaPluginBinding;

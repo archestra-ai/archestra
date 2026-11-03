@@ -25,7 +25,7 @@ import {
   humanApprovalWaived,
   isUnattendedSession,
   recordWaivedReview,
-  type WaivedReviewRecord,
+  WAIVED_REVIEW_RECEIPTS,
 } from "@/openappa/break-the-glass";
 import { compositionView } from "@/openappa/composition-view";
 import {
@@ -1421,7 +1421,7 @@ const registry = defineArchestraTools([
           content: Array.isArray(byOffer.result.content)
             ? [
                 ...byOffer.result.content,
-                { type: "text" as const, text: WAIVED_REVIEW_RECEIPT[record] },
+                { type: "text" as const, text: WAIVED_REVIEW_RECEIPTS[record] },
               ]
             : byOffer.result.content,
         };
@@ -1755,19 +1755,6 @@ function unknownOfferResult() {
     ],
   };
 }
-
-/** What the agent reads after a review the platform approved in place of a person. */
-const WAIVED_REVIEW_RECEIPT: Record<
-  Exclude<WaivedReviewRecord, "refused">,
-  string
-> = {
-  recorded:
-    "[appa] Break the glass receipt: this plan needed a person's approval, and Human approval is waived for this session, so the platform approved the review itself and recorded a yell in Guardrails → Yells. No human ruled. Follow the runtime outcome above. If a retry is authorized and still requested, copy its exact arguments without reconstructing or changing them.",
-  reports_off:
-    "[appa] Break the glass receipt: this plan needed a person's approval, and Human approval is waived for this session, so the platform approved the review itself. No human ruled. Yell reports are off in this deployment, so no yell was recorded. Follow the runtime outcome above. If a retry is authorized and still requested, copy its exact arguments without reconstructing or changing them.",
-  failed:
-    "[appa] Break the glass receipt: this plan needed a person's approval, and Human approval is waived for this session, so the platform approved the review itself. No human ruled. Guardrails could not record the yell for it: tell the user. Follow the runtime outcome above.",
-};
 
 /**
  * The settings under which the Break the glass settings answer this review in

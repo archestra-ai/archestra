@@ -807,6 +807,7 @@ function createCohereClient(
             ...options.defaultHeaders,
           },
           body: JSON.stringify({ ...request, stream: false }),
+          signal: options.abortSignal,
         });
 
         if (!response.ok) {
@@ -830,6 +831,7 @@ function createCohereClient(
             ...options.defaultHeaders,
           },
           body: JSON.stringify({ ...request, stream: true }),
+          signal: options.abortSignal,
         });
 
         if (!response.ok) {

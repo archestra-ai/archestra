@@ -35,6 +35,7 @@ import {
   type SupportedProvider,
   type SupportedProviderEndpoint,
   subscriptionKindFromCredential,
+  UNATTENDED_HEADER,
   USER_ID_HEADER,
 } from "@archestra/shared";
 import type { AzureModelEvidence } from "@archestra/shared/azure-models";
@@ -212,6 +213,8 @@ export function createLLMModel(params: {
   appaParentId?: string;
   /** Signed binding of an in-process subagent run to its child trajectory. */
   appaSubagentToken?: string;
+  /** No person is there to answer: sends UNATTENDED_HEADER. */
+  unattended?: boolean;
   source?: InteractionSource;
   baseUrl: string | null;
   chatApiKeyId?: string;
@@ -277,6 +280,7 @@ export function createLLMModel(params: {
     clientHeaders[APPA_PARENT_HEADER] = params.appaParentId;
   if (enterpriseTier.isOpenappaActive() && params.appaSubagentToken)
     clientHeaders[APPA_SUBAGENT_BINDING_HEADER] = params.appaSubagentToken;
+  if (params.unattended) clientHeaders[UNATTENDED_HEADER] = "1";
   if (source) {
     clientHeaders[SOURCE_HEADER] = source;
   }
@@ -363,6 +367,8 @@ export async function createLLMModelForAgent(params: {
   encryptedChatKey?: Buffer | null;
   /** Signed binding of an in-process subagent run to its child trajectory. */
   appaSubagentToken?: string;
+  /** No person is there to answer: sends UNATTENDED_HEADER. */
+  unattended?: boolean;
 }): Promise<{
   model: LLMModel;
   provider: SupportedProvider;
@@ -517,6 +523,7 @@ export async function createLLMModelForAgent(params: {
     autoRoutable: params.autoRoutable,
     encryptedChatKey: params.encryptedChatKey,
     appaSubagentToken: params.appaSubagentToken,
+    unattended: params.unattended,
     supportedEndpoints,
     azureCapabilities:
       azureCapabilities?.status === "known" ? azureCapabilities : undefined,

@@ -6,12 +6,18 @@ import {
   setGuardrailsDeployment,
 } from "@/services/guardrails-deployment";
 import { constructResponseSchema } from "@/types";
-import { UnsupportedAppaClientActionSchema } from "@/types/guardrails-policy";
+import {
+  HumanApprovalModeSchema,
+  UnapprovableBlockModeSchema,
+  UnsupportedAppaClientActionSchema,
+} from "@/types/guardrails-policy";
 
 const status = z.object({
   enabled: z.boolean(),
   unsupportedClientAction: UnsupportedAppaClientActionSchema,
   breakTheGlassEnabled: z.boolean(),
+  humanApprovalMode: HumanApprovalModeSchema,
+  unapprovableBlockMode: UnapprovableBlockModeSchema,
   annotatorModelId: z.string().uuid().nullable(),
   annotatorLlmApiKeyId: z.string().uuid().nullable(),
   featureEnabled: z.boolean(),
@@ -41,6 +47,8 @@ const routes: FastifyPluginAsyncZod = async (app) => {
             unsupportedClientAction:
               UnsupportedAppaClientActionSchema.optional(),
             breakTheGlassEnabled: z.boolean().optional(),
+            humanApprovalMode: HumanApprovalModeSchema.optional(),
+            unapprovableBlockMode: UnapprovableBlockModeSchema.optional(),
             annotatorModelId: z.string().uuid().nullable().optional(),
             annotatorLlmApiKeyId: z.string().uuid().nullable().optional(),
           })
@@ -49,6 +57,8 @@ const routes: FastifyPluginAsyncZod = async (app) => {
               body.enabled !== undefined ||
               body.unsupportedClientAction !== undefined ||
               body.breakTheGlassEnabled !== undefined ||
+              body.humanApprovalMode !== undefined ||
+              body.unapprovableBlockMode !== undefined ||
               body.annotatorModelId !== undefined ||
               body.annotatorLlmApiKeyId !== undefined,
             "Set at least one guardrails deployment setting",

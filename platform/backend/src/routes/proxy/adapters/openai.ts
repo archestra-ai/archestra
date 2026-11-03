@@ -520,7 +520,7 @@ export class OpenAIRequestAdapter<
   // Build Modified Request
   // ---------------------------------------------------------------------------
 
-  toProviderRequest(): TRequest {
+  toProviderRequest(options?: { preserveToolCallIds?: boolean }): TRequest {
     let messages = this.request.messages;
 
     if (Object.keys(this.toolResultUpdates).length > 0) {
@@ -598,7 +598,9 @@ export class OpenAIRequestAdapter<
       ...this.request,
       model: this.getModel(),
       // After the result updates above, which look up the client's call ids.
-      messages: withOpenAiChatToolCallIds(messages),
+      messages: options?.preserveToolCallIds
+        ? messages
+        : withOpenAiChatToolCallIds(messages),
     };
   }
 

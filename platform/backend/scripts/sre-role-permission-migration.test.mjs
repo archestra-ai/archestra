@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 
 const migration = new URL(
-  "../src/database/migrations/0618_retire-sre-role-permission.sql",
+  "../src/database/migrations/0620_retire-sre-role-permission.sql",
   import.meta.url,
 );
 const catalogId = "00000000-0000-4000-8000-000000000510";

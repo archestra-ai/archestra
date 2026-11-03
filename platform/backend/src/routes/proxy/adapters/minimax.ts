@@ -23,6 +23,7 @@ import {
   extractCommonToolCallArguments,
 } from "@/types";
 import type { Minimax } from "@/types/llm-providers";
+import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { upstreamHttpError } from "./upstream-http-error";
 
 // =============================================================================
@@ -1177,7 +1178,11 @@ export const minimaxAdapterFactory: LLMProvider<
       : undefined;
 
     const baseUrl = options.baseUrl || config.llm.minimax.baseUrl;
-    return new MinimaxClient(apiKey, baseUrl, customFetch);
+    return new MinimaxClient(
+      apiKey,
+      baseUrl,
+      fetchWithAbortSignal(customFetch, options.abortSignal),
+    );
   },
 
   async execute(

@@ -2,7 +2,7 @@
 title: Model Pools
 description: Serve one model name from several provider keys, with load balancing and failover
 order: 5
-lastUpdated: 2026-10-28
+lastUpdated: 2026-11-02
 beta: "Set [`ARCHESTRA_LLM_MODEL_POOLS_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_MODEL_POOLS_ENABLED) to turn it on."
 ---
 
@@ -120,5 +120,5 @@ Each attempt is priced as the member that made it, with that member's provider a
 ## Limits
 
 - Clients on the OpenAI Responses API, such as OpenCode, can't use pools yet. That includes `/responses` on the Model Router.
-- Members can be keys for Anthropic, AWS Bedrock, OpenAI, Azure AI Foundry, and OpenAI-compatible providers such as vLLM, OpenRouter, and Mistral AI. Gemini and Vertex AI keys can't be members yet.
+- Members can use credentials for Anthropic, AWS Bedrock, Gemini (including Vertex AI), OpenAI, Azure AI Foundry, and OpenAI-compatible providers such as vLLM, OpenRouter, and Mistral AI. Bedrock Converse clients can't reach Gemini members.
 - Timeouts and cooldown are set for the whole pool, not for one member. Pools don't route by a key's rate or token limits.

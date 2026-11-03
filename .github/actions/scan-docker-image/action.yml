@@ -127,15 +127,28 @@ runs:
               scout_args+=(--exit-code)
             fi
 
-            DOCKER_CONFIG="$docker_config" \
-              "${RUNNER_TEMP}/docker-scout-1.24.0/docker-scout" "${scout_args[@]}"
+            # A Scout backend outage is different from a CVE finding.
+            # Retry only that service error; every scan must ultimately pass.
+            for attempt in 1 2 3; do
+              if DOCKER_CONFIG="$docker_config" \
+                "${RUNNER_TEMP}/docker-scout-1.24.0/docker-scout" "${scout_args[@]}" >"$log" 2>&1; then
+                return 0
+              else
+                status=$?
+              fi
+              if [ "$attempt" -eq 3 ] || ! grep -q 'code:DOWNSTREAM_SERVICE_ERROR' "$log"; then
+                return "$status"
+              fi
+              echo "Docker Scout backend error for $image (attempt $attempt); retrying." >&2
+              sleep $((attempt * 10))
+            done
           }
 
           if [ "$SCOUT_CONCURRENT" = "true" ]; then
-            scan_image >"$log" 2>&1 &
+            scan_image &
             pids+=("$!")
             statuses+=("")
-          elif scan_image >"$log" 2>&1; then
+          elif scan_image; then
             pids+=("")
             statuses+=("0")
           else

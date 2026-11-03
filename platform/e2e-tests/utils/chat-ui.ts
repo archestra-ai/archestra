@@ -169,7 +169,7 @@ export async function selectRuntimeModelFromDialog(
   runtimeModel: RuntimeChatModel,
 ): Promise<void> {
   const menu = page.getByTestId(E2eTestId.ChatSetupMenu);
-  await expect(menu).toBeVisible({ timeout: 5_000 });
+  await expect(menu).toBeVisible();
   const modelTab = menu.getByRole("tab", { name: /^Model:/ });
   if ((await modelTab.getAttribute("aria-selected")) !== "true") {
     await modelTab.click();
@@ -194,7 +194,7 @@ async function openSetupMenuTab(page: Page, tabName: RegExp) {
   await expect(trigger).toBeVisible({ timeout: 10_000 });
   await trigger.click();
   const menu = page.getByTestId(E2eTestId.ChatSetupMenu);
-  await expect(menu).toBeVisible({ timeout: 5_000 });
+  await expect(menu).toBeVisible();
   await menu.getByRole("tab", { name: tabName }).click();
   return menu;
 }

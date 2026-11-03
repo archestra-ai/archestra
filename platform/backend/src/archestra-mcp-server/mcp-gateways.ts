@@ -62,6 +62,8 @@ const EditMcpGatewayToolArgsSchema = z
     toolExposureMode: ToolExposureModeSchema.optional().describe(
       "How tools should be loaded for MCP clients and models.",
     ),
+    accessAllTools: CreateBaseToolArgsSchema.shape.accessAllTools,
+    accessAllSubagents: CreateBaseToolArgsSchema.shape.accessAllSubagents,
     knowledgeBaseIds: UpdateAgentSchemaBase.shape.knowledgeBaseIds
       .describe(
         "Replace the MCP gateway's assigned knowledge bases with this set.",

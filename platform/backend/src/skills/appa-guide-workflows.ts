@@ -156,7 +156,7 @@ Inspect, then suggest; change nothing.
 2. Open with one sentence: how many of the inspected tools a specific rule covers, and that the rest run as they do now. Name at most two of the riskiest uncovered tools: ones that send data out, change or delete data, or read private data. The tools **Keep agents working** names are not uncovered risks; suggest restricting them only when the operator names them.
 3. Report each included battery that is not \`active\`, what is wrong, and how to fix it.
 4. Under **Available batteries**, give one line per battery that fits and would cover at least one more tool: its sentence from **Propose a battery**, how many tools it would cover, and whether it needs a token.
-5. End with up to three numbered changes ranked by impact, such as fixing a battery, adding batteries, or adding rules, so the operator can reply with a number.
+5. End with up to three numbered changes ranked by impact, such as fixing a battery, adding batteries, adding rules, or adding the deployment hint as **The deployment hint** in \`references/archestra.md\` describes, so the operator can reply with a number.
 
 Leave out server health, unavailable deployments, and failed inspections unless they change a suggestion; then say only "I could not read <server>'s tools". Never quote an inspection's internal error or placeholder text.
 

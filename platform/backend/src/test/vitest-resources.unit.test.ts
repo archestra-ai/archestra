@@ -9,8 +9,10 @@ import {
   parseMemoryQuantity,
   readCgroupMemory,
   resourceEnvelope,
+  sharedVitestWorkers,
   typeScriptCheckers,
   typeScriptMemorySettings,
+  wholeProgramGoMemoryLimits,
 } from "../../../vitest.resources";
 import { calculateVitestResourceLimits } from "./vitest-resource-limits";
 
@@ -18,6 +20,40 @@ const GIB = 1024 ** 3;
 
 // An n2d-standard-8 node of the staging runtime pool, as the pod sees it.
 const NODE = { hostParallelism: 8, hostMemoryBytes: 32 * GIB };
+
+describe("sharedVitestWorkers", () => {
+  test("honors the one-CPU request even when the host exposes more cores", () => {
+    expect(
+      sharedVitestWorkers(
+        resourceEnvelope({
+          ...NODE,
+          constrainedMemoryBytes: 4 * GIB,
+          podCpuRequest: "1",
+        }),
+      ),
+    ).toBe(1);
+  });
+
+  test("bounds workers by memory when the pod has more CPUs", () => {
+    expect(
+      sharedVitestWorkers({
+        constrained: true,
+        availableParallelism: 8,
+        totalMemoryBytes: 4 * GIB,
+      }),
+    ).toBe(2);
+  });
+
+  test("leaves an unconstrained machine's default pool unchanged", () => {
+    expect(
+      sharedVitestWorkers({
+        constrained: false,
+        availableParallelism: 8,
+        totalMemoryBytes: 32 * GIB,
+      }),
+    ).toBeUndefined();
+  });
+});
 
 describe("resourceEnvelope", () => {
   test("is the machine when nothing constrains the process", () => {
@@ -239,12 +275,28 @@ describe("readCgroupMemory", () => {
       );
       writeFileSync(path.join(dir, "memory.peak"), `${8 * GIB}\n`);
       writeFileSync(path.join(dir, "memory.max"), "max\n");
-      expect(readCgroupMemory(dir)).toEqual({
+      expect(readCgroupMemory(dir, path.join(dir, "no-warden.log"))).toEqual({
         oomKills: 2,
+        wardenStops: 0,
         limitHits: 3,
         peakBytes: 8 * GIB,
         // "max" is no limit.
         limitBytes: null,
+      });
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  test("counts the commands the memory warden stopped", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "cgroup-"));
+    try {
+      writeFileSync(path.join(dir, "memory.events"), "oom 0\noom_kill 0\n");
+      const log = path.join(dir, "memory-warden.log");
+      writeFileSync(log, '{"reason":"limit"}\n{"reason":"pressure"}\n');
+      expect(readCgroupMemory(dir, log)).toMatchObject({
+        oomKills: 0,
+        wardenStops: 2,
       });
     } finally {
       rmSync(dir, { recursive: true });
@@ -264,12 +316,14 @@ describe("readCgroupMemory", () => {
 describe("describeToolMemoryKill", () => {
   const before = {
     oomKills: 0,
+    wardenStops: 0,
     limitHits: 10,
     peakBytes: 5 * GIB,
     limitBytes: 8 * GIB,
   };
   const atLimit = {
     oomKills: 1,
+    wardenStops: 0,
     limitHits: 11,
     peakBytes: 8 * GIB,
     limitBytes: 8 * GIB,
@@ -288,6 +342,21 @@ describe("describeToolMemoryKill", () => {
     steps: ["Give the compiler one checker: add --checkers 1."],
     env,
   };
+
+  test("says the memory warden stopped the command near the limit", () => {
+    const report = describeToolMemoryKill({
+      ...typeCheck,
+      subjectKilled: true,
+      before,
+      after: { ...before, wardenStops: 1, peakBytes: 7.8 * GIB },
+    });
+    expect(report).toContain(
+      "type-check: tsc was stopped for memory: this container neared its memory limit of 8 GiB at tier S, and its memory warden stops the largest command before the kernel stops every process.",
+    );
+    expect(report).toContain(
+      "  - Give the compiler one checker: add --checkers 1.",
+    );
+  });
 
   test("names the killed command, the limit, the tier, the peak and what to change", () => {
     expect(
@@ -411,5 +480,45 @@ describe("describeToolMemoryKill", () => {
         after: atLimit,
       }),
     ).toBeNull();
+  });
+});
+
+describe("wholeProgramGoMemoryLimits", () => {
+  const pod = (gib: number) =>
+    resourceEnvelope({ ...NODE, constrainedMemoryBytes: gib * GIB });
+
+  test("in a 4 GiB pod the frontend gets the room left with the servers stopped, less the compiler's own", () => {
+    // 2.68 GiB with the servers stopped, less 0.5 GiB outside Go's heap.
+    const limits = wholeProgramGoMemoryLimits(pod(4), 1.9 * GIB);
+    expect((limits?.serversPausedBytes ?? 0) / GIB).toBeCloseTo(2.18, 2);
+  });
+
+  test("beside the servers, and in any pod, never below the program's live data", () => {
+    // 1.83 GiB beside the servers, less 0.5, is below the frontend's 1.9 GiB.
+    expect(
+      wholeProgramGoMemoryLimits(pod(4), 1.9 * GIB)?.besideServersBytes,
+    ).toBe(Math.ceil(1.9 * GIB));
+    expect(
+      wholeProgramGoMemoryLimits(pod(3), 1.9 * GIB)?.serversPausedBytes,
+    ).toBe(Math.ceil(1.9 * GIB));
+  });
+
+  test("gives Go whole bytes, as GOMEMLIMIT needs", () => {
+    for (const gib of [3, 4, 6, 8, 12]) {
+      const limits = wholeProgramGoMemoryLimits(pod(gib), 1.9 * GIB);
+      expect(Number.isInteger(limits?.besideServersBytes)).toBe(true);
+      expect(Number.isInteger(limits?.serversPausedBytes)).toBe(true);
+    }
+  });
+
+  test("a small program gets the room beside the servers", () => {
+    expect(
+      (wholeProgramGoMemoryLimits(pod(4), 0.4 * GIB)?.besideServersBytes ?? 0) /
+        GIB,
+    ).toBeCloseTo(1.33, 2);
+  });
+
+  test("sets nothing where the lane is off", () => {
+    expect(wholeProgramGoMemoryLimits(pod(24), 1.9 * GIB)).toBeNull();
   });
 });

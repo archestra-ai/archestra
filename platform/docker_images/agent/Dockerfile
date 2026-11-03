@@ -109,6 +109,19 @@ RUN uv venv --python /usr/bin/python3 /opt/agent-tools \
 
 ENV PNPM_HOME=/usr/local/share/pnpm
 ENV PATH=$PNPM_HOME/bin:$PNPM_HOME:$PATH
+# pnpm runs through corepack, so a repository that pins pnpm
+# (`packageManager`) gets that version in one Node process. A global pnpm of
+# another version starts the pinned one as a second process: about 0.11 GiB
+# of anonymous memory more per pnpm call, measured in an Agent Runtime, and a
+# check chain nests several. Repositories without a pin get 11.28.7.
+# COREPACK_HOME is shared and writable by the agent's user: a pinned version
+# is downloaded, signature-checked, on first use. Corepack never writes a pin
+# into a repository's package.json, and a newer version some repository pins
+# never becomes the default for the others.
+ENV COREPACK_HOME=/usr/local/share/corepack \
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+    COREPACK_ENABLE_AUTO_PIN=0 \
+    COREPACK_DEFAULT_TO_LATEST=0
 RUN corepack disable \
  && rm -rf /usr/local/lib/node_modules/corepack /usr/local/lib/node_modules/npm \
  && curl -fsSL https://registry.npmjs.org/npm/-/npm-11.21.1.tgz -o /tmp/npm.tgz \
@@ -120,9 +133,16 @@ RUN corepack disable \
  && rm -rf /usr/local/lib/node_modules/npm/node_modules/undici \
  && mkdir -p /usr/local/lib/node_modules/npm/node_modules/undici \
  && tar -xzf /tmp/undici.tgz --strip-components=1 -C /usr/local/lib/node_modules/npm/node_modules/undici \
- && rm /tmp/npm.tgz /tmp/undici.tgz \
- && npm install --global --ignore-scripts pnpm@11.28.7 \
- && node --version && npm --version && pnpm --version
+ && curl -fsSL https://registry.npmjs.org/corepack/-/corepack-0.36.0.tgz -o /tmp/corepack.tgz \
+ && echo '9128cfe26aee0c99f4fc68c15c6b8b12309a68be0de2c012cdfea2a463cb722f  /tmp/corepack.tgz' | sha256sum -c - \
+ && mkdir -p /usr/local/lib/node_modules/corepack \
+ && tar -xzf /tmp/corepack.tgz --strip-components=1 -C /usr/local/lib/node_modules/corepack \
+ && ln -sf ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack \
+ && rm /tmp/npm.tgz /tmp/undici.tgz /tmp/corepack.tgz \
+ && corepack enable --install-directory /usr/local/bin pnpm \
+ && corepack install --global pnpm@11.28.7 \
+ && chown -R 1000:1000 "$COREPACK_HOME" \
+ && node --version && npm --version && corepack --version && pnpm --version
 
 COPY docker_images/agent/bin /usr/local/bin
 # The maintained launchers append this description of the machine to the
@@ -159,16 +179,17 @@ RUN --network=none \
  && python3 /tmp/agent-image-tests/interactive-resume.py \
  && python3 /tmp/agent-image-tests/tui-exec.py \
  && python3 /tmp/agent-image-tests/development-tools.py \
+ && python3 /tmp/agent-image-tests/memory-warden.py \
  && node /tmp/agent-image-tests/npm-http.cjs
 
 FROM agent-base AS agent-claude-code
 USER root
-RUN pnpm --config.ignore-scripts=false add --global @anthropic-ai/claude-code@2.1.309 \
+RUN pnpm --config.ignore-scripts=false add --global @anthropic-ai/claude-code@2.1.311 \
  && CLAUDE_PACKAGE_DIR=$(pnpm list --global --json @anthropic-ai/claude-code | jq -r '.[0].dependencies["@anthropic-ai/claude-code"].path') \
  && node "$CLAUDE_PACKAGE_DIR/install.cjs" \
  && claude --version \
  && mkdir -p /home/node/.claude \
- && printf '%s\n' '{"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.309","theme":"dark","shiftEnterKeyBindingInstalled":true,"projects":{"/home/node/workspace":{"allowedTools":[],"hasTrustDialogAccepted":true}}}' > /home/node/.claude.json \
+ && printf '%s\n' '{"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.311","theme":"dark","shiftEnterKeyBindingInstalled":true,"projects":{"/home/node/workspace":{"allowedTools":[],"hasTrustDialogAccepted":true}}}' > /home/node/.claude.json \
  && printf '%s\n' '{"skipDangerousModePermissionPrompt":true}' > /home/node/.claude/settings.json \
  && chmod 0600 /home/node/.claude.json /home/node/.claude/settings.json \
  && chown -R 1000:1000 /home/node
@@ -232,8 +253,8 @@ USER root
 # required MCP startup guard and refreshes runtime bindings on session resume.
 COPY --from=uv-hermes /uv /usr/local/bin/uv-hermes
 RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
-    hermes_version=0.22.2 \
- && hermes_commit=d923a5eb487a17c0a68801bba9ef0f56c81040a8 \
+    hermes_version=0.22.5 \
+ && hermes_commit=bf0203a794a07aac3ff764972ab9087baa4e4f4e \
  && git clone --quiet --depth 1 --branch "v${hermes_version}" https://github.com/NousResearch/hermes-agent /opt/hermes \
  && test "$(git -C /opt/hermes rev-parse HEAD)" = "${hermes_commit}" \
  && case "${TARGETARCH}" in amd64) python_target=linux-x64 ;; arm64) python_target=linux-arm64 ;; *) exit 1 ;; esac \
@@ -382,13 +403,13 @@ FROM agent-base AS agent-copilot
 USER root
 ENV COPILOT_AUTO_UPDATE=false
 RUN case "$TARGETARCH" in \
-      amd64) copilot_arch=x64; copilot_checksum=f6a36bceb79c0d32f837de2d3ecc687170b5049f82ca45c68b029039d558ce9cb6e89778dea2ed19f60d22baebe22422f6502140fa7ae10e540c0910dc966057 ;; \
-      arm64) copilot_arch=arm64; copilot_checksum=40afab4a82f1183efda96a4f19906157ff4a07fc803a77d3916b0001c44174544ede5a1214efdb90a0dbf3c695ad2318fe0b9ed7aee04ce4a947605674539b8e ;; \
+      amd64) copilot_arch=x64; copilot_checksum=1c6c53024c2b973200a10450db9b96a0a4e8ba31f398ed6c282d2a18fff2413bfc5215ae7c76061ca9078f8b2311b1e146ac177d9bdc53328bf6dfef52d92516 ;; \
+      arm64) copilot_arch=arm64; copilot_checksum=ac9e1fd83822fa36ece097ffb7ff689a660a852d5eefccf1331ecd2ae39890bb9b9e3c33a8bfdc59e1be519578b3197cb93686d41ea99dcd47af93ae79c43ccc ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /opt/copilot \
  && cd /tmp \
- && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.103)" copilot.tgz \
+ && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.104)" copilot.tgz \
  && echo "$copilot_checksum  copilot.tgz" | sha512sum -c - \
  && tar -xzf copilot.tgz --strip-components=1 -C /opt/copilot \
  && test -s /opt/copilot/LICENSE.md \

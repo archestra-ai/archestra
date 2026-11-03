@@ -24,7 +24,15 @@
      `scripts/dev-lite.sh reload backend` (about 15 s) or
      `scripts/dev-lite.sh reload frontend` (a production build, about 45 to
      80 s). `ARCHESTRA_DEV_LITE_FRONTEND=dev` gives the Next dev server back
-     (about 3.5 GB once pages are open). MCP server installs, nested Agent
+     (about 3.5 GB once pages are open). A pod's bootstrap only runs
+     `scripts/dev-lite.sh prepare` (dependencies, PostgreSQL, migrations):
+     run `up` when you need the servers; it builds the backend and the
+     frontend one after the other, then starts them. On a clean checkout of
+     a main commit it installs the frontend CI built for that commit
+     instead, and a rebuild after edits starts from CI's build cache
+     (`scripts/frontend-prebuilt.mjs`). `pause` and `resume`
+     stop and restart the two servers, keeping PostgreSQL and the builds, to
+     give one memory-heavy command their memory. MCP server installs, nested Agent
      Runtime, the code runtime, Vault, Keycloak specs and the `api-k8s`,
      `hibernation` and `vault-k8s` Playwright projects need the Tilt stack.
 4. **Documentation** - The `archestra-docs-writer` skill decides whether a change needs docs and how to write them. Read it before touching `../docs/pages`.
@@ -99,8 +107,10 @@ pnpm run prepare                        # Install the husky pre-commit hook. `ti
 pnpm lint                               # Check lint
 pnpm lint:fix                           # Lint and auto-fix
 pnpm type-check                         # Check TypeScript types. Run it (or `pnpm --dir <pkg> type-check`), not bare
-                                        # `tsc --noEmit`: it sizes the compiler to the memory it has. Bare tsc in
-                                        # backend/ holds about 9 GB, past a small Agent Runtime tier's limit.
+                                        # `tsc --noEmit`: it sizes the compiler to the memory it has. backend/tsconfig.json
+                                        # is a solution of projects (one per layer or test shard), so bare tsc there
+                                        # checks nothing; type-check builds the projects one at a time, each in its own
+                                        # compiler, and keeps their declarations in .tsbuild/ for the next run.
 pnpm test                               # Run tests
 pnpm test:e2e                           # Run e2e tests with Playwright (chromium, webkit, firefox)
 

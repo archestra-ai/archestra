@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { executeArchestraTool } from "@/archestra-mcp-server";
 import config from "@/config";
-import { syncBuiltInSkillsForOrganization } from "@/database/seed";
 import { SkillModel } from "@/models";
 import AgentSkillModel from "@/models/agent-skill";
 import {
@@ -9,6 +8,7 @@ import {
   initialPolicy,
 } from "@/services/guardrails-policy";
 import { inspectOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
+import { syncBuiltInSkillsForOrganization } from "@/services/seed";
 import { describe, expect, test } from "@/test";
 import { APPA_GUIDE_SKILL } from "./appa-guide";
 import {

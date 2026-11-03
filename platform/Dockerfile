@@ -327,6 +327,9 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
          --filter @archestra/openappa-rs \
          --filter @archestra/router-rs build
 
+# The constrained frontend build uses the dev-lite Bash entrypoint.
+RUN apk add --no-cache bash
+
 # VERSION is intentionally declared after the native RUN. Build args implicitly
 # participate in following RUN cache keys, and every staging commit has a new
 # VERSION even when the Rust workspace is unchanged.
@@ -336,6 +339,9 @@ COPY --from=deps /app/backend/node_modules ./backend/node_modules
 COPY --from=deps /app/frontend/node_modules ./frontend/node_modules
 COPY --from=deps /app/shared/node_modules ./shared/node_modules
 COPY turbo.json ./
+COPY vitest.resources.ts ./
+COPY Tiltfile .env.example ./
+COPY scripts ./scripts
 COPY patches ./patches
 COPY backend ./backend
 COPY frontend ./frontend
@@ -549,9 +555,9 @@ ENV _EXPERIMENTAL_DAGGER_CLI_BIN=/usr/local/bin/dagger
 # and CVE-2026-4519 (HIGH) in python3, all fixed in 3.12.14-r0. python3 arrives transitively via
 # supervisor, so pin an explicit floor here — the bare `apk upgrade` earlier in this stage runs
 # before python3 is installed and cannot lift it.
-# CVE-2026-77214, CVE-2026-102633: expat vulnerabilities (HIGH) fixed in 2.9.0-r0. expat arrives
-# transitively with python3 here, so it needs the same explicit floor.
-RUN apk add --no-cache --upgrade supervisor "python3>=3.12.14-r0" "expat>=2.9.0-r0" && \
+# Expat 2.10.0-r0 fixes the high-severity XML parser advisories. It arrives
+# transitively with python3, so require the patched version explicitly.
+RUN apk add --no-cache --upgrade supervisor "python3>=3.12.14-r0" "expat>=2.10.0-r0" && \
     # CVE-2026-24049: wheel 0.45.1 path traversal. Vendored inside py3-setuptools
     # (pulled in by supervisor); pip can't upgrade the vendored copy, so delete it.
     rm -rf /usr/lib/python*/site-packages/setuptools/_vendor/wheel \

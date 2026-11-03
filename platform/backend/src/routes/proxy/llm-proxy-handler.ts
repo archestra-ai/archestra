@@ -1,5 +1,11 @@
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { enterOpenappaEncryptedChat } from "@/openappa/encrypted-chat";
 import { validateAzureModelOperation } from "@/services/azure-model-capabilities";
+import {
+  fireworksModelAliases,
+  isFireworksEndpoint,
+  resolveFireworksModel,
+} from "@/services/fireworks-model";
 import type { BillingAttribution } from "@/utils/billable-usage";
 import { primaryBillingUsage } from "@/utils/billable-usage";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
@@ -58,7 +64,7 @@ import { a2aOAuthExecutionReference } from "@/clients/a2a-oauth-execution";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
-import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import { internalCallProvenance } from "@/clients/internal-call";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
@@ -257,6 +263,8 @@ export interface LLMProxyContext<TRequest> {
   attributionLabels?: AttributionLabels;
   throughput?: LlmThroughput;
   providerApiKeyId?: string;
+  billingEndpoint?: "fireworks" | "other";
+  requestedModel?: string;
   autoRouting?: AutoRoutingRequestContext;
   /**
    * The upstream attempt this request's interaction rows record: which
@@ -1241,9 +1249,60 @@ async function handleObservedLLMProxy<
   const isEncryptedChatSession = encryptedChat.kind !== "none";
   const suppressContent =
     isEncryptedChatSession || resolveLogContentMode() === "metadata_only";
-  const actualModel = stripClaudeContextVariantSuffix(
+  // Only internal calls may override the provider URL; accepting this header
+  // from external clients would allow SSRF.
+  const providerBaseUrlHeader =
+    internalCall &&
+    typeof headersForExtraction["x-archestra-provider-base-url"] === "string"
+      ? headersForExtraction["x-archestra-provider-base-url"]
+      : undefined;
+  const effectiveBaseUrl =
+    perKeyBaseUrl || providerBaseUrlHeader || provider.getBaseUrl();
+  const requestedModel = stripClaudeContextVariantSuffix(
     requestAdapter.getModel(),
   );
+  // A request for a model pool's name is served by the pool's members when
+  // the caller may use the pool (see `mayUseModelPool`). Members on a wire
+  // the client's can't reach are left out of the plan.
+  const poolWire = openAiCodexPassthrough
+    ? null
+    : inboundPoolWire(provider.interactionType);
+  // A chat or agent set to a pool names it, and sends one of its members'
+  // models. Any other platform call runs on the key and model it names.
+  const chatModelPoolHeader = internalCall
+    ? headersForExtraction[MODEL_POOL_ID_HEADER.toLowerCase()]
+    : undefined;
+  const chatModelPoolId =
+    typeof chatModelPoolHeader === "string" && chatModelPoolHeader
+      ? chatModelPoolHeader
+      : undefined;
+  const modelPoolPlan =
+    poolWire && (!internalCall || chatModelPoolId)
+      ? await planModelPool({
+          organizationId: resolvedAgent.organizationId,
+          name: requestedModel,
+          poolId: chatModelPoolId,
+          inbound: poolWire,
+          caller: {
+            virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
+            providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
+          },
+          grantedPoolId: authOverride?.modelPoolId ?? grantedPoolId,
+          sessionId,
+        })
+      : null;
+  const endpointModel = modelPoolPlan
+    ? { model: requestedModel, unresolved: false }
+    : await resolveFireworksModel({
+        provider: providerName,
+        model: requestedModel,
+        baseUrl: effectiveBaseUrl,
+      });
+  const actualModel = endpointModel.model;
+  if (actualModel !== requestedModel) requestAdapter.setModel(actualModel);
+  const billingEndpoint = isFireworksEndpoint(effectiveBaseUrl)
+    ? ("fireworks" as const)
+    : ("other" as const);
   const requestContext = await readProxyRequestState({
     organizationId: resolvedAgent.organizationId,
     provider: providerName,
@@ -1270,6 +1329,44 @@ async function handleObservedLLMProxy<
         ? authenticatedApp?.id
         : undefined,
   });
+  const modelAliases =
+    billingEndpoint === "fireworks" && !modelPoolPlan
+      ? fireworksModelAliases(actualModel)
+      : [];
+  for (const alias of modelAliases) {
+    const aliasAccess = await utils.checkModelTeamAccess({
+      provider: providerName,
+      modelId: alias,
+      organizationId: resolvedAgent.organizationId,
+      authenticatedUserId,
+    });
+    if (!aliasAccess.allowed) throw new ApiError(403, aliasAccess.message);
+  }
+  const assertResolvedUnderControls = async (unresolved: boolean) => {
+    if (!unresolved) return;
+    const hasSpendControl =
+      [
+        ...requestContext.limitState.limits,
+        ...requestContext.throughputRules,
+      ].some(
+        (limit) =>
+          limit.limitType === "token_cost" && limit.behavior !== "soft",
+      ) ||
+      Boolean(
+        userId && !billingTeamId && requestContext.limitState.defaultUserLimit,
+      );
+    if (
+      hasSpendControl ||
+      (await ResourcePermissionPolicyModel.hasRestrictedModels(
+        resolvedAgent.organizationId,
+      ))
+    ) {
+      throw new ApiError(
+        400,
+        "This Fireworks alias does not identify a fixed model. Use the full model ID so spend limits and model permissions can be enforced.",
+      );
+    }
+  };
   const {
     active: appaActive,
     featureEnabled: appaFeatureEnabled,
@@ -1316,6 +1413,7 @@ async function handleObservedLLMProxy<
   const mediaPricedForBudget =
     provider.mediaTariffCovers?.(requestAdapter.getOriginalRequest()) === true;
   const limitContext = {
+    modelAliases,
     unpricedMediaModel:
       provider.unavailableUsageAccounting && !mediaPricedForBudget
         ? actualModel
@@ -1348,36 +1446,6 @@ async function handleObservedLLMProxy<
         "Encrypted chat key and escrow are required for policy storage",
       );
     }
-    // A request for a model pool's name is served by the pool's members when
-    // the caller may use the pool (see `mayUseModelPool`). Members on a wire
-    // the client's can't reach are left out of the plan.
-    const poolWire = openAiCodexPassthrough
-      ? null
-      : inboundPoolWire(provider.interactionType);
-    // A chat or agent set to a pool names it, and sends one of its members'
-    // models. Any other platform call runs on the key and model it names.
-    const chatModelPoolHeader = internalCall
-      ? headersForExtraction[MODEL_POOL_ID_HEADER.toLowerCase()]
-      : undefined;
-    const chatModelPoolId =
-      typeof chatModelPoolHeader === "string" && chatModelPoolHeader
-        ? chatModelPoolHeader
-        : undefined;
-    const modelPoolPlan =
-      poolWire && (!internalCall || chatModelPoolId)
-        ? await planModelPool({
-            organizationId: resolvedAgent.organizationId,
-            name: actualModel,
-            poolId: chatModelPoolId,
-            inbound: poolWire,
-            caller: {
-              virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
-              providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
-            },
-            grantedPoolId: authOverride?.modelPoolId ?? grantedPoolId,
-            sessionId,
-          })
-        : null;
     // A user's chat or agent call on the organization default model, from an
     // agent with no model of its own, is routed across the organization trio.
     // The router picks the session's tier and key, which the call is sent with
@@ -1394,6 +1462,8 @@ async function handleObservedLLMProxy<
         ? poolWire
         : null;
     const autoRouteUser = autoRouteWire ? resolvedUser : null;
+    if (!autoRouteUser)
+      await assertResolvedUnderControls(endpointModel.unresolved);
     // Model-scoped budgets wait until the pool member or routed tier is known.
     const deferModelScopedLimits =
       modelPoolPlan != null || autoRouteUser != null;
@@ -1481,7 +1551,7 @@ async function handleObservedLLMProxy<
             request,
             organizationId: resolvedAgent.organizationId,
             userId: autoRouteUser.id,
-            named: { provider: providerName, modelId: actualModel },
+            named: { provider: providerName, modelId: requestedModel },
             callApiKeyId: perKeyChatApiKeyId ?? null,
             sessionId,
             body: requestAdapter.getOriginalRequest(),
@@ -1490,6 +1560,8 @@ async function handleObservedLLMProxy<
               canReachMember(autoRouteWire, tierProvider),
           })
         : null;
+    if (autoRouteUser && !autoRoute)
+      await assertResolvedUnderControls(endpointModel.unresolved);
     const autoRoutedMember: TierMember | null = autoRoute
       ? {
           providerApiKeyId: autoRoute.providerApiKeyId,
@@ -1505,13 +1577,11 @@ async function handleObservedLLMProxy<
     }
     // Budgets scoped to a model apply to the model the call runs on: the
     // routed tier's, or the one it names when the router left it alone.
-    if (autoRouteUser) {
+    if (autoRouteUser && !autoRoutedMember) {
       const routedLimitViolation =
         await LimitValidationService.checkLimitsBeforeRequest({
           ...limitContext,
-          model: autoRoutedMember
-            ? stripClaudeContextVariantSuffix(autoRoutedMember.modelId)
-            : actualModel,
+          model: actualModel,
         });
       if (routedLimitViolation) {
         logger.info(
@@ -1763,15 +1833,6 @@ async function handleObservedLLMProxy<
       "Tool results updated by proxy plugins",
     );
 
-    // Read per-key base URL override from header, but ONLY from internal (localhost) requests.
-    // External clients must NOT be able to set this header — it would be an SSRF vector
-    // (attacker could redirect the proxy to arbitrary URLs like cloud metadata endpoints).
-    const providerBaseUrlHeader =
-      internalCall &&
-      typeof headersForExtraction["x-archestra-provider-base-url"] === "string"
-        ? headersForExtraction["x-archestra-provider-base-url"]
-        : undefined;
-
     // Extract provider-specific headers to forward (e.g., anthropic-beta)
     // Type cast is necessary because this is a generic handler for multiple providers,
     // and only Anthropic has the anthropic-beta header in its type definition
@@ -1859,9 +1920,6 @@ async function handleObservedLLMProxy<
         `[${providerName}Proxy] forwarding headers to provider`,
       );
     }
-
-    const effectiveBaseUrl =
-      perKeyBaseUrl || providerBaseUrlHeader || provider.getBaseUrl();
 
     assertSubscriptionCredentialForProvider({
       apiKey,
@@ -1985,6 +2043,47 @@ async function handleObservedLLMProxy<
       });
       return { row, adapter, apiKey, billingMode: memberBillingMode };
     };
+    const resolveMemberIdentity = async (
+      member: TierMember,
+      owned: Awaited<ReturnType<typeof memberCredential>>,
+    ) => {
+      const baseUrl =
+        owned.row.inferenceBaseUrl ??
+        owned.row.baseUrl ??
+        owned.adapter.getBaseUrl();
+      const named = member.modelId;
+      const resolved = await resolveFireworksModel({
+        provider: member.provider,
+        model: named,
+        baseUrl,
+      });
+      await assertResolvedUnderControls(resolved.unresolved);
+      if (isFireworksEndpoint(baseUrl)) {
+        for (const modelId of new Set([
+          named,
+          resolved.model,
+          ...fireworksModelAliases(resolved.model),
+        ])) {
+          const access = await utils.checkModelTeamAccess({
+            provider: member.provider,
+            modelId,
+            organizationId: resolvedAgent.organizationId,
+            authenticatedUserId,
+          });
+          if (!access.allowed) throw new ApiError(403, access.message);
+        }
+      }
+      member.modelId = resolved.model;
+      return {
+        requestedModel: named,
+        modelAliases: isFireworksEndpoint(baseUrl)
+          ? fireworksModelAliases(resolved.model)
+          : [],
+        billingEndpoint: isFireworksEndpoint(baseUrl)
+          ? ("fireworks" as const)
+          : ("other" as const),
+      };
+    };
     // A member's own provider client, its own model id and, when it speaks
     // another wire than the client's, a translator.
     const reachMember = async (
@@ -2026,7 +2125,19 @@ async function handleObservedLLMProxy<
     const routedCredential = autoRoutedMember
       ? await memberCredential(autoRoutedMember)
       : undefined;
-    if (routedCredential) billingMode = routedCredential.billingMode;
+    if (routedCredential && autoRoutedMember) {
+      Object.assign(
+        upstreamAttempt,
+        await resolveMemberIdentity(autoRoutedMember, routedCredential),
+      );
+      const violation = await LimitValidationService.checkLimitsBeforeRequest({
+        ...limitContext,
+        model: autoRoutedMember.modelId,
+        modelAliases: upstreamAttempt.modelAliases,
+      });
+      if (violation) return sendUsageLimitRefusal(reply, violation);
+      billingMode = routedCredential.billingMode;
+    }
     const autoRoutedTier: AutoRoutedTier | undefined =
       autoRoutedMember && autoRouteWire && routedCredential
         ? {
@@ -2069,13 +2180,6 @@ async function handleObservedLLMProxy<
         ? {
             plan: modelPoolPlan,
             checkLimits: async (member) => {
-              const model = stripClaudeContextVariantSuffix(member.modelId);
-              const violation =
-                await LimitValidationService.checkLimitsBeforeRequest({
-                  ...limitContext,
-                  model,
-                });
-              if (violation) throw new ModelBudgetExceededError(violation);
               try {
                 preparedMember = { value: await memberCredential(member) };
               } catch (error) {
@@ -2083,11 +2187,25 @@ async function handleObservedLLMProxy<
                 preparedMember = { error };
                 return;
               }
+              Object.assign(
+                upstreamAttempt,
+                await resolveMemberIdentity(member, preparedMember.value),
+              );
+              const model = stripClaudeContextVariantSuffix(member.modelId);
+              upstreamAttempt.modelId = model;
+              const violation =
+                await LimitValidationService.checkLimitsBeforeRequest({
+                  ...limitContext,
+                  model,
+                  modelAliases: upstreamAttempt.modelAliases,
+                });
+              if (violation) throw new ModelBudgetExceededError(violation);
               billingMode = preparedMember.value.billingMode;
               try {
                 await throughput.admitSpendForModel(
                   model,
                   billingMode === "subscription",
+                  upstreamAttempt.modelAliases,
                 );
               } catch (error) {
                 if (error instanceof ThroughputError && error.status === 402)
@@ -2285,6 +2403,9 @@ async function handleObservedLLMProxy<
     const throughput = new LlmThroughput({
       entities: [...uniqueBillingEntities.values()],
       model: autoRoutedMember?.modelId ?? actualModel,
+      modelAliases: autoRoutedMember
+        ? upstreamAttempt.modelAliases
+        : modelAliases,
       provider: autoRoutedMember?.provider ?? providerName,
       subscription: billingMode === "subscription",
       rules: modelPool
@@ -2312,6 +2433,8 @@ async function handleObservedLLMProxy<
       autoRouting: autoRoutingContext(request),
       throughput,
       providerApiKeyId: perKeyChatApiKeyId,
+      billingEndpoint,
+      requestedModel,
       upstreamAttempt,
       ...(modelPool ? { modelPool } : {}),
       ...(autoRoutedTier ? { autoRoutedTier } : {}),
@@ -2834,6 +2957,8 @@ async function handleStreaming<
       const costs = await calculateInteractionCosts({
         autoRouting: ctx.autoRouting,
         providerApiKeyId: ctx.providerApiKeyId,
+        billingEndpoint: ctx.billingEndpoint,
+        requestedModel: ctx.requestedModel,
         actualModel: ctx.upstreamAttempt.modelId ?? actualModel,
         usage,
         providerName: ctx.upstreamAttempt.provider ?? providerName,
@@ -3158,6 +3283,8 @@ async function handleStreaming<
           }
           const cost = await calculateUsageCost({
             providerApiKeyId: ctx.providerApiKeyId,
+            billingEndpoint: ctx.billingEndpoint,
+            requestedModel: ctx.requestedModel,
             model: ctx.upstreamAttempt.modelId ?? actualModel,
             usage: state.usage,
             provider: ctx.upstreamAttempt.provider ?? providerName,
@@ -3827,6 +3954,8 @@ async function handleNonStreaming<
             usage: error.usage,
             providerName: ctx.upstreamAttempt.provider ?? providerName,
             providerApiKeyId: ctx.providerApiKeyId,
+            billingEndpoint: ctx.billingEndpoint,
+            requestedModel: ctx.requestedModel,
           });
           const record = buildInteractionRecord({
             agent,
@@ -3975,6 +4104,8 @@ async function handleNonStreaming<
       }
       const cost = await calculateUsageCost({
         providerApiKeyId: ctx.providerApiKeyId,
+        billingEndpoint: ctx.billingEndpoint,
+        requestedModel: ctx.requestedModel,
         model: ctx.upstreamAttempt.modelId ?? actualModel,
         usage,
         provider: ctx.upstreamAttempt.provider ?? providerName,
@@ -4175,6 +4306,8 @@ async function handleNonStreaming<
       const costs = await calculateInteractionCosts({
         autoRouting: ctx.autoRouting,
         providerApiKeyId: ctx.providerApiKeyId,
+        billingEndpoint: ctx.billingEndpoint,
+        requestedModel: ctx.requestedModel,
         actualModel: ctx.upstreamAttempt.modelId ?? actualModel,
         usage,
         providerName: ctx.upstreamAttempt.provider ?? providerName,
@@ -4351,6 +4484,8 @@ async function handleNonStreaming<
   const costs = await calculateInteractionCosts({
     autoRouting: ctx.autoRouting,
     providerApiKeyId: ctx.providerApiKeyId,
+    billingEndpoint: ctx.billingEndpoint,
+    requestedModel: ctx.requestedModel,
     actualModel: ctx.upstreamAttempt.modelId ?? actualModel,
     usage,
     providerName: ctx.upstreamAttempt.provider ?? providerName,
@@ -4788,6 +4923,8 @@ async function openUpstream<TRequest, T>(params: {
   if (routed) {
     Object.assign(ctx.upstreamAttempt, routed.member);
     ctx.providerApiKeyId = routed.member.providerApiKeyId;
+    ctx.billingEndpoint = ctx.upstreamAttempt.billingEndpoint;
+    ctx.requestedModel = ctx.upstreamAttempt.requestedModel;
     const routedTransport = await routed.transport();
     return openUpstreamWithRetry({
       open: () =>
@@ -4820,13 +4957,16 @@ async function openUpstream<TRequest, T>(params: {
   } catch (error) {
     if (
       (error instanceof ModelBudgetExceededError ||
-        error instanceof ThroughputError) &&
+        error instanceof ThroughputError ||
+        error instanceof ApiError) &&
       !dispatched
     )
       await ctx.throughput?.cancelBeforeSend();
     throw error;
   } finally {
     ctx.providerApiKeyId = ctx.upstreamAttempt.providerApiKeyId;
+    ctx.billingEndpoint = ctx.upstreamAttempt.billingEndpoint;
+    ctx.requestedModel = ctx.upstreamAttempt.requestedModel;
     if (ctx.telemetry) {
       if (ctx.upstreamAttempt.provider)
         ctx.telemetry.setProvider(ctx.upstreamAttempt.provider);

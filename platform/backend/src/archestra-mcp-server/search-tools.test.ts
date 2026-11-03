@@ -677,12 +677,12 @@ describe("search_tools", () => {
       userId: user.id,
     };
 
-    // "guardrails policy" matches only the guardrails policy tools, all of
+    // "guardrails" matches only the guardrails tools, all of
     // which require permissions this agent:read role lacks, so RBAC filters
     // them all out before ranking.
     const result = await executeArchestraTool(
       TOOL_SEARCH_TOOLS_FULL_NAME,
-      { query: "guardrails policy", limit: 10 },
+      { query: "guardrails", limit: 10 },
       context,
     );
 
@@ -692,7 +692,7 @@ describe("search_tools", () => {
       matchCount: 0,
       truncated: false,
       nextOffset: null,
-      hint: "No tools matched. Try broader or different keywords, or switch mode. No tool text matches these query terms: guardrails, policy.",
+      hint: "No tools matched. Try broader or different keywords, or switch mode. No tool text matches these query terms: guardrails.",
       tools: [],
     });
   });

@@ -20,15 +20,17 @@ import { llmUpstreamFetch } from "@/clients/llm-upstream-fetch";
 import { LRUCacheManager } from "@/in-memory-lru-cache";
 import logger from "@/logging";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
-import { getUsageTokens as getAnthropicUsage } from "@/routes/proxy/adapters/anthropic";
-import { getUsageTokens as getCohereUsage } from "@/routes/proxy/adapters/cohere";
-import { getUsageTokens as getGeminiUsage } from "@/routes/proxy/adapters/gemini";
-import { getUsageTokens as getMinimaxUsage } from "@/routes/proxy/adapters/minimax";
-import { getUsageTokens as getOllamaNativeUsage } from "@/routes/proxy/adapters/ollama-native";
-import { getUsageTokens as getOpenAIUsage } from "@/routes/proxy/adapters/openai";
 import { responsesUsageTokens } from "@/routes/proxy/adapters/responses-usage";
-import { getUsageTokens as getZhipuaiUsage } from "@/routes/proxy/adapters/zhipuai";
 import type { GatewayAgent, InteractionAuthMethod } from "@/types";
+import {
+  anthropicUsageTokens,
+  cohereUsageTokens,
+  geminiUsageTokens,
+  minimaxUsageTokens,
+  ollamaNativeUsageTokens,
+  openAIUsageTokens,
+  zhipuaiUsageTokens,
+} from "./llm-usage";
 import { getExemplarLabels, sanitizeLabelKey } from "./utils";
 
 type UsageExtractor =
@@ -55,7 +57,7 @@ type UsageExtractor =
 function getChatOrResponsesUsage(usage: Record<string, unknown>) {
   return "input_tokens" in usage
     ? responsesUsageTokens(usage as Parameters<typeof responsesUsageTokens>[0])
-    : getOpenAIUsage(usage as Parameters<typeof getOpenAIUsage>[0]);
+    : openAIUsageTokens(usage as Parameters<typeof openAIUsageTokens>[0]);
 }
 
 /**
@@ -75,29 +77,29 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
     output: usage.output_tokens,
   }),
   openai: getChatOrResponsesUsage,
-  archestra: getOpenAIUsage,
-  cerebras: getOpenAIUsage,
-  vllm: getOpenAIUsage,
-  ollama: getOpenAIUsage,
+  archestra: openAIUsageTokens,
+  cerebras: openAIUsageTokens,
+  vllm: openAIUsageTokens,
+  ollama: openAIUsageTokens,
   // Ollama's native response has no `usage` object at all — see
   // `rootUsageExtractors` below, which handles it before the `data.usage` guard.
   "ollama-native": null,
-  mistral: getOpenAIUsage,
+  mistral: openAIUsageTokens,
   perplexity: getChatOrResponsesUsage,
-  groq: getOpenAIUsage,
-  xai: getOpenAIUsage,
-  openrouter: getOpenAIUsage,
-  anthropic: getAnthropicUsage,
+  groq: openAIUsageTokens,
+  xai: openAIUsageTokens,
+  openrouter: openAIUsageTokens,
+  anthropic: anthropicUsageTokens,
   azure: getChatOrResponsesUsage,
-  cohere: getCohereUsage,
-  zhipuai: getZhipuaiUsage,
-  minimax: getMinimaxUsage,
-  deepseek: getOpenAIUsage,
-  kimi: getOpenAIUsage,
-  "kimi-code": getOpenAIUsage,
-  "github-copilot": getOpenAIUsage,
+  cohere: cohereUsageTokens,
+  zhipuai: zhipuaiUsageTokens,
+  minimax: minimaxUsageTokens,
+  deepseek: openAIUsageTokens,
+  kimi: openAIUsageTokens,
+  "kimi-code": openAIUsageTokens,
+  "github-copilot": openAIUsageTokens,
   // Responses are OpenAI-shaped by our own Graph translation (usage estimated)
-  "microsoft-365-copilot": getOpenAIUsage,
+  "microsoft-365-copilot": openAIUsageTokens,
   gemini: null,
   bedrock: null,
 };
@@ -116,7 +118,7 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
 const rootUsageExtractors: Partial<
   Record<SupportedProvider, NonNullable<UsageExtractor>>
 > = {
-  "ollama-native": getOllamaNativeUsage,
+  "ollama-native": ollamaNativeUsageTokens,
 };
 
 type Fetch = (
@@ -924,7 +926,8 @@ export function getObservableGenAI(
       // Record token metrics
       const usage = result.usageMetadata;
       if (usage) {
-        const { input, output, cacheRead, cacheWrite } = getGeminiUsage(usage);
+        const { input, output, cacheRead, cacheWrite } =
+          geminiUsageTokens(usage);
         reportLLMTokens(
           provider,
           profile,

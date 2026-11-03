@@ -16,6 +16,7 @@ import { createGoogleGenAIClient } from "@/clients/gemini-client";
 import config from "@/config";
 import logger from "@/logging";
 import { metrics } from "@/observability";
+import { geminiUsageTokens } from "@/observability/metrics/llm-usage";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -562,9 +563,8 @@ class GeminiResponseAdapter implements LLMResponseAdapter<GeminiResponse> {
         cacheWriteTokens: 0,
       };
     }
-    const { input, output, cacheRead, cacheWrite, reasoning } = getUsageTokens(
-      this.response.usageMetadata,
-    );
+    const { input, output, cacheRead, cacheWrite, reasoning } =
+      geminiUsageTokens(this.response.usageMetadata);
     return {
       inputTokens: input,
       outputTokens: output,
@@ -1006,28 +1006,6 @@ class GeminiStreamAdapter
 // =============================================================================
 // ADAPTER FACTORY
 // =============================================================================
-
-// =============================================================================
-// USAGE TOKEN HELPERS
-// =============================================================================
-
-export function getUsageTokens(usage: {
-  promptTokenCount?: number;
-  candidatesTokenCount?: number;
-  cachedContentTokenCount?: number;
-  thoughtsTokenCount?: number;
-}) {
-  // Gemini's cachedContentTokenCount is a SUBSET already inside promptTokenCount,
-  // so subtract it to get the uncached input and avoid double-counting.
-  const cacheRead = usage.cachedContentTokenCount ?? 0;
-  return {
-    input: Math.max(0, (usage.promptTokenCount ?? 0) - cacheRead),
-    output: usage.candidatesTokenCount ?? 0,
-    cacheRead,
-    cacheWrite: 0,
-    reasoning: usage.thoughtsTokenCount ?? 0,
-  };
-}
 
 // =============================================================================
 // GEMINI FORMAT CONVERSION UTILITIES

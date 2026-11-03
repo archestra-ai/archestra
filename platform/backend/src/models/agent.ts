@@ -1,5 +1,7 @@
 import type { CreatedBy } from "@archestra/shared";
 import {
+  AGENT_CATALOG_IDS,
+  type AgentCatalogId,
   type ArchestraToolShortName,
   BUILT_IN_AGENT_IDS,
   type CursorQuery,
@@ -85,6 +87,8 @@ import {
   type GatewayAgent,
   type InsertAgent,
   type McpServerAgentUsage,
+  type NetworkPolicy,
+  NetworkPolicyInputSchema,
   type ReadinessAgent,
   type SortingQuery,
   type UpdateAgent,
@@ -108,6 +112,7 @@ import AgentSkillModel from "./agent-skill";
 import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
+import { agentToolSurfaceChanged } from "./agent-tool-surface";
 import AgentUserModel from "./agent-user";
 import AgentVersionModel from "./agent-version";
 import CreatedByModel from "./created-by";
@@ -115,6 +120,7 @@ import { gatewayAgentSelection } from "./gateway-agent-selection";
 import { idArrayCondition } from "./id-array-condition";
 import InteractionUserActivityModel from "./interaction-user-activity";
 import OrganizationModel from "./organization";
+import { port } from "./ports";
 import ResourcePermissionPolicyModel, {
   type ObjectPolicy,
 } from "./resource-permission-policy";
@@ -194,6 +200,7 @@ type AgentListFilters = {
   labels?: Record<string, string[]>;
   status?: AgentRecordStatus;
   providerApiKeyId?: string;
+  runtime?: AgentCatalogId | "chat" | "custom";
   /** Caller-relative pin filter for the paginated Agents surface. */
   pinned?: boolean;
   /** False skips the count; `total` is then a lower bound. */
@@ -265,7 +272,13 @@ class AgentModel {
     Array<
       Pick<
         Agent,
-        "id" | "name" | "agentType" | "scope" | "authorId" | "isPersonalGateway"
+        | "id"
+        | "name"
+        | "agentType"
+        | "scope"
+        | "authorId"
+        | "isPersonalGateway"
+        | "networkPolicy"
       > & { isBuiltIn: boolean; teamIds: string[] }
     >
   > {
@@ -284,6 +297,7 @@ class AgentModel {
         createdByServiceAccountId: schema.agentsTable.createdByServiceAccountId,
         isPersonalGateway: schema.agentsTable.isPersonalGateway,
         isBuiltIn: schema.agentsTable.builtIn,
+        networkPolicy: schema.agentsTable.networkPolicy,
       })
       .from(schema.agentsTable)
       .where(
@@ -715,10 +729,10 @@ class AgentModel {
   ): Promise<void> {
     if (agents.length === 0 || !userId) return;
 
-    // Lazy: the availability check reaches into the service layer, which
-    // would otherwise load with every model.
-    const { isSkillSandboxAvailableForAgent } = await import(
-      "@/skills/skill-sandbox-availability"
+    // Through a port: the availability check sits above the models and loads
+    // on first use.
+    const { isSkillSandboxAvailableForAgent } = await port(
+      "skillSandboxAvailability",
     );
     await Promise.all(
       agents.map(async (agent) => {
@@ -834,6 +848,10 @@ class AgentModel {
           activationSkillMode: "manual" as const,
         }),
         ...(enableAccessAllTools && { accessAllTools: false }),
+        // The insert type carries the input shape; store the normalized policy.
+        networkPolicy: agent.networkPolicy
+          ? NetworkPolicyInputSchema.parse(agent.networkPolicy)
+          : agent.networkPolicy,
         organizationId,
         ...(slug && { slug }),
         ...(authorId && { authorId }),
@@ -1414,6 +1432,7 @@ class AgentModel {
         runtime: schema.agentsTable.runtime,
         namespace: schema.environmentsTable.namespace,
         defaultNamespace: schema.organizationsTable.defaultEnvironmentNamespace,
+        agentPolicy: schema.agentsTable.networkPolicy,
         environmentPolicy: schema.environmentsTable.networkPolicy,
         defaultPolicy: schema.organizationsTable.defaultNetworkPolicy,
         agentRuntimeTiers: schema.organizationsTable.agentRuntimeTiers,
@@ -1441,6 +1460,83 @@ class AgentModel {
         ),
       )
       .orderBy(desc(recentRuns.lastRunAt), schema.agentsTable.id);
+  }
+
+  /**
+   * Agents with their own egress policy, each with the namespace its Code
+   * Sandbox engine runs in: the bound environment's namespace, or the
+   * organization's default namespace when unbound. Optionally narrowed to one
+   * organization, one environment, or one agent.
+   */
+  static async listNetworkPolicyEngineTargets(
+    filter: {
+      organizationId?: string;
+      environmentId?: string;
+      agentId?: string;
+    } = {},
+  ): Promise<
+    {
+      id: string;
+      organizationId: string;
+      environmentId: string | null;
+      networkPolicy: NetworkPolicy;
+      namespace: string | null;
+    }[]
+  > {
+    const rows = await db
+      .select({
+        id: schema.agentsTable.id,
+        organizationId: schema.agentsTable.organizationId,
+        environmentId: schema.agentsTable.environmentId,
+        networkPolicy: schema.agentsTable.networkPolicy,
+        environmentNamespace: schema.environmentsTable.namespace,
+        defaultNamespace: schema.organizationsTable.defaultEnvironmentNamespace,
+      })
+      .from(schema.agentsTable)
+      .innerJoin(
+        schema.organizationsTable,
+        eq(schema.organizationsTable.id, schema.agentsTable.organizationId),
+      )
+      .leftJoin(
+        schema.environmentsTable,
+        and(
+          eq(schema.environmentsTable.id, schema.agentsTable.environmentId),
+          eq(
+            schema.environmentsTable.organizationId,
+            schema.agentsTable.organizationId,
+          ),
+        ),
+      )
+      .where(
+        and(
+          isNotNull(schema.agentsTable.networkPolicy),
+          notDeleted(schema.agentsTable),
+          filter.organizationId
+            ? eq(schema.agentsTable.organizationId, filter.organizationId)
+            : undefined,
+          filter.environmentId
+            ? eq(schema.agentsTable.environmentId, filter.environmentId)
+            : undefined,
+          filter.agentId
+            ? eq(schema.agentsTable.id, filter.agentId)
+            : undefined,
+        ),
+      );
+    return rows.flatMap((row) =>
+      row.networkPolicy
+        ? [
+            {
+              id: row.id,
+              organizationId: row.organizationId,
+              environmentId: row.environmentId,
+              networkPolicy: row.networkPolicy,
+              namespace: row.environmentId
+                ? row.environmentNamespace
+                : row.defaultNamespace,
+            },
+          ]
+        : [],
+    );
   }
 
   /**
@@ -1800,6 +1896,7 @@ class AgentModel {
       (params.filters?.status ?? "active") === "active" &&
       !params.filters?.labels &&
       !params.filters?.providerApiKeyId &&
+      !params.filters?.runtime &&
       params.filters?.pinned !== true &&
       params.filters?.scope !== "built_in";
     const externalWhereConditions: SQL[] = [
@@ -2363,6 +2460,24 @@ class AgentModel {
       whereConditions.push(
         ilike(schema.agentsTable.name, `%${escapeLikePattern(filters.name)}%`),
       );
+    }
+    if (filters?.runtime) {
+      // Match resolveAgentCatalogId: the launcher identifies the runtime,
+      // independently of the saved image registry or tag.
+      const command = sql<string>`coalesce(${schema.agentsTable.runtime}->'command'->>0, '')`;
+      if (filters.runtime === "chat") {
+        whereConditions.push(isNull(schema.agentsTable.runtime));
+      } else if (filters.runtime === "custom") {
+        whereConditions.push(
+          isNotNull(schema.agentsTable.runtime),
+          notInArray(
+            command,
+            AGENT_CATALOG_IDS.map((id) => `archestra-${id}`),
+          ),
+        );
+      } else {
+        whereConditions.push(eq(command, `archestra-${filters.runtime}`));
+      }
     }
     if (filters?.providerApiKeyId === "organization-default") {
       whereConditions.push(
@@ -4257,13 +4372,8 @@ class AgentModel {
 
         // Invalidate tool cache for all parent agents so they pick up the new tool name
         const parentAgentIds = await ToolModel.getParentAgentIds(id);
-        // Lazy (here and below): the chat MCP client imports the service
-        // layer, which would otherwise load with every model.
-        const { clearChatMcpClient } = await import(
-          "@/clients/chat-mcp-client"
-        );
         for (const parentAgentId of parentAgentIds) {
-          clearChatMcpClient(parentAgentId);
+          agentToolSurfaceChanged(parentAgentId);
         }
       }
 
@@ -4277,10 +4387,7 @@ class AgentModel {
         updatedAgent.toolExposureMode !== existingAgent.toolExposureMode ||
         updatedAgent.accessAllTools !== existingAgent.accessAllTools
       ) {
-        const { clearChatMcpClient } = await import(
-          "@/clients/chat-mcp-client"
-        );
-        clearChatMcpClient(id);
+        agentToolSurfaceChanged(id);
       }
     } else {
       updatedAgent = existingAgent;

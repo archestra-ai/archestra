@@ -29,8 +29,9 @@ const config: KnipConfig = {
     // Loaded by `vitest run --config` for the opt-in session storage benchmark.
     "vitest.benchmark.config.ts",
     // `pnpm check:layers` and the layer table it checks (also its
-    // dependency-cruiser configuration).
+    // dependency-cruiser configuration), and `pnpm check:projects`.
     "scripts/check-layers.mjs!",
+    "scripts/check-projects.mjs!",
     "layers.mjs!",
   ],
   // Browser-side static assets read at runtime via readFileSync (server.ts) —
@@ -41,9 +42,8 @@ const config: KnipConfig = {
     "typescript-7",
   ],
   ignoreBinaries: [
-    // biome and concurrently are in root package.json
+    // biome is in root package.json
     "biome",
-    "concurrently",
     // System tools that tests run where the machine has them.
     "kubectl",
     "unshare",

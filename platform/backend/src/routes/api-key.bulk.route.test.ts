@@ -1,19 +1,15 @@
 import { vi } from "vitest";
+import { auth } from "@/auth/better-auth";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-const { deleteApiKeyMock } = vi.hoisted(() => ({
-  deleteApiKeyMock: vi.fn(),
-}));
+// Better Auth owns key deletion; the rows below use the real test database.
+vi.mock("@/auth/better-auth");
 
-// Better Auth owns key deletion, so it is mocked at that boundary — the rows
-// themselves are real, which is what the fence below actually tests.
-vi.mock("@/auth/better-auth", () => ({
-  auth: { api: { deleteApiKey: deleteApiKeyMock } },
-}));
+const deleteApiKeyMock = vi.mocked(auth.api.deleteApiKey);
 
 describe("DELETE /api/api-keys/bulk", () => {
   let app: FastifyInstanceWithZod;
@@ -112,12 +108,10 @@ describe("DELETE /api/api-keys/bulk", () => {
     await seedKey("ok-1", "Fine", user.id);
     await seedKey("boom", "Broken", user.id);
     await seedKey("ok-2", "Also fine", user.id);
-    deleteApiKeyMock.mockImplementation(
-      ({ body }: { body: { keyId: string } }) => {
-        if (body.keyId === "boom") throw new Error("upstream refused");
-        return Promise.resolve({ success: true });
-      },
-    );
+    deleteApiKeyMock.mockImplementation((context) => {
+      if (context?.body.keyId === "boom") throw new Error("upstream refused");
+      return Promise.resolve({ success: true });
+    });
 
     const response = await bulkDelete(["ok-1", "boom", "ok-2"]);
 

@@ -23,7 +23,7 @@ All targets inherit the same tools from `agent-base`:
 | Independent code review | Nitpicker, pinned to a revision with reviewer deadlines and OpenTelemetry support |
 | Browser automation and recording | Playwright 1.64.0, Chromium, shot-scraper 1.12 |
 | Media processing | FFmpeg/ffprobe, H.264 and AAC encoding, subtitle rendering, fonts |
-| Project tooling | Node.js 24, pnpm, Python 3, uv/uvx, Rust 1.93 with Cargo, C/C++ build tools, OpenSSL headers, pkg-config, tmux |
+| Project tooling | Node.js 24, pnpm through corepack 0.36 (a repository's pinned `packageManager` version, else 11.28.7, which a pin elsewhere never replaces), Python 3, uv/uvx, Rust 1.93 with Cargo, C/C++ build tools, OpenSSL headers, pkg-config, tmux |
 | Local database | PostgreSQL 18 with pgvector, from the PostgreSQL project's Debian repository |
 
 These are enough to run the Archestra platform itself from a checkout, without
@@ -115,6 +115,30 @@ image's own, still runs after the hook in the client's non-interactive shells.
 `tests/command-oom-score.py` checks each client during the image build: its
 shell tool's command, a process the command starts and a process it leaves
 behind all get 1000, and the client and launcher keep their score.
+
+### Memory warden
+
+With the kubelet's default on cgroup v2 (`memory.oom.group`), a container that
+reaches its memory limit loses every process, the client's session included,
+whatever the scores. `archestra-agent-init` starts `archestra-memory-warden`
+(once per container) for that case. It polls the memory the kernel cannot
+reclaim (anonymous and shared memory, kernel stacks, page tables, sockets,
+unreclaimable slab) every 200 ms, and when that comes within a reserve of the
+limit (7.5% of it, at least 0.3 GiB and at most 1 GiB), or memory pressure
+stalls the container while close to it, it SIGKILLs the agent command with the
+most anonymous memory: a process with score 1000 under the agent's terminal
+(the tmux server on the default socket), with its whole process group when
+every member is one, and only when that frees at least the overshoot (and
+64 MiB), except within the last quarter of the reserve, where any command over
+64 MiB goes: memory held by what it never stops is noted once a minute in
+`memory-warden.notes.log` instead of costing every small command. The client, its launcher, tmux, PID 1 and anything
+detached from the agent's terminal (a dev stack's servers on their own tmux
+socket, PostgreSQL) are never stopped. The command's stderr gets a line saying
+why (appended, without blocking); each stop is a JSON line in `/var/run/archestra/memory-warden.log`, which
+the platform's memory-kill report and the repository's type-check and test
+reports count next to the kernel's `oom_kill`. On a node with
+`singleProcessOOMKill` the kernel's own choice backs it up.
+`tests/memory-warden.py` checks the trigger, the victim choice and one stop.
 
 Claude Code personal subscriptions use a token from the configured secrets backend. The wrapper sends inference through the Agent-scoped LLM proxy with a personal passthrough key, so token usage appears in proxy logs. The OAuth token remains the provider credential; subscription requests do not count toward metered cost limits. MCP calls use the Agent-scoped gateway and its tool policies.
 

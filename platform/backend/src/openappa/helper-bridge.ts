@@ -15,6 +15,7 @@ import { deployedFromRow } from "./battery-target";
 import { servedHelperSource } from "./composition-view";
 import { openappaDeclarations } from "./declarations";
 import { draftHelperSource } from "./draft-helper-sources";
+import { HelperSlots } from "./helper-slots";
 
 /**
  * The last line a helper wrote to stderr, safe as a header value. Untrusted:
@@ -31,7 +32,12 @@ export type HelperConsultOutcome =
       diagnostics?: HelperDiagnostics;
     }
   | { kind: "not_found" }
-  | { kind: "failed"; reason: string; diagnostics?: HelperDiagnostics }
+  | {
+      kind: "failed";
+      reason: string;
+      exitStatus?: number;
+      diagnostics?: HelperDiagnostics;
+    }
   | { kind: "timed_out"; diagnostics?: HelperDiagnostics }
   | { kind: "busy" };
 
@@ -44,8 +50,7 @@ export type HelperConsultOutcome =
  * about the run is persisted here.
  */
 class OpenAppaHelperBridge {
-  /** Consults in flight, a raced-out run included until it settles. */
-  private inFlight = 0;
+  private readonly slots = new HelperSlots(helperConsultCap);
 
   async consult(params: {
     installId: string;
@@ -57,7 +62,7 @@ class OpenAppaHelperBridge {
       installId: params.installId,
       externalName: params.externalName,
     };
-    const work = this.run(params);
+    const work = this.run(params, startedAt + HELPER_DEADLINE_MS);
     let outcome: HelperConsultOutcome;
     try {
       outcome = await withDeadline(
@@ -82,17 +87,28 @@ class OpenAppaHelperBridge {
       outcome = { kind: "timed_out" };
     }
     logger.info(
-      { ...context, outcome: outcome.kind, durationMs: Date.now() - startedAt },
+      {
+        ...context,
+        outcome: outcome.kind,
+        ...(outcome.kind === "failed" && {
+          reason: outcome.reason,
+          exitStatus: outcome.exitStatus,
+        }),
+        durationMs: Date.now() - startedAt,
+      },
       "OpenAPPA battery helper consulted",
     );
     return outcome;
   }
 
-  private async run(params: {
-    installId: string;
-    externalName: string;
-    request: string;
-  }): Promise<HelperConsultOutcome> {
+  private async run(
+    params: {
+      installId: string;
+      externalName: string;
+      request: string;
+    },
+    deadline: number,
+  ): Promise<HelperConsultOutcome> {
     const install = await this.helperSource(params.installId);
     if (!install) return { kind: "not_found" };
     const battery = await openappaDeclarations.resolveInstalled({
@@ -143,8 +159,11 @@ class OpenAppaHelperBridge {
     const cwd = skillRootPath(battery.name);
     // Only sandbox execution consumes this share. In-process audience reads,
     // missing helpers and credential validation do not occupy sandbox workers.
-    if (this.inFlight >= helperConsultCap()) return { kind: "busy" };
-    this.inFlight++;
+    // A consult over the cap waits for a slot as long as its execution budget
+    // still ends before the deadline. The wait comes out of the margin kept for
+    // container start-up, which beats turning the consult away outright.
+    const waitUntil = deadline - HELPER_EXEC_TIMEOUT_SECONDS * 1000;
+    if (!(await this.slots.acquire(waitUntil))) return { kind: "busy" };
     try {
       let executed: Awaited<
         ReturnType<typeof sandboxRuntimeService.runCommand>
@@ -153,8 +172,9 @@ class OpenAppaHelperBridge {
         await sandboxRuntimeService.attach(CONSUMER_ID);
         executed = await sandboxRuntimeService.runCommand({
           // Helpers are short-lived; lazy imports (Python 3.15+, ignored before)
-          // skip loading modules a consult never touches.
-          command: `PYTHON_LAZY_IMPORTS=all ${external.command.map(shellQuote).join(" ")}`,
+          // skip loading modules a consult never touches. The helper reads its
+          // budget as an OpenAPPA command external reads it from the runtime.
+          command: `${CONSULT_TIMEOUT_VARIABLE}=${HELPER_EXEC_TIMEOUT_SECONDS * 1000} PYTHON_LAZY_IMPORTS=all ${external.command.map(shellQuote).join(" ")}`,
           cwd,
           timeoutSeconds: HELPER_EXEC_TIMEOUT_SECONDS,
           replayEntries: [
@@ -192,6 +212,7 @@ class OpenAppaHelperBridge {
         return {
           kind: "failed",
           reason: `the helper exited with status ${executed.exitCode}`,
+          exitStatus: executed.exitCode,
           diagnostics,
         };
       const answer = parseJsonObject(executed.stdout);
@@ -204,7 +225,7 @@ class OpenAppaHelperBridge {
           };
     } finally {
       // A timed-out consult still holds its share until the underlying run ends.
-      this.inFlight--;
+      this.slots.release();
     }
   }
 
@@ -309,6 +330,8 @@ const CREDENTIAL_FAILURES: Record<CredentialFailure, string> = {
 const CONSUMER_ID = "openappa-helper-bridge";
 /** The helper's own execution budget inside the container. */
 const HELPER_EXEC_TIMEOUT_SECONDS = 4;
+/** Where an OpenAPPA command external reads the milliseconds it has to answer. */
+const CONSULT_TIMEOUT_VARIABLE = "APPA_CONSULT_TIMEOUT_MS";
 /**
  * Wall-clock budget for one helper consult, container materialization
  * included: the execution budget plus a margin, kept under the runtime's own

@@ -113,7 +113,8 @@ jobs:
       # Finish publishing the cache; newer pending commits collapse to the latest.
       cancel-in-progress: false
     permissions:
-      contents: read # Checkout only; the product is an Actions cache entry.
+      contents: read # Check out sources for the exact-source declaration cache.
+      id-token: write # Publish declarations through Workload Identity Federation.
     defaults:
       run:
         working-directory: ./platform
@@ -153,3 +154,31 @@ jobs:
             rustup show
             pnpm exec turbo build --filter="@backend^..."
           }
+
+      # Walk the solution even when Turbo has cached a successful dependency
+      # check: the portable artifact also needs shared/linter declarations.
+      - name: Build portable backend declarations
+        run: pnpm --dir backend type-check
+
+      - name: Pack portable backend declarations
+        run: node scripts/backend-types-prebuilt.mjs --pack "$RUNNER_TEMP/backend-types-cache"
+
+      - name: Authenticate to Google Artifact Registry
+        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        with:
+          service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          registry: europe-west1-docker.pkg.dev
+
+      - name: Publish portable backend declarations
+        env:
+          REPOSITORY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/backend-types-cache
+        run: |
+          key="$(node scripts/backend-types-prebuilt.mjs --key)"
+          docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --tag "$REPOSITORY:$key" --push --file - "$RUNNER_TEMP/backend-types-cache" <<'EOF'
+          FROM scratch
+          COPY backend-types.json /
+          EOF

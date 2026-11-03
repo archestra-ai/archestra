@@ -1863,11 +1863,15 @@ Required RBAC permission: [`credential:create`](/docs/reference/permissions#cred
 | `get_agent` | Get a specific agent by ID or name. | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `list_agents` | List agents with optional filtering by name, provider key, or how the caller reaches them (access). | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `edit_agent` | Edit an existing agent. | `update` on the agent (granted per item) |
+| `get_agent_skill_policy` | Read an internal agent's skill allowlist, exclusions and current revision. | [`agent:read`](/docs/reference/permissions#agent:read) † |
+| `patch_agent_skill_policy` | Change an internal agent's skill activation mode, allowlist or exclusions using its current expectedRevision from get_agent_skill_policy. | `update` on the agent (granted per item) † |
 | `list_llm_models` | List the provider API keys the caller can use and the models linked to each. | [`llmModel:read`](/docs/reference/permissions#llmModel:read) |
 | `list_hooks` | List an agent's lifecycle hooks. | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `create_hook` | Create a lifecycle hook on an agent. | `update` on the agent (granted per item) |
 | `update_hook` | Update an existing lifecycle hook: its event, file name, script content, Python requirements, or enabled state. | `update` on the agent (granted per item) |
 | `delete_hook` | Delete a lifecycle hook by ID. | `update` on the agent (granted per item) |
+
+† This tool enforces an additional access requirement beyond its RBAC permission — see its details below.
 
 #### create_agent
 
@@ -1921,6 +1925,11 @@ Required RBAC permission: [`agent:create`](/docs/reference/permissions#agent:cre
 | `runtime.image` | `string` | No |  |
 | `runtime.command` | `string[] \| null` | No |  |
 | `runtime.inferenceProtocol` | `"openai_responses" \| "openai_chat" \| "anthropic"` | No |  |
+| `networkPolicy` | `object` | No | The agent's own outbound network policy for its Agent Runtime and code sandbox. It replaces the policy of the agent's environment. Requires permission to update environments. |
+| `networkPolicy.egressMode` | `"off" \| "restricted" \| "unrestricted"` | Yes | unrestricted allows all outbound traffic, restricted allows only the listed destinations, off blocks all outbound traffic. |
+| `networkPolicy.domainPreset` | `"none" \| "common_dependencies" \| "package_managers"` | No | Restricted mode only: a built-in domain allowlist to add (none, common_dependencies, package_managers). |
+| `networkPolicy.allowedDomains` | `string[]` | No | Restricted mode only: extra allowed domains, e.g. api.github.com or *.example.com. |
+| `networkPolicy.allowedCidrs` | `string[]` | No | Allowed IP ranges in CIDR notation, e.g. 10.0.0.0/8. |
 | `llmApiKeyId` | `string` | No | Provider API key the agent uses. Set together with modelId. Use list_llm_models to find both. |
 | `modelId` | `string` | No | Model the agent uses: the model's id from list_llm_models, not its provider name. Set together with llmApiKeyId. |
 
@@ -2085,9 +2094,150 @@ Required RBAC permission: `update` on the agent (granted per item)
 | `suggestedPrompts[].prompt` | `string` | Yes | Suggested prompt text users can click to start a conversation. |
 | `systemPrompt` | `string \| null` | No | New system prompt for the agent. |
 | `runtime` | `object \| null` | No | Run this agent in its own container (Agent Runtime) instead of the built-in chat harness. Pass { template } for a maintained CLI, or { image } for a custom image. Other fields override the defaults: claudeCode.authentication is 'subscription' (each user signs in with their own Claude account, the default) or 'provider' (bill through llmApiKeyId/modelId); credentials declares environment variables a run needs (users supply values later, or use transfer_credential); ttlHours, idleTimeoutMinutes, and maxCostUsd bound each run; privileged requires an agent administrator. Replaces the whole runtime: pass every field to keep. Pass null to return the agent to the built-in chat harness. |
+| `networkPolicy` | `object \| null` | No | The agent's own outbound network policy for its Agent Runtime and code sandbox. It replaces the policy of the agent's environment. Requires permission to update environments. Replaces the whole policy. Pass null to inherit the environment's policy again. |
+| `networkPolicy.egressMode` | `"off" \| "restricted" \| "unrestricted"` | Yes | unrestricted allows all outbound traffic, restricted allows only the listed destinations, off blocks all outbound traffic. |
+| `networkPolicy.domainPreset` | `"none" \| "common_dependencies" \| "package_managers"` | No | Restricted mode only: a built-in domain allowlist to add (none, common_dependencies, package_managers). |
+| `networkPolicy.allowedDomains` | `string[]` | No | Restricted mode only: extra allowed domains, e.g. api.github.com or *.example.com. |
+| `networkPolicy.allowedCidrs` | `string[]` | No | Allowed IP ranges in CIDR notation, e.g. 10.0.0.0/8. |
 | `llmApiKeyId` | `string \| null` | No | Provider API key the agent uses. Set together with modelId. Use list_llm_models to find both. Pass null for both to use the default model. |
 | `modelId` | `string \| null` | No | Model the agent uses: the model's id from list_llm_models, not its provider name. Set together with llmApiKeyId. Pass null for both to use the default model. |
 
+
+#### get_agent_skill_policy
+
+Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
+
+Additional access requirement: Also requires [`skill:read`](/docs/reference/permissions#skill:read). Returns an internal agent's skill activation policy.
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | Yes | The ID of the internal agent. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `mode` | `"all" \| "manual"` | Yes |  |
+| `revision` | `integer` | Yes |  |
+| `allowedReferences` | `object[]` | Yes |  |
+| `allowedReferences[].source` | `"native" \| "external_mcp" \| "plugin"` | Yes | "native": A skill-library skill. "external_mcp": A skill from an MCP server. "plugin": A skill bundled in a plugin. |
+| `allowedReferences[].skillId` | `string` | When `source="native"` | The skill-library skill ID. |
+| `allowedReferences[].mcpServerId` | `string` | When `source="external_mcp"` | The MCP server installation ID. |
+| `allowedReferences[].uri` | `string` | When `source="external_mcp"` | The skill resource URI. |
+| `allowedReferences[].pluginId` | `string` | When `source="plugin"` | The plugin ID. |
+| `allowedReferences[].skillPath` | `string` | When `source="plugin"` | The skill root inside the plugin. |
+| `excludedReferences` | `object[]` | Yes |  |
+| `excludedReferences[].source` | `"native" \| "external_mcp" \| "plugin"` | Yes | "native": A skill-library skill. "external_mcp": A skill from an MCP server. "plugin": A skill bundled in a plugin. |
+| `excludedReferences[].skillId` | `string` | When `source="native"` | The skill-library skill ID. |
+| `excludedReferences[].mcpServerId` | `string` | When `source="external_mcp"` | The MCP server installation ID. |
+| `excludedReferences[].uri` | `string` | When `source="external_mcp"` | The skill resource URI. |
+| `excludedReferences[].pluginId` | `string` | When `source="plugin"` | The plugin ID. |
+| `excludedReferences[].skillPath` | `string` | When `source="plugin"` | The skill root inside the plugin. |
+| `allowedSkills` | `object[]` | Yes |  |
+| `allowedSkills[].reference` | `object` | Yes | Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath. |
+| `allowedSkills[].reference.source` | `"native" \| "external_mcp" \| "plugin"` | Yes | "native": A skill-library skill. "external_mcp": A skill from an MCP server. "plugin": A skill bundled in a plugin. |
+| `allowedSkills[].reference.skillId` | `string` | When `source="native"` | The skill-library skill ID. |
+| `allowedSkills[].reference.mcpServerId` | `string` | When `source="external_mcp"` | The MCP server installation ID. |
+| `allowedSkills[].reference.uri` | `string` | When `source="external_mcp"` | The skill resource URI. |
+| `allowedSkills[].reference.pluginId` | `string` | When `source="plugin"` | The plugin ID. |
+| `allowedSkills[].reference.skillPath` | `string` | When `source="plugin"` | The skill root inside the plugin. |
+| `allowedSkills[].name` | `string` | Yes | The declared, human-facing skill name. |
+| `allowedSkills[].activationName` | `string` | Yes | The exact name to pass to load_skill. |
+| `allowedSkills[].description` | `string` | Yes | The skill description. |
+| `allowedSkills[].scope` | `"personal" \| "team" \| "org"` | Yes | The visibility scope through which the skill is shared. |
+| `allowedSkills[].providerName` | `string \| null` | Yes | Plugin or MCP server name; null for a skill-library entry. |
+| `excludedSkills` | `object[]` | Yes |  |
+| `excludedSkills[].reference` | `object` | Yes | Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath. |
+| `excludedSkills[].reference.source` | `"native" \| "external_mcp" \| "plugin"` | Yes | "native": A skill-library skill. "external_mcp": A skill from an MCP server. "plugin": A skill bundled in a plugin. |
+| `excludedSkills[].reference.skillId` | `string` | When `source="native"` | The skill-library skill ID. |
+| `excludedSkills[].reference.mcpServerId` | `string` | When `source="external_mcp"` | The MCP server installation ID. |
+| `excludedSkills[].reference.uri` | `string` | When `source="external_mcp"` | The skill resource URI. |
+| `excludedSkills[].reference.pluginId` | `string` | When `source="plugin"` | The plugin ID. |
+| `excludedSkills[].reference.skillPath` | `string` | When `source="plugin"` | The skill root inside the plugin. |
+| `excludedSkills[].name` | `string` | Yes | The declared, human-facing skill name. |
+| `excludedSkills[].activationName` | `string` | Yes | The exact name to pass to load_skill. |
+| `excludedSkills[].description` | `string` | Yes | The skill description. |
+| `excludedSkills[].scope` | `"personal" \| "team" \| "org"` | Yes | The visibility scope through which the skill is shared. |
+| `excludedSkills[].providerName` | `string \| null` | Yes | Plugin or MCP server name; null for a skill-library entry. |
+| `hiddenAllowedCount` | `integer` | Yes |  |
+| `hiddenExcludedCount` | `integer` | Yes |  |
+
+#### patch_agent_skill_policy
+
+Required RBAC permission: `update` on the agent (granted per item)
+
+Additional access requirement: Also requires [`skill:read`](/docs/reference/permissions#skill:read). Requires the current revision and an update grant on the agent. Only skills the caller can access may be added.
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | Yes | The ID of the internal agent. |
+| `patch` | `object` | Yes | The policy changes, guarded by the revision returned by get_agent_skill_policy. |
+| `patch.expectedRevision` | `integer` | Yes |  |
+| `patch.mode` | `"all" \| "manual"` | No |  |
+| `patch.operations` | `object[]` | No |  |
+| `patch.operations[].op` | `"add" \| "remove"` | Yes |  |
+| `patch.operations[].disposition` | `"allow" \| "exclude"` | Yes |  |
+| `patch.operations[].reference` | `object` | Yes | Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath. |
+| `patch.operations[].reference.source` | `"native" \| "external_mcp" \| "plugin"` | Yes | "native": A skill-library skill. "external_mcp": A skill from an MCP server. "plugin": A skill bundled in a plugin. |
+| `patch.operations[].reference.skillId` | `string` | When `source="native"` | The skill-library skill ID. |
+| `patch.operations[].reference.mcpServerId` | `string` | When `source="external_mcp"` | The MCP server installation ID. |
+| `patch.operations[].reference.uri` | `string` | When `source="external_mcp"` | The skill resource URI. |
+| `patch.operations[].reference.pluginId` | `string` | When `source="plugin"` | The plugin ID. |
+| `patch.operations[].reference.skillPath` | `string` | When `source="plugin"` | The skill root inside the plugin. |
+| `patch.discardUnavailable` | `string[]` | No |  |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `mode` | `"all" \| "manual"` | Yes |  |
+| `revision` | `integer` | Yes |  |
+| `allowedReferences` | `object[]` | Yes |  |
+| `allowedReferences[].source` | `"native" \| "external_mcp" \| "plugin"` | Yes | "native": A skill-library skill. "external_mcp": A skill from an MCP server. "plugin": A skill bundled in a plugin. |
+| `allowedReferences[].skillId` | `string` | When `source="native"` | The skill-library skill ID. |
+| `allowedReferences[].mcpServerId` | `string` | When `source="external_mcp"` | The MCP server installation ID. |
+| `allowedReferences[].uri` | `string` | When `source="external_mcp"` | The skill resource URI. |
+| `allowedReferences[].pluginId` | `string` | When `source="plugin"` | The plugin ID. |
+| `allowedReferences[].skillPath` | `string` | When `source="plugin"` | The skill root inside the plugin. |
+| `excludedReferences` | `object[]` | Yes |  |
+| `excludedReferences[].source` | `"native" \| "external_mcp" \| "plugin"` | Yes | "native": A skill-library skill. "external_mcp": A skill from an MCP server. "plugin": A skill bundled in a plugin. |
+| `excludedReferences[].skillId` | `string` | When `source="native"` | The skill-library skill ID. |
+| `excludedReferences[].mcpServerId` | `string` | When `source="external_mcp"` | The MCP server installation ID. |
+| `excludedReferences[].uri` | `string` | When `source="external_mcp"` | The skill resource URI. |
+| `excludedReferences[].pluginId` | `string` | When `source="plugin"` | The plugin ID. |
+| `excludedReferences[].skillPath` | `string` | When `source="plugin"` | The skill root inside the plugin. |
+| `allowedSkills` | `object[]` | Yes |  |
+| `allowedSkills[].reference` | `object` | Yes | Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath. |
+| `allowedSkills[].reference.source` | `"native" \| "external_mcp" \| "plugin"` | Yes | "native": A skill-library skill. "external_mcp": A skill from an MCP server. "plugin": A skill bundled in a plugin. |
+| `allowedSkills[].reference.skillId` | `string` | When `source="native"` | The skill-library skill ID. |
+| `allowedSkills[].reference.mcpServerId` | `string` | When `source="external_mcp"` | The MCP server installation ID. |
+| `allowedSkills[].reference.uri` | `string` | When `source="external_mcp"` | The skill resource URI. |
+| `allowedSkills[].reference.pluginId` | `string` | When `source="plugin"` | The plugin ID. |
+| `allowedSkills[].reference.skillPath` | `string` | When `source="plugin"` | The skill root inside the plugin. |
+| `allowedSkills[].name` | `string` | Yes | The declared, human-facing skill name. |
+| `allowedSkills[].activationName` | `string` | Yes | The exact name to pass to load_skill. |
+| `allowedSkills[].description` | `string` | Yes | The skill description. |
+| `allowedSkills[].scope` | `"personal" \| "team" \| "org"` | Yes | The visibility scope through which the skill is shared. |
+| `allowedSkills[].providerName` | `string \| null` | Yes | Plugin or MCP server name; null for a skill-library entry. |
+| `excludedSkills` | `object[]` | Yes |  |
+| `excludedSkills[].reference` | `object` | Yes | Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath. |
+| `excludedSkills[].reference.source` | `"native" \| "external_mcp" \| "plugin"` | Yes | "native": A skill-library skill. "external_mcp": A skill from an MCP server. "plugin": A skill bundled in a plugin. |
+| `excludedSkills[].reference.skillId` | `string` | When `source="native"` | The skill-library skill ID. |
+| `excludedSkills[].reference.mcpServerId` | `string` | When `source="external_mcp"` | The MCP server installation ID. |
+| `excludedSkills[].reference.uri` | `string` | When `source="external_mcp"` | The skill resource URI. |
+| `excludedSkills[].reference.pluginId` | `string` | When `source="plugin"` | The plugin ID. |
+| `excludedSkills[].reference.skillPath` | `string` | When `source="plugin"` | The skill root inside the plugin. |
+| `excludedSkills[].name` | `string` | Yes | The declared, human-facing skill name. |
+| `excludedSkills[].activationName` | `string` | Yes | The exact name to pass to load_skill. |
+| `excludedSkills[].description` | `string` | Yes | The skill description. |
+| `excludedSkills[].scope` | `"personal" \| "team" \| "org"` | Yes | The visibility scope through which the skill is shared. |
+| `excludedSkills[].providerName` | `string \| null` | Yes | Plugin or MCP server name; null for a skill-library entry. |
+| `hiddenAllowedCount` | `integer` | Yes |  |
+| `hiddenExcludedCount` | `integer` | Yes |  |
 
 #### list_llm_models
 
@@ -2916,6 +3066,8 @@ Required RBAC permission: `update` on the MCP gateway (granted per item)
 | `labels[].value` | `string` | Yes |  |
 | `name` | `string` | No | New name for the MCP gateway. |
 | `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. |
+| `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only', since dynamic access only works through the search/run dispatch surface. Defaults to false. Also gated by the organization's security settings. |
+| `accessAllSubagents` | `boolean` | No | Allow dynamic subagent delegation: the agent may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions). Defaults to false. |
 | `knowledgeBaseIds` | `string[]` | No | Replace the MCP gateway's assigned knowledge bases with this set. |
 | `connectorIds` | `string[]` | No | Replace the MCP gateway's directly assigned knowledge connectors with this set. |
 

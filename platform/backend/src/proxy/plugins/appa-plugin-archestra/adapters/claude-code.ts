@@ -23,6 +23,11 @@ import {
   claudeCodeRelayArrivals,
   isClaudeCodeRelayReceipt,
 } from "./claude-code-relay";
+import {
+  claudeDesktopGroupedAnswer,
+  claudeDesktopQuestion,
+  claudeOversizedQuestion,
+} from "./claude-question";
 import { structuredQuestionRuling } from "./native-question-ruling";
 import {
   bindMintedChildTrajectory,
@@ -100,6 +105,7 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   readonly childTranscriptPaths = CHILD_PATHS;
   readonly nativeQuestion = {
     toolName: "AskUserQuestion",
+    maxOptions: 4,
     // A review shows its call in each option's preview, inside the form, and
     // asks one line about it.
     fromAskUser: (args: AskUserArguments) => {
@@ -475,19 +481,12 @@ export class AppaClaudeDesktopAdapter extends AppaClaudeCodeAdapter {
   // submission enabled.
   override readonly nativeQuestion = {
     toolName: "AskUserQuestion",
-    fromAskUser: (args: AskUserArguments) => ({
-      questions: [
-        {
-          question: args.question,
-          header: questionHeader(args.header, 12),
-          options: args.options.map((option) => ({
-            label: option.label,
-            description: option.description ?? option.label,
-          })),
-          multiSelect: args.allowMultiple === true,
-        },
-      ],
-    }),
+    requiresNativeForm: true,
+    maxOptions: 4,
+    maxConvertedOptions: 12,
+    fromAskUser: claudeDesktopQuestion,
+    fromNativeQuestion: claudeOversizedQuestion,
+    ordinaryResultFromAskUser: claudeDesktopGroupedAnswer,
     rulingFromResult: (result: NativeQuestionResult, asked: AskUserArguments) =>
       structuredQuestionRuling(result, asked.question),
     formFallback: true,

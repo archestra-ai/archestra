@@ -336,6 +336,40 @@ jobs:
           pattern: ${{ inputs.image_name }}-digests-*-${{ github.run_attempt }}
           merge-multiple: true
 
+      # A partial rerun can retain successful build legs from attempt 1 while
+      # rerunning this manifest job in attempt 2. Never download old digests:
+      # recreate the missing set from this attempt's verified candidate archives.
+      - name: Check current-attempt digest set
+        if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}
+        id: digest-set
+        env:
+          EXPECTED_LEGS: ${{ inputs.amd64_only && '1' || '2' }}
+        run: |
+          shopt -s nullglob
+          digest_files=(/tmp/digests/*)
+          if (("${#digest_files[@]}" == "$EXPECTED_LEGS")); then
+            echo "recover=false" >> "$GITHUB_OUTPUT"
+          elif (("${#digest_files[@]}" < "$EXPECTED_LEGS")); then
+            echo "recover=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Unexpected number of current-attempt digest files"
+            exit 1
+          fi
+
+      - name: Download current-attempt selection for digest recovery
+        if: ${{ startsWith(inputs.checkout_ref, 'platform-v') && steps.digest-set.outputs.recover == 'true' }}
+        uses: $/.github/actions/github-download-artifact
+        with:
+          name: release-candidate-selection-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-selection
+
+      - name: Download current-attempt candidate archives for digest recovery
+        if: ${{ startsWith(inputs.checkout_ref, 'platform-v') && steps.digest-set.outputs.recover == 'true' }}
+        uses: $/.github/actions/github-download-artifact
+        with:
+          pattern: promoted-candidate-${{ inputs.image_name }}-*-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-candidates
+
       # No builder setup needed: `docker buildx imagetools` is a pure registry
       # manifest operation and runs on the preinstalled buildx CLI.
       - name: Log in to GHCR
@@ -360,6 +394,40 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Recover current-attempt digests from verified candidate bytes
+        if: ${{ startsWith(inputs.checkout_ref, 'platform-v') && steps.digest-set.outputs.recover == 'true' }}
+        shell: bash
+        env:
+          IMAGE_NAME: ${{ inputs.image_name }}
+          IMAGE_DESTINATION: ${{ inputs.image_registry }}/${{ inputs.image_name }}
+          EXPECTED_VERSION: ${{ inputs.version }}
+          AMD64_ONLY: ${{ inputs.amd64_only }}
+          POLICY_SHA: ${{ github.workflow_sha }}
+          SELECTION_FILE: ${{ runner.temp }}/release-selection/release-candidate-selection.json
+          CANDIDATES_DIR: ${{ runner.temp }}/release-candidates
+        run: |
+          set -euo pipefail
+          [[ "$POLICY_SHA" =~ ^[0-9a-f]{40}$ ]]
+          policy_dir="$RUNNER_TEMP/release-handoff-policy"
+          mkdir -p "$policy_dir" /tmp/digests
+          for script in release-handoff.py release-candidate.py release-image-policy.py release-oci.py; do
+            git show "$POLICY_SHA:.github/scripts/$script" > "$policy_dir/$script"
+          done
+          # Discard partial current-attempt digests and regenerate a complete set.
+          find /tmp/digests -maxdepth 1 -type f -delete
+          arches=(amd64)
+          if [ "$AMD64_ONLY" = false ]; then arches+=(arm64); fi
+          for arch in "${arches[@]}"; do
+            export IMAGE_ARCH="$arch"
+            export CANDIDATE_DIR="$CANDIDATES_DIR/promoted-candidate-$IMAGE_NAME-$arch-$GITHUB_RUN_ATTEMPT"
+            export GITHUB_OUTPUT="$RUNNER_TEMP/recovered-$arch-output"
+            : > "$GITHUB_OUTPUT"
+            python3 "$policy_dir/release-handoff.py" promote
+            digest=$(sed -n 's/^digest=//p' "$GITHUB_OUTPUT")
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+            git rev-parse HEAD > "/tmp/digests/${digest#sha256:}"
+          done
 
       # Every per-arch digest comes from this run's successful build matrix,
       # checked out at checkout_ref. Validate the complete set before scanning

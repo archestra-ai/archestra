@@ -6195,7 +6195,7 @@ describe("rendering runtime text for this client", () => {
       const run = async (
         sessionId: string,
         how: "header" | "runtime" | "attended",
-        toolCalls: { id: string; name: string; arguments: object }[] = [
+        toolCalls: LlmProxyToolCallsContext["toolCalls"] = [
           { id: "post", name: "post_message", arguments: {} },
           { id: "send", name: "send_email", arguments: {} },
           { id: "read", name: "read_file", arguments: {} },

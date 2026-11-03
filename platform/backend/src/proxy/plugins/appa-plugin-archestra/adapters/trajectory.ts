@@ -505,9 +505,10 @@ function runtimeNest(params: {
 
 /**
  * The already-bound trusted session, when the client header names that same
- * root and native metadata names a child of it. An explicit child-session
- * claim, a parent header for a different trajectory, or a client with no
- * native child id is not an anchor.
+ * root and native metadata or a signed spawn call names a child of it. An
+ * explicit child-session claim, a parent header for a different trajectory,
+ * or a child with neither a native id nor a signed spawn call id is not an
+ * anchor.
  */
 function workspaceAnchor(params: {
   context: AppaMatchContext;

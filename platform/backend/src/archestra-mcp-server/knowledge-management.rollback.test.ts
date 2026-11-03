@@ -24,7 +24,12 @@ import {
 } from "@/models";
 import { createEnvironment } from "@/services/environments/environment";
 import { beforeEach, describe, expect, test } from "@/test";
-import { indexKnowledgeFile } from "@/test/knowledge-search";
+import {
+  configureKnowledgeSearch,
+  indexKnowledgeFile,
+  knowledgeEmbeddingHandler,
+} from "@/test/knowledge-search";
+import { useMswServer } from "@/test/msw";
 import type { Agent, KnowledgeBase, KnowledgeBaseConnector } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
 import { archestraMcpBranding } from "./branding";
@@ -1153,6 +1158,105 @@ describe("knowledge-management tool execution", () => {
       );
       expect(verifyResult.isError).toBe(true);
       expect((verifyResult.content[0] as any).text).toContain("not found");
+    });
+  });
+
+  describe("uploaded files environment retrieval", () => {
+    useMswServer(knowledgeEmbeddingHandler);
+
+    test("moves an existing uploaded document between Default and Support search results without reindexing", async ({
+      makeKnowledgeBase,
+      makeAgent,
+      makeLlmProviderApiKey,
+    }) => {
+      const organizationId = mockContext.organizationId!;
+      const userId = mockContext.userId!;
+      await configureKnowledgeSearch(organizationId, makeLlmProviderApiKey);
+      const kb = await makeKnowledgeBase(organizationId, {
+        access: { users: [userId], preset: "manage" },
+      });
+      const { document } = await indexKnowledgeFile({
+        organizationId,
+        knowledgeBaseId: kb.id,
+        uploadedBy: userId,
+        content: "The quokka retention policy is seven days.",
+        published: false,
+      });
+      const support = await createEnvironment({
+        organizationId,
+        userId,
+        data: { name: "Support" },
+      });
+      const engineering = await createEnvironment({
+        organizationId,
+        userId,
+        data: { name: "Engineering" },
+      });
+      const agents = await Promise.all(
+        [null, support.id, engineering.id].map((environmentId) =>
+          makeAgent({
+            organizationId,
+            environmentId,
+            knowledgeBaseIds: [kb.id],
+            accessAllTools: false,
+          }),
+        ),
+      );
+      const query = (agent: Agent) =>
+        executeArchestraTool(
+          t("query_knowledge_sources"),
+          { query: "quokka retention" },
+          {
+            ...mockContext,
+            agent: { id: agent.id, name: agent.name },
+          },
+        );
+      const expectDocument = async (agent: Agent, present: boolean) => {
+        const result = await query(agent);
+        if (present) {
+          expect(result.isError).toBe(false);
+          expect(JSON.stringify(result)).toContain(document.id);
+        } else {
+          expect(result.isError).toBe(true);
+          expect(JSON.stringify(result)).toContain(
+            "No connectors found for the assigned knowledge bases or agent",
+          );
+          expect(JSON.stringify(result)).not.toContain(document.id);
+        }
+      };
+      await expectDocument(agents[0], true);
+      await expectDocument(agents[1], false);
+      await expectDocument(agents[2], false);
+
+      const updated = await executeArchestraTool(
+        t("update_knowledge_base"),
+        {
+          id: kb.id,
+          uploadedFilesEnvironmentId: support.id,
+        },
+        mockContext,
+      );
+      expect(updated.isError).toBe(false);
+      const supportResults = await query(agents[1]);
+      expect(supportResults.isError).toBe(false);
+      expect(JSON.stringify(supportResults)).toContain(document.id);
+      expect(JSON.stringify(supportResults)).toContain(
+        "The quokka retention policy is seven days.",
+      );
+      await expectDocument(agents[0], false);
+      await expectDocument(agents[2], false);
+
+      const cleared = await executeArchestraTool(
+        t("update_knowledge_base"),
+        {
+          id: kb.id,
+          uploadedFilesEnvironmentId: null,
+        },
+        mockContext,
+      );
+      expect(cleared.isError).toBe(false);
+      await expectDocument(agents[0], true);
+      await expectDocument(agents[1], false);
     });
   });
 

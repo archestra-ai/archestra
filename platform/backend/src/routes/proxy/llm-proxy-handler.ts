@@ -10,6 +10,7 @@ import type { BillingAttribution } from "@/utils/billable-usage";
 import { primaryBillingUsage } from "@/utils/billable-usage";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
 import { UpstreamStreamIncompleteError } from "@/utils/upstream-stream-incomplete-error";
+import { isBedrockPromptOverBudget } from "./utils/bedrock-prompt-budget";
 /**
  * Generic LLM Proxy Handler
  *
@@ -2342,6 +2343,26 @@ async function handleObservedLLMProxy<
         ? { ...asRecord(providerRequest), tool_choice: "none" }
         : providerRequest
     ) as TRequest;
+
+    // The native Converse routes receive the complete client history. Check
+    // the outbound text against the catalog window before calling Bedrock;
+    // silently removing turns here would break tool-use and cache semantics.
+    if (
+      provider.interactionType === "bedrock:converse" &&
+      !modelPoolPlan &&
+      !autoRoutedMember &&
+      isBedrockPromptOverBudget(
+        finalRequest,
+        actualModel,
+        catalogModel?.customContextLength ?? catalogModel?.contextLength,
+      )
+    ) {
+      throw new ApiError(
+        413,
+        "The prompt is too large for this model's context window. Shorten the conversation or start a new session.",
+        ArchestraInternalErrorCode.ContextLengthExceeded,
+      );
+    }
 
     // The tool names the request declares, in the canonical form tool-call
     // names are compared in. Read from the request body rather than

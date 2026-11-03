@@ -207,15 +207,12 @@ test.each([
   expect(built.args).toEqual(
     override ? ["build", "--webpack", "--profile"] : ["build", "--turbopack"],
   );
-  if (override) expect(fs.existsSync(cached)).toBe(false);
-  else {
-    expect(JSON.parse(fs.readFileSync(cached, "utf8"))).toEqual([
-      path.join(platform, "scripts/dev-lite.sh"),
-      "frontend-artifact",
-      "build",
-      "--turbopack",
-    ]);
-  }
+  expect(JSON.parse(fs.readFileSync(cached, "utf8"))).toEqual([
+    path.join(platform, "scripts/dev-lite.sh"),
+    "frontend-artifact",
+    "build",
+    ...(override ? ["--webpack", "--profile"] : ["--turbopack"]),
+  ]);
   expect(built.node).toBe(
     override ? "--max-old-space-size=3072" : "--max-old-space-size=2048",
   );
@@ -347,6 +344,27 @@ test.each([
     args: ["--experimental-build-mode=compile"],
   },
   {
+    command: "build",
+    fail: "",
+    expected: 0,
+    modes: ["default"],
+    args: ["--webpack", "--profile"],
+  },
+  {
+    command: "build",
+    fail: "default",
+    expected: 23,
+    modes: ["default"],
+    args: ["--webpack"],
+  },
+  {
+    command: "build",
+    fail: "",
+    expected: 0,
+    modes: ["compile"],
+    args: ["--webpack", "--experimental-build-mode=compile"],
+  },
+  {
     command: "pack",
     fail: "",
     expected: 0,
@@ -411,9 +429,10 @@ fs.appendFileSync(process.env.ARCHESTRA_TEST_NEXT_LOG, JSON.stringify({ mode: pr
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 const flag = args.find(arg => arg.startsWith("--experimental-build-mode="));
-const mode = flag ? flag.split("=")[1] : args[args.indexOf("--experimental-build-mode") + 1];
+const modeIndex = args.indexOf("--experimental-build-mode");
+const mode = flag ? flag.split("=")[1] : modeIndex >= 0 ? args[modeIndex + 1] : "default";
 const log = process.env.ARCHESTRA_TEST_NEXT_LOG;
-const earlier = fs.readFileSync(log, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+const earlier = fs.existsSync(log) ? fs.readFileSync(log, "utf8").trim().split("\n").map((line) => JSON.parse(line)) : [];
 const compiler = earlier.find(event => event.mode === "compile");
 if (mode === "generate" && compiler) {
   try { process.kill(compiler.pid, 0); process.exit(88); }
@@ -433,7 +452,7 @@ if (mode === "compile" && process.env.ARCHESTRA_TEST_NEXT_FAIL === "signal") pro
       ...(command === "pack"
         ? [dir]
         : [
-            "--turbopack",
+            ...(args.includes("--webpack") ? [] : ["--turbopack"]),
             "--debug-build-paths",
             "app/page with $literal",
             ...args,
@@ -460,13 +479,18 @@ if (mode === "compile" && process.env.ARCHESTRA_TEST_NEXT_FAIL === "signal") pro
     .map((line) => JSON.parse(line));
   expect(events.map((event) => event.mode)).toEqual(modes);
   for (const event of events.filter((event) => event.args)) {
-    expect(event.args).toContain("--turbopack");
+    expect(event.args).toContain(
+      args.includes("--webpack") ? "--webpack" : "--turbopack",
+    );
     if (command === "build") {
       expect(event.args).toContain("app/page with $literal");
     }
   }
   const served = path.join(frontend, ".next/standalone/frontend");
-  if (expected === 0 && modes.includes("generate")) {
+  if (
+    expected === 0 &&
+    (modes.includes("generate") || modes.includes("default"))
+  ) {
     expect(
       fs.readFileSync(path.join(served, ".next/static/current.js"), "utf8"),
     ).toBe("current js");

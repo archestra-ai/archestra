@@ -687,8 +687,7 @@ cmd_frontend_artifact() {
     key) frontend_prebuilt --key --explain ;;
     build)
       shift
-      frontend_prebuilt install-cache || true
-      local arg mode explicit_mode=0 selected_mode="" mode_value_next=0
+      local arg mode explicit_mode=0 selected_mode="" mode_value_next=0 webpack=0
       for arg in "$@"; do
         if [ "$mode_value_next" = 1 ]; then
           selected_mode="$arg"
@@ -698,10 +697,15 @@ cmd_frontend_artifact() {
         case "$arg" in
           --experimental-build-mode) explicit_mode=1; mode_value_next=1 ;;
           --experimental-build-mode=*) explicit_mode=1; selected_mode="${arg#*=}" ;;
+          --webpack) webpack=1 ;;
         esac
       done
+      # CI's cache and phase split are for Turbopack. An explicit Webpack
+      # build keeps its usual single phase, but still packages assets before
+      # the heavy lane resumes the standalone server.
+      if [ "$webpack" = 0 ]; then frontend_prebuilt install-cache || true; fi
       local launcher='const { status, signal } = require("node:child_process").spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build", ...process.argv.slice(1)], { stdio: "inherit" }); process.exit(status ?? (signal ? 128 + require("node:os").constants.signals[signal] : 1));'
-      if [ "$explicit_mode" = 1 ]; then
+      if [ "$explicit_mode" = 1 ] || [ "$webpack" = 1 ]; then
         frontend_build_node -e "$launcher" -- "$@" || return $?
       else
         # Turbopack retains its native compiler heap after compilation.

@@ -73,12 +73,11 @@ export function runWorkspaceCommand(input: string[]): number {
     );
     const nodeOptions = process.env.NODE_OPTIONS ?? "";
     const buildArgs = [...(!explicitBundler ? ["--turbopack"] : []), ...args];
-    const cachedBuild = constrained && !args.includes("--webpack");
     return runWorkspaceChecks([
       {
         label: "frontend build",
-        command: cachedBuild ? "bash" : "next",
-        args: cachedBuild
+        command: constrained ? "bash" : "next",
+        args: constrained
           ? [
               path.join(path.dirname(SCRIPT), "dev-lite.sh"),
               "frontend-artifact",

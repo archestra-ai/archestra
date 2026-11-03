@@ -154,6 +154,10 @@ describe("redactCredentials", () => {
       "Authorization: Digest [redacted]",
     ],
     ['Cookie: sid="secret"\nnext', "Cookie: [redacted]\nnext"],
+    [
+      String.raw`api_key=abc\def client_secret=\sec`,
+      "api_key=[redacted] client_secret=[redacted]",
+    ],
     ["Cookie: sid='se\\'cret'; theme=dark", "Cookie: [redacted]"],
     ['Authorization: Bearer "tok_secret"', "Authorization: Bearer [redacted]"],
     [

@@ -150,9 +150,10 @@ type QuoteToken = {
 };
 
 // After `:` or `=` a gap that may be shell-escaped, then a value quoted from
-// its first character, or a bare one: after `=` up to a space, quote or `&`,
-// as in a query string; after `:` see `colonValueEnd`. Second in a quoted
-// `"name", "value"` tuple, the quoted value.
+// its first character, or a bare one: after `=` see `equalsValueEnd`, after
+// `:` see `colonValueEnd`. Second in a quoted `"name", "value"` tuple, the
+// quoted value. A quote just before the name opens the argument holding the
+// pair, as in `-H 'Cookie: ...'`, and its match ends the value.
 function credentialValue(
   text: string,
   head: RegExpExecArray,
@@ -163,8 +164,10 @@ function credentialValue(
     const quoted =
       nameClose !== undefined &&
       text.startsWith(nameClose, head.index - nameClose.length);
-    return quoted ? quotedValue(text, skipSpace(text, at)) : undefined;
+    return quoted ? tupleValue(text, skipSpace(text, at)) : undefined;
   }
+  const enclosing =
+    nameClose === undefined ? quoteTokenBefore(text, head.index) : undefined;
   let escapedGap = false;
   for (;;) {
     if (text[at] === "\\" && isSpace(text[at + 1])) {
@@ -175,34 +178,84 @@ function credentialValue(
       escapedGap = false;
     } else break;
   }
-  const quoted = quotedValue(text, at);
-  if (quoted) return quoted;
-  let end = at;
-  if (separator === "=")
-    while (end < text.length && !/[\s'"\\&]/.test(text[end] ?? "")) end++;
-  else end = colonValueEnd(text, at, escapedGap);
+  const open = quoteToken(text, at);
+  if (open && !closesEnclosing(open, enclosing)) {
+    const close = closingQuote(text, open, false, enclosing);
+    if (close.start > open.end && !continuesWord(text, close.end, enclosing))
+      return { start: open.end, end: close.start };
+  }
+  const end =
+    separator === "="
+      ? equalsValueEnd(text, at, enclosing)
+      : colonValueEnd(text, at, escapedGap, enclosing);
   return end > at ? { start: at, end } : undefined;
 }
 
-// The content of a value opening with a quote, through its matching quote or
-// the end of the text.
-function quotedValue(text: string, at: number): Span | undefined {
-  const open = quoteToken(text, at);
-  if (!open) return undefined;
-  const close = closingQuote(text, open, false);
-  return close.start > open.end
-    ? { start: open.end, end: close.start }
-    : undefined;
+// Quoted literals, possibly prefixed as in Python's `r'...'` and adjacent as
+// in `'Bearer ' 'tok'`, read as one value.
+function tupleValue(text: string, at: number): Span | undefined {
+  let value: Span | undefined;
+  let index = at;
+  for (;;) {
+    let literal = index;
+    while (literal < index + 2 && /[bfru]/i.test(text[literal] ?? ""))
+      literal++;
+    const open = quoteToken(text, literal) ?? quoteToken(text, index);
+    if (!open) return value;
+    const close = closingQuote(text, open, false, undefined);
+    value = { start: value?.start ?? open.end, end: close.start };
+    if (close.end === close.start) return value;
+    index = skipSpace(text, close.end);
+  }
+}
+
+// A bare value after `=`, as in a query string or a shell assignment: up to
+// a space or `&`, reading escaped characters and quoted parts that open it
+// or follow one another.
+function equalsValueEnd(
+  text: string,
+  at: number,
+  enclosing: QuoteToken | undefined,
+): number {
+  let index = at;
+  let afterQuoted = false;
+  while (index < text.length) {
+    const char = text[index] ?? "";
+    if (isSpace(char) || char === "&") break;
+    if (!QUOTES.has(char) && char !== "\\") {
+      index++;
+      afterQuoted = false;
+      continue;
+    }
+    const token = quoteToken(text, index);
+    if (token) {
+      if (closesEnclosing(token, enclosing) || (index > at && !afterQuoted))
+        break;
+      index = closingQuote(text, token, true, enclosing).end;
+      afterQuoted = true;
+      continue;
+    }
+    index = escapeEnd(text, index, true);
+    afterQuoted = false;
+  }
+  return index;
 }
 
 // A bare value after `:`. Shell-escaped (`\ ` in the gap or before any
 // space) it runs to the first unescaped space, else to the end of the line.
-// A quote after `=` or a space opens a quoted part that is read through its
-// match, as in `Digest response="..."` or `sid="..."`; any other quote ends
-// the value, since it may close an enclosing argument.
-function colonValueEnd(text: string, at: number, escapedGap: boolean): number {
+// A quote opening the value, following a quoted part, or after `=` or a
+// space opens a quoted part that is read through its match, as in
+// `Digest response="..."` or `sid="..."`; any other quote ends the value,
+// since it may close an enclosing argument.
+function colonValueEnd(
+  text: string,
+  at: number,
+  escapedGap: boolean,
+  enclosing: QuoteToken | undefined,
+): number {
   let mode: "unknown" | "line" | "shell" = escapedGap ? "shell" : "unknown";
   let index = at;
+  let afterQuoted = false;
   while (index < text.length) {
     const char = text[index] ?? "";
     if (char === "\n" || char === "\r") break;
@@ -210,59 +263,121 @@ function colonValueEnd(text: string, at: number, escapedGap: boolean): number {
       if (mode === "shell") break;
       mode = "line";
       index++;
+      afterQuoted = false;
       continue;
     }
-    if (char !== "\\" && char !== '"' && char !== "'") {
+    if (!QUOTES.has(char) && char !== "\\") {
       index++;
+      afterQuoted = false;
       continue;
     }
     const token = quoteToken(text, index);
     if (token) {
+      if (closesEnclosing(token, enclosing)) break;
       const before = text[index - 1] ?? "";
-      if (before !== "=" && !isSpace(before)) break;
-      index = closingQuote(text, token, true).end;
+      if (index > at && !afterQuoted && before !== "=" && !isSpace(before))
+        break;
+      index = closingQuote(text, token, true, enclosing).end;
+      afterQuoted = true;
       if (mode === "unknown") mode = "line";
       continue;
     }
     const run = backslashRunEnd(text, index);
-    const escaped = (run - index) % 2 === 1;
-    if (escaped && isSpace(text[run]) && mode !== "line") mode = "shell";
-    index =
-      escaped && mode !== "line" && text[run] !== undefined ? run + 1 : run;
+    if ((run - index) % 2 === 1 && isSpace(text[run]) && mode !== "line")
+      mode = "shell";
+    index = escapeEnd(text, index, mode !== "line");
+    afterQuoted = false;
   }
   return index;
 }
 
+// Past a backslash run, and past the character it escapes when `escapes`.
+function escapeEnd(text: string, at: number, escapes: boolean): number {
+  const run = backslashRunEnd(text, at);
+  const next = text[run];
+  return escapes &&
+    (run - at) % 2 === 1 &&
+    next !== undefined &&
+    next !== "\n" &&
+    next !== "\r"
+    ? run + 1
+    : run;
+}
+
 // Quotes may be escaped as many times as the text is nested in JSON: a quote
-// with no more backslashes than the opening one closes it.
+// with no more backslashes than the opening one closes it, as does one after
+// an even run when the opening one has none. The enclosing argument's quote
+// ends the value unclosed.
 function closingQuote(
   text: string,
   open: QuoteToken,
   withinLine: boolean,
+  enclosing: QuoteToken | undefined,
 ): Span {
   let index = open.end;
   while (index < text.length) {
-    const char = text[index];
+    const char = text[index] ?? "";
     if (withinLine && (char === "\n" || char === "\r")) break;
-    if (char !== "\\" && char !== '"' && char !== "'") {
+    if (!QUOTES.has(char) && char !== "\\") {
       index++;
       continue;
     }
     const token = quoteToken(text, index);
     if (!token) index = backslashRunEnd(text, index);
-    else if (token.quote === open.quote && token.slashes <= open.slashes)
-      return { start: token.start, end: token.end };
+    else if (closesEnclosing(token, enclosing)) break;
+    else if (
+      token.quote === open.quote &&
+      (token.slashes <= open.slashes ||
+        (open.slashes === 0 && token.slashes % 2 === 0))
+    )
+      return {
+        start: token.end - 1 - Math.min(token.slashes, open.slashes),
+        end: token.end,
+      };
     else index = token.end;
   }
   return { start: index, end: index };
 }
 
+// Whether the shell word goes on past a closing quote, as in `'sek'ret`.
+function continuesWord(
+  text: string,
+  at: number,
+  enclosing: QuoteToken | undefined,
+): boolean {
+  const token = quoteToken(text, at);
+  return token
+    ? !closesEnclosing(token, enclosing)
+    : /[\w.~+/=-]/.test(text[at] ?? "");
+}
+
+function closesEnclosing(
+  token: QuoteToken,
+  enclosing: QuoteToken | undefined,
+): boolean {
+  return (
+    enclosing !== undefined &&
+    token.quote === enclosing.quote &&
+    token.slashes <= enclosing.slashes
+  );
+}
+
+const QUOTES = new Set(['"', "'", "`"]);
+
 function quoteToken(text: string, at: number): QuoteToken | undefined {
   const run = backslashRunEnd(text, at);
-  const quote = text[run];
-  return quote === '"' || quote === "'"
+  const quote = text[run] ?? "";
+  return QUOTES.has(quote)
     ? { quote, slashes: run - at, start: at, end: run + 1 }
     : undefined;
+}
+
+function quoteTokenBefore(text: string, at: number): QuoteToken | undefined {
+  const quote = text[at - 1] ?? "";
+  if (!QUOTES.has(quote)) return undefined;
+  let start = at - 1;
+  while (text[start - 1] === "\\") start--;
+  return { quote, slashes: at - 1 - start, start, end: at };
 }
 
 function backslashRunEnd(text: string, at: number): number {
@@ -413,7 +528,7 @@ const CREDENTIAL_NAME = new RegExp(`^(?:${CREDENTIAL_NAMES})$`, "i");
 // A name starting a word, so a long word is tried once, possibly quoted, then
 // `:`, `=` or the `,` of a tuple.
 const CREDENTIAL_HEAD = new RegExp(
-  String.raw`(?<![\w-])(?:${CREDENTIAL_NAMES})(\\*["'])?\s*([:=,])`,
+  String.raw`(?<![\w-])(?:${CREDENTIAL_NAMES})(\\*["'\`])?\s*([:=,])`,
   "gi",
 );
 

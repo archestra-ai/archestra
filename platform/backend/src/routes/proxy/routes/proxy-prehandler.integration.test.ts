@@ -186,6 +186,10 @@ test.for([
         "synthetic-model",
         "LIBRARY/synthetic-model:latest",
         "registry.ollama.ai/library/synthetic-model",
+        " synthetic-model ",
+        "synthetic-model:local",
+        "synthetic-model:latest:local",
+        "1://registry.ollama.ai/library/synthetic-model",
       ]) {
         const hiddenAlias = await ask(paths[0], alias);
         expect(hiddenAlias.statusCode, hiddenAlias.body).toBe(403);

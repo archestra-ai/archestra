@@ -49,6 +49,10 @@ describe("resolved model availability", () => {
       "library/llama3.2",
       "registry.ollama.ai/library/llama3.2:latest",
       "https://registry.ollama.ai/library/llama3.2",
+      "1://registry.ollama.ai/library/llama3.2",
+      " llama3.2 ",
+      "llama3.2:local",
+      "llama3.2:latest:local",
     ]) {
       await expect(
         ModelModel.assertAvailable({ provider, modelId }),
@@ -60,6 +64,7 @@ describe("resolved model availability", () => {
     for (const modelId of [
       "unknown-custom-model",
       "llama3.2:small",
+      "llama3.2:cloud",
       "team/llama3.2",
       "mirror.example/library/llama3.2:latest",
     ]) {
@@ -88,6 +93,25 @@ describe("resolved model availability", () => {
         aliases: ["synthetic-fireworks"],
       }),
     ).rejects.toMatchObject({ statusCode: 403 });
+    await ModelModel.create({
+      provider,
+      modelId: "cloud-model:cloud",
+      externalId: `${provider}/cloud-model:cloud`,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      ignored: true,
+    });
+    for (const modelId of [
+      "cloud-model:latest:cloud",
+      "cloud-model:latest-cloud",
+    ]) {
+      await expect(
+        ModelModel.assertAvailable({ provider, modelId }),
+      ).rejects.toMatchObject({ statusCode: 403 });
+    }
+    await expect(
+      ModelModel.assertAvailable({ provider, modelId: "cloud-model:local" }),
+    ).resolves.toBeUndefined();
     await ModelModel.update(model.id, { ignored: false });
     await expect(
       ModelModel.assertAvailable({ provider, modelId: "llama3.2" }),

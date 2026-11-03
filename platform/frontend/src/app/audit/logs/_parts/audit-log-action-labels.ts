@@ -142,6 +142,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "limit.bulk_deleted": "Limits deleted",
   // LLM model
   "llmModel.updated": "LLM model updated",
+  "llmModel.deleted": "LLM model deleted",
   "llmModel.synced": "LLM model catalog synced",
   "modelPool.created": "Model pool created",
   "modelPool.updated": "Model pool updated",

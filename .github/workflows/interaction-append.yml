@@ -1,0 +1,44 @@
+name: Interaction append regression
+
+on:
+  pull_request:
+    paths:
+      - platform/backend/src/database/migrations/**
+      - platform/backend/scripts/interaction-append-postgres.test.mjs
+      - .github/workflows/interaction-append.yml
+
+permissions:
+  contents: read
+
+jobs:
+  append:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: append_test
+          POSTGRES_PASSWORD: append_test
+          POSTGRES_DB: append_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U append_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-env
+      - name: Validate migration metadata
+        run: pnpm --dir backend exec drizzle-kit check
+      - name: Test function upgrade and compare append timings
+        env:
+          ARCHESTRA_APPEND_TEST_DATABASE_URL: postgresql://append_test:append_test@localhost:5432/append_test
+        run: node --test backend/scripts/interaction-append-postgres.test.mjs

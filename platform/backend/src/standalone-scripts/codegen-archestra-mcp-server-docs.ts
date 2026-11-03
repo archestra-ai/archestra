@@ -81,6 +81,10 @@ const groupLabel = new Map<ArchestraToolGroupId, string>(
  * with no entry has no requirement beyond its RBAC permission.
  */
 const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
+  get_agent_skill_policy:
+    "Also requires [`skill:read`](/docs/reference/permissions#skill:read). Returns an internal agent's skill activation policy.",
+  patch_agent_skill_policy:
+    "Also requires [`skill:read`](/docs/reference/permissions#skill:read). Requires the current revision and an update grant on the agent. Only skills the caller can access may be added.",
   // Membership mutations gate on `team:read`, then require the caller to be an
   // organization-level team manager (holds `team:create`) OR an admin
   // (team-member role) of the target team.

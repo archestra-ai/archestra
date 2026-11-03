@@ -2964,8 +2964,10 @@ async function handleStreaming<
             })
           : response) as InteractionResponse,
         model: actualModel,
-        inputTokens: provider.unavailableUsageAccounting ? null : 0,
-        outputTokens: provider.unavailableUsageAccounting ? null : 0,
+        // No usage reached the adapter. Keep unknown distinct from a provider
+        // that explicitly reported zero tokens.
+        inputTokens: null,
+        outputTokens: null,
         toolCallBlock,
       };
       await persistProxyInteraction({

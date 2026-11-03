@@ -174,6 +174,28 @@ it("leads each request's tokens with its output, labels the input, and gives exa
   expect(tooltip).not.toHaveTextContent("Cache write");
 });
 
+it("shows unknown usage when a request has no provider token count", async () => {
+  serveSession({
+    rows: [
+      summary({
+        id: "request-no-usage",
+        inputTokens: null,
+        outputTokens: null,
+      }),
+    ],
+  });
+
+  await renderPage();
+
+  const requests = await screen.findByRole("list", { name: "Requests" });
+  expect(within(requests).getByText("Unknown")).toBeVisible();
+  expect(
+    await screen.findByText(
+      "The provider did not report a token count for this request.",
+    ),
+  ).toBeVisible();
+});
+
 it("opens the request a link names, moving to the page that holds it", async () => {
   // Sixty requests, newest first: the linked one is the 56th newest, so it
   // sits on page two of fifty.

@@ -23,6 +23,8 @@ Know what every agent did, as whom, and what it cost. Archestra logs every model
 
 Open an **LLM Proxy** session to see every request and the MCP tool calls it triggered on one timeline; select a row for its timing, tokens, cost, conversation, and raw request and response. A tool call opened from the **MCP Gateway** tab shows where it sat in its session, or nearby calls from the same caller when it is not linked to one. Timing measures request processing before the log is saved, including the full stream for LLM requests. Older records may have no timing.
 
+If a model response ends before its provider reports token counts, the request still appears in the session with any response received so far. Its token count shows **Unknown** rather than zero; zero means the provider actually reported zero.
+
 In **Agent connections**, the **Usage** tab groups calls with **Show** and **by**; select a bar or row to drill down, and **Back** to step out. The page follows the selected date range, except the **State** column on **User connections**, which always reflects the last 30 days. **User connections** lists users with no calls too, and **Export CSV** saves the filtered list.
 
 ## Keep Prompts Out of the Logs

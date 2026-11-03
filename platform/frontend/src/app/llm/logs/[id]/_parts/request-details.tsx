@@ -241,6 +241,7 @@ function RequestOverview({
   // (OpenAI-style); otherwise they are reported beside it (Anthropic-style).
   const input = row.inputTokens ?? 0;
   const output = row.outputTokens ?? 0;
+  const usageUnknown = row.inputTokens === null && row.outputTokens === null;
   const read = row.cacheReadTokens ?? 0;
   const write = row.cacheWriteTokens ?? 0;
   const cacheInsideInput = read + write <= input;
@@ -388,59 +389,74 @@ function RequestOverview({
 
         <OverviewSection
           title="Tokens"
-          aside={<BigFigure value={tokenTotal.toLocaleString()} />}
+          aside={
+            <BigFigure
+              value={usageUnknown ? "Unknown" : tokenTotal.toLocaleString()}
+            />
+          }
         >
-          <div className="flex h-1.5 gap-px overflow-hidden rounded-full bg-muted">
-            {segments
-              .filter((segment) => segment.value > 0)
-              .map((segment) => (
-                <span
-                  key={segment.key}
-                  className={segment.tone}
-                  style={{
-                    width: `${(segment.value / Math.max(tokenTotal, 1)) * 100}%`,
-                  }}
-                />
-              ))}
-          </div>
-          <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-            {segments.map((segment) => (
-              <li
-                key={segment.key}
-                className={cn(
-                  "flex min-w-0 items-center gap-1.5",
-                  segment.value === 0 && "opacity-40",
-                )}
-                title={
-                  tokenTotal > 0
-                    ? `${Math.round((segment.value / tokenTotal) * 100)}% of tokens`
-                    : undefined
-                }
-              >
-                <span
-                  className={cn("size-2 shrink-0 rounded-[2px]", segment.tone)}
-                  aria-hidden="true"
-                />
-                <span className="truncate text-muted-foreground">
-                  {segment.label}
-                </span>
-                <span className="ml-auto tabular-nums">
-                  {formatCompactNumber(segment.value)}
-                </span>
-              </li>
-            ))}
-          </ul>
-          {cacheShare > 0 ? (
-            <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
-              {Math.round(cacheShare * 100)}% of input from the prompt cache
+          {usageUnknown ? (
+            <p className="text-xs text-muted-foreground">
+              The provider did not report a token count for this request.
             </p>
-          ) : null}
-          {row.inputTokensEstimated ? (
-            <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
-              Input is estimated from the request: the provider reported no
-              usage.
-            </p>
-          ) : null}
+          ) : (
+            <>
+              <div className="flex h-1.5 gap-px overflow-hidden rounded-full bg-muted">
+                {segments
+                  .filter((segment) => segment.value > 0)
+                  .map((segment) => (
+                    <span
+                      key={segment.key}
+                      className={segment.tone}
+                      style={{
+                        width: `${(segment.value / Math.max(tokenTotal, 1)) * 100}%`,
+                      }}
+                    />
+                  ))}
+              </div>
+              <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                {segments.map((segment) => (
+                  <li
+                    key={segment.key}
+                    className={cn(
+                      "flex min-w-0 items-center gap-1.5",
+                      segment.value === 0 && "opacity-40",
+                    )}
+                    title={
+                      tokenTotal > 0
+                        ? `${Math.round((segment.value / tokenTotal) * 100)}% of tokens`
+                        : undefined
+                    }
+                  >
+                    <span
+                      className={cn(
+                        "size-2 shrink-0 rounded-[2px]",
+                        segment.tone,
+                      )}
+                      aria-hidden="true"
+                    />
+                    <span className="truncate text-muted-foreground">
+                      {segment.label}
+                    </span>
+                    <span className="ml-auto tabular-nums">
+                      {formatCompactNumber(segment.value)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {cacheShare > 0 ? (
+                <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
+                  {Math.round(cacheShare * 100)}% of input from the prompt cache
+                </p>
+              ) : null}
+              {row.inputTokensEstimated ? (
+                <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
+                  Input is estimated from the request: the provider reported no
+                  usage.
+                </p>
+              ) : null}
+            </>
+          )}
         </OverviewSection>
 
         <PoolAttempt row={row} />

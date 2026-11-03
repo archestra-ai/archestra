@@ -285,6 +285,14 @@ test("an administrator changes the Break the glass settings one at a time", asyn
   ]);
 });
 
+test("describes Other blocked calls and says an explicit block never waives", async () => {
+  show(<OpenAppaBreakTheGlassSettings />);
+  expect(
+    await screen.findByText(/How to handle denials that can't be approved\./),
+  ).toBeVisible();
+  expect(screen.getByText("blocked", { selector: "code" })).toBeVisible();
+});
+
 test.each([
   ["members who cannot manage them", readOnly],
   [

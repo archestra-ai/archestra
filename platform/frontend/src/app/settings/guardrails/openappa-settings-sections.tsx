@@ -139,7 +139,13 @@ export function OpenAppaBreakTheGlassSettings() {
       />
       <BreakTheGlassRow
         title="Other blocked calls"
-        description="Blocks without approval option. Explicitly blocking a call in the policy can't waive regardless of this setting."
+        description={
+          <>
+            How to handle denials that can't be approved. Calls explicitly set
+            to <code className="font-mono text-xs">blocked</code> in the policy
+            will never waive.
+          </>
+        }
         value={data?.unapprovableBlockMode}
         disabled={disabled}
         options={[

@@ -156,6 +156,7 @@ describe("matchBatteries", () => {
     });
     for (const dockerImage of [
       "registry.example.com/github/github-mcp-server:v0.30.1",
+      "docker.io/github/github-mcp-server:latest",
       "harbor.example.com/ghcr-proxy/github/github-mcp-server@sha256:e47f6ccc5347e1ea6be495d8d9ab55ac8a995fe87800fb984fa770cebe14ad44",
     ])
       expect(matchBatteries(enterpriseServer(dockerImage), available)).toEqual([

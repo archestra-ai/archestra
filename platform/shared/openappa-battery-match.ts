@@ -144,8 +144,11 @@ const BATTERY_MATCH_RULES: BatteryMatchRule[] = [
 
 function imageMatches(image: string, known: string): boolean {
   if (image === known || image.startsWith(`${known}/`)) return true;
-  const [registry, ...path] = known.split("/");
-  return registry.includes(".") && image.endsWith(`/${path.join("/")}`);
+  const [registry, ...rest] = known.split("/");
+  const path = rest.join("/");
+  return (
+    registry.includes(".") && (image === path || image.endsWith(`/${path}`))
+  );
 }
 
 function urlHost(serverUrl: string | null | undefined): string | null {

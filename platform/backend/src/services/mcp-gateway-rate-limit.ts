@@ -16,26 +16,43 @@ import { registerProcessLocalCache } from "@/process-local-cache-registry";
 const WINDOW_MS = 60_000;
 const MAX_PER_CREDENTIAL = 10;
 const MAX_TRACKED_CREDENTIALS_PER_IP = 100;
-const MAX_AUTHENTICATION_OPERATIONS = 16;
-let authenticationOperations = 0;
+const MAX_AUTHENTICATION_OPERATIONS_PER_POOL = 16;
+type AuthenticationPool = "unverified" | "verified";
 
 export class McpGatewayAuthenticationBusyError extends Error {}
 
-/** A process-wide bound, including requests handled by different gateway plugins. */
-export async function withMcpGatewayAuthenticationCapacity<T>(
+class McpGatewayAuthenticationCapacity {
+  private readonly active: Record<AuthenticationPool, number> = {
+    unverified: 0,
+    verified: 0,
+  };
+
+  async run<T>(
+    operation: () => Promise<T>,
+    pool: AuthenticationPool,
+  ): Promise<T> {
+    if (this.active[pool] >= MAX_AUTHENTICATION_OPERATIONS_PER_POOL) {
+      throw new McpGatewayAuthenticationBusyError(
+        "Gateway authentication capacity is exhausted",
+      );
+    }
+    this.active[pool] += 1;
+    try {
+      return await operation();
+    } finally {
+      this.active[pool] -= 1;
+    }
+  }
+}
+
+const authenticationCapacity = new McpGatewayAuthenticationCapacity();
+
+/** Separate bounded pools prevent unknown callers from consuming verified capacity. */
+export function withMcpGatewayAuthenticationCapacity<T>(
   operation: () => Promise<T>,
+  pool: AuthenticationPool = "unverified",
 ): Promise<T> {
-  if (authenticationOperations >= MAX_AUTHENTICATION_OPERATIONS) {
-    throw new McpGatewayAuthenticationBusyError(
-      "Gateway authentication capacity is exhausted",
-    );
-  }
-  authenticationOperations += 1;
-  try {
-    return await operation();
-  } finally {
-    authenticationOperations -= 1;
-  }
+  return authenticationCapacity.run(operation, pool);
 }
 const FINGERPRINT_KEY = config.auth.secret || randomBytes(32);
 
@@ -50,7 +67,8 @@ type Window = { count: number; endsAt: number };
  * Each IP retains at most 100 recent credential/gateway counters. There is no
  * shared IP allowance: unrelated guesses must not lock out new or idle clients.
  * Rotating guesses can evade a credential budget, so admission storage and
- * authentication also share a bounded process-wide work pool. IP locks keep
+ * authentication use bounded process-wide work pools. Recent local successes
+ * have reserved capacity, but still undergo live authentication. IP locks keep
  * credential admission atomic across replicas without unbounded bucket rows.
  */
 export class McpGatewayRateLimiter extends RateLimiterCompatibleAbstract {
@@ -70,16 +88,6 @@ export class McpGatewayRateLimiter extends RateLimiterCompatibleAbstract {
     points = 1,
     options?: Record<string, unknown>,
   ): Promise<RateLimiterRes> {
-    return withMcpGatewayAuthenticationCapacity(() =>
-      this.consumeWithinCapacity(key, points, options),
-    );
-  }
-
-  private async consumeWithinCapacity(
-    key: string | number,
-    points: number,
-    options?: Record<string, unknown>,
-  ): Promise<RateLimiterRes> {
     if (
       typeof key !== "string" ||
       points !== 1 ||
@@ -94,8 +102,26 @@ export class McpGatewayRateLimiter extends RateLimiterCompatibleAbstract {
       credential: options.credential as string | undefined,
     };
     const verifiedKey = this.verifiedKey(caller);
+    // The local success mark is only an admission hint. Check it before the
+    // unverified pool so junk traffic cannot exclude established callers.
+    if (
+      verifiedKey &&
+      !this.denied.has(verifiedKey) &&
+      this.validated.has(verifiedKey)
+    ) {
+      return this.exempt();
+    }
+    return withMcpGatewayAuthenticationCapacity(() =>
+      this.consumeUnverified(key, caller, verifiedKey),
+    );
+  }
+
+  private async consumeUnverified(
+    key: string,
+    caller: Caller,
+    verifiedKey: AllowedCacheKey | null,
+  ): Promise<RateLimiterRes> {
     if (verifiedKey && !this.denied.has(verifiedKey)) {
-      if (this.validated.has(verifiedKey)) return this.exempt();
       const entries = await cacheManager.readMany<true>([verifiedKey]);
       if (entries.get(verifiedKey)) {
         this.validated.set(verifiedKey, true);

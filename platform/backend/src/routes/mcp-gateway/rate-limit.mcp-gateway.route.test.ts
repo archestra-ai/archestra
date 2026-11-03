@@ -203,32 +203,62 @@ describe("MCP Gateway authentication rate limiting", () => {
     }
   });
 
-  test("returns bounded backpressure across gateway instances and recovers as work finishes", async ({
+  test("keeps established OAuth and platform clients working while unknown callers fill capacity", async ({
     makeOrganization,
     makeAgent,
+    makeUser,
+    makeMember,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
-    const gateway = await makeAgent({ organizationId: org.id });
+    const gateway = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+    const client = await makeOAuthClient({ userId: user.id });
+    const token = randomUUID();
+    const hash = createHash("sha256").update(token).digest("base64url");
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: hash,
+      referenceId: `${MCP_RESOURCE_REFERENCE_PREFIX}${gateway.id}`,
+    });
+    const platformToken = await makeServiceAccountToken({
+      organizationId: org.id,
+    });
     const replica = createFastifyInstance();
     await replica.register(mcpGatewayRoutes);
-    let release = () => {};
-    const pendingWork = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const pending = Array.from({ length: 16 }, () =>
-      withMcpGatewayAuthenticationCapacity(() => pendingWork),
-    );
     const request = {
       method: "GET" as const,
       url: `/v1/mcp/${gateway.id}`,
       headers: { authorization: `Bearer ${randomUUID()}` },
     };
+    const established = [token, platformToken.value].map((credential) => ({
+      ...request,
+      headers: { authorization: `Bearer ${credential}` },
+    }));
+    let release = () => {};
+    let pending: Promise<void>[] = [];
     try {
+      for (const instance of [app, replica])
+        for (const authenticated of established)
+          expect((await instance.inject(authenticated)).statusCode).toBe(405);
+      const pendingWork = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      pending = Array.from({ length: 16 }, () =>
+        withMcpGatewayAuthenticationCapacity(() => pendingWork),
+      );
       for (const instance of [app, replica]) {
         const busy = await instance.inject(request);
         expect(busy.statusCode).toBe(503);
         expect(busy.headers["retry-after"]).toBe("1");
         expect(busy.headers["www-authenticate"]).toBeUndefined();
+        for (const authenticated of established)
+          expect((await instance.inject(authenticated)).statusCode).toBe(405);
         const discovery = await instance.inject({
           method: "GET",
           url: request.url,
@@ -238,6 +268,19 @@ describe("MCP Gateway authentication rate limiting", () => {
           "resource_metadata",
         );
       }
+      await OAuthAccessTokenModel.deleteByTokenHash(hash);
+      for (const instance of [app, replica]) {
+        const revoked = await instance.inject(established[0]);
+        expect(revoked.statusCode).toBe(401);
+        expect(revoked.headers["www-authenticate"]).toContain(
+          "resource_metadata",
+        );
+        // A denied client loses priority and returns to unknown-caller capacity.
+        expect((await instance.inject(established[0])).statusCode).toBe(503);
+      }
+      config.authRateLimitDisabled = true;
+      expect((await app.inject(request)).statusCode).toBe(401);
+      config.authRateLimitDisabled = false;
     } finally {
       release();
       await Promise.all(pending);

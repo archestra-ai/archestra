@@ -87,7 +87,7 @@ describe("gateway attempt budgets", () => {
     expect(Object.keys(stored.value)).toHaveLength(100);
   });
 
-  test("bounds in-flight work across limiter instances and releases capacity on success or error", async () => {
+  test("reserves bounded verified capacity and releases both pools on success or error", async () => {
     let release = () => {};
     const pendingWork = new Promise<void>((resolve) => {
       release = resolve;
@@ -95,6 +95,7 @@ describe("gateway attempt budgets", () => {
     const pending = Array.from({ length: 16 }, () =>
       withMcpGatewayAuthenticationCapacity(() => pendingWork),
     );
+    let verified: Promise<void>[] = [];
     try {
       for (const limiter of [
         new McpGatewayRateLimiter(),
@@ -110,19 +111,28 @@ describe("gateway attempt budgets", () => {
       await expect(
         withMcpGatewayAuthenticationCapacity(async () => true),
       ).rejects.toBeInstanceOf(McpGatewayAuthenticationBusyError);
+      // Unverified saturation cannot consume the reserved verified pool.
+      verified = Array.from({ length: 16 }, () =>
+        withMcpGatewayAuthenticationCapacity(() => pendingWork, "verified"),
+      );
+      await expect(
+        withMcpGatewayAuthenticationCapacity(async () => true, "verified"),
+      ).rejects.toBeInstanceOf(McpGatewayAuthenticationBusyError);
     } finally {
       release();
-      await Promise.all(pending);
+      await Promise.all([...pending, ...verified]);
     }
-    await expect(
-      withMcpGatewayAuthenticationCapacity(async () => {
-        throw new Error("Validation failed");
-      }),
-    ).rejects.toThrow("Validation failed");
-    const resumed = Array.from({ length: 16 }, () =>
-      withMcpGatewayAuthenticationCapacity(async () => true),
-    );
-    await expect(Promise.all(resumed)).resolves.toHaveLength(16);
+    for (const pool of ["unverified", "verified"] as const) {
+      await expect(
+        withMcpGatewayAuthenticationCapacity(async () => {
+          throw new Error("Validation failed");
+        }, pool),
+      ).rejects.toThrow("Validation failed");
+      const resumed = Array.from({ length: 16 }, () =>
+        withMcpGatewayAuthenticationCapacity(async () => true, pool),
+      );
+      await expect(Promise.all(resumed)).resolves.toHaveLength(16);
+    }
   });
 
   test("does not admit an unknown caller when shared storage is unavailable", async () => {

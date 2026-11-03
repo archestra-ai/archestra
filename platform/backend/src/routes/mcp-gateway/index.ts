@@ -672,6 +672,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
     503: generateErrorResponseSchema("api_service_unavailable_error"),
   };
   const rateLimiter = new McpGatewayRateLimiter();
+  const verifiedRequests = new WeakSet<FastifyRequest>();
   const rateLimitCaller = (request: FastifyRequest) => ({
     credential: extractBearerToken(request) ?? undefined,
     gateway: (request.params as { profileId?: string }).profileId ?? "",
@@ -682,7 +683,12 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
     if (config.authRateLimitDisabled || !extractBearerToken(request)) return;
     try {
       // request.ip follows Fastify's configured trustProxy policy.
-      await rateLimiter.consume(request.ip, 1, rateLimitCaller(request));
+      const admission = await rateLimiter.consume(
+        request.ip,
+        1,
+        rateLimitCaller(request),
+      );
+      if (admission.consumedPoints === 0) verifiedRequests.add(request);
     } catch (error) {
       reply.header("Cache-Control", "no-store");
       if (error instanceof RateLimiterRes) {
@@ -711,12 +717,16 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
     }
   });
   const withAuthenticationCapacity = async <T>(
+    request: FastifyRequest,
     reply: FastifyReply,
     operation: () => Promise<T>,
   ): Promise<T> => {
     if (config.authRateLimitDisabled) return operation();
     try {
-      return await withMcpGatewayAuthenticationCapacity(operation);
+      return await withMcpGatewayAuthenticationCapacity(
+        operation,
+        verifiedRequests.has(request) ? "verified" : "unverified",
+      );
     } catch (error) {
       if (!(error instanceof McpGatewayAuthenticationBusyError)) throw error;
       reply.header("Cache-Control", "no-store").header("Retry-After", 1);
@@ -730,7 +740,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
     const token = extractBearerToken(request);
     if (!token) return { token: null, profileId: null };
     const { profileId } = request.params as { profileId: string };
-    const resolved = await withAuthenticationCapacity(reply, () =>
+    const resolved = await withAuthenticationCapacity(request, reply, () =>
       AgentModel.resolveIdFromIdOrSlug(profileId),
     );
     return { token, profileId: resolved };
@@ -742,7 +752,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
     token: string,
     lookups?: RequestLookups,
   ) =>
-    withAuthenticationCapacity(reply, async () => {
+    withAuthenticationCapacity(request, reply, async () => {
       const outcome = await authenticateMCPGatewayRequest(
         profileId,
         token,

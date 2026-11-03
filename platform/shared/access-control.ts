@@ -1213,6 +1213,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetLlmModelOptions]: {},
   [RouteId.BulkUpdateModels]: {},
   [RouteId.UpdateModel]: {},
+  // Deletion removes global catalog metadata, not just a scoped assignment.
+  [RouteId.DeleteModel]: { llmModel: ["update"] },
   // Cost backfill: scoped llmModel:update checked in the handler
   [RouteId.PreviewModelCostBackfill]: {},
   [RouteId.StartModelCostBackfill]: {},

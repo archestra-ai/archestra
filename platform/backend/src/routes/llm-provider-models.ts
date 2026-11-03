@@ -467,6 +467,46 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.delete(
+    "/api/llm-models/:id",
+    {
+      schema: {
+        operationId: RouteId.DeleteModel,
+        description:
+          "Delete unused model catalog metadata. Recorded interactions and spend are retained. Provider sync or another request may rediscover the model.",
+        tags: ["LLM Models"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Object-scoped edit grants must not authorize global catalog deletion.
+      if (
+        !(await userHasPermission(
+          user.id,
+          organizationId,
+          "llmModel",
+          "update",
+        ))
+      ) {
+        throw new ApiError(
+          403,
+          "Deleting models requires organization-wide model management permission",
+        );
+      }
+      const result = await ModelModel.deleteUnused(id);
+      if (result.status === "not_found")
+        throw new ApiError(404, "Model not found");
+      if (result.status === "in_use") {
+        throw new ApiError(
+          409,
+          `This model is used by ${result.reason}. Remove that reference before deleting it.`,
+        );
+      }
+      return reply.send({ success: true });
+    },
+  );
+
   fastify.patch(
     "/api/llm-models/:id",
     {

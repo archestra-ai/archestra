@@ -759,6 +759,74 @@ class ModelModel {
     });
   }
 
+  /** Remove catalog metadata only when no live configuration depends on it. */
+  static async deleteUnused(id: string) {
+    return withDbTransaction(async (tx) => {
+      // These references use provider model names rather than foreign keys.
+      // Keep their writers out until the check and deletion commit together.
+      await tx.execute(sql`LOCK TABLE ${schema.organizationsTable},
+        ${schema.modelPoolMembersTable} IN SHARE ROW EXCLUSIVE MODE`);
+      const [model] = await tx
+        .select()
+        .from(schema.modelsTable)
+        .where(eq(schema.modelsTable.id, id))
+        .for("update");
+      if (!model) return { status: "not_found" } as const;
+
+      // The row lock also serializes new FK references (defaults/backfills)
+      // with deletion. Check all organizations: model metadata is global.
+      const references = await tx.execute<{ reason: string }>(sql`
+        SELECT 'a default model or knowledge setting' AS reason
+        WHERE EXISTS (
+          SELECT 1 FROM ${schema.organizationsTable} o
+          WHERE o.default_model_id = ${id} OR o.default_fast_model_id = ${id}
+            OR o.default_smart_model_id = ${id}
+            OR EXISTS (
+              SELECT 1 FROM ${schema.llmProviderApiKeysTable} k
+              WHERE k.provider = ${model.provider} AND (
+                (o.embedding_chat_api_key_id = k.id AND o.embedding_model = ${model.modelId})
+                OR (o.reranker_chat_api_key_id = k.id AND o.reranker_model = ${model.modelId})
+                OR (o.ocr_chat_api_key_id = k.id AND o.ocr_model = ${model.modelId})
+              )
+            )
+        )
+        UNION ALL SELECT 'a member default' WHERE EXISTS (
+          SELECT 1 FROM ${schema.membersTable} WHERE default_model_id = ${id}
+        )
+        UNION ALL SELECT 'an agent' WHERE EXISTS (
+          SELECT 1 FROM ${schema.agentsTable} WHERE model_id = ${id}
+        )
+        UNION ALL SELECT 'guardrails' WHERE EXISTS (
+          SELECT 1 FROM ${schema.guardrailsDeploymentTable} WHERE annotator_model_id = ${id}
+        )
+        UNION ALL SELECT 'a model pool' WHERE EXISTS (
+          SELECT 1 FROM ${schema.modelPoolMembersTable} m
+          JOIN ${schema.llmProviderApiKeysTable} k ON k.id = m.provider_api_key_id
+          WHERE m.model_id = ${model.modelId} AND k.provider = ${model.provider}
+        )
+        UNION ALL SELECT 'an active cost recompute' WHERE EXISTS (
+          SELECT 1 FROM ${schema.modelCostBackfillsTable}
+          WHERE model_id = ${id} AND status IN ('pending', 'running')
+        )
+      `);
+      if (references.rows.length) {
+        return { status: "in_use", reason: references.rows[0].reason } as const;
+      }
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.deleteForTarget({
+        tx,
+        resources: ["llmModel"],
+        scope: id,
+      });
+      // SPDX-SnippetEnd
+      await tx.delete(schema.modelsTable).where(eq(schema.modelsTable.id, id));
+      return { status: "deleted" } as const;
+    });
+  }
+
   /**
    * Delete model by provider and model ID
    */

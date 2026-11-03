@@ -141,6 +141,7 @@ export const AuditEventNameSchema = z.enum([
   "limit.deleted",
   "limit.bulk_deleted",
   "llmModel.updated",
+  "llmModel.deleted",
   "llmModel.synced",
   "llmModel.bulk_updated",
   "llmModel.cost_backfill_started",

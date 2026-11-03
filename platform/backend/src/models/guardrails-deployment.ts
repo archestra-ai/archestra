@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { CacheKey, cacheManager } from "@/cache-manager";
+import config from "@/config";
 import db, { schema } from "@/database";
 import type {
   HumanApprovalMode,
@@ -11,10 +11,7 @@ const table = schema.guardrailsDeploymentTable;
 const id = "global";
 class GuardrailsDeploymentModel {
   static async get() {
-    const [[row], modes] = await Promise.all([
-      db.select().from(table).where(eq(table.id, id)),
-      readBreakTheGlassModes(),
-    ]);
+    const [row] = await db.select().from(table).where(eq(table.id, id));
     return {
       ...(row ?? {
         id,
@@ -24,7 +21,10 @@ class GuardrailsDeploymentModel {
         annotatorModelId: null,
         annotatorLlmApiKeyId: null,
       }),
-      ...modes,
+      // Release 1.4 sets these two in the environment: they are read-only here.
+      humanApprovalMode: config.openappa.humanApprovalMode as HumanApprovalMode,
+      unapprovableBlockMode: config.openappa
+        .softBlockMode as UnapprovableBlockMode,
     };
   }
   static async isEnabled(): Promise<boolean> {
@@ -37,57 +37,16 @@ class GuardrailsDeploymentModel {
     enabled?: boolean;
     unsupportedClientAction?: UnsupportedAppaClientAction;
     breakTheGlassEnabled?: boolean;
-    humanApprovalMode?: HumanApprovalMode;
-    unapprovableBlockMode?: UnapprovableBlockMode;
     annotatorModelId?: string | null;
     annotatorLlmApiKeyId?: string | null;
   }) {
-    const { humanApprovalMode, unapprovableBlockMode, ...columns } = update;
-    if (humanApprovalMode || unapprovableBlockMode) {
-      await cacheManager.set<BreakTheGlassModes>(
-        CacheKey.BreakTheGlassSettings,
-        {
-          ...(await readBreakTheGlassModes()),
-          ...(humanApprovalMode ? { humanApprovalMode } : {}),
-          ...(unapprovableBlockMode ? { unapprovableBlockMode } : {}),
-        },
-        SETTINGS_TTL_MS,
-      );
-    }
-    if (Object.keys(columns).length === 0) return;
     await db
       .insert(table)
-      .values({ id, ...columns })
-      .onConflictDoUpdate({ target: table.id, set: columns });
+      .values({ id, ...update })
+      .onConflictDoUpdate({ target: table.id, set: update });
   }
   static async findByIdForAudit() {
     return GuardrailsDeploymentModel.get();
   }
 }
 export default GuardrailsDeploymentModel;
-
-type BreakTheGlassModes = {
-  humanApprovalMode: HumanApprovalMode;
-  unapprovableBlockMode: UnapprovableBlockMode;
-};
-
-const DEFAULT_MODES: BreakTheGlassModes = {
-  humanApprovalMode: "unattended",
-  unapprovableBlockMode: "refuse",
-};
-
-/** The cache has no "never expires"; a century is the same in practice. */
-const SETTINGS_TTL_MS = 100 * 365 * 24 * 60 * 60 * 1000;
-
-/**
- * Release 1.4 keeps these two settings in the shared cache table instead of
- * guardrails_deployment columns, so it needs no schema change. Later
- * releases add the columns with the same defaults, so an unset value reads
- * the same before and after the upgrade.
- */
-async function readBreakTheGlassModes(): Promise<BreakTheGlassModes> {
-  const stored = await cacheManager.get<Partial<BreakTheGlassModes>>(
-    CacheKey.BreakTheGlassSettings,
-  );
-  return { ...DEFAULT_MODES, ...(stored ?? {}) };
-}

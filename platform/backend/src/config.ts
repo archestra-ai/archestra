@@ -2049,7 +2049,11 @@ export function parseOpenAppaConfig({
   reviewSummaryProvider,
   reviewSummaryModel,
   authSecret,
+  humanApprovalMode,
+  softBlockMode,
 }: {
+  humanApprovalMode?: string;
+  softBlockMode?: string;
   yellEnabled?: string;
   yellForwardingEnabled?: string;
   offerSigningSecret?: string;
@@ -2087,6 +2091,18 @@ export function parseOpenAppaConfig({
   });
   return {
     enabled: true,
+    // Release 1.4 sets these two Break the glass settings here; later
+    // releases store them with the Guardrails settings.
+    humanApprovalMode: parseOpenAppaChoice(
+      "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE",
+      humanApprovalMode,
+      ["unattended", "block", "everywhere"] as const,
+    ),
+    softBlockMode: parseOpenAppaChoice(
+      "ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE",
+      softBlockMode,
+      ["refuse", "allow"] as const,
+    ),
     yellEnabled: (yellEnabled ?? "true") === "true",
     // External diagnostic delivery requires its own opt-in in every environment.
     yellForwardingEnabled: forwarding === "true",
@@ -2098,6 +2114,20 @@ export function parseOpenAppaConfig({
     // tests do not observe a key for a feature that is off.
     ...(reviewSummary ? { reviewSummary } : {}),
   };
+}
+
+/** The first choice is the default; any other value stops startup. */
+function parseOpenAppaChoice<const T extends readonly [string, ...string[]]>(
+  name: string,
+  value: string | undefined,
+  choices: T,
+): T[number] {
+  const trimmed = value?.trim() ?? "";
+  if (trimmed === "") return choices[0];
+  if (!choices.includes(trimmed)) {
+    throw new Error(`${name} must be one of: ${choices.join(", ")}`);
+  }
+  return trimmed as T[number];
 }
 
 function deriveOfferSigningSecret(authSecret: string | undefined): string {
@@ -2216,6 +2246,8 @@ const authSessionSecret =
 
 const openappa = parseOpenAppaConfig({
   yellEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_ENABLED,
+  humanApprovalMode: process.env.ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE,
+  softBlockMode: process.env.ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE,
   yellForwardingEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED,
   offerSigningSecret: process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
   postgresMaxConnections:

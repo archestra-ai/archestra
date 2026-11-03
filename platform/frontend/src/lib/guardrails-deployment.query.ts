@@ -85,14 +85,17 @@ export function useUpdateUnsupportedClientAction() {
   });
 }
 
-/** The Break the glass settings: any of them, saved together. */
+/**
+ * The Break the glass setting the page can save. Release 1.4 sets Human
+ * approval and Soft block in the environment.
+ */
 export function useUpdateBreakTheGlass() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: async (
       body: Pick<
         NonNullable<archestraApiTypes.UpdateGuardrailsDeploymentData["body"]>,
-        "breakTheGlassEnabled" | "humanApprovalMode" | "unapprovableBlockMode"
+        "breakTheGlassEnabled"
       >,
     ) => {
       const { data, error } = await archestraApiSdk.updateGuardrailsDeployment({

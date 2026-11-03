@@ -3590,9 +3590,29 @@ describe("OpenAPPA feature configuration", () => {
     );
   });
 
+  test("the Break the glass environment settings default to the release defaults and refuse other values", () => {
+    expect(
+      parseOpenAppaConfig({
+        humanApprovalMode: "block",
+        softBlockMode: " allow ",
+      }),
+    ).toMatchObject({ humanApprovalMode: "block", softBlockMode: "allow" });
+    expect(parseOpenAppaConfig({ humanApprovalMode: "" })).toMatchObject({
+      humanApprovalMode: "unattended",
+    });
+    expect(() => parseOpenAppaConfig({ humanApprovalMode: "always" })).toThrow(
+      "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE must be one of: unattended, block, everywhere",
+    );
+    expect(() => parseOpenAppaConfig({ softBlockMode: "waive" })).toThrow(
+      "ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE must be one of: refuse, allow",
+    );
+  });
+
   test("enables database policies without a container path", () => {
     expect(parseOpenAppaConfig()).toEqual({
       enabled: true,
+      humanApprovalMode: "unattended",
+      softBlockMode: "refuse",
       yellEnabled: true,
       yellForwardingEnabled: false,
       offerSigningSecret: "",

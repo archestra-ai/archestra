@@ -47,8 +47,6 @@ const routes: FastifyPluginAsyncZod = async (app) => {
             unsupportedClientAction:
               UnsupportedAppaClientActionSchema.optional(),
             breakTheGlassEnabled: z.boolean().optional(),
-            humanApprovalMode: HumanApprovalModeSchema.optional(),
-            unapprovableBlockMode: UnapprovableBlockModeSchema.optional(),
             annotatorModelId: z.string().uuid().nullable().optional(),
             annotatorLlmApiKeyId: z.string().uuid().nullable().optional(),
           })
@@ -57,8 +55,6 @@ const routes: FastifyPluginAsyncZod = async (app) => {
               body.enabled !== undefined ||
               body.unsupportedClientAction !== undefined ||
               body.breakTheGlassEnabled !== undefined ||
-              body.humanApprovalMode !== undefined ||
-              body.unapprovableBlockMode !== undefined ||
               body.annotatorModelId !== undefined ||
               body.annotatorLlmApiKeyId !== undefined,
             "Set at least one guardrails deployment setting",

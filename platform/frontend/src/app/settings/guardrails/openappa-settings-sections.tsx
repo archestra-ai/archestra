@@ -109,6 +109,7 @@ export function OpenAppaBreakTheGlassSettings() {
         description="Calls and remedy plans waiting for human approval."
         value={data?.humanApprovalMode}
         disabled={disabled}
+        environmentVariable="ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE"
         options={[
           { value: "block", label: "Block until approved" },
           {
@@ -119,20 +120,17 @@ export function OpenAppaBreakTheGlassSettings() {
           },
           { value: "everywhere", label: "Waive everywhere" },
         ]}
-        onChange={(humanApprovalMode) => update.mutate({ humanApprovalMode })}
       />
       <BreakTheGlassRow
         title="Soft block"
         description="Blocks no approval can lift."
         value={data?.unapprovableBlockMode}
         disabled={disabled}
+        environmentVariable="ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE"
         options={[
           { value: "refuse", label: "Keep the block" },
           { value: "allow", label: "Waive the block" },
         ]}
-        onChange={(unapprovableBlockMode) =>
-          update.mutate({ unapprovableBlockMode })
-        }
       />
       <BreakTheGlassRow
         title="Yell tool"
@@ -390,8 +388,11 @@ function BreakTheGlassRow<T extends string>(props: {
   value: T | undefined;
   disabled: boolean;
   options: { value: T; label: string; description?: string }[];
-  onChange: (value: T) => void;
+  /** Release 1.4: the deployment sets this one; the page only shows it. */
+  environmentVariable?: string;
+  onChange?: (value: T) => void;
 }) {
+  const current = props.options.find((option) => option.value === props.value);
   return (
     <div className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)] lg:items-center lg:gap-8">
       <div className="min-w-0 space-y-1">
@@ -400,13 +401,25 @@ function BreakTheGlassRow<T extends string>(props: {
           {props.description}
         </div>
       </div>
-      {props.value ? (
+      {props.value && props.environmentVariable ? (
+        <div className="min-w-0 space-y-1 lg:text-right">
+          <p className="text-sm font-medium leading-5">
+            {current?.label ?? props.value}
+          </p>
+          <p className="text-xs leading-4 text-muted-foreground">
+            Set with{" "}
+            <code className="break-all font-mono">
+              {props.environmentVariable}
+            </code>
+          </p>
+        </div>
+      ) : props.value ? (
         <Select
           value={props.value}
           disabled={props.disabled}
           onValueChange={(value) => {
             const option = props.options.find((each) => each.value === value);
-            if (option) props.onChange(option.value);
+            if (option) props.onChange?.(option.value);
           }}
         >
           <SelectTrigger aria-label={props.title} className="w-full">

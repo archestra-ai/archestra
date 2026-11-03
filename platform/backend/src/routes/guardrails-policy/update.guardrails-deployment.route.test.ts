@@ -138,47 +138,43 @@ describe("Deployment-wide Guardrails v2 switch", () => {
     expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(false);
   });
 
-  test("administrators can let blocked calls through with a yell, and the change is audited", async () => {
+  test("the environment sets Human approval and Soft block, and the API cannot change them", async () => {
     await set(true);
-    const response = await app.inject({
-      method: "PUT",
-      url: "/api/guardrails-deployment",
-      payload: {
+    const previous = {
+      humanApprovalMode: config.openappa.humanApprovalMode,
+      softBlockMode: config.openappa.softBlockMode,
+    };
+    config.openappa.humanApprovalMode = "everywhere";
+    config.openappa.softBlockMode = "allow";
+    try {
+      const read = await app.inject({
+        method: "GET",
+        url: "/api/guardrails-deployment",
+      });
+      expect(read.statusCode, read.body).toBe(200);
+      expect(read.json()).toMatchObject({
         humanApprovalMode: "everywhere",
         unapprovableBlockMode: "allow",
-      },
-    });
-    expect(response.statusCode, response.body).toBe(200);
-    expect(response.json()).toMatchObject({
-      enabled: true,
-      humanApprovalMode: "everywhere",
-      unapprovableBlockMode: "allow",
-    });
-    await vi.waitFor(async () => {
-      const rows = await db
-        .select()
-        .from(schema.auditLogsTable)
-        .where(eq(schema.auditLogsTable.organizationId, organizationId));
-      expect(rows).toContainEqual(
-        expect.objectContaining({
-          action: "organization.updated",
-          before: expect.objectContaining({
-            humanApprovalMode: "unattended",
-            unapprovableBlockMode: "refuse",
-          }),
-          after: expect.objectContaining({
-            humanApprovalMode: "everywhere",
-            unapprovableBlockMode: "allow",
-          }),
-        }),
-      );
-    });
-    const refused = await app.inject({
-      method: "PUT",
-      url: "/api/guardrails-deployment",
-      payload: { humanApprovalMode: "always" },
-    });
-    expect(refused.statusCode).toBe(400);
+      });
+      for (const payload of [
+        { humanApprovalMode: "block" },
+        { unapprovableBlockMode: "refuse" },
+      ]) {
+        const refused = await app.inject({
+          method: "PUT",
+          url: "/api/guardrails-deployment",
+          payload,
+        });
+        expect(refused.statusCode).toBe(400);
+      }
+      expect(await getGuardrailsDeployment()).toMatchObject({
+        humanApprovalMode: "everywhere",
+        unapprovableBlockMode: "allow",
+      });
+    } finally {
+      config.openappa.humanApprovalMode = previous.humanApprovalMode;
+      config.openappa.softBlockMode = previous.softBlockMode;
+    }
   });
 
   test("a write that names the removed setting for new sessions is refused and changes nothing", async () => {

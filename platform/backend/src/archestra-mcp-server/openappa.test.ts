@@ -165,6 +165,8 @@ describe("OpenAPPA tool execution", () => {
     }) => {
       config.openappa = {
         enabled: true,
+        humanApprovalMode: "unattended" as const,
+        softBlockMode: "refuse" as const,
         yellEnabled: false,
         yellForwardingEnabled: false,
         offerSigningSecret: TEST_SIGNING_SECRET,

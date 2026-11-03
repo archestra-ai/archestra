@@ -224,7 +224,7 @@ test.each([
   ).toBeDisabled();
 });
 
-test("an administrator changes the Break the glass settings one at a time", async () => {
+test("an administrator changes the Yell tool, and the environment sets Human approval and Soft block", async () => {
   const updates: unknown[] = [];
   server.use(
     http.put(`${api}/guardrails-deployment`, async ({ request }) => {
@@ -253,18 +253,19 @@ test("an administrator changes the Break the glass settings one at a time", asyn
     fireEvent.click(screen.getByRole("option", { name: option }));
     await waitFor(() => expect(selector).toHaveTextContent(to));
   };
-  await change(
-    "Human approval",
-    "Waive in unattended sessions",
-    /Waive everywhere/,
-    "Waive everywhere",
-  );
-  await change(
-    "Soft block",
-    "Keep the block",
-    /Waive the block/,
-    "Waive the block",
-  );
+  // Release 1.4: the environment sets these two; the page shows them only.
+  expect(await screen.findByText("Waive in unattended sessions")).toBeVisible();
+  expect(
+    screen.getByText("ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE"),
+  ).toBeVisible();
+  expect(screen.getByText("Keep the block")).toBeVisible();
+  expect(screen.getByText("ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE")).toBeVisible();
+  expect(
+    screen.queryByRole("combobox", { name: "Human approval" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("combobox", { name: "Soft block" }),
+  ).not.toBeInTheDocument();
   // The Yell tool row maps its two choices onto the stored boolean.
   await change(
     "Yell tool",
@@ -272,11 +273,7 @@ test("an administrator changes the Break the glass settings one at a time", asyn
     /Record only/,
     "Record only",
   );
-  expect(updates).toEqual([
-    { humanApprovalMode: "everywhere" },
-    { unapprovableBlockMode: "allow" },
-    { breakTheGlassEnabled: false },
-  ]);
+  expect(updates).toEqual([{ breakTheGlassEnabled: false }]);
 });
 
 test.each([
@@ -290,8 +287,9 @@ test.each([
 ])("the Break the glass settings are disabled for %s", async (_name, arrange) => {
   arrange();
   show(<OpenAppaBreakTheGlassSettings />);
-  for (const name of ["Human approval", "Soft block", "Yell tool"])
-    expect(await screen.findByRole("combobox", { name })).toBeDisabled();
+  expect(
+    await screen.findByRole("combobox", { name: "Yell tool" }),
+  ).toBeDisabled();
 });
 
 test("links 'more' to the clients page and 'OpenAPPA session headers' to session-headers", async () => {

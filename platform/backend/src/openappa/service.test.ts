@@ -144,6 +144,8 @@ beforeEach(async ({ makeOrganization }) => {
   config.llmProxy.plugins = ["appa"];
   config.openappa = {
     enabled: true,
+    humanApprovalMode: "unattended" as const,
+    softBlockMode: "refuse" as const,
     yellEnabled: false,
     yellForwardingEnabled: false,
     offerSigningSecret: "test-offer-signing-secret-32chars",

@@ -236,6 +236,7 @@ import {
 import * as utils from "./utils";
 import { autoRoutingContext } from "./utils/auto-routing-context";
 import { getAzureProxyIngress } from "./utils/azure-ingress";
+import { isBedrockPromptOverBudget } from "./utils/bedrock-prompt-budget";
 import { withClaudeDesktopSubscriptionPreamble } from "./utils/claude-desktop-subscription";
 import { resolveClientGatewayBindings } from "./utils/client-gateway-bindings";
 import { consumeClientRuntimeEvidence } from "./utils/client-runtime-evidence";
@@ -2379,6 +2380,28 @@ async function handleObservedLLMProxy<
         ? { ...asRecord(providerRequest), tool_choice: "none" }
         : providerRequest
     ) as TRequest;
+
+    // The native Converse routes receive the complete client history. Check
+    // the outbound text against the catalog window before calling Bedrock;
+    // silently removing turns here would break tool-use and cache semantics.
+    if (
+      provider.interactionType === "bedrock:converse" &&
+      !modelPoolPlan &&
+      !autoRoutedMember &&
+      isBedrockPromptOverBudget(
+        finalRequest,
+        actualModel,
+        catalogModel
+          ? ModelModel.resolveArchitecturalContextLength(catalogModel)
+          : null,
+      )
+    ) {
+      throw new ApiError(
+        400,
+        "The prompt is too long for this model's context window. Shorten the conversation or start a new session.",
+        ArchestraInternalErrorCode.ContextLengthExceeded,
+      );
+    }
 
     // The tool names the request declares, in the canonical form tool-call
     // names are compared in. Read from the request body rather than

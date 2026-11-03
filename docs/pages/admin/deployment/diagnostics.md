@@ -13,6 +13,8 @@ Ask the SRE agent why an Archestra pod keeps restarting, and it reads that pod's
 
 The SRE agent and its Kubernetes MCP Registry entry start with **Can use** access for everyone in the organization. People who can manage the SRE agent's permissions can narrow **Who can use it** on its detail page; this also blocks direct access to its Kubernetes tools. The catalog entry has its own policy and can be narrowed separately. Pod specs can carry other MCP servers' credentials, so review these grants for your deployment. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
 
+The SRE agent remains available in chat, ChatOps, delegation, and project defaults wherever its object grant allows use. Its configuration remains editable by authorized users. As a built-in agent, it cannot be cloned, exported, restored from an older version, or deleted; these actions would replace or remove the installation-managed agent.
+
 1. Find the Kubernetes API server endpoint IPs with `kubectl get endpoints kubernetes -n default`. Use these IPs (with `/32`), not the `kubernetes` Service IP.
 2. Turn the agent on in your Helm values, then run `helm upgrade`:
 

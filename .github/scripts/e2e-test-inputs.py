@@ -8,7 +8,7 @@ def run_e2e(paths):
     if not paths:
         return True
     for path in paths:
-        if path.startswith(("docs/", "ai-labs/", "mcp-catalog/", ".agents/", ".claude/", ".codex/")):
+        if path.startswith(("docs/", "ai-labs/", ".agents/", ".claude/", ".codex/")):
             continue
         if "/" not in path and path.endswith(".md"):
             continue

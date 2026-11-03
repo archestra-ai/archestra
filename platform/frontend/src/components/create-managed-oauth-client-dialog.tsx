@@ -23,6 +23,7 @@ import {
   resolveOauthClientFormBody,
   useOauthClientScopeChange,
 } from "@/components/oauth-client/configuration-fields";
+import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import {
   Accordion,
   AccordionContent,
@@ -52,6 +53,7 @@ export function CreateManagedOAuthClientDialog({
   isSubmitting,
   defaultClientType = "mcp",
   defaultAllowedGatewayIds,
+  defaultProviderApiKeys,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -63,6 +65,8 @@ export function CreateManagedOAuthClientDialog({
   isSubmitting: boolean;
   defaultClientType?: "mcp" | "llm";
   defaultAllowedGatewayIds?: string[];
+  /** Provider keys an LLM client starts mapped to, e.g. a model pool's. */
+  defaultProviderApiKeys?: ProviderApiKeyMappings;
 }) {
   const form = useForm<OAuthClientFormValues>({
     defaultValues: {
@@ -82,6 +86,10 @@ export function CreateManagedOAuthClientDialog({
   });
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const defaultTargetIds = defaultAllowedGatewayIds?.join(",") ?? "";
+  // Read when the dialog opens, like the gateways: a new array on re-render
+  // must not reset the form.
+  const defaultProviderApiKeysRef = useRef(defaultProviderApiKeys);
+  defaultProviderApiKeysRef.current = defaultProviderApiKeys;
   const [step, setStep] = useState(0);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const values = form.watch();
@@ -100,7 +108,7 @@ export function CreateManagedOAuthClientDialog({
         serviceAccountId: null,
         grantType: "client_credentials",
         scopes: defaultClientType === "llm" ? ["llm:proxy"] : ["mcp", "a2a"],
-        providerApiKeys: [],
+        providerApiKeys: defaultProviderApiKeysRef.current ?? [],
         includeFutureProviders: false,
         allowedGatewayIds: defaultTargetIds ? defaultTargetIds.split(",") : [],
         redirectUrisText: "",

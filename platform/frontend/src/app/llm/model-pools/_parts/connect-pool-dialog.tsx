@@ -9,7 +9,12 @@ import {
   Waypoints,
 } from "lucide-react";
 import { useId, useState } from "react";
+import { ConnectStep } from "@/components/connect-rail";
 import { FormDialog } from "@/components/form-dialog";
+import {
+  type ConnectablePoolDetails,
+  LlmConnectSteps,
+} from "@/components/llm-connect-steps";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
@@ -20,20 +25,19 @@ import {
 } from "@/components/ui/radio-group";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useConnectionBaseUrl } from "@/components/virtual-key-connection-base-url";
-import { CodeExample } from "@/components/virtual-key-connection-guide";
 import {
-  buildCurlExample,
   getProxyBaseUrl,
   type RequestTarget,
 } from "@/components/virtual-key-request-example";
-import type { ModelPool } from "@/lib/model-pools.query";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
+import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { cn } from "@/lib/utils/tailwind";
 
 /** What the view needs of a pool, which a pool just created also has. */
-export type ConnectablePool = Pick<ModelPool, "id" | "name">;
+export type ConnectablePool = ConnectablePoolDetails;
 
 type Endpoint = "model-router" | "anthropic" | "openai";
-type Credential = "standard" | "token";
+type Credential = "standard" | "oauth";
 
 const ENDPOINTS: Choice<Endpoint>[] = [
   {
@@ -64,17 +68,18 @@ const CREDENTIALS: Choice<Credential>[] = [
     icon: KeyRound,
   },
   {
-    value: "token",
+    value: "oauth",
     label: "OAuth client",
-    description: "A token for a client that maps a member's key",
+    description: "One that maps a member's key, or is granted this pool",
     icon: ShieldCheck,
   },
 ];
 
 /**
  * How clients call a pool: by its name, on any endpoint that serves its
- * members, with a credential that may use it. Shown after a pool is created
- * too, as `ready`.
+ * members, with a credential that may use it. The credential and request
+ * steps are the LLM Proxy page's, narrowed to the pool. Shown after a pool is
+ * created too, as `ready`.
  */
 export function ConnectPoolDialog({
   pool,
@@ -86,22 +91,20 @@ export function ConnectPoolDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const connectionBaseUrl = useConnectionBaseUrl();
+  const providerCatalog = useModelProviderCatalog({ fresh: true });
   const [endpoint, setEndpoint] = useState<Endpoint>("model-router");
   const [credential, setCredential] = useState<Credential>("standard");
+  const { data: usableProviderKeys = [] } = useAvailableLlmProviderApiKeys({
+    toastOnError: false,
+  });
   const target: RequestTarget =
     endpoint === "model-router"
       ? { kind: "model-router" }
       : { kind: "provider", provider: endpoint };
-  const example = buildCurlExample({
-    connectionBaseUrl,
-    target,
-    keyType: credential,
-    keyValue:
-      credential === "standard"
-        ? "$ARCHESTRA_LLM_VIRTUAL_KEY"
-        : "$ARCHESTRA_OAUTH_TOKEN",
-    model: pool.name,
-  });
+  const targetLabel =
+    endpoint === "model-router"
+      ? "Model Router"
+      : providerCatalog.label(endpoint);
 
   return (
     <FormDialog
@@ -112,29 +115,46 @@ export function ConnectPoolDialog({
       size="large"
       className="max-w-4xl"
     >
-      <DialogBody className="space-y-5">
-        <ChoiceCards
-          label="Endpoint"
-          choices={ENDPOINTS}
-          value={endpoint}
-          onChange={setEndpoint}
-          columns="sm:grid-cols-3"
-        />
-        <ChoiceCards
-          label="Sign in with"
-          choices={CREDENTIALS}
-          value={credential}
-          onChange={setCredential}
-          columns="sm:grid-cols-2"
-        />
-        <div className="space-y-2">
-          <Label>Base URL</Label>
-          <code className="block rounded-md border bg-muted px-3 py-2 font-mono text-sm break-all">
-            {getProxyBaseUrl(connectionBaseUrl, target)}
-          </code>
-        </div>
-        {endpoint === "anthropic" ? <AnthropicNotice pool={pool} /> : null}
-        {example ? <CodeExample language="curl" code={example} /> : null}
+      <DialogBody>
+        <ol>
+          <ConnectStep number={1} title="Endpoint">
+            <ChoiceCards
+              label="Endpoint"
+              choices={ENDPOINTS}
+              value={endpoint}
+              onChange={setEndpoint}
+              columns="sm:grid-cols-3"
+            />
+            <div className="space-y-2">
+              <Label>Base URL</Label>
+              <code className="block rounded-md border bg-muted px-3 py-2 font-mono text-sm break-all">
+                {getProxyBaseUrl(connectionBaseUrl, target)}
+              </code>
+            </div>
+            {endpoint === "anthropic" ? <AnthropicNotice pool={pool} /> : null}
+          </ConnectStep>
+          <ConnectStep number={2} title="Authentication">
+            <ChoiceCards
+              label="Sign in with"
+              choices={CREDENTIALS}
+              value={credential}
+              onChange={setCredential}
+              columns="sm:grid-cols-2"
+            />
+          </ConnectStep>
+          <LlmConnectSteps
+            // Selections belong to one endpoint and credential; start over
+            // when either changes.
+            key={`${endpoint}:${credential}`}
+            firstNumber={3}
+            baseUrl={connectionBaseUrl}
+            selected={endpoint}
+            auth={credential}
+            targetLabel={targetLabel}
+            pool={pool}
+            usableProviderKeyIds={usableProviderKeys.map((key) => key.id)}
+          />
+        </ol>
       </DialogBody>
       <DialogStickyFooter className="mt-0">
         <DialogCancelButton>Close</DialogCancelButton>
@@ -165,6 +185,7 @@ type Choice<T extends string> = {
   icon: LucideIcon;
 };
 
+/** The step's title names the choice, so `label` only labels the group. */
 function ChoiceCards<T extends string>({
   label,
   choices,
@@ -180,38 +201,35 @@ function ChoiceCards<T extends string>({
 }) {
   const id = useId();
   return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      <RadioGroup
-        aria-label={label}
-        value={value}
-        onValueChange={(next) => onChange(next as T)}
-        className={cn("grid gap-2", columns)}
-      >
-        {choices.map((choice) => (
-          <Label
-            key={choice.value}
-            htmlFor={`${id}-${choice.value}`}
-            className={cn(
-              "flex cursor-pointer flex-col items-start gap-1 rounded-md p-3 font-normal",
-              radioCardClass({ checked: value === choice.value }),
-            )}
-          >
-            <RadioGroupItem
-              className="sr-only"
-              id={`${id}-${choice.value}`}
-              value={choice.value}
-            />
-            <span className="flex items-center gap-2 text-sm font-medium">
-              <choice.icon className="size-4" aria-hidden="true" />
-              <span>{choice.label}</span>
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {choice.description}
-            </span>
-          </Label>
-        ))}
-      </RadioGroup>
-    </div>
+    <RadioGroup
+      aria-label={label}
+      value={value}
+      onValueChange={(next) => onChange(next as T)}
+      className={cn("grid gap-2", columns)}
+    >
+      {choices.map((choice) => (
+        <Label
+          key={choice.value}
+          htmlFor={`${id}-${choice.value}`}
+          className={cn(
+            "flex cursor-pointer flex-col items-start gap-1 rounded-md p-3 font-normal",
+            radioCardClass({ checked: value === choice.value }),
+          )}
+        >
+          <RadioGroupItem
+            className="sr-only"
+            id={`${id}-${choice.value}`}
+            value={choice.value}
+          />
+          <span className="flex items-center gap-2 text-sm font-medium">
+            <choice.icon className="size-4" aria-hidden="true" />
+            <span>{choice.label}</span>
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {choice.description}
+          </span>
+        </Label>
+      ))}
+    </RadioGroup>
   );
 }

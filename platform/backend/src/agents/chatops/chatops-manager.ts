@@ -77,6 +77,8 @@ import type {
 import type { A2AAttachment } from "@/types/a2a-attachment";
 import { AgentRuntimeCredentialsRequiredError } from "@/types/agent-runtime";
 import type { ChatOpsChannelBinding } from "@/types/chatops-channel-binding";
+import { trackBackgroundWork } from "@/utils/background-work";
+import { withDrainScope } from "@/utils/drain-scope";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 import { stripThinkingBlocks } from "@/utils/strip-thinking-blocks";
@@ -742,6 +744,14 @@ export class ChatOpsManager {
     await this.initialize();
   }
 
+  /** Disconnect event sources before HTTP drain; admitted handlers still reply. */
+  async beginShutdown(): Promise<void> {
+    await Promise.all([
+      ...this.getSlackProviders().map((provider) => provider.beginShutdown()),
+      this.telegramProvider?.beginShutdown(),
+    ]);
+  }
+
   async cleanup(): Promise<void> {
     if (this.msTeamsProvider) {
       await this.msTeamsProvider.cleanup();
@@ -775,7 +785,20 @@ export class ChatOpsManager {
    * Covers: channel discovery, email resolution, user verification,
    * binding check, agent selection or processMessage().
    */
-  async handleIncomingMessage(
+  handleIncomingMessage(
+    provider: ChatOpsProvider,
+    body: unknown,
+  ): Promise<void> {
+    // Webhooks acknowledge before this work finishes. Retain the scope and
+    // dependencies for the full turn, just as socket ingress does.
+    const work = withDrainScope(() =>
+      this.processIncomingMessage(provider, body),
+    );
+    trackBackgroundWork(work);
+    return work;
+  }
+
+  private async processIncomingMessage(
     provider: ChatOpsProvider,
     body: unknown,
   ): Promise<void> {

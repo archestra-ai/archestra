@@ -24,6 +24,7 @@ export async function createSlackSocketFixture() {
   }[] = [];
   let connections = 0;
   const calls: string[] = [];
+  const acknowledgements: string[] = [];
   const pending: (() => void)[] = [];
   const sockets = new Set<Socket>();
   const websocket = new WebSocketServer({ noServer: true });
@@ -90,6 +91,10 @@ export async function createSlackSocketFixture() {
     const upgrade = () =>
       websocket.handleUpgrade(request, socket, head, (client) => {
         connections++;
+        client.on("message", (message) => {
+          const body = JSON.parse(message.toString());
+          if (body.envelope_id) acknowledgements.push(body.envelope_id);
+        });
         if (closeBeforeHello) {
           closeBeforeHello = false;
           stalledMethod = "apps.connections.open";
@@ -120,6 +125,18 @@ export async function createSlackSocketFixture() {
   );
   return {
     calls,
+    acknowledgements,
+    sendEvent(envelopeId: string, event: Record<string, unknown>) {
+      for (const client of websocket.clients)
+        client.send(
+          JSON.stringify({
+            envelope_id: envelopeId,
+            type: "events_api",
+            accepts_response_payload: false,
+            payload: { type: "event_callback", team_id: "T_TEST", event },
+          }),
+        );
+    },
     get abortedRequests() {
       return abortedRequests;
     },

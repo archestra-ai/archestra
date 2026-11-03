@@ -1,8 +1,16 @@
 import { setTimeout as delay } from "node:timers/promises";
+import Fastify from "fastify";
 import { describe, expect, test, vi } from "vitest";
+import { internalCallHeader } from "@/clients/internal-call";
 import ChatOpsConfigModel from "@/models/chatops-config";
+import {
+  beginLlmProxyDrain,
+  drainLlmProxyRequests,
+  registerLlmProxyDrain,
+} from "@/server/llm-proxy-drain";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { createSlackSocketFixture } from "@/test/slack-socket-fixture";
+import type { ChatOpsEventHandler } from "@/types/chatops";
 import SlackProvider from "./slack-provider";
 
 setupTestCacheManager();
@@ -62,6 +70,93 @@ const slackConfig = {
   appLevelToken: "xapp-synthetic",
   appId: "A_TEST",
 };
+
+test("shutdown disconnects Slack intake and drains an acknowledged turn through its model call and reply", async () => {
+  const fixture = await createSlackSocketFixture();
+  const provider = new SlackProvider(slackConfig);
+  const app = Fastify();
+  registerLlmProxyDrain(app, 2000);
+  let dependencyClosed = false;
+  app.addHook("onClose", async () => {
+    dependencyClosed = true;
+  });
+  app.post("/v1/openai/chat/completions", async () => ({
+    answer: "completed",
+  }));
+  const url = await app.listen({ host: "127.0.0.1", port: 0 });
+  let proceed = () => {};
+  const pending = new Promise<void>((resolve) => {
+    proceed = resolve;
+  });
+  let finished = () => {};
+  const done = new Promise<void>((resolve) => {
+    finished = resolve;
+  });
+  const handler: ChatOpsEventHandler = {
+    handleIncomingMessage: vi.fn(async () => {
+      await pending;
+      expect(dependencyClosed).toBe(false);
+      const response = await fetch(`${url}/v1/openai/chat/completions`, {
+        method: "POST",
+        headers: internalCallHeader(),
+      });
+      expect(response.status).toBe(200);
+      await provider.sendReply({
+        originalMessage: {
+          messageId: "1.000001",
+          channelId: "C_TEST",
+          workspaceId: "T_TEST",
+          threadId: "1.000001",
+          senderId: "U_TEST",
+          senderName: "Test",
+          text: "hello",
+          rawText: "hello",
+          timestamp: new Date(),
+          isThreadReply: false,
+        },
+        text: "completed",
+      });
+      finished();
+    }),
+    handleInteractiveApprovalDecision: vi.fn(),
+    handleInteractiveSelection: vi.fn(),
+    getAccessibleChatopsAgents: vi.fn(),
+  };
+  provider.setEventHandler(handler);
+  try {
+    await provider.initialize();
+    fixture.sendEvent("first", { type: "message", ts: "1.000001" });
+    await vi.waitFor(() =>
+      expect(handler.handleIncomingMessage).toHaveBeenCalledTimes(1),
+    );
+    expect(fixture.acknowledgements).toContain("first");
+    // beginShutdown gates admission synchronously, even before disconnect finishes.
+    const stopped = provider.beginShutdown();
+    fixture.sendEvent("late", { type: "message", ts: "1.000002" });
+    beginLlmProxyDrain(app);
+    const draining = drainLlmProxyRequests(app);
+    let drained = false;
+    void draining.then(() => {
+      drained = true;
+    });
+    await stopped;
+    await delay(30);
+    expect(drained).toBe(false);
+    expect(handler.handleIncomingMessage).toHaveBeenCalledTimes(1);
+    expect(fixture.acknowledgements).not.toContain("late");
+    proceed();
+    await done;
+    await draining;
+    expect(fixture.calls).toContain("chat.postMessage");
+    await app.close();
+    expect(dependencyClosed).toBe(true);
+  } finally {
+    proceed();
+    await provider.cleanup();
+    await fixture.close();
+    await app.close();
+  }
+});
 
 describe("Slack startup cancellation", () => {
   for (const stage of [
@@ -221,17 +316,25 @@ describe("Slack startup cancellation", () => {
     const fixture = await createSlackSocketFixture();
     fixture.failNextConnection(429, 60);
     const provider = new SlackProvider(slackConfig);
+    const timers = vi.spyOn(globalThis, "setTimeout");
     try {
       const started = performance.now();
       await expect(provider.initialize()).rejects.toThrow("slack.com");
       expect(performance.now() - started).toBeLessThan(1000);
       await delay(100);
-      expect(process.getActiveResourcesInfo()).not.toContain("Timeout");
+      // Other tests may leave fetch's keep-alive timers in this worker.
+      // The rejected Retry-After must never schedule its sixty-second sleep.
+      expect(
+        timers.mock.calls.some(
+          ([, ms]) => typeof ms === "number" && ms >= 60_000,
+        ),
+      ).toBe(false);
       expect(
         fixture.calls.filter((method) => method === "apps.connections.open"),
       ).toHaveLength(1);
       expect(fixture.connections).toBe(0);
     } finally {
+      timers.mockRestore();
       await provider.cleanup();
       await fixture.close();
     }

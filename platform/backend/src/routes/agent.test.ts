@@ -1061,7 +1061,7 @@ describe("agent routes", () => {
       expect(response.json().builtInAgentConfig).toBeNull();
     });
 
-    test("keeps SRE editable while protecting its built-in identity", async ({
+    test("limits SRE edits to built-in fields and protects its identity", async ({
       makeAgent,
     }) => {
       const created = await makeAgent({
@@ -1076,12 +1076,14 @@ describe("agent routes", () => {
         url: `/api/agents/${created.id}`,
         payload: {
           name: "Operations SRE",
+          systemPrompt: "Investigate the cluster",
           builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION },
         },
       });
       expect(response.statusCode).toBe(200);
       expect(response.json()).toMatchObject({
-        name: "Operations SRE",
+        name: "SRE",
+        systemPrompt: "Investigate the cluster",
         builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.SRE },
       });
     });

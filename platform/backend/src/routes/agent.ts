@@ -1,7 +1,6 @@
 import {
   AGENT_OPTIONS_MAX_IDS,
   AGENT_OPTIONS_MAX_PAGE_SIZE,
-  BUILT_IN_AGENT_IDS,
   type AgentType,
   CursorQuerySchema,
   createCursorPaginatedResponseSchema,
@@ -116,7 +115,6 @@ import {
   AgentSubagentExclusionsSchema,
   AgentToolExclusionsSchema,
   ApiError,
-  BuiltInAgentConfigSchema,
   ChatAgentRosterSchema,
   CloneAgentBodySchema,
   CreateAgentBodySchema,
@@ -2277,25 +2275,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Built-in agent guard: restrict which fields can be modified
       let updateData: typeof body;
-      if (
-        existingAgent.builtInAgentConfig &&
-        existingAgent.builtInAgentConfig.name !== BUILT_IN_AGENT_IDS.SRE
-      ) {
-        // Validate builtInAgentConfig if provided
-        if (body.builtInAgentConfig) {
-          const parsed = BuiltInAgentConfigSchema.safeParse(
-            body.builtInAgentConfig,
-          );
-          if (!parsed.success) {
-            throw new ApiError(400, "Invalid built-in agent configuration");
-          }
-        }
-
+      if (existingAgent.builtInAgentConfig) {
         // Only allow specific fields for built-in agents.
         updateData = {
-          ...(body.builtInAgentConfig !== undefined && {
-            builtInAgentConfig: body.builtInAgentConfig,
-          }),
           ...(body.systemPrompt !== undefined && {
             systemPrompt: body.systemPrompt,
           }),

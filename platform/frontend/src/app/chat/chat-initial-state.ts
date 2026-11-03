@@ -1,4 +1,7 @@
-import { BUILT_IN_AGENT_IDS, type ThinkingEffortSetting } from "@archestra/shared";
+import {
+  BUILT_IN_AGENT_IDS,
+  type ThinkingEffortSetting,
+} from "@archestra/shared";
 import {
   resolveInitialModel,
   resolveModelForAgent,

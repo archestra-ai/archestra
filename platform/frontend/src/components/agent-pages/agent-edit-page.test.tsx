@@ -178,7 +178,9 @@ describe("AgentEditPage", () => {
     render(<AgentEditPage id="a1" />);
 
     expect(screen.getByTestId("resource-permissions")).toBeVisible();
-    expect(screen.getByText("mounted: configuration,tools")).toBeInTheDocument();
+    expect(
+      screen.getByText("mounted: configuration,tools"),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Step 2 of 2: Tools/ }),
     ).toBeVisible();
@@ -197,7 +199,9 @@ describe("AgentEditPage", () => {
     render(<AgentEditPage id="a1" />);
 
     expect(screen.getByTestId("resource-permissions")).toBeVisible();
-    expect(screen.getByText("mounted: configuration,tools")).toBeInTheDocument();
+    expect(
+      screen.getByText("mounted: configuration,tools"),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Step 2 of 2: Tools/ }),
     ).toBeVisible();

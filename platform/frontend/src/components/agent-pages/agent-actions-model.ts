@@ -1,6 +1,6 @@
 import {
-  BUILT_IN_AGENT_IDS,
   type AgentType,
+  BUILT_IN_AGENT_IDS,
   getResourceForAgentType,
   type Permissions,
 } from "@archestra/shared";

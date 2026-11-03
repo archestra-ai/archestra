@@ -2,8 +2,8 @@
 
 import {
   ARCHESTRA_MCP_CATALOG_ID,
-  BUILT_IN_AGENT_IDS,
   type archestraApiTypes,
+  BUILT_IN_AGENT_IDS,
 } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {

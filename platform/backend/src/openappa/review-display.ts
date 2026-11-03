@@ -144,9 +144,9 @@ type Span = { start: number; end: number };
 type QuoteToken = { quote: string; slashes: number; end: number };
 
 // After a gap that may be shell-escaped, a value quoted from its first
-// character, or a bare one: after `=` up to a space, quote or `&`; after `:`
-// up to the first unescaped space when shell-escaped (`\ `), else to the end
-// of the line. A quote just before an unquoted name opens the argument
+// character, or a bare one: after `=` up to an unescaped space, quote or `&`;
+// after `:` up to the first unescaped space when shell-escaped (`\ `), else to
+// the end of the line. A quote just before an unquoted name opens the argument
 // holding the pair, as in `-H 'Cookie: ...'`, and its match ends the value.
 function credentialValue(text: string, head: RegExpExecArray): Span {
   const [match, nameClose, separator] = head;

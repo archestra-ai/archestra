@@ -2,7 +2,7 @@
 title: Limits
 description: Cap spend, tokens, and requests across your organization, teams, virtual keys, users, agents, OAuth clients, and environments
 order: 2
-lastUpdated: 2026-11-03
+lastUpdated: 2026-10-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -38,10 +38,6 @@ When more than one rule matches a call, every matching hard rule must allow it:
 - **Model-specific and all-models rules both apply.** A call to `claude-sonnet-4-6` checks both any rule targeting `claude-sonnet-4-6` and any rule set to **All models** on the same scope.
 - **Multi-model rules share one pool.** Selecting multiple models on a single rule caps their combined spend, tokens, or requests together.
 - **A team limit counts only that team's calls.** A call counts toward a team when its credential bills that team, or when the signed-in person is in the team, directly or through a sub-team, and the agent is shared with it. Another team's limit on a shared agent never blocks you.
-
-To cap requests billed directly to several child teams, set an **Organization** hard limit. A key billed to a child counts against that child and the organization; team hierarchy alone does not add it to the parent team's limit. A three-request parent-team limit therefore does not stop two child teams from making four requests.
-
-Set the shared rule on **Organization**, then set each child's allocation with a **Team** rule. This organization rule also counts other calls in the organization; there is no parent-team request cap limited to directly billed child-team keys. Team admins can issue keys billed to teams they administer and manage the limits they set there, but cannot edit organization-set limits.
 
 <span id="team-limits-and-spend"></span>
 

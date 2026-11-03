@@ -92179,6 +92179,7 @@ export type GetKnowledgeBasesResponses = {
                 keyId?: string;
                 valueId?: string;
             }>;
+            uploadedFilesEnvironmentId?: string | null;
             connectors: Array<{
                 id: string;
                 name: string;
@@ -92336,6 +92337,7 @@ export type CreateKnowledgeBaseResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        uploadedFilesEnvironmentId?: string | null;
     };
 };
 
@@ -92534,6 +92536,7 @@ export type GetKnowledgeBaseResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        uploadedFilesEnvironmentId?: string | null;
     };
 };
 
@@ -92543,6 +92546,10 @@ export type UpdateKnowledgeBaseData = {
     body: {
         name?: string;
         description?: string | null;
+        /**
+         * Environment for this knowledge base's indexed uploaded files. Requires uploaded files to have been indexed; omit to leave it unchanged.
+         */
+        uploadedFilesEnvironmentId?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -92655,6 +92662,7 @@ export type UpdateKnowledgeBaseResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        uploadedFilesEnvironmentId?: string | null;
     };
 };
 

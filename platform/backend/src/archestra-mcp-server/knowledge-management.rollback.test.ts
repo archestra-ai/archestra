@@ -22,7 +22,9 @@ import {
   KnowledgeBaseModel,
   TeamModel,
 } from "@/models";
+import { createEnvironment } from "@/services/environments/environment";
 import { beforeEach, describe, expect, test } from "@/test";
+import { indexKnowledgeFile } from "@/test/knowledge-search";
 import type { Agent, KnowledgeBase, KnowledgeBaseConnector } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
 import { archestraMcpBranding } from "./branding";
@@ -1037,6 +1039,60 @@ describe("knowledge-management tool execution", () => {
       );
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain("At least one field");
+    });
+
+    test("updates and reads the uploaded files environment through MCP", async ({
+      makeKnowledgeBase,
+      makeOrganization,
+    }) => {
+      const organizationId = mockContext.organizationId!;
+      const userId = mockContext.userId!;
+      const kb = await makeKnowledgeBase(organizationId, {
+        access: { users: [userId], preset: "manage" },
+      });
+      await indexKnowledgeFile({
+        organizationId,
+        knowledgeBaseId: kb.id,
+        uploadedBy: userId,
+        content: "A synthetic policy document.",
+        published: false,
+      });
+      const environment = await createEnvironment({
+        organizationId,
+        userId,
+        data: { name: "Support" },
+      });
+      for (const uploadedFilesEnvironmentId of [environment.id, null]) {
+        const result = await executeArchestraTool(
+          t("update_knowledge_base"),
+          { id: kb.id, uploadedFilesEnvironmentId },
+          mockContext,
+        );
+        expect(result.isError).toBe(false);
+        const fetched = await executeArchestraTool(
+          t("get_knowledge_base"),
+          { id: kb.id },
+          mockContext,
+        );
+        expect(JSON.parse((fetched.content[0] as any).text)).toMatchObject({
+          uploadedFilesEnvironmentId,
+        });
+      }
+      const foreign = await createEnvironment({
+        organizationId: (await makeOrganization()).id,
+        data: { name: "Foreign" },
+      });
+      const rejected = await executeArchestraTool(
+        t("update_knowledge_base"),
+        { id: kb.id, uploadedFilesEnvironmentId: foreign.id },
+        mockContext,
+      );
+      expect(rejected.isError).toBe(true);
+      expect(
+        await KnowledgeBaseModel.findUploadedFilesEnvironment(kb.id),
+      ).toEqual({
+        uploadedFilesEnvironmentId: null,
+      });
     });
 
     test("full knowledge base lifecycle", async () => {

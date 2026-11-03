@@ -61,6 +61,7 @@ import {
   UserModel,
 } from "@/models";
 import * as metrics from "@/observability/metrics";
+import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import { hiddenKnowledgeConnectorViolation } from "@/services/integration-overrides";
 import { canAccessKnowledgeBase } from "@/services/knowledge-base-access";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -114,6 +115,14 @@ const KnowledgeBaseCreateToolArgsSchema = z
 const KnowledgeBaseUpdateToolArgsSchema = z
   .object({
     id: UuidIdSchema.describe("Knowledge base ID."),
+    uploadedFilesEnvironmentId: z
+      .string()
+      .uuid()
+      .nullable()
+      .optional()
+      .describe(
+        "Environment for this knowledge base's indexed uploaded files. Requires uploaded files to have been indexed; omit to leave it unchanged.",
+      ),
     name: UpdateKnowledgeBaseSchema.shape.name
       .optional()
       .describe("New knowledge base name."),
@@ -975,9 +984,13 @@ async function handleGetKnowledgeBase(params: {
     ) {
       return knowledgeBaseNotFound(args.id);
     }
+    const result = {
+      ...kb,
+      ...(await KnowledgeBaseModel.findUploadedFilesEnvironment(kb.id)),
+    };
     return structuredSuccessResult(
-      { knowledgeBase: kb },
-      JSON.stringify(kb, null, 2),
+      { knowledgeBase: result },
+      JSON.stringify(result, null, 2),
     );
   } catch (error) {
     return catchError(error, "getting knowledge base");
@@ -998,6 +1011,23 @@ async function handleUpdateKnowledgeBase(params: {
     const updates: Record<string, unknown> = {};
     if (args.name !== undefined) updates.name = args.name;
     if (args.description !== undefined) updates.description = args.description;
+    if (args.uploadedFilesEnvironmentId !== undefined) {
+      if (!context.userId)
+        return errorResult("User context is required to assign an environment");
+      await ResourcePermissions.require({
+        organizationId: context.organizationId,
+        userId: context.userId,
+        resource: "knowledgeBase",
+        scope: args.id,
+        action: "update",
+      });
+      await assertCanAssignEnvironment({
+        organizationId: context.organizationId,
+        userId: context.userId,
+        environmentId: args.uploadedFilesEnvironmentId,
+      });
+      updates.uploadedFilesEnvironmentId = args.uploadedFilesEnvironmentId;
+    }
     if (Object.keys(updates).length === 0) {
       return errorResult("At least one field to update is required");
     }
@@ -1017,9 +1047,13 @@ async function handleUpdateKnowledgeBase(params: {
     if (!kb) {
       return knowledgeBaseNotFound(args.id);
     }
+    const result = {
+      ...kb,
+      ...(await KnowledgeBaseModel.findUploadedFilesEnvironment(kb.id)),
+    };
     return structuredSuccessResult(
-      { knowledgeBase: kb },
-      `Knowledge base updated successfully.\n\n${JSON.stringify(kb, null, 2)}`,
+      { knowledgeBase: result },
+      `Knowledge base updated successfully.\n\n${JSON.stringify(result, null, 2)}`,
     );
   } catch (error) {
     return catchError(error, "updating knowledge base");

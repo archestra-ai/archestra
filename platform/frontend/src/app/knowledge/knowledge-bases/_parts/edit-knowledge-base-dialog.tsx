@@ -7,6 +7,7 @@ import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { createdByFact } from "@/components/created-by-cell";
 import { DetailFacts } from "@/components/detail-facts";
+import { EnvironmentSelector } from "@/components/environment-selector";
 import { ResourceAccessSection } from "@/components/resource-access-section";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -27,11 +28,13 @@ type KnowledgeBaseItem = Pick<
 > & {
   createdBy?: archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number]["createdBy"];
   labels?: archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number]["labels"];
+  uploadedFilesEnvironmentId?: string | null;
 };
 
 type EditKnowledgeBaseFormValues = {
   name: string;
   description: string;
+  uploadedFilesEnvironmentId: string | null;
 };
 
 export function EditKnowledgeBaseDialog({
@@ -63,6 +66,8 @@ export function EditKnowledgeBaseDialog({
     defaultValues: {
       name: knowledgeBase.name,
       description: knowledgeBase.description ?? "",
+      uploadedFilesEnvironmentId:
+        knowledgeBase.uploadedFilesEnvironmentId ?? null,
     },
   });
 
@@ -71,6 +76,8 @@ export function EditKnowledgeBaseDialog({
       form.reset({
         name: knowledgeBase.name,
         description: knowledgeBase.description ?? "",
+        uploadedFilesEnvironmentId:
+          knowledgeBase.uploadedFilesEnvironmentId ?? null,
       });
       setLabels(knowledgeBase.labels ?? []);
     }
@@ -85,6 +92,9 @@ export function EditKnowledgeBaseDialog({
         name: values.name,
         description: values.description || null,
         labels: finalLabels,
+        ...(knowledgeBase.uploadedFilesEnvironmentId !== undefined && {
+          uploadedFilesEnvironmentId: values.uploadedFilesEnvironmentId,
+        }),
       },
     });
     if (result) {
@@ -149,6 +159,22 @@ export function EditKnowledgeBaseDialog({
             </FormItem>
           )}
         />
+
+        {knowledgeBase.uploadedFilesEnvironmentId !== undefined && (
+          <FormField
+            control={form.control}
+            name="uploadedFilesEnvironmentId"
+            render={({ field }) => (
+              <EnvironmentSelector
+                label="Uploaded files environment"
+                value={field.value}
+                onChange={field.onChange}
+                resource="knowledgeSource"
+                helpText="Applies to all uploaded documents indexed into this knowledge base. Only agents and gateways in this environment can retrieve them. File sharing permissions still apply."
+              />
+            )}
+          />
+        )}
 
         <ResourceAccessSection
           resource="knowledgeBase"

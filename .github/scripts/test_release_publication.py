@@ -80,15 +80,15 @@ gh() {
 
     def test_retired_line_security_patches_preserve_newer_channels(self):
         releases = [{"tag_name": "platform-v1.4.4", "prerelease": False}]
-        for version in ("1.3.78", "1.3.79"):
+        for version in ("1.3.78", "1.3.79", "1.3.80"):
             with self.subTest(version=version):
                 result = self.run_guard(releases, version=version)
                 self.assert_allowed(result)
                 self.assertEqual(result.policy_output, "preserve_latest=true\n")
-        for ref, version in (("main", "1.3.78"), ("main", "1.3.79"), ("release/1.3", "1.3.80")):
+        for ref, version in (("main", "1.3.78"), ("main", "1.3.79"), ("main", "1.3.80"), ("release/1.3", "1.3.81")):
             with self.subTest(ref=ref, version=version):
                 self.assert_blocked(self.run_guard(releases, ref=ref, version=version))
-        for version, newer in (("1.3.78", "1.3.79"), ("1.3.79", "1.3.80")):
+        for version, newer in (("1.3.78", "1.3.79"), ("1.3.79", "1.3.80"), ("1.3.80", "1.3.81")):
             for draft in (False, True):
                 with self.subTest(version=version, newer=newer, draft=draft):
                     self.assert_blocked(self.run_guard([
@@ -278,7 +278,7 @@ docker() { printf 'docker %s\\n' "$*"; }
         self.assertIn("Cannot list releases", result.stdout)
 
     def test_security_patch_never_moves_platform_latest(self):
-        result = self.run_platform_latest(version="1.3.78", preserve_latest="true")
+        result = self.run_platform_latest(version="1.3.80", preserve_latest="true")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("docker", result.stdout)
 
@@ -291,13 +291,13 @@ docker() { printf 'docker %s\\n' "$*"; }
             images = Path(directory) / "release-images"
             images.mkdir()
             (images / "mcp-server-base").write_text("registry.example.invalid/mcp@sha256:" + "a" * 64)
-            env = os.environ | {"VERSION": "1.3.78", "TAG_NAME": "platform-v1.3.78", "PRESERVE_LATEST": "true"}
+            env = os.environ | {"VERSION": "1.3.80", "TAG_NAME": "platform-v1.3.80", "PRESERVE_LATEST": "true"}
             result = subprocess.run(
                 ["bash", "-eo", "pipefail", "-c", 'helm() { echo "helm $*"; }; docker() { echo "docker $*"; };\n' + script("Publish approved stable artifacts without rebuilding")],
                 cwd=directory, env=env, capture_output=True, text=True, timeout=10,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("helm push archestra-platform-1.3.78.tgz", result.stdout)
+            self.assertIn("helm push archestra-platform-1.3.80.tgz", result.stdout)
             self.assertFalse(any(line.startswith("docker ") for line in result.stdout.splitlines()))
             result = subprocess.run(
                 ["bash", "-eo", "pipefail", "-c", 'gh() { if [ "$1 $2" = "release view" ]; then echo true; else echo "gh $*"; fi; };\n' + script("Publish GitHub release")],

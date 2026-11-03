@@ -1071,6 +1071,8 @@ describe("asking through the client's own question tool", () => {
         toolResultUpdates: {
           remedy: { content: authorized, outputSource: "runtime" },
           quoted: { content: authorized, outputSource: "runtime" },
+          joined: { content: authorized, outputSource: "runtime" },
+          whole: { content: authorized, outputSource: "runtime" },
           other: { content: "admitted output", outputSource: "tool" },
         },
       });
@@ -1102,6 +1104,25 @@ describe("asking through the client's own question tool", () => {
             isError: false,
           },
           {
+            // A client that joins the blocks into one string.
+            id: "joined",
+            name: "archestra__execute_remedy_plan",
+            content: `${authorized}\n\n${receipt}`,
+            isError: false,
+          },
+          {
+            // A client that sends the whole CallToolResult object.
+            id: "whole",
+            name: "archestra__execute_remedy_plan",
+            content: {
+              content: [
+                { type: "text", text: authorized },
+                { type: "text", text: receipt },
+              ],
+            },
+            isError: false,
+          },
+          {
             id: "other",
             name: "read_file",
             content: receipt,
@@ -1113,6 +1134,10 @@ describe("asking through the client's own question tool", () => {
         `${authorized}\n\n${receipt}`,
       );
       expect(outcome?.toolResultUpdates?.quoted).toBe(authorized);
+      for (const id of ["joined", "whole"])
+        expect(outcome?.toolResultUpdates?.[id]).toBe(
+          `${authorized}\n\n${receipt}`,
+        );
       // Another tool's output cannot add a receipt to its own result.
       expect(outcome?.toolResultUpdates?.other).toBe("admitted output");
     } finally {

@@ -6007,11 +6007,12 @@ function keepBreakTheGlassReceipts(params: {
       )
     )
       continue;
-    // Only one of the gateway's own receipts, as a whole text block: text
+    // Only one of the gateway's own receipts, as its own text block, or as
+    // the last block of a client that joins blocks into one string: text
     // inside another block (a call's quoted arguments, say) never counts.
     const blocks = textBlocks(result.content);
     const receipt = Object.values(WAIVED_REVIEW_RECEIPTS).find((text) =>
-      blocks.includes(text),
+      blocks.some((block) => block === text || block.endsWith(`\n${text}`)),
     );
     if (!receipt || admitted.includes(receipt)) continue;
     params.toolResultUpdates[result.id] = `${admitted}\n\n${receipt}`;
@@ -6020,6 +6021,15 @@ function keepBreakTheGlassReceipts(params: {
 
 function textBlocks(content: unknown): string[] {
   if (typeof content === "string") return [content];
+  // A client that sends the whole CallToolResult object.
+  if (
+    content &&
+    typeof content === "object" &&
+    !Array.isArray(content) &&
+    "content" in content
+  ) {
+    return textBlocks(content.content);
+  }
   if (!Array.isArray(content)) return [];
   return content.flatMap((block) =>
     block &&

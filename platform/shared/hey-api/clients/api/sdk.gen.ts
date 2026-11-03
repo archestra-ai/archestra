@@ -308,7 +308,7 @@ export const pinAgent = <ThrowOnError extends boolean = false>(options: Options<
 export const getChatAgentRoster = <ThrowOnError extends boolean = false>(options?: Options<GetChatAgentRosterData, ThrowOnError>) => (options?.client ?? client).get<GetChatAgentRosterResponses, GetChatAgentRosterErrors, ThrowOnError>({ url: '/api/agents/chat-roster', ...options });
 
 /**
- * Fetch bounded authorized nonbuilt-in chat choices with literal name or description search.
+ * Fetch bounded authorized chat choices with literal name or description search.
  *
  * Authentication:
  *

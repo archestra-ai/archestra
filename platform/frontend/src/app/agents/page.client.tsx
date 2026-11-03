@@ -267,7 +267,7 @@ function Agents() {
     access: scopeFilter.access,
     sharedWith: scopeFilter.sharedWith,
     owner: scopeFilter.owner,
-    includeBuiltIn: includeBuiltIn || undefined,
+    includeBuiltIn: includeBuiltIn || !!nameFilter || undefined,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
     providerApiKeyId: providerApiKeyIdFilter,

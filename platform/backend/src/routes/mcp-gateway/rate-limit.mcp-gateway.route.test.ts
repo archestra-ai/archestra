@@ -2,9 +2,11 @@ import { createHash, randomUUID } from "node:crypto";
 import { cacheManager } from "@/cache-manager";
 import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
+import OAuthAccessTokenModel from "@/models/oauth-access-token";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { withMcpGatewayAuthenticationCapacity } from "@/services/mcp-gateway-rate-limit";
+import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import mcpGatewayRoutes from "./index";
 
@@ -20,7 +22,7 @@ describe("MCP Gateway authentication rate limiting", () => {
   });
   afterEach(async () => app.close());
 
-  test("keeps tokenless OAuth discovery available after the IP budget is exhausted", async ({
+  test("keeps tokenless OAuth discovery available on a noisy IP", async ({
     makeOrganization,
     makeAgent,
   }) => {
@@ -83,7 +85,7 @@ describe("MCP Gateway authentication rate limiting", () => {
         method: transport === "messages" ? "POST" : transport,
         url: `/v1/mcp/${gateway.id}${transport === "messages" ? `/${transport}?sessionId=${randomUUID()}` : ""}`,
         headers: {
-          authorization: `Bearer ${credential}`,
+          authorization: `${attempt % 2 ? "bEaReR    " : "Bearer "}${credential}`,
           accept: "application/json, text/event-stream",
         },
         ...(transport === "POST" || transport === "messages"
@@ -100,7 +102,7 @@ describe("MCP Gateway authentication rate limiting", () => {
       }
     }
   });
-  test("keeps working clients on a noisy IP usable across replicas and rechecks revoked grants", async ({
+  test("admits new and idle clients on a noisy IP across replicas and rechecks revocation", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -131,23 +133,47 @@ describe("MCP Gateway authentication rate limiting", () => {
     };
     const replica = createFastifyInstance();
     await replica.register(mcpGatewayRoutes);
+    const now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
     try {
       // Authenticated GET with no legacy-SSE Accept header normally returns 405.
       expect((await app.inject(request)).statusCode).toBe(405);
       expect((await replica.inject(request)).statusCode).toBe(405);
-      for (let attempt = 0; attempt < 100; attempt += 1) {
+      // Expire the original exemption before an unrelated caller rotates guesses.
+      clock.mockReturnValue(now + 61_000);
+      for (let attempt = 0; attempt < 150; attempt += 1) {
         const rejected = await app.inject({
           ...request,
           headers: {
             authorization: `Bearer ${randomUUID()}`,
-            // Untrusted forwarding headers must not split the IP budget.
+            // These untrusted headers do not create independent origins.
             "x-forwarded-for": `192.0.2.${attempt + 1}`,
           },
         });
-        expect(rejected.statusCode).toBe(attempt < 99 ? 401 : 429);
+        expect(rejected.statusCode).toBe(401);
       }
       for (let attempt = 0; attempt < 12; attempt += 1) {
         expect((await replica.inject(request)).statusCode).toBe(405);
+      }
+      const newToken = randomUUID();
+      const hash = createHash("sha256").update(newToken).digest("base64url");
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: hash,
+        referenceId: `${MCP_RESOURCE_REFERENCE_PREFIX}${gateway.id}`,
+      });
+      const freshRequest = {
+        ...request,
+        headers: { authorization: `Bearer ${newToken}` },
+      };
+      for (const instance of [app, replica])
+        expect((await instance.inject(freshRequest)).statusCode).toBe(405);
+      await OAuthAccessTokenModel.deleteByTokenHash(hash);
+      for (const instance of [app, replica]) {
+        const revoked = await instance.inject(freshRequest);
+        expect(revoked.statusCode).toBe(401);
+        expect(revoked.headers["www-authenticate"]).toContain(
+          "resource_metadata",
+        );
       }
       const key = {
         organizationId: org.id,
@@ -165,11 +191,59 @@ describe("MCP Gateway authentication rate limiting", () => {
         const denied = await instance.inject(request);
         expect(denied.statusCode).toBe(403);
         expect(denied.headers["www-authenticate"]).toBeUndefined();
-        expect((await instance.inject(request)).statusCode).toBe(429);
       }
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        const denied = await replica.inject(request);
+        expect([403, 429]).toContain(denied.statusCode);
+      }
+      expect((await app.inject(request)).statusCode).toBe(429);
     } finally {
+      clock.mockRestore();
       await replica.close();
     }
+  });
+
+  test("returns bounded backpressure across gateway instances and recovers as work finishes", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const gateway = await makeAgent({ organizationId: org.id });
+    const replica = createFastifyInstance();
+    await replica.register(mcpGatewayRoutes);
+    let release = () => {};
+    const pendingWork = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const pending = Array.from({ length: 16 }, () =>
+      withMcpGatewayAuthenticationCapacity(() => pendingWork),
+    );
+    const request = {
+      method: "GET" as const,
+      url: `/v1/mcp/${gateway.id}`,
+      headers: { authorization: `Bearer ${randomUUID()}` },
+    };
+    try {
+      for (const instance of [app, replica]) {
+        const busy = await instance.inject(request);
+        expect(busy.statusCode).toBe(503);
+        expect(busy.headers["retry-after"]).toBe("1");
+        expect(busy.headers["www-authenticate"]).toBeUndefined();
+        const discovery = await instance.inject({
+          method: "GET",
+          url: request.url,
+        });
+        expect(discovery.statusCode).toBe(401);
+        expect(discovery.headers["www-authenticate"]).toContain(
+          "resource_metadata",
+        );
+      }
+    } finally {
+      release();
+      await Promise.all(pending);
+      await replica.close();
+    }
+    expect((await app.inject(request)).statusCode).toBe(401);
   });
 
   test("returns 503 before authentication when the budget cannot be read", async () => {

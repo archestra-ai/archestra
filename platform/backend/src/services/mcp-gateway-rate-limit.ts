@@ -15,7 +15,28 @@ import { registerProcessLocalCache } from "@/process-local-cache-registry";
 
 const WINDOW_MS = 60_000;
 const MAX_PER_CREDENTIAL = 10;
-const MAX_PER_IP = 100;
+const MAX_TRACKED_CREDENTIALS_PER_IP = 100;
+const MAX_AUTHENTICATION_OPERATIONS = 16;
+let authenticationOperations = 0;
+
+export class McpGatewayAuthenticationBusyError extends Error {}
+
+/** A process-wide bound, including requests handled by different gateway plugins. */
+export async function withMcpGatewayAuthenticationCapacity<T>(
+  operation: () => Promise<T>,
+): Promise<T> {
+  if (authenticationOperations >= MAX_AUTHENTICATION_OPERATIONS) {
+    throw new McpGatewayAuthenticationBusyError(
+      "Gateway authentication capacity is exhausted",
+    );
+  }
+  authenticationOperations += 1;
+  try {
+    return await operation();
+  } finally {
+    authenticationOperations -= 1;
+  }
+}
 const FINGERPRINT_KEY = config.auth.secret || randomBytes(32);
 
 type Caller = { credential?: string; gateway: string };
@@ -26,9 +47,11 @@ type Window = { count: number; endsAt: number };
  * credential/gateway pairs are exempt for one minute, but still authenticate
  * on EVERY request; the exemption is discarded on any 401/403 response.
  *
- * Unknown credentials share an IP ceiling so rotating guesses cannot evade
- * the per-credential ceiling. Known working clients behind that same proxy/IP
- * remain usable. IP locks make admission atomic across concurrent replicas.
+ * Each IP retains at most 100 recent credential/gateway counters. There is no
+ * shared IP allowance: unrelated guesses must not lock out new or idle clients.
+ * Rotating guesses can evade a credential budget, so admission storage and
+ * authentication also share a bounded process-wide work pool. IP locks keep
+ * credential admission atomic across replicas without unbounded bucket rows.
  */
 export class McpGatewayRateLimiter extends RateLimiterCompatibleAbstract {
   private readonly validated = registerProcessLocalCache(
@@ -45,6 +68,16 @@ export class McpGatewayRateLimiter extends RateLimiterCompatibleAbstract {
   override async consume(
     key: string | number,
     points = 1,
+    options?: Record<string, unknown>,
+  ): Promise<RateLimiterRes> {
+    return withMcpGatewayAuthenticationCapacity(() =>
+      this.consumeWithinCapacity(key, points, options),
+    );
+  }
+
+  private async consumeWithinCapacity(
+    key: string | number,
+    points: number,
     options?: Record<string, unknown>,
   ): Promise<RateLimiterRes> {
     if (
@@ -69,33 +102,35 @@ export class McpGatewayRateLimiter extends RateLimiterCompatibleAbstract {
         return this.exempt();
       }
     }
-    const ipKey: AllowedCacheKey = `${CacheKey.McpGatewayRateLimit}-ip-${key}`;
-    const pairKey: AllowedCacheKey = `${CacheKey.McpGatewayRateLimit}-pair-${key}-${this.fingerprint(caller.credential ?? "")}`;
+    const ipKey: AllowedCacheKey = `${CacheKey.McpGatewayRateLimit}-credentials-${key}`;
+    const pair = this.fingerprint(
+      JSON.stringify([caller.gateway, caller.credential]),
+    );
     return cacheManager.withLock(ipKey, async (cache) => {
       const now = Date.now();
-      const read = async (bucket: AllowedCacheKey): Promise<Window> => {
-        const window = await cache.get<Window>(bucket);
-        return window && window.endsAt > now
-          ? window
-          : { count: 0, endsAt: now + WINDOW_MS };
-      };
-      // Check the IP first: an already-blocked origin cannot create a new
-      // persisted credential bucket for every subsequent guess.
-      const ip = await read(ipKey);
-      if (ip.count >= MAX_PER_IP) throw this.exhausted(ip, now);
-      const pair = await read(pairKey);
-      if (pair.count >= MAX_PER_CREDENTIAL) throw this.exhausted(pair, now);
-      await cache.set(ipKey, { ...ip, count: ip.count + 1 }, ip.endsAt - now);
-      await cache.set(
-        pairKey,
-        { ...pair, count: pair.count + 1 },
-        pair.endsAt - now,
+      const stored = await cache.get<Record<string, Window>>(ipKey);
+      const windows = Object.fromEntries(
+        Object.entries(stored ?? {}).filter(
+          ([, window]) => window.endsAt > now,
+        ),
       );
+      const window = windows[pair] ?? { count: 0, endsAt: now + WINDOW_MS };
+      if (window.count >= MAX_PER_CREDENTIAL) throw this.exhausted(window, now);
+      if (
+        !windows[pair] &&
+        Object.keys(windows).length >= MAX_TRACKED_CREDENTIALS_PER_IP
+      ) {
+        // Bound attacker-controlled storage. Evict the oldest tracked credential,
+        // never reject a different credential because this IP has been noisy.
+        delete windows[Object.keys(windows)[0]];
+      }
+      windows[pair] = { ...window, count: window.count + 1 };
+      await cache.set(ipKey, windows, WINDOW_MS);
       return new RateLimiterRes(
-        MAX_PER_CREDENTIAL - pair.count - 1,
-        pair.endsAt - now,
-        pair.count + 1,
-        pair.count === 0,
+        MAX_PER_CREDENTIAL - window.count - 1,
+        window.endsAt - now,
+        window.count + 1,
+        window.count === 0,
       );
     });
   }

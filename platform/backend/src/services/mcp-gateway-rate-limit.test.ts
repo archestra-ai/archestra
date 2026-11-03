@@ -5,7 +5,11 @@ import { describe, expect, test, vi } from "vitest";
 import { cacheManager } from "@/cache-manager";
 import db from "@/database";
 import { setupTestCacheManager } from "@/test/cache-manager";
-import { McpGatewayRateLimiter } from "./mcp-gateway-rate-limit";
+import {
+  McpGatewayAuthenticationBusyError,
+  McpGatewayRateLimiter,
+  withMcpGatewayAuthenticationCapacity,
+} from "./mcp-gateway-rate-limit";
 
 setupTestCacheManager();
 
@@ -47,53 +51,78 @@ describe("gateway attempt budgets", () => {
     }
   });
 
-  test("caps rotating guesses without blocking validated pairs or persisting raw credentials", async () => {
+  test("bounds rotating-credential storage without sharing a lockout across clients", async () => {
     const first = new McpGatewayRateLimiter();
     const second = new McpGatewayRateLimiter();
-    const caller = {
-      credential: `Bearer ${randomUUID()}`,
-      gateway: randomUUID(),
-    };
+    const caller = { credential: randomUUID(), gateway: randomUUID() };
     await first.consume("192.0.2.2", 1, caller);
     await first.recordSuccess(caller);
-    // The successful first attempt consumed one slot; 99 guesses fill the IP.
-    for (let i = 0; i < 99; i += 1) {
+    for (let i = 0; i < 150; i += 1) {
       await second.consume("192.0.2.2", 1, {
         ...caller,
         credential: randomUUID(),
       });
     }
-    await expect(
-      second.consume("192.0.2.2", 1, {
-        ...caller,
-        credential: randomUUID(),
-      }),
-    ).rejects.toBeInstanceOf(RateLimiterRes);
-    // Another replica recognizes the verified pair; normal traffic is unmetered.
     for (let i = 0; i < 20; i += 1) {
       await expect(
         second.consume("192.0.2.2", 1, caller),
       ).resolves.toMatchObject({ consumedPoints: 0 });
     }
+    // Fresh credentials and another gateway have their own allowances on this IP.
     await expect(
-      second.consume("192.0.2.2", 1, {
-        ...caller,
-        gateway: randomUUID(),
-      }),
-    ).rejects.toBeInstanceOf(RateLimiterRes);
-    // Losing authorization removes the exemption even on a previously warm replica.
+      second.consume("192.0.2.2", 1, { ...caller, credential: randomUUID() }),
+    ).resolves.toMatchObject({ consumedPoints: 1 });
+    await expect(
+      second.consume("192.0.2.2", 1, { ...caller, gateway: randomUUID() }),
+    ).resolves.toMatchObject({ consumedPoints: 1 });
     await second.recordDenial(caller);
-    await expect(second.consume("192.0.2.2", 1, caller)).rejects.toBeInstanceOf(
-      RateLimiterRes,
-    );
-    // A different origin has an independent budget.
-    await expect(second.consume("192.0.2.3", 1, caller)).resolves.toMatchObject(
+    await expect(second.consume("192.0.2.2", 1, caller)).resolves.toMatchObject(
       { consumedPoints: 1 },
     );
     const rows = await db.execute(sql`SELECT key, value FROM keyv_cache`);
     expect(JSON.stringify(rows.rows)).not.toContain(caller.credential);
-    // 100 pair buckets plus the IP and at most the second origin's two rows.
-    expect(rows.rows.length).toBeLessThanOrEqual(104);
+    // One bounded map for the IP, even after 150 distinct guesses.
+    expect(rows.rows).toHaveLength(1);
+    const stored = JSON.parse(String(rows.rows[0].value));
+    expect(Object.keys(stored.value)).toHaveLength(100);
+  });
+
+  test("bounds in-flight work across limiter instances and releases capacity on success or error", async () => {
+    let release = () => {};
+    const pendingWork = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const pending = Array.from({ length: 16 }, () =>
+      withMcpGatewayAuthenticationCapacity(() => pendingWork),
+    );
+    try {
+      for (const limiter of [
+        new McpGatewayRateLimiter(),
+        new McpGatewayRateLimiter(),
+      ]) {
+        await expect(
+          limiter.consume("192.0.2.8", 1, {
+            credential: randomUUID(),
+            gateway: randomUUID(),
+          }),
+        ).rejects.toBeInstanceOf(McpGatewayAuthenticationBusyError);
+      }
+      await expect(
+        withMcpGatewayAuthenticationCapacity(async () => true),
+      ).rejects.toBeInstanceOf(McpGatewayAuthenticationBusyError);
+    } finally {
+      release();
+      await Promise.all(pending);
+    }
+    await expect(
+      withMcpGatewayAuthenticationCapacity(async () => {
+        throw new Error("Validation failed");
+      }),
+    ).rejects.toThrow("Validation failed");
+    const resumed = Array.from({ length: 16 }, () =>
+      withMcpGatewayAuthenticationCapacity(async () => true),
+    );
+    await expect(Promise.all(resumed)).resolves.toHaveLength(16);
   });
 
   test("does not admit an unknown caller when shared storage is unavailable", async () => {
@@ -105,7 +134,7 @@ describe("gateway attempt budgets", () => {
       }),
     ).rejects.toThrow("Not started");
   });
-  test("refreshes active clients across IP windows so a new guessing burst cannot lock them out", async () => {
+  test("renews active credential exemptions while unrelated guesses arrive", async () => {
     const limiter = new McpGatewayRateLimiter();
     const caller = { credential: randomUUID(), gateway: randomUUID() };
     const now = Date.now();
@@ -157,6 +186,11 @@ describe("gateway attempt budgets", () => {
       });
     try {
       await limiter.recordDenial(caller);
+      await expect(
+        limiter.consume("192.0.2.6", 1, caller),
+      ).resolves.toMatchObject({ consumedPoints: 2 });
+      for (let i = 0; i < 8; i += 1)
+        await limiter.consume("192.0.2.6", 1, caller);
       await expect(
         limiter.consume("192.0.2.6", 1, caller),
       ).rejects.toBeInstanceOf(RateLimiterRes);

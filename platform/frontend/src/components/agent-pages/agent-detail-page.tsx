@@ -177,7 +177,7 @@ export function AgentDetailPage({
       title={config.singular}
       description=""
       backLink={backLink}
-      maxWidth={pageWidth(kind)}
+      maxWidth="wizard"
       minWidth="phone"
     >
       {children}
@@ -558,7 +558,7 @@ function AgentDetails({
 
   return (
     <PageLayout
-      maxWidth={pageWidth(kind)}
+      maxWidth="wizard"
       minWidth="phone"
       // A scrolling box would trap the sticky save footer, so it could not
       // pin to the bottom of the window. Only the wide sections, such as
@@ -990,15 +990,6 @@ function AgentDetails({
  * reason out of reach of exactly the users it is written for. The refusal is
  * enforced by preventing the select and the click instead.
  */
-
-/**
- * An Agent's page holds its Runs table, so it takes the list pages' width,
- * like the Agents, Skills and MCP Registry pages. An MCP Gateway's page is a
- * settings form, which keeps the column it was created in.
- */
-function pageWidth(kind: AgentPageKind) {
-  return kind === "agent" ? "wide" : "wizard";
-}
 
 /**
  * What a section is called on this record's page. Connect is the exception:

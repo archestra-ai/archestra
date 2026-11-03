@@ -272,6 +272,8 @@ export interface LLMProxyContext<TRequest> {
    * Mutated as a pool moves between members.
    */
   upstreamAttempt: UpstreamAttempt;
+  /** The current transport's usage, independent of translated terminal events. */
+  getUpstreamStreamUsage?: MemberTransport["getStreamUsage"];
   /** Set when the request's model is a model pool's name. */
   modelPool?: ModelPoolRouting;
   /** Set when a platform call on the organization default was auto routed. */
@@ -2295,7 +2297,11 @@ async function handleObservedLLMProxy<
     }
 
     // Build final request
-    const builtRequest = requestAdapter.toProviderRequest();
+    // A translated member may need data encoded in a tool-call id (Gemini's
+    // thought signature). Apply the destination's id rules in its transport.
+    const builtRequest = requestAdapter.toProviderRequest({
+      preserveToolCallIds: Boolean(modelPool || autoRoutedTier),
+    });
     governedThread?.restoreProviderRequest(builtRequest);
 
     // Repair unpaired UTF-16 surrogates before the body leaves for the
@@ -2884,11 +2890,14 @@ async function handleStreaming<
   let accountingFinalized = false;
   let upstreamFinished = false;
   let providerTerminalSeen = false;
+  const observedUsage = () =>
+    (!upstreamFinished ? ctx.getUpstreamStreamUsage?.() : null) ??
+    streamAdapter.state.usage;
   const finalizeInteraction = async () => {
     if (accountingFinalized) return;
     accountingFinalized = true;
     try {
-      await ctx.throughput?.reconcile(streamAdapter.state.usage);
+      await ctx.throughput?.reconcile(observedUsage());
     } catch (error) {
       // A committed stream cannot become an HTTP 503. Preserve interaction
       // accounting and surface the metering failure in server logs.
@@ -2916,10 +2925,11 @@ async function handleStreaming<
       );
     }
 
-    let usage = streamAdapter.state.usage;
+    let usage = observedUsage();
     if (usage && !upstreamFinished) {
       const breakdown =
-        usage.billingUsage ?? primaryBillingUsage(usage, actualModel);
+        usage.billingUsage ??
+        primaryBillingUsage(usage, ctx.upstreamAttempt.modelId ?? actualModel);
       usage = {
         ...usage,
         billingQuote: undefined,
@@ -3134,7 +3144,7 @@ async function handleStreaming<
           // Gemini's SDK loses the HTTP status when an error body is cut off;
           // that is indistinguishable from a transport failure, so don't retry.
           isRetryable: (error) =>
-            providerName !== "gemini" &&
+            (ctx.upstreamAttempt.provider ?? providerName) !== "gemini" &&
             isRetryableUpstreamConnectionFailure(error),
           shouldContinue: () => !reply.raw.destroyed,
           onRetry: (event) =>
@@ -3748,7 +3758,7 @@ async function handleStreaming<
     // A stream that fails before any usage arrives (e.g. a provider 400
     // rejecting the request, or a mid-stream failure once SSE headers and
     // content are already on the wire) still has to reach interaction history.
-    if (!streamAdapter.state.usage) {
+    if (!observedUsage()) {
       const errorMessage = upstreamErrorMessage(
         lifecycleError,
         provider.extractErrorMessage,
@@ -3943,7 +3953,7 @@ async function handleNonStreaming<
             ctx.modelPool?.plan.timeoutMs ?? poolResponseTimeoutMs(request),
           // See the streaming path: Gemini cannot safely classify this boundary.
           isRetryable: (error) =>
-            providerName !== "gemini" &&
+            (ctx.upstreamAttempt.provider ?? providerName) !== "gemini" &&
             isRetryableUpstreamConnectionFailure(error),
           shouldContinue: () => !reply.raw.destroyed,
           onRetry: (event) =>
@@ -4932,10 +4942,13 @@ async function openUpstream<TRequest, T>(params: {
 }): Promise<T> {
   const { ctx, transport, onAccepted, open, memberTimeoutMs, ...retry } =
     params;
+  ctx.getUpstreamStreamUsage = undefined;
   let dispatched = false;
   const authorizedOpen = async (attemptTransport: MemberTransport) => {
     await ctx.authorizeA2AOAuthAttempt?.();
     dispatched = true;
+    // Replace on every attempt so a failed member cannot leak usage to its sibling.
+    ctx.getUpstreamStreamUsage = attemptTransport.getStreamUsage;
     return open(attemptTransport);
   };
   const routed = ctx.autoRoutedTier;
@@ -4949,6 +4962,7 @@ async function openUpstream<TRequest, T>(params: {
       open: () =>
         authorizedOpen({
           execute: routedTransport.execute,
+          getStreamUsage: routedTransport.getStreamUsage,
           executeStream: (request) =>
             routedTransport.executeStream(request, onAccepted),
         }),
@@ -4967,7 +4981,11 @@ async function openUpstream<TRequest, T>(params: {
       plan: pool.plan,
       attempt: ctx.upstreamAttempt,
       transportFor: pool.transportFor,
-      beforeAttempt: (member) => pool.checkLimits(member),
+      beforeAttempt: (member) => {
+        // Preparation can fail before authorizedOpen installs the next getter.
+        ctx.getUpstreamStreamUsage = undefined;
+        return pool.checkLimits(member);
+      },
       open: authorizedOpen,
       memberTimeoutMs,
       recordFailedAttempt: pool.recordFailedAttempt,

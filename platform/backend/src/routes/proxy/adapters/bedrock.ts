@@ -551,7 +551,9 @@ function isReasoningContentBlock(
 }
 
 /** Tool-use ids Bedrock accepts; see `wordToolCallId`. */
-function withBedrockToolCallIds(messages: BedrockMessages): BedrockMessages {
+export function withBedrockToolCallIds(
+  messages: BedrockMessages,
+): BedrockMessages {
   return messages.map((message) => {
     if (!Array.isArray(message.content)) return message;
     let changed = false;

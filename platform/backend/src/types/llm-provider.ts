@@ -218,7 +218,7 @@ export interface LLMRequestAdapter<TRequest, TMessages = unknown> {
    * Build the modified provider-specific request
    * Incorporates all modifications (model, tool results)
    */
-  toProviderRequest(): TRequest;
+  toProviderRequest(options?: { preserveToolCallIds?: boolean }): TRequest;
 }
 
 // =============================================================================

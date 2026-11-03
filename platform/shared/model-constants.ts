@@ -112,8 +112,8 @@ export type SupportedProvider = z.infer<typeof SupportedProvidersSchema>;
 /**
  * Providers whose shared keys can be model pool members. Per-user providers
  * (Copilot) and subscription-only ones are left out: their credential belongs
- * to one user. Gemini and Cohere have no translator to or from the wires
- * pooled clients speak.
+ * to one user. Cohere has no translator to or from the wires pooled clients
+ * speak.
  */
 export const MODEL_POOL_PROVIDERS = [
   "anthropic",
@@ -122,6 +122,7 @@ export const MODEL_POOL_PROVIDERS = [
   "azure",
   "cerebras",
   "deepseek",
+  "gemini",
   "groq",
   "minimax",
   "mistral",

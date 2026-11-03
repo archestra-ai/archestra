@@ -178,9 +178,10 @@ describe("AgentEditPage", () => {
     render(<AgentEditPage id="a1" />);
 
     expect(screen.getByTestId("resource-permissions")).toBeVisible();
+    expect(screen.getByText("mounted: configuration,tools")).toBeInTheDocument();
     expect(
-      screen.getByText("mounted: configuration,runtime,tools,messaging,advanced"),
-    ).toBeInTheDocument();
+      screen.getByRole("button", { name: /Step 2 of 2: Tools/ }),
+    ).toBeVisible();
   });
 
   it("keeps permissions editable for the built-in APPA Keeper agent", () => {
@@ -196,6 +197,10 @@ describe("AgentEditPage", () => {
     render(<AgentEditPage id="a1" />);
 
     expect(screen.getByTestId("resource-permissions")).toBeVisible();
+    expect(screen.getByText("mounted: configuration,tools")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Step 2 of 2: Tools/ }),
+    ).toBeVisible();
   });
 
   it("jumps to any step from the header, on the same mount", async () => {

@@ -6,7 +6,6 @@ import {
   type archestraApiTypes,
   BLOCKED_PASSTHROUGH_HEADERS,
   BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
-  BUILT_IN_AGENT_IDS,
   DEFAULT_AGENT_SYSTEM_PROMPT,
   DocsPage,
   E2eTestId,
@@ -1508,10 +1507,7 @@ export function AgentForm({
     agentType === "mcp_gateway"
       ? "The environment this gateway belongs to, controlling which tools and knowledge it can expose to consumers."
       : "The environment for this agent's sandbox (runtime and network egress) and the tools and knowledge sources it can use.";
-  // SRE is built-in for identity and grants, but keeps its editable agent setup.
-  const isBuiltIn =
-    !!agent?.builtIn &&
-    agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.SRE;
+  const isBuiltIn = !!agent?.builtIn;
   const showActivationSkills =
     showToolsSections && isInternalAgent && !isBuiltIn && !!canReadSkills;
   const agentHooksEnabled = useFeature("agentHooksEnabled");
@@ -3466,11 +3462,15 @@ export function AgentForm({
                   <AgentRuntimeToolSources />
                 </SettingsSection>
               )}
-              {/* Section 3: Tools & Knowledge Sources */}
+              {/* Section 3: Tools and optional knowledge sources */}
               {showTools && (
                 <SettingsSection
-                  title="Tools &amp; Knowledge"
-                  description="What this agent can call while it works, and what it can search before answering."
+                  title={isBuiltIn ? "Tools" : "Tools & Knowledge"}
+                  description={
+                    isBuiltIn
+                      ? "Tools this agent can call while it works."
+                      : "What this agent can call while it works, and what it can search before answering."
+                  }
                   data-testid={E2eTestId.AgentToolsSection}
                 >
                   <div className="space-y-3">

@@ -3021,6 +3021,10 @@ describe("AgentForm save payload and failure handling", () => {
 
       expect(screen.getByText("Mock Tools Editor")).toBeInTheDocument();
       expect(
+        screen.getByRole("heading", { name: "Tools" }),
+      ).toBeVisible();
+      expect(screen.queryByText("Tools & Knowledge")).toBeNull();
+      expect(
         screen.queryByRole("radiogroup", { name: "Tool access" }),
       ).toBeNull();
 

@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  BUILT_IN_AGENT_IDS,
   DocsPage,
   E2eTestId,
   getDocsUrl,
@@ -803,21 +802,13 @@ function AgentDetails({
                 canEdit={canEdit}
               />
             )}
-            {overviewOnly && section === "general" && kind === "agent" && (
-              <AgentSchedulesSection
-                agentId={agent.id}
-                agentName={agent.name}
-              />
-            )}
             {overviewOnly &&
               section === "general" &&
-              (agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.SRE ||
-                agent.builtInAgentConfig?.name ===
-                  BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG) && (
-                <ResourcePermissions
-                  resource="agent"
-                  scope={agent.id}
-                  standalone
+              kind === "agent" &&
+              !isBuiltIn && (
+                <AgentSchedulesSection
+                  agentId={agent.id}
+                  agentName={agent.name}
                 />
               )}
             {activeFormGroups.length > 0 && (

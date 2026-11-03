@@ -474,7 +474,7 @@ describe("AgentDetailPage", () => {
     expect(screen.queryByText("connect content")).toBeNull();
   });
 
-  it("shows object permissions on the built-in SRE agent detail page", () => {
+  it("keeps SRE permissions and schedules off the built-in detail page", () => {
     access = { ...access, isBuiltIn: true };
     mockAgent({
       ...baseAgent,
@@ -483,10 +483,11 @@ describe("AgentDetailPage", () => {
     });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
-    expect(screen.getByTestId("resource-permissions")).toBeVisible();
+    expect(screen.queryByTestId("resource-permissions")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Scheduled runs" })).toBeNull();
   });
 
-  it("shows object permissions on the built-in APPA Keeper detail page", () => {
+  it("keeps APPA Keeper permissions and schedules off the built-in detail page", () => {
     access = { ...access, isBuiltIn: true };
     mockAgent({
       ...baseAgent,
@@ -495,7 +496,8 @@ describe("AgentDetailPage", () => {
     });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
-    expect(screen.getByTestId("resource-permissions")).toBeVisible();
+    expect(screen.queryByTestId("resource-permissions")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Scheduled runs" })).toBeNull();
   });
 
   it("reveals audience and owner on keyboard focus without crowding the header", async () => {

@@ -2268,6 +2268,137 @@ exit 0
 );
 
 describe("ChatGPT plugin disconnect verification", () => {
+  test.for([
+    "bash",
+    "powershell",
+  ] as const)("%s retries the connection plugin as one resource after partial cleanup", async (platform, {
+    skip,
+  }) => {
+    skip(platform === "powershell" && !powershellBin);
+    const dir = await mkdtemp(path.join(tmpdir(), "chatgpt-plugin-cleanup-"));
+    try {
+      const home = path.join(dir, "home");
+      const bin = path.join(dir, "bin");
+      const configDir = path.join(home, ".codex");
+      await mkdir(configDir, { recursive: true });
+      await mkdir(path.join(home, ".archestra"), { recursive: true });
+      await mkdir(bin);
+      const configFile = path.join(configDir, "config.toml");
+      const logFile = path.join(dir, "calls.jsonl");
+      const owned = [
+        '[plugins."acme-skills@acme-skills"]',
+        "enabled = true",
+        '[marketplaces."acme-skills"]',
+        'source_type = "git"',
+        '[mcp_servers."prod_gateway"]',
+        'url = "https://example.test/mcp"',
+        "",
+      ].join("\n");
+      await writeFile(configFile, `${FOREIGN_TABLES}\n${owned}`);
+      const cli = path.join(bin, "codex");
+      await writeFile(
+        cli,
+        `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(logFile)}, JSON.stringify(args) + '\\n');
+let section;
+if (args[0] === 'plugin' && args[1] === 'marketplace' && args[2] === 'remove') {
+  if (process.env.FAIL_MARKETPLACE === '1') process.exit(1);
+  section = '[marketplaces."acme-skills"]';
+} else if (args[0] === 'plugin' && args[1] === 'remove') section = '[plugins."acme-skills@acme-skills"]';
+else if (args[0] === 'mcp' && args[1] === 'remove') section = '[mcp_servers."prod_gateway"]';
+if (section) {
+  const file = ${JSON.stringify(configFile)};
+  const blocks = fs.readFileSync(file, 'utf8').split(/(?=^\\[)/m);
+  fs.writeFileSync(file, blocks.filter(block => !block.startsWith(section)).join(''));
+}
+`,
+      );
+      await chmod(cli, 0o755);
+      const client = codexGuardClient(true);
+      const ctx: StartupGuardContext = {
+        ...CTX,
+        proxy: null,
+        skills: {
+          marketplaceName: "acme-skills",
+          cloneUrl: "https://example.test/marketplace.git",
+          connectionPlugin: true,
+          pluginNames: ["acme-skills"],
+        },
+      };
+      const guard = path.join(
+        home,
+        platform === "bash" ? client.scriptRelpath : client.psScriptRelpath,
+      );
+      await writeFile(
+        guard,
+        platform === "bash"
+          ? renderStartupGuardScript(ctx, client)
+          : renderStartupGuardPowerShell(ctx, client),
+      );
+      const driver = path.join(dir, "disconnect.ps1");
+      await writeFile(
+        driver,
+        // PowerShell can derive real profile paths outside USERPROFILE.
+        // Hide those externally owned files; fixture files use the real cmdlet.
+        `function Test-Path {
+  param([Parameter(Position=0)][string]$Path, [string]$LiteralPath)
+  $target = if ($LiteralPath) { $LiteralPath } else { $Path }
+  $root = [IO.Path]::GetFullPath($env:USERPROFILE) + [IO.Path]::DirectorySeparatorChar
+  if (-not $target -or -not [IO.Path]::GetFullPath($target).StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) { return $false }
+  Microsoft.PowerShell.Management\\Test-Path -LiteralPath $target
+}
+& ${psSingleQuote(guard)}
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+`,
+      );
+      const run = (fail: boolean) =>
+        spawnSync(
+          platform === "bash" ? "bash" : (powershellBin ?? "pwsh"),
+          platform === "bash"
+            ? [guard]
+            : ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", driver],
+          {
+            env: {
+              ...process.env,
+              HOME: home,
+              USERPROFILE: home,
+              CODEX_HOME: configDir,
+              PATH: `${bin}:${process.env.PATH ?? ""}`,
+              ARCHESTRA_GUARD_ACTION: "disconnect",
+              FAIL_MARKETPLACE: fail ? "1" : "0",
+            },
+            encoding: "utf8",
+            timeout: 30_000,
+          },
+        );
+      const failed = run(true);
+      expect(failed.error).toBeUndefined();
+      expect(failed.status).toBe(1);
+      expect(failed.stdout.match(/^Could not disconnect /gm)).toHaveLength(1);
+      expect(await readFile(configFile, "utf8")).toContain(
+        '[marketplaces."acme-skills"]',
+      );
+      expect(
+        await readFile(path.join(home, client.skipRelpath), "utf8").catch(
+          () => "",
+        ),
+      ).not.toMatch(/^(mcp|skills)$/m);
+      expect(await readFile(guard, "utf8").catch(() => null)).not.toBeNull();
+      const retried = run(false);
+      expect(retried.error).toBeUndefined();
+      expect(retried.status).toBe(0);
+      expect(retried.stdout.match(/^Disconnected /gm)).toHaveLength(1);
+      expect((await readFile(configFile, "utf8")).trim()).toBe(
+        FOREIGN_TABLES.trim(),
+      );
+      expect(await readFile(guard, "utf8").catch(() => null)).toBeNull();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   const entries = [
     ['[plugins."acme-skills@acme-skills"]\nenabled = true\n', 7],
     [

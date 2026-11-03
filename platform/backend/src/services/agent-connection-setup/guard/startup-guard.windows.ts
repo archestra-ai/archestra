@@ -1539,15 +1539,19 @@ function guardResources(ctx: StartupGuardContext): Array<{
     });
   }
   if (ctx.mcp) {
+    const label = ctx.skills?.connectionPlugin
+      ? "Connection plugin"
+      : "MCP gateway";
     resources.push({
-      label: `MCP gateway (${ctx.mcp.serverName})`,
+      label: `${label} (${ctx.mcp.serverName})`,
       url: ctx.mcp.url,
       kind: "mcp",
-      failName: `MCP gateway (${ctx.mcp.ref ?? ctx.mcp.serverName})`,
+      failName: `${label} (${ctx.mcp.ref ?? ctx.mcp.serverName})`,
       downMarker: ctx.mcp.ref ? `"mcp":"down"` : null,
     });
   }
-  if (ctx.skills) {
+  // One verified disconnect records the entire connection plugin as removed.
+  if (ctx.skills && !(ctx.mcp && ctx.skills.connectionPlugin)) {
     const label = `${describeMarketplaceContents(ctx.skills).label} (${ctx.skills.marketplaceName})`;
     resources.push({
       label,

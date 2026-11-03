@@ -286,20 +286,23 @@ export function createProxyPreHandler(params: {
  *
  * The catch-all hands its preHandler the raw body stream, so a JSON body is
  * read here, within the route's body limit, and put back: byte for byte when
- * nothing in it changed, re-serialized when something did. Compressed and
- * non-JSON bodies are forwarded as they are.
+ * nothing in it changed, re-serialized when something did. Native Ollama
+ * inference validates JSON independently of the content headers, like its
+ * upstream decoder; other opaque bodies are forwarded as they are.
  */
 export async function cleanForwardedBody(
   request: FastifyRequest,
   beforeCleanBody?: (request: FastifyRequest, body: unknown) => Promise<void>,
   availability?: { provider: SupportedProvider; baseUrl?: string },
 ): Promise<void> {
+  const nativeOllama =
+    availability?.provider === "ollama" ||
+    availability?.provider === "ollama-native";
   const path = request.url.split("?")[0].replace(/\/+$/, "");
   const metadata =
     isNonInferenceOperation(request) ||
     /\/(?:tokenize|detokenize)$/.test(path) ||
-    ((availability?.provider === "ollama" ||
-      availability?.provider === "ollama-native") &&
+    (nativeOllama &&
       /\/api\/(?:show|pull|push|create|copy|delete)$/.test(path));
   const validateBody =
     availability && !metadata
@@ -310,15 +313,17 @@ export async function cleanForwardedBody(
             try {
               body = JSON.parse(body.toString());
             } catch {
+              if (nativeOllama)
+                throw new ApiError(
+                  400,
+                  "Native Ollama inference requests must contain one valid JSON body.",
+                );
               return;
             }
           }
           if (!body || typeof body !== "object") return;
           let model = "model" in body ? body.model : undefined;
-          if (
-            availability.provider === "ollama" ||
-            availability.provider === "ollama-native"
-          ) {
+          if (nativeOllama) {
             // Go accepts case-insensitive field names, but its null/duplicate
             // handling differs from JSON.parse. Never authorize one model and
             // forward an ambiguous body that Ollama could decode as another.
@@ -360,7 +365,7 @@ export async function cleanForwardedBody(
   // Native endpoints can parse JSON regardless of Content-Type. Inspect those
   // bytes for availability too; otherwise a different header bypasses Hidden.
   if (
-    (encoding && encoding !== "identity") ||
+    (encoding && encoding !== "identity" && !nativeOllama) ||
     (!isUncompressedJson(request.headers) && !validateBody)
   ) {
     return;
@@ -414,6 +419,9 @@ async function cleanedJson(
   try {
     body = JSON.parse(raw.toString("utf8"));
   } catch {
+    // Native providers can accept a first JSON value and ignore trailing
+    // bytes. The availability validator must reject such ambiguous input.
+    await validateBody?.(raw);
     return null;
   }
   if (typeof body !== "object" || body === null) return null;

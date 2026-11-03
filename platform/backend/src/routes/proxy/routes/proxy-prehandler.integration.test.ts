@@ -111,6 +111,8 @@ test.for([
         '{"model":"synthetic-model","Model":null}',
         '{"model":"synthetic-model","Model":"unknown-custom-model","model":"synthetic-model"}',
         '{"model":"synthetic-model","model":null}',
+        '{"model":"synthetic-model"}{}',
+        '{"model":"synthetic-model"}x',
       ]) {
         const response = await app.inject({
           method: "POST",
@@ -123,6 +125,17 @@ test.for([
         });
         expect(response.statusCode, response.body).toBe(400);
       }
+      const encodedHeader = await app.inject({
+        method: "POST",
+        url: `/v1/${provider}/${agent.id}${paths[0]}`,
+        headers: {
+          "x-archestra-virtual-key": token,
+          "content-type": "application/json",
+          "content-encoding": "gzip",
+        },
+        payload: JSON.stringify({ model: model.modelId }),
+      });
+      expect(encodedHeader.statusCode, encodedHeader.body).toBe(403);
     }
     expect(hits).toHaveLength(0);
     expect((await ask(metadata)).statusCode).toBe(200);

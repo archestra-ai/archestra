@@ -12,6 +12,7 @@ import { type ReactNode, useMemo } from "react";
 import {
   type ExecSessionTransport,
   ExecTerminal,
+  type InterruptPrompt,
 } from "@/components/exec/exec-terminal";
 import type { ExecSessionProgress } from "@/components/exec/exec-terminal-progress";
 import { useProfile } from "@/lib/agent.query";
@@ -20,6 +21,18 @@ import {
   useUploadAgentRunTerminalFiles,
 } from "@/lib/agent-runtime.query";
 import websocketService from "@/lib/websocket/websocket";
+
+/**
+ * Ctrl+C reaches the agent's own input loop, where it stops the running turn
+ * and, pressed again, can close the agent. It is also the copy shortcut a
+ * person presses after a drag the agent's interface handled itself. Ask first.
+ */
+const AGENT_RUN_INTERRUPT_PROMPT: InterruptPrompt = {
+  title: "Send Ctrl+C to the agent?",
+  description:
+    "Ctrl+C stops the turn that is running, and a second Ctrl+C can close the agent. To copy text instead, switch to Select text.",
+  confirmLabel: "Send Ctrl+C",
+};
 
 /** Shared tmux terminal for Agent detail and Chat run sessions. */
 export function AgentRunTerminal({
@@ -71,6 +84,7 @@ export function AgentRunTerminal({
       initialProgress={run?.startupProgress ?? DEFAULT_STARTUP_PROGRESS}
       progressStartedAt={parseStartedAt(run?.startedAt)}
       onDropFiles={uploadFiles.mutateAsync}
+      interruptPrompt={AGENT_RUN_INTERRUPT_PROMPT}
       onCommandChange={onCommandChange}
       onError={onError}
       onClosed={onClosed}

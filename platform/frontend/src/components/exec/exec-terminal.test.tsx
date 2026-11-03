@@ -188,6 +188,91 @@ describe("ExecTerminal", () => {
     expect(terminal.contains(toggle)).toBe(false);
   });
 
+  it("asks before sending Ctrl+C to a session whose input loop belongs to an agent", async () => {
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        handlers.onStarted(null);
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+    render(
+      <ExecTerminal
+        sessionKey="interrupt-prompt"
+        transport={transport}
+        isActive
+        interruptPrompt={{
+          title: "Send Ctrl+C to the agent?",
+          description: "It stops the running turn.",
+          confirmLabel: "Send Ctrl+C",
+        }}
+      />,
+    );
+    await screen.findByText("Connected");
+    const keyHandler = terminalHarness.keyHandler;
+    const textarea = terminalHarness.textarea;
+    if (!keyHandler || !textarea)
+      throw new Error("Terminal did not initialize");
+    // The key is typed in the terminal, so that is where focus returns.
+    textarea.focus();
+    const ctrlC = (init: KeyboardEventInit = {}) =>
+      new KeyboardEvent("keydown", {
+        key: "c",
+        ctrlKey: true,
+        cancelable: true,
+        ...init,
+      });
+
+    // Held back and asked about, not sent.
+    const press = ctrlC();
+    expect(keyHandler(press)).toBe(false);
+    expect(press.defaultPrevented).toBe(true);
+    expect(transport.sendInput).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("dialog", {
+      name: "Send Ctrl+C to the agent?",
+    });
+    expect(dialog).toHaveTextContent("It stops the running turn.");
+
+    // Enter means keep running: the prompt opens on Cancel.
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    await waitFor(() => expect(cancel).toHaveFocus());
+    fireEvent.click(cancel);
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(transport.sendInput).not.toHaveBeenCalled();
+    await waitFor(() => expect(textarea).toHaveFocus());
+
+    // Confirming sends the interrupt once.
+    expect(keyHandler(ctrlC())).toBe(false);
+    fireEvent.click(await screen.findByRole("button", { name: "Send Ctrl+C" }));
+    await waitFor(() =>
+      expect(transport.sendInput).toHaveBeenCalledWith("\x03"),
+    );
+    expect(transport.sendInput).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    await waitFor(() => expect(textarea).toHaveFocus());
+
+    // An xterm selection still copies without a question.
+    terminalHarness.selectedText = "selected";
+    expect(keyHandler(ctrlC())).toBe(false);
+    expect(terminalHarness.copyToClipboard).toHaveBeenCalledWith("selected");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    terminalHarness.selectedText = "";
+
+    // Other chords and key phases are the emulator's as before.
+    expect(keyHandler(ctrlC({ shiftKey: true }))).toBe(true);
+    expect(keyHandler(ctrlC({ ctrlKey: false, metaKey: true }))).toBe(true);
+    expect(
+      keyHandler(new KeyboardEvent("keyup", { key: "c", ctrlKey: true })),
+    ).toBe(true);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(transport.sendInput).toHaveBeenCalledOnce();
+  });
+
   it("restores browser defaults and blocks mouse, keyboard, paste and pending input when off", async () => {
     const transport: ExecSessionTransport = {
       open: (handlers) => {

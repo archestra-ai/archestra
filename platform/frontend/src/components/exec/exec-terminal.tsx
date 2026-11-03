@@ -11,8 +11,10 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { FileDropZone } from "@/components/files/file-drop-zone";
+import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
+import { DialogStickyFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip,
@@ -63,6 +65,19 @@ export type ExecSessionHandlers = {
  * different WebSocket messages, but neither difference belongs to xterm
  * lifecycle, fitting, or the status chrome below.
  */
+/**
+ * What the terminal asks before it sends Ctrl+C.
+ *
+ * Set for a session whose input loop belongs to an agent: there Ctrl+C stops
+ * the running turn, and it is also the copy shortcut a person presses after a
+ * drag that the agent's own interface, not xterm, turned into a selection.
+ */
+export type InterruptPrompt = {
+  title: string;
+  description: ReactNode;
+  confirmLabel: string;
+};
+
 export type ExecSessionTransport = {
   /**
    * Open the session and return a teardown that also detaches server-side.
@@ -113,6 +128,8 @@ interface ExecTerminalProps {
    * stored file; the paths are then typed at the prompt for the user to send.
    */
   onDropFiles?: (files: File[]) => Promise<string[]>;
+  /** Confirm before sending Ctrl+C; without it Ctrl+C goes straight through. */
+  interruptPrompt?: InterruptPrompt | null;
   onCommandChange?: (command: string | null) => void;
   onError?: () => void;
   onClosed?: () => void;
@@ -132,6 +149,7 @@ export function ExecTerminal({
   initialProgress = null,
   progressStartedAt,
   onDropFiles,
+  interruptPrompt = null,
   onCommandChange,
   onError,
   onClosed,
@@ -142,6 +160,11 @@ export function ExecTerminal({
   transportRef.current = transport;
   const claudeMouseWorkaroundRef = useRef(claudeMouseWorkaround);
   claudeMouseWorkaroundRef.current = claudeMouseWorkaround;
+  const interruptPromptRef = useRef(interruptPrompt);
+  interruptPromptRef.current = interruptPrompt;
+  const [interruptPending, setInterruptPending] = useState(false);
+  // Enter on the open prompt means "keep running": the safe answer first.
+  const cancelInterruptRef = useRef<HTMLButtonElement>(null);
   const initialProgressRef = useRef(initialProgress);
   initialProgressRef.current = initialProgress;
   const hasTransportProgressRef = useRef(false);
@@ -261,6 +284,22 @@ export function ExecTerminal({
         ) {
           event.preventDefault();
           copyTerminalText(terminal.getSelection());
+          return false;
+        }
+        if (
+          event.type === "keydown" &&
+          event.ctrlKey &&
+          !event.metaKey &&
+          !event.altKey &&
+          !event.shiftKey &&
+          event.key.toLowerCase() === "c" &&
+          interruptPromptRef.current
+        ) {
+          // With no xterm selection, this Ctrl+C would reach the agent as an
+          // interrupt. Ask first: a person who dragged over the agent's own
+          // interface meant to copy.
+          event.preventDefault();
+          setInterruptPending(true);
           return false;
         }
         return true;
@@ -441,6 +480,15 @@ export function ExecTerminal({
     [onDropFiles, status],
   );
 
+  const closeInterruptPrompt = useCallback(() => {
+    setInterruptPending(false);
+  }, []);
+
+  const sendInterrupt = useCallback(() => {
+    setInterruptPending(false);
+    transportRef.current.sendInput("\x03");
+  }, []);
+
   const handleCopyCommand = useCallback(async () => {
     if (!command) return;
     try {
@@ -618,6 +666,32 @@ export function ExecTerminal({
             </Button>
           </div>
         </div>
+      )}
+      {interruptPrompt && (
+        <FormDialog
+          open={interruptPending}
+          onOpenChange={(open) => {
+            if (!open) closeInterruptPrompt();
+          }}
+          title={interruptPrompt.title}
+          description={interruptPrompt.description}
+          size="small"
+          initialFocusRef={cancelInterruptRef}
+        >
+          <DialogStickyFooter className="mt-0">
+            <Button
+              type="button"
+              variant="outline"
+              ref={cancelInterruptRef}
+              onClick={closeInterruptPrompt}
+            >
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" onClick={sendInterrupt}>
+              {interruptPrompt.confirmLabel}
+            </Button>
+          </DialogStickyFooter>
+        </FormDialog>
       )}
     </div>
   );

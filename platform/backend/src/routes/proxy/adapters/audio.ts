@@ -77,7 +77,6 @@ export function makeAudioAdapterFactory(params: {
     interactionType: `${provider}:audio`,
     spanName: "generate_content",
     unavailableUsageAccounting: true,
-    cancelOnDisconnect: true,
     binaryStream: !sse,
     recordRequestDurationInHandler: true,
     getBaseUrl: base.getBaseUrl,

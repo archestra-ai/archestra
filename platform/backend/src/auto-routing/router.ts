@@ -106,7 +106,7 @@ type AutoModelResolution =
   | { kind: "usage_limited"; violation: LimitViolationResponse };
 
 /**
- * The model a Model Router request should be resolved as. Anything but
+ * The model a Unified Model API request should be resolved as. Anything but
  * "auto" — and "auto" itself while the feature is off — is returned as is.
  * For "auto", picks the session's sticky tier (deciding it on first sight),
  * records the decision on `request` for the interaction write, and returns
@@ -199,7 +199,7 @@ type InternalAutoRoute = { model: Model; providerApiKeyId: string };
 /**
  * Routes a platform call on the organization default model on a native
  * provider route: the session's sticky tier, decided on first sight as for the
- * Model Router, on a key `userId` may use for it. The caller already checked
+ * Unified Model API, on a key `userId` may use for it. The caller already checked
  * usage limits. Records the decision on `request` for the interaction write.
  *
  * Null when the call is not routed: auto routing is off, the call names
@@ -347,12 +347,12 @@ export async function autoModelAvailable(
   return false;
 }
 
-/** Native provider routes cannot serve "auto"; only the Model Router translates between tiers. */
+/** Native provider routes cannot serve "auto"; only the Unified Model API translates between tiers. */
 export function assertNotAutoOnNativeRoute(model: string): void {
   if (config.autoRouting.enabled && isAutoModel(model)) {
     throw new ApiError(
       400,
-      `"${AUTO_MODEL}" is only available through the Model Router.`,
+      `"${AUTO_MODEL}" is only available through the Unified Model API.`,
     );
   }
 }

@@ -47,6 +47,7 @@ import {
   createStreamAccumulatorState,
   extractCommonToolCallArguments,
 } from "@/types";
+import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { isApprovedAsSent } from "../utils/approved-as-sent";
 import { withOpenAiResponsesToolCallIds } from "../utils/tool-call-ids";
 import {
@@ -205,7 +206,7 @@ export const openAiResponsesAdapterFactory: LLMProvider<
       maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey,
       baseURL: resolvedBaseUrl,
-      fetch: customFetch,
+      fetch: fetchWithAbortSignal(customFetch, options.abortSignal),
       defaultHeaders: options.defaultHeaders,
     });
   },

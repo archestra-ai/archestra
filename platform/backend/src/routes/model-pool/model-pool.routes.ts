@@ -149,7 +149,7 @@ function assertModelPoolsEnabled(): void {
   }
 }
 
-/** "auto" names the Model Router's auto routing alias, which a pool must not shadow. */
+/** "auto" names the Unified Model API's auto routing alias, which a pool must not shadow. */
 function assertNameNotReserved(input: ModelPoolInput): void {
   if (isAutoModel(input.name)) {
     throw new ApiError(

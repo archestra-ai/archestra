@@ -300,7 +300,7 @@ export async function buildAgentRunLaunchSpec(params: {
     }
   }
 
-  const modelRouterUrl = `${platformBaseUrl}/v1/model-router/${params.agentId}`;
+  const modelRouterUrl = `${platformBaseUrl}/v1/unified-model/${params.agentId}`;
   const anthropicUrl = `${platformBaseUrl}/v1/anthropic/${params.agentId}`;
   const bedrockUrl = `${platformBaseUrl}/v1/bedrock/${params.agentId}`;
   const proxyUrl = isClaudeCodeBedrock
@@ -362,7 +362,7 @@ export async function buildAgentRunLaunchSpec(params: {
     ARCHESTRA_AGENT_RUNTIME_MODEL: runtimeModel,
     // Native CLIs use provider-published model slugs for local metadata and
     // capability detection. Their single-provider virtual key keeps this
-    // unambiguous at the Model Router while the generic Agent Runtime client retains the
+    // unambiguous at the Unified Model API while the generic Agent Runtime client retains the
     // qualified model id above.
     ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: nativeModel,
     ARCHESTRA_AGENT_RUNTIME_MODEL_PROVIDER: llm.selectedProvider,

@@ -97,7 +97,7 @@ export interface CreateClientOptions {
   llmProviderApiKeyId?: string;
   /**
    * Aborted when the downstream HTTP client disconnects before its response
-   * finishes. Provider clients may forward it to their upstream requests.
+   * finishes. Provider clients must forward it to their upstream requests.
    */
   abortSignal?: AbortSignal;
   /**
@@ -218,7 +218,7 @@ export interface LLMRequestAdapter<TRequest, TMessages = unknown> {
    * Build the modified provider-specific request
    * Incorporates all modifications (model, tool results)
    */
-  toProviderRequest(): TRequest;
+  toProviderRequest(options?: { preserveToolCallIds?: boolean }): TRequest;
 }
 
 // =============================================================================
@@ -596,8 +596,6 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
    * spreads another provider's factory does not inherit its request type.
    */
   toLoggedRequest?(request: unknown): unknown;
-  /** Propagate downstream disconnection to upstream work. */
-  readonly cancelOnDisconnect?: boolean;
   /** End failed binary streams by closing the transport, never injecting SSE bytes. */
   readonly binaryStream?: boolean;
 

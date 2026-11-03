@@ -1,6 +1,7 @@
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { enterOpenappaEncryptedChat } from "@/openappa/encrypted-chat";
 import { validateAzureModelOperation } from "@/services/azure-model-capabilities";
+import { resolvePricingQuote } from "@/services/billable-usage";
 import {
   fireworksModelAliases,
   isFireworksEndpoint,
@@ -10,6 +11,7 @@ import type { BillingAttribution } from "@/utils/billable-usage";
 import { primaryBillingUsage } from "@/utils/billable-usage";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
 import { UpstreamStreamIncompleteError } from "@/utils/upstream-stream-incomplete-error";
+import { uuidv7 } from "@/utils/uuid";
 /**
  * Generic LLM Proxy Handler
  *
@@ -235,6 +237,7 @@ import {
 import * as utils from "./utils";
 import { autoRoutingContext } from "./utils/auto-routing-context";
 import { getAzureProxyIngress } from "./utils/azure-ingress";
+import { isBedrockPromptOverBudget } from "./utils/bedrock-prompt-budget";
 import { withClaudeDesktopSubscriptionPreamble } from "./utils/claude-desktop-subscription";
 import { resolveClientGatewayBindings } from "./utils/client-gateway-bindings";
 import { consumeClientRuntimeEvidence } from "./utils/client-runtime-evidence";
@@ -272,6 +275,8 @@ export interface LLMProxyContext<TRequest> {
    * Mutated as a pool moves between members.
    */
   upstreamAttempt: UpstreamAttempt;
+  /** The current transport's usage, independent of translated terminal events. */
+  getUpstreamStreamUsage?: MemberTransport["getStreamUsage"];
   /** Set when the request's model is a model pool's name. */
   modelPool?: ModelPoolRouting;
   /** Set when a platform call on the organization default was auto routed. */
@@ -343,12 +348,15 @@ export interface LLMProxyContext<TRequest> {
 /** How a request is spread across its model pool's members. */
 export interface ModelPoolRouting {
   plan: ModelPoolPlan;
+  prepareAttempt: (member: PlannedMember) => Promise<void>;
   checkLimits: (member: PlannedMember) => Promise<void>;
   transportFor: (
     member: PlannedMember,
     signal: AbortSignal,
   ) => Promise<MemberTransport>;
-  recordFailedAttempt: (attempt: UpstreamAttempt) => Promise<void>;
+  prepareFailedAttempt: (
+    attempt: UpstreamAttempt,
+  ) => Promise<(outcome: "failed" | "failed_over") => Promise<void>>;
   setResponseHeaders: (attempt: UpstreamAttempt) => void;
 }
 
@@ -378,9 +386,9 @@ export type LLMProxyAuthOverride = {
   authenticated: boolean;
   source?: InteractionSource;
   authMethod?: InteractionAuthMethod;
-  /** Model Router virtual key ID, preserved for usage limits and interaction attribution. */
+  /** Unified Model API virtual key ID, preserved for usage limits and interaction attribution. */
   virtualKeyId?: string;
-  /** A model pool the Model Router already let this caller use. */
+  /** A model pool the Unified Model API already let this caller use. */
   modelPoolId?: string;
   authenticatedApp?: {
     id: string;
@@ -1412,6 +1420,26 @@ async function handleObservedLLMProxy<
   // it is refused only where a spend budget applies to it.
   const mediaPricedForBudget =
     provider.mediaTariffCovers?.(requestAdapter.getOriginalRequest()) === true;
+  const unpricedVllmModel = async (
+    model: string,
+    targetProvider: SupportedProvider,
+    providerApiKeyId?: string,
+    endpoint?: "fireworks" | "other",
+  ): Promise<string | undefined> => {
+    // Fireworks has its own published pricing and conservative estimate policy.
+    if (targetProvider !== "vllm" || endpoint === "fireworks") return undefined;
+    const quote = await resolvePricingQuote({
+      model,
+      provider: targetProvider,
+      providerApiKeyId,
+      billingEndpoint: endpoint,
+      usage: { inputTokens: 0, outputTokens: 0 },
+    });
+    return quote.request.prices.input === null ||
+      quote.request.prices.output === null
+      ? model
+      : undefined;
+  };
   const limitContext = {
     modelAliases,
     unpricedMediaModel:
@@ -1476,6 +1504,14 @@ async function handleObservedLLMProxy<
     const limitViolation =
       await LimitValidationService.checkLimitsBeforeRequest({
         ...limitContext,
+        unpricedModel: deferModelScopedLimits
+          ? undefined
+          : await unpricedVllmModel(
+              actualModel,
+              providerName,
+              perKeyChatApiKeyId,
+              billingEndpoint,
+            ),
         model: deferModelScopedLimits ? undefined : actualModel,
         deferModelScopedLimits,
       });
@@ -1581,6 +1617,12 @@ async function handleObservedLLMProxy<
       const routedLimitViolation =
         await LimitValidationService.checkLimitsBeforeRequest({
           ...limitContext,
+          unpricedModel: await unpricedVllmModel(
+            actualModel,
+            providerName,
+            perKeyChatApiKeyId,
+            billingEndpoint,
+          ),
           model: actualModel,
         });
       if (routedLimitViolation) {
@@ -1599,6 +1641,16 @@ async function handleObservedLLMProxy<
         400,
         `${wasOAuthAuthenticated ? "LLM OAuth client" : "Virtual API key"} is not mapped to provider "${providerName}".`,
       );
+    }
+
+    // A pool name is not a provider model. Its selected member is checked at
+    // dispatch; direct and automatically routed calls already have an identity.
+    if (!modelPoolPlan) {
+      await ModelModel.assertAvailable({
+        provider: autoRoutedMember?.provider ?? providerName,
+        modelId: autoRoutedMember?.modelId ?? actualModel,
+        aliases: autoRoutedMember ? undefined : modelAliases,
+      });
     }
 
     // The catalog identity and independent metadata were read together after
@@ -1969,17 +2021,8 @@ async function handleObservedLLMProxy<
       });
     }
 
-    // Create client with observability (each provider handles metrics internally)
-    // A guardrail caller disconnects once it stops waiting for the answer,
-    // so its upstream call stops too instead of running on and being billed.
-    const abortSignal =
-      provider.cancelOnDisconnect ||
-      providerName === "microsoft-365-copilot" ||
-      providerName === "azure" ||
-      provider.interactionType === "azure:realtime" ||
-      proof.guardrail
-        ? clientDisconnectSignal({ request, reply })
-        : undefined;
+    // Every request owns its upstream work, including retries and pool members.
+    const abortSignal = clientDisconnectSignal({ request, reply });
     const createUpstreamClient = (target: {
       adapter: Pick<typeof provider, "createClient" | "provider">;
       apiKey: string | undefined;
@@ -2132,6 +2175,12 @@ async function handleObservedLLMProxy<
       );
       const violation = await LimitValidationService.checkLimitsBeforeRequest({
         ...limitContext,
+        unpricedModel: await unpricedVllmModel(
+          autoRoutedMember.modelId,
+          autoRoutedMember.provider,
+          autoRoutedMember.providerApiKeyId,
+          upstreamAttempt.billingEndpoint,
+        ),
         model: autoRoutedMember.modelId,
         modelAliases: upstreamAttempt.modelAliases,
       });
@@ -2153,7 +2202,7 @@ async function handleObservedLLMProxy<
         : undefined;
 
     // A pooled or routed request never uses the caller's own key, which a
-    // Model Router pool request doesn't even carry.
+    // Unified Model API pool request doesn't even carry.
     const client =
       modelPoolPlan || autoRoutedTier
         ? undefined
@@ -2179,7 +2228,11 @@ async function handleObservedLLMProxy<
       modelPoolPlan && poolWire
         ? {
             plan: modelPoolPlan,
-            checkLimits: async (member) => {
+            prepareAttempt: async (member) => {
+              await ModelModel.assertAvailable({
+                provider: member.provider,
+                modelId: member.modelId,
+              });
               try {
                 preparedMember = { value: await memberCredential(member) };
               } catch (error) {
@@ -2193,9 +2246,24 @@ async function handleObservedLLMProxy<
               );
               const model = stripClaudeContextVariantSuffix(member.modelId);
               upstreamAttempt.modelId = model;
+              await ModelModel.assertAvailable({
+                provider: member.provider,
+                modelId: model,
+                aliases: upstreamAttempt.modelAliases,
+              });
+            },
+            checkLimits: async (member) => {
+              if (!preparedMember || "error" in preparedMember) return;
+              const model = stripClaudeContextVariantSuffix(member.modelId);
               const violation =
                 await LimitValidationService.checkLimitsBeforeRequest({
                   ...limitContext,
+                  unpricedModel: await unpricedVllmModel(
+                    model,
+                    member.provider,
+                    member.providerApiKeyId,
+                    upstreamAttempt.billingEndpoint,
+                  ),
                   model,
                   modelAliases: upstreamAttempt.modelAliases,
                 });
@@ -2228,7 +2296,7 @@ async function handleObservedLLMProxy<
                 preparedMember.value,
               );
             },
-            recordFailedAttempt: async (attempt) => {
+            prepareFailedAttempt: async (attempt) => {
               const cutOff = attempt.cutOff
                 ? await estimateCutOffAttemptUsage({
                     provider: providerName,
@@ -2237,47 +2305,57 @@ async function handleObservedLLMProxy<
                     member: attempt,
                   })
                 : undefined;
+              const interactionId = uuidv7();
+              const record: InsertInteraction = {
+                id: interactionId,
+                profileId: resolvedAgent.id,
+                externalAgentId,
+                runId,
+                userId,
+                serviceAccountId,
+                virtualKeyId,
+                passthroughVirtualKeyId,
+                appId: attributedAppId,
+                sessionId,
+                sessionSource,
+                source,
+                authMethod,
+                authenticatedAppId: authenticatedApp?.id,
+                authenticatedAppName: authenticatedApp?.name,
+                billingTeamId,
+                type: provider.interactionType,
+                request:
+                  requestAdapter.getOriginalRequest() as InteractionRequest,
+                processedRequest: null,
+                response: { error: attempt.failureReason ?? "failed" },
+                model: actualModel,
+                baselineModel: actualModel,
+                // A refused attempt is free. One we cut off had read the
+                // prompt, so it carries that input as an estimate.
+                inputTokens: cutOff?.inputTokens ?? 0,
+                inputTokensEstimated: cutOff !== undefined,
+                outputTokens: 0,
+                cost: cutOff ? cutOff.cost : "0",
+                baselineCost: cutOff?.cost,
+                billingMode,
+              };
+              // Persist the attempt and settle minute spend before admitting
+              // the next member. Mark failover only when a non-hidden choice opens.
               await persistProxyInteraction({
-                record: {
-                  profileId: resolvedAgent.id,
-                  externalAgentId,
-                  runId,
-                  userId,
-                  serviceAccountId,
-                  virtualKeyId,
-                  passthroughVirtualKeyId,
-                  appId: attributedAppId,
-                  sessionId,
-                  sessionSource,
-                  source,
-                  authMethod,
-                  authenticatedAppId: authenticatedApp?.id,
-                  authenticatedAppName: authenticatedApp?.name,
-                  billingTeamId,
-                  type: provider.interactionType,
-                  request:
-                    requestAdapter.getOriginalRequest() as InteractionRequest,
-                  processedRequest: null,
-                  response: { error: attempt.failureReason ?? "failed" },
-                  model: actualModel,
-                  baselineModel: actualModel,
-                  // A refused attempt is free. One we cut off had read the
-                  // prompt, so it carries that input as an estimate.
-                  inputTokens: cutOff?.inputTokens ?? 0,
-                  inputTokensEstimated: cutOff !== undefined,
-                  outputTokens: 0,
-                  cost: cutOff ? cutOff.cost : "0",
-                  baselineCost: cutOff?.cost,
-                  billingMode,
-                },
+                record,
                 encryptedChat,
                 streamTiming,
                 attributionLabels,
                 throughput,
-                // A failed attempt has no usage to attribute to its routing decision.
                 autoRouting: undefined,
-                upstreamAttempt: attempt,
+                upstreamAttempt: { ...attempt, attemptOutcome: "failed" },
               });
+              return async (outcome) => {
+                if (outcome === "failed_over")
+                  await InteractionModel.markPoolAttemptFailedOver(
+                    interactionId,
+                  );
+              };
             },
             setResponseHeaders: (attempt) => {
               if (reply.raw.headersSent) return;
@@ -2304,7 +2382,11 @@ async function handleObservedLLMProxy<
     }
 
     // Build final request
-    const builtRequest = requestAdapter.toProviderRequest();
+    // A translated member may need data encoded in a tool-call id (Gemini's
+    // thought signature). Apply the destination's id rules in its transport.
+    const builtRequest = requestAdapter.toProviderRequest({
+      preserveToolCallIds: Boolean(modelPool || autoRoutedTier),
+    });
     governedThread?.restoreProviderRequest(builtRequest);
 
     // Repair unpaired UTF-16 surrogates before the body leaves for the
@@ -2345,6 +2427,28 @@ async function handleObservedLLMProxy<
         ? { ...asRecord(providerRequest), tool_choice: "none" }
         : providerRequest
     ) as TRequest;
+
+    // The native Converse routes receive the complete client history. Check
+    // the outbound text against the catalog window before calling Bedrock;
+    // silently removing turns here would break tool-use and cache semantics.
+    if (
+      provider.interactionType === "bedrock:converse" &&
+      !modelPoolPlan &&
+      !autoRoutedMember &&
+      isBedrockPromptOverBudget(
+        finalRequest,
+        actualModel,
+        catalogModel
+          ? ModelModel.resolveArchitecturalContextLength(catalogModel)
+          : null,
+      )
+    ) {
+      throw new ApiError(
+        400,
+        "The prompt is too long for this model's context window. Shorten the conversation or start a new session.",
+        ArchestraInternalErrorCode.ContextLengthExceeded,
+      );
+    }
 
     // The tool names the request declares, in the canonical form tool-call
     // names are compared in. Read from the request body rather than
@@ -2530,6 +2634,7 @@ async function handleObservedLLMProxy<
         lifecycleError.quota,
       );
     if (
+      upstreamAttempt.interactionRecorded ||
       (lifecycleError instanceof ObservedProviderUsageError &&
         lifecycleError.billingRecorded) ||
       (lifecycleError instanceof ThroughputError &&
@@ -2893,11 +2998,14 @@ async function handleStreaming<
   let accountingFinalized = false;
   let upstreamFinished = false;
   let providerTerminalSeen = false;
+  const observedUsage = () =>
+    (!upstreamFinished ? ctx.getUpstreamStreamUsage?.() : null) ??
+    streamAdapter.state.usage;
   const finalizeInteraction = async () => {
     if (accountingFinalized) return;
     accountingFinalized = true;
     try {
-      await ctx.throughput?.reconcile(streamAdapter.state.usage);
+      await ctx.throughput?.reconcile(observedUsage());
     } catch (error) {
       // A committed stream cannot become an HTTP 503. Preserve interaction
       // accounting and surface the metering failure in server logs.
@@ -2925,10 +3033,11 @@ async function handleStreaming<
       );
     }
 
-    let usage = streamAdapter.state.usage;
+    let usage = observedUsage();
     if (usage && !upstreamFinished) {
       const breakdown =
-        usage.billingUsage ?? primaryBillingUsage(usage, actualModel);
+        usage.billingUsage ??
+        primaryBillingUsage(usage, ctx.upstreamAttempt.modelId ?? actualModel);
       usage = {
         ...usage,
         billingQuote: undefined,
@@ -3122,6 +3231,7 @@ async function handleStreaming<
         };
         const stream = await openUpstream({
           ctx,
+          providerName,
           transport: ownTransport(provider, client, onAccepted),
           onAccepted,
           open: async (transport) => {
@@ -3143,7 +3253,7 @@ async function handleStreaming<
           // Gemini's SDK loses the HTTP status when an error body is cut off;
           // that is indistinguishable from a transport failure, so don't retry.
           isRetryable: (error) =>
-            providerName !== "gemini" &&
+            (ctx.upstreamAttempt.provider ?? providerName) !== "gemini" &&
             isRetryableUpstreamConnectionFailure(error),
           shouldContinue: () => !reply.raw.destroyed,
           onRetry: (event) =>
@@ -3308,6 +3418,13 @@ async function handleStreaming<
         }
       },
     });
+
+    // Some SDK iterators end quietly on abort. They must still take the failure
+    // cleanup path, preserving partial usage and discarding held tool calls.
+    if (reply.raw.destroyed && !providerTerminalSeen) {
+      clientGone = true;
+      throw new ApiError(499, "Client disconnected during inference");
+    }
 
     // Anthropic requires message_stop; its beta usage arrives before that frame.
     upstreamFinished = providerName !== "anthropic" || providerTerminalSeen;
@@ -3583,18 +3700,28 @@ async function handleStreaming<
     streamCompleted = true;
     return reply;
   } catch (error) {
-    const lifecycleError = error;
+    // A disconnect after the provider's terminal must preserve final usage.
+    // Before it, both quiet EOF and throwing aborts are client cancellations.
+    // An unsent member's budget refusal must keep its own accounting cleanup.
+    const clientDisconnected =
+      reply.raw.destroyed &&
+      !providerTerminalSeen &&
+      !(error instanceof ModelBudgetExceededError);
+    const lifecycleError = clientDisconnected
+      ? new ApiError(499, "Client disconnected during inference")
+      : error;
+    if (clientDisconnected) clientGone = true;
     if (
-      error instanceof CodexResponsesGenerationError &&
-      error.isIncompleteTerminal
+      lifecycleError instanceof CodexResponsesGenerationError &&
+      lifecycleError.isIncompleteTerminal
     )
       ctx.telemetry?.markIncomplete();
     else
       ctx.telemetry?.fail(
-        error instanceof CodexResponsesGenerationError ||
-          error instanceof ResponsesStreamIncompleteError
+        lifecycleError instanceof CodexResponsesGenerationError ||
+          lifecycleError instanceof ResponsesStreamIncompleteError
           ? { statusCode: 502, origin: "provider", outcome: "error" }
-          : classifyProxyFailure(error),
+          : classifyProxyFailure(lifecycleError),
       );
     const codexError =
       error instanceof CodexResponsesGenerationError ? error : undefined;
@@ -3629,11 +3756,22 @@ async function handleStreaming<
       provider.interactionType === "openai:responses"
         ? error
         : undefined;
-    if (eofError) {
+    const responsesError =
+      clientDisconnected &&
+      provider.provider === "openai" &&
+      provider.interactionType === "openai:responses"
+        ? {
+            code: "client_disconnected",
+            message: "Client disconnected during inference",
+          }
+        : eofError;
+    if (clientDisconnected || responsesError) {
       // Discard held executable fragments without emitting a synthetic success.
       streamAdapter.formatToolCallsSSE?.([]);
       streamAdapter.state.toolCalls = [];
       streamAdapter.state.rawToolCallEvents = [];
+    }
+    if (responsesError) {
       streamAdapter.state.stopReason = "error";
       const observed = asRecord(
         discardUnadmittedResponsesOutput(
@@ -3655,7 +3793,7 @@ async function handleStreaming<
         model: streamAdapter.state.model || actualModel,
         status: "incomplete",
         incomplete_details: null,
-        error: { code: eofError.code, message: eofError.message },
+        error: { code: responsesError.code, message: responsesError.message },
         output: Array.isArray(observed?.output)
           ? observed.output.filter(
               (item) =>
@@ -3668,7 +3806,7 @@ async function handleStreaming<
     }
     try {
       if (pluginRegistry && pluginContext) {
-        await pluginRegistry.fail({ ...pluginContext, error });
+        await pluginRegistry.fail({ ...pluginContext, error: lifecycleError });
       }
     } catch (pluginError) {
       logger.warn(
@@ -3729,7 +3867,8 @@ async function handleStreaming<
     // A stream that fails before any usage arrives (e.g. a provider 400
     // rejecting the request, or a mid-stream failure once SSE headers and
     // content are already on the wire) still has to reach interaction history.
-    if (!streamAdapter.state.usage) {
+    if (ctx.upstreamAttempt.interactionRecorded) accountingFinalized = true;
+    if (!observedUsage() && !ctx.upstreamAttempt.interactionRecorded) {
       const errorMessage = upstreamErrorMessage(
         lifecycleError,
         provider.extractErrorMessage,
@@ -3915,6 +4054,7 @@ async function handleNonStreaming<
         }
         result = await openUpstream({
           ctx,
+          providerName,
           transport: ownTransport(provider, client),
           open: async (transport) =>
             (await llmProxyTiming.upstream(reply, () =>
@@ -3924,7 +4064,7 @@ async function handleNonStreaming<
             ctx.modelPool?.plan.timeoutMs ?? poolResponseTimeoutMs(request),
           // See the streaming path: Gemini cannot safely classify this boundary.
           isRetryable: (error) =>
-            providerName !== "gemini" &&
+            (ctx.upstreamAttempt.provider ?? providerName) !== "gemini" &&
             isRetryableUpstreamConnectionFailure(error),
           shouldContinue: () => !reply.raw.destroyed,
           onRetry: (event) =>
@@ -4896,6 +5036,7 @@ function planDispatchRewrites(params: {
  * `ctx.providerApiKeyId`.
  */
 async function openUpstream<TRequest, T>(params: {
+  providerName: SupportedProvider;
   ctx: LLMProxyContext<TRequest>;
   transport: MemberTransport;
   /** Bound to a routed tier's stream the way `transport` binds its own. */
@@ -4911,12 +5052,41 @@ async function openUpstream<TRequest, T>(params: {
     error: unknown;
   }) => void;
 }): Promise<T> {
-  const { ctx, transport, onAccepted, open, memberTimeoutMs, ...retry } =
-    params;
+  const {
+    ctx,
+    providerName,
+    transport,
+    onAccepted,
+    open,
+    memberTimeoutMs,
+    ...retry
+  } = params;
+  ctx.getUpstreamStreamUsage = undefined;
   let dispatched = false;
   const authorizedOpen = async (attemptTransport: MemberTransport) => {
     await ctx.authorizeA2AOAuthAttempt?.();
+    try {
+      await ModelModel.assertAvailable({
+        provider: ctx.upstreamAttempt.provider ?? providerName,
+        modelId: ctx.upstreamAttempt.modelId ?? ctx.actualModel,
+        aliases:
+          (ctx.upstreamAttempt.billingEndpoint ?? ctx.billingEndpoint) ===
+          "fireworks"
+            ? fireworksModelAliases(
+                ctx.upstreamAttempt.modelId ?? ctx.actualModel,
+              )
+            : undefined,
+      });
+    } catch (error) {
+      // A queued request can become unavailable after admission. It never
+      // reached the provider, so release its reservation before recording it.
+      if (!dispatched && !ctx.modelPool)
+        await ctx.throughput?.cancelBeforeSend();
+      throw error;
+    }
     dispatched = true;
+    // Replace on every attempt so a failed member cannot leak usage to its sibling.
+    ctx.getUpstreamStreamUsage = attemptTransport.getStreamUsage;
     return open(attemptTransport);
   };
   const routed = ctx.autoRoutedTier;
@@ -4930,6 +5100,7 @@ async function openUpstream<TRequest, T>(params: {
       open: () =>
         authorizedOpen({
           execute: routedTransport.execute,
+          getStreamUsage: routedTransport.getStreamUsage,
           executeStream: (request) =>
             routedTransport.executeStream(request, onAccepted),
         }),
@@ -4948,10 +5119,15 @@ async function openUpstream<TRequest, T>(params: {
       plan: pool.plan,
       attempt: ctx.upstreamAttempt,
       transportFor: pool.transportFor,
+      prepareAttempt: (member) => {
+        // Preparation can fail before authorizedOpen installs the next getter.
+        ctx.getUpstreamStreamUsage = undefined;
+        return pool.prepareAttempt(member);
+      },
       beforeAttempt: (member) => pool.checkLimits(member),
       open: authorizedOpen,
       memberTimeoutMs,
-      recordFailedAttempt: pool.recordFailedAttempt,
+      prepareFailedAttempt: pool.prepareFailedAttempt,
       ...retry,
     });
   } catch (error) {

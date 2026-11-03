@@ -9,6 +9,7 @@ import {
   INSTALLER_CLIENT_LABELS,
   type InstallerClientId,
   isInstallerClientId,
+  startupGuardDisconnectCommand,
   startupGuardStem,
 } from "@archestra/shared/connection-setup";
 import {
@@ -218,7 +219,7 @@ function focusedInstructions(
   client: string,
 ): string | null {
   if (!isInstallerClientId(client)) return null;
-  const details = GUARD_CLIENTS[client];
+  const details = GUARD_CLIENTS[client === "chatgpt" ? "codex" : client];
   if (client === "pi" && details)
     return instructions({
       target,
@@ -256,12 +257,13 @@ The variables at the top of the startup check file name exactly what it covers
 If the guard file contains ARCHESTRA_GUARD_ACTION, it can undo every step itself:
 the same reverse steps it offers when the deployment is down. Run it directly.
 macOS/Linux:
-ARCHESTRA_GUARD_ACTION=disconnect bash ${guardSh}
+${startupGuardDisconnectCommand(client, "bash")}
 Windows PowerShell:
-$env:ARCHESTRA_GUARD_ACTION='disconnect'; try { & "${guardPs}" } finally { Remove-Item Env:ARCHESTRA_GUARD_ACTION }
+${startupGuardDisconnectCommand(client, "windows")}
 
 It prints one line per removed part. On success it also deletes itself and its
-profile blocks. If it reports "Could not disconnect", do that part by hand below,
+profile blocks. Running the command again succeeds without errors when the script
+is already gone. If it reports "Could not disconnect", do that part by hand below,
 then run it again. If a part the plan keeps would be removed, use the manual steps instead.
 
 ### Otherwise, by hand

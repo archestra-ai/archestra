@@ -2,7 +2,7 @@
 title: Connect Your Agents
 description: Connect your AI client to Archestra's tools, models, and shared skills
 order: 2
-lastUpdated: 2026-11-01
+lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -17,12 +17,13 @@ Open **Connect** in the Archestra sidebar and choose how to connect:
 
 - **Coding agents:** for [Claude Code](/docs/integrations/ai-clients/claude-code), Codex, Cursor, Copilot CLI, OpenCode, Kilo Code, and Kimi Code, you run one command in a terminal and approve the connection in your browser.
 - **[Claude Desktop](/docs/integrations/ai-clients/claude-desktop#setup):** a downloadable installer sets up Desktop.
+- **[ChatGPT](/docs/integrations/ai-clients/chatgpt):** one terminal command installs the connection plugin and routes the desktop app's local Work and Codex conversations through the proxy. For web chats and dots, download the plugin instead.
 - **[n8n](/docs/integrations/web-ui-and-automation#n8n):** you enter the gateway URL and model settings in your workflow.
 - **Any Client:** any tool that supports MCP or an OpenAI-compatible API. Copy the gateway URL, the proxy base URL, a key, and a Git URL for the shared skills.
 
 To leave out the proxy, skills, or plugins, open **Setup options** on the approval page before you approve. Your admin decides which provider keys the proxy uses for each client.
 
-Guardrails recognize Archestra Chat, Claude Code, Codex CLI, Copilot CLI, OpenCode, Kilo Code, and Kimi Code automatically. Custom clients and workflows need a [session header](/docs/agents/guardrails/clients#session-headers) so Guardrails can track their conversations.
+Guardrails recognize Archestra Chat, Claude Code, Codex CLI, the ChatGPT desktop app, Copilot CLI, OpenCode, Kilo Code, and Kimi Code automatically. Custom clients and workflows need a [session header](/docs/agents/guardrails/clients#session-headers) so Guardrails can track their conversations.
 
 ![Connect with Codex selected and its setup command](/docs/automated_screenshots/platform-connection_connect-with-ai.webp)
 
@@ -64,7 +65,7 @@ Some clients need one more step. The installer prints any other steps under **Go
 
 - **Claude Code:** if you skipped the sign-in, start Claude Code, run `/mcp`, select the gateway, and choose **Authenticate**.
 - **Codex:** if you skipped the sign-in, run `codex mcp login <gateway>`.
-- **Cursor:** quit and reopen Cursor, then sign in to the gateway under **Customize → MCPs**. Setup points Cursor's OpenAI API key settings at the [Model Router](/docs/llm-proxy/model-router) with a virtual key for your model providers. Cursor's model picker then lists only the models the Model Router offers you, such as `anthropic:claude-sonnet-4-6`. Setup switches off Cursor's built-in models. Switch one back on under **Settings → Models**.
+- **Cursor:** quit and reopen Cursor, then sign in to the gateway under **Customize → MCPs**. Setup points Cursor's OpenAI API key settings at the [Unified Model API](/docs/llm-proxy/unified-model) with a virtual key for your model providers. Cursor's model picker then lists only the models the Unified Model API offers you, such as `anthropic:claude-sonnet-4-6`. Setup switches off Cursor's built-in models. Switch one back on under **Settings → Models**.
 - **Copilot CLI:** setup saves your provider settings and available key in `providers.json` and selects the model in `settings.json`. GitHub Copilot is the provider selected by default. The page offers your own sign-in and your organization's enterprise plan as two cards, keeps the one not connected yet on offer, and lists the models the chosen account serves with a default selected; the model list stays off until an account is connected, or a key exists for another provider you choose. If setup reports a missing key, add it to `providers.json`. Leave `COPILOT_MODEL` and the `COPILOT_PROVIDER_*` variables unset: Copilot CLI uses them instead of `providers.json`, and with only `COPILOT_MODEL` set it refuses to start the saved model. Setup removes the values an earlier setup saved, the launch check ignores the rest while the LLM proxy is connected, and the closing note lists any that remain. With OpenAI, Azure, GitHub Copilot, or xAI, setup selects the Responses API so [Guardrails](/docs/agents/guardrails/clients#copilot-cli) can follow the session, and Connect lists only models that serve that API. For example, Claude models on GitHub Copilot serve only Chat Completions, so they are not listed. With GitHub Copilot, you connect your account under Model routing in Setup options on the approval page. If your organization also connected its Copilot plan, **Setup options** let you choose your personal subscription or the enterprise plan.
 - **OpenCode:** if you skipped the sign-in, run `opencode mcp auth <gateway>`. While connected, OpenCode lists only the providers and models Archestra serves you, under their usual names. A `model`, `small_model` or agent `model` setting that Archestra does not serve is ignored, and setup names it. Providers you sign in to from OpenCode itself, such as a ChatGPT or Claude subscription or your own key, also go through Archestra. Restart OpenCode after signing in to one.
 - **Kimi Code:** if you skipped the sign-in, start `kimi` and run `/mcp-config login <gateway>`. With your own key, the `archestra` model uses your Kimi Code sign-in, so run `kimi login` before setup, or set `KIMI_API_KEY` (`MOONSHOT_API_KEY` for a Moonshot key). New sessions use the `archestra` model; models from your other Kimi Code providers do not go through Archestra. Setup starts Kimi Code in Ask When Needed mode, so gateway calls run without asking; disconnecting restores your previous mode.

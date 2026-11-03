@@ -251,7 +251,9 @@ class AnthropicRequestAdapter
   // Build Modified Request
   // ---------------------------------------------------------------------------
 
-  toProviderRequest(): AnthropicRequest {
+  toProviderRequest(options?: {
+    preserveToolCallIds?: boolean;
+  }): AnthropicRequest {
     let messages = this.request.messages;
 
     // Apply tool result updates if any
@@ -262,7 +264,9 @@ class AnthropicRequestAdapter
     messages = this.convertToolResultContent(messages);
     messages = stripEmptyTextBlocks(messages);
     // After the result updates above, which look up the client's call ids.
-    messages = withAnthropicToolCallIds(messages);
+    if (!options?.preserveToolCallIds) {
+      messages = withAnthropicToolCallIds(messages);
+    }
 
     return {
       ...this.request,
@@ -1823,7 +1827,7 @@ function parseArgs(argumentsJson: string): Record<string, unknown> {
 }
 
 /** Tool-use ids Anthropic accepts; see `wordToolCallId`. */
-function withAnthropicToolCallIds(
+export function withAnthropicToolCallIds(
   messages: AnthropicMessages,
 ): AnthropicMessages {
   return messages.map((message) => {

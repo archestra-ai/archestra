@@ -277,8 +277,8 @@ test.each([
     }),
   );
   expect(
-    screen.queryByRole("option", { name: /APPA Keeper/ }),
-  ).not.toBeInTheDocument();
+    await screen.findByRole("option", { name: /APPA Keeper/ }),
+  ).toBeInTheDocument();
   await user.click(
     await screen.findByRole("option", { name: /Research Agent/ }),
   );
@@ -288,7 +288,7 @@ test.each([
   expect(createBodies).toHaveLength(0);
 });
 
-test("a fresh stack selects My Assistant while hiding APPA Keeper from the picker", async () => {
+test("a fresh stack selects My Assistant while offering APPA Keeper in the picker", async () => {
   const user = userEvent.setup();
   const personal = makeAgent({
     id: "personal-assistant",
@@ -312,8 +312,8 @@ test("a fresh stack selects My Assistant while hiding APPA Keeper from the picke
     await screen.findByRole("combobox", { name: "My Assistant" }),
   );
   expect(
-    screen.queryByRole("option", { name: /APPA Keeper/ }),
-  ).not.toBeInTheDocument();
+    await screen.findByRole("option", { name: /APPA Keeper/ }),
+  ).toBeInTheDocument();
   expect(
     screen.getByRole("option", { name: /My Assistant/ }),
   ).toBeInTheDocument();

@@ -316,6 +316,7 @@ export async function admitOpenappaRequest(params: {
   const facts: AdmissionFacts = {
     claims,
     ...(runtimeSessionId ? { runtimeSessionId, runtimeTaskId } : {}),
+    ...(runtimeSession ? { agentRuntimeRun: true as const } : {}),
     ...(chatSource ? { chatSource } : {}),
   };
   // Enforcement rejects conflicts above; observing and setup-bypass paths
@@ -636,7 +637,11 @@ export type OpenappaAdmission =
 /** What every trusted context of the request says about its lineage. */
 type AdmissionFacts = Pick<
   AppaTrustedContext,
-  "claims" | "runtimeSessionId" | "runtimeTaskId" | "chatSource"
+  | "claims"
+  | "runtimeSessionId"
+  | "runtimeTaskId"
+  | "agentRuntimeRun"
+  | "chatSource"
 >;
 
 type OpenappaPrincipal = {
@@ -754,7 +759,7 @@ function observedAppaSession(params: {
 
 /**
  * The session the client reports. On a wire OpenAPPA does not read, it is
- * read from the client's own wire when a Model Router route translated it,
+ * read from the client's own wire when a Unified Model API route translated it,
  * and otherwise from the headers alone.
  */
 function clientSessionIdentity(params: {

@@ -46,6 +46,11 @@ export type AppaTrustedContext = {
   runtimeSessionId?: string;
   /** Current task from the authenticated runtime credential, not a request header. */
   runtimeTaskId?: string;
+  /**
+   * The request is an Agent Runtime run's, proven by its runtime credential
+   * and binding whatever image it runs. Not set for an in-process subagent.
+   */
+  agentRuntimeRun?: true;
   /** Present only for the proxy's loopback Chat call path. */
   chatSource?: AppaChatSource;
   /**
@@ -113,6 +118,17 @@ export type AppaSpawnResultDisposition = "pending" | "failed";
 export type AppaSpawnModel =
   | { stamp: Record<string, unknown> }
   | { refusal: string };
+
+/** A native `<prefix><id><suffix>` file that holds raw child output. */
+export type AppaChildTranscriptPath = {
+  prefix: string;
+  suffix: string;
+  /**
+   * Anchored shape of ids in the same directory that hold the caller's own
+   * non-agent output, such as a background command's.
+   */
+  ownOutputId?: RegExp;
+};
 
 export type AppaClientAdapter = {
   readonly id: string;
@@ -345,7 +361,7 @@ export type AppaClientAdapter = {
    */
   namesChildren(params: { rootId: string; arguments: unknown }): string[];
   /** File paths that contain raw child transcript or output data. */
-  childTranscriptPaths?: ReadonlyArray<{ prefix: string; suffix: string }>;
+  childTranscriptPaths?: ReadonlyArray<AppaChildTranscriptPath>;
   /**
    * Binds a child request to a server-minted trajectory.
    * Returns undefined for root requests. Resolves lineage from a verified

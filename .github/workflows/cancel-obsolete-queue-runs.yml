@@ -1,0 +1,39 @@
+name: Cancel Obsolete Queue Runs
+
+on:
+  delete:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Report obsolete runs without cancelling them
+        type: boolean
+        default: true
+
+permissions: {}
+concurrency:
+  group: cancel-obsolete-queue-runs
+  cancel-in-progress: false
+
+jobs:
+  cancel:
+    name: Cancel Obsolete Merge Groups
+    if: github.event_name != 'delete' || (github.event.ref_type == 'branch' && startsWith(github.event.ref, 'gh-readonly-queue/'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read # Read trusted observer code and queue refs.
+      actions: write # List active runs and cancel only verified obsolete run IDs.
+    steps:
+      # Privileged observer: only execute trusted default-branch code. Never
+      # checkout the PR/merge-group ref or download its artifacts here.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Cancel runs for deleted or superseded queue refs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
+        run: python3 .github/scripts/cancel-obsolete-queue-runs.py

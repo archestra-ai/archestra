@@ -28,6 +28,7 @@ import config from "@/config";
 import { metrics } from "@/observability";
 import type { CreateClientOptions, LLMProvider, Perplexity } from "@/types";
 import { ApiError } from "@/types";
+import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { openAiResponsesAdapterFactory } from "./openai-responses";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
@@ -82,13 +83,16 @@ export const perplexityResponsesAdapterFactory: LLMProvider<
       maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey,
       baseURL: perplexityAgentApiBaseUrl(options.baseUrl),
-      fetch: options.agent
-        ? metrics.llm.getObservableFetch(
-            "perplexity",
-            options.agent,
-            options.source,
-          )
-        : undefined,
+      fetch: fetchWithAbortSignal(
+        options.agent
+          ? metrics.llm.getObservableFetch(
+              "perplexity",
+              options.agent,
+              options.source,
+            )
+          : undefined,
+        options.abortSignal,
+      ),
       defaultHeaders: options.defaultHeaders,
     });
   },

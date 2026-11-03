@@ -1549,7 +1549,6 @@ describe("ModelModel", () => {
     test.each([
       "ollama",
       "ollama-native",
-      "vllm",
     ] as const)("prices an unpriced %s model at zero rather than the generic estimate", async (provider) => {
       const model = await ModelModel.create({
         externalId: `${provider}/qwen3:8b`,
@@ -1564,6 +1563,32 @@ describe("ModelModel", () => {
 
       expect(pricing.pricePerMillionInput).toBe("0.00");
       expect(pricing.pricePerMillionOutput).toBe("0.00");
+    });
+
+    test("keeps an unknown vLLM price distinct from explicit zero", async () => {
+      const model = await ModelModel.create({
+        externalId: "vllm/synthetic-unpriced",
+        provider: "vllm",
+        modelId: "synthetic-unpriced",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+      });
+      for (const row of [model, null]) {
+        const price = ModelModel.getEffectivePricing(
+          row,
+          model.modelId,
+          "vllm",
+        );
+        expect(price.pricePerMillionInput).toBeNull();
+        expect(price.pricePerMillionOutput).toBeNull();
+      }
+      const free = ModelModel.getEffectivePricing({
+        ...model,
+        customPricePerMillionInput: "0",
+        customPricePerMillionOutput: "0",
+      });
+      expect(free.pricePerMillionInput).toBe("0");
+      expect(free.pricePerMillionOutput).toBe("0");
     });
 
     test("prices an unknown Ollama model at zero from the provider hint alone", () => {
@@ -2038,6 +2063,6 @@ describe("published context pricing", () => {
     expect(
       ModelModel.getEffectivePricing(null, "claude-haiku-5.5", "vllm", 100001)
         .pricePerMillionInput,
-    ).toBe("0.00");
+    ).toBeNull();
   });
 });

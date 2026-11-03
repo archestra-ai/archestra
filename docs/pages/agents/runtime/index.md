@@ -3,7 +3,7 @@ title: Agent Runtime
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-11-01
+lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -88,6 +88,7 @@ Select the agent in Chat or in a [Project](/docs/chat/projects) and send a task.
 - **Delete a run:** after a run ends, the person who started it selects **Delete run** on its row, or **More run actions → Delete run** in the open run. Deleting a run permanently removes its history, output, and saved files.
 - **Several runs at once:** on the **Runs** tab, select the runs you started. Then choose **Stop**, **Delete saved files**, or **Delete**. **Stop** acts on live runs. The other two act on finished runs. **Delete saved files** frees the storage of those runs and keeps their history.
 - **Copy text:** select **Select text** to copy text with the browser. Select **Type** to use the running app's controls again.
+- **Ctrl+C:** in **Type** mode, Archestra asks you to confirm before it sends Ctrl+C. Ctrl+C stops the agent's turn, and a second one can close the agent. The audit log records who attached to the terminal and when they sent Ctrl+C.
 - **Follow-ups** reach the agent between its turns. To type them into its terminal instead, set **Steering** to **Terminal input** on the **Agent Runtime** tab.
 - **Open a web app:** for a run you started, select **Open full view**, then **More run actions → View connection details** for the agent's port forwarding command.
 
@@ -137,7 +138,7 @@ What to know:
 [Guardrails](/docs/agents/guardrails) check each tool call and tool result inside the run.
 
 - **Delegated runs** get their parent's restrictions before work starts. Follow-up instructions keep them. An answer crosses the guardrail check before another agent gets it.
-- **Review:** a remedy that needs a person shows in the run's live terminal, as the agent's own question card or form. The run's owner approves or denies it there. Client permission settings cannot approve it. An agent with no question card or form keeps the call blocked.
+- **Review:** a run has no person at hand. By default, a call that needs human approval runs anyway, and a plan that needs one is approved for the agent. Each records a yell in the **Yells** tab. The **Human approval** setting under **Break the glass** in **Settings → Guardrails** controls this. Set it to **Block until approved** to keep the review. The review then shows in the run's live terminal as the agent's own question card or form, and only the run's owner approves or denies it there. Client permission settings cannot approve it.
 - **File downloads:** a protected transfer checks the pinned file content before it returns a download command. It refuses a file that needs changes or that passes the protected export limit. The session owner can still download directly.
 - **Old sessions:** turning on Guardrails does not protect work that started before. Start a new session. Guardrails do not replace filesystem or network sandboxing.
 

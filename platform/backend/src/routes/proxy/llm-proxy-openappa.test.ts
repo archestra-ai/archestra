@@ -3106,6 +3106,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         enabled: false,
         unsupportedClientAction: "bypass",
         breakTheGlassEnabled: true,
+        humanApprovalMode: "block",
+        unapprovableBlockMode: "refuse",
         annotatorModelId: null,
         annotatorLlmApiKeyId: null,
       });
@@ -4568,6 +4570,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             enabled: false,
             unsupportedClientAction: "bypass",
             breakTheGlassEnabled: true,
+            humanApprovalMode: "block",
+            unapprovableBlockMode: "refuse",
             annotatorModelId: null,
             annotatorLlmApiKeyId: null,
           };
@@ -17798,7 +17802,10 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
    * given declarations: what the client receives, and what the provider was
    * sent.
    */
-  const deniedCodexTurn = async (tools: unknown[]) => {
+  const deniedCodexTurn = async (
+    tools: unknown[],
+    clientHeaders: Record<string, string> = codexHeaders(),
+  ) => {
     native.dispatchHook.mockImplementation(async (raw: string) => {
       const event = JSON.parse(raw);
       events.push(event);
@@ -17841,7 +17848,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
-      headers: { ...internalCallHeader(), ...codexHeaders() },
+      headers: { ...internalCallHeader(), ...clientHeaders },
       payload: {
         ...codexPayload({ session_id: CODEX_SESSION, thread_id: CODEX_THREAD }),
         stream: false,
@@ -17861,6 +17868,48 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       sent: providerBodies.at(-1) as { tools: Record<string, unknown>[] },
     };
   };
+
+  // The ChatGPT desktop app's Work and Codex tabs run Codex's app server and
+  // read Codex's config.toml: the same wire, under the desktop's originators.
+  test.for([
+    ["a Work thread", "codex_work_desktop"],
+    ["the Codex tab", "Codex Desktop"],
+  ] as const)("governs %s of the ChatGPT desktop app as a native Codex session", async ([
+    ,
+    originator,
+  ], { makeAgent }) => {
+    await makeAgent({
+      name: "My Gateway",
+      agentType: "mcp_gateway",
+      organizationId: agent.organizationId,
+    });
+
+    const { output } = await deniedCodexTurn(
+      [codexNamespace("mcp__my_gateway")],
+      {
+        ...codexHeaders(),
+        "x-archestra-agent-id": "openai_codex",
+        "user-agent": "Codex Desktop/0.163.0 (Windows 10.0.26200; x86_64)",
+        originator,
+      },
+    );
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "tool_call",
+        tool: "exec_command",
+        session_id: expect.stringContaining(CODEX_THREAD),
+      }),
+    );
+    expect(output).toEqual([
+      expect.objectContaining({
+        type: "function_call",
+        call_id: "call_shell",
+        name: "archestra__get_remedy_plans",
+        namespace: "mcp__my_gateway",
+      }),
+    ]);
+  });
 
   test("delivers a Codex denial notice under the namespace Codex declared it in", async ({
     makeAgent,

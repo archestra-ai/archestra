@@ -5,6 +5,7 @@ import {
   PROVIDER_BASE_URL_HEADER,
   SESSION_ID_HEADER,
   type SupportedProviderEndpoint,
+  UNATTENDED_HEADER,
 } from "@archestra/shared";
 import { generateObject, generateText, streamText } from "ai";
 import { vi } from "vitest";
@@ -209,6 +210,23 @@ describe("createDirectLLMModel", () => {
     expect(model).toBeDefined();
   });
 
+  test("the direct availability fetch preserves Gemini Vertex routing", () => {
+    mockIsVertexAiEnabled.mockReturnValue(true);
+    try {
+      const model = createDirectLLMModel({
+        provider: "gemini",
+        apiKey: undefined,
+        modelName: "gemini-2.5-flash",
+        baseUrl: null,
+      });
+      expect(typeof model === "string" ? model : model.provider).toContain(
+        "vertex",
+      );
+    } finally {
+      mockIsVertexAiEnabled.mockReturnValue(false);
+    }
+  });
+
   test("decodes Bedrock SigV4 credentials on the direct provider path", () => {
     const marker = encodeBedrockSigV4Marker({
       accessKeyId: "test-access-key",
@@ -344,7 +362,7 @@ describe("createDirectLLMModel", () => {
       provider: "archestra",
       apiKey: "arch_test-key",
       modelName: "deepseek:deepseek-reasoner",
-      baseUrl: "https://other-archestra.test/v1/model-router/agent-1",
+      baseUrl: "https://other-archestra.test/v1/unified-model/agent-1",
     });
     // The upstream Archestra relays thinking as DeepSeek-style
     // `reasoning_content`; the strict openai provider ("openai.chat") drops
@@ -382,7 +400,7 @@ describe("createDirectLLMModel", () => {
       provider: "archestra",
       apiKey: "arch_test-key",
       modelName: "deepseek:deepseek-reasoner",
-      baseUrl: "https://other-archestra.test/v1/model-router/agent-1",
+      baseUrl: "https://other-archestra.test/v1/unified-model/agent-1",
     });
 
     // The stubbed upstream fails the call; the request body is captured
@@ -1249,6 +1267,25 @@ describe("createLLMModel", () => {
     expect(headers?.[SESSION_ID_HEADER]).toBe("session");
     for (const name of ["X-Appa-Session-ID", "X-Appa-Parent-ID"]) {
       expect(new Headers(headers).has(name)).toBe(enabled);
+    }
+  });
+
+  test("says when no person answers for the session, as a Scheduled task run does", () => {
+    for (const unattended of [true, false]) {
+      createLLMModel({
+        provider: "openai",
+        apiKey: "test",
+        agentId: "agent",
+        modelName: "gpt-4",
+        baseUrl: null,
+        source: "chat",
+        userId: "user",
+        sessionId: "session",
+        unattended,
+      });
+      expect(
+        new Headers(capturedCreateOpenAIOptions.headers).get(UNATTENDED_HEADER),
+      ).toBe(unattended ? "1" : null);
     }
   });
 

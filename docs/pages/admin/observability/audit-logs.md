@@ -71,6 +71,12 @@ Collector transforms can use these attribute keys:
 
 Missing values are omitted. Behind a trusted reverse proxy, configure [`ARCHESTRA_TRUST_PROXY`](/docs/admin/deployment/configuration#ARCHESTRA_TRUST_PROXY) to preserve the client IP.
 
+## Requests Rejected Before the Proxy Handler
+
+For invalid credentials, malformed requests, and other requests rejected before an LLM proxy handler runs, use your ingress or reverse-proxy access logs. Capture the timestamp, method, path, response status, client address, and request ID where available; do not log credentials or request bodies. Route those access logs to your security monitoring system and set retention for your investigation needs.
+
+These early rejections do not produce an `archestra.llm_proxy.request` event or a proxy duration metric. They are also outside the administrative audit events returned by `GET /api/audit-logs` and exported as `archestra.audit.*` logs. A denied administrative action that reached an authenticated, audited route is a different case: look for `archestra.audit.outcome` set to `denied`.
+
 ## Retrieve Events Through the API
 
 Use [`GET /api/audit-logs`](/docs/reference/api#/Audit%20Log/getAuditLogs) to retrieve persisted events, including historical records that have not been removed by [audit retention](/docs/admin/deployment/configuration#ARCHESTRA_AUDIT_LOG_RETENTION_DAYS).

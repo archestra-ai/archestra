@@ -9,6 +9,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import { createFastifyInstance } from "@/fastify-instance";
 import { ModelModel, ModelPoolModel, VirtualApiKeyModel } from "@/models";
+import InteractionBillingModel from "@/models/interaction-billing";
 import { accessGrants, beforeEach, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
@@ -716,6 +717,82 @@ for (const wire of ["openai", "anthropic"] as const) {
   }
 }
 
+for (const stream of [false, true]) {
+  poolTest(
+    `aborts a timed-out in-flight Gemini member and completes fallback (stream=${stream})`,
+    async ({ pool }) => {
+      const hits: string[] = [];
+      let slowRequestClosed = false;
+      let closedBeforeFallbackAnswered = false;
+      const upstream = createServer((request, response) => {
+        request.resume();
+        request.on("end", () => {
+          hits.push(request.url ?? "");
+          response.writeHead(200, {
+            "content-type": stream ? "text/event-stream" : "application/json",
+          });
+          if (request.url?.includes("gemini-3.1-flash-lite")) {
+            response.on("close", () => {
+              slowRequestClosed = !response.writableEnded;
+            });
+            // Establish body I/O without producing a model response. SDK 1.45's
+            // early-abort race before headers is outside this regression.
+            response.write(stream ? ": accepted\n\n" : '{"candidates":[');
+            return;
+          }
+          closedBeforeFallbackAnswered = slowRequestClosed;
+          response.end(
+            stream
+              ? `data: ${JSON.stringify(answer())}\n\n`
+              : JSON.stringify(answer()),
+          );
+        });
+      });
+      onTestFinished(async () => {
+        upstream.closeAllConnections();
+        await new Promise<void>((resolve) => upstream.close(() => resolve()));
+      });
+      await new Promise<void>((resolve) =>
+        upstream.listen(0, "127.0.0.1", resolve),
+      );
+      const baseUrl = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`;
+      server.use(
+        http.post(`${baseUrl}/v1beta/models/:model`, () => passthrough()),
+      );
+      await db
+        .update(schema.llmProviderApiKeysTable)
+        .set({ baseUrl })
+        .where(eq(schema.llmProviderApiKeysTable.id, pool.keyId));
+      await ModelPoolModel.update({
+        organizationId: pool.organizationId,
+        id: pool.poolId,
+        input: {
+          name: "gemini-pool",
+          streamTimeoutSeconds: 1,
+          timeoutSeconds: 1,
+          members: ["gemini-3.1-flash-lite", "gemini-2.5-flash"].map(
+            (modelId, index) => ({
+              providerApiKeyId: pool.keyId,
+              modelId,
+              priority: index + 1,
+              weight: 1,
+              enabled: true,
+            }),
+          ),
+        },
+      });
+      const response = await pool.ask({ stream });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.body).toContain("answer");
+      expect(hits).toHaveLength(2);
+      expect(hits[0]).toContain("gemini-3.1-flash-lite");
+      expect(hits[1]).toContain("gemini-2.5-flash");
+      expect(slowRequestClosed).toBe(true);
+      expect(closedBeforeFallbackAnswered).toBe(true);
+    },
+  );
+}
+
 poolTest(
   "does not retry another member after output from an incomplete stream",
   async ({ pool }) => {
@@ -739,6 +816,139 @@ poolTest(
     expect(response.body).toContain("partial answer");
     expect(response.body).not.toContain('"finish_reason":"stop"');
     expect(hits).toHaveLength(1);
+  },
+);
+
+for (const wire of ["openai", "anthropic"] as const) {
+  for (const complete of [false, true]) {
+    poolTest(
+      `retains observed Gemini usage without ending the ${wire} stream early (complete=${complete})`,
+      async ({ pool }) => {
+        let hits = 0;
+        server.use(
+          http.post(`${origin}/v1beta/models/:model`, () => {
+            hits++;
+            return sse([
+              {
+                candidates: [
+                  {
+                    index: 0,
+                    content: { role: "model", parts: [{ text: "partial " }] },
+                  },
+                ],
+                usageMetadata,
+              },
+              {
+                candidates: [
+                  {
+                    index: 0,
+                    content: { role: "model", parts: [{ text: "answer" }] },
+                    ...(complete ? { finishReason: "STOP" } : {}),
+                  },
+                ],
+              },
+            ]);
+          }),
+        );
+        const response = await pool.ask({ stream: true }, wire);
+        expect(response.body).toContain("partial ");
+        expect(response.body).toContain("answer");
+        if (!complete) {
+          expect(response.body).not.toContain('"finish_reason":"stop"');
+          expect(response.body).not.toContain("event: message_stop");
+        }
+        expect(hits).toBe(1);
+        const rows = await db
+          .select()
+          .from(schema.interactionsTable)
+          .where(eq(schema.interactionsTable.modelPoolId, pool.poolId));
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({
+          model: "gemini-3.1-flash-lite",
+          providerApiKeyId: pool.keyId,
+          inputTokens: 16,
+          outputTokens: 5,
+          cacheReadTokens: 4,
+          cost: "0.0000280000",
+        });
+        const receipts = await InteractionBillingModel.findMany([rows[0].id]);
+        expect(receipts).toHaveLength(1);
+        if (!complete) {
+          expect(receipts[0].usage.status).toBe("incomplete");
+          expect(receipts[0].usage.issues).toContain("partial_stream");
+        } else {
+          expect(receipts[0].usage.issues).not.toContain("partial_stream");
+        }
+      },
+    );
+  }
+}
+
+poolTest(
+  "does not attribute a timed-out member's observed usage to an unavailable sibling",
+  async ({ pool, makeLlmProviderApiKey }) => {
+    const unavailable = await makeLlmProviderApiKey(pool.organizationId, null, {
+      provider: "gemini",
+    });
+    let hits = 0;
+    const upstream = createServer((request, response) => {
+      request.resume();
+      request.on("end", () => {
+        hits++;
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        // Google reported usage, but no visible output to commit this member.
+        response.write(`data: ${JSON.stringify({ usageMetadata })}\n\n`);
+      });
+    });
+    onTestFinished(async () => {
+      upstream.closeAllConnections();
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    });
+    await new Promise<void>((resolve) =>
+      upstream.listen(0, "127.0.0.1", resolve),
+    );
+    const baseUrl = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`;
+    server.use(
+      http.post(`${baseUrl}/v1beta/models/:model`, () => passthrough()),
+    );
+    await db
+      .update(schema.llmProviderApiKeysTable)
+      .set({ baseUrl })
+      .where(eq(schema.llmProviderApiKeysTable.id, pool.keyId));
+    await ModelPoolModel.update({
+      organizationId: pool.organizationId,
+      id: pool.poolId,
+      input: {
+        name: "gemini-pool",
+        streamTimeoutSeconds: 1,
+        members: [pool.keyId, unavailable.id].map(
+          (providerApiKeyId, index) => ({
+            providerApiKeyId,
+            modelId: index === 0 ? "gemini-3.1-flash-lite" : "gemini-2.5-flash",
+            priority: index + 1,
+            weight: 1,
+            enabled: true,
+          }),
+        ),
+      },
+    });
+    const response = await pool.ask({ stream: true });
+    expect(response.statusCode, response.body).toBe(500);
+    expect(hits).toBe(1);
+    const rows = await db
+      .select()
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.modelPoolId, pool.poolId));
+    expect(rows).toHaveLength(2);
+    expect(
+      rows.find((row) => row.providerApiKeyId === unavailable.id),
+    ).toMatchObject({
+      inputTokens: 0,
+      outputTokens: 0,
+      model: "gemini-2.5-flash",
+      attemptOutcome: "failed",
+      failureReason: "key_unavailable",
+    });
   },
 );
 

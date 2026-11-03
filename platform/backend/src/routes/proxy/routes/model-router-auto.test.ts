@@ -1393,71 +1393,91 @@ describe("Model Router auto model", () => {
       });
     }
 
-    test("an organization-default call reaches a Gemini tier through the shared member transport", async ({
-      makeOrganization,
-      makeSecret,
-      makeLlmProviderApiKey,
-      makeUser,
-      makeMember,
-    }) => {
-      const base = await setupOrganization({
+    for (const stream of [false, true]) {
+      test(`an organization-default call reaches a Gemini tier and retains interrupted usage (stream=${stream})`, async ({
         makeOrganization,
         makeSecret,
         makeLlmProviderApiKey,
-      });
-      const gemini = await createModel("gemini", "gemini-3.1-flash-lite");
-      const key = await makeLlmProviderApiKey(
-        base.organizationId,
-        (await makeSecret({ secret: { apiKey: "routed-gemini-key" } })).id,
-        { provider: "gemini", baseUrl: "https://gemini.auto-routing.test" },
-      );
-      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
-        gemini.id,
-      ]);
-      const org = {
-        ...base,
-        trio: [base.trio[0], base.trio[1], gemini] as const,
-      };
-      await setOrganizationTrio(org.organizationId, { smart: gemini });
-      await publishPlan(org);
-      config.llm.gemini.vertexAi.enabled = false;
-      let hits = 0;
-      server.use(
-        http.post(
-          "https://gemini.auto-routing.test/v1beta/models/gemini-3.1-flash-lite:generateContent",
-          ({ request }) => {
-            hits++;
-            expect(request.headers.get("x-goog-api-key")).toBe(
-              "routed-gemini-key",
-            );
-            return HttpResponse.json({
-              candidates: [
-                {
-                  content: {
-                    role: "model",
-                    parts: [{ text: "routed answer" }],
+        makeUser,
+        makeMember,
+      }) => {
+        const base = await setupOrganization({
+          makeOrganization,
+          makeSecret,
+          makeLlmProviderApiKey,
+        });
+        const gemini = await createModel("gemini", "gemini-3.1-flash-lite");
+        const key = await makeLlmProviderApiKey(
+          base.organizationId,
+          (await makeSecret({ secret: { apiKey: "routed-gemini-key" } })).id,
+          { provider: "gemini", baseUrl: "https://gemini.auto-routing.test" },
+        );
+        await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+          gemini.id,
+        ]);
+        const org = {
+          ...base,
+          trio: [base.trio[0], base.trio[1], gemini] as const,
+        };
+        await setOrganizationTrio(org.organizationId, { smart: gemini });
+        await publishPlan(org);
+        config.llm.gemini.vertexAi.enabled = false;
+        let hits = 0;
+        server.use(
+          http.post(
+            `https://gemini.auto-routing.test/v1beta/models/gemini-3.1-flash-lite:${stream ? "streamGenerateContent" : "generateContent"}`,
+            ({ request }) => {
+              hits++;
+              expect(request.headers.get("x-goog-api-key")).toBe(
+                "routed-gemini-key",
+              );
+              const answer = {
+                candidates: [
+                  {
+                    content: {
+                      role: "model",
+                      parts: [{ text: "routed answer" }],
+                    },
+                    ...(stream ? {} : { finishReason: "STOP" }),
                   },
-                  finishReason: "STOP",
+                ],
+                usageMetadata: {
+                  promptTokenCount: 10,
+                  candidatesTokenCount: 2,
+                  totalTokenCount: 12,
                 },
-              ],
-              usageMetadata: {
-                promptTokenCount: 10,
-                candidatesTokenCount: 2,
-                totalTokenCount: 12,
-              },
-            });
-          },
-        ),
-      );
-      const userId = await member(org, makeUser, makeMember);
-      const response = await sendPlatformCall(org, { userId });
-      expect(response.statusCode, response.body).toBe(200);
-      expect(response.body).toContain("routed answer");
-      expect(hits).toBe(1);
-      expect(upstreamModels).toEqual([]);
-      const [decision] = await decisions(org.organizationId);
-      expect(decision).toMatchObject({ tierIndex: 2, modelId: gemini.id });
-    });
+              };
+              return stream
+                ? new HttpResponse(`data: ${JSON.stringify(answer)}\n\n`, {
+                    headers: { "content-type": "text/event-stream" },
+                  })
+                : HttpResponse.json(answer);
+            },
+          ),
+        );
+        const userId = await member(org, makeUser, makeMember);
+        const response = await sendPlatformCall(org, { userId, stream });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.body).toContain("routed answer");
+        if (stream)
+          expect(response.body).not.toContain('"finish_reason":"stop"');
+        const rows = await db
+          .select()
+          .from(schema.interactionsTable)
+          .where(eq(schema.interactionsTable.profileId, org.agentId));
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({
+          providerApiKeyId: key.id,
+          model: gemini.modelId,
+          inputTokens: 10,
+          outputTokens: 2,
+        });
+        expect(hits).toBe(1);
+        expect(upstreamModels).toEqual([]);
+        const [decision] = await decisions(org.organizationId);
+        expect(decision).toMatchObject({ tierIndex: 2, modelId: gemini.id });
+      });
+    }
 
     test("an agent inheriting the default runs on the session's routed tier while routing is on", async ({
       makeOrganization,

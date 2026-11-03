@@ -16,7 +16,13 @@ import {
   type SupportedProviderDiscriminator,
 } from "@archestra/shared";
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
-import type { Anthropic, Bedrock, LLMProvider, OpenAi } from "@/types";
+import type {
+  Anthropic,
+  Bedrock,
+  LLMProvider,
+  OpenAi,
+  UsageView,
+} from "@/types";
 import { UpstreamStreamIncompleteError } from "@/utils/upstream-stream-incomplete-error";
 import {
   anthropicAdapterFactory,
@@ -62,6 +68,8 @@ export type PoolWire = "openai-chat" | "anthropic" | "bedrock-converse";
 
 /** Sends a request in the client's shapes to one member, and answers in them. */
 export interface MemberTransport {
+  /** Observed usage retained even when translation cannot emit a terminal event. */
+  getStreamUsage?: () => UsageView | null;
   execute(request: unknown): Promise<unknown>;
   /** `onAccepted` fires once the member's provider accepted the request. */
   executeStream(
@@ -225,6 +233,7 @@ export function memberTransport(params: {
   }
 
   if (inbound === "openai-chat" && target === "gemini") {
+    let observedUsage: UsageView | null = null;
     const translate = (request: unknown) => {
       // Translation depends on the selected model's thinking capabilities.
       const { geminiBody, openaiContext } = openaiToGemini({
@@ -241,6 +250,7 @@ export function memberTransport(params: {
       };
     };
     return {
+      getStreamUsage: () => observedUsage,
       async execute(request) {
         const { body, adapter } = translate(request);
         const response = await adapter.execute(client, body);
@@ -248,6 +258,7 @@ export function memberTransport(params: {
       },
       async executeStream(request, onAccepted) {
         const { body, adapter } = translate(request);
+        observedUsage = null;
         const events = await adapter.executeStream(client, body);
         onAccepted?.();
         const stream = adapter.createStreamAdapter(body);
@@ -257,6 +268,15 @@ export function memberTransport(params: {
             const result = stream.processChunk(
               event as Parameters<typeof stream.processChunk>[0],
             );
+            if (stream.state.usage) {
+              observedUsage = {
+                ...stream.state.usage,
+                // Match the translated wire: completion tokens include thinking.
+                outputTokens:
+                  stream.state.usage.outputTokens +
+                  (stream.state.usage.reasoningTokens ?? 0),
+              };
+            }
             return sseToChunks(result.sseData);
           },
           () => {
@@ -290,6 +310,7 @@ export function memberTransport(params: {
       client,
     });
     return {
+      getStreamUsage: viaOpenai.getStreamUsage,
       async execute(request) {
         const { openaiBody, anthropicContext } = anthropicToOpenai(
           request as Anthropic.Types.MessagesRequest,

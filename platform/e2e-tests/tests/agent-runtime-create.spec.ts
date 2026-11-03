@@ -210,7 +210,9 @@ test("configures popular agent templates and preserves the creation wizard", asy
     await expect(
       page.getByRole("button", { name: /Custom image/ }),
     ).toBeVisible();
-    await page.getByRole("button", { name: /^New .* agent/ }).click();
+    await page
+      .getByRole("button", { name: /Built into .* for chat\./ })
+      .click();
     await expect(page.getByRole("textbox", { name: /^Name\b/ })).toBeVisible();
     await expect(
       page.getByRole("radiogroup", { name: "Runtime", exact: true }),
@@ -231,7 +233,7 @@ test("configures popular agent templates and preserves the creation wizard", asy
       page.getByRole("button", { name: /Custom image/ }),
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: /^New .* agent/ }),
+      page.getByRole("button", { name: /Built into .* for chat\./ }),
     ).toBeVisible();
     await expect(
       page.getByRole("button", { name: /Connect via A2A/ }),

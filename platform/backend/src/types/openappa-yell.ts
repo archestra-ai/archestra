@@ -3,9 +3,23 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { openappaYellsTable } from "@/database/schemas/openappa-yell";
 
+/**
+ * Who raised a yell: the agent with its own `yell` call (`agent`), or the
+ * platform when Break the glass settings let a blocked call through: one that
+ * waited for human approval (`approval_waived`) or one no remedy could lift
+ * (`block_waived`).
+ */
+export const OpenAppaYellKindSchema = z.enum([
+  "agent",
+  "approval_waived",
+  "block_waived",
+]);
+export type OpenAppaYellKind = z.infer<typeof OpenAppaYellKindSchema>;
+
 export const OpenAppaYellSchema = createSelectSchema(openappaYellsTable)
   .omit({ archive: true, conversationId: true })
   .extend({
+    kind: OpenAppaYellKindSchema,
     hasArchive: z.boolean(),
     caller: CreatedByNullableSchema,
     /** The app that sent the yell, when an app did (`callerId` `app:<id>`). */

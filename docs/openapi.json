@@ -228017,6 +228017,21 @@
                     "breakTheGlassEnabled": {
                       "type": "boolean"
                     },
+                    "humanApprovalMode": {
+                      "type": "string",
+                      "enum": [
+                        "block",
+                        "unattended",
+                        "everywhere"
+                      ]
+                    },
+                    "unapprovableBlockMode": {
+                      "type": "string",
+                      "enum": [
+                        "refuse",
+                        "allow"
+                      ]
+                    },
                     "annotatorModelId": {
                       "nullable": true,
                       "type": "string",
@@ -228040,6 +228055,8 @@
                     "enabled",
                     "unsupportedClientAction",
                     "breakTheGlassEnabled",
+                    "humanApprovalMode",
+                    "unapprovableBlockMode",
                     "annotatorModelId",
                     "annotatorLlmApiKeyId",
                     "featureEnabled",
@@ -228315,6 +228332,21 @@
                   "breakTheGlassEnabled": {
                     "type": "boolean"
                   },
+                  "humanApprovalMode": {
+                    "type": "string",
+                    "enum": [
+                      "block",
+                      "unattended",
+                      "everywhere"
+                    ]
+                  },
+                  "unapprovableBlockMode": {
+                    "type": "string",
+                    "enum": [
+                      "refuse",
+                      "allow"
+                    ]
+                  },
                   "annotatorModelId": {
                     "nullable": true,
                     "type": "string",
@@ -228354,6 +228386,21 @@
                     "breakTheGlassEnabled": {
                       "type": "boolean"
                     },
+                    "humanApprovalMode": {
+                      "type": "string",
+                      "enum": [
+                        "block",
+                        "unattended",
+                        "everywhere"
+                      ]
+                    },
+                    "unapprovableBlockMode": {
+                      "type": "string",
+                      "enum": [
+                        "refuse",
+                        "allow"
+                      ]
+                    },
                     "annotatorModelId": {
                       "nullable": true,
                       "type": "string",
@@ -228377,6 +228424,8 @@
                     "enabled",
                     "unsupportedClientAction",
                     "breakTheGlassEnabled",
+                    "humanApprovalMode",
+                    "unapprovableBlockMode",
                     "annotatorModelId",
                     "annotatorLlmApiKeyId",
                     "featureEnabled",
@@ -477111,6 +477160,19 @@
                           "superyell": {
                             "type": "boolean"
                           },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "agent",
+                              "approval_waived",
+                              "block_waived"
+                            ]
+                          },
+                          "count": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -477237,6 +477299,8 @@
                           "message",
                           "withTrajectory",
                           "superyell",
+                          "kind",
+                          "count",
                           "createdAt",
                           "reportedAt",
                           "reportFailed",
@@ -477850,6 +477914,19 @@
                     "superyell": {
                       "type": "boolean"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "agent",
+                        "approval_waived",
+                        "block_waived"
+                      ]
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -477976,6 +478053,8 @@
                     "message",
                     "withTrajectory",
                     "superyell",
+                    "kind",
+                    "count",
                     "createdAt",
                     "reportedAt",
                     "reportFailed",
@@ -478302,6 +478381,19 @@
                     "superyell": {
                       "type": "boolean"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "agent",
+                        "approval_waived",
+                        "block_waived"
+                      ]
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -478428,6 +478520,8 @@
                     "message",
                     "withTrajectory",
                     "superyell",
+                    "kind",
+                    "count",
                     "createdAt",
                     "reportedAt",
                     "reportFailed",

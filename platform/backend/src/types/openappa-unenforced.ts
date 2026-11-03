@@ -2,10 +2,12 @@ import { z } from "zod";
 
 /**
  * Why the runtime did not see a tool call's outcome: the model made the call
- * while Guardrails enforcement was off (`made`), or the call started a child
- * that ran or got a message while enforcement was off (`child`).
+ * while Guardrails enforcement was off (`made`), the call started a child
+ * that ran or got a message while enforcement was off (`child`), or the
+ * runtime denied it and the Break the glass settings let it through
+ * (`waived`).
  */
-const UnenforcedCallReasonSchema = z.enum(["made", "child"]);
+const UnenforcedCallReasonSchema = z.enum(["made", "child", "waived"]);
 export type UnenforcedCallReason = z.infer<typeof UnenforcedCallReasonSchema>;
 
 /**

@@ -100,6 +100,24 @@ describe("filterAndSortInitialAgents", () => {
     expect(result.map((agent) => agent.id)).toEqual(["mine", "shared"]);
   });
 
+  it("keeps an authorized personal-scoped system assistant without an author", () => {
+    const policy = makeAgent({
+      id: "named-policy",
+      name: "Named Policy Assistant",
+      scope: "personal",
+      builtIn: true,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    });
+    expect(
+      filterAndSortInitialAgents({
+        allAgents: [policy],
+        currentAgentId: null,
+        search: "Policy",
+        userId,
+      }).map((agent) => agent.id),
+    ).toEqual([policy.id]);
+  });
+
   it("puts the current agent first even if it is a shared agent", () => {
     const agents = [
       makeAgent({

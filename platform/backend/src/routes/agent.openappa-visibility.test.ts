@@ -1,5 +1,6 @@
 import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import config from "@/config";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { beforeEach, describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import agentRoutes from "./agent";
@@ -145,6 +146,48 @@ describe("system chat agent visibility", () => {
       origin: "user",
       title: "Policy review",
     });
+  });
+
+  test("a system assistant granted only to a named user appears in every searched sort", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId);
+    const owner = await makeUser();
+    await makeMember(owner.id, ctx.organizationId);
+    const policy = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      authorId: owner.id,
+      access: "personal",
+      name: "Named Policy Assistant",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    });
+    const key = {
+      organizationId: ctx.organizationId,
+      resource: "agent" as const,
+      scope: policy.id,
+    };
+    const existing = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: existing?.revision ?? 0,
+      grants: [
+        { subject: { type: "user", id: ctx.user.id }, actions: ["read"] },
+      ],
+    });
+
+    for (const sortBy of ["chat", "name", "createdAt"]) {
+      const page = await ctx.app.inject({
+        method: "GET",
+        url: `/api/agents/chat-roster/page?search=Named%20Policy%20Assistant&sortBy=${sortBy}`,
+      });
+      expect(page.statusCode, page.body).toBe(200);
+      expect(page.json().data.map((agent: { id: string }) => agent.id)).toEqual(
+        [policy.id],
+      );
+    }
   });
   test("a member's built-in scope in chat view lists only the system assistant", async ({
     makeMember,

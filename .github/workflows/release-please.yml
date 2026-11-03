@@ -518,24 +518,37 @@ jobs:
           persist-credentials: false
 
       - name: Check publication is still allowed
+        id: publication-policy
         shell: bash
         env:
           RELEASE_FREEZE: ${{ vars.RELEASE_FREEZE }}
         run: |
           test "$RELEASE_FREEZE" != true || { echo "::error::Releases are frozen"; exit 1; }
+          PRESERVE_LATEST=false
           if [[ "$VERSION" != *-* ]]; then
+            RELEASE_LINE=${VERSION%.*}
+            test "${GITHUB_REF_NAME:-}" = "release/$RELEASE_LINE" \
+              || { echo "::error::Stable version does not match its release branch"; exit 1; }
             # Fetch every page before comparing: process substitution hides API failures.
-            # An empty successful list permits the first stable release without a 404 exception.
+            # Include drafts so a partially published newer patch still blocks a downgrade.
             STABLE_TAGS=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" --jq '.[] | select(.prerelease | not) | .tag_name') \
               || { echo "::error::Cannot verify stable release ordering; retry when the release list is available"; exit 1; }
             while IFS= read -r RELEASE_TAG; do
               [[ "$RELEASE_TAG" =~ ^platform-v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
               RELEASE_VERSION=${RELEASE_TAG#platform-v}
-              # Ubuntu's GNU sort -V orders the numeric stable versions accepted above.
-              test "$(printf '%s\n' "$VERSION" "$RELEASE_VERSION" | sort -V | tail -1)" = "$VERSION" \
-                || { echo "::error::Newer stable release ${RELEASE_TAG} exists (published or draft); cannot publish ${TAG_NAME}"; exit 1; }
+              [ "$RELEASE_VERSION" != "$VERSION" ] || continue
+              # Ubuntu's GNU sort -V compares numeric stable versions.
+              if [ "$(printf '%s\n' "$VERSION" "$RELEASE_VERSION" | sort -V | tail -1)" = "$RELEASE_VERSION" ]; then
+                if [ "${RELEASE_VERSION%.*}" = "$RELEASE_LINE" ]; then
+                  echo "::error::Newer stable release ${RELEASE_TAG} exists on this line (published or draft); cannot publish ${TAG_NAME}"
+                  exit 1
+                fi
+                # Older lines may ship patches without taking over a newer channel.
+                PRESERVE_LATEST=true
+              fi
             done <<< "$STABLE_TAGS"
           fi
+          echo "preserve_latest=$PRESERVE_LATEST" >> "$GITHUB_OUTPUT"
 
       - name: Download saved chart
         uses: ./.github/actions/github-download-artifact
@@ -572,9 +585,15 @@ jobs:
       - name: Publish stable artifacts without rebuilding
         if: ${{ github.ref_name != 'main' }}
         shell: bash
+        env:
+          PRESERVE_LATEST: ${{ steps.publication-policy.outputs.preserve_latest }}
         run: |
           test -s release-images/mcp-server-base
           helm push "archestra-platform-${VERSION}.tgz" oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts
+          if [ "$PRESERVE_LATEST" = true ]; then
+            echo "Published the older-line patch chart; preserving newer image latest tags."
+            exit 0
+          fi
           for file in release-images/*; do
             [ "${file##*/}" = platform ] && continue
             IMAGE=$(cat "$file")
@@ -584,6 +603,8 @@ jobs:
 
       - name: Move the platform latest tag
         shell: bash
+        env:
+          PRESERVE_LATEST: ${{ steps.publication-policy.outputs.preserve_latest }}
         run: |
           # Quickstart pulls archestra/platform:latest, so it follows the newest
           # published release, release candidates included. Companion and agent
@@ -591,6 +612,10 @@ jobs:
           # the agent images by that tag. This step runs after the companion
           # images are tagged, so a stable platform never points ahead of them.
           PLATFORM_IMAGE=$(cat release-images/platform)
+          if [ "$PRESERVE_LATEST" = true ]; then
+            echo "Preserving the newer platform latest tag."
+            exit 0
+          fi
           version_is_newer() {
             local a_base=${1%%-*} b_base=${2%%-*} a_pre= b_pre=
             [[ "$1" == *-* ]] && a_pre=${1#*-}
@@ -607,14 +632,14 @@ jobs:
             [ "$a_pre" != "$b_pre" ] \
               && [ "$(printf '%s\n' "$a_pre" "$b_pre" | sort -V | tail -1)" = "$a_pre" ]
           }
-          # Drafts are excluded: they have not moved the tag. This release is
-          # still a draft here, so a retry is allowed to move it again.
-          RELEASE_TAGS=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" --jq '.[] | select(.draft | not) | .tag_name') \
+          # A newer draft may have moved latest before publication failed.
+          # Include it to prevent rollback; this version's own draft permits retry.
+          RELEASE_TAGS=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" --jq '.[] | .tag_name') \
             || { echo "::error::Cannot list releases to order the platform latest tag"; exit 1; }
           while IFS= read -r RELEASE_TAG; do
             [[ "$RELEASE_TAG" =~ ^platform-v[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+\.[0-9]+)?$ ]] || continue
             if version_is_newer "${RELEASE_TAG#platform-v}" "$VERSION"; then
-              echo "Newer release ${RELEASE_TAG} already holds the platform latest tag"
+              echo "Newer release ${RELEASE_TAG} may already hold the platform latest tag"
               exit 0
             fi
           done <<< "$RELEASE_TAGS"
@@ -623,6 +648,8 @@ jobs:
 
       - name: Publish GitHub release
         shell: bash
+        env:
+          PRESERVE_LATEST: ${{ steps.publication-policy.outputs.preserve_latest }}
         run: |
           # A retry may find an already published immutable release.
           IS_DRAFT=$(gh release view "$TAG_NAME" --json isDraft --jq .isDraft)
@@ -630,6 +657,8 @@ jobs:
           gh release upload "$TAG_NAME" "archestra-platform-${VERSION}.tgz" --clobber
           if [[ "$VERSION" == *-* ]]; then
             gh release edit "$TAG_NAME" --draft=false --prerelease --latest=false
+          elif [ "$PRESERVE_LATEST" = true ]; then
+            gh release edit "$TAG_NAME" --draft=false --prerelease=false --latest=false
           else
             gh release edit "$TAG_NAME" --draft=false --prerelease=false --latest
           fi

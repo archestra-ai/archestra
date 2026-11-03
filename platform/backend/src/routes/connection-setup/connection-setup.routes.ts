@@ -128,7 +128,7 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
   codex: ["openai"],
   pi: INSTALLER_CLIENT_KEY_PROVIDERS.pi,
   "kimi-code": INSTALLER_CLIENT_KEY_PROVIDERS["kimi-code"],
-  // Cursor routes every model through the Model Router with one key that maps
+  // Cursor routes every model through the Unified Model API with one key that maps
   // many providers ("primary-providers"), never a single provider.
   cursor: [],
   "copilot-cli": [
@@ -542,7 +542,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (clientId === "cursor" && provider && !allPrimary) {
         throw new ApiError(
           400,
-          "Cursor routes its models through the Model Router. Use primary-providers.",
+          "Cursor routes its models through the Unified Model API. Use primary-providers.",
         );
       }
       const baseUrl = body.baseUrl.replace(/\/+$/, "");
@@ -1478,12 +1478,12 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
           }
         : {}),
       // Cursor's requests come from Cursor's own servers, never a running
-      // conversation, so its Model Router URL carries no setup context.
+      // conversation, so its Unified Model API URL carries no setup context.
       url:
         setup.clientId === "cursor"
-          ? `${proxyApiPrefix}/model-router`
+          ? `${proxyApiPrefix}/unified-model`
           : setup.clientId === "pi" && setup.proxyAuth !== "provider-key"
-            ? `${proxyBaseUrl}/model-router`
+            ? `${proxyBaseUrl}/unified-model`
             : `${proxyBaseUrl}/${setup.provider}`,
       proxyName: toProxyName(proxyAgent.name),
       virtualKey: virtualKeyValue,
@@ -1946,7 +1946,7 @@ function assertConnectPluginsEnabledOrGone(organization: Organization): void {
 }
 
 /**
- * The chat models Cursor's picker should list: what the Model Router's
+ * The chat models Cursor's picker should list: what the Unified Model API's
  * GET /models returns for this virtual key, plus the organization's default
  * model when the key can route it.
  */

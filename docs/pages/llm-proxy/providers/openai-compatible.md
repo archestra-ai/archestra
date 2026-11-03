@@ -2,7 +2,7 @@
 title: OpenAI-compatible Servers
 description: Connect vLLM, llama.cpp, LM Studio, or another OpenAI-compatible server
 order: 5
-lastUpdated: 2026-10-27
+lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -20,7 +20,7 @@ Start your model server before adding it. Archestra must be able to reach its UR
 
 The key appears in the provider table, and the models returned by your server appear under **Models**. A server that lists several models needs only one key entry. Add separate entries for servers on different URLs.
 
-Proxy clients use `https://<archestra-host>/v1/vllm`. Through the [Model Router](/docs/llm-proxy/model-router), use model IDs prefixed with `vllm:`.
+Proxy clients use `https://<archestra-host>/v1/vllm`. Through the [Unified Model API](/docs/llm-proxy/unified-model), use model IDs prefixed with `vllm:`.
 
 ## Deployment Configuration
 

@@ -98,7 +98,7 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
     availableKeysMock.mockReturnValue({ data: [{ provider: "anthropic" }] });
   });
 
-  it("switches from a provider endpoint to Model Router through the provider dropdown", async () => {
+  it("switches from a provider endpoint to Unified Model API through the provider dropdown", async () => {
     const user = userEvent.setup();
     renderInstructions();
 
@@ -110,13 +110,13 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
     fireEvent.keyDown(screen.getByRole("combobox", { name: "Provider" }), {
       key: "ArrowDown",
     });
-    await user.click(screen.getByRole("option", { name: "Model Router" }));
+    await user.click(screen.getByRole("option", { name: "Unified Model API" }));
     expect(
       Object.fromEntries(new URLSearchParams(window.location.search)),
     ).toEqual({ clientId: "generic", providerId: "model-router" });
   });
 
-  it("selecting the Model Router tab shows the unified /model-router/ endpoint", async () => {
+  it("selecting the Unified Model API tab shows the canonical endpoint", async () => {
     const user = userEvent.setup();
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("providerId=model-router") as unknown as ReturnType<
@@ -126,14 +126,19 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
     provisionMock.mockResolvedValue({ value: "arch_secret", name: "My Key" });
     renderInstructions();
 
-    // The unified model-router endpoint replaces the per-provider URL.
+    // The unified endpoint replaces the per-provider URL.
     expect(
-      screen.getByText("http://localhost:9000/v1/model-router"),
+      screen.getByText("http://localhost:9000/v1/unified-model"),
     ).toBeInTheDocument();
     expect(
       screen.queryByText("http://localhost:9000/v1/anthropic"),
     ).not.toBeInTheDocument();
     expect(screen.getByText("https://api.openai.com/v1/")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /The previous \/v1\/model-router endpoint is still supported/,
+      ),
+    ).toBeInTheDocument();
 
     // Virtual keys wrap one provider key — the router flow provisions against
     // the (only) configured provider.

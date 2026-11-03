@@ -345,7 +345,7 @@ describe("createDirectLLMModel", () => {
       provider: "archestra",
       apiKey: "arch_test-key",
       modelName: "deepseek:deepseek-reasoner",
-      baseUrl: "https://other-archestra.test/v1/model-router/agent-1",
+      baseUrl: "https://other-archestra.test/v1/unified-model/agent-1",
     });
     // The upstream Archestra relays thinking as DeepSeek-style
     // `reasoning_content`; the strict openai provider ("openai.chat") drops
@@ -383,7 +383,7 @@ describe("createDirectLLMModel", () => {
       provider: "archestra",
       apiKey: "arch_test-key",
       modelName: "deepseek:deepseek-reasoner",
-      baseUrl: "https://other-archestra.test/v1/model-router/agent-1",
+      baseUrl: "https://other-archestra.test/v1/unified-model/agent-1",
     });
 
     // The stubbed upstream fails the call; the request body is captured

@@ -8996,11 +8996,11 @@ export const updateModelPool = <ThrowOnError extends boolean = false>(options: O
  *
  * Authentication:
  *
- * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).
+ * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).
  */
 export const modelRouterImageEditsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterImageEditsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<ModelRouterImageEditsWithDefaultAgentResponses, ModelRouterImageEditsWithDefaultAgentErrors, ThrowOnError>({
     ...formDataBodySerializer,
-    url: '/v1/model-router/images/edits',
+    url: '/v1/unified-model/images/edits',
     ...options,
     headers: {
         'Content-Type': null,
@@ -9013,11 +9013,11 @@ export const modelRouterImageEditsWithDefaultAgent = <ThrowOnError extends boole
  *
  * Authentication:
  *
- * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).
+ * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).
  */
 export const modelRouterImageEditsWithAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterImageEditsWithAgentData, ThrowOnError>) => (options.client ?? client).post<ModelRouterImageEditsWithAgentResponses, ModelRouterImageEditsWithAgentErrors, ThrowOnError>({
     ...formDataBodySerializer,
-    url: '/v1/model-router/{agentId}/images/edits',
+    url: '/v1/unified-model/{agentId}/images/edits',
     ...options,
     headers: {
         'Content-Type': null,
@@ -9030,10 +9030,10 @@ export const modelRouterImageEditsWithAgent = <ThrowOnError extends boolean = fa
  *
  * Authentication:
  *
- * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).
+ * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).
  */
 export const modelRouterAudioSpeechWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterAudioSpeechWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<ModelRouterAudioSpeechWithDefaultAgentResponses, unknown, ThrowOnError>({
-    url: '/v1/model-router/audio/speech',
+    url: '/v1/unified-model/audio/speech',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -9046,10 +9046,10 @@ export const modelRouterAudioSpeechWithDefaultAgent = <ThrowOnError extends bool
  *
  * Authentication:
  *
- * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).
+ * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).
  */
 export const modelRouterAudioSpeechWithAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterAudioSpeechWithAgentData, ThrowOnError>) => (options.client ?? client).post<ModelRouterAudioSpeechWithAgentResponses, unknown, ThrowOnError>({
-    url: '/v1/model-router/{agentId}/audio/speech',
+    url: '/v1/unified-model/{agentId}/audio/speech',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -9062,11 +9062,11 @@ export const modelRouterAudioSpeechWithAgent = <ThrowOnError extends boolean = f
  *
  * Authentication:
  *
- * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).
+ * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).
  */
 export const modelRouterAudioTranscriptionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterAudioTranscriptionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<ModelRouterAudioTranscriptionsWithDefaultAgentResponses, unknown, ThrowOnError>({
     ...formDataBodySerializer,
-    url: '/v1/model-router/audio/transcriptions',
+    url: '/v1/unified-model/audio/transcriptions',
     ...options,
     headers: {
         'Content-Type': null,
@@ -9079,11 +9079,11 @@ export const modelRouterAudioTranscriptionsWithDefaultAgent = <ThrowOnError exte
  *
  * Authentication:
  *
- * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).
+ * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).
  */
 export const modelRouterAudioTranscriptionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterAudioTranscriptionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<ModelRouterAudioTranscriptionsWithAgentResponses, unknown, ThrowOnError>({
     ...formDataBodySerializer,
-    url: '/v1/model-router/{agentId}/audio/transcriptions',
+    url: '/v1/unified-model/{agentId}/audio/transcriptions',
     ...options,
     headers: {
         'Content-Type': null,
@@ -9096,11 +9096,11 @@ export const modelRouterAudioTranscriptionsWithAgent = <ThrowOnError extends boo
  *
  * Authentication:
  *
- * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).
+ * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).
  */
 export const modelRouterAudioTranslationsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterAudioTranslationsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<ModelRouterAudioTranslationsWithDefaultAgentResponses, unknown, ThrowOnError>({
     ...formDataBodySerializer,
-    url: '/v1/model-router/audio/translations',
+    url: '/v1/unified-model/audio/translations',
     ...options,
     headers: {
         'Content-Type': null,
@@ -9113,11 +9113,11 @@ export const modelRouterAudioTranslationsWithDefaultAgent = <ThrowOnError extend
  *
  * Authentication:
  *
- * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).
+ * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).
  */
 export const modelRouterAudioTranslationsWithAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterAudioTranslationsWithAgentData, ThrowOnError>) => (options.client ?? client).post<ModelRouterAudioTranslationsWithAgentResponses, unknown, ThrowOnError>({
     ...formDataBodySerializer,
-    url: '/v1/model-router/{agentId}/audio/translations',
+    url: '/v1/unified-model/{agentId}/audio/translations',
     ...options,
     headers: {
         'Content-Type': null,
@@ -9126,14 +9126,14 @@ export const modelRouterAudioTranslationsWithAgent = <ThrowOnError extends boole
 });
 
 /**
- * Generate images through the OpenAI-compatible Model Router. Unsupported provider parameters and streaming are rejected.
+ * Generate images through the OpenAI-compatible Unified Model API. Unsupported provider parameters and streaming are rejected.
  *
  * Authentication:
  *
- * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).
+ * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).
  */
 export const modelRouterImagesWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterImagesWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<ModelRouterImagesWithDefaultAgentResponses, ModelRouterImagesWithDefaultAgentErrors, ThrowOnError>({
-    url: '/v1/model-router/images/generations',
+    url: '/v1/unified-model/images/generations',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -9142,14 +9142,14 @@ export const modelRouterImagesWithDefaultAgent = <ThrowOnError extends boolean =
 });
 
 /**
- * Generate images through the OpenAI-compatible Model Router. Unsupported provider parameters and streaming are rejected.
+ * Generate images through the OpenAI-compatible Unified Model API. Unsupported provider parameters and streaming are rejected.
  *
  * Authentication:
  *
- * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).
+ * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).
  */
 export const modelRouterImagesWithAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterImagesWithAgentData, ThrowOnError>) => (options.client ?? client).post<ModelRouterImagesWithAgentResponses, ModelRouterImagesWithAgentErrors, ThrowOnError>({
-    url: '/v1/model-router/{agentId}/images/generations',
+    url: '/v1/unified-model/{agentId}/images/generations',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -9158,32 +9158,32 @@ export const modelRouterImagesWithAgent = <ThrowOnError extends boolean = false>
 });
 
 /**
- * List OpenAI-compatible model ids available through the model router (default LLM proxy)
+ * List OpenAI-compatible model ids available through the Unified Model API (default LLM proxy)
  *
  * Authentication:
  *
- * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).
+ * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).
  */
-export const modelRouterListModelsWithDefaultAgent = <ThrowOnError extends boolean = false>(options?: Options<ModelRouterListModelsWithDefaultAgentData, ThrowOnError>) => (options?.client ?? client).get<ModelRouterListModelsWithDefaultAgentResponses, ModelRouterListModelsWithDefaultAgentErrors, ThrowOnError>({ url: '/v1/model-router/models', ...options });
+export const modelRouterListModelsWithDefaultAgent = <ThrowOnError extends boolean = false>(options?: Options<ModelRouterListModelsWithDefaultAgentData, ThrowOnError>) => (options?.client ?? client).get<ModelRouterListModelsWithDefaultAgentResponses, ModelRouterListModelsWithDefaultAgentErrors, ThrowOnError>({ url: '/v1/unified-model/models', ...options });
 
 /**
- * List OpenAI-compatible model ids available through the model router (specific attribution Agent)
+ * List OpenAI-compatible model ids available through the Unified Model API (specific attribution Agent)
  *
  * Authentication:
  *
- * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).
+ * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).
  */
-export const modelRouterListModelsWithAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterListModelsWithAgentData, ThrowOnError>) => (options.client ?? client).get<ModelRouterListModelsWithAgentResponses, ModelRouterListModelsWithAgentErrors, ThrowOnError>({ url: '/v1/model-router/{agentId}/models', ...options });
+export const modelRouterListModelsWithAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterListModelsWithAgentData, ThrowOnError>) => (options.client ?? client).get<ModelRouterListModelsWithAgentResponses, ModelRouterListModelsWithAgentErrors, ThrowOnError>({ url: '/v1/unified-model/{agentId}/models', ...options });
 
 /**
- * Create a response through the OpenAI-compatible model router (default LLM proxy)
+ * Create a response through the OpenAI-compatible Unified Model API (default LLM proxy)
  *
  * Authentication:
  *
- * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).
+ * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).
  */
 export const modelRouterResponsesWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterResponsesWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<ModelRouterResponsesWithDefaultAgentResponses, ModelRouterResponsesWithDefaultAgentErrors, ThrowOnError>({
-    url: '/v1/model-router/responses',
+    url: '/v1/unified-model/responses',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -9192,14 +9192,14 @@ export const modelRouterResponsesWithDefaultAgent = <ThrowOnError extends boolea
 });
 
 /**
- * Create a response through the OpenAI-compatible model router (specific attribution Agent)
+ * Create a response through the OpenAI-compatible Unified Model API (specific attribution Agent)
  *
  * Authentication:
  *
- * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).
+ * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).
  */
 export const modelRouterResponsesWithAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterResponsesWithAgentData, ThrowOnError>) => (options.client ?? client).post<ModelRouterResponsesWithAgentResponses, ModelRouterResponsesWithAgentErrors, ThrowOnError>({
-    url: '/v1/model-router/{agentId}/responses',
+    url: '/v1/unified-model/{agentId}/responses',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -9208,14 +9208,14 @@ export const modelRouterResponsesWithAgent = <ThrowOnError extends boolean = fal
 });
 
 /**
- * Create embeddings through the OpenAI-compatible model router (default LLM proxy)
+ * Create embeddings through the OpenAI-compatible Unified Model API (default LLM proxy)
  *
  * Authentication:
  *
- * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).
+ * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).
  */
 export const modelRouterEmbeddingsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterEmbeddingsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<ModelRouterEmbeddingsWithDefaultAgentResponses, ModelRouterEmbeddingsWithDefaultAgentErrors, ThrowOnError>({
-    url: '/v1/model-router/embeddings',
+    url: '/v1/unified-model/embeddings',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -9224,14 +9224,14 @@ export const modelRouterEmbeddingsWithDefaultAgent = <ThrowOnError extends boole
 });
 
 /**
- * Create embeddings through the OpenAI-compatible model router (specific attribution Agent)
+ * Create embeddings through the OpenAI-compatible Unified Model API (specific attribution Agent)
  *
  * Authentication:
  *
- * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).
+ * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).
  */
 export const modelRouterEmbeddingsWithAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterEmbeddingsWithAgentData, ThrowOnError>) => (options.client ?? client).post<ModelRouterEmbeddingsWithAgentResponses, ModelRouterEmbeddingsWithAgentErrors, ThrowOnError>({
-    url: '/v1/model-router/{agentId}/embeddings',
+    url: '/v1/unified-model/{agentId}/embeddings',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -9240,14 +9240,14 @@ export const modelRouterEmbeddingsWithAgent = <ThrowOnError extends boolean = fa
 });
 
 /**
- * Create a chat completion through the OpenAI-compatible model router (default LLM proxy)
+ * Create a chat completion through the OpenAI-compatible Unified Model API (default LLM proxy)
  *
  * Authentication:
  *
- * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).
+ * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).
  */
 export const modelRouterChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<ModelRouterChatCompletionsWithDefaultAgentResponses, ModelRouterChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
-    url: '/v1/model-router/chat/completions',
+    url: '/v1/unified-model/chat/completions',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -9256,14 +9256,14 @@ export const modelRouterChatCompletionsWithDefaultAgent = <ThrowOnError extends 
 });
 
 /**
- * Create a chat completion through the OpenAI-compatible model router (specific attribution Agent)
+ * Create a chat completion through the OpenAI-compatible Unified Model API (specific attribution Agent)
  *
  * Authentication:
  *
- * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).
+ * Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).
  */
 export const modelRouterChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<ModelRouterChatCompletionsWithAgentResponses, ModelRouterChatCompletionsWithAgentErrors, ThrowOnError>({
-    url: '/v1/model-router/{agentId}/chat/completions',
+    url: '/v1/unified-model/{agentId}/chat/completions',
     ...options,
     headers: {
         'Content-Type': 'application/json',

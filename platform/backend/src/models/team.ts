@@ -85,13 +85,13 @@ class TeamModel {
       })
       .from(schema.teamsTable)
       .where(eq(schema.teamsTable.organizationId, organizationId));
+    // Direct administration never removes authority inherited from another
+    // administered ancestor. Writable allocations are their strict descendants.
     const result = new Set(descendantsOnly ? [] : roots);
     for (const root of roots) {
       for (const team of TeamModel.findDescendants(hierarchy, root))
         result.add(team.id);
     }
-    // A lead cannot raise the ceiling assigned to any team they directly administer.
-    if (descendantsOnly) for (const root of roots) result.delete(root);
     return [...result];
   }
 

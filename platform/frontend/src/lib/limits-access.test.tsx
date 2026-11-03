@@ -69,6 +69,49 @@ it("preserves each organization action independently", () => {
     result.current.allows("delete", { entityType: "team", entityId: "b" }),
   ).toBe(false);
 });
+it("keeps a directly administered child writable through its parent while protecting each top-level ceiling", () => {
+  vi.mocked(useMyTeams).mockReturnValue({
+    data: [
+      {
+        id: "parent",
+        myRole: "admin",
+        descendantTeams: [{ id: "child", name: "Child" }],
+      },
+      { id: "child", myRole: "admin", descendantTeams: [] },
+      { id: "other", myRole: "admin", descendantTeams: [] },
+    ],
+    isPending: false,
+  } as ReturnType<typeof useMyTeams>);
+  const { result, rerender } = renderHook(useTeamLimitAccess);
+  expect(result.current.managedTeams.map((team) => team.id)).toEqual(["child"]);
+  for (const action of ["create", "update", "delete"] as const) {
+    expect(
+      result.current.allows(action, { entityType: "team", entityId: "child" }),
+    ).toBe(true);
+    for (const entityId of ["parent", "other"]) {
+      expect(
+        result.current.allows(action, { entityType: "team", entityId }),
+      ).toBe(false);
+      expect(result.current.isLocked({ entityType: "team", entityId })).toBe(
+        true,
+      );
+    }
+  }
+  expect(
+    result.current.isLocked({ entityType: "team", entityId: "child" }),
+  ).toBe(false);
+  vi.mocked(useMyTeams).mockReturnValue({
+    data: [
+      { id: "child", name: "Child", myRole: "admin", descendantTeams: [] },
+    ],
+    isPending: false,
+  } as unknown as ReturnType<typeof useMyTeams>);
+  rerender();
+  expect(result.current.managedTeams).toEqual([]);
+  expect(
+    result.current.isLocked({ entityType: "team", entityId: "child" }),
+  ).toBe(true);
+});
 it("does not open Limits for ordinary members", () => {
   vi.mocked(useMyTeams).mockReturnValue({
     data: [{ id: "a", myRole: "member" }],

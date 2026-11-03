@@ -31,9 +31,8 @@ export function useTeamLimitAccess() {
         [...roots, ...descendants].map((team) => [team.id, team]),
       ).values(),
     ];
-    const managedTeams = teams.filter(
-      (team) => !roots.some((root) => root.id === team.id),
-    );
+    const descendantIds = new Set(descendants.map((team) => team.id));
+    const managedTeams = teams.filter((team) => descendantIds.has(team.id));
     const isTeamAdmin = roots.length > 0;
     const canRead = read?.data || isTeamAdmin;
     const administers = (target: { entityType: string; entityId: string }) =>

@@ -189,19 +189,11 @@ test("a waived call is hidden from the runtime and repeats merge into one yell",
     "call-2": "waived",
   });
 
-  const yells = await db
-    .select()
-    .from(schema.openappaYellsTable)
-    .where(
-      and(
-        eq(schema.openappaYellsTable.organizationId, organizationId),
-        eq(schema.openappaYellsTable.sessionId, session.session_id),
-      ),
-    );
+  const yells = await yellsOf(organizationId, session.session_id);
   expect(yells).toEqual([
     expect.objectContaining({
       kind: "block_waived",
-      count: 2,
+      count: 1,
       superyell: false,
       message: expect.stringContaining("mcp/slack/send"),
     }),
@@ -229,10 +221,7 @@ test("a waived call turns Guardrails off for the session when the yell is a supe
     }),
   ).toBe(true);
   expect(await isUnenforcedSession(session)).toBe(true);
-  const [yell] = await db
-    .select()
-    .from(schema.openappaYellsTable)
-    .where(eq(schema.openappaYellsTable.sessionId, session.session_id));
+  const [yell] = await yellsOf(organizationId, session.session_id);
   expect(yell).toMatchObject({ kind: "approval_waived", superyell: true });
 });
 
@@ -256,9 +245,10 @@ test("a repeated evaluation of a waived call counts once; another call counts ag
   expect(await waive("call-1")).toBe(true);
   // A retried response proposes the same call id again.
   expect(await waive("call-1")).toBe(true);
-  expect((await yellsOf(organizationId, session.session_id))[0]?.count).toBe(1);
+  expect(await yellsOf(organizationId, session.session_id)).toHaveLength(1);
+  // Release 1.4 keeps no count: another call merges into the same yell.
   expect(await waive("call-2")).toBe(true);
-  expect((await yellsOf(organizationId, session.session_id))[0]?.count).toBe(2);
+  expect(await yellsOf(organizationId, session.session_id)).toHaveLength(1);
 });
 
 test("a failed yell write leaves no marker behind, and the next record succeeds", async ({
@@ -338,7 +328,7 @@ test("a waived review records a yell for the reviewed tool and follows the Yell 
   expect(await yellsOf(organizationId, session.session_id)).toEqual([
     expect.objectContaining({
       kind: "approval_waived",
-      count: 2,
+      count: 1,
       superyell: true,
       message: expect.stringContaining("host/archestra/Agent"),
     }),
@@ -431,8 +421,12 @@ test("humanApprovalWaived reaches an unattended session, everywhere, or nowhere"
   ).toBe(false);
 });
 
+/**
+ * The yells as the API reads them. Release 1.4 has no kind or count column:
+ * the kind comes from a platform yell's merge key, and each yell counts once.
+ */
 async function yellsOf(organizationId: string, sessionId: string) {
-  return db
+  const rows = await db
     .select()
     .from(schema.openappaYellsTable)
     .where(
@@ -441,6 +435,15 @@ async function yellsOf(organizationId: string, sessionId: string) {
         eq(schema.openappaYellsTable.sessionId, sessionId),
       ),
     );
+  return rows.map((row) => ({
+    ...row,
+    kind: row.toolCallId.startsWith("approval_waived:")
+      ? "approval_waived"
+      : row.toolCallId.startsWith("block_waived:")
+        ? "block_waived"
+        : "agent",
+    count: 1,
+  }));
 }
 
 test("a batch's waived calls commit together as one yell per tool, and reports off record nothing", async ({
@@ -488,7 +491,7 @@ test("a batch's waived calls commit together as one yell per tool, and reports o
     expect.arrayContaining([
       {
         kind: "approval_waived",
-        count: 2,
+        count: 1,
         message: expect.stringContaining("mcp/slack/send"),
       },
       {
@@ -552,7 +555,7 @@ test("a resolved yell raised again starts over as a new one", async ({
   await waive("call-1");
   await waive("call-2");
   const [first] = await yellsOf(organizationId, session.session_id);
-  expect(first?.count).toBe(2);
+  expect(await yellsOf(organizationId, session.session_id)).toHaveLength(1);
   const resolvedAt = new Date("2026-01-01T00:00:00Z");
   await db
     .update(schema.openappaYellsTable)

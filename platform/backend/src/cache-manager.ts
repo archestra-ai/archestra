@@ -176,6 +176,13 @@ export const CacheKey = {
    * or API call, redeemed by whichever one the public content URL reaches.
    */
   AgentWorkspaceTransferTicket: "agent-workspace-transfer-ticket-v1",
+  /**
+   * Release 1.4 only: the Break the glass Human approval and Soft block
+   * settings, which later releases store as guardrails_deployment columns.
+   * Kept without expiry, so the settings outlive restarts and are shared by
+   * every replica.
+   */
+  BreakTheGlassSettings: "guardrails-break-the-glass-settings-v1",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

@@ -2,14 +2,12 @@ import {
   boolean,
   customType,
   index,
-  integer,
   pgTable,
   text,
   timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { OpenAppaYellKind } from "@/types/openappa-yell";
 import conversationsTable from "./conversation";
 import organizationsTable from "./organization";
 
@@ -32,12 +30,6 @@ export const openappaYellsTable = pgTable(
     withTrajectory: boolean("with_trajectory").notNull(),
     // Sent through superyell, which also turned guardrails off for the session.
     superyell: boolean("superyell").notNull().default(false),
-    // Who raised it: the agent's own `yell` call, or the platform when it let
-    // a blocked call through under the Break the glass settings.
-    kind: text("kind").$type<OpenAppaYellKind>().notNull().default("agent"),
-    // How many calls a platform yell stands for: repeats of the same tool and
-    // kind in a session add to one yell.
-    count: integer("count").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

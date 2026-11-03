@@ -20,6 +20,7 @@ export const OpenAppaYellSchema = createSelectSchema(openappaYellsTable)
   .omit({ archive: true, conversationId: true })
   .extend({
     kind: OpenAppaYellKindSchema,
+    count: z.number().int(),
     hasArchive: z.boolean(),
     caller: CreatedByNullableSchema,
     /** The app that sent the yell, when an app did (`callerId` `app:<id>`). */

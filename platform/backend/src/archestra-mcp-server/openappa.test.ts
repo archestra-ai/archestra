@@ -1818,11 +1818,22 @@ describe("OpenAPPA tool execution", () => {
         { offer_id: "offer-hitl", trajectory: trajectory(), plan: "Review" },
         gatewayContext(),
       );
-    const yells = () =>
-      db
-        .select()
-        .from(schema.openappaYellsTable)
-        .where(sql`${schema.openappaYellsTable.organizationId} = ${orgId}`);
+    // Release 1.4 has no kind or count column: read them as the API does.
+    const yells = async () =>
+      (
+        await db
+          .select()
+          .from(schema.openappaYellsTable)
+          .where(sql`${schema.openappaYellsTable.organizationId} = ${orgId}`)
+      ).map((row) => ({
+        ...row,
+        kind: row.toolCallId.startsWith("approval_waived:")
+          ? "approval_waived"
+          : row.toolCallId.startsWith("block_waived:")
+            ? "block_waived"
+            : "agent",
+        count: 1,
+      }));
 
     test("approves the plan itself, says no person ruled, and records a yell", async () => {
       config.openappa.yellEnabled = true;

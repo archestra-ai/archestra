@@ -62,8 +62,8 @@ export default class OpenAppaYellModel {
    * Records calls the platform let through under the Break the glass
    * settings. Repeats of the same tool and kind in a session add to one
    * unresolved yell, so a looping agent does not flood the Yells tab; once
-   * resolved, the next repeat raises it again as a new yell. `calls` is how
-   * many distinct calls this record stands for; the caller counts a call once.
+   * resolved, the next repeat raises it again as a new yell. Release 1.4 keeps
+   * no count: `calls` is accepted for the callers' sake and not stored.
    */
   static async recordWaiver(
     input: {
@@ -78,7 +78,6 @@ export default class OpenAppaYellModel {
     },
     executor: typeof db | Transaction = db,
   ) {
-    const calls = input.calls ?? 1;
     await executor
       .insert(table)
       .values({
@@ -89,8 +88,6 @@ export default class OpenAppaYellModel {
         toolCallId: `${input.kind}:${input.tool}`,
         message: input.message,
         withTrajectory: false,
-        kind: input.kind,
-        count: calls,
         superyell: input.superyell,
       })
       .onConflictDoUpdate({
@@ -103,7 +100,6 @@ export default class OpenAppaYellModel {
         // A resolved yell is raised again as a new one: its count and age
         // start over, so the Yells tab lists it as new.
         set: {
-          count: sql`case when ${table.resolvedAt} is null then ${table.count} + ${calls} else ${calls} end`,
           createdAt: sql`case when ${table.resolvedAt} is null then ${table.createdAt} else now() end`,
           message: input.message,
           superyell: input.superyell,
@@ -326,5 +322,13 @@ export default class OpenAppaYellModel {
 
 function metadataColumns() {
   const { archive, conversationId, ...columns } = getTableColumns(table);
-  return { ...columns, hasArchive: sql<boolean>`${archive} IS NOT NULL` };
+  return {
+    ...columns,
+    hasArchive: sql<boolean>`${archive} IS NOT NULL`,
+    // Release 1.4 has no kind column: a platform yell's merge key starts with
+    // its kind (`recordWaiver`), an agent's own yell carries a real call id.
+    kind: sql<OpenAppaYellKind>`case when ${columns.toolCallId} like 'approval\_waived:%' then 'approval_waived' when ${columns.toolCallId} like 'block\_waived:%' then 'block_waived' else 'agent' end`,
+    // Nor a count column: each yell stands for one record on 1.4.
+    count: sql<number>`1`.mapWith(Number),
+  };
 }

@@ -5594,8 +5594,7 @@ describe("rendering runtime text for this client", () => {
         .spyOn(appaService, "evaluateToolCalls")
         .mockImplementation(async (_session, calls) =>
           calls.map((call) =>
-            call.name === "post_message" ||
-            call.name === "archestra__start_run"
+            call.name === "post_message" || call.name === "archestra__start_run"
               ? {
                   kind: "deny" as const,
                   feedback:
@@ -5677,7 +5676,12 @@ describe("rendering runtime text for this client", () => {
           .from(schema.openappaYellsTable)
           .where(eq(schema.openappaYellsTable.organizationId, organizationId))
       )
-        .map(({ sessionId, kind }) => ({ sessionId, kind }))
+        // Release 1.4 has no kind column: a platform yell's merge key
+        // starts with its kind.
+        .map(({ sessionId, toolCallId }) => ({
+          sessionId,
+          kind: toolCallId.split(":")[0],
+        }))
         .sort((a, b) =>
           `${a.sessionId}${a.kind}`.localeCompare(`${b.sessionId}${b.kind}`),
         );

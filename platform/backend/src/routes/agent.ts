@@ -3283,7 +3283,7 @@ type AgentRosterRequest = {
   ids?: string[];
 };
 
-/** The chat roster's filter: internal, non-built-in agents, no tools. */
+/** The chat roster includes internal agents and user-facing built-ins, without tools. */
 const CHAT_ROSTER_QUERY = {
   agentType: "agent",
   excludeBuiltIn: true,

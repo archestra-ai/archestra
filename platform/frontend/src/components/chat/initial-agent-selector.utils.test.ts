@@ -133,6 +133,25 @@ describe("filterAndSortInitialAgents", () => {
     ).toEqual([policy.id]);
   });
 
+  it("keeps a personal-scoped SRE agent granted to another user", () => {
+    const sre = makeAgent({
+      id: "sre",
+      name: "SRE",
+      scope: "personal",
+      authorId: "admin",
+      builtIn: true,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.SRE },
+    });
+    expect(
+      filterAndSortInitialAgents({
+        allAgents: [sre],
+        currentAgentId: null,
+        search: "",
+        userId,
+      }),
+    ).toEqual([sre]);
+  });
+
   it("puts the current agent first even if it is a shared agent", () => {
     const agents = [
       makeAgent({

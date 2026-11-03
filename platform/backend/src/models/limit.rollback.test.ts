@@ -450,6 +450,133 @@ describe("Selected model budget applicability", () => {
   });
 });
 
+describe("Legacy vLLM budget usage", () => {
+  test.for([
+    { rate: null, estimated: true, legacyCost: 0 },
+    { rate: "0", estimated: false, legacyCost: 0 },
+    { rate: "2", estimated: false, legacyCost: 0.003 },
+  ])("keeps shared budgets readable with legacy rate $rate", async ({
+    rate,
+    estimated,
+    legacyCost,
+  }, { makeAgent, makeUser, makeInteraction }) => {
+    const agent = await makeAgent();
+    const user = await makeUser();
+    for (const [modelId, price] of [
+      ["legacy-vllm", rate],
+      ["priced-vllm", "1"],
+    ] as const) {
+      await ModelModel.create({
+        externalId: `vllm/${modelId}`,
+        provider: "vllm",
+        modelId,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        customPricePerMillionInput: price,
+        customPricePerMillionOutput: price,
+      });
+    }
+    const models = ["legacy-vllm", "priced-vllm"];
+    const limit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 3,
+      model: models,
+      cleanupInterval: "1w",
+      lastCleanup: new Date(),
+    });
+    // No billing receipt: these tokens came from an older release.
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "legacy-vllm",
+      1000,
+      500,
+    );
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "priced-vllm",
+      2_000_000,
+      0,
+    );
+    const context = {
+      agentId: agent.id,
+      userId: user.id,
+      model: "priced-vllm",
+    };
+    expect(
+      await LimitValidationService.checkLimitsBeforeRequest(context),
+    ).toBeNull();
+    expect(
+      (await LimitModel.getTokenCostTotals([limit.id])).get(limit.id),
+    ).toEqual({
+      cost: 2 + legacyCost,
+      estimated,
+    });
+    expect(
+      (await LimitModel.getSpendUsage([limit.id])).get(limit.id),
+    ).toMatchObject({
+      estimatedUsage: estimated,
+      modelUsage: expect.arrayContaining([
+        {
+          model: "legacy-vllm",
+          tokensIn: 1000,
+          tokensOut: 500,
+          cost: legacyCost,
+        },
+      ]),
+    });
+    await LimitModel.patch(limit.id, { limitValue: 1 });
+    expect(
+      await LimitValidationService.checkLimitsBeforeRequest(context),
+    ).not.toBeNull();
+    await LimitModel.delete(limit.id);
+
+    const inherited = await EnvironmentDefaultUserLimitModel.create({
+      organizationId: agent.organizationId,
+      environmentId: null,
+      limitValue: 3,
+      model: models,
+      cleanupInterval: "1w",
+    });
+    const legacy = await makeInteraction(agent.id, {
+      userId: user.id,
+      model: "legacy-vllm",
+      inputTokens: 1000,
+      outputTokens: 500,
+    });
+    await db
+      .update(schema.interactionsTable)
+      .set({ cost: null })
+      .where(eq(schema.interactionsTable.id, legacy.id));
+    await makeInteraction(agent.id, {
+      userId: user.id,
+      model: "priced-vllm",
+      cost: "2",
+    });
+    expect(
+      await LimitValidationService.checkLimitsBeforeRequest(context),
+    ).toBeNull();
+    expect(
+      (
+        await LimitModel.getDefaultUserLimitUsageByUser({
+          organizationId: agent.organizationId,
+          models,
+          cleanupInterval: "1w",
+        })
+      ).get(user.id),
+    ).toEqual({ cost: 2 + legacyCost, estimated });
+    await EnvironmentDefaultUserLimitModel.patch(inherited.id, {
+      limitValue: 1,
+    });
+    expect(
+      await LimitValidationService.checkLimitsBeforeRequest(context),
+    ).not.toBeNull();
+  });
+});
+
 describe("CreateLimitSchema", () => {
   test("normalizes empty array to null for token_cost", () => {
     const result = CreateLimitSchema.parse({

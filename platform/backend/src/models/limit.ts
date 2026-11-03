@@ -490,26 +490,13 @@ class LimitModel {
           pricing.get(group.model) ?? null,
           group.model,
         );
-        groupCost = sumMoney([
-          groupCost,
-          priceTokens(
-            {
-              inputTokens: Number(group.unpricedTokensIn),
-              outputTokens: Number(group.unpricedTokensOut),
-              cacheReadTokens: 0,
-              cacheWriteTokens: 0,
-              cacheWrite1hTokens: 0,
-            },
-            {
-              input: modelPricing.pricePerMillionInput,
-              output: modelPricing.pricePerMillionOutput,
-              cacheRead: null,
-              cacheWrite: null,
-              cacheWrite1h: null,
-              source: modelPricing.source,
-            },
-          ),
-        ]);
+        const legacy = priceLegacyTokens(
+          Number(group.unpricedTokensIn),
+          Number(group.unpricedTokensOut),
+          modelPricing,
+        );
+        if (legacy.estimated) estimated.add(group.userId);
+        groupCost = sumMoney([groupCost, legacy.cost]);
       }
       costs.set(
         group.userId,
@@ -2560,6 +2547,39 @@ async function readLimitSpend(
   return spend;
 }
 
+/** Older token rows have no receipt. Preserve known charges and flag missing
+ * rates as estimates without making historical usage block priced requests.
+ * This fallback is only for historical accounting, never request admission.
+ */
+function priceLegacyTokens(
+  inputTokens: number,
+  outputTokens: number,
+  pricing: ReturnType<typeof ModelModel.getEffectivePricing>,
+) {
+  return {
+    estimated:
+      (inputTokens > 0 && pricing.pricePerMillionInput === null) ||
+      (outputTokens > 0 && pricing.pricePerMillionOutput === null),
+    cost: priceTokens(
+      {
+        inputTokens,
+        outputTokens,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        cacheWrite1hTokens: 0,
+      },
+      {
+        input: pricing.pricePerMillionInput ?? "0",
+        output: pricing.pricePerMillionOutput ?? "0",
+        cacheRead: null,
+        cacheWrite: null,
+        cacheWrite1h: null,
+        source: pricing.source,
+      },
+    ),
+  };
+}
+
 function computeModelUsageCosts(
   modelUsages: LimitModelUsageRecord[],
   modelEntriesByModelId: Map<string, Model>,
@@ -2577,30 +2597,13 @@ function computeModelUsageCosts(
       modelEntriesByModelId.get(usage.model) ?? null,
       usage.model,
     );
-    const legacyCost = priceTokens(
-      {
-        inputTokens: Math.max(
-          0,
-          usage.currentUsageTokensIn - (usage.coveredTokensIn ?? 0),
-        ),
-        outputTokens: Math.max(
-          0,
-          usage.currentUsageTokensOut - (usage.coveredTokensOut ?? 0),
-        ),
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
-        cacheWrite1hTokens: 0,
-      },
-      {
-        input: pricing.pricePerMillionInput,
-        output: pricing.pricePerMillionOutput,
-        cacheRead: null,
-        cacheWrite: null,
-        cacheWrite1h: null,
-        source: pricing.source,
-      },
+    const legacy = priceLegacyTokens(
+      Math.max(0, usage.currentUsageTokensIn - (usage.coveredTokensIn ?? 0)),
+      Math.max(0, usage.currentUsageTokensOut - (usage.coveredTokensOut ?? 0)),
+      pricing,
     );
-    const modelCost = sumMoney([legacyCost, usage.settledCost ?? "0"]);
+    estimated ||= legacy.estimated;
+    const modelCost = sumMoney([legacy.cost, usage.settledCost ?? "0"]);
     cost = sumMoney([cost, modelCost]);
     return {
       model: usage.model,
@@ -2752,6 +2755,7 @@ async function getDefaultUserLimitUsage(params: {
       ),
     );
   let cost = "0.0000000000";
+  let estimated = Boolean(settled?.estimated);
   let tokensIn = 0;
   let tokensOut = 0;
   for (const interaction of interactions) {
@@ -2777,33 +2781,16 @@ async function getDefaultUserLimitUsage(params: {
       modelEntry,
       interaction.model,
     );
-    cost = sumMoney([
-      cost,
-      priceTokens(
-        {
-          inputTokens,
-          outputTokens,
-          cacheReadTokens: 0,
-          cacheWriteTokens: 0,
-          cacheWrite1hTokens: 0,
-        },
-        {
-          input: pricing.pricePerMillionInput,
-          output: pricing.pricePerMillionOutput,
-          cacheRead: null,
-          cacheWrite: null,
-          cacheWrite1h: null,
-          source: pricing.source,
-        },
-      ),
-    ]);
+    const legacy = priceLegacyTokens(inputTokens, outputTokens, pricing);
+    estimated ||= legacy.estimated;
+    cost = sumMoney([cost, legacy.cost]);
   }
   tokensIn += Number(settled?.tokensIn ?? 0);
   tokensOut += Number(settled?.tokensOut ?? 0);
   cost = sumMoney([cost, settled?.cost ?? "0"]);
   return {
     cost: Number(cost),
-    estimated: Boolean(settled?.estimated),
+    estimated,
     tokensIn,
     tokensOut,
   };

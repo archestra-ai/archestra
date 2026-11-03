@@ -1,8 +1,14 @@
 import { createHash, randomUUID } from "node:crypto";
+import { MCP_OAUTH_CLIENT_REFERENCE_PREFIX } from "@archestra/shared";
 import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { createFastifyInstance } from "@/fastify-instance";
+import {
+  McpOauthClientModel,
+  MemberModel,
+  OAuthAccessTokenModel,
+} from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -53,19 +59,35 @@ describe("MCP Gateway authorization failures", () => {
       "expired",
       "revoked",
       "wrong-gateway",
+      "removed-member",
     ] as const) {
       const token = `test-oauth-${randomUUID()}`;
+      const removedUser =
+        scenario === "removed-member" ? await makeUser() : null;
+      const removedMembership = removedUser
+        ? await makeMember(removedUser.id, org.id, { role: "member" })
+        : null;
       if (scenario !== "invalid") {
-        await makeOAuthAccessToken(client.clientId, user.id, {
-          token: createHash("sha256").update(token).digest("base64url"),
-          referenceId: `${MCP_RESOURCE_REFERENCE_PREFIX}${scenario === "wrong-gateway" ? randomUUID() : agent.id}`,
-          ...(scenario === "expired" && {
-            expiresAt: new Date(Date.now() - 60_000),
-          }),
-          ...(scenario === "revoked" && { refreshId: revoked.id }),
-        });
+        await makeOAuthAccessToken(
+          client.clientId,
+          removedUser?.id ?? user.id,
+          {
+            token: createHash("sha256").update(token).digest("base64url"),
+            referenceId: `${MCP_RESOURCE_REFERENCE_PREFIX}${scenario === "wrong-gateway" ? randomUUID() : agent.id}`,
+            ...(scenario === "expired" && {
+              expiresAt: new Date(Date.now() - 60_000),
+            }),
+            ...(scenario === "revoked" && { refreshId: revoked.id }),
+          },
+        );
       }
 
+      if (removedMembership) {
+        await MemberModel.deleteByIdInOrganization(
+          removedMembership.id,
+          org.id,
+        );
+      }
       for (const endpoint of ["post", "get", "sse", "delete"] as const) {
         const response = await app.inject({
           method:
@@ -104,6 +126,51 @@ describe("MCP Gateway authorization failures", () => {
         }
       }
     }
+  });
+
+  test("returns 403 when an application token loses its gateway grant", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    const { oauthClient } = await McpOauthClientModel.create({
+      organizationId: org.id,
+      authorId: randomUUID(),
+      name: "gateway-worker",
+      allowedGatewayIds: [agent.id],
+    });
+    const token = `test-oauth-${randomUUID()}`;
+    await OAuthAccessTokenModel.createClientCredentialsToken({
+      tokenHash: OAuthAccessTokenModel.hashTokenForLookup(token),
+      clientId: oauthClient.clientId,
+      expiresAt: new Date(Date.now() + 3_600_000),
+      scopes: ["mcp"],
+      referenceId: `${MCP_OAUTH_CLIENT_REFERENCE_PREFIX}${oauthClient.id}`,
+    });
+    const request = {
+      method: "POST" as const,
+      url: `/v1/mcp/${agent.slug}`,
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: "application/json, text/event-stream",
+      },
+      payload: { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} },
+    };
+    expect((await app.inject(request)).statusCode).toBe(200);
+    await McpOauthClientModel.update({
+      id: oauthClient.id,
+      organizationId: org.id,
+      name: oauthClient.name,
+      allowedGatewayIds: [],
+    });
+    const denied = await app.inject(request);
+    expect(denied.statusCode).toBe(403);
+    expect(denied.headers["www-authenticate"]).toBeUndefined();
+    expect(denied.body).toContain("does not have access to this gateway");
   });
 
   test("SDK surfaces denied access without OAuth discovery or reauthentication, including after a grant is revoked", async ({

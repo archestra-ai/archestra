@@ -1905,15 +1905,12 @@ async function authenticateOAuthTokenByHash(
       accessToken.referenceId?.startsWith(MCP_OAUTH_CLIENT_REFERENCE_PREFIX) ||
       accessToken.referenceId?.startsWith(OAUTH_CLIENT_REFERENCE_PREFIX)
     ) {
-      const result = await validateMcpClientAccessToken({
+      return await validateMcpClientAccessToken({
         accessToken,
         profileId: params.profileId,
         organizationId: agent.organizationId,
         requiredScope: params.requiredOAuthScope ?? MCP_GATEWAY_OAUTH_SCOPE,
       });
-      return result
-        ? { result, reason: null }
-        : { result: null, reason: "invalid_token" };
     }
 
     const managedClient = await ManagedOauthClientModel.findByClientId(
@@ -1934,6 +1931,10 @@ async function authenticateOAuthTokenByHash(
       return { result: null, reason: "invalid_token" };
     }
     const organizationId = agent.organizationId;
+    const member = params.lookups
+      ? await params.lookups.membership({ userId, organizationId })
+      : await MemberModel.getByUserId(userId, organizationId);
+    if (!member) return { result: null, reason: "invalid_token" };
 
     // Check if user has MCP gateway admin permission (can access all gateways)
     const isGatewayAdmin = await ResourcePermissions.allows({
@@ -2060,7 +2061,7 @@ async function validateMcpClientAccessToken(params: {
   profileId: string;
   organizationId: string;
   requiredScope: "mcp" | "a2a";
-}): Promise<TokenAuthResult | null> {
+}): Promise<GatewayAuthOutcome> {
   const { accessToken, profileId, organizationId, requiredScope } = params;
 
   // Require the mcp scope (parallels the llm:proxy scope check on the LLM path).
@@ -2069,10 +2070,10 @@ async function validateMcpClientAccessToken(params: {
     accessToken.referenceId?.startsWith(MCP_OAUTH_CLIENT_REFERENCE_PREFIX) &&
     accessToken.scopes?.includes(MCP_GATEWAY_OAUTH_SCOPE);
   if (!accessToken.scopes?.includes(requiredScope) && !legacyA2a) {
-    return null;
+    return { result: null, reason: "invalid_token" };
   }
   if (!accessToken.clientId) {
-    return null;
+    return { result: null, reason: "invalid_token" };
   }
 
   // findByClientId returns null when the client was deleted or disabled.
@@ -2084,7 +2085,7 @@ async function validateMcpClientAccessToken(params: {
     oauthClient.disabled ||
     !oauthClient.scopes.includes(requiredScope)
   ) {
-    return null;
+    return { result: null, reason: "invalid_token" };
   }
 
   // Defense in depth: the token's referenceId must point at this exact client.
@@ -2094,21 +2095,12 @@ async function validateMcpClientAccessToken(params: {
     accessToken.referenceId !==
       `${OAUTH_CLIENT_REFERENCE_PREFIX}${oauthClient.id}`
   ) {
-    return null;
+    return { result: null, reason: "invalid_token" };
   }
 
   // Cross-org tokens are never valid for this gateway.
   if (oauthClient.organizationId !== organizationId) {
-    return null;
-  }
-
-  // The client must be explicitly scoped to the requested gateway.
-  if (!oauthClient.allowedGatewayIds.includes(profileId)) {
-    logger.warn(
-      { profileId, clientId: oauthClient.clientId },
-      "validateOAuthToken: MCP OAuth client not authorized for this gateway",
-    );
-    return null;
+    return { result: null, reason: "invalid_token" };
   }
 
   const account = oauthClient.serviceAccountId
@@ -2117,6 +2109,16 @@ async function validateMcpClientAccessToken(params: {
         organizationId,
       })
     : null;
+
+  // The client must be explicitly scoped to the requested gateway.
+  if (!oauthClient.allowedGatewayIds.includes(profileId)) {
+    logger.warn(
+      { profileId, clientId: oauthClient.clientId },
+      "validateOAuthToken: MCP OAuth client not authorized for this gateway",
+    );
+    return { result: null, reason: "no_gateway_access" };
+  }
+
   if (
     account &&
     !(await validateServiceAccountGatewayAccess({
@@ -2127,14 +2129,17 @@ async function validateMcpClientAccessToken(params: {
       tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
     }))
   )
-    return null;
+    return { result: null, reason: "no_gateway_access" };
   return {
-    ...(account ? { serviceAccountId: account.id } : {}),
-    tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
-    teamId: account?.teamId ?? null,
-    isOrganizationToken: false,
-    organizationId,
-    oauthClientId: accessToken.clientId,
+    reason: null,
+    result: {
+      ...(account ? { serviceAccountId: account.id } : {}),
+      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
+      teamId: account?.teamId ?? null,
+      isOrganizationToken: false,
+      organizationId,
+      oauthClientId: accessToken.clientId,
+    },
   };
 }
 
@@ -2310,17 +2315,17 @@ async function authenticateUngated(
   }
 
   // Try OAuth token validation (for MCP clients like Open WebUI)
-  const oauthOutcome = await authenticateOAuthTokenByHash({
+  const validation = await authenticateOAuthTokenByHash({
     profileId,
     oauthTokenHash: tokenHashes.oauthTokenHash,
     agentAccessContext: await getAgentAccessContext(),
     lookups,
     requiredOAuthScope,
   });
-  if (oauthOutcome.result || oauthOutcome.reason === "no_gateway_access") {
+  if (validation.result || validation.reason === "no_gateway_access") {
     // OAuth scopes and target grants are live configuration. Recheck them on
     // every call so a capability removal cannot leave a cached authorization.
-    return oauthOutcome;
+    return validation;
   }
 
   logger.warn(

@@ -3,7 +3,7 @@ import type {
   SupportedProvider,
   SupportedProviderDiscriminator,
 } from "@archestra/shared";
-import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import { isConnectionErrno, isTimeoutErrno } from "@/utils/network-errors";
 import {
   KnowledgeBaseError,

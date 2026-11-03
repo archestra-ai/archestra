@@ -117,6 +117,7 @@ async function startAgentRunSession(params: {
   });
   const effectiveNetworkPolicy = await resolveEffectiveNetworkPolicy({
     organizationId: params.organizationId,
+    agentNetworkPolicy: params.runtime.agentNetworkPolicy,
     environmentId: params.runtime.environmentId,
     environmentNetworkPolicy: environment?.networkPolicy,
     defaultNetworkPolicy: organization?.defaultNetworkPolicy,
@@ -409,7 +410,12 @@ async function startAgentRunSession(params: {
 export function resolveAgentRuntime(
   agent: Pick<
     Agent,
-    "id" | "organizationId" | "environmentId" | "runtime" | "runtimeSecretId"
+    | "id"
+    | "organizationId"
+    | "environmentId"
+    | "runtime"
+    | "runtimeSecretId"
+    | "networkPolicy"
   >,
 ): ResolvedAgentRuntime | null {
   if (!agent.runtime) {
@@ -425,6 +431,7 @@ export function resolveAgentRuntime(
     organizationId: agent.organizationId,
     environmentId: agent.environmentId,
     secretId: agent.runtimeSecretId,
+    agentNetworkPolicy: agent.networkPolicy ?? null,
   };
 }
 

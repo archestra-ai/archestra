@@ -1,0 +1,120 @@
+{
+  "extends": "./tsconfig.source-project.json",
+  "compilerOptions": {
+    "outDir": "./.tsbuild/connections",
+    "tsBuildInfoFile": "./.tsbuild/connections.tsbuildinfo"
+  },
+  "files": [
+    "src/services/agent-connection-setup/bootstrap/device-agent-runtime.ts",
+    "src/services/agent-connection-setup/agents/claude-code.ts",
+    "src/services/agent-connection-setup/agents/claude-desktop.ts",
+    "src/services/agent-connection-setup/agents/codex.ts",
+    "src/services/agent-connection-setup/agents/copilot-cli.ts",
+    "src/services/agent-connection-setup/agents/cursor.ts",
+    "src/services/agent-connection-setup/agents/kimi-code.ts",
+    "src/services/agent-connection-setup/agents/opencode.ts",
+    "src/services/agent-connection-setup/agents/pi.ts",
+    "src/services/agent-connection-setup/bootstrap/client-connection-installer.ts",
+    "src/services/agent-connection-setup/credentials/primary-providers.ts",
+    "src/services/agent-connection-setup/desktop/connection-desktop-installer.ts",
+    "src/services/agent-connection-setup/desktop/connection-setup-desktop-bundle.ts",
+    "src/services/agent-connection-setup/desktop/windows-desktop-processes.ts",
+    "src/services/agent-connection-setup/guard/clients/claude-code.ts",
+    "src/services/agent-connection-setup/guard/clients/codex.ts",
+    "src/services/agent-connection-setup/guard/clients/copilot-cli.ts",
+    "src/services/agent-connection-setup/guard/clients/index.ts",
+    "src/services/agent-connection-setup/guard/clients/kimi-code.ts",
+    "src/services/agent-connection-setup/guard/clients/opencode.ts",
+    "src/services/agent-connection-setup/guard/clients/pi.ts",
+    "src/services/agent-connection-setup/guard/clients/verify.ts",
+    "src/services/agent-connection-setup/guard/startup-guard-artifact.ts",
+    "src/services/agent-connection-setup/guard/startup-guard.ts",
+    "src/services/agent-connection-setup/guard/startup-guard.windows.ts",
+    "src/services/agent-connection-setup/index.ts",
+    "src/services/agent-connection-setup/opencode-family.ts",
+    "src/services/agent-connection-setup/payloads/codex-handoff.ts",
+    "src/services/agent-connection-setup/payloads/codex-setup-preflight.ts",
+    "src/services/agent-connection-setup/payloads/copilot-provider-config.ts",
+    "src/services/agent-connection-setup/payloads/kimi-code-connection.ts",
+    "src/services/agent-connection-setup/payloads/managed-instructions-refresh.ts",
+    "src/services/agent-connection-setup/payloads/managed-instructions-refresh.windows.ts",
+    "src/services/agent-connection-setup/payloads/managed-runtime-bootstrap.ts",
+    "src/services/agent-connection-setup/payloads/managed-runtime-install.ts",
+    "src/services/agent-connection-setup/payloads/managed-runtime.ts",
+    "src/services/agent-connection-setup/payloads/marketplace-skills-sync.ts",
+    "src/services/agent-connection-setup/payloads/opencode-handoff.ts",
+    "src/services/agent-connection-setup/payloads/opencode-mcp-config.ts",
+    "src/services/agent-connection-setup/payloads/opencode-primary-config.ts",
+    "src/services/agent-connection-setup/payloads/opencode-question-tui.ts",
+    "src/services/agent-connection-setup/payloads/opencode-routing-plugin.ts",
+    "src/services/agent-connection-setup/payloads/pi-extension.ts",
+    "src/services/agent-connection-setup/payloads/pi-launcher.ts",
+    "src/services/agent-connection-setup/payloads/pi-lifecycle.ts",
+    "src/services/agent-connection-setup/payloads/pi-mcp-sign-in.ts",
+    "src/services/agent-connection-setup/payloads/startup-guard-refresh.ts",
+    "src/services/agent-connection-setup/setup-command.ts",
+    "src/services/agent-connection-setup/steps/ending.ts",
+    "src/services/agent-connection-setup/steps/json-merge.ts",
+    "src/services/agent-connection-setup/steps/marketplace-copy.ts",
+    "src/services/agent-connection-setup/steps/mcp.ts",
+    "src/services/agent-connection-setup/steps/node-script.ts",
+    "src/services/agent-connection-setup/steps/powershell-json.ts",
+    "src/services/agent-connection-setup/steps/quoting.ts",
+    "src/services/agent-connection-setup/steps/script-frame.ts",
+    "src/services/agent-connection-setup/steps/startup-guard.ts",
+    "src/services/agent-connection-setup/types.ts",
+    "src/services/archestra-mark.ts",
+    "src/services/connection-instructions-token.ts",
+    "src/services/connection-managed-instructions.ts",
+    "src/services/connection-proxy-setup-context.ts",
+    "src/services/connection-runtime-token.ts",
+    "src/services/connection-runtime.ts",
+    "src/services/connection-setup-scope.ts",
+    "src/services/connection-setup.ts",
+    "src/services/virtual-key-providers.ts"
+  ],
+  "include": [
+    "src/ambient/*.d.ts"
+  ],
+  "references": [
+    {
+      "path": "../shared/tsconfig.lib.json"
+    },
+    {
+      "path": "./tsconfig.schema.json"
+    },
+    {
+      "path": "./tsconfig.core.json"
+    },
+    {
+      "path": "./tsconfig.models.json"
+    },
+    {
+      "path": "./tsconfig.models-agents.json"
+    },
+    {
+      "path": "./tsconfig.models-upper.json"
+    },
+    {
+      "path": "./tsconfig.llm-clients.json"
+    },
+    {
+      "path": "./tsconfig.runtime.json"
+    },
+    {
+      "path": "./tsconfig.llm-protocol.json"
+    },
+    {
+      "path": "./tsconfig.provider-adapters.json"
+    },
+    {
+      "path": "./tsconfig.kb-core.json"
+    },
+    {
+      "path": "./tsconfig.kb-connectors.json"
+    },
+    {
+      "path": "./tsconfig.kb.json"
+    }
+  ]
+}

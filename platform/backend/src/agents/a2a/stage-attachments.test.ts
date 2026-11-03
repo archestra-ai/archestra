@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import type { A2AAttachment } from "@/agents/a2a-executor";
 import config from "@/config";
 import {
   SkillSandboxFileModel,
@@ -16,6 +15,7 @@ import {
   expect,
   test,
 } from "@/test";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 import { stageAttachmentsIntoSandbox } from "./stage-attachments";
 
 // Exercises the real staging path against the test DB: per-execution sandbox

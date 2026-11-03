@@ -1,6 +1,6 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 
 /**
  * Closed vocabulary of audit event names. Dotted form: `<resourceType>.<verb>`
@@ -42,6 +42,9 @@ export const AuditEventNameSchema = z.enum([
   "agentRun.canceled",
   "agentRun.updated",
   "agentRun.deleted",
+  "agentRun.bulk_canceled",
+  "agentRun.bulk_deleted",
+  "agentRun.bulk_files_deleted",
   "agentRun.reviewDecided",
   // No route emits these any more; kept so earlier records still parse.
   "agentRun.shared",

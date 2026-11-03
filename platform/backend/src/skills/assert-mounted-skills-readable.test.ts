@@ -1,3 +1,4 @@
+import config from "@/config";
 import {
   AgentModel,
   EnvironmentModel,
@@ -5,7 +6,10 @@ import {
   SkillSandboxReplayEventModel,
   SkillVersionModel,
 } from "@/models";
-import { expect, test } from "@/test";
+import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
+import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
+import { expect, test, vi } from "@/test";
+import { asSandboxId } from "@/types";
 import { assertMountedSkillsReadable } from "./assert-mounted-skills-readable";
 
 test("blocks replay after the mounted skill is removed from the agent policy", async ({
@@ -77,6 +81,35 @@ test("blocks replay after the mounted skill is removed from the agent policy", a
     reason:
       'the skill "mounted-skill" mounted in this sandbox is no longer enabled for this agent',
   });
+
+  // The real runtime service must recheck the policy through its port before
+  // any command reaches the external sandbox engine.
+  config.skillsSandbox.enabled = true;
+  const enabled = vi
+    .spyOn(sandboxRuntimeService, "isEnabled", "get")
+    .mockReturnValue(true);
+  const execute = vi
+    .spyOn(sandboxRuntimeService, "runCommand")
+    .mockRejectedValue(new Error("unexpected engine call"));
+  try {
+    await expect(
+      skillSandboxRuntimeService.runCommand({
+        sandboxId: asSandboxId(sandbox.id),
+        caller: {
+          userId: user.id,
+          organizationId: organization.id,
+          agentId: agent.id,
+        },
+        command: "echo should-not-run",
+      }),
+    ).rejects.toThrow(
+      'the skill "mounted-skill" mounted in this sandbox is no longer enabled for this agent',
+    );
+    expect(execute).not.toHaveBeenCalled();
+  } finally {
+    enabled.mockRestore();
+    execute.mockRestore();
+  }
 });
 
 test("blocks replay after the mounted skill leaves the agent environment", async ({

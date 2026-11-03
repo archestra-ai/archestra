@@ -32,7 +32,7 @@ import {
   type BedrockSigV4Credentials,
   encodeBedrockSigV4Marker,
 } from "@/clients/bedrock-credentials";
-import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import { getProviderConfiguredBaseUrl } from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";

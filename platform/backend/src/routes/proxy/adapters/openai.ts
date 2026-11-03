@@ -12,6 +12,7 @@ import type {
 import config from "@/config";
 import logger from "@/logging";
 import { metrics } from "@/observability";
+import { openAIUsageTokens } from "@/observability/metrics/llm-usage";
 import { priceOpenAiAudioChat } from "@/services/media-pricing";
 import {
   decodeOpenAiCodexCredential,
@@ -289,18 +290,19 @@ export class OpenAIEmbeddingStreamAdapter
 // =============================================================================
 
 // Exported for reuse by OpenAI-compatible providers (Mistral, etc.)
-export class OpenAIRequestAdapter
-  implements LLMRequestAdapter<OpenAiRequest, OpenAiMessages>
+export class OpenAIRequestAdapter<
+  TRequest extends Omit<OpenAiRequest, "response_format"> = OpenAiRequest,
+> implements LLMRequestAdapter<TRequest, OpenAiMessages>
 {
   readonly provider: SupportedProvider;
-  private request: OpenAiRequest;
+  private request: TRequest;
   private modifiedModel: string | null = null;
   private toolResultUpdates: Record<string, string> = {};
 
   // `provider` overrides which provider this adapter attributes to (logs,
   // metrics, interactions). OpenAI-compatible providers (DeepSeek, GitHub
   // Copilot, …) reuse this adapter via createOpenAiCompatibleAdapterFactory.
-  constructor(request: OpenAiRequest, provider: SupportedProvider = "openai") {
+  constructor(request: TRequest, provider: SupportedProvider = "openai") {
     this.request = request;
     this.provider = provider;
   }
@@ -380,7 +382,7 @@ export class OpenAIRequestAdapter
     return this.request.messages;
   }
 
-  getOriginalRequest(): OpenAiRequest {
+  getOriginalRequest(): TRequest {
     return this.request;
   }
 
@@ -518,7 +520,7 @@ export class OpenAIRequestAdapter
   // Build Modified Request
   // ---------------------------------------------------------------------------
 
-  toProviderRequest(): OpenAiRequest {
+  toProviderRequest(): TRequest {
     let messages = this.request.messages;
 
     if (Object.keys(this.toolResultUpdates).length > 0) {
@@ -950,7 +952,7 @@ export class OpenAIResponseAdapter
       };
     }
     const { input, output, cacheRead, cacheWrite, cacheWrite1h, reasoning } =
-      getUsageTokens(this.response.usage);
+      openAIUsageTokens(this.response.usage);
     return withAudioTokenCost(
       {
         inputTokens: input,
@@ -1163,7 +1165,7 @@ export class OpenAIStreamAdapter
     // when stream_options.include_usage is true
     if (chunk.usage) {
       this.upstreamUsage = chunk.usage;
-      const tokens = getUsageTokens(chunk.usage);
+      const tokens = openAIUsageTokens(chunk.usage);
       this.state.usage = withAudioTokenCost(
         {
           inputTokens: tokens.input,
@@ -1637,32 +1639,6 @@ function withContentPrefix(
 // =============================================================================
 // USAGE TOKEN HELPERS
 // =============================================================================
-
-export function getUsageTokens(usage: OpenAi.Types.Usage) {
-  // OpenAI reports cached tokens as a SUBSET already inside prompt_tokens, so
-  // subtract them to get the uncached input and avoid double-counting.
-  const cacheRead =
-    (usage.prompt_tokens_details as { cached_tokens?: number } | undefined)
-      ?.cached_tokens ?? 0;
-  const details = usage.prompt_tokens_details as
-    | { cache_write_tokens?: number; cache_write_1h_tokens?: number }
-    | undefined;
-  const cacheWrite = details?.cache_write_tokens ?? 0;
-  const reasoning =
-    (
-      usage.completion_tokens_details as
-        | { reasoning_tokens?: number }
-        | undefined
-    )?.reasoning_tokens ?? 0;
-  return {
-    input: Math.max(0, (usage.prompt_tokens ?? 0) - cacheRead - cacheWrite),
-    output: usage.completion_tokens ?? 0,
-    cacheRead,
-    cacheWrite,
-    cacheWrite1h: details?.cache_write_1h_tokens,
-    reasoning,
-  };
-}
 
 /**
  * An audio chat response (`gpt-audio`) counts its audio tokens inside the

@@ -35,7 +35,7 @@ import McpDeploymentLeaseModel, {
 } from "@/models/mcp-deployment-lease";
 import ServiceAccountModel from "@/models/service-account";
 import { reportAgentRuntimeSteer } from "@/observability/metrics/agent-runtime";
-import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
+import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends/types";
 import {
   agentRuntimeFailureReason,
   agentRuntimeTurnFailure,
@@ -96,6 +96,7 @@ import {
   parseMemoryEvents,
   READ_MEMORY_EVENTS_COMMAND,
   splitTurnPoll,
+  turnEndingKill,
 } from "./memory-kill";
 import {
   AGENT_RUNTIME_LEASE_SCOPE,
@@ -959,6 +960,7 @@ class AgentRuntimeManager {
     );
     const effectiveNetworkPolicy = await resolveEffectiveNetworkPolicy({
       organizationId: session.organizationId,
+      agentNetworkPolicy: agent.networkPolicy,
       environmentId: agent.environmentId,
       defaultNetworkPolicy: organization?.defaultNetworkPolicy,
     });
@@ -1002,6 +1004,55 @@ class AgentRuntimeManager {
    * `tmux_keys` types into the session, the only option for a CLI that owns its
    * own input loop.
    */
+  /**
+   * Re-apply the egress policy of every running workspace of one Agent after
+   * its own policy or environment changed. Suspended workspaces pick the new
+   * policy up when they resume, and every new turn refreshes it too, so this
+   * only closes the window until the next turn. Best-effort per workspace.
+   */
+  async refreshAgentWorkspacesEgress(params: {
+    agentId: string;
+    organizationId: string;
+  }): Promise<void> {
+    if (!this.isEnabled) return;
+    const workspaces = await AgentWorkspaceModel.listRunningForAgent(params);
+    if (workspaces.length === 0) return;
+    const agent = await AgentModel.findById(params.agentId);
+    if (!agent || agent.organizationId !== params.organizationId) return;
+    const organization = await OrganizationModel.getById(params.organizationId);
+    const effectiveNetworkPolicy = await resolveEffectiveNetworkPolicy({
+      organizationId: params.organizationId,
+      agentNetworkPolicy: agent.networkPolicy,
+      environmentId: agent.environmentId,
+      defaultNetworkPolicy: organization?.defaultNetworkPolicy,
+    });
+    const clients = this.requireClients();
+    for (const workspace of workspaces) {
+      try {
+        const sandbox = await readWorkspaceSandbox({
+          api: clients.customObjectsApi,
+          namespace: workspace.runtimeScope,
+          name: workspace.workloadName,
+        });
+        await this.refreshWorkspaceEgress({
+          sandbox,
+          spec: {
+            taskId: workspace.lastTaskId,
+            agentRuntimeId: workspace.agentId,
+            frozenName: workspace.workloadName,
+            runtimeScope: workspace.runtimeScope,
+            effectiveNetworkPolicy,
+          },
+        });
+      } catch (err) {
+        logger.warn(
+          { err, agentId: params.agentId, workspaceId: workspace.id },
+          "[AgentRuntime] failed to refresh workspace egress",
+        );
+      }
+    }
+  }
+
   async steer(params: {
     session: AgentRunRecord;
     steerMode: AgentRuntimeSteerMode;
@@ -1319,7 +1370,9 @@ class AgentRuntimeManager {
             }
             const turnFailure = agentRuntimeTurnFailure(result);
             const turnReason = agentRuntimeFailureReason(result);
-            const killed = memoryKillBetween(running.atStart, poll.memory);
+            const killed = turnEndingKill(
+              memoryKillBetween(running.atStart, poll.memory),
+            );
             if (!killed) {
               return {
                 outcome: "failed",
@@ -1373,7 +1426,9 @@ class AgentRuntimeManager {
           // read the counters.
           const killed =
             pod?.status?.phase === "Running" && running
-              ? memoryKillBetween(running.atStart, running.latest)
+              ? turnEndingKill(
+                  memoryKillBetween(running.atStart, running.latest),
+                )
               : null;
           const failure = agentRunFailure(
             podFailure && pod
@@ -1406,7 +1461,9 @@ class AgentRuntimeManager {
           ).catch(() => undefined);
           if (params.abortSignal?.aborted) break;
           const killed =
-            now === undefined ? null : memoryKillBetween(running.atStart, now);
+            now === undefined
+              ? null
+              : turnEndingKill(memoryKillBetween(running.atStart, now));
           if (killed) {
             // A container that hit its limit ran out of memory; a node that
             // did took the process with it, which says nothing about the
@@ -2005,6 +2062,7 @@ done`
         podName: running.podName,
         tier: running.tier,
         killed: kill.killed,
+        stopped: kill.stopped,
         atLimit: kill.atLimit,
         memoryLimitBytes: kill.events.limitBytes,
         memoryPeakBytes: kill.events.peakBytes,
@@ -2013,7 +2071,9 @@ done`
           tier: running.tier,
         }),
       },
-      "The kernel killed a process of an Agent Runtime run for memory",
+      kill.killed > 0
+        ? "The kernel killed a process of an Agent Runtime run for memory"
+        : "The memory warden stopped a command of an Agent Runtime run near its memory limit",
     );
   }
 

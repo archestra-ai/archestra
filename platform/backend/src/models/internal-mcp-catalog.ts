@@ -29,7 +29,7 @@ import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import {
   constructLegacyMcpDeploymentName,
   constructLegacyMultitenantMcpDeploymentName,
-} from "@/k8s/shared";
+} from "@/k8s/deployment-names";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import { readConfig } from "@/services/config-cache";

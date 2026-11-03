@@ -109,6 +109,19 @@ RUN uv venv --python /usr/bin/python3 /opt/agent-tools \
 
 ENV PNPM_HOME=/usr/local/share/pnpm
 ENV PATH=$PNPM_HOME/bin:$PNPM_HOME:$PATH
+# pnpm runs through corepack, so a repository that pins pnpm
+# (`packageManager`) gets that version in one Node process. A global pnpm of
+# another version starts the pinned one as a second process: about 0.11 GiB
+# of anonymous memory more per pnpm call, measured in an Agent Runtime, and a
+# check chain nests several. Repositories without a pin get 11.28.7.
+# COREPACK_HOME is shared and writable by the agent's user: a pinned version
+# is downloaded, signature-checked, on first use. Corepack never writes a pin
+# into a repository's package.json, and a newer version some repository pins
+# never becomes the default for the others.
+ENV COREPACK_HOME=/usr/local/share/corepack \
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+    COREPACK_ENABLE_AUTO_PIN=0 \
+    COREPACK_DEFAULT_TO_LATEST=0
 RUN corepack disable \
  && rm -rf /usr/local/lib/node_modules/corepack /usr/local/lib/node_modules/npm \
  && curl -fsSL https://registry.npmjs.org/npm/-/npm-11.21.1.tgz -o /tmp/npm.tgz \
@@ -120,9 +133,16 @@ RUN corepack disable \
  && rm -rf /usr/local/lib/node_modules/npm/node_modules/undici \
  && mkdir -p /usr/local/lib/node_modules/npm/node_modules/undici \
  && tar -xzf /tmp/undici.tgz --strip-components=1 -C /usr/local/lib/node_modules/npm/node_modules/undici \
- && rm /tmp/npm.tgz /tmp/undici.tgz \
- && npm install --global --ignore-scripts pnpm@11.28.7 \
- && node --version && npm --version && pnpm --version
+ && curl -fsSL https://registry.npmjs.org/corepack/-/corepack-0.36.0.tgz -o /tmp/corepack.tgz \
+ && echo '9128cfe26aee0c99f4fc68c15c6b8b12309a68be0de2c012cdfea2a463cb722f  /tmp/corepack.tgz' | sha256sum -c - \
+ && mkdir -p /usr/local/lib/node_modules/corepack \
+ && tar -xzf /tmp/corepack.tgz --strip-components=1 -C /usr/local/lib/node_modules/corepack \
+ && ln -sf ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack \
+ && rm /tmp/npm.tgz /tmp/undici.tgz /tmp/corepack.tgz \
+ && corepack enable --install-directory /usr/local/bin pnpm \
+ && corepack install --global pnpm@11.28.7 \
+ && chown -R 1000:1000 "$COREPACK_HOME" \
+ && node --version && npm --version && corepack --version && pnpm --version
 
 COPY docker_images/agent/bin /usr/local/bin
 # The maintained launchers append this description of the machine to the
@@ -133,6 +153,19 @@ COPY docker_images/agent/environment.md /etc/archestra/agent-environment.md
 # own test honest and gives anyone debugging inside a pod the same tool.
 COPY backend/src/static/workspace-files.py /usr/local/bin/archestra-workspace-files
 RUN chmod 0755 /usr/local/bin/archestra-*
+# The agent client's shell commands take the highest OOM score through the
+# BASH_ENV its launcher sets (archestra-command-oom-score.sh). Bash skips
+# BASH_ENV in two cases and reads this file instead: an interactive shell, and
+# a command line whose input is a socket while SHLVL is below 1, which is how
+# Claude Code and Kimi Code start their shell commands. Only a shell whose
+# BASH_ENV is that file runs it, so other shells in the pod are unaffected.
+RUN { printf '%s\n' \
+        '# Agent Runtime: a shell the agent client started takes the highest OOM score.' \
+        'case "${BASH_ENV:-}" in */archestra-command-oom-score.sh) . "${BASH_ENV}" ;; esac' \
+        ''; \
+      cat /etc/bash.bashrc; \
+    } > /tmp/bash.bashrc \
+ && mv /tmp/bash.bashrc /etc/bash.bashrc
 
 ENV HOME=/home/node
 RUN mkdir -p /home/node/workspace /var/run/archestra \
@@ -146,6 +179,7 @@ RUN --network=none \
  && python3 /tmp/agent-image-tests/interactive-resume.py \
  && python3 /tmp/agent-image-tests/tui-exec.py \
  && python3 /tmp/agent-image-tests/development-tools.py \
+ && python3 /tmp/agent-image-tests/memory-warden.py \
  && node /tmp/agent-image-tests/npm-http.cjs
 
 FROM agent-base AS agent-claude-code
@@ -168,7 +202,8 @@ RUN --network=none \
 
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
-    python3 /tmp/agent-image-tests/mcp-startup.py claude-code
+    python3 /tmp/agent-image-tests/mcp-startup.py claude-code \
+ && python3 /tmp/agent-image-tests/command-oom-score.py claude-code
 
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
@@ -187,7 +222,8 @@ RUN --network=none \
 
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
-    python3 /tmp/agent-image-tests/mcp-startup.py codex
+    python3 /tmp/agent-image-tests/mcp-startup.py codex \
+ && python3 /tmp/agent-image-tests/command-oom-score.py codex
 
 FROM agent-base AS agent-opencode
 USER root
@@ -202,7 +238,8 @@ USER 1000:1000
 
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
-    python3 /tmp/agent-image-tests/mcp-startup.py opencode
+    python3 /tmp/agent-image-tests/mcp-startup.py opencode \
+ && python3 /tmp/agent-image-tests/command-oom-score.py opencode
 
 FROM agent-base AS agent-hermes
 ARG TARGETARCH
@@ -216,8 +253,8 @@ USER root
 # required MCP startup guard and refreshes runtime bindings on session resume.
 COPY --from=uv-hermes /uv /usr/local/bin/uv-hermes
 RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
-    hermes_version=0.22.2 \
- && hermes_commit=d923a5eb487a17c0a68801bba9ef0f56c81040a8 \
+    hermes_version=0.22.5 \
+ && hermes_commit=bf0203a794a07aac3ff764972ab9087baa4e4f4e \
  && git clone --quiet --depth 1 --branch "v${hermes_version}" https://github.com/NousResearch/hermes-agent /opt/hermes \
  && test "$(git -C /opt/hermes rev-parse HEAD)" = "${hermes_commit}" \
  && case "${TARGETARCH}" in amd64) python_target=linux-x64 ;; arm64) python_target=linux-arm64 ;; *) exit 1 ;; esac \
@@ -266,7 +303,8 @@ RUN --network=none \
 
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
-    python3 /tmp/agent-image-tests/mcp-startup.py hermes
+    python3 /tmp/agent-image-tests/mcp-startup.py hermes \
+ && python3 /tmp/agent-image-tests/command-oom-score.py hermes
 
 FROM agent-base AS agent-openclaw
 USER root
@@ -292,7 +330,8 @@ RUN --network=none \
 USER 1000:1000
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
-    python3 /tmp/agent-image-tests/mcp-startup.py openclaw
+    python3 /tmp/agent-image-tests/mcp-startup.py openclaw \
+ && python3 /tmp/agent-image-tests/command-oom-score.py openclaw
 
 # The npm package's postinstall only unpacks the platform binary into
 # ~/.grok/bin, under the persisted HOME, and writes ~/.grok/config.toml. Unpack
@@ -324,7 +363,8 @@ USER 1000:1000
 
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
-    python3 /tmp/agent-image-tests/mcp-startup.py grok
+    python3 /tmp/agent-image-tests/mcp-startup.py grok \
+ && python3 /tmp/agent-image-tests/command-oom-score.py grok
 
 # The npm package's postinstall only renames a previous Python kimi shim on
 # global installs. Install the checksummed tarball without lifecycle scripts.
@@ -354,7 +394,8 @@ USER 1000:1000
 
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
-    python3 /tmp/agent-image-tests/mcp-startup.py kimi
+    python3 /tmp/agent-image-tests/mcp-startup.py kimi \
+ && python3 /tmp/agent-image-tests/command-oom-score.py kimi
 
 # Redistribute the unmodified native binary and its license/notices together.
 # No package lifecycle scripts or automatic updates run in this image.
@@ -379,4 +420,5 @@ RUN case "$TARGETARCH" in \
 USER 1000:1000
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
-    python3 /tmp/agent-image-tests/copilot.py
+    python3 /tmp/agent-image-tests/copilot.py \
+ && python3 /tmp/agent-image-tests/command-oom-score.py copilot

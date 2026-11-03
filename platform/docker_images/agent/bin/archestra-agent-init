@@ -78,3 +78,11 @@ if [ -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ] && command -v gh >/dev/null 2>&1; the
   # repository's commits to the connected account.
   "$(dirname "$0")/archestra-github-identity"
 fi
+
+# Keep the container under its memory limit: past it the kernel stops every
+# process in the container, the agent's session included. The warden stops the
+# agent's largest command first (one warden per container; it exits without a
+# limit).
+if command -v archestra-memory-warden >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
+  setsid archestra-memory-warden >/dev/null 2>&1 </dev/null &
+fi

@@ -10,7 +10,7 @@ import {
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
-import { betterAuth } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
 import db, { schema } from "@/database";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";

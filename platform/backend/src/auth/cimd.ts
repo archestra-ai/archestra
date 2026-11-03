@@ -4,7 +4,7 @@ import ipaddr from "ipaddr.js";
 import type { Agent as UndiciAgent } from "undici";
 import { LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
-import { OAuthClientModel } from "@/models";
+import OAuthClientModel from "@/models/oauth-client";
 import type { CimdMetadata } from "@/types";
 import { createPinnedOutboundDispatcher } from "@/utils/outbound-url";
 

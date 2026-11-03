@@ -45,10 +45,7 @@ import {
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { secretManager } from "@/secrets-manager";
-import {
-  filterMcpServersAssignableToTarget,
-  isPredefinedAdmin,
-} from "@/services/agent-tool-assignment";
+import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 import { resolveMcpCredentialValues } from "@/services/credentials";
 import { assertValuesMatchEnvironmentRegex } from "@/services/environments/environment";
 import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-providers/access-token-refresh";
@@ -74,6 +71,7 @@ import {
   autoReinstallServer,
   reloadToolsForServer,
 } from "@/services/mcp-reinstall";
+import { filterMcpServersAssignableToTarget } from "@/services/mcp-server-assignability";
 import { decorateMcpServerListEntries } from "@/services/mcp-server-list";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { refreshMcpSkillMetadata } from "@/skills/mcp-external";

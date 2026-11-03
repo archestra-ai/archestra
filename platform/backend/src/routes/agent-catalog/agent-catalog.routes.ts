@@ -1,4 +1,5 @@
 import {
+  AGENT_CATALOG_IDS,
   calculatePaginationMeta,
   PaginationQuerySchema,
   parseLabelsParam,
@@ -108,6 +109,9 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .optional(),
             labels: z.string().optional(),
             status: z.enum(["active", "deleted"]).optional(),
+            runtime: z
+              .enum(["chat", "custom", ...AGENT_CATALOG_IDS])
+              .optional(),
             providerApiKeyId: z
               .union([z.string().uuid(), z.literal("organization-default")])
               .optional(),
@@ -169,6 +173,7 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         labels: parseLabelsParam(query.labels),
         status: query.status,
         providerApiKeyId: query.providerApiKeyId,
+        runtime: query.runtime,
         pinned: query.pinned,
       };
       const sorting = {

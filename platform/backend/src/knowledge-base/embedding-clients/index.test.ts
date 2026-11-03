@@ -24,6 +24,8 @@ import {
 const mockIsVertexAiEnabled = vi.hoisted(() => vi.fn(() => false));
 vi.mock("@/clients/gemini-client", () => ({
   createGoogleGenAIClient: vi.fn(),
+}));
+vi.mock("@/clients/gemini-vertex-ai", () => ({
   isVertexAiEnabled: mockIsVertexAiEnabled,
 }));
 

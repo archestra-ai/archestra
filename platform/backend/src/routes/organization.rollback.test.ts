@@ -159,7 +159,7 @@ describe("organization routes", () => {
   test("re-brands the built-in skill rows when appName changes", async () => {
     vi.spyOn(ToolModel, "syncArchestraBuiltInCatalog").mockResolvedValue([]);
     const { syncBuiltInSkillsForOrganization } = await import(
-      "@/database/seed"
+      "@/services/seed"
     );
     const { SkillModel } = await import("@/models");
     const { getEnabledBuiltInSkills, builtInSkillSourceRef } = await import(

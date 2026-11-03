@@ -1,3 +1,5 @@
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -16,6 +18,11 @@ import {
   predefinedPermissionsMap,
 } from "@archestra/shared/access-control";
 import logger from "@/logging";
+import { assertPortsBound } from "@/models/ports";
+
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
+assertPortsBound();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

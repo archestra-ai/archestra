@@ -83,8 +83,10 @@ What to know:
 Select the agent in Chat or in a [Project](/docs/chat/projects) and send a task. This starts a **run**: a container that works on your task. Follow-ups continue the same run. The live terminal opens and shows startup progress. Attach files before you send, and the agent reads them in its container.
 
 - **Leave and come back:** the run keeps working. Reopen it from the sidebar and send a follow-up.
-- **Past runs:** the agent's **Runs** tab lists live and finished runs. Select the **Open full view** expand icon for the larger terminal and run controls. For a retained run you started, select **Resume** to reopen it without sending a message.
-- **Stop a run:** the person who started it can select **Stop** in Chat or on the agent's **Runs** tab. Confirm with **Stop run**. Saved files and history remain available.
+- **Past runs:** the agent's **Runs** tab lists live and finished runs. Select a run to open it, then select the **Open full view** expand icon for the larger terminal and run controls. For a retained run you started, select **Resume** to reopen it without sending a message.
+- **Stop a run:** the person who started it selects **Stop** in Chat or in the open run, or **Stop run** on its row in the **Runs** tab. Its saved files and history stay, so you can resume it later.
+- **Delete a run:** after a run ends, the person who started it selects **Delete run** on its row, or **More run actions → Delete run** in the open run. Deleting a run permanently removes its history, output, and saved files.
+- **Several runs at once:** on the **Runs** tab, select the runs you started. Then choose **Stop**, **Delete saved files**, or **Delete**. **Stop** acts on live runs. The other two act on finished runs. **Delete saved files** frees the storage of those runs and keeps their history.
 - **Copy text:** select **Select text** to copy text with the browser. Select **Type** to use the running app's controls again.
 - **Follow-ups** reach the agent between its turns. To type them into its terminal instead, set **Steering** to **Terminal input** on the **Agent Runtime** tab.
 - **Open a web app:** for a run you started, select **Open full view**, then **More run actions → View connection details** for the agent's port forwarding command.
@@ -123,7 +125,7 @@ Inside a container, `ARCHESTRA_AGENT_RUNTIME_TIERS` lists the allowed tiers with
 
 ## Network Access
 
-Unless an administrator sets a policy, a run can reach the public internet. To limit it, set a [network egress policy](/docs/admin/environments#network-egress-policies) on the agent's [environment](/docs/admin/environments).
+Unless an administrator sets a policy, a run can reach the public internet. To limit it, set a [network egress policy](/docs/admin/environments#network-egress-policies) on the agent's [environment](/docs/admin/environments), or [give the agent its own policy](/docs/admin/environments#give-one-agent-its-own-policy).
 
 What to know:
 

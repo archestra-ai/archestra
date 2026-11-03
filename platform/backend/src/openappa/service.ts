@@ -67,10 +67,13 @@ import {
   isGuardrailsV2Active,
 } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
+import type { OpenAppaSession } from "@/types/openappa-session";
 import { policyView } from "./result-view";
+import { toolCallArgumentsText } from "./tool-call-arguments";
 import type { DeclaredToolSpelling } from "./wire";
 
 export { APPA_PARENT_HEADER, APPA_SESSION_HEADER };
+export type { OpenAppaSession } from "@/types/openappa-session";
 export const APPA_CHAT_SOURCES = [
   "chat",
   "chat:tool_call_repair",
@@ -82,18 +85,6 @@ const ATTEST_SCHEMA_SANITIZER = "attest-schema";
 type ExecutionOutcome = "success" | "failure" | "unknown";
 type OutputSource = "tool" | "runtime";
 type RuntimeReason = string;
-export type OpenAppaSession = {
-  organization_id: string;
-  caller_id?: string;
-  session_id: string;
-  parent_id?: string;
-  /**
-   * The session this one forks, on a new session whose history the proxy
-   * traced to it: its first event opens a root of its own seeded from that
-   * session's labels.
-   */
-  fork_of?: string;
-};
 
 const ResultDecisionFields = {
   approved_output: z.string().optional(),
@@ -1297,7 +1288,10 @@ export async function evaluateToolCalls(
       throw new ApiError(400, "OpenAPPA requires distinct tool-call IDs");
     }
     ids.add(call.id);
-    if (typeof call.arguments === "string" && !isJson(call.arguments)) {
+    if (
+      typeof call.arguments === "string" &&
+      !isJson(toolCallArgumentsText(call.arguments))
+    ) {
       malformedIds.add(call.id);
     }
   }

@@ -1,6 +1,6 @@
 {
   "name": "@frontend",
-  "version": "1.5.0-rc.19",
+  "version": "1.5.0-rc.20",
   "private": true,
   "type": "module",
   "scripts": {
@@ -22,7 +22,7 @@
     "test:integration:report": "playwright show-report",
     "check:ci": "concurrently --kill-others-on-fail --group --names type-check,test,knip,biome 'pnpm type-check' 'pnpm test' 'pnpm knip' 'biome ci'",
     "check:commit": "concurrently --kill-others-on-fail --group --names type-check,knip,biome 'pnpm type-check' 'pnpm knip' 'biome ci'",
-    "knip": "knip"
+    "knip": "tsx ../scripts/heavy-lane.ts --label \"knip (frontend)\" -- knip"
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.195",
@@ -131,7 +131,7 @@
     "@types/ua-parser-js": "^0.7.39",
     "highlight.js": "^11.11.1",
     "jsdom": "^29.0.0",
-    "knip": "^5.85.0",
+    "knip": "^6.43.0",
     "msw": "^2.14.6",
     "semver": "^7.7.4",
     "tailwindcss": "^4",

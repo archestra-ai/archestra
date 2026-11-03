@@ -67,10 +67,10 @@ import {
 import { remedyCallNeedsHumanReview } from "@/openappa/a2a-hitl-review";
 import type { SubagentBinding } from "@/openappa/subagent-binding";
 import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
-import type { A2AOAuthExecution } from "@/routes/mcp-gateway/utils";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import type { Tool as CatalogTool } from "@/types";
 import { agentOwner } from "@/types";
+import type { A2AOAuthExecution } from "@/types/a2a-actor";
 
 /** Gateway token selected for the current call (see selectMCPGatewayToken). */
 export interface McpGatewayToken {

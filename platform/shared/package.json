@@ -1,6 +1,6 @@
 {
   "name": "@archestra/shared",
-  "version": "1.5.0-rc.19",
+  "version": "1.5.0-rc.20",
   "description": "",
   "type": "module",
   "sideEffects": false,
@@ -51,7 +51,7 @@
     "codegen": "pnpm codegen:api-client && pnpm codegen:theme-css",
     "check:ci": "concurrently --kill-others-on-fail --group --names type-check,test,knip,biome 'pnpm type-check' 'pnpm test' 'pnpm knip' 'biome ci'",
     "check:commit": "concurrently --kill-others-on-fail --group --names type-check,knip,biome 'pnpm type-check' 'pnpm knip' 'biome ci'",
-    "knip": "knip"
+    "knip": "tsx ../scripts/heavy-lane.ts --label \"knip (shared)\" -- knip"
   },
   "keywords": [],
   "author": "",
@@ -64,7 +64,7 @@
   "devDependencies": {
     "@hey-api/openapi-ts": "^0.97.3",
     "@types/node": "^25",
-    "knip": "^5.85.0",
+    "knip": "^6.43.0",
     "typescript": "catalog:",
     "typescript-7": "catalog:",
     "vitest": "^4.1.11"

@@ -1,2 +1,0 @@
-ALTER TABLE "device_mcp_connection" ADD COLUMN "local_device_id" uuid;--> statement-breakpoint
-ALTER TABLE "device_mcp_connection" ADD CONSTRAINT "device_mcp_connection_local_device_id_local_device_id_fk" FOREIGN KEY ("local_device_id") REFERENCES "public"."local_device"("id") ON DELETE cascade ON UPDATE no action NOT VALID;

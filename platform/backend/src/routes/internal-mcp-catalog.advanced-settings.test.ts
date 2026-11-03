@@ -16,8 +16,10 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { constructResponseSchema, type User } from "@/types";
 
 vi.mock("@/auth");
+vi.mock("@/auth/better-auth");
 
-import { betterAuth, hasPermission } from "@/auth";
+import { hasPermission } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import { authPlugin } from "@/auth/fastify-plugin/plugin";
 import { hasPermission as checkPermissions } from "@/auth/utils";
 

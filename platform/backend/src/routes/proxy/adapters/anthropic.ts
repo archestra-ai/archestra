@@ -1336,7 +1336,7 @@ class AnthropicStreamAdapter
    * The cache counts belong here for the same reason they belong on the wire:
    * without them the stored body reports a prompt of only the tokens that missed
    * the cache, contradicting the row's own `cache_read_tokens` column and making
-   * any usage re-derived from the stored response (`getUsageTokens`) silently
+   * any usage re-derived from the stored response (`anthropicUsageTokens`) silently
    * cache-free.
    */
   private responseUsage(): AnthropicResponse["usage"] {
@@ -1407,20 +1407,6 @@ class AnthropicStreamAdapter
 // =============================================================================
 // ADAPTER FACTORY
 // =============================================================================
-
-// =============================================================================
-// USAGE TOKEN HELPERS
-// =============================================================================
-
-export function getUsageTokens(usage: Anthropic.Types.Usage) {
-  return {
-    input: usage.input_tokens,
-    output: usage.output_tokens,
-    cacheRead: usage.cache_read_input_tokens ?? 0,
-    cacheWrite: usage.cache_creation_input_tokens ?? 0,
-    cacheWrite1h: usage.cache_creation?.ephemeral_1h_input_tokens ?? 0,
-  };
-}
 
 // Same value as the SDK default, but passing it explicitly opts out of the
 // SDK's client-side guard that throws "Streaming is required for operations

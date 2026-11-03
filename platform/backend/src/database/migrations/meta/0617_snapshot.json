@@ -1,5 +1,5 @@
 {
-  "id": "22bd6c18-6632-4571-abb1-f3fbcce4be27",
+  "id": "6252ae1e-403b-43fc-a543-ee5055d143e3",
   "prevId": "b43c20bd-76e8-43da-a177-87485be2f6d7",
   "version": "7",
   "dialect": "postgresql",
@@ -4682,6 +4682,12 @@
         "environment_id": {
           "name": "environment_id",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "network_policy": {
+          "name": "network_policy",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -9765,312 +9771,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.device_mcp_command": {
-      "name": "device_mcp_command",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "device_id": {
-          "name": "device_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "session_id": {
-          "name": "session_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'queued'"
-        },
-        "tool_name": {
-          "name": "tool_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "arguments": {
-          "name": "arguments",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "result": {
-          "name": "result",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "result_digest": {
-          "name": "result_digest",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "device_mcp_command_poll_idx": {
-          "name": "device_mcp_command_poll_idx",
-          "columns": [
-            {
-              "expression": "device_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "device_mcp_command_device_id_device_mcp_connection_id_fk": {
-          "name": "device_mcp_command_device_id_device_mcp_connection_id_fk",
-          "tableFrom": "device_mcp_command",
-          "tableTo": "device_mcp_connection",
-          "columnsFrom": [
-            "device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.device_mcp_connection": {
-      "name": "device_mcp_connection",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "catalog_id": {
-          "name": "catalog_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "config_digest": {
-          "name": "config_digest",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "config_version": {
-          "name": "config_version",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "pairing_hash": {
-          "name": "pairing_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "pairing_expires_at": {
-          "name": "pairing_expires_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "token_hash": {
-          "name": "token_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "token_expires_at": {
-          "name": "token_expires_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "session_id": {
-          "name": "session_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_seen_at": {
-          "name": "last_seen_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "revoked_at": {
-          "name": "revoked_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "device_mcp_owner_idx": {
-          "name": "device_mcp_owner_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "catalog_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "device_mcp_connection_organization_id_organization_id_fk": {
-          "name": "device_mcp_connection_organization_id_organization_id_fk",
-          "tableFrom": "device_mcp_connection",
-          "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "device_mcp_connection_user_id_user_id_fk": {
-          "name": "device_mcp_connection_user_id_user_id_fk",
-          "tableFrom": "device_mcp_connection",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "device_mcp_connection_catalog_id_internal_mcp_catalog_id_fk": {
-          "name": "device_mcp_connection_catalog_id_internal_mcp_catalog_id_fk",
-          "tableFrom": "device_mcp_connection",
-          "tableTo": "internal_mcp_catalog",
-          "columnsFrom": [
-            "catalog_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "device_mcp_connection_pairing_hash_unique": {
-          "name": "device_mcp_connection_pairing_hash_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "pairing_hash"
-          ]
-        },
-        "device_mcp_connection_token_hash_unique": {
-          "name": "device_mcp_connection_token_hash_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "token_hash"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.encryption_key_canaries": {
       "name": "encryption_key_canaries",
       "schema": "",
@@ -12837,12 +12537,6 @@
         },
         "local_config": {
           "name": "local_config",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "device_config": {
-          "name": "device_config",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
@@ -21539,13 +21233,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
-        },
-        "device_mcp_enabled": {
-          "name": "device_mcp_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "default_personal_agent_access_all_tools": {
           "name": "default_personal_agent_access_all_tools",

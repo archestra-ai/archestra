@@ -1113,6 +1113,23 @@ class InteractionModel {
     };
   }
 
+  /** Visibility checks for metadata endpoints must not decrypt or reconstruct conversation payloads. */
+  static async findAccessMetadata(params: {
+    id: string;
+    organizationId: string;
+  }) {
+    const [row] = await db
+      .select({ userId: schema.interactionsTable.userId })
+      .from(schema.interactionsTable)
+      .where(
+        and(
+          eq(schema.interactionsTable.id, params.id),
+          interactionBelongsToOrganization(params.organizationId),
+        ),
+      );
+    return row ?? null;
+  }
+
   static async findById(
     idOrScope: string | { id: string; organizationId: string },
     userId?: string,
@@ -3335,28 +3352,43 @@ class InteractionModel {
   }
 
   /**
-   * Number of distinct users with at least one attributed interaction since
-   * `since`. Backs the `llm_active_users` gauge.
+   * Distinct users with an attributed interaction at or after each cutoff.
+   * Computes every rolling window of the `llm_active_users` gauge in one scan.
    *
    * Deliberately an aggregate: per-user identity is not exported to Prometheus
    * (a user_id label would multiply every LLM metric's series count by the size
    * of the org — the same reason external_agent_id is not a label). Per-user
    * detail belongs to the statistics API, which reads this table directly.
    */
-  static async countDistinctActiveUsersSince(since: Date): Promise<number> {
-    const [row] = await db
+  static async countDistinctActiveUsersForWindows(
+    since: Date[],
+  ): Promise<number[]> {
+    if (!since.length) return [];
+    const earliest = new Date(Math.min(...since.map((date) => date.getTime())));
+    // Group once over the widest window. Each user contributes exactly once
+    // to every window containing their most recent interaction.
+    const activeUsers = db
       .select({
-        activeUsers: sql<number>`CAST(COUNT(DISTINCT ${schema.interactionsTable.userId}) AS INTEGER)`,
+        userId: schema.interactionsTable.userId,
+        lastSeen: max(schema.interactionsTable.createdAt).as("last_seen"),
       })
       .from(schema.interactionsTable)
       .where(
         and(
-          gte(schema.interactionsTable.createdAt, since),
+          gte(schema.interactionsTable.createdAt, earliest),
           isNotNull(schema.interactionsTable.userId),
         ),
-      );
-
-    return Number(row?.activeUsers) || 0;
+      )
+      .groupBy(schema.interactionsTable.userId)
+      .as("active_users");
+    const counts = Object.fromEntries(
+      since.map((date, index) => [
+        `window${index}`,
+        sql<number>`count(*) FILTER (WHERE ${activeUsers.lastSeen} >= ${date})`,
+      ]),
+    );
+    const [row] = await db.select(counts).from(activeUsers);
+    return since.map((_, index) => Number(row?.[`window${index}`]) || 0);
   }
 
   /**

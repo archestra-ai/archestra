@@ -285,6 +285,17 @@ type NativeQuestionClaim = {
   digest?: string;
 };
 
+type OrdinaryQuestionSource = {
+  kind: "gateway" | "native";
+  name: string;
+  namespace?: string;
+};
+
+type StoredOrdinaryQuestion = AskUserArguments & {
+  /** Additive so older replicas can still decode the cached question. */
+  archestraQuestionSource?: OrdinaryQuestionSource;
+};
+
 type IssuedNativeQuestion = {
   askedQuestion?: string;
   id: string;
@@ -410,10 +421,59 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         ) !== "made",
     );
     const childResultUpdates: Record<string, string> = Object.create(null);
+    const ordinaryResultUpdates: Record<string, string> = Object.create(null);
+    const ordinary = binding.adapter?.nativeQuestion?.ordinaryResultFromAskUser;
+    if (ordinary) {
+      const questions = await cacheManager.getMany<StoredOrdinaryQuestion>(
+        toolResults
+          .filter(
+            (answer) =>
+              releasesUserQuestion(binding, answer) &&
+              nativeQuestionName(binding, answer.name),
+          )
+          .flatMap((answer) => {
+            const scope = { session: binding.session, id: answer.id };
+            return [
+              ordinaryQuestionPresentationCacheKey(scope),
+              ordinaryQuestionCacheKey(scope),
+            ];
+          }),
+      );
+      for (const answer of toolResults) {
+        if (
+          !releasesUserQuestion(binding, answer) ||
+          !nativeQuestionName(binding, answer.name)
+        )
+          continue;
+        const scope = { session: binding.session, id: answer.id };
+        const stored =
+          questions.get(ordinaryQuestionPresentationCacheKey(scope)) ??
+          questions.get(ordinaryQuestionCacheKey(scope));
+        if (stored) {
+          const texts = outputTexts(answer.content);
+          const content = ordinary(
+            {
+              content:
+                texts.length > 0
+                  ? texts.join("\n")
+                  : JSON.stringify(answer.content ?? null),
+              isError: answer.isError,
+            },
+            stored,
+          );
+          ordinaryResultUpdates[answer.id] = ordinaryQuestionPresentation(
+            content,
+            stored.archestraQuestionSource,
+            binding.adapter?.nativeQuestion?.toolName,
+          );
+        }
+      }
+    }
     const results = toolResults.map((result) => {
-      const content = binding.adapter?.normalizeChildLaunchResult?.(result);
+      const launch = binding.adapter?.normalizeChildLaunchResult?.(result);
+      if (launch !== undefined) childResultUpdates[result.id] = launch;
+      const content = launch ?? ordinaryResultUpdates[result.id];
       if (content === undefined) return result;
-      childResultUpdates[result.id] = content;
       return { ...result, content };
     });
     // A launch acknowledgment answers a spawn whose child runs on after it.
@@ -778,6 +838,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       ),
     );
     const toolResultUpdates = {
+      ...ordinaryResultUpdates,
       ...childResultUpdates,
       ...Object.fromEntries(
         Object.entries(result.toolResultUpdates).map(([id, result]) => {
@@ -867,9 +928,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         });
       }
       const askUser = binding.request.tools?.askUser;
-      // Name the native question tool only when asNativeQuestion would send
-      // ask_user to it. Otherwise the model calls a tool that cannot return
-      // the user's answer, and then asks again in prose.
+      // Name the native question tool only when the client can show it.
+      // Ordinary gateway questions can keep their chosen transport while
+      // server-held reviews use the bound native card.
       const nativeQuestion =
         binding.adapter?.nativeQuestion &&
         binding.adapter.nativeQuestion.isAvailable?.(
@@ -887,6 +948,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           guidance: buildElicitationMandateInstruction({
             askUserToolName: askUserTool,
             nativeQuestionToolName: nativeQuestion,
+            nativeQuestionMaxOptions:
+              binding.adapter?.nativeQuestion?.maxOptions,
+            gatewayQuestionMaxOptions:
+              binding.adapter?.nativeQuestion?.maxConvertedOptions,
+            nativeQuestionSupportsMultiple:
+              binding.adapter?.nativeQuestion?.supportsMultiple,
+            gatewayQuestionUsesNativeForm:
+              binding.adapter?.nativeQuestion?.requiresNativeForm,
           }),
           onContinue: binding.threadContinue ? "skip" : undefined,
         });
@@ -1201,7 +1270,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // the client will run.
       const nativeQuestion = askedInForm
         ? prepared
-        : this.asNativeQuestion(binding, prepared, offerIds.length > 0);
+        : await this.asNativeQuestion(binding, prepared, offerIds.length > 0);
       changed ||= nativeQuestion !== prepared;
       prepared = nativeQuestion;
       const issued =
@@ -2172,55 +2241,85 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   }
 
   /**
-   * Converts an ask_user call to the client's native question tool when the
-   * client declares that tool. Preserves the original tool call ID. Leaves the
-   * call unchanged when the request has no native question declaration, so the
+   * Converts reviews to the client's declared native question tool.
+   * Ordinary questions use it only when the client has no MCP form.
+   * Preserves the original tool call ID. With no native declaration, the
    * gateway can use MCP elicitation or fail closed without a deadlock.
    */
-  private asNativeQuestion(
+  private async asNativeQuestion(
     binding: AppaPluginBinding,
     call: LlmProxyToolCallsContext["toolCalls"][number],
     /** The call carries a server-held review, not arguments the model wrote. */
     review: boolean,
-  ): LlmProxyToolCallsContext["toolCalls"][number] {
+  ): Promise<LlmProxyToolCallsContext["toolCalls"][number]> {
     const native = binding.adapter?.nativeQuestion;
+    const direct =
+      !review &&
+      native?.fromNativeQuestion &&
+      nativeQuestionName(binding, call.name) &&
+      releasesUserQuestion(binding, call)
+        ? native.fromNativeQuestion(argumentRecordOf(call.arguments))
+        : undefined;
     if (
+      (!review && native?.requiresNativeForm !== true) ||
       !native?.fromAskUser ||
-      !isSpecialToolMember(binding, call, "askUser") ||
+      (!direct && !isSpecialToolMember(binding, call, "askUser")) ||
       native.isAvailable?.(binding.requestHeaders, binding.requestBody) ===
         false ||
       !declaresNativeQuestion(binding, native.toolName) ||
-      archestraMcpBranding.getToolShortName(
-        this.canonicalize(binding, call),
-      ) !== TOOL_ASK_USER_SHORT_NAME
+      (!direct &&
+        archestraMcpBranding.getToolShortName(
+          this.canonicalize(binding, call),
+        ) !== TOOL_ASK_USER_SHORT_NAME)
     ) {
       return call;
     }
-    const parsed = parseAskUserArguments(call.arguments);
+    const parsed = direct ?? parseAskUserArguments(call.arguments);
     if (!parsed) return call;
     if (parsed.allowMultiple && native.supportsMultiple === false) return call;
-    // A preview shows only a call this server holds. Text a model put in
-    // these fields of its own question could pass for a review's call.
-    const {
-      callPreview: _callPreview,
-      shortQuestion: _shortQuestion,
-      ...asked
-    } = parsed;
-    const args = review
-      ? parsed
-      : {
-          ...asked,
-          options: asked.options.map(
-            ({ preview: _preview, ...option }) => option,
-          ),
-        };
+    const limit = review
+      ? native.maxOptions
+      : (native.maxConvertedOptions ?? native.maxOptions);
+    if (limit !== undefined && parsed.options.length > limit) return call;
+    const ordinaryArgs = {
+      question: parsed.question,
+      header: parsed.header,
+      allowMultiple: parsed.allowMultiple,
+      options: parsed.options.map(({ label, description }) => ({
+        label,
+        description,
+      })),
+    };
+    if (!review && native.ordinaryResultFromAskUser) {
+      // Keep the legacy grouped format readable across replicas. Older code
+      // must not see single-card entries: its decoder drops the fourth choice.
+      const key =
+        native.maxOptions !== undefined &&
+        parsed.options.length > native.maxOptions
+          ? ordinaryQuestionCacheKey
+          : ordinaryQuestionPresentationCacheKey;
+      await cacheManager.set(
+        key({ session: binding.session, id: call.id }),
+        {
+          ...ordinaryArgs,
+          archestraQuestionSource: {
+            kind: direct ? "native" : "gateway",
+            name: call.name,
+            ...(call.namespace ? { namespace: call.namespace } : {}),
+          },
+        } satisfies StoredOrdinaryQuestion,
+        TimeInMs.Day,
+      );
+    }
     return {
       id: call.id,
       name: native.toolName,
       // An explicit empty namespace tells Responses rewrites not to inherit
       // the gateway namespace from the ask_user call this local tool replaces.
       namespace: "",
-      arguments: JSON.stringify(native.fromAskUser(args)),
+      arguments: JSON.stringify(
+        native.fromAskUser(review ? parsed : ordinaryArgs),
+      ),
     };
   }
 
@@ -2967,6 +3066,12 @@ async function approveChildReturnCarriers(params: {
     completion: AppaChildReturnCompletion;
     record: AppaChildReturnRecord & { rank: number };
   }> = [];
+  // Copilot re-reads the same finished turns with a new read_agent call.
+  // Reuse a match only for that same child/turn in a different envelope,
+  // with identical bytes and lineage. No client coordinate authorizes a
+  // crossing: its first occurrence must still match the retained records
+  // uniquely, and distinct children/turns still consume distinct records.
+  const replays = new Map<string, (typeof matched)[number]>();
   for (const completion of completions) {
     // Display-only echoes never consume a child's crossing.
     if (completion.assistantOrigin) continue;
@@ -2988,6 +3093,32 @@ async function approveChildReturnCarriers(params: {
           directSpawnResults.has(withoutTrajectoryStamp(completion.envelopeId))
         ? withoutTrajectoryStamp(completion.envelopeId)
         : undefined;
+    const replayKey = completion.replayIdentity
+      ? JSON.stringify([
+          completion.replayIdentity.childId,
+          completion.replayIdentity.turn,
+        ])
+      : undefined;
+    const replay = replayKey ? replays.get(replayKey) : undefined;
+    if (replay) {
+      if (
+        completion.value !== replay.completion.value ||
+        completion.childNativeId !== replay.completion.childNativeId ||
+        completion.spawnCallId !== replay.completion.spawnCallId ||
+        (completion.envelopeId !== undefined &&
+          replay.completion.envelopeId !== undefined &&
+          withoutTrajectoryStamp(completion.envelopeId) ===
+            withoutTrajectoryStamp(replay.completion.envelopeId))
+      ) {
+        throw childReturnRefusal({
+          ...unrecorded,
+          callId: completion.envelopeId,
+          childNativeId: completion.childNativeId,
+        });
+      }
+      matched.push({ completion, record: replay.record });
+      continue;
+    }
     const candidates = available.flatMap((record, index) =>
       record.value === completion.value ? [{ record, index }] : [],
     );
@@ -3059,7 +3190,9 @@ async function approveChildReturnCarriers(params: {
     }
     const hit = eligible[0].index;
     const [record] = available.splice(hit, 1);
-    matched.push({ completion, record });
+    const match = { completion, record };
+    matched.push(match);
+    if (replayKey) replays.set(replayKey, match);
   }
   // The newest return each child carries into this request, by spawn call.
   const arrived = new Map<
@@ -3216,6 +3349,39 @@ async function approveChildReturnCarriers(params: {
       verified.some((record) => withheldChildren.has(record.childSessionId))
     ) {
       updates[result.id] = LATE_BACKGROUND_RETURN;
+      continue;
+    }
+    // Copilot reports several turns of one child, whose native id is absent
+    // from the retained crossings. A status object keyed by that absent id
+    // would overwrite earlier turns. Rebuild the report from verified bytes
+    // and bounded turn coordinates, without the client's unsigned header.
+    const reportTurns = [
+      ...matched
+        .filter(
+          ({ completion }) =>
+            completion.envelopeId !== undefined &&
+            withoutTrajectoryStamp(completion.envelopeId) === envelopeId,
+        )
+        .map(({ completion, record }) => ({
+          identity: completion.replayIdentity,
+          value: record.value,
+        })),
+      ...emptyHere.map((completion) => ({
+        identity: completion.replayIdentity,
+        value: "",
+      })),
+    ].flatMap(({ identity, value }) =>
+      identity ? [{ turn: identity.turn, value }] : [],
+    );
+    if (
+      reportTurns.length > 1 &&
+      reportTurns.length === verified.length + emptyHere.length &&
+      ignoredHere.length === 0
+    ) {
+      updates[result.id] = reportTurns
+        .sort((a, b) => a.turn - b.turn)
+        .map((turn) => `[Turn ${turn.turn}]\n${turn.value}`)
+        .join("\n\n");
       continue;
     }
     // A return OpenAPPA ignores stays beside the crossed ones, as it came. A
@@ -6203,10 +6369,13 @@ function issueNativeQuestionId(params: { currentId: string }): string {
   return `${prefix}_aq2_${nonce}`;
 }
 
-function nativeQuestionCacheKey(params: {
-  session: OpenAppaSession;
-  id: string;
-}): AllowedCacheKey {
+function nativeQuestionCacheKey(
+  params: {
+    session: OpenAppaSession;
+    id: string;
+  },
+  prefix: CacheKeyPrefix = CacheKey.OpenAppaNativeQuestion,
+): AllowedCacheKey {
   const scope = createHash("sha256")
     .update(
       JSON.stringify([
@@ -6218,7 +6387,50 @@ function nativeQuestionCacheKey(params: {
       ]),
     )
     .digest("base64url");
-  return `${CacheKey.OpenAppaNativeQuestion}-${scope}`;
+  return `${prefix}-${scope}`;
+}
+
+function ordinaryQuestionCacheKey(
+  params: Parameters<typeof nativeQuestionCacheKey>[0],
+): AllowedCacheKey {
+  return nativeQuestionCacheKey(params, CacheKey.NativeUserQuestion);
+}
+
+function ordinaryQuestionPresentationCacheKey(
+  params: Parameters<typeof nativeQuestionCacheKey>[0],
+): AllowedCacheKey {
+  return nativeQuestionCacheKey(
+    params,
+    CacheKey.NativeUserQuestionPresentation,
+  );
+}
+
+function ordinaryQuestionPresentation(
+  content: string,
+  source: OrdinaryQuestionSource | undefined,
+  renderer: string | undefined,
+): string {
+  if (!source || !renderer) return content;
+  try {
+    const result: unknown = JSON.parse(content);
+    if (!isRecord(result)) return content;
+    return JSON.stringify({
+      ...result,
+      archestra_presentation: {
+        requested_tool: {
+          name: source.name,
+          ...(source.namespace ? { namespace: source.namespace } : {}),
+        },
+        rendered_with: renderer,
+        translation:
+          source.kind === "gateway"
+            ? "gateway_question_to_native_form"
+            : "native_question_grouping",
+      },
+    });
+  } catch {
+    return content;
+  }
 }
 
 /**

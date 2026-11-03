@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { A2ATaskApprovalRequestModel } from "@/models";
 import { RouteCategory } from "@/observability/tracing";
 import {
   attachHitlReviews,
@@ -26,6 +27,8 @@ setupTestCacheManager();
 
 const SESSION_ID = "a2a-session-1";
 const REVIEW_TEXT = "Approve this call?\nsend_email to ceo@example.com";
+const CREDENTIAL_REVIEW_TEXT =
+  "Approve this call?\ncurl -H 'Authorization: Bearer tok_secret' https://x/api";
 
 function pausedOnRemedy(messageId: string) {
   return {
@@ -77,7 +80,7 @@ for (const approved of [true, false]) {
     };
     vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
       offer_id: "offer-1",
-      text: REVIEW_TEXT,
+      text: CREDENTIAL_REVIEW_TEXT,
       session_id: SESSION_ID,
     });
     const manager = new A2AManager({
@@ -108,12 +111,15 @@ for (const approved of [true, false]) {
     expect(paused.task.metadata?.approvalRequests).toEqual([
       expect.objectContaining({
         approvalId: "approval-1",
-        openappaReview: expect.objectContaining({
-          offerId: "offer-1",
-          text: REVIEW_TEXT,
-        }),
+        openappaReview: expect.objectContaining({ offerId: "offer-1" }),
       }),
     ]);
+    expect(JSON.stringify(paused.task.metadata)).not.toContain("tok_secret");
+    const stored = await A2ATaskApprovalRequestModel.findByTaskIdAndApprovalId({
+      taskId: paused.task.id,
+      approvalId: "approval-1",
+    });
+    expect(stored?.openappaReviewText).toBe(CREDENTIAL_REVIEW_TEXT);
 
     // The resumed run is where `execute_remedy_plan` spends the ruling.
     let rulingSeenByRun: string | undefined;

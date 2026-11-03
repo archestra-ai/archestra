@@ -1,6 +1,6 @@
 {
-  "id": "56a80d30-b049-416e-865f-5e222ceb686c",
-  "prevId": "22bd6c18-6632-4571-abb1-f3fbcce4be27",
+  "id": "eb25bb64-e0af-43e4-b433-2d1aaad75d3b",
+  "prevId": "6252ae1e-403b-43fc-a543-ee5055d143e3",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -4682,6 +4682,12 @@
         "environment_id": {
           "name": "environment_id",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "network_policy": {
+          "name": "network_policy",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -9912,6 +9918,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "local_device_id": {
+          "name": "local_device_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "name": {
           "name": "name",
           "type": "text",
@@ -10042,6 +10054,19 @@
           "tableTo": "internal_mcp_catalog",
           "columnsFrom": [
             "catalog_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "device_mcp_connection_local_device_id_local_device_id_fk": {
+          "name": "device_mcp_connection_local_device_id_local_device_id_fk",
+          "tableFrom": "device_mcp_connection",
+          "tableTo": "local_device",
+          "columnsFrom": [
+            "local_device_id"
           ],
           "columnsTo": [
             "id"

@@ -44,7 +44,7 @@ const mockCreateAnthropic = vi.hoisted(() =>
     },
   ),
 );
-vi.mock("@/clients/gemini-client", () => ({
+vi.mock("@/clients/gemini-vertex-ai", () => ({
   isVertexAiEnabled: mockIsVertexAiEnabled,
 }));
 vi.mock("@/clients/azure-openai-credentials", async (importOriginal) => {

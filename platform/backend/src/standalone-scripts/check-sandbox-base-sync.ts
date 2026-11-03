@@ -10,8 +10,15 @@
  * compared — the baked image pins requirements.lock while the runtime fallback
  * floats `uv add`.
  */
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { assertPortsBound } from "@/models/ports";
+
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
+assertPortsBound();
 
 const PLATFORM = path.resolve(process.cwd(), "..");
 const daggerRs = readFileSync(

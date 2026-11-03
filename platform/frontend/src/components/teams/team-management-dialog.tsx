@@ -467,10 +467,9 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
         />
       )}
 
-      {activeSection === "team-sync" &&
-        syncAvailable &&
-        mode === "edit" &&
-        team && <TeamSyncSection open={open} team={team} readOnly={readOnly} />}
+      {activeSection === "team-sync" && mode === "edit" && team && (
+        <TeamSyncSection open={open} team={team} readOnly={readOnly} />
+      )}
     </TabbedDialogShell>
   );
 }

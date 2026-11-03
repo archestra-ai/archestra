@@ -25,11 +25,11 @@ Open an **LLM Proxy** session to see every request and the MCP tool calls it tri
 
 In **Agent connections**, the **Usage** tab groups calls with **Show** and **by**; select a bar or row to drill down, and **Back** to step out. The page follows the selected date range, except the **State** column on **User connections**, which always reflects the last 30 days. **User connections** lists users with no calls too, and **Export CSV** saves the filtered list.
 
-## Reading Token Counts After a Disconnected Stream
+## When a Stream Ends Early
 
-If a client disconnects before the provider reports usage, the LLM Proxy log can retain partial response content with zero input and output tokens. Those zeros are placeholders for missing usage, not proof that the provider used no tokens. When the provider did report partial counts, the billing usage record has `status: "incomplete"` and includes `partial_stream` in `issues`.
+If a client disconnects while a model is responding, **LLM Proxy** logs may show part of the answer and zero tokens. The provider may never have sent its final token count, so zero does not prove that no tokens were used. The log does not currently distinguish that case from a true zero.
 
-For an operational signal that the request was cancelled, use the metadata-only [`archestra.llm_proxy.request` event](/docs/admin/observability/tracing#proxy-request-log-events): check `archestra.proxy.outcome` and `archestra.proxy.error_origin`. A streamed response can have HTTP status `200` even when it ends after the client disconnects. There is currently no separate "usage unknown" field on an LLM Proxy interaction row whose provider sent no usage.
+For operations monitoring, the [proxy request event](/docs/admin/observability/tracing#proxy-request-log-events) can identify a client cancellation, even when the HTTP status is `200` because streaming had already started.
 
 ## Keep Prompts Out of the Logs
 

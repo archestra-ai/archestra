@@ -15,6 +15,7 @@ import { deployedFromRow } from "./battery-target";
 import { servedHelperSource } from "./composition-view";
 import { openappaDeclarations } from "./declarations";
 import { draftHelperSource } from "./draft-helper-sources";
+import { HelperSlots } from "./helper-slots";
 
 /**
  * The last line a helper wrote to stderr, safe as a header value. Untrusted:
@@ -44,8 +45,7 @@ export type HelperConsultOutcome =
  * about the run is persisted here.
  */
 class OpenAppaHelperBridge {
-  /** Consults in flight, a raced-out run included until it settles. */
-  private inFlight = 0;
+  private readonly slots = new HelperSlots(helperConsultCap);
 
   async consult(params: {
     installId: string;
@@ -57,7 +57,7 @@ class OpenAppaHelperBridge {
       installId: params.installId,
       externalName: params.externalName,
     };
-    const work = this.run(params);
+    const work = this.run(params, startedAt + HELPER_DEADLINE_MS);
     let outcome: HelperConsultOutcome;
     try {
       outcome = await withDeadline(
@@ -88,11 +88,14 @@ class OpenAppaHelperBridge {
     return outcome;
   }
 
-  private async run(params: {
-    installId: string;
-    externalName: string;
-    request: string;
-  }): Promise<HelperConsultOutcome> {
+  private async run(
+    params: {
+      installId: string;
+      externalName: string;
+      request: string;
+    },
+    deadline: number,
+  ): Promise<HelperConsultOutcome> {
     const install = await this.helperSource(params.installId);
     if (!install) return { kind: "not_found" };
     const battery = await openappaDeclarations.resolveInstalled({
@@ -143,8 +146,11 @@ class OpenAppaHelperBridge {
     const cwd = skillRootPath(battery.name);
     // Only sandbox execution consumes this share. In-process audience reads,
     // missing helpers and credential validation do not occupy sandbox workers.
-    if (this.inFlight >= helperConsultCap()) return { kind: "busy" };
-    this.inFlight++;
+    // A consult over the cap waits for a slot as long as its execution budget
+    // still ends before the deadline. The wait comes out of the margin kept for
+    // container start-up, which beats turning the consult away outright.
+    const waitUntil = deadline - HELPER_EXEC_TIMEOUT_SECONDS * 1000;
+    if (!(await this.slots.acquire(waitUntil))) return { kind: "busy" };
     try {
       let executed: Awaited<
         ReturnType<typeof sandboxRuntimeService.runCommand>
@@ -204,7 +210,7 @@ class OpenAppaHelperBridge {
           };
     } finally {
       // A timed-out consult still holds its share until the underlying run ends.
-      this.inFlight--;
+      this.slots.release();
     }
   }
 

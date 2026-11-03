@@ -196,10 +196,10 @@ describe("popular agent configuration", () => {
     renderFlow();
     await screen.findByRole("button", { name: /Claude Code / });
     const section = screen
-      .getByRole("heading", { name: "Agent Runtimes Beta" })
+      .getByRole("heading", { name: "Choose an agent" })
       .closest("section");
     if (!section) throw new Error("Missing catalog section");
-    expect(within(section).getAllByRole("button")[0]).toHaveTextContent(
+    expect(within(section).getAllByRole("button")[1]).toHaveTextContent(
       "Codex",
     );
     expect(screen.getAllByRole("radio")[1]).toHaveAccessibleName("Codex");
@@ -266,7 +266,7 @@ describe("popular agent configuration", () => {
         screen.queryByRole("button", { name: /Codex / }),
       ).not.toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: /New Test Platform agent/ }),
+        screen.getByRole("button", { name: /^Test Platform Built into/ }),
       ).toBeInTheDocument();
     } finally {
       responseReady.resolve();
@@ -436,15 +436,15 @@ describe("popular agent configuration", () => {
     ).toBeInTheDocument();
     await ready();
     const codingAgents = screen
-      .getByRole("heading", { name: "Agent Runtimes Beta" })
+      .getByRole("heading", { name: "Choose an agent" })
       .closest("section") as HTMLElement;
     expect(
       within(codingAgents)
         .getAllByRole("button")
         .map((button) => button.querySelector(".font-medium")?.textContent),
-    ).toEqual(["Custom image"]);
+    ).toEqual(["Test Platform", "Custom image"]);
     expect(
-      screen.getByRole("button", { name: /New Test Platform agent/ }),
+      screen.getByRole("button", { name: /^Test Platform Built into/ }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Connect via A2A/ }),
@@ -585,10 +585,10 @@ describe("popular agent configuration", () => {
     await ready();
     expect(picker().getAllByRole("listitem")[0]).toHaveTextContent("Codex");
     const section = screen
-      .getByRole("heading", { name: "Agent Runtimes Beta" })
+      .getByRole("heading", { name: "Choose an agent" })
       .closest("section");
     if (!section) throw new Error("Missing catalog section");
-    expect(within(section).getAllByRole("button")[0]).toHaveTextContent(
+    expect(within(section).getAllByRole("button")[1]).toHaveTextContent(
       "Codex",
     );
     expect(screen.getAllByRole("radio")[1]).toHaveAccessibleName("Codex");

@@ -321,15 +321,11 @@ export function PageLayout({
                     headerSpacing.titleRow,
                     icon ? "col-start-2" : "col-start-1",
                     stackHeaderOnMobile && "col-span-full sm:col-span-1",
-                    maxWidthKey === "wizard"
-                      ? stackHeaderOnMobile
-                        ? "sm:flex-nowrap sm:overflow-hidden"
-                        : "flex-nowrap overflow-hidden"
-                      : // A long detail title wraps inside itself; wrapping
-                        // the row would drop it below the back link.
-                        stackHeaderOnMobile
-                        ? "flex-nowrap"
-                        : "flex-wrap",
+                    // Constrain long titles below, without clipping the back
+                    // control's hover background or keyboard focus ring.
+                    maxWidthKey === "wizard" || stackHeaderOnMobile
+                      ? "flex-nowrap"
+                      : "flex-wrap",
                   )}
                 >
                   {/* Without an icon the back link leads the title itself;

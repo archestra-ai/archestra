@@ -174,6 +174,8 @@ function vitestCheck(workspace: string, args: string[]): WorkspaceCheck {
 }
 
 function staticChecks(workspace: string, tests: boolean): WorkspaceCheck[] {
+  // Both Turbo check tasks run this sequence. Keep check:ci/check:commit
+  // inputs in platform/turbo.json in sync when adding helper dependencies.
   // Turbo schedules shared's type-check as a prerequisite. Direct package
   // commands still run it here, since they have no task graph.
   const checks: WorkspaceCheck[] = [

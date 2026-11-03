@@ -48,7 +48,6 @@
       "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json", "!**/.tsbuild/**"]
     },
     "check:ci": {
-      // Keep check:ci and check:commit inputs in sync: both run staticChecks.
       "inputs": [
         "$TURBO_DEFAULT$",
         "**/*.tsx",
@@ -75,7 +74,6 @@
       "dependsOn": ["^type-check"]
     },
     "check:commit": {
-      // Keep check:ci and check:commit inputs in sync: both run staticChecks.
       "inputs": [
         "$TURBO_DEFAULT$",
         "**/*.tsx",

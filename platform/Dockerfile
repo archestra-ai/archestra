@@ -327,6 +327,9 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
          --filter @archestra/openappa-rs \
          --filter @archestra/router-rs build
 
+# The constrained frontend build uses the dev-lite Bash entrypoint.
+RUN apk add --no-cache bash
+
 # VERSION is intentionally declared after the native RUN. Build args implicitly
 # participate in following RUN cache keys, and every staging commit has a new
 # VERSION even when the Rust workspace is unchanged.

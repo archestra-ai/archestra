@@ -320,7 +320,9 @@ function YellsCard() {
             </Link>
           </Button>
           <Button size="sm" variant="ghost" asChild>
-            <Link href="/settings/guardrails#break-the-glass">Settings</Link>
+            <Link href="/settings/guardrails#break-the-glass">
+              Break the glass settings
+            </Link>
           </Button>
         </div>
       }

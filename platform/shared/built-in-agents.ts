@@ -8,11 +8,12 @@ export { BUILT_IN_AGENT_IDS } from "./built-in-agent-ids";
 
 /** Display names for built-in agents */
 export const BUILT_IN_AGENT_NAMES = {
+  SRE: "SRE",
   OPENAPPA_CONFIG: "APPA Keeper",
   CONTEXT_COMPACTION: "Context Compaction Subagent",
   CHAT_TITLE_GENERATION: "Chat Title Generation Subagent",
   APP_RUNTIME: "App Runtime LLM Agent",
-} as const;
+} as const satisfies Record<keyof typeof BUILT_IN_AGENT_IDS, string>;
 
 /** The APPA Keeper's agent icon, drawn by the frontend's agent icon control. */
 export const APPA_KEEPER_AGENT_ICON = "logo:appa-keeper";

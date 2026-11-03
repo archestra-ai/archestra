@@ -1489,8 +1489,9 @@ Choose whether stored LLM proxy logs, MCP gateway logs, and Guardrails consult r
   - Default: `full`
   - Values: `full` stores prompts, responses, tool arguments, and tool results. `metadata_only` stores who, when, the model or tool, tokens, cost, and whether the call failed. Any other value stores metadata only.
   - Applies to records written after a restart. Stored records keep their content.
+  - Metadata-only mode also suppresses content on LLM proxy and MCP tool-call trace spans.
 
-This setting does not control application error logs or trace spans. Application error logs omit attached SDK request bodies, including those in retry histories, but error messages and provider responses can still contain sensitive content. To disable prompt and tool content on trace spans, set [`ARCHESTRA_OTEL_CAPTURE_CONTENT`](/docs/admin/deployment/configuration#ARCHESTRA_OTEL_CAPTURE_CONTENT) to `false`.
+This setting does not control application error logs. Application error logs omit attached SDK request bodies, including those in retry histories, but error messages and provider responses can still contain sensitive content. To disable prompt and tool content on trace spans independently, set [`ARCHESTRA_OTEL_CAPTURE_CONTENT`](/docs/admin/deployment/configuration#ARCHESTRA_OTEL_CAPTURE_CONTENT) to `false`.
 
 ## Data Retention
 

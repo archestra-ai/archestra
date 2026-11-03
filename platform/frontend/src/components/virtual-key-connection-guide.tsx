@@ -646,7 +646,9 @@ export function RequestExample({
               <SelectTrigger id="virtual-key-example-model" className="w-full">
                 <SelectValue
                   placeholder={
-                    isPending ? "Loading models…" : "No models found for this key"
+                    isPending
+                      ? "Loading models…"
+                      : "No models found for this key"
                   }
                 />
               </SelectTrigger>
@@ -660,14 +662,16 @@ export function RequestExample({
             </Select>
             {usesCatalog && (
               <p className="text-xs text-muted-foreground">
-                From your organization&apos;s model catalog. Your own key may have
-                access to different models.
+                From your organization&apos;s model catalog. Your own key may
+                have access to different models.
               </p>
             )}
           </div>
           {showImageOperationPicker && (
             <div className="space-y-1.5">
-              <Label htmlFor="virtual-key-image-operation">Image operation</Label>
+              <Label htmlFor="virtual-key-image-operation">
+                Image operation
+              </Label>
               <Select
                 value={selectedImageOperation}
                 onValueChange={(value) =>

@@ -225,6 +225,7 @@ export function createProxyPreHandler(params: {
         const violation = await LimitValidationService.checkLimitsBeforeRequest(
           {
             unmeteredOperation: true,
+            allowUnattributed: !!identity.serviceAccountId,
             agentId: identity.agent.id,
             agent: identity.agent,
             userId: identity.userId,

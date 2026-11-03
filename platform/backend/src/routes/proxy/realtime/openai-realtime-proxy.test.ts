@@ -457,6 +457,39 @@ describe("OpenAI realtime sessions through the Model Router", () => {
     opened.socket.close();
   });
 
+  test("a shared key cannot evade a user cap through realtime", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+    const key = await mappedKey({
+      organizationId: agent.organizationId,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    await LimitModel.create({
+      entityType: "user",
+      entityId: user.id,
+      limitType: "token_cost",
+      limitValue: 1,
+    });
+    expect(
+      await connect(
+        `${origin}/v1/model-router/${agent.id}/realtime?model=openai:gpt-realtime-2.1`,
+        key.value,
+      ),
+    ).toMatchObject({
+      status: 401,
+      body: expect.stringContaining("user credential"),
+    });
+    expect(upstreamConnections).toHaveLength(0);
+  });
+
   test("refuses a bad key, an unmapped provider, a missing model, and a budget over a session it cannot price", async ({
     makeAgent,
     makeSecret,

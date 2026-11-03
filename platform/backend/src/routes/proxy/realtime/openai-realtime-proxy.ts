@@ -172,6 +172,7 @@ async function admit(request: IncomingMessage, socket: Duplex, head: Buffer) {
     operation: "realtime",
   });
   const violation = await LimitValidationService.checkLimitsBeforeRequest({
+    allowUnattributed: !!identity.serviceAccountId,
     unpricedMediaModel: priced ? undefined : resolution.modelId,
     agentId: agent.id,
     userId: identity.userId,
@@ -221,6 +222,7 @@ async function admit(request: IncomingMessage, socket: Duplex, head: Buffer) {
     budgetRefusal: async () => {
       try {
         const spent = await LimitValidationService.checkLimitsBeforeRequest({
+          allowUnattributed: !!identity.serviceAccountId,
           unpricedMediaModel: priced ? undefined : resolution.modelId,
           agentId: agent.id,
           userId: identity.userId,
@@ -254,6 +256,7 @@ async function admit(request: IncomingMessage, socket: Duplex, head: Buffer) {
   // response from here, after the check, including the one OpenAI would start
   // itself when the user stops speaking.
   const gated = await LimitValidationService.checkLimitsBeforeRequest({
+    allowUnattributed: !!identity.serviceAccountId,
     unpricedMediaModel: resolution.modelId,
     agentId: agent.id,
     userId: identity.userId,

@@ -3,7 +3,7 @@ title: LLM Proxy Authentication
 sidebarTitle: Authentication
 description: How apps, agents, and people sign in to the LLM Proxy, and whose provider key each call uses
 order: 1
-lastUpdated: 2026-10-30
+lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -146,7 +146,7 @@ Keep this off unless a client cannot send any Archestra credential. When it is o
 
 Turn on **Allow requests without a virtual key** under **Settings → LLM**. You need [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
 
-- These calls are not tied to a person, so per-person limits and attribution do not apply.
+- These calls are not tied to a person. They are rejected when hard per-user LLM limits are configured, as described below.
 - A self-hosted provider with no key of its own, such as Ollama or vLLM, becomes open to anyone who can reach the proxy.
 - Providers whose credentials Archestra holds, such as Vertex AI or Bedrock with IAM, still need an Archestra credential.
 
@@ -155,4 +155,6 @@ Turn on **Allow requests without a virtual key** under **Settings → LLM**. You
 ## What to Know
 
 - **Logs name a person** only for a personal virtual key, a passthrough key, user OAuth, or an identity provider JWT. A shared key names the key, and an app's token names the app. Give each budget its own credential.
+- External `X-Archestra-User-Id` and `x-openwebui-user-email` headers are ignored. To attribute spend to a person, authenticate with that person's credential.
+- If any member has a hard LLM limit, or a default user limit applies to the gateway, a shared or ownerless credential must also authenticate a person. This applies even to calls using other models. Use a personal credential, or add a personal passthrough key on provider routes. Credentials billed to a configured team and service-account credentials retain their own billing and limits.
 - Which provider key a call uses and per-key **Base URL** settings are on [Model Providers](/docs/llm-proxy/providers#which-key-a-request-uses).

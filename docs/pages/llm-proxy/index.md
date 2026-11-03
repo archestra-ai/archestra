@@ -2,7 +2,7 @@
 title: LLM Proxy
 description: See and control every model call your company makes, from coding agents to your own apps
 order: 4
-lastUpdated: 2026-10-27
+lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -50,7 +50,6 @@ Add headers to group requests by app, run, or session in logs and costs. Headers
 | Header | Groups requests by | Example |
 | --- | --- | --- |
 | `X-Archestra-Agent-Id` | The calling app | `workflow-service` |
-| `X-Archestra-User-Id` | The Archestra user, by user ID | A member's user ID |
 | `X-Archestra-Session-Id` | Session | `research-123` |
 | `X-Archestra-Run-Id` | Run, for metrics | `run-456` |
 | `X-Archestra-Meta` | All three, as `<agent-id>/<run-id>/<session-id>` | `workflow-service/run-456/research-123` |
@@ -59,7 +58,7 @@ In `X-Archestra-Meta`, a segment can be empty, but no value can contain `/`. A s
 
 Send the same session header to the [MCP Gateway](/docs/mcp/gateway), and the agent's tool calls are filed under that session too.
 
-To tie a request to a person for certain, use a credential that names them. See [Attribution in Logs](/docs/llm-proxy/authentication#attribution-in-logs).
+To tie a request to a person, use a credential that names them. External user-ID and Open WebUI email headers are ignored. See [Attribution in Logs](/docs/llm-proxy/authentication#attribution-in-logs).
 
 `X-Archestra-Session-Id` only labels requests in logs. To enforce Guardrails on custom clients or workflows, send [`X-Appa-Session-ID`](/docs/agents/guardrails/clients#session-headers) with the conversation ID. When you send both headers, use the same value.
 

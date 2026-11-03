@@ -17,7 +17,7 @@ import { enableSre, seedSreAgent } from "@/test/sre-agent";
 
 const statements = fs
   .readFileSync(
-    path.join(__dirname, "0620_retire-sre-role-permission.sql"),
+    path.join(__dirname, "0621_retire-sre-role-permission.sql"),
     "utf8",
   )
   .split("--> statement-breakpoint")

@@ -229,6 +229,7 @@ export class DeviceMcpCompanion {
     // long-lived process. Renewing a session starts a new bounded generation.
     const executed = new Set<string>();
     let failureDelay = 1_000;
+    let interrupted = false;
     while (!signal.aborted) {
       if (this.localProcessStopped)
         throw new Error("The local MCP process stopped");
@@ -240,9 +241,16 @@ export class DeviceMcpCompanion {
             await this.request("poll", { sessionId, ready: true }, signal),
           );
         command = response.command;
+        if (interrupted) {
+          interrupted = false;
+          this.report(
+            "Device MCP is ready. Keep this process running in your signed-in user session.",
+          );
+        }
         failureDelay = 1_000;
       } catch (error) {
         if (signal.aborted || error instanceof RelayError) throw error;
+        interrupted = true;
         this.report(
           "Connection interrupted. Waiting to reconnect; tool execution is not retried.",
         );

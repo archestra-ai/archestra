@@ -52,7 +52,7 @@ async function relay(
     action: string,
     body: Record<string, unknown>,
     authorization: string | undefined,
-  ) => { status?: number; body: unknown },
+  ) => { status?: number; body: unknown; disconnect?: boolean },
 ) {
   const server = createServer(async (request, response) => {
     const chunks: Buffer[] = [];
@@ -62,6 +62,10 @@ async function relay(
       JSON.parse(Buffer.concat(chunks).toString()),
       request.headers.authorization,
     );
+    if (result.disconnect) {
+      request.socket.destroy();
+      return;
+    }
     response.writeHead(result.status ?? 200, {
       "Content-Type": "application/json",
     });
@@ -389,6 +393,62 @@ describe("device MCP companion", () => {
     expect(results).toHaveLength(1);
     expect(results[0]).toMatchObject({
       result: { structuredContent: { executionCount: 1 } },
+    });
+  });
+
+  test("reports readiness again after an interrupted poll without replaying execution", async () => {
+    const controller = new AbortController();
+    const states: string[] = [];
+    const results: Record<string, unknown>[] = [];
+    let polls = 0;
+    const url = await relay((action, body) => {
+      if (action === "inspect") return { body: inspection() };
+      if (action === "redeem")
+        return {
+          body: {
+            ...inspection(),
+            deviceId: "test-device",
+            token: "test-memory-token",
+          },
+        };
+      if (action === "session") return { body: { sessionId: "test-session" } };
+      if (action === "poll") {
+        if (body.ready === false) return { body: { command: null } };
+        polls++;
+        if (polls === 1) return { disconnect: true, body: {} };
+        if (polls > 2) return { body: { command: null } };
+        return {
+          body: {
+            command: {
+              id: "after-reconnect",
+              toolName: "echo",
+              arguments: { text: "recovered" },
+              expiresAt: new Date(Date.now() + 30_000).toISOString(),
+            },
+          },
+        };
+      }
+      if (action === "result") {
+        results.push(body);
+        setTimeout(() => controller.abort(), 20);
+        return { body: {} };
+      }
+      throw new Error(`Unexpected action ${action}`);
+    });
+    const client = new DeviceMcpCompanion(url, "darwin", (message) =>
+      states.push(
+        message.startsWith("Device MCP is ready") ? "ready" : "interrupted",
+      ),
+    );
+    await client.pair("code", async () => true);
+    await client.run(controller.signal);
+    expect(states).toEqual(["ready", "interrupted", "ready"]);
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      result: {
+        content: [{ type: "text", text: "recovered" }],
+        structuredContent: { executionCount: 1 },
+      },
     });
   });
 

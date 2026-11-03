@@ -102,3 +102,27 @@ Test the signed-out redirect, matching code requirement, mismatched client/OS,
 denial, expired request, duplicate decision, transient polling failures, and
 single-use script download. Check the original connection page still works without
 `connectRequest` in its URL.
+
+## Optional personal background agent
+
+When Local devices is enabled, the browser review explicitly includes installation
+of a per-user background agent. Approval records a short-lived grant scoped to
+that setup token, human user, organization, and operating system. Script redemption
+consumes the grant and includes a one-time install proof in a private setup marker.
+No device bearer credential is embedded in the script or process arguments.
+
+The Node bootstrap preflights the credential store and user service manager before
+applying client settings, then installs the background agent and waits for a real
+heartbeat. Failure does not report overall success. Normal setup is unchanged
+when the feature is disabled or no background-agent consent was given.
+
+The service uses launchd on macOS, a limited interactive-user login task on Windows,
+and systemd --user on Linux. Tokens use Keychain, current-user DPAPI, or Secret
+Service respectively, with no plaintext fallback. Per-owner/deployment install
+locks and proof of the existing saved bearer prevent duplicate devices on repeat
+Connect. Node must remain at its recorded absolute executable path.
+
+Device enrollment grants presence only. MCP execution and desktop permissions are
+not implicitly authorized by this setup. The native lifecycle CI workflow exercises
+installation, repeat setup, restart, network recovery, revocation, and uninstall
+on macOS and Windows without changing a developer's login configuration.

@@ -1,0 +1,71 @@
+name: Device Background Agent
+on:
+  pull_request:
+    paths:
+      - platform/backend/src/services/agent-connection-setup/bootstrap/**
+      - platform/backend/src/services/client-connection.ts
+      - platform/backend/src/services/local-device*.ts
+      - platform/backend/src/routes/local-device/**
+      - platform/backend/src/routes/client-connection/**
+      - platform/backend/src/routes/connection-setup/**
+      - platform/frontend/src/app/connection/**
+      - platform/frontend/src/app/account/**
+      - platform/scripts/device-agent-ci.test.mjs
+      - .github/workflows/device-agent.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: device-agent-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  lifecycle:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22'
+      - name: Verify payload and native lifecycle
+        working-directory: platform
+        env:
+          DEVICE_AGENT_NATIVE_CI: ${{ runner.os != 'Linux' && '1' || '0' }}
+        run: node --test scripts/device-agent-ci.test.mjs
+
+  connect-integration:
+    runs-on: ubicloud-standard-8-ubuntu-2404
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-env
+      - uses: ./.github/actions/cache-backend-napi
+        id: native-cache
+        with:
+          save: 'false'
+      - uses: ./.github/actions/setup-rust-build
+        if: steps.native-cache.outputs.usable != 'true'
+        with:
+          workspaces: platform/archestra-rs
+          shared-key: backend-unit-tests
+      - name: Build backend dependencies on cache miss
+        if: steps.native-cache.outputs.usable != 'true'
+        run: pnpm exec turbo build --filter="@backend^..."
+      - name: Verify approved Connect enrollment and installer
+        run: pnpm --dir backend exec vitest run --maxWorkers=1 src/routes/client-connection/decision.client-connection.route.test.ts src/routes/local-device/enroll.local-device.route.test.ts src/services/agent-connection-setup/bootstrap/client-connection-installer.unit.test.ts
+      - name: Verify device visibility and browser consent
+        run: pnpm --dir frontend exec vitest run --maxWorkers=1 src/app/account/credentials/page.test.tsx src/app/account/_parts/local-device-cards.test.tsx src/app/account/_parts/use-local-devices-controller.test.tsx src/app/connection/client-connection-approval.test.tsx src/app/settings/mcp/page.test.tsx
+      - name: Check types and unused exports
+        run: |
+          pnpm --dir backend type-check
+          pnpm --dir frontend type-check
+          pnpm --dir frontend knip

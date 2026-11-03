@@ -22,6 +22,7 @@ import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LimitModel from "@/models/limit";
 import LlmOauthClientModel from "@/models/llm-oauth-client";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import LocalDeviceModel from "@/models/local-device";
 import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
@@ -90,6 +91,7 @@ type AuditDecision =
  * @public — consumed by audit-log-snapshot.test.ts invariant tests
  */
 export const AUDIT_DECISIONS = {
+  localDevicesTable: { audited: true, model: LocalDeviceModel },
   deviceMcpConnectionsTable: { audited: true, model: DeviceMcpModel },
   deviceMcpCommandsTable: {
     audited: false,

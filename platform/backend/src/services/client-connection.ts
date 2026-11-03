@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import type { ConnectSetupPart } from "@archestra/shared/connection-setup";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import ConnectionSetupModel from "@/models/connection-setup";
+import { localDeviceInstallService } from "@/services/local-device-install";
 import { ApiError } from "@/types";
 import type {
   ConnectionSetupClientId,
@@ -72,6 +73,7 @@ class ClientConnectionService {
   async decide(params: {
     id: string;
     setupId?: string;
+    localDeviceAgent?: boolean;
     userId: string;
     organizationId: string;
   }) {
@@ -87,6 +89,20 @@ class ClientConnectionService {
     let approved = false;
     if (params.setupId) {
       try {
+        if (params.localDeviceAgent) {
+          await localDeviceInstallService.approve(pending.tokenHash, {
+            organizationId: params.organizationId,
+            userId: params.userId,
+            name: pending.deviceName || "My computer",
+            expiresAt: pending.expiresAt,
+            platform:
+              pending.platform === "macos"
+                ? "darwin"
+                : pending.platform === "windows"
+                  ? "win32"
+                  : "linux",
+          });
+        }
         approved = await ConnectionSetupModel.bindClientConnection({
           setupId: params.setupId,
           userId: params.userId,
@@ -98,7 +114,10 @@ class ClientConnectionService {
           expiresAt: new Date(pending.expiresAt),
           deviceName: pending.deviceName,
         });
+        if (!approved)
+          await localDeviceInstallService.discard(pending.tokenHash);
       } catch (error) {
+        await localDeviceInstallService.discard(pending.tokenHash);
         await restorePending(pending);
         throw unavailable(error);
       }

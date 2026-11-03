@@ -1,75 +1,58 @@
 ---
-title: Device MCP Servers
-description: Connect a personal MCP server on your own device to agents and gateways
+title: Local Devices
+description: Connect your computers automatically through the Connect command
 order: 5
-lastUpdated: 2026-11-01
+lastUpdated: 2026-11-02
 ---
 
-A device MCP server lets an agent in Archestra use software running on your laptop. The registry holds the approved launch configuration; each person connects their own device to it.
+Run Connect once on each computer to keep it connected to your personal account after login. Manage your computers in **Personal Settings → Devices**.
 
-This source CLI concept is opt-in and does not install a signed desktop app or background service. macOS and Windows use the same connector source; actual Windows execution remains pending validation. The deterministic test server verifies connectivity, not MATLAB installation, licensing, or MATLAB behavior.
+This preview registers computers and tracks their connection status. Selecting and running local MCP servers is a separate step.
 
-## Enable Device Connections
+## Enable Local Devices
 
-Device connections stay unavailable until your organization enables them.
+Devices appear only when your organization enables them.
 
-1. Stop existing personal runtime sessions so new sessions can use scoped credentials.
-2. Open **Settings → MCP** with [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
-3. Turn on **Device MCP servers** and click **Save**.
-4. Add a registry entry with **User device** hosting and reviewed launch commands for both operating systems.
+1. Open **Settings → MCP** with [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
+2. Turn on **Local devices** and click **Save**.
 
-Turning the setting off revokes device connections and blocks pairing, device polling, and tool calls. Enabling it again requires fresh pairing. Existing registry entries remain available for review.
+When disabled, the Devices tab and Connect mention are hidden. Turning the setting off revokes existing device credentials; turning it on again requires running Connect again.
 
-## Connect Your Device
+## Add a Computer
 
-Pairing gives your own agent requests a route to your selected device, without opening an inbound port on the laptop.
+Use the Connect terminal command on the computer you want to add. Node.js 18 or newer must remain installed at the path used during setup.
 
-1. Open the device server in **MCP Registry**.
-2. Under **Your device connection**, enter **Device name** and click **Prepare device setup**.
-3. Review **Review launch configuration**. On your device, open the `platform` directory in a source checkout with its dependencies installed and choose **Copy with real token** for your operating system and run the copied command.
-4. Approve the launch configuration in the connector prompt. Keep the connector running until the page shows **Online**.
+1. Open **Connect**, select your client, and copy its terminal command.
+2. Run the command on your computer.
+3. Check the terminal code in the browser and approve the setup, including its background agent.
+4. Wait for the installer to report that the background agent connected. The computer appears **Online** in Devices.
 
-The one-time code expires after ten minutes. The connector keeps its credential in memory for up to 24 hours; restarting it requires pairing again. To replace a selected device, check **Replace my selected device and disconnect its existing connector** before preparing another setup.
+The installer checks secure credential storage and the service manager before changing client settings. It reports failure if the background agent cannot check in. Running Connect for another client on the same computer reuses the saved device connection.
 
-### Run Without a Source Checkout
+There is no separate desktop application or connection-file download. **Add device** opens Connect; edit the computer's name afterward by clicking it in Devices.
 
-Build the connector once, then copy its bundled JavaScript file to a device with Node.js 22 or later.
+## Reconnect Automatically
 
-1. In the source checkout's `platform` directory, build the bundle:
+The background agent starts when you log in and reconnects after sleep or network loss. Closing the terminal does not stop it.
 
-   ```bash
-   pnpm --dir backend device-mcp:build
-   ```
+| Operating System | Startup | Credential Storage |
+| --- | --- | --- |
+| macOS | User LaunchAgent | Keychain |
+| Windows | Scheduled task at user login | Current-user DPAPI |
+| Linux | systemd user service | Secret Service through `secret-tool` |
 
-2. Copy `backend/dist/device-mcp-client.mjs` to the device.
-3. Use the URL and one-time code from the copied setup command:
+Linux requires an active systemd user session, `secret-tool`, and an unlocked Secret Service store. Setup fails if these are unavailable. macOS and Windows also require access to the signed-in user's credential store.
 
-   ```bash
-   node device-mcp-client.mjs --url https://deployment.example --code PAIRING_CODE
-   ```
+The computer is unavailable while powered off, asleep, disconnected, or logged out. The agent runs with your user permissions. It does not install a privileged system service or make desktop applications available before login.
 
-The same command runs in macOS Terminal and Windows PowerShell. The bundle is unsigned and runs in the foreground; it does not install a service.
+Device credentials expire after 90 days. Run Connect again after expiry or revocation.
 
-## Use Its Tools
+## Manage Your Devices
 
-Assign device server tools to agents and MCP gateways through the same tool assignment controls as other registry entries.
+Click a computer's name to edit it inline. Press Enter to save or Escape to cancel.
 
-- A signed-in person's tool call uses that person's selected device for the registry entry.
-- A missing or unavailable personal device produces a setup or reconnect error. Another person's device is never a fallback.
-- Scheduled runs cannot use device, built-in, skill or delegated-agent tools while this preview is enabled. They can use assigned external MCP tools. Team, organization and service-account credentials cannot borrow a device connection.
-- Interactive runtime credentials are bound to the persisted task and agent. An external client holding your personal gateway token acts as you, including automated clients; pair only while you intend to grant that account access to your device.
+Use its menu to **Revoke access**. Revocation removes the device from your list; the background agent clears its saved credential when it learns access was revoked. Revocation cannot remotely remove installed files or startup configuration from an offline computer.
 
-The connector launches only the reviewed configuration you approve. A tool call cannot supply a replacement executable or browse an arbitrary filesystem through the connector itself; individual MCP tools retain the access granted by their launch configuration.
+The installer prints commands for local status and uninstall. The installed `agent.cjs` accepts `status`, `start`, `stop`, and `uninstall` through the Node executable printed during setup. Uninstall removes startup configuration and clears the local credential. It also revokes the connection when reachable; otherwise it asks you to revoke the computer in Devices.
 
-## Reconnect or Update
-
-An offline device cannot serve tool calls, and failed calls are not saved for later execution. Calls time out after 30 seconds; an interrupted operation may already have changed the local application. Check that application before retrying.
-
-| What You See | What to Do |
-| --- | --- |
-| **Finish setup** | Run the displayed connector command before its code expires. |
-| **Offline** | Wake the laptop and restore its network connection. A running connector retries after a disconnect. If it exited or the machine restarted, prepare setup again. |
-| **Configuration changed** | Prepare setup again and approve the changed launch configuration. Configuration changes do not silently run new commands on your device. |
-| **Revoked** | Prepare another setup if you want to connect again. |
-
-Click **Revoke connection** to block new requests to the paired device. Revocation cannot undo an operation already delivered to the MCP server. Closing the connector also stops its supervised MCP process. Startup at login and automatic software installation are outside this concept.
+Each device belongs to one person in one organization. Another person's device is never a fallback. Service accounts cannot enroll personal devices.

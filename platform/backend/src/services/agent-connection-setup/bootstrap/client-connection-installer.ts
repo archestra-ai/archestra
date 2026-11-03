@@ -3,6 +3,7 @@ import {
   INSTALLER_CLIENT_IDS,
 } from "@archestra/shared/connection-setup";
 import { SETUP_STOPPED_EXIT_CODE } from "../types";
+import { DEVICE_AGENT_RUNTIME } from "./device-agent-runtime";
 
 /** Public bootstrap: secrets stay in process memory; only the approved script reaches disk. */
 export const CLIENT_CONNECTION_INSTALLER = String.raw`#!/usr/bin/env node
@@ -225,12 +226,28 @@ async function applySetup({ scriptPath, origin, platform }) {
     await writeFile(filename, platform === 'windows' ? '\uFEFF' + script : script, { mode: 0o600 });
     const lineCount = script.trimEnd().split(/\r?\n/).length;
     const marker = /^# archestra-ending: (\S+)$/m.exec(script);
+    const deviceMarker = /^# archestra-device-agent: (\S+)$/m.exec(script);
+    if (deviceMarker) {
+      const metadata = JSON.parse(Buffer.from(deviceMarker[1], 'base64').toString('utf8'));
+      if (new URL(metadata.url).origin !== origin.origin) throw new Error('Background agent deployment does not match this connection.');
+      const agentFile = join(directory, 'device-agent.cjs');
+      await writeFile(agentFile, Buffer.from(${JSON.stringify(Buffer.from(DEVICE_AGENT_RUNTIME).toString("base64"))}, 'base64'), { mode: 0o600 });
+      const check = spawnSync(process.execPath, [agentFile, 'preflight'], { input: JSON.stringify(metadata), stdio: ['pipe', 'inherit', 'inherit'], timeout: 90000, env: process.env });
+      if (check.error || check.status !== 0) throw new Error('Background agent prerequisites are unavailable. No client settings were changed. Unlock your credential store; Linux also requires secret-tool and an active systemd user session.');
+    }
     console.log('Downloaded approved setup (' + lineCount + ' lines). Applying now.');
     const child = platform === 'windows'
       ? spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', filename], { stdio: 'inherit', env: installerEnv })
       : spawnSync('bash', [filename], { stdio: 'inherit', env: installerEnv });
     if (child.status === ${SETUP_STOPPED_EXIT_CODE}) throw new Error('Setup stopped.');
     if (child.error || child.status !== 0) throw new Error('Setup failed. Review the output above and start the installer again after fixing the problem.');
+    if (deviceMarker) {
+      const metadata = JSON.parse(Buffer.from(deviceMarker[1], 'base64').toString('utf8'));
+      const agentFile = join(directory, 'device-agent.cjs');
+      console.log('Installing the approved background agent. Waiting for this computer to check in...');
+      const agent = spawnSync(process.execPath, [agentFile, 'install'], { input: JSON.stringify(metadata), stdio: ['pipe', 'inherit', 'inherit'], timeout: 180000, env: process.env });
+      if (agent.error || agent.status !== 0) throw new Error('Client settings were applied, but the background agent did not finish connecting. Run Connect again after resolving the error above.');
+    }
     if (marker) return JSON.parse(Buffer.from(marker[1], 'base64').toString('utf8'));
     console.log('Setup applied. Restart or reload your client if needed. Complete its MCP sign-in if prompted.');
     return null;

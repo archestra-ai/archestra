@@ -170,3 +170,14 @@ export const DEVICE_MCP_PROOF_PATHS = new Set([
   "/api/device-mcp/poll",
   "/api/device-mcp/result",
 ]);
+
+/** Local device proofs are independent of browser cookies and grant presence only. */
+export const LOCAL_DEVICE_PROOF_PATHS = new Set([
+  "/api/local-devices/install",
+  "/api/local-devices/remove-agent",
+  "/api/local-devices/inspect",
+  "/api/local-devices/redeem",
+  "/api/local-devices/session",
+  "/api/local-devices/heartbeat",
+  "/api/local-devices/disconnect",
+]);

@@ -26,6 +26,7 @@ import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LimitModel from "@/models/limit";
 import LlmOauthClientModel from "@/models/llm-oauth-client";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import LocalDeviceModel from "@/models/local-device";
 import ManagedOauthClientModel from "@/models/managed-oauth-client";
 import McpOauthClientModel from "@/models/mcp-oauth-client";
 import McpServerModel from "@/models/mcp-server";
@@ -152,6 +153,19 @@ export function deriveAction(
  * @public — consumed by audit-log-snapshot.test.ts to verify registry invariants
  */
 export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
+  "/api/local-devices/enroll": {
+    resourceType: "localDevice",
+    action: "localDevice.created",
+    fetchById: (id, orgId) => LocalDeviceModel.findByIdForAudit(id, orgId),
+  },
+  "/api/local-devices/:id": {
+    resourceType: "localDevice",
+    actionByMethod: {
+      PATCH: "localDevice.updated",
+      DELETE: "localDevice.revoked",
+    },
+    fetchById: (id, orgId) => LocalDeviceModel.findByIdForAudit(id, orgId),
+  },
   "/api/device-mcp/pair": {
     resourceType: "deviceMcp",
     action: "deviceMcp.created",

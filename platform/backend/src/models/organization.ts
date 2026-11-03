@@ -359,6 +359,17 @@ class OrganizationModel {
       // Turning off access is a revocation, not a temporary pause. Re-enabling
       // requires fresh device consent and cannot resurrect queued operations.
       const tx = params.tx ?? db;
+      await tx
+        .update(schema.localDevicesTable)
+        .set({
+          revokedAt: new Date(),
+          tokenHash: null,
+          tokenExpiresAt: null,
+          pairingHash: null,
+          sessionId: null,
+          lastSeenAt: null,
+        })
+        .where(eq(schema.localDevicesTable.organizationId, params.id));
       const revoked = await tx
         .update(schema.deviceMcpConnectionsTable)
         .set({

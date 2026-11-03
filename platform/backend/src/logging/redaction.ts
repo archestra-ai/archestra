@@ -34,6 +34,17 @@ export const REDACTED_LOG_PATHS = [
 ]
   .flatMap((key) => [key, `*.${key}`, `*.headers.${key}`])
   .concat([
+    // Device enrollment proofs use a generic `code` key. Scope redaction to
+    // request/response bodies so ordinary diagnostic error codes stay useful.
+    "body.code",
+    "*.body.code",
+    "payload.code",
+    "*.payload.code",
+    "body.token",
+    "*.body.token",
+    "payload.token",
+    "*.payload.token",
+
     ...[
       "api-key",
       "Api-Key",

@@ -126,6 +126,16 @@ export function parseFrontendBaseUrl(rawValue: string | undefined): string {
   return (trimmed || "http://localhost:3000").replace(/\/+$/, "");
 }
 
+/** @public — development packages never become downloads on production servers. */
+export function parseDevelopmentConnectorDirectory(
+  rawValue: string | undefined,
+  nodeEnvironment: string | undefined,
+) {
+  return nodeEnvironment === "development"
+    ? rawValue?.trim() || undefined
+    : undefined;
+}
+
 const frontendBaseUrl = parseFrontendBaseUrl(
   process.env.ARCHESTRA_FRONTEND_URL,
 );
@@ -2410,6 +2420,15 @@ const config = {
   },
   websocket: {
     path: "/ws",
+  },
+  deviceMcp: {
+    developmentEnabled: process.env.NODE_ENV === "development",
+    developmentConnectorDirectory: parseDevelopmentConnectorDirectory(
+      process.env.ARCHESTRA_DEVICE_MCP_DEVELOPMENT_CONNECTOR_DIRECTORY,
+      process.env.NODE_ENV,
+    ),
+    connectorDirectory:
+      process.env.ARCHESTRA_DEVICE_MCP_CONNECTOR_DIRECTORY || undefined,
   },
   mcpOAuth: {
     // Deployment-operator opt-in; compatibility must remain the default.

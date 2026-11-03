@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 6
-lastUpdated: 2026-10-31
+lastUpdated: 2026-11-02
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -775,6 +775,14 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
 - **`ARCHESTRA_MCP_CATALOG_API_BASE_URL`** - API URL for the online MCP server catalog.
   - Default: `https://archestra.ai/mcp-catalog/api`
   - Set it when your deployment uses a catalog mirror.
+
+- **`ARCHESTRA_DEVICE_MCP_CONNECTOR_DIRECTORY`** - Directory containing the desktop connector packages offered under **Personal Settings → Devices**.
+  - Default: unset (connector downloads unavailable).
+  - Supply the branded platform ZIP files and their matching version, size, SHA-256, protocol and native verification manifests. Packages must match the deployment’s exact app name. macOS releases require Developer ID signing and notarization; Windows releases require Authenticode signing. Unsigned development builds and legacy manifests are not offered. The operator-controlled release pipeline must verify native signatures before promoting files into this read-only directory.
+
+- **`ARCHESTRA_DEVICE_MCP_DEVELOPMENT_CONNECTOR_DIRECTORY`** - Offers explicitly marked local development desktop packages for a localhost preview.
+  - Default: unset. Ignored unless `NODE_ENV` is exactly `development`, the configured frontend is a localhost origin, and the actual request socket is loopback. Forwarded headers cannot enable it.
+  - Requires a matching branded development manifest and verified ad-hoc integrity metadata. Production release checks remain unchanged. These packages are not Apple-notarized; macOS may require manual approval to open them.
 
 ## MCP Server Orchestrator
 

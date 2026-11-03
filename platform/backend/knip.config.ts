@@ -12,6 +12,10 @@ const config: KnipConfig = {
     "src/standalone-scripts/**/*.ts!",
     // Foreground device connector launched from the registry's setup command.
     "src/device-mcp-client/cli.ts!",
+    // Consumed by the separate desktop app bundle, outside this package graph.
+    "src/device-mcp-client/connection-file.ts!",
+    "src/device-mcp-client/local-device-client.ts!",
+    "src/device-mcp-client/local-device-store.ts!",
     // Optional source build command; not a production server entry point.
     "src/device-mcp-client/build.mjs",
     // Container/Helm entrypoint; referenced outside the TypeScript module graph.

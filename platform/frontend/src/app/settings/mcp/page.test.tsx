@@ -181,7 +181,7 @@ describe("McpSettingsPage", () => {
     renderPage();
 
     expect(blockSwitch("Online MCP catalog")).toBeDisabled();
-    expect(blockSwitch("Device MCP servers")).toBeDisabled();
+    expect(blockSwitch("Local devices")).toBeDisabled();
   });
 
   // SPDX-SnippetBegin
@@ -243,8 +243,8 @@ describe("McpSettingsPage", () => {
   it("requires an explicit device opt-in and saves only that change", async () => {
     const user = userEvent.setup();
     renderPage();
-    expect(blockSwitch("Device MCP servers")).not.toBeChecked();
-    await user.click(blockSwitch("Device MCP servers"));
+    expect(blockSwitch("Local devices")).not.toBeChecked();
+    await user.click(blockSwitch("Local devices"));
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(mockMutateAsync).toHaveBeenCalledWith({ deviceMcpEnabled: true });
   });
@@ -253,11 +253,11 @@ describe("McpSettingsPage", () => {
     setOrganization({ deviceMcpEnabled: true });
     const user = userEvent.setup();
     renderPage();
-    await user.click(blockSwitch("Device MCP servers"));
+    await user.click(blockSwitch("Local devices"));
     await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(blockSwitch("Device MCP servers")).toBeChecked();
+    expect(blockSwitch("Local devices")).toBeChecked();
     expect(mockMutateAsync).not.toHaveBeenCalled();
-    await user.click(blockSwitch("Device MCP servers"));
+    await user.click(blockSwitch("Local devices"));
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(mockMutateAsync).toHaveBeenCalledWith({ deviceMcpEnabled: false });
   });

@@ -14,6 +14,9 @@ import { schema } from "@/database";
  *    `audit-log-action-labels.ts` ACTION_LABEL map.
  */
 export const AuditEventNameSchema = z.enum([
+  "localDevice.created",
+  "localDevice.updated",
+  "localDevice.revoked",
   "deviceMcp.created",
   "deviceMcp.revoked",
   "resourcePermissions.updated",

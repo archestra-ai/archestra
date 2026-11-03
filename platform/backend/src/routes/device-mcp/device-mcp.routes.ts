@@ -1,10 +1,20 @@
 import { RouteId } from "@archestra/shared";
+import { DEFAULT_APP_NAME } from "@archestra/shared/consts";
 import { DeviceMcpConfigSchema } from "@archestra/shared/device-mcp";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import config from "@/config";
 import logger from "@/logging";
+import OrganizationModel from "@/models/organization";
 import { deviceMcpService } from "@/services/device-mcp";
-import { constructResponseSchema } from "@/types";
+import {
+  ConnectorArtifactSchema,
+  ConnectorTargetSchema,
+  connectorContentDisposition,
+  listDeviceConnectors,
+  openDeviceConnector,
+} from "@/services/device-mcp-connectors";
+import { ApiError, constructResponseSchema } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
 
 const CodeSchema = z.string().min(40).max(128);
@@ -40,6 +50,76 @@ const deviceMcpRoutes: FastifyPluginAsyncZod = async (fastify) => {
   }, 30_000);
   cleanupTimer.unref();
   fastify.addHook("onClose", async () => clearInterval(cleanupTimer));
+
+  fastify.get(
+    "/api/device-mcp/connectors",
+    {
+      schema: {
+        operationId: RouteId.ListDeviceMcpConnectors,
+        tags: ["Device MCP"],
+        response: constructResponseSchema(z.array(ConnectorArtifactSchema)),
+      },
+    },
+    async (request) => {
+      const { organizationId } = request;
+      await deviceMcpService.assertEnabled(organizationId);
+      const organization = await OrganizationModel.getById(organizationId);
+      if (!organization) throw new ApiError(404, "Organization not found");
+      return listDeviceConnectors(
+        config.deviceMcp.connectorDirectory,
+        organization.appName ?? DEFAULT_APP_NAME,
+        {
+          directory: config.deviceMcp.developmentConnectorDirectory,
+          enabled: config.deviceMcp.developmentEnabled,
+          frontendBaseUrl: config.frontendBaseUrl,
+          remoteAddress: request.raw.socket.remoteAddress,
+        },
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/device-mcp/connector",
+    {
+      schema: {
+        operationId: RouteId.DownloadDeviceMcpConnector,
+        tags: ["Device MCP"],
+        querystring: ConnectorTargetSchema,
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, query } = request;
+      await deviceMcpService.assertEnabled(organizationId);
+      const organization = await OrganizationModel.getById(organizationId);
+      if (!organization) throw new ApiError(404, "Organization not found");
+      const result = await openDeviceConnector(
+        config.deviceMcp.connectorDirectory,
+        query,
+        organization.appName ?? DEFAULT_APP_NAME,
+        {
+          directory: config.deviceMcp.developmentConnectorDirectory,
+          enabled: config.deviceMcp.developmentEnabled,
+          frontendBaseUrl: config.frontendBaseUrl,
+          remoteAddress: request.raw.socket.remoteAddress,
+        },
+      );
+      if (!result)
+        throw new ApiError(
+          404,
+          "The connector for this computer is not available. Contact your administrator.",
+        );
+      return reply
+        .header("Cache-Control", "private, no-store")
+        .header(
+          "Content-Disposition",
+          connectorContentDisposition(result.artifact),
+        )
+        .header("Content-Length", result.artifact.bytes)
+        .header("X-Content-Type-Options", "nosniff")
+        .type("application/zip")
+        .send(result.stream);
+    },
+  );
 
   fastify.get(
     "/api/device-mcp",

@@ -1,19 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Suspense, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AccountPageActionSlotContext } from "@/app/account/_parts/account-page-action";
 import { accountSections } from "@/app/account/_parts/account-sections";
 import { useAccountCredentialsAccess } from "@/app/account/_parts/use-account-credentials-access";
+import { BetaBadge } from "@/components/beta-badge";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
+import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useOrganization } from "@/lib/organization.query";
 
-// The title stays put across tabs — the tab bar says which one is open — and
-// the description says what the open tab is for.
+const PAGE_TITLES: Record<string, string> = {
+  "/account": "Personal Settings",
+  "/account/credentials": "Credentials",
+  "/account/api-keys": "API Keys",
+  "/account/devices": "Devices",
+  "/account/sessions": "Sessions",
+};
+
 const PAGE_DESCRIPTIONS: Record<string, React.ReactNode> = {
   "/account": "Settings that apply only to you, not your organization.",
   "/account/credentials":
@@ -21,6 +30,8 @@ const PAGE_DESCRIPTIONS: Record<string, React.ReactNode> = {
   "/account/api-keys": <ApiKeysDescription />,
   "/account/sessions":
     "The browsers and devices you're signed in on. Sign out of any you don't recognize.",
+  "/account/devices":
+    "Local devices connected to your account. Only you can see, rename or remove them.",
 };
 
 const PAGES_WITH_ACTION = new Set([
@@ -67,6 +78,15 @@ function ApiKeysDescription() {
 
 function AccountShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const organization = useOrganization();
+  const devicesEnabled = organization.data?.deviceMcpEnabled === true;
+  const isDevicesPage = pathname === "/account/devices";
+  useEffect(() => {
+    if (isDevicesPage && organization.data?.deviceMcpEnabled === false) {
+      router.replace("/account");
+    }
+  }, [isDevicesPage, organization.data?.deviceMcpEnabled, router]);
   const [pageActionSlot, setPageActionSlot] = useState<HTMLDivElement | null>(
     null,
   );
@@ -74,14 +94,40 @@ function AccountShell({ children }: { children: React.ReactNode }) {
   // has nothing to show here (no credential:read, no Claude Code agent); its
   // page forwards them.
   const { hasTab: hasCredentialsTab } = useAccountCredentialsAccess();
-  const tabs = accountSections.filter(
-    (section) =>
-      section.href !== "/account/credentials" || hasCredentialsTab !== false,
-  );
+  const tabs = accountSections
+    .filter(
+      (section) =>
+        (section.href !== "/account/credentials" ||
+          hasCredentialsTab !== false) &&
+        (section.href !== "/account/devices" || devicesEnabled),
+    )
+    .map((section) => ({
+      ...section,
+      label: section.beta ? (
+        <span className="inline-flex items-center gap-1.5">
+          {section.label} <BetaBadge />
+        </span>
+      ) : (
+        section.label
+      ),
+    }));
+
+  // Do not mount device queries or briefly expose the disabled feature on a deep link.
+  if (isDevicesPage && !devicesEnabled) {
+    if (organization.isError) {
+      return (
+        <QueryLoadError
+          title="Couldn't load device settings"
+          onRetry={() => void organization.refetch()}
+        />
+      );
+    }
+    return null;
+  }
 
   return (
     <PageLayout
-      title="Personal Settings"
+      title={PAGE_TITLES[pathname] ?? PAGE_TITLES["/account"]}
       description={PAGE_DESCRIPTIONS[pathname] ?? PAGE_DESCRIPTIONS["/account"]}
       tabs={tabs}
       // API Keys puts Create API Key, and Credentials Add credential, in the

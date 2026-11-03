@@ -1,5 +1,6 @@
 packages:
   - "backend"
+  - "device-mcp-desktop"
   - "tools/drizzle-migration-linter"
   - "frontend"
   - "shared"

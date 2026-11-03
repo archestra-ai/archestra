@@ -2,6 +2,7 @@
 
 import type { Permissions } from "@archestra/shared";
 import { useEffect, useState } from "react";
+import { BetaBadge } from "@/components/beta-badge";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -238,11 +239,15 @@ export default function McpSettingsPage() {
         )}
         {/* SPDX-SnippetEnd */}
         <SettingsBlock
-          title="Device MCP servers"
-          description="Let each user connect MCP servers running on their own Mac or Windows device. Stop personal runtime sessions before enabling. In this preview, scheduled agents can use external tools only. Turning this off revokes device connections; users must pair again."
+          title={
+            <span className="inline-flex items-center gap-1.5">
+              Local devices <BetaBadge />
+            </span>
+          }
+          description="Let people connect their own Mac or Windows computers from Personal Settings → Devices. Stop personal agent runs before enabling. Turning this off revokes device access."
           control={
             <ToggleControl
-              label="Device MCP servers"
+              label="Local devices"
               value={deviceMcpEnabled}
               onChange={setDeviceMcpEnabled}
               isSaving={updateMcpSettingsMutation.isPending}

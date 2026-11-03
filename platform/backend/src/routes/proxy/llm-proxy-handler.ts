@@ -10,7 +10,6 @@ import type { BillingAttribution } from "@/utils/billable-usage";
 import { primaryBillingUsage } from "@/utils/billable-usage";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
 import { UpstreamStreamIncompleteError } from "@/utils/upstream-stream-incomplete-error";
-import { isBedrockPromptOverBudget } from "./utils/bedrock-prompt-budget";
 /**
  * Generic LLM Proxy Handler
  *
@@ -236,6 +235,7 @@ import {
 import * as utils from "./utils";
 import { autoRoutingContext } from "./utils/auto-routing-context";
 import { getAzureProxyIngress } from "./utils/azure-ingress";
+import { isBedrockPromptOverBudget } from "./utils/bedrock-prompt-budget";
 import { withClaudeDesktopSubscriptionPreamble } from "./utils/claude-desktop-subscription";
 import { resolveClientGatewayBindings } from "./utils/client-gateway-bindings";
 import { consumeClientRuntimeEvidence } from "./utils/client-runtime-evidence";

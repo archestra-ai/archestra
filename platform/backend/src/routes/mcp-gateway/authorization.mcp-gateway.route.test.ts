@@ -200,7 +200,7 @@ describe("MCP Gateway authorization failures", () => {
     }
     expect(redirects).toBe(0);
     expect(
-      requests.some((request) => !request.includes(`/v1/mcp/${agent.slug}`)),
+      requests.some((request) => !request.endsWith(` /v1/mcp/${agent.slug}`)),
     ).toBe(false);
   });
 });

@@ -56,6 +56,7 @@ describe("the SRE agent and its tools follow object grants", () => {
     });
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
+    await shareWithRole(organizationId, MEMBER_ROLE_NAME);
     const caller = {
       kind: "caller" as const,
       userId: member.id,

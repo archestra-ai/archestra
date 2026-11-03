@@ -1,7 +1,9 @@
 import {
   ADMIN_ROLE_NAME,
   BUILT_IN_AGENT_IDS,
+  PLATFORM_ADMIN_ROLE_NAME,
   type ResourcePermissionGrant,
+  resourcePermissionPresets,
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -44,7 +46,7 @@ import {
 /**
  * The opt-in SRE agent: a read-only Kubernetes MCP server in its own "SRE"
  * environment, whose egress allows only the configured API server CIDRs, plus
- * an org-wide agent that uses its tools.
+ * an Admin and Platform Admin agent that uses its tools.
  *
  * Seeded once. While the feature is on, a catalog item, install, or agent an
  * admin deleted stays deleted (the soft-deleted row is the marker). Turning
@@ -194,7 +196,8 @@ class SreAgentService {
         },
         params.authorId ?? undefined,
         {
-          initialPermissionGrants: SRE_ORGANIZATION_GRANTS,
+          initialPermissionGrants: SRE_ADMIN_GRANTS,
+          grantAuthor: false,
           skipCreationDefaultTools: true,
           deferInitialVersionFork: true,
         },
@@ -366,7 +369,8 @@ class SreAgentService {
       {
         organizationId: organization.id,
         authorId: adminUserId,
-        initialPermissionGrants: SRE_ORGANIZATION_GRANTS,
+        initialPermissionGrants: SRE_ADMIN_GRANTS,
+        grantAuthor: false,
       },
     );
     await this.createInstall(adminUserId);
@@ -402,16 +406,17 @@ class SreAgentService {
 export const sreAgentService = new SreAgentService();
 
 /**
- * The environment remains admin-managed. The agent and its catalog start
- * organization-wide, and their own policies can narrow access later.
+ * SRE resources start visible only to Admin and Platform Admin roles.
+ * Their own policies can be edited later.
  */
 const SRE_ADMIN_GRANTS: ResourcePermissionGrant[] = [
-  { subject: { type: "role", id: ADMIN_ROLE_NAME }, actions: ["read", "use"] },
-];
-const SRE_ORGANIZATION_GRANTS: ResourcePermissionGrant[] = [
   {
-    subject: { type: "organization", id: "*" },
-    actions: ["read", "use"],
+    subject: { type: "role", id: ADMIN_ROLE_NAME },
+    actions: resourcePermissionPresets.manage.actions,
+  },
+  {
+    subject: { type: "role", id: PLATFORM_ADMIN_ROLE_NAME },
+    actions: resourcePermissionPresets.manage.actions,
   },
 ];
 

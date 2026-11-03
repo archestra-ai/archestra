@@ -802,6 +802,8 @@ class AgentModel {
        */
       skipExclusionPrefill?: boolean;
       initialPermissionGrants?: ResourcePermissionGrant[];
+      /** A system-seeded agent can retain its author without an individual grant. */
+      grantAuthor?: boolean;
       /** Publish to the whole organization; for system callers only. */
       publishToOrganization?: boolean;
       /**
@@ -866,6 +868,7 @@ class AgentModel {
       },
       {
         grants: options?.initialPermissionGrants,
+        grantAuthor: options?.grantAuthor,
         publishToOrganization: options?.publishToOrganization,
       },
     );
@@ -5444,6 +5447,7 @@ class AgentModel {
     values: typeof schema.agentsTable.$inferInsert,
     permissions: {
       grants?: ResourcePermissionGrant[];
+      grantAuthor?: boolean;
       publishToOrganization?: boolean;
     },
   ) {
@@ -5483,7 +5487,7 @@ class AgentModel {
             resource: row.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
             scope: row.id,
             grants: permissions.grants,
-            authorId: row.authorId,
+            authorId: permissions.grantAuthor === false ? null : row.authorId,
             publishToOrganization: permissions.publishToOrganization,
           });
           // SPDX-SnippetEnd

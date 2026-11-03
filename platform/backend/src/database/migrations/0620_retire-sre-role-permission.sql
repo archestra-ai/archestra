@@ -1,4 +1,42 @@
 -- SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+-- Narrow only pristine built-in object policies. Revision 1 means nobody has
+-- edited their grants. SRE had an organization grant; APPA Keeper was seeded
+-- with the legacy organization audience. Preserve every edited policy.
+UPDATE resource_permission_policies AS policy
+SET grants = jsonb_build_array(
+    jsonb_build_object('subject', jsonb_build_object('type', 'role', 'id', 'admin'), 'actions', jsonb_build_array('read', 'use', 'update', 'delete', 'manage-permissions')),
+    jsonb_build_object('subject', jsonb_build_object('type', 'role', 'id', 'platform_admin'), 'actions', jsonb_build_array('read', 'use', 'update', 'delete', 'manage-permissions'))
+  ),
+  legacy_organization_audience = false,
+  revision = policy.revision + 1,
+  updated_at = now()
+WHERE policy.resource = 'agent'
+  AND policy.revision = 1
+  AND EXISTS (
+    SELECT 1 FROM agents AS agent
+    WHERE agent.id::text = policy.scope
+      AND agent.organization_id = policy.organization_id
+      AND agent.deleted_at IS NULL
+      AND (
+        (agent.id = '00000000-0000-4000-8000-000000000512'
+          AND policy.grants @> '[{"subject":{"type":"organization","id":"*"}}]'::jsonb)
+        OR (agent.built_in_agent_config->>'name' = 'openappa-configuration-agent'
+          AND policy.legacy_organization_audience)
+      )
+  );
+--> statement-breakpoint
+UPDATE resource_permission_policies AS policy
+SET grants = jsonb_build_array(
+    jsonb_build_object('subject', jsonb_build_object('type', 'role', 'id', 'admin'), 'actions', jsonb_build_array('read', 'use', 'update', 'delete', 'manage-permissions')),
+    jsonb_build_object('subject', jsonb_build_object('type', 'role', 'id', 'platform_admin'), 'actions', jsonb_build_array('read', 'use', 'update', 'delete', 'manage-permissions'))
+  ),
+  revision = policy.revision + 1,
+  updated_at = now()
+WHERE policy.resource = 'mcpRegistry'
+  AND policy.scope = '00000000-0000-4000-8000-000000000510'
+  AND policy.revision = 1
+  AND policy.grants @> '[{"subject":{"type":"organization","id":"*"}}]'::jsonb;
+--> statement-breakpoint
 -- Preserve access held by frozen custom roles with sre:read before removing
 -- that retired RBAC resource. Both the agent and Kubernetes catalog now use
 -- their own policies. Upgrade existing role grants, keeping other actions.
@@ -49,7 +87,7 @@ WHERE policy.organization_id = rewritten.organization_id
   AND policy.scope = rewritten.scope
   AND policy.grants IS DISTINCT FROM rewritten.grants;
 --> statement-breakpoint
--- Include the Admin grant when either object has not been seeded yet. If it
+-- Include Admin and Platform Admin grants when either object has not been seeded yet. If it
 -- already exists, preserve its policy and add only missing legacy roles.
 WITH legacy_roles AS (
   SELECT id, organization_id
@@ -67,10 +105,10 @@ WITH legacy_roles AS (
 INSERT INTO resource_permission_policies
   (organization_id, resource, scope, grants)
 SELECT organization_id, target.resource, target.scope,
-  jsonb_build_array(jsonb_build_object(
-    'subject', jsonb_build_object('type', 'role', 'id', 'admin'),
-    'actions', jsonb_build_array('read', 'use')
-  )) || grants
+  jsonb_build_array(
+    jsonb_build_object('subject', jsonb_build_object('type', 'role', 'id', 'admin'), 'actions', jsonb_build_array('read', 'use', 'update', 'delete', 'manage-permissions')),
+    jsonb_build_object('subject', jsonb_build_object('type', 'role', 'id', 'platform_admin'), 'actions', jsonb_build_array('read', 'use', 'update', 'delete', 'manage-permissions'))
+  ) || grants
 FROM grants_by_org
 CROSS JOIN (VALUES
   ('mcpRegistry', '00000000-0000-4000-8000-000000000510'),
@@ -89,7 +127,7 @@ ON CONFLICT (organization_id, resource, scope) DO UPDATE
 SET grants = resource_permission_policies.grants || COALESCE((
     SELECT jsonb_agg(grant_entry)
     FROM jsonb_array_elements(EXCLUDED.grants) AS grant_entry
-    WHERE grant_entry->'subject'->>'id' <> 'admin'
+    WHERE grant_entry->'subject'->>'id' NOT IN ('admin', 'platform_admin')
       AND NOT EXISTS (
         SELECT 1
         FROM jsonb_array_elements(resource_permission_policies.grants) AS existing

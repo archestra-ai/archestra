@@ -22,6 +22,7 @@ test("retiring sre:read preserves custom-role catalog access and upgrades the ag
     CREATE TABLE resource_permission_policies (
       organization_id text NOT NULL, resource text NOT NULL, scope text NOT NULL,
       grants jsonb NOT NULL, revision integer NOT NULL DEFAULT 1,
+      legacy_organization_audience boolean NOT NULL DEFAULT false,
       updated_at timestamp DEFAULT now(),
       PRIMARY KEY (organization_id, resource, scope)
     );
@@ -70,7 +71,8 @@ test("retiring sre:read preserves custom-role catalog access and upgrades the ag
       { id: "sre-reader", actions: ["manage-permissions", "read", "use"] },
     ] },
     { organization_id: "org-one", resource: "mcpRegistry", roles: [
-      { id: "admin", actions: ["read", "use"] },
+      { id: "admin", actions: ["read", "use", "update", "delete", "manage-permissions"] },
+      { id: "platform_admin", actions: ["read", "use", "update", "delete", "manage-permissions"] },
       { id: "sre-new", actions: ["read", "use"] },
       { id: "sre-reader", actions: ["read", "use"] },
     ] },

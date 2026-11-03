@@ -124,8 +124,155 @@ function redactSpan(span: string): string {
   return `${shown}${span.slice(from)}`;
 }
 
+// The regex only finds a credential name and its separator; the value is
+// scanned by hand and the search resumes past it, so every character is read
+// a bounded number of times.
 function redactText(text: string): string {
-  return text.replace(CREDENTIAL_TEXT, redactTextPair);
+  let shown = "";
+  let from = 0;
+  const heads = new RegExp(CREDENTIAL_HEAD);
+  for (let head = heads.exec(text); head; head = heads.exec(text)) {
+    const value = credentialValue(text, head);
+    if (!value) continue;
+    shown += `${text.slice(from, value.start)}${redactSecret(text.slice(value.start, value.end))}`;
+    from = value.end;
+    heads.lastIndex = Math.max(heads.lastIndex, value.end);
+  }
+  return `${shown}${text.slice(from)}`;
+}
+
+type Span = { start: number; end: number };
+type QuoteToken = {
+  quote: string;
+  slashes: number;
+  start: number;
+  end: number;
+};
+
+// After `:` or `=` a gap that may be shell-escaped, then a value quoted from
+// its first character, or a bare one: after `=` up to a space, quote or `&`,
+// as in a query string; after `:` see `colonValueEnd`. Second in a quoted
+// `"name", "value"` tuple, the quoted value.
+function credentialValue(
+  text: string,
+  head: RegExpExecArray,
+): Span | undefined {
+  const [match, nameClose, separator] = head;
+  let at = head.index + match.length;
+  if (separator === ",") {
+    const quoted =
+      nameClose !== undefined &&
+      text.startsWith(nameClose, head.index - nameClose.length);
+    return quoted ? quotedValue(text, skipSpace(text, at)) : undefined;
+  }
+  let escapedGap = false;
+  for (;;) {
+    if (text[at] === "\\" && isSpace(text[at + 1])) {
+      at += 2;
+      escapedGap = true;
+    } else if (isSpace(text[at])) {
+      at++;
+      escapedGap = false;
+    } else break;
+  }
+  const quoted = quotedValue(text, at);
+  if (quoted) return quoted;
+  let end = at;
+  if (separator === "=")
+    while (end < text.length && !/[\s'"\\&]/.test(text[end] ?? "")) end++;
+  else end = colonValueEnd(text, at, escapedGap);
+  return end > at ? { start: at, end } : undefined;
+}
+
+// The content of a value opening with a quote, through its matching quote or
+// the end of the text.
+function quotedValue(text: string, at: number): Span | undefined {
+  const open = quoteToken(text, at);
+  if (!open) return undefined;
+  const close = closingQuote(text, open, false);
+  return close.start > open.end
+    ? { start: open.end, end: close.start }
+    : undefined;
+}
+
+// A bare value after `:`. Shell-escaped (`\ ` in the gap or before any
+// space) it runs to the first unescaped space, else to the end of the line.
+// A quote after `=` or a space opens a quoted part that is read through its
+// match, as in `Digest response="..."` or `sid="..."`; any other quote ends
+// the value, since it may close an enclosing argument.
+function colonValueEnd(text: string, at: number, escapedGap: boolean): number {
+  let mode: "unknown" | "line" | "shell" = escapedGap ? "shell" : "unknown";
+  let index = at;
+  while (index < text.length) {
+    const char = text[index] ?? "";
+    if (char === "\n" || char === "\r") break;
+    if (isSpace(char)) {
+      if (mode === "shell") break;
+      mode = "line";
+      index++;
+      continue;
+    }
+    if (char !== "\\" && char !== '"' && char !== "'") {
+      index++;
+      continue;
+    }
+    const token = quoteToken(text, index);
+    if (token) {
+      const before = text[index - 1] ?? "";
+      if (before !== "=" && !isSpace(before)) break;
+      index = closingQuote(text, token, true).end;
+      if (mode === "unknown") mode = "line";
+      continue;
+    }
+    const run = backslashRunEnd(text, index);
+    const escaped = (run - index) % 2 === 1;
+    if (escaped && isSpace(text[run]) && mode !== "line") mode = "shell";
+    index =
+      escaped && mode !== "line" && text[run] !== undefined ? run + 1 : run;
+  }
+  return index;
+}
+
+// Quotes may be escaped as many times as the text is nested in JSON: a quote
+// with no more backslashes than the opening one closes it.
+function closingQuote(
+  text: string,
+  open: QuoteToken,
+  withinLine: boolean,
+): Span {
+  let index = open.end;
+  while (index < text.length) {
+    const char = text[index];
+    if (withinLine && (char === "\n" || char === "\r")) break;
+    if (char !== "\\" && char !== '"' && char !== "'") {
+      index++;
+      continue;
+    }
+    const token = quoteToken(text, index);
+    if (!token) index = backslashRunEnd(text, index);
+    else if (token.quote === open.quote && token.slashes <= open.slashes)
+      return { start: token.start, end: token.end };
+    else index = token.end;
+  }
+  return { start: index, end: index };
+}
+
+function quoteToken(text: string, at: number): QuoteToken | undefined {
+  const run = backslashRunEnd(text, at);
+  const quote = text[run];
+  return quote === '"' || quote === "'"
+    ? { quote, slashes: run - at, start: at, end: run + 1 }
+    : undefined;
+}
+
+function backslashRunEnd(text: string, at: number): number {
+  let index = at;
+  while (text[index] === "\\") index++;
+  return index;
+}
+
+function isSpace(char: string | undefined): boolean {
+  return char !== undefined && /\s/.test(char);
 }
 
 function isJson(text: string): boolean {
@@ -235,19 +382,6 @@ function stringEnd(json: string, start: number): number {
   return index + 1;
 }
 
-function redactTextPair(
-  _pair: string,
-  prefix: string,
-  open: string | undefined,
-  quoted: string | undefined,
-  close: string | undefined,
-  bare: string | undefined,
-): string {
-  return open === undefined
-    ? `${prefix}${redactSecret(bare ?? "")}`
-    : `${prefix}${open}${redactSecret(quoted ?? "")}${close ?? ""}`;
-}
-
 // Only a known scheme stays visible: any other word before a gap may be the
 // credential itself.
 function redactSecret(value: string): string {
@@ -272,19 +406,14 @@ const AUTH_SCHEMES = new Set([
 
 const PAIR_NAME_KEYS = new Set(["name", "key", "header"]);
 
-const CREDENTIAL_NAMES = String.raw`(?:proxy-)?authorization|[\w-]*(?:api|auth|private)[-_]?(?:key|token)|(?:set-)?cookie`;
+const CREDENTIAL_NAMES = String.raw`(?:proxy-)?authorization|[\w-]*(?:api|auth|private|access|secret|session|security)[-_]?(?:key|token)|[\w-]*(?:refresh|id)[-_]?token|[\w-]*client[-_]?secret|(?:set-)?cookie`;
 
 const CREDENTIAL_NAME = new RegExp(`^(?:${CREDENTIAL_NAMES})$`, "i");
 
-// The name, starting a word so a long word is tried once, possibly quoted,
-// `:` or `=`, a gap that may be shell-escaped, then either a value quoted
-// from its first character through the matching quote, or a bare value: after
-// `:` up to the first unescaped space when it is shell-escaped (`\ `), else
-// up to the end of the line or a quote, which may close an enclosing
-// argument; after `=` up to a space, quote or `&`, as in a query string.
-// Quotes may be escaped as many times as the text is nested in JSON.
-const CREDENTIAL_TEXT = new RegExp(
-  String.raw`((?<![\w-])(?:${CREDENTIAL_NAMES})(?:\\*["'])?\s*[:=](?:\\?\s)*)(?:(\\*["'])([\s\S]*?)(\2|$)|((?<=:(?:\\?\s)*)(?:(?:(?<=\\\s)|(?=(?:\\\S|[^\s'"\\])*\\\s))(?:\\\s|[^\s'"\\])+|(?:\\(?![\\"'])|[^\r\n'"\\])+)|[^\s'"\\&]+))`,
+// A name starting a word, so a long word is tried once, possibly quoted, then
+// `:`, `=` or the `,` of a tuple.
+const CREDENTIAL_HEAD = new RegExp(
+  String.raw`(?<![\w-])(?:${CREDENTIAL_NAMES})(\\*["'])?\s*([:=,])`,
   "gi",
 );
 

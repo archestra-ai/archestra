@@ -196,6 +196,29 @@ it("shows unknown usage when a request has no provider token count", async () =>
   ).toBeVisible();
 });
 
+it("keeps a missing output count unknown when input usage is reported", async () => {
+  serveSession({
+    rows: [
+      summary({
+        id: "request-partial-usage",
+        inputTokens: 12,
+        outputTokens: null,
+      }),
+    ],
+  });
+
+  await renderPage();
+
+  expect(
+    await screen.findByText(
+      "The provider did not report every token count for this request.",
+    ),
+  ).toBeVisible();
+  const tokens = screen.getByText("Output").closest("li");
+  expect(tokens).toHaveTextContent("Unknown");
+  expect(screen.getByText("Fresh input").closest("li")).toHaveTextContent("12");
+});
+
 it("opens the request a link names, moving to the page that holds it", async () => {
   // Sixty requests, newest first: the linked one is the 56th newest, so it
   // sits on page two of fifty.

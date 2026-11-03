@@ -239,16 +239,21 @@ function RequestOverview({
 
   // Tokens: cache counts are part of the input when they fit inside it
   // (OpenAI-style); otherwise they are reported beside it (Anthropic-style).
-  const input = row.inputTokens ?? 0;
-  const output = row.outputTokens ?? 0;
-  const usageUnknown = row.inputTokens === null && row.outputTokens === null;
+  const input = row.inputTokens;
+  const output = row.outputTokens;
+  const usageUnknown = input === null || output === null;
+  const allUsageUnknown = input === null && output === null;
   const read = row.cacheReadTokens ?? 0;
   const write = row.cacheWriteTokens ?? 0;
-  const cacheInsideInput = read + write <= input;
-  const fresh = cacheInsideInput ? input - read - write : input;
-  const tokenTotal = cacheInsideInput
-    ? input + output
-    : input + read + write + output;
+  const cacheInsideInput = input !== null && read + write <= input;
+  const fresh =
+    input === null ? null : cacheInsideInput ? input - read - write : input;
+  const tokenTotal =
+    input === null || output === null
+      ? null
+      : cacheInsideInput
+        ? input + output
+        : input + read + write + output;
   const segments = [
     {
       key: "fresh",
@@ -270,7 +275,8 @@ function RequestOverview({
     },
     { key: "output", label: "Output", value: output, tone: TOKEN_TONES.output },
   ];
-  const cacheShare = input > 0 && cacheInsideInput ? read / input : 0;
+  const cacheShare =
+    input !== null && input > 0 && cacheInsideInput ? read / input : 0;
 
   // A pass-through call or a model without a tariff records no cost at all,
   // which is not the same as costing nothing.
@@ -391,29 +397,41 @@ function RequestOverview({
           title="Tokens"
           aside={
             <BigFigure
-              value={usageUnknown ? "Unknown" : tokenTotal.toLocaleString()}
+              value={
+                tokenTotal === null ? "Unknown" : tokenTotal.toLocaleString()
+              }
             />
           }
         >
-          {usageUnknown ? (
+          {allUsageUnknown ? (
             <p className="text-xs text-muted-foreground">
               The provider did not report a token count for this request.
             </p>
           ) : (
             <>
-              <div className="flex h-1.5 gap-px overflow-hidden rounded-full bg-muted">
-                {segments
-                  .filter((segment) => segment.value > 0)
-                  .map((segment) => (
-                    <span
-                      key={segment.key}
-                      className={segment.tone}
-                      style={{
-                        width: `${(segment.value / Math.max(tokenTotal, 1)) * 100}%`,
-                      }}
-                    />
-                  ))}
-              </div>
+              {usageUnknown ? (
+                <p className="text-xs text-muted-foreground">
+                  The provider did not report every token count for this
+                  request.
+                </p>
+              ) : null}
+              {tokenTotal !== null ? (
+                <div className="flex h-1.5 gap-px overflow-hidden rounded-full bg-muted">
+                  {segments
+                    .filter(
+                      (segment) => segment.value !== null && segment.value > 0,
+                    )
+                    .map((segment) => (
+                      <span
+                        key={segment.key}
+                        className={segment.tone}
+                        style={{
+                          width: `${((segment.value ?? 0) / Math.max(tokenTotal, 1)) * 100}%`,
+                        }}
+                      />
+                    ))}
+                </div>
+              ) : null}
               <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                 {segments.map((segment) => (
                   <li
@@ -423,7 +441,9 @@ function RequestOverview({
                       segment.value === 0 && "opacity-40",
                     )}
                     title={
-                      tokenTotal > 0
+                      tokenTotal !== null &&
+                      tokenTotal > 0 &&
+                      segment.value !== null
                         ? `${Math.round((segment.value / tokenTotal) * 100)}% of tokens`
                         : undefined
                     }
@@ -439,7 +459,9 @@ function RequestOverview({
                       {segment.label}
                     </span>
                     <span className="ml-auto tabular-nums">
-                      {formatCompactNumber(segment.value)}
+                      {segment.value === null
+                        ? "Unknown"
+                        : formatCompactNumber(segment.value)}
                     </span>
                   </li>
                 ))}

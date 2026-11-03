@@ -473,8 +473,8 @@ describe("prefill SSE keep-alives over HTTP", () => {
     const interactions =
       await InteractionModel.getAllInteractionsForProfile(agentId);
     expect(interactions).toHaveLength(1);
-    expect(interactions[0].inputTokens).toBe(0);
-    expect(interactions[0].outputTokens).toBe(0);
+    expect(interactions[0].inputTokens).toBeNull();
+    expect(interactions[0].outputTokens).toBeNull();
     expect(interactions[0].response).not.toMatchObject({
       content: message.content,
     });

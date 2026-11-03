@@ -121,8 +121,12 @@ export type AppaClientAdapter = {
    */
   nativeQuestion?: {
     toolName: string;
+    /** Gateway questions need this form when the client has no MCP elicitation. */
+    requiresNativeForm?: boolean;
     isAvailable?(headers: IncomingHttpHeaders): boolean;
     supportsMultiple?: boolean;
+    /** Keep questions with more choices on the gateway; never discard options. */
+    maxOptions?: number;
     fromAskUser?(args: AskUserArguments): Record<string, unknown>;
     /**
      * Approve or Deny from the tool's result. `asked` is the question the

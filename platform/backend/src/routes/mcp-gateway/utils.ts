@@ -2722,6 +2722,10 @@ function createGatewayUserElicit(params: {
         params: request.params as Record<string, unknown>,
       },
     });
+    // Let the tool handle an unavailable form, including closing an unshown
+    // guardrail review. Unwinding first would bypass that fail-closed path.
+    if (!canElicit) return { status: "no_viewer" };
+
     // Under 2026-07-28 a server may not open a request mid-call: the client
     // drops it and the call would wait out the answer timeout. Unwind to an
     // InputRequiredResult instead, which the client answers on a retry.

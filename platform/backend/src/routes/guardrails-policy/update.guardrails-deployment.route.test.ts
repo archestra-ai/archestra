@@ -71,7 +71,7 @@ describe("Deployment-wide Guardrails v2 switch", () => {
           enabled,
           unsupportedClientAction: "bypass",
           breakTheGlassEnabled: true,
-          humanApprovalMode: "unattended",
+          humanApprovalMode: "block",
           unapprovableBlockMode: "refuse",
           annotatorModelId: null,
           annotatorLlmApiKeyId: null,

@@ -789,6 +789,9 @@ class ModelModel {
         model.customContextLength,
         model.customOutputLength,
         model.configuredParameters,
+        model.inputModalities,
+        model.outputModalities,
+        model.embeddingDimensions,
       ];
       if (
         !model.discoveredViaLlmProxy ||

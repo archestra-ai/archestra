@@ -268,6 +268,25 @@ describe("DELETE /api/llm-models/:id", () => {
   });
 
   test.for([
+    { inputModalities: ["text", "image"] },
+    { outputModalities: ["text", "image"] },
+    { embeddingDimensions: 1536 },
+  ])("retains edited model capabilities: %j", async (settings) => {
+    const model = await createModel();
+    const edited = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-models/${model.id}`,
+      headers: { [USER_HEADER]: adminId },
+      payload: settings,
+    });
+    expect(edited.statusCode, edited.body).toBe(200);
+    const before = await ModelModel.findById(model.id);
+    expect(before).toMatchObject(settings);
+    expect((await remove(model.id)).statusCode).toBe(409);
+    expect(await ModelModel.findById(model.id)).toEqual(before);
+  });
+
+  test.for([
     { discoveredViaLlmProxy: false },
     { promptPricePerToken: "0.000001" },
     { completionPricePerToken: "0" },
@@ -466,22 +485,11 @@ describe("DELETE /api/llm-models/:id", () => {
   });
 });
 
-function createModel(
+async function createModel(
   modelId = "cleanup-bogus-model",
   provider: "openai" | "anthropic" = "openai",
 ) {
-  return ModelModel.create({
-    externalId: `${provider}/${modelId}`,
-    provider,
-    modelId,
-    description: modelId,
-    contextLength: 4096,
-    inputModalities: ["text"],
-    outputModalities: ["text"],
-    supportsToolCalling: true,
-    promptPricePerToken: null,
-    completionPricePerToken: null,
-    discoveredViaLlmProxy: true,
-    lastSyncedAt: new Date(),
-  });
+  const model = await ModelModel.ensureModelExists(modelId, provider);
+  if (!model) throw new Error("Expected a newly discovered model");
+  return model;
 }

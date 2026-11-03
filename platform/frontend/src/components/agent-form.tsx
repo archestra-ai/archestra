@@ -2351,7 +2351,9 @@ export function AgentForm({
               ...(isInternalAgent && {
                 systemPrompt: trimmedSystemPrompt || null,
                 ...(isClaudeCodeRuntime &&
-                  (runtimeHasLocalChanges || runtimeToSave !== runtime) && {
+                  (runtimeHasLocalChanges ||
+                    (canConfigureRuntime === true &&
+                      runtimeToSave !== runtime)) && {
                     runtime: runtimeToSave,
                   }),
                 ...(llmSelectionChanged && {

@@ -4799,6 +4799,51 @@ describe("AgentForm save payload and failure handling", () => {
     });
   });
 
+  it("omits runtime from the configuration save when the caller lacks configure-runtime permission even if claudeCode.authentication is subscription on a custom command", async () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
+    vi.mocked(useHasPermissions).mockImplementation((permissions) => {
+      const requested = permissions as { agent?: string[] };
+      const hasConfigureRuntime =
+        requested.agent?.includes("configure-runtime") ?? false;
+      return {
+        data: !hasConfigureRuntime,
+      } as unknown as ReturnType<typeof useHasPermissions>;
+    });
+    const user = userEvent.setup();
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          llmApiKeyId: "key-1",
+          modelId: "claude-model",
+          runtime: {
+            image: "example.com/claude-code:latest",
+            command: ["archestra-claude-code-runtime"],
+            claudeCode: {
+              authentication: "subscription",
+              model: "opus",
+            },
+            inferenceProtocol: "anthropic",
+            backend: "kubernetes",
+            steerMode: "tmux_keys",
+            privileged: false,
+            environment: null,
+            credentials: null,
+            ttlHours: null,
+            maxCostUsd: null,
+            idleTimeoutMinutes: null,
+          },
+        }}
+        sections={["configuration"]}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /update/i }));
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(savedBody().runtime).toBeUndefined();
+  });
+
   it("does not treat a maintained non-Claude harness on the Anthropic protocol as Claude Code", () => {
     render(
       <AgentForm

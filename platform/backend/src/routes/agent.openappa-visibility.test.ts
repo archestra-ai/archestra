@@ -77,6 +77,16 @@ describe("system chat agent visibility", () => {
         .data.map((agent: { id: string }) => agent.id)
         .sort(),
     ).toEqual([policy.id, ordinary.id].sort());
+    for (const sortBy of ["chat", "name", "createdAt"]) {
+      const page = await ctx.app.inject({
+        method: "GET",
+        url: `/api/agents/chat-roster/page?search=${encodeURIComponent(policy.name)}&sortBy=${sortBy}`,
+      });
+      expect(page.statusCode).toBe(200);
+      expect(page.json().data.map((agent: { id: string }) => agent.id)).toEqual(
+        [policy.id],
+      );
+    }
   });
 
   test("a member can select and pin the granted system assistant without seeing other platform agents", async ({

@@ -67738,7 +67738,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Fetch bounded authorized nonbuilt-in chat choices with literal name or description search.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Fetch bounded authorized chat choices with literal name or description search.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {

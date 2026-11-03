@@ -131,6 +131,24 @@ test('a probe-declared spawn starts its child once, under the real call', { skip
   assert.equal(result.decision, 'ack', "the crossed value is the spawn's result");
 });
 
+test('a return declared ahead, as the gateway does without an offer, releases only the next spawn', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const run = family();
+  // The proxy opens the session at the model's first tool call, before the gateway runs any.
+  assert.equal((await run.hook(run.parent, run.call('c0', 'publish'))).decision, 'allow_call');
+  await run.hook(run.parent, { event: 'tool_result', tool_call_id: 'c0', output: 'sent', outcome: 'success' });
+  const declared = await run.remedy(run.parent, 'ahead:1', { label: {} });
+  assert.equal(declared.result.isError, false, JSON.stringify(declared));
+  assert.match(declared.approved_output, /^\[appa\] Declared\./);
+
+  const call = await run.hook(run.parent, run.spawnCall('s1'));
+  assert.equal(call.decision, 'allow_call', JSON.stringify(call));
+  assert.ok(call.spawn_binding, 'the spawn starts its child under the declared return');
+
+  const next = await run.hook(run.parent, run.spawnCall('s2'));
+  assert.equal(next.decision, 'deny_call', 'a declaration covers one spawn');
+});
+
 test('an attested return schema admits only bounded leaves', { skip: !databaseUrl }, async () => {
   await native.initializeOpenappa(databaseUrl, 2);
   const run = family();

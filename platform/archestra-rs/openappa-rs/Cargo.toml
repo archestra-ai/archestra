@@ -19,15 +19,25 @@ crate-type = ["cdylib"]
 # errors for tool names that identify no tool (#698), `[aliases.tool]` (#696)
 # and the generic coding battery (#697); then v0.37.0 and libpq TLS
 # parameters (`sslmode=verify-full`, `sslrootcert`) in the PostgreSQL URL (#710),
-# and the attestation offered only where the parent covers its rank (#713).
-# On the 1.4 line only: the `main` pin above plus plaintext receipts that hold
-# U+0000 stored under the plaintext escape (#724), cherry-picked as 9e89e007 on
-# the branch backport/archestra-release-1.4-plaintext-nul; then the ZIP 9
-# security fix (#680), backported without changing OpenAPPA 0.37.0.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "66ac46eb9e6af851d438742e2e25bebe7796cfad", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "66ac46eb9e6af851d438742e2e25bebe7796cfad" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "66ac46eb9e6af851d438742e2e25bebe7796cfad", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "66ac46eb9e6af851d438742e2e25bebe7796cfad" }
+# the attestation offered only where the parent covers its rank (#713),
+# and the archestra battery's agent-run rules (#716); then explicit
+# no-remedy refusal feedback (#720), a failed subagent reported as stopped
+# (#722), and plaintext receipts that hold U+0000 stored under the plaintext
+# escape (#724); then v0.38.0 and the remedy's vouch spent at its claim
+# (#725), shorter block feedback (#726), the replay stand-in (#739), a
+# subagent's return declared without review or ahead of its spawn (#763), and
+# the required readers named in reviews and block reasons (#764); then
+# v0.38.1 and zip 9, which fixes the archive extract advisories (#680); then
+# context-provider answers trimmed largest first (#769), refusal detail in
+# provider errors (#770), more shell shapes for the GitHub provider (#771),
+# the consult budget in `APPA_CONSULT_TIMEOUT_MS` (#772), and context-provider
+# and deployment hints (#773), and the GitHub context provider answering the
+# GH_TOKEN, git config, assignment, and heredoc shapes it used to decline (#775);
+# then the annotator label-guide fixes and the claude-code verdict cache (#782).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4be942a1688e90795e9b74f4e5f3dcaeb35d2321", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4be942a1688e90795e9b74f4e5f3dcaeb35d2321" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4be942a1688e90795e9b74f4e5f3dcaeb35d2321", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4be942a1688e90795e9b74f4e5f3dcaeb35d2321" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

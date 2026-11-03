@@ -82,7 +82,10 @@ import {
   getGuardrailsDeployment,
   turnOnForFirstPolicy,
 } from "@/services/guardrails-deployment";
-import { guardrailsPolicyService } from "@/services/guardrails-policy";
+import {
+  deploymentHint,
+  guardrailsPolicyService,
+} from "@/services/guardrails-policy";
 import {
   policyDiff,
   resolveProposedPolicy,
@@ -145,7 +148,8 @@ import { filterToolNamesByPermission } from "./rbac";
 import type { ArchestraContext } from "./types";
 
 const RemedyPlanArgumentsSchema = z.object({
-  offer_id: z.string().min(1),
+  // Omitted to declare, right before a subagent call, what its return may carry.
+  offer_id: z.string().min(1).optional(),
   plan: z.string().optional(),
   label: z
     .object({
@@ -155,6 +159,27 @@ const RemedyPlanArgumentsSchema = z.object({
     .optional(),
   return_schema: z.record(z.string(), z.unknown()).optional(),
 });
+
+// A call that quotes no offer declares a subagent's return, so it names what
+// the return may carry. One that names neither forgot its `offer_id`.
+function quotesOfferOrDeclares(
+  args: z.infer<typeof RemedyPlanArgumentsSchema>,
+) {
+  return (
+    args.offer_id !== undefined ||
+    args.label !== undefined ||
+    args.return_schema !== undefined
+  );
+}
+const OFFER_OR_DECLARATION = {
+  path: ["offer_id"],
+  message:
+    "Pass the offer_id from the ruling. Omit it only to declare a subagent's return, with label.",
+};
+const RemedyPlanCallSchema = RemedyPlanArgumentsSchema.refine(
+  quotesOfferOrDeclares,
+  OFFER_OR_DECLARATION,
+);
 
 // Shared by the chat elicitation bridge and the MRTR input-required signal.
 // Both channels request the same approve/deny ruling form.
@@ -588,7 +613,7 @@ const registry = defineArchestraTools([
     title: "Read OpenAPPA policy",
     annotations: { readOnlyHint: true },
     description:
-      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, which open and new conversations follow at their next call; its `include` list names the batteries that compose into enforcement on top of it, `[aliases.mcp]` points each battery's namespace at the MCP servers it governs, and `effective` reports the composed result the runtime enforces: one entry per declared battery with the status it composed under, and `credentialBindings`, each battery credential variable bound with bind_guardrails_credential, outside the text. Set `composed` to also get `effective.content`, the composed policy text with every included battery's rules; it is large, so ask for it only to read those rules. The text may not name credentials: validation refuses a `[credentials]` line and a `token_env` in the policy's own externals. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. Without Git sync, `delivery.githubSyncSetupUrl` links to where the operator sets it up. Use this read to recover after a lost local publish response, without publishing again. `effective.served.kind` says what the runtime opens: `current` (the latest revision), `previous` (the latest attempt was refused and an earlier composition stays enforced; each battery's `served` is how that composition holds it, its `status` what the current text would give it), or `root_only` (nothing ever composed, so governed calls are refused). Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
+      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, which open and new conversations follow at their next call; its `include` list names the batteries that compose into enforcement on top of it, `[aliases.mcp]` points each battery's namespace at the MCP servers it governs, and `effective` reports the composed result the runtime enforces: one entry per declared battery with the status it composed under, and `credentialBindings`, each battery credential variable bound with bind_guardrails_credential, outside the text. Set `composed` to also get `effective.content`, the composed policy text with every included battery's rules; it is large, so ask for it only to read those rules. The text may not name credentials: validation refuses a `[credentials]` line and a `token_env` in the policy's own externals. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. Without Git sync, `delivery.githubSyncSetupUrl` links to where the operator sets it up. `suggestedDeploymentHint` is the `[policy.deployment] hint` the starting policy carries on this deployment, naming its own host as first-party, or null when it has none. Use this read to recover after a lost local publish response, without publishing again. `effective.served.kind` says what the runtime opens: `current` (the latest revision), `previous` (the latest attempt was refused and an earlier composition stays enforced; each battery's `served` is how that composition holds it, its `status` what the current text would give it), or `root_only` (nothing ever composed, so governed calls are refused). Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
     schema: z.strictObject({
       composed: z
         .boolean()
@@ -606,6 +631,7 @@ const registry = defineArchestraTools([
       const sync = await getAppaGithubSync(organizationId);
       return result({
         ...root,
+        suggestedDeploymentHint: deploymentHint(),
         effective,
         enforcement: await getGuardrailsDeployment(),
         delivery: sync.source?.interval
@@ -1076,7 +1102,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
     title: "Execute OpenAPPA remedy plan",
     description:
-      "Apply a remedy plan that the organization's guardrails policy offers for a blocked call. Pass the offer_id and plan from the ruling. The policy decides when the user must approve a plan. In that case, the result is review_required. Ask the user with the declared ask_user tool and that offer ID. The platform renders the approval card itself and binds it to the offer server-side; the card intentionally omits the offer ID. After the user approves, call execute_remedy_plan again with the same offer and plan. An authorized result means the policy permits the plan; a narrower policy can authorize without any human review, so authorization alone is not proof the user approved. When the reviewer did approve, their selection stands over any earlier prediction of their answer. After the plan is authorized, retry the original call with exactly the authorized arguments, never regenerated or corrected ones, or use the admitted output. If the user denies the review, or the review is declined, canceled, unavailable, or unanswered, tell the user that the action stays blocked. A client decline is not a human denial.",
+      'Apply a remedy plan that the organization\'s guardrails policy offers for a blocked call. Pass the offer_id and plan from the ruling. The policy decides when the user must approve a plan. In that case, the result is review_required. Ask the user with the declared ask_user tool and that offer ID. The platform renders the approval card itself and binds it to the offer server-side; the card intentionally omits the offer ID. After the user approves, call execute_remedy_plan again with the same offer and plan. An authorized result means the policy permits the plan; a narrower policy can authorize without any human review, so authorization alone is not proof the user approved. When the reviewer did approve, their selection stands over any earlier prediction of their answer. After the plan is authorized, retry the original call with exactly the authorized arguments, never regenerated or corrected ones, or use the admitted output. If the user denies the review, or the review is declined, canceled, unavailable, or unanswered, tell the user that the action stays blocked. A client decline is not a human denial. To declare what a subagent\'s return may carry, call execute_remedy_plan without offer_id right before the subagent call, for example execute_remedy_plan(label: {trust: "suspicious", audience: ["self"]}); the next subagent call then meets no block for its return.',
     // The proxy alone writes these members. They have no `.describe()` text,
     // so no rendering of the full schema can show the model their prose:
     // - execution: retry identity and history restoration; it does not authorize.
@@ -1085,7 +1111,7 @@ const registry = defineArchestraTools([
     schema: RemedyPlanArgumentsSchema.extend({
       execution: RemedyExecutionSchema.optional(),
       trajectory: CurrentTrajectorySchema.optional(),
-    }),
+    }).refine(quotesOfferOrDeclares, OFFER_OR_DECLARATION),
     // The model writes only these arguments. The proxy stamps the receipt and
     // the current trajectory onto the released call, so the advertised schema
     // leaves them out; it is not strict, so a validating client accepts the stamp.
@@ -1101,13 +1127,12 @@ const registry = defineArchestraTools([
       ) {
         return unknownOfferResult();
       }
-      const submittedSemantic =
-        RemedyPlanArgumentsSchema.parse(submittedArguments);
+      const submittedSemantic = RemedyPlanCallSchema.parse(submittedArguments);
       const originalArguments = execution?.original_arguments;
       let originalSemantic = submittedSemantic;
       if (originalArguments) {
         try {
-          originalSemantic = RemedyPlanArgumentsSchema.parse(
+          originalSemantic = RemedyPlanCallSchema.parse(
             JSON.parse(originalArguments),
           );
         } catch {
@@ -1151,6 +1176,22 @@ const registry = defineArchestraTools([
         return unknownOfferResult();
       }
       const callId = execution?.call_id ?? context.currentToolCallId;
+      if (remedy.offer_id === undefined) {
+        // A return declared ahead of its spawn: no offer, so no review. The
+        // runtime checks the floor and holds it for the next subagent call.
+        const declared = await executeRemedyByOffer({
+          organizationId: context.organizationId,
+          callerId: spender,
+          sessionId: stamp.session_id,
+          ...(stamp.parent_id ? { parentId: stamp.parent_id } : {}),
+          toolCallId: callId,
+          controlToolName: execution?.tool_name,
+          originalArguments:
+            originalArguments ?? JSON.stringify(submittedSemantic),
+          args: remedy,
+        });
+        return declared.result;
+      }
       if (callId) {
         const previousOutcome = await getHitlReviewResult({
           session: reviewSession,

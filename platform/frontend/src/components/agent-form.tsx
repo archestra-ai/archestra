@@ -74,6 +74,7 @@ import {
   type AgentRuntimeConfig,
   AgentRuntimeFields,
   isClaudeCodeRuntimeConfig,
+  supportsClaudeCodeSubscription as runtimeSupportsClaudeCodeSubscription,
 } from "@/components/agent-runtime-fields";
 import { AgentRuntimeHowItWorks } from "@/components/agent-runtime-how-it-works";
 import { AgentRuntimePicker } from "@/components/agent-runtime-picker";
@@ -1515,7 +1516,7 @@ export function AgentForm({
   const anthropicVertexAiEnabled =
     useFeature("anthropicVertexAiEnabled") === true;
   const supportsClaudeCodeSubscription =
-    runtime?.command?.[0] === "archestra-claude-code";
+    runtimeSupportsClaudeCodeSubscription(runtime);
   const isClaudeCodeRuntime = isClaudeCodeRuntimeConfig(runtime);
   const agentRuntimeEnabled = useFeature("agentRuntime") === true;
   // A runtime saved before the deployment turned Agent Runtime off stays
@@ -2350,7 +2351,9 @@ export function AgentForm({
               ...(isInternalAgent && {
                 systemPrompt: trimmedSystemPrompt || null,
                 ...(isClaudeCodeRuntime &&
-                  runtimeHasLocalChanges && { runtime: runtimeToSave }),
+                  (runtimeHasLocalChanges || runtimeToSave !== runtime) && {
+                    runtime: runtimeToSave,
+                  }),
                 ...(llmSelectionChanged && {
                   llmApiKeyId: llmApiKeyId || null,
                   modelId: llmModel || null,

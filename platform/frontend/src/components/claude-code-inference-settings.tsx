@@ -46,8 +46,8 @@ export function ClaudeCodeInferenceSettings({
 }) {
   const id = useId();
   const appName = useAppName();
+  const subscriptionSupported = runtimeCommand === "archestra-claude-code";
   const trimmedCommand = runtimeCommand?.trim() || null;
-  const subscriptionSupported = trimmedCommand === "archestra-claude-code";
   const effectiveAuthentication = subscriptionSupported
     ? authentication
     : "provider";

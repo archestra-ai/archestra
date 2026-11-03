@@ -4,6 +4,7 @@ import {
   buildCustomAgentRuntime,
   findAgentRuntimeTier,
   getAgentRuntimeAllowedProtocols,
+  resolveAgentCatalogId,
   summarizeAgentRuntimeTier,
   TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
 } from "@archestra/shared";
@@ -87,6 +88,12 @@ export function defaultAgentRuntime(): AgentRuntimeConfig {
   return buildCustomAgentRuntime({ image: "" });
 }
 
+export function supportsClaudeCodeSubscription(
+  runtime: Pick<AgentRuntimeConfig, "command"> | null | undefined,
+): boolean {
+  return runtime?.command?.[0] === "archestra-claude-code";
+}
+
 export function isClaudeCodeRuntimeConfig(
   runtime:
     | Pick<AgentRuntimeConfig, "command" | "claudeCode" | "inferenceProtocol">
@@ -94,10 +101,11 @@ export function isClaudeCodeRuntimeConfig(
     | undefined,
 ): boolean {
   if (!runtime) return false;
+  const catalogId = resolveAgentCatalogId(runtime);
+  if (catalogId === "claude-code") return true;
+  if (catalogId !== null) return false;
   return (
-    runtime.command?.[0] === "archestra-claude-code" ||
-    Boolean(runtime.claudeCode) ||
-    runtime.inferenceProtocol === "anthropic"
+    Boolean(runtime.claudeCode) || runtime.inferenceProtocol === "anthropic"
   );
 }
 

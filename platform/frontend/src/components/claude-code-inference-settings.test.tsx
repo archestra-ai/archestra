@@ -281,6 +281,31 @@ describe("Claude Code authentication", () => {
       screen.getByRole("button", { name: "Provider model" }),
     ).toBeVisible();
   });
+
+  it("treats a command with surrounding whitespace as not matching archestra-claude-code", () => {
+    render(
+      <QueryClientProvider client={client}>
+        <ClaudeCodeInferenceSettings
+          agentId="agent-1"
+          authentication="subscription"
+          onAuthenticationChange={vi.fn()}
+          model="opus"
+          onModelChange={vi.fn()}
+          provider="anthropic"
+          vertexEnabled={false}
+          runtimeCommand=" archestra-claude-code "
+          apiKeySelector={<button type="button">Provider key</button>}
+          modelSelector={<button type="button">Provider model</button>}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(
+      screen.getByRole("radio", {
+        name: /Each person's Claude subscription/,
+      }),
+    ).toBeDisabled();
+  });
 });
 
 /** The account control the agent's setup banner shows until sign-in. */

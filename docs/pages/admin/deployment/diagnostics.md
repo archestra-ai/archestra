@@ -2,7 +2,7 @@
 title: Diagnostics
 description: Investigate an installation with the SRE agent and collect a support bundle
 order: 7
-lastUpdated: 2026-10-27
+lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -11,7 +11,7 @@ lastUpdated: 2026-10-27
 
 Ask the SRE agent why an Archestra pod keeps restarting, and it reads that pod's events and logs, then answers with ranked hypotheses and the evidence for each. It sees only Archestra's own namespace, through a read-only Kubernetes MCP server that the chart runs under a dedicated `-sre` ServiceAccount. That account cannot read Secrets or ConfigMaps or change anything.
 
-To use the agent, your role needs [`sre:read`](/docs/reference/permissions#sre:read) (held by Admin by default; pod specs can carry other MCP servers' credentials).
+By default, only Admin and Platform Admin roles can use the SRE agent or its Kubernetes MCP Registry entry. To change access, edit **Who can use it** on the agent and the entry separately. Pod specs can contain other MCP servers' credentials, so grant access only to people who may see them.
 
 1. Find the Kubernetes API server endpoint IPs with `kubectl get endpoints kubernetes -n default`. Use these IPs (with `/32`), not the `kubernetes` Service IP.
 2. Turn the agent on in your Helm values, then run `helm upgrade`:
@@ -24,7 +24,7 @@ To use the agent, your role needs [`sre:read`](/docs/reference/permissions#sre:r
          - 172.16.0.2/32
    ```
 
-3. After the rollout, open **Chat**, pick the **SRE** agent, and ask "Why did a pod restart in the last hour?" If the agent is missing, check your role's [`sre:read`](/docs/reference/permissions#sre:read) permission, then check **MCP Registry → Kubernetes** for a startup error.
+3. After the rollout, open **Chat**, pick the **SRE** agent, and ask "Why did a pod restart in the last hour?" If the agent or its tools are missing, check their access settings and the Kubernetes entry in **MCP Registry**.
 
 The MCP server's egress is your organization's [default network policy](/docs/admin/environments) plus `apiServerCidrs`. A change applies when the **Kubernetes** MCP server's pod restarts.
 

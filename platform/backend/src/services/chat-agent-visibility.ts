@@ -43,6 +43,7 @@ export async function chatAgentVisibilityFor(params: {
         agent.organizationId !== organizationId ||
         agent.agentType !== "agent" ||
         (agent.builtIn &&
+          agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.SRE &&
           (agent.builtInAgentConfig?.name !==
             BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG ||
             !enterpriseTier.isOpenappaActive()))

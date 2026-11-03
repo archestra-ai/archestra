@@ -28,7 +28,6 @@ export const resources = [
   "plugin",
   "app",
   "guardrailsPolicy",
-  "sre",
   "mcpGateway",
   "llmProxy",
   "log",
@@ -81,7 +80,6 @@ export const resourceLabels: Record<Resource, string> = {
   mcpGateway: "MCP Gateways",
   llmProxy: "LLM Proxy",
   log: "LLM & MCP Logs",
-  sre: "SRE agent",
   organization: "Organization",
   identityProvider: "Identity Providers",
   member: "Users",
@@ -113,7 +111,6 @@ export const resourceDescriptions: Record<Resource, string> = {
   skill: "Agent skills — reusable SKILL.md instruction plugins",
   plugin: "Opaque plugins that execute hooks on connected developer machines",
   app: "User-authored MCP Apps — interactive apps with their own data store and tools",
-  sre: "The SRE agent and its Kubernetes tools, which read this installation's pods, logs, and specs",
   mcpGateway: "Unified MCP endpoints that aggregate tools for clients",
   llmProxy: "The LLM Proxy endpoint with security policies and observability",
   guardrailsPolicy: "Guardrails (OpenAPPA) policy, batteries, and coverage",
@@ -163,7 +160,7 @@ export const internalResources: Resource[] = ["organization", "invitation"];
  * Used in both the create/edit role dialog and the account permissions display.
  */
 export const resourceCategories: Record<string, Resource[]> = {
-  Agents: ["agent", "skill", "plugin", "app", "guardrailsPolicy", "sre"],
+  Agents: ["agent", "skill", "plugin", "app", "guardrailsPolicy"],
   MCP: ["mcpGateway", "mcpRegistry", "mcpServerInstallation"],
   LLM: [
     "llmProxy",

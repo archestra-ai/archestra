@@ -429,15 +429,14 @@ describe("own-vs-all log split (Read and Admin role actions)", () => {
 });
 
 describe("platform_admin predefined role", () => {
-  test("withholds impersonation, organization-wide diagnostics, and the SRE agent", () => {
+  test("withholds impersonation and organization-wide diagnostics", () => {
     const p = predefinedPermissionsMap.platform_admin;
     expect(p.log).toEqual(["read"]);
     expect(p.auditLog).toEqual(["read"]);
     expect(p.member).not.toContain("impersonate");
-    expect(p.sre).toEqual([]);
     // …and is otherwise the full admin set.
     for (const [resource, actions] of Object.entries(allAvailableActions)) {
-      if (["log", "auditLog", "member", "sre"].includes(resource)) {
+      if (["log", "auditLog", "member"].includes(resource)) {
         continue;
       }
       expect(p[resource as keyof typeof p]).toEqual(actions);
@@ -451,7 +450,6 @@ describe("platform_admin predefined role", () => {
         "member:impersonate",
         "log:admin",
         "auditLog:admin",
-        "sre:read",
       ]),
     );
     // …while granting its own role or member stays possible.

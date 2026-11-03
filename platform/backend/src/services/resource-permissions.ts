@@ -26,7 +26,6 @@ import {
   topResourcePermissionPreset,
 } from "@archestra/shared";
 import { roleActionResourceFor } from "@archestra/shared/access-control";
-import { canUseAgent } from "@/auth/permission-gated";
 import type { RequestLookups } from "@/auth/request-lookups";
 import { SERVICE_ACCOUNT_USER_ID_PREFIX } from "@/auth/service-account-user-id";
 import { getPermissionsForUserContext } from "@/auth/utils";
@@ -41,6 +40,7 @@ import ResourcePermissionSubjectModel, {
 import ResourcePermissionTargetModel from "@/models/resource-permission-target";
 import { resyncAppBackingInstallScope } from "@/services/apps/app-mcp-backing";
 import { assertNoStaticPinsBrokenByTargetChange } from "@/services/mcp-server-assignability";
+import { SRE_AGENT_ID, SRE_CATALOG_ID } from "@/services/sre-agent/definition";
 import type { ListInternalMcpCatalog } from "@/types";
 import { ApiError } from "@/types";
 import { CredentialResourcePermissions } from "./credential-resource-permissions";
@@ -397,7 +397,10 @@ export class ResourcePermissions {
         target.id,
         ResourcePermissionActionSchema.options.filter((action) =>
           hasScopedPermission({
-            grants: explicit,
+            grants:
+              target.id === SRE_CATALOG_ID
+                ? explicit.filter((grant) => grant.scope === target.id)
+                : explicit,
             required: { ...required, action },
           }),
         ),
@@ -721,17 +724,19 @@ export class ResourcePermissions {
     context: PermissionContext & { lookups?: PrincipalSource },
   ): Promise<ScopedPermission[]> {
     if (!ManagedResourceSchema.safeParse(context.resource).success) return [];
-    if (
-      context.resource === "agent" &&
-      !(await canUseAgent(context.scope, context))
-    )
-      return [];
     const params = await ResourcePermissions.grantContext(context);
     const subjects = await ResourcePermissions.getSubjects(params);
     if (subjects.length === 0) return [];
     const policies = await ResourcePermissionPolicyModel.findApplicable(params);
+    // The SRE agent and Kubernetes catalog require their own grants. General
+    // wildcard policies must not expose the installation's pod specs or logs.
+    const effectivePolicies =
+      (context.resource === "agent" && context.scope === SRE_AGENT_ID) ||
+      (context.resource === "mcpRegistry" && context.scope === SRE_CATALOG_ID)
+        ? policies.filter((policy) => policy.scope === params.scope)
+        : policies;
     const subjectKeys = new Set(subjects.map(subjectKey));
-    return expandScopedGrants({ policies, subjectKeys })
+    return expandScopedGrants({ policies: effectivePolicies, subjectKeys })
       .filter(
         (grant) =>
           grant.scope === params.scope ||

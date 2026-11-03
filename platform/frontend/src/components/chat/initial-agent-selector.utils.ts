@@ -29,6 +29,7 @@ export function filterAndSortInitialAgents<
   let result = allAgents.filter((agent) => {
     if (
       agent.builtIn &&
+      agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.SRE &&
       agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG
     )
       return false;
@@ -36,7 +37,9 @@ export function filterAndSortInitialAgents<
       return (
         agent.authorId === userId ||
         (agent.builtIn &&
-          agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG)
+          (agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.SRE ||
+            agent.builtInAgentConfig?.name ===
+              BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG))
       );
     }
     return true;

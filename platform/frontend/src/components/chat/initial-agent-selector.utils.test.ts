@@ -36,6 +36,21 @@ function makeAgent(
 }
 
 describe("filterAndSortInitialAgents", () => {
+  it("shows the built-in SRE agent when granted to the caller", () => {
+    const sre = makeAgent({
+      id: "sre",
+      builtIn: true,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.SRE },
+    });
+    expect(
+      filterAndSortInitialAgents({
+        allAgents: [sre],
+        currentAgentId: null,
+        search: "",
+        userId,
+      }),
+    ).toEqual([sre]);
+  });
   it("offers the chat-capable built-in while hiding platform subagents", () => {
     const agents = [
       makeAgent({
@@ -116,6 +131,25 @@ describe("filterAndSortInitialAgents", () => {
         userId,
       }).map((agent) => agent.id),
     ).toEqual([policy.id]);
+  });
+
+  it("keeps a personal-scoped SRE agent granted to another user", () => {
+    const sre = makeAgent({
+      id: "sre",
+      name: "SRE",
+      scope: "personal",
+      authorId: "admin",
+      builtIn: true,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.SRE },
+    });
+    expect(
+      filterAndSortInitialAgents({
+        allAgents: [sre],
+        currentAgentId: null,
+        search: "",
+        userId,
+      }),
+    ).toEqual([sre]);
   });
 
   it("puts the current agent first even if it is a shared agent", () => {

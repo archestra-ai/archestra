@@ -8,7 +8,9 @@ import {
   BUILT_IN_AGENT_NAMES,
   CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
   CONTEXT_COMPACTION_SYSTEM_PROMPT,
+  MEMBER_ROLE_NAME,
   OPENAPPA_CONFIG_SUGGESTED_PROMPTS,
+  PLATFORM_ADMIN_ROLE_NAME,
   SUBSCRIPTION_CREDENTIALS,
 } from "@archestra/shared";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
@@ -31,6 +33,7 @@ import AgentVersionModel from "@/models/agent-version";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ToolModel from "@/models/tool";
 import { DEFAULT_APPS } from "@/services/apps/default-apps";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   builtInSkillSourceRef,
   builtInSkillVersion,
@@ -76,7 +79,9 @@ async function countBuiltIns(organizationId: string) {
 
 function expectedBuiltIns() {
   return {
-    agents: Object.values(BUILT_IN_AGENT_IDS).sort(),
+    agents: Object.values(BUILT_IN_AGENT_IDS)
+      .filter((id) => id !== BUILT_IN_AGENT_IDS.SRE)
+      .sort(),
     skills: getEnabledBuiltInSkills()
       .map(({ builtInSkillId }) => builtInSkillSourceRef(builtInSkillId))
       .sort(),
@@ -84,6 +89,38 @@ function expectedBuiltIns() {
 }
 
 describe("syncBuiltInAgents", () => {
+  test("APPA Keeper starts usable only by Admin and Platform Admin", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    await syncBuiltInAgents();
+    await syncOpenAppaConfigAgentCapabilities();
+    const agent = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+      org.id,
+    );
+    if (!agent) throw new Error("APPA Keeper missing");
+    for (const [role, allowed] of [
+      [ADMIN_ROLE_NAME, true],
+      [PLATFORM_ADMIN_ROLE_NAME, true],
+      [MEMBER_ROLE_NAME, false],
+    ] as const) {
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role });
+      expect(
+        await ResourcePermissions.allows({
+          organizationId: org.id,
+          userId: user.id,
+          resource: "agent",
+          scope: agent.id,
+          action: "use",
+        }),
+      ).toBe(allowed);
+    }
+  });
+
   test("reuses the built-in OpenAPPA agent and reconciles its capabilities", async ({
     makeOrganization,
     makeUser,
@@ -102,12 +139,23 @@ describe("syncBuiltInAgents", () => {
     );
     expect(disabledAgent).not.toBeNull();
     expect(
-      await ResourcePermissionPolicyModel.find({
-        organizationId: organization.id,
-        resource: "agent",
-        scope: disabledAgent?.id ?? "",
-      }),
-    ).not.toBeNull();
+      (
+        await ResourcePermissionPolicyModel.find({
+          organizationId: organization.id,
+          resource: "agent",
+          scope: disabledAgent?.id ?? "",
+        })
+      )?.grants,
+    ).toEqual([
+      {
+        subject: { type: "role", id: ADMIN_ROLE_NAME },
+        actions: ["read", "use", "update", "delete", "manage-permissions"],
+      },
+      {
+        subject: { type: "role", id: PLATFORM_ADMIN_ROLE_NAME },
+        actions: ["read", "use", "update", "delete", "manage-permissions"],
+      },
+    ]);
     config.openappa.enabled = true;
     await syncBuiltInSkills();
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
@@ -199,14 +247,16 @@ describe("syncBuiltInAgents", () => {
       resource: "agent",
       scope: agent?.id ?? "",
     });
-    expect(policy?.grants).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          subject: { type: "organization", id: "*" },
-          actions: expect.arrayContaining(["use"]),
-        }),
-      ]),
-    );
+    expect(policy?.grants).toEqual([
+      {
+        subject: { type: "role", id: ADMIN_ROLE_NAME },
+        actions: ["read", "use", "update", "delete", "manage-permissions"],
+      },
+      {
+        subject: { type: "role", id: PLATFORM_ADMIN_ROLE_NAME },
+        actions: ["read", "use", "update", "delete", "manage-permissions"],
+      },
+    ]);
   });
 
   test("keeps an existing system agent and provisions its normal access policy", async ({

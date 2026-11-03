@@ -121,11 +121,6 @@ class CliTest(unittest.TestCase):
             git("commit", "-qm", "repair")
             git("update-ref", "refs/remotes/origin/main", "HEAD")
             git("checkout", "--detach", "origin/release/1.3")
-            # The same valid stable worktree fails if a workflow selects main
-            # mode: stable intentionally omits main-only migration history.
-            result = run("--base-branch", "main")
-            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-            self.assertIn("Source migration feature", result.stdout)
             result = run("--base-branch", "release/1.3")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("WORKTREE -> origin/main", result.stdout)

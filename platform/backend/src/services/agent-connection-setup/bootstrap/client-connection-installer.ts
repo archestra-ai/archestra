@@ -233,7 +233,7 @@ async function applySetup({ scriptPath, origin, platform }) {
       const agentFile = join(directory, 'device-agent.cjs');
       await writeFile(agentFile, Buffer.from(${JSON.stringify(Buffer.from(DEVICE_AGENT_RUNTIME).toString("base64"))}, 'base64'), { mode: 0o600 });
       const check = spawnSync(process.execPath, [agentFile, 'preflight'], { input: JSON.stringify(metadata), stdio: ['pipe', 'inherit', 'inherit'], timeout: 90000, env: process.env });
-      if (check.error || check.status !== 0) throw new Error('Background agent prerequisites are unavailable. No client settings were changed. Unlock your credential store; Linux also requires secret-tool and an active systemd user session.');
+      if (check.error || check.status !== 0) throw new Error('Background agent prerequisites are unavailable. No client settings were changed. Use Node.js 22 or newer and unlock your credential store; Linux also requires secret-tool and an active systemd user session.');
     }
     console.log('Downloaded approved setup (' + lineCount + ' lines). Applying now.');
     const child = platform === 'windows'

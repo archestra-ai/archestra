@@ -5,7 +5,9 @@ import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import DeviceMcpModel from "@/models/device-mcp";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import LocalDeviceModel from "@/models/local-device";
 import MemberModel from "@/models/member";
+import { localDeviceService } from "@/services/local-device";
 import { ApiError } from "@/types";
 import type { DeviceMcpConnection } from "@/types/device-mcp";
 
@@ -55,6 +57,122 @@ class DeviceMcpService {
     };
   }
 
+  async review(params: {
+    organizationId: string;
+    userId: string;
+    catalogId: string;
+  }) {
+    const config = await this.authorizedConfig(params);
+    return { config, configDigest: digest(config) };
+  }
+  async installManaged(params: {
+    organizationId: string;
+    userId: string;
+    catalogId: string;
+    localDeviceId: string;
+    configDigest: string;
+    replaceExisting: boolean;
+  }) {
+    const config = await this.authorizedConfig(params);
+    const computer = await LocalDeviceModel.owned(
+      params.localDeviceId,
+      params.organizationId,
+      params.userId,
+    );
+    if (!computer.platform || !config.platforms[computer.platform])
+      throw new ApiError(
+        400,
+        "This MCP has no approved launch configuration for the selected computer's OS.",
+      );
+    if (
+      (
+        await DeviceMcpModel.managed(
+          computer.id,
+          params.organizationId,
+          params.userId,
+        )
+      ).length >= 32
+    )
+      throw new ApiError(
+        409,
+        "This computer already has 32 MCP installations. Remove one before adding another.",
+      );
+    if (digest(config) !== params.configDigest)
+      throw new ApiError(
+        409,
+        "Launch configuration changed. Review it before installing.",
+      );
+    const row = await DeviceMcpModel.createPairing(
+      {
+        organizationId: params.organizationId,
+        userId: params.userId,
+        catalogId: params.catalogId,
+        localDeviceId: computer.id,
+        name: computer.name,
+        configDigest: digest(config),
+        configVersion: config.version,
+        pairingExpiresAt: new Date(),
+      },
+      params.replaceExisting,
+    );
+    return { id: row.id };
+  }
+  async managedManifest(authorization: string | undefined) {
+    const { device } = await localDeviceService.authenticate(authorization);
+    const rows = await DeviceMcpModel.managed(
+      device.id,
+      device.organizationId,
+      device.userId,
+    );
+    const installations = [];
+    for (const row of rows) {
+      try {
+        const config = await this.validateDevice(row);
+        installations.push({
+          id: row.id,
+          config,
+          configDigest: row.configDigest,
+        });
+      } catch (error) {
+        if (
+          !(error instanceof ApiError) ||
+          ![403, 404, 409].includes(error.statusCode)
+        )
+          throw error;
+        // Absence from the manifest stops the local child; never run changed commands.
+      }
+    }
+    return { installations };
+  }
+  async openManaged(
+    authorization: string | undefined,
+    id: string,
+    configDigest: string,
+  ) {
+    const { device: computer } =
+      await localDeviceService.authenticate(authorization);
+    const installation = await DeviceMcpModel.findManaged(
+      id,
+      computer.id,
+      computer.organizationId,
+      computer.userId,
+    );
+    const config = await this.validateDevice(installation);
+    if (installation.configDigest !== configDigest)
+      throw new ApiError(409, "Installation approval changed.");
+    const token = randomBytes(48).toString("base64url");
+    await DeviceMcpModel.openManaged(
+      installation,
+      digest(token),
+      new Date(
+        Math.min(
+          computer.tokenExpiresAt?.getTime() ?? Date.now(),
+          Date.now() + 24 * 60 * 60 * 1000,
+        ),
+      ),
+    );
+    return { token, config, configDigest };
+  }
   async inspect(code: string) {
     const device = await DeviceMcpModel.findPairing(digest(code));
     if (!device)
@@ -170,6 +288,7 @@ class DeviceMcpService {
       )
     ).map((device) => ({
       id: device.id,
+      localDeviceId: device.localDeviceId,
       name: device.name,
       configVersion: device.configVersion,
       lastSeenAt: device.lastSeenAt?.toISOString() ?? null,
@@ -277,6 +396,14 @@ class DeviceMcpService {
   }
 
   private async validateDevice(device: DeviceMcpConnection) {
+    if (device.localDeviceId)
+      await localDeviceService.human(device.organizationId, device.userId);
+    if (device.localDeviceId)
+      await LocalDeviceModel.owned(
+        device.localDeviceId,
+        device.organizationId,
+        device.userId,
+      );
     const config = await this.authorizedConfig(device);
     if (digest(config) !== device.configDigest)
       throw new ApiError(

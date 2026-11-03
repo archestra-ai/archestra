@@ -7,7 +7,7 @@ lastUpdated: 2026-11-02
 
 Run Connect once on each computer to keep it connected to your personal account after login. Manage your computers in **Personal Settings → Devices**.
 
-This preview registers computers and tracks their connection status. Selecting and running local MCP servers is a separate step.
+A registry entry defines the reviewed commands and tools. Each person approves an installation on their own computer; another person's computer is never a fallback.
 
 ## Enable Local Devices
 
@@ -20,7 +20,7 @@ When disabled, the Devices tab and Connect mention are hidden. Turning the setti
 
 ## Add a Computer
 
-Use the Connect terminal command on the computer you want to add. Node.js 18 or newer must remain installed at the path used during setup.
+Use the Connect terminal command on the computer you want to add. Node.js 22 or newer must remain installed at the path used during setup.
 
 1. Open **Connect**, select your client, and copy its terminal command.
 2. Run the command on your computer.
@@ -30,6 +30,23 @@ Use the Connect terminal command on the computer you want to add. Node.js 18 or 
 The installer checks secure credential storage and the service manager before changing client settings. It reports failure if the background agent cannot check in. Running Connect for another client on the same computer reuses the saved device connection.
 
 There is no separate desktop application or connection-file download. **Add device** opens Connect; edit the computer's name afterward by clicking it in Devices.
+
+## Install a Local MCP Server
+
+A connected computer can run MCP installations without a separate desktop application or another terminal process.
+
+1. Create or open a registry entry with **User device** hosting and reviewed launch commands and tool schemas.
+2. Under **Your device installation**, click **Install on my computer**.
+3. Select your computer, review the command and tools, and approve execution with your user permissions.
+4. Click **Install**. The background agent starts the approved MCP; its status becomes **Online**.
+
+Assign its tools to agents or MCP gateways through the usual tool controls, including automatic tool mode. Execution resolves the requesting person's own installation at call time. Team, organization, and service-account credentials cannot borrow a personal installation; scheduled runs remain unsupported in this preview.
+
+If a tool has no usable personal installation, its error includes a link to the registry. The link opens installation setup for the signed-in person. Connect a computer first if none is available, or wake an offline computer and retry the tool call.
+
+The background agent supervises each approved MCP as a separate process. Changing the registry command or tool schemas stops the old approval; review and install the new configuration before it can run. Removing an installation stops its process; revoking the computer blocks all its installations.
+
+Interrupted tool calls are not queued for later execution or replayed after reconnect. A call may already have reached the local application, so inspect its result before retrying a timed-out operation.
 
 ## Reconnect Automatically
 

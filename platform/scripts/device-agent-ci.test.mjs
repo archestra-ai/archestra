@@ -48,6 +48,7 @@ test('network failures reconnect; permanent revocation removes the saved proof',
   Object.defineProperty(fakeProcess, 'platform', { value: 'darwin' });
   const api = runtime({ require: mockedRequire, process: fakeProcess, setTimeout: fn => setTimeout(fn, 0), fetch: async url => {
     const path = new URL(url).pathname;
+    if (path.endsWith('/mcp-sync')) return Response.json({ installations: [], workerSha256: null });
     if (path.endsWith('/session')) { sessions++; return Response.json({ sessionId: randomUUID() }); }
     if (path.endsWith('/heartbeat')) {
       heartbeats++;
@@ -101,6 +102,7 @@ test('native install, repeat Connect, restart, reconnect, revocation and uninsta
     }
     if (revoked || req.headers.authorization !== 'Bearer ' + token) return send(401, {});
     if (unavailable) return send(503, {});
+    if (req.url.endsWith('/mcp-sync')) return send(200, { installations: [], workerSha256: null });
     if (req.url.endsWith('/session')) { sessionId = randomUUID(); return send(200, { sessionId }); }
     if (req.url.endsWith('/heartbeat') && body.sessionId !== sessionId) return send(409, {});
     if (req.url.endsWith('/remove-agent')) revoked = true;

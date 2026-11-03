@@ -1,6 +1,11 @@
 export const RouteId = {
   InstallLocalDeviceAgent: "installLocalDeviceAgent",
   RemoveLocalDeviceAgent: "removeLocalDeviceAgent",
+  GetDeviceMcpReview: "getDeviceMcpReview",
+  InstallManagedDeviceMcp: "installManagedDeviceMcp",
+  SyncManagedDeviceMcps: "syncManagedDeviceMcps",
+  OpenManagedDeviceMcp: "openManagedDeviceMcp",
+  GetManagedDeviceMcpWorker: "getManagedDeviceMcpWorker",
   ListLocalDevices: "listLocalDevices",
   EnrollLocalDevice: "enrollLocalDevice",
   RenameLocalDevice: "renameLocalDevice",

@@ -202,11 +202,12 @@ export function ClientConnectionApproval({
         {localDeviceAgent && (
           <p className="text-sm text-muted-foreground">
             <span>
-              Also installs a background agent on this computer. It starts when
-              you log in, reconnects automatically, and appears in your Devices.
-              Its 90-day device credential is saved in your OS credential store.
-              This step connects the computer; it does not grant access to files
-              or run MCP servers.
+              Also installs a background agent on this computer (requires
+              Node.js 22 or newer). It starts when you log in, reconnects
+              automatically, and appears in your Devices. Its 90-day device
+              credential is saved in your OS credential store. This step
+              connects the computer; it does not grant access to files or run
+              MCP servers.
             </span>
           </p>
         )}

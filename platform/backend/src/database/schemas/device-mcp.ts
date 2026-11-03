@@ -8,6 +8,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type { DeviceMcpCommandStatus } from "@/types/device-mcp";
 import catalog from "./internal-mcp-catalog";
+import { localDevicesTable } from "./local-device";
 import organizations from "./organization";
 import users from "./user";
 
@@ -24,6 +25,10 @@ export const deviceMcpConnectionsTable = pgTable(
     catalogId: uuid("catalog_id")
       .notNull()
       .references(() => catalog.id, { onDelete: "cascade" }),
+    localDeviceId: uuid("local_device_id").references(
+      () => localDevicesTable.id,
+      { onDelete: "cascade" },
+    ),
     name: text("name").notNull(),
     configDigest: text("config_digest").notNull(),
     configVersion: text("config_version").notNull(),

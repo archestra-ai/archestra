@@ -30,7 +30,7 @@ const RedemptionSchema = InspectionSchema.extend({
   token: z.string(),
 });
 
-type Platform = "darwin" | "win32";
+type Platform = "darwin" | "win32" | "linux";
 
 class RelayError extends Error {
   constructor(readonly status: number) {
@@ -57,12 +57,28 @@ export class DeviceMcpCompanion {
     validateServerUrl(serverUrl);
   }
 
+  restore(credential: {
+    token: string;
+    config: DeviceMcpConfig;
+    configDigest: string;
+  }) {
+    const config = DeviceMcpConfigSchema.parse(credential.config);
+    if (
+      configurationDigest(config) !== credential.configDigest ||
+      !/^[A-Za-z0-9_-]{40,128}$/.test(credential.token)
+    )
+      throw new Error("Invalid approved MCP session.");
+    this.config = config;
+    this.configDigest = credential.configDigest;
+    this.token = credential.token;
+  }
+
   async pair(
     code: string,
     approve: (details: {
       config: DeviceMcpConfig;
       configDigest: string;
-      launch: DeviceMcpConfig["platforms"][Platform];
+      launch: NonNullable<DeviceMcpConfig["platforms"][Platform]>;
     }) => Promise<boolean>,
     signal?: AbortSignal,
   ): Promise<void> {
@@ -76,6 +92,10 @@ export class DeviceMcpCompanion {
       );
     }
     const launch = inspection.config.platforms[this.platform];
+    if (!launch)
+      throw new Error(
+        "This MCP has no approved launch configuration for this OS.",
+      );
     validateLaunch(launch.command, this.platform);
     if (!(await approve({ ...inspection, launch }))) {
       throw new Error(
@@ -153,6 +173,10 @@ export class DeviceMcpCompanion {
   private async startLocalServer(signal: AbortSignal): Promise<void> {
     if (!this.config) throw new Error("Missing launch configuration");
     const launch = this.config.platforms[this.platform];
+    if (!launch)
+      throw new Error(
+        "This MCP has no approved launch configuration for this OS.",
+      );
     validateLaunch(launch.command, this.platform);
     this.localProcessStopped = false;
     const client = new Client({
@@ -395,7 +419,7 @@ function configurationDigest(config: DeviceMcpConfig): string {
 }
 
 function supportedPlatform(platform: string): Platform {
-  if (platform !== "darwin" && platform !== "win32") {
+  if (platform !== "darwin" && platform !== "win32" && platform !== "linux") {
     throw new Error("The device MCP companion supports macOS and Windows.");
   }
   return platform;

@@ -122,7 +122,12 @@ Service respectively, with no plaintext fallback. Per-owner/deployment install
 locks and proof of the existing saved bearer prevent duplicate devices on repeat
 Connect. Node must remain at its recorded absolute executable path.
 
-Device enrollment grants presence only. MCP execution and desktop permissions are
-not implicitly authorized by this setup. The native lifecycle CI workflow exercises
+Device enrollment itself grants presence only. Separately approved registry
+installations bind to that device through a foreign key. The agent fetches only
+that user/device's approved manifest and runs one bundled SDK worker per MCP.
+Short-lived per-installation credentials travel over local IPC and stay in memory.
+A configuration digest change or computer revocation blocks execution immediately;
+manifest reconciliation stops the local process. No other user's installation is
+a fallback. Desktop permissions remain subject to the local OS. The native lifecycle CI workflow exercises
 installation, repeat setup, restart, network recovery, revocation, and uninstall
 on macOS and Windows without changing a developer's login configuration.

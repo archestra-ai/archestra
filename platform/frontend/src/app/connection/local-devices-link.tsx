@@ -15,7 +15,7 @@ export function LocalDevicesLink() {
   return (
     <Link
       href="/account/devices"
-      title="Connect also installs a background agent on this computer. Manage your connected computers in Devices."
+      title="Connect also installs a background agent on this computer using Node.js 22 or newer. Manage your connected computers in Devices."
       className="inline-flex items-center gap-1.5 text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
     >
       <Laptop aria-hidden className="size-3.5 shrink-0" />

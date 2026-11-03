@@ -815,7 +815,7 @@ class McpClient {
                   catalogId: catalogItem.id,
                   catalogName: catalogItem.name,
                   action: "connect_device" as const,
-                  actionUrl: `${config.frontendBaseUrl}/mcp/registry/${catalogItem.id}`,
+                  actionUrl: `${config.frontendBaseUrl}/mcp/registry/${catalogItem.id}?setup=device`,
                 },
               }
             : {}),

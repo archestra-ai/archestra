@@ -1,6 +1,6 @@
 /** Only OS launch compatibility belongs here; relay/application secrets never do. */
 export function deviceMcpChildEnvironment(
-  platform: "darwin" | "win32",
+  platform: "darwin" | "win32" | "linux",
   environment: NodeJS.ProcessEnv,
 ): Record<string, string> {
   if (platform !== "win32") return {};

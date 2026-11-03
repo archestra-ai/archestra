@@ -166,6 +166,11 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     },
     fetchById: (id, orgId) => LocalDeviceModel.findByIdForAudit(id, orgId),
   },
+  "/api/device-mcp/install": {
+    resourceType: "deviceMcp",
+    action: "deviceMcp.created",
+    fetchById: (id, orgId) => DeviceMcpModel.findByIdForAudit(id, orgId),
+  },
   "/api/device-mcp/pair": {
     resourceType: "deviceMcp",
     action: "deviceMcp.created",

@@ -54769,6 +54769,7 @@ export type ListDeviceMcpConnectionsResponses = {
      */
     200: Array<{
         id: string;
+        localDeviceId: string | null;
         name: string;
         configVersion: string;
         lastSeenAt: string | null;
@@ -54777,6 +54778,211 @@ export type ListDeviceMcpConnectionsResponses = {
 };
 
 export type ListDeviceMcpConnectionsResponse = ListDeviceMcpConnectionsResponses[keyof ListDeviceMcpConnectionsResponses];
+
+export type GetDeviceMcpReviewData = {
+    body?: never;
+    path?: never;
+    query: {
+        catalogId: string;
+    };
+    url: '/api/device-mcp/review';
+};
+
+export type GetDeviceMcpReviewErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetDeviceMcpReviewError = GetDeviceMcpReviewErrors[keyof GetDeviceMcpReviewErrors];
+
+export type GetDeviceMcpReviewResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        config: {
+            protocolVersion: 1;
+            version: string;
+            platforms: {
+                darwin: {
+                    command: string;
+                    args: Array<string>;
+                };
+                win32: {
+                    command: string;
+                    args: Array<string>;
+                };
+                linux?: {
+                    command: string;
+                    args: Array<string>;
+                };
+            };
+            tools: Array<{
+                name: string;
+                description?: string;
+                inputSchema: {
+                    type: 'object';
+                    [key: string]: unknown;
+                };
+            }>;
+        };
+        configDigest: string;
+    };
+};
+
+export type GetDeviceMcpReviewResponse = GetDeviceMcpReviewResponses[keyof GetDeviceMcpReviewResponses];
+
+export type InstallManagedDeviceMcpData = {
+    body: {
+        catalogId: string;
+        localDeviceId: string;
+        configDigest: string;
+        replaceExisting?: boolean;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/device-mcp/install';
+};
+
+export type InstallManagedDeviceMcpErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type InstallManagedDeviceMcpError = InstallManagedDeviceMcpErrors[keyof InstallManagedDeviceMcpErrors];
+
+export type InstallManagedDeviceMcpResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+    };
+};
+
+export type InstallManagedDeviceMcpResponse = InstallManagedDeviceMcpResponses[keyof InstallManagedDeviceMcpResponses];
 
 export type PairDeviceMcpData = {
     body: {
@@ -54871,6 +55077,10 @@ export type PairDeviceMcpResponses = {
                     args: Array<string>;
                 };
                 win32: {
+                    command: string;
+                    args: Array<string>;
+                };
+                linux?: {
                     command: string;
                     args: Array<string>;
                 };
@@ -55075,6 +55285,10 @@ export type InspectDeviceMcpPairingResponses = {
                     command: string;
                     args: Array<string>;
                 };
+                linux?: {
+                    command: string;
+                    args: Array<string>;
+                };
             };
             tools: Array<{
                 name: string;
@@ -55185,6 +55399,10 @@ export type RedeemDeviceMcpPairingResponses = {
                     args: Array<string>;
                 };
                 win32: {
+                    command: string;
+                    args: Array<string>;
+                };
+                linux?: {
                     command: string;
                     args: Array<string>;
                 };
@@ -85070,6 +85288,10 @@ export type GetInternalMcpCatalogResponses = {
                     command: string;
                     args: Array<string>;
                 };
+                linux?: {
+                    command: string;
+                    args: Array<string>;
+                };
             };
             tools: Array<{
                 name: string;
@@ -85254,6 +85476,10 @@ export type CreateInternalMcpCatalogItemData = {
                     args: Array<string>;
                 };
                 win32: {
+                    command: string;
+                    args: Array<string>;
+                };
+                linux?: {
                     command: string;
                     args: Array<string>;
                 };
@@ -85496,6 +85722,10 @@ export type CreateInternalMcpCatalogItemResponses = {
                     args: Array<string>;
                 };
                 win32: {
+                    command: string;
+                    args: Array<string>;
+                };
+                linux?: {
                     command: string;
                     args: Array<string>;
                 };
@@ -86600,6 +86830,10 @@ export type GetInternalMcpCatalogItemResponses = {
                     command: string;
                     args: Array<string>;
                 };
+                linux?: {
+                    command: string;
+                    args: Array<string>;
+                };
             };
             tools: Array<{
                 name: string;
@@ -86772,6 +87006,10 @@ export type UpdateInternalMcpCatalogItemData = {
                     args: Array<string>;
                 };
                 win32: {
+                    command: string;
+                    args: Array<string>;
+                };
+                linux?: {
                     command: string;
                     args: Array<string>;
                 };
@@ -86998,6 +87236,10 @@ export type UpdateInternalMcpCatalogItemResponses = {
                     args: Array<string>;
                 };
                 win32: {
+                    command: string;
+                    args: Array<string>;
+                };
+                linux?: {
                     command: string;
                     args: Array<string>;
                 };
@@ -87721,6 +87963,10 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
                     command: string;
                     args: Array<string>;
                 };
+                linux?: {
+                    command: string;
+                    args: Array<string>;
+                };
             };
             tools: Array<{
                 name: string;
@@ -87970,6 +88216,10 @@ export type ApproveCatalogItemImageResponses = {
                     args: Array<string>;
                 };
                 win32: {
+                    command: string;
+                    args: Array<string>;
+                };
+                linux?: {
                     command: string;
                     args: Array<string>;
                 };
@@ -103938,6 +104188,329 @@ export type RemoveLocalDeviceAgentResponses = {
 };
 
 export type RemoveLocalDeviceAgentResponse = RemoveLocalDeviceAgentResponses[keyof RemoveLocalDeviceAgentResponses];
+
+export type SyncManagedDeviceMcpsData = {
+    body: {
+        [key: string]: never;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/local-devices/mcp-sync';
+};
+
+export type SyncManagedDeviceMcpsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SyncManagedDeviceMcpsError = SyncManagedDeviceMcpsErrors[keyof SyncManagedDeviceMcpsErrors];
+
+export type SyncManagedDeviceMcpsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        installations: Array<{
+            id: string;
+            config: {
+                protocolVersion: 1;
+                version: string;
+                platforms: {
+                    darwin: {
+                        command: string;
+                        args: Array<string>;
+                    };
+                    win32: {
+                        command: string;
+                        args: Array<string>;
+                    };
+                    linux?: {
+                        command: string;
+                        args: Array<string>;
+                    };
+                };
+                tools: Array<{
+                    name: string;
+                    description?: string;
+                    inputSchema: {
+                        type: 'object';
+                        [key: string]: unknown;
+                    };
+                }>;
+            };
+            configDigest: string;
+        }>;
+        workerSha256: string | null;
+    };
+};
+
+export type SyncManagedDeviceMcpsResponse = SyncManagedDeviceMcpsResponses[keyof SyncManagedDeviceMcpsResponses];
+
+export type OpenManagedDeviceMcpData = {
+    body: {
+        id: string;
+        configDigest: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/local-devices/mcp-open';
+};
+
+export type OpenManagedDeviceMcpErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenManagedDeviceMcpError = OpenManagedDeviceMcpErrors[keyof OpenManagedDeviceMcpErrors];
+
+export type OpenManagedDeviceMcpResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        token: string;
+        config: {
+            protocolVersion: 1;
+            version: string;
+            platforms: {
+                darwin: {
+                    command: string;
+                    args: Array<string>;
+                };
+                win32: {
+                    command: string;
+                    args: Array<string>;
+                };
+                linux?: {
+                    command: string;
+                    args: Array<string>;
+                };
+            };
+            tools: Array<{
+                name: string;
+                description?: string;
+                inputSchema: {
+                    type: 'object';
+                    [key: string]: unknown;
+                };
+            }>;
+        };
+        configDigest: string;
+    };
+};
+
+export type OpenManagedDeviceMcpResponse = OpenManagedDeviceMcpResponses[keyof OpenManagedDeviceMcpResponses];
+
+export type GetManagedDeviceMcpWorkerData = {
+    body: {
+        [key: string]: never;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/local-devices/mcp-worker';
+};
+
+export type GetManagedDeviceMcpWorkerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetManagedDeviceMcpWorkerError = GetManagedDeviceMcpWorkerErrors[keyof GetManagedDeviceMcpWorkerErrors];
+
+export type GetManagedDeviceMcpWorkerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        source: string;
+        sha256: string;
+    };
+};
+
+export type GetManagedDeviceMcpWorkerResponse = GetManagedDeviceMcpWorkerResponses[keyof GetManagedDeviceMcpWorkerResponses];
 
 export type InspectLocalDeviceEnrollmentData = {
     body: {

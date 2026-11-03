@@ -1,6 +1,9 @@
 import { RouteId } from "@archestra/shared";
+import { DeviceMcpConfigSchema } from "@archestra/shared/device-mcp";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { deviceMcpService } from "@/services/device-mcp";
+import { deviceMcpWorkerBundle } from "@/services/device-mcp-worker";
 import { localDeviceService } from "@/services/local-device";
 import { localDeviceInstallService } from "@/services/local-device-install";
 import { constructResponseSchema } from "@/types";
@@ -129,6 +132,86 @@ const localDeviceRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request) =>
       localDeviceService.revokeCredential(request.headers.authorization),
+  );
+  fastify.post(
+    "/api/local-devices/mcp-sync",
+    {
+      schema: {
+        operationId: RouteId.SyncManagedDeviceMcps,
+        tags: ["Local devices"],
+        body: z.object({}).strict(),
+        response: constructResponseSchema(
+          z.object({
+            installations: z.array(
+              z.object({
+                id: z.string().uuid(),
+                config: DeviceMcpConfigSchema,
+                configDigest: z.string(),
+              }),
+            ),
+            workerSha256: z.string().nullable(),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      reply.header("Cache-Control", "no-store");
+      const result = await deviceMcpService.managedManifest(
+        request.headers.authorization,
+      );
+      const worker = result.installations.length
+        ? await deviceMcpWorkerBundle()
+        : null;
+      return { ...result, workerSha256: worker?.sha256 ?? null };
+    },
+  );
+  fastify.post(
+    "/api/local-devices/mcp-open",
+    {
+      schema: {
+        operationId: RouteId.OpenManagedDeviceMcp,
+        tags: ["Local devices"],
+        body: z
+          .object({
+            id: z.string().uuid(),
+            configDigest: z.string().regex(/^[a-f0-9]{64}$/),
+          })
+          .strict(),
+        response: constructResponseSchema(
+          z.object({
+            token: z.string(),
+            config: DeviceMcpConfigSchema,
+            configDigest: z.string(),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      reply.header("Cache-Control", "no-store");
+      return deviceMcpService.openManaged(
+        request.headers.authorization,
+        request.body.id,
+        request.body.configDigest,
+      );
+    },
+  );
+  fastify.post(
+    "/api/local-devices/mcp-worker",
+    {
+      schema: {
+        operationId: RouteId.GetManagedDeviceMcpWorker,
+        tags: ["Local devices"],
+        body: z.object({}).strict(),
+        response: constructResponseSchema(
+          z.object({ source: z.string(), sha256: z.string() }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      await localDeviceService.authenticate(request.headers.authorization);
+      reply.header("Cache-Control", "no-store");
+      return deviceMcpWorkerBundle();
+    },
   );
   // Proof routes deliberately do not accept a browser session as a device credential.
   fastify.post(

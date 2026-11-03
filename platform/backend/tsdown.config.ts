@@ -279,6 +279,17 @@ export default defineConfig((options: UserConfig) => {
     outfile: path.join(process.cwd(), "src/static/ext-apps-app.global.js"),
   });
 
+  // Portable Node worker; bundle SDK dependencies so the user's machine needs only Node.
+  buildSync({
+    entryPoints: ["src/device-mcp-client/managed-worker.ts"],
+    outfile: "src/static/device-mcp-worker.cjs",
+    bundle: true,
+    packages: "bundle",
+    platform: "node",
+    target: "node22",
+    format: "cjs",
+  });
+
   // Clean dist directory once at startup in watch mode.
   // This runs here (instead of in package.json) to keep the logic self-contained
   // and avoid platform-specific shell commands.

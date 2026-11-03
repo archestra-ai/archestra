@@ -67,6 +67,26 @@ export default class LocalDeviceModel {
       );
     return row;
   }
+  static async owned(id: string, organizationId: string, userId: string) {
+    const [row] = await db
+      .select()
+      .from(devices)
+      .where(
+        and(
+          eq(devices.id, id),
+          eq(devices.organizationId, organizationId),
+          eq(devices.userId, userId),
+          isNull(devices.revokedAt),
+          gt(devices.tokenExpiresAt, new Date()),
+        ),
+      );
+    if (!row)
+      throw new ApiError(
+        409,
+        "This computer is not connected to your account. Run Connect on it first.",
+      );
+    return row;
+  }
   static async list(organizationId: string, userId: string) {
     return db
       .select()

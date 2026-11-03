@@ -5,7 +5,7 @@ const { constants } = require('node:fs');
 const { join, dirname } = require('node:path');
 const { homedir } = require('node:os');
 const { createHash, randomBytes } = require('node:crypto');
-const { spawnSync } = require('node:child_process');
+const { spawnSync, fork } = require('node:child_process');
 const VERSION = '1.0.0';
 function origin(value) {
   const url = new URL(value);
@@ -86,7 +86,7 @@ function windowsArguments(script) {
 function serviceDefinition(spec, node) {
   if (/[\r\n]/.test(spec.root + node)) throw new Error('Unsupported installation path.');
   const script = join(spec.root, 'agent.cjs');
-  if (process.platform === 'darwin') return '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>Label</key><string>' + spec.label + '</string><key>ProgramArguments</key><array><string>' + xml(node) + '</string><string>' + xml(script) + '</string><string>run</string></array><key>RunAtLoad</key><true/><key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict><key>ThrottleInterval</key><integer>15</integer></dict></plist>';
+  if (process.platform === 'darwin') return '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>Label</key><string>' + spec.label + '</string><key>ProgramArguments</key><array><string>' + xml(node) + '</string><string>' + xml(script) + '</string><string>run</string></array><key>EnvironmentVariables</key><dict><key>HOME</key><string>' + xml(homedir()) + '</string></dict><key>RunAtLoad</key><true/><key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict><key>ThrottleInterval</key><integer>15</integer></dict></plist>';
   const escape = value => '"' + value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/%/g, '%%').replace(/\$/g, '$$') + '"';
   return '[Unit]\nDescription=Personal local device agent\n[Service]\nExecStart=' + escape(node) + ' ' + escape(script) + ' run\nRestart=on-failure\nRestartSec=15\nUMask=0077\n[Install]\nWantedBy=default.target\n';
 }
@@ -155,6 +155,7 @@ async function lock(spec) {
   throw new Error('Could not lock device setup.');
 }
 async function preflight(options) {
+  if (Number(process.versions.node.split('.')[0]) < 22) throw new Error('The background agent requires Node.js 22 or newer.');
   const spec = identity(origin(options.url), options.userId);
   await fs.mkdir(spec.root, { recursive: true, mode: 0o700 });
   const stat = await fs.lstat(spec.root);
@@ -217,7 +218,7 @@ async function install(options) {
     if (await vault('load', spec) !== credential.token) throw new Error('Could not verify saved device credential.');
     saved = true;
     await writePrivate(join(spec.root, 'agent.cjs'), await fs.readFile(__filename));
-    const config = { url, userId: options.userId, appName: options.appName, deviceId: credential.deviceId, name: credential.name, expiresAt: credential.expiresAt, node: process.execPath };
+    const config = { url, userId: options.userId, appName: options.appName, deviceId: credential.deviceId, name: credential.name, expiresAt: credential.expiresAt, node: process.execPath, path: process.env.PATH };
     await writePrivate(join(spec.root, 'config.json'), JSON.stringify(config));
     await fs.rm(join(spec.root, 'status.json'), { force: true });
     const began = Date.now();
@@ -260,8 +261,58 @@ async function install(options) {
     throw error;
   } finally { process.removeListener('SIGINT', interrupt); process.removeListener('SIGTERM', interrupt); await unlock(); }
 }
+function mcpSupervisor(config, spec, token) {
+  const workers = new Map();
+  let cachedHash;
+  const report = () => writePrivate(join(spec.root, 'mcp-status.json'), JSON.stringify(Array.from(workers, ([id, item]) => ({ id, state: item.state, reason: item.reason || null }))));
+  async function stop(item) {
+    if (!item.child) return;
+    const child = item.child; item.child = null;
+    if (child.connected) child.disconnect(); else child.kill('SIGTERM');
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    await new Promise(resolve => {
+      const timer = setTimeout(() => { child.kill('SIGKILL'); resolve(); }, 10000);
+      child.once('exit', () => { clearTimeout(timer); resolve(); });
+    });
+  }
+  return {
+    async sync() {
+      const manifest = await request(config.url, 'mcp-sync', {}, token);
+      if (!Array.isArray(manifest.installations) || manifest.installations.length > 32) throw new Error('Invalid MCP manifest.');
+      const wanted = new Set(manifest.installations.map(item => item.id));
+      await Promise.all(Array.from(workers, async ([id, item]) => { if (!wanted.has(id)) { await stop(item); workers.delete(id); } }));
+      for (const installation of manifest.installations) {
+        if (!/^[a-f0-9-]{36}$/.test(installation.id) || !/^[a-f0-9]{64}$/.test(installation.configDigest)) throw new Error('Invalid MCP installation.');
+        let item = workers.get(installation.id);
+        if (item && item.digest !== installation.configDigest) { await stop(item); workers.delete(installation.id); item = undefined; }
+        if (item && (item.child || item.retryAt > Date.now())) continue;
+        if (cachedHash !== manifest.workerSha256) {
+          const bundle = await request(config.url, 'mcp-worker', {}, token);
+          if (typeof bundle.source !== 'string' || Buffer.byteLength(bundle.source) > 8 * 1024 * 1024 || createHash('sha256').update(bundle.source).digest('hex') !== manifest.workerSha256 || bundle.sha256 !== manifest.workerSha256) throw new Error('MCP worker integrity check failed.');
+          await writePrivate(join(spec.root, 'mcp-worker.cjs'), bundle.source);
+          cachedHash = bundle.sha256;
+        }
+        const session = await request(config.url, 'mcp-open', { id: installation.id, configDigest: installation.configDigest }, token);
+        if (session.configDigest !== installation.configDigest || createHash('sha256').update(JSON.stringify(session.config)).digest('hex') !== installation.configDigest) throw new Error('MCP approval changed.');
+        const environment = {};
+        for (const key of ['HOME', 'USERPROFILE', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'APPDATA', 'LOCALAPPDATA', 'LANG', 'XDG_RUNTIME_DIR', 'DBUS_SESSION_BUS_ADDRESS']) if (process.env[key]) environment[key] = process.env[key];
+        environment.PATH = config.path || process.env.PATH;
+        const child = fork(join(spec.root, 'mcp-worker.cjs'), [], { execPath: config.node, stdio: ['ignore', 'ignore', 'ignore', 'ipc'], env: environment });
+        const next = { child, digest: installation.configDigest, state: 'starting', retryAt: 0, failures: item ? item.failures : 0 };
+        workers.set(installation.id, next);
+        child.on('message', message => { if (message && ['ready', 'connecting', 'failed'].includes(message.state)) { next.state = message.state; next.reason = message.reason; void report().catch(() => {}); } });
+        child.once('exit', () => { next.child = null; next.state = 'stopped'; next.failures++; next.retryAt = Date.now() + Math.min(30000, 1000 * 2 ** Math.min(next.failures, 5)); void report().catch(() => {}); });
+        child.once('error', () => { next.state = 'failed'; next.reason = 'MCP worker could not start'; });
+        child.send({ ...session, url: config.url });
+      }
+      await report();
+    },
+    async stop() { await Promise.all(Array.from(workers.values(), stop)); workers.clear(); await report(); },
+  };
+}
 async function run(config, spec) {
   let token;
+  let mcps;
   let sessionId;
   let stopped = false;
   let wake;
@@ -279,6 +330,7 @@ async function run(config, spec) {
       // A locked/unready vault at login is retried by the service manager.
       await status('storage-error'); process.exitCode = 1; return;
     }
+    mcps = mcpSupervisor(config, spec, token);
     while (!stopped) {
       try {
         if (Date.parse(config.expiresAt) <= Date.now()) { await vault('clear', spec); await status('revoked'); return; }
@@ -286,6 +338,7 @@ async function run(config, spec) {
         const result = await request(config.url, 'heartbeat', { sessionId }, token);
         if (result.success !== true) throw new Error('Invalid heartbeat.');
         await status('online'); backoff = 1000;
+        await mcps.sync();
         await sleep(15000);
       } catch (error) {
         if (error.status === 401 || error.status === 403) { await vault('clear', spec); await status('revoked'); return; }
@@ -295,6 +348,7 @@ async function run(config, spec) {
       }
     }
   } finally {
+    if (mcps) await mcps.stop();
     if (token && sessionId) { try { await request(config.url, 'disconnect', { sessionId }, token); } catch {} }
     if (stopped) await status('stopped');
     process.removeListener('SIGTERM', stop); process.removeListener('SIGINT', stop);
@@ -313,7 +367,9 @@ async function main() {
     let state = { state: 'not started' };
     try { state = JSON.parse(await readPrivate(join(spec.root, 'status.json'))); } catch (error) { if (error.code !== 'ENOENT') throw error; }
     if (state.state === 'online' && Date.now() - state.updatedAt > 45000) state.state = 'offline';
-    console.log(JSON.stringify(state, null, 2)); return;
+    console.log(JSON.stringify(state, null, 2));
+    try { console.log(await readPrivate(join(spec.root, 'mcp-status.json'))); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    return;
   }
   if (action === 'uninstall') {
     const token = await vault('load', spec);
@@ -322,7 +378,7 @@ async function main() {
     if (token) { try { await request(config.url, 'remove-agent', {}, token); } catch (error) { if (![401, 403].includes(error.status)) remoteRevoked = false; } }
     await vault('clear', spec);
     // Remove only files owned by this installer, never recursively delete a user path.
-    for (const file of ['agent.cjs', 'config.json', 'status.json', 'credential.dpapi']) await fs.rm(join(spec.root, file), { force: true });
+    for (const file of ['agent.cjs', 'config.json', 'status.json', 'credential.dpapi', 'mcp-worker.cjs', 'mcp-status.json']) await fs.rm(join(spec.root, file), { force: true });
     console.log('Background agent removed and device credential cleared.');
     if (!remoteRevoked) console.log('Remote revocation could not be confirmed. Revoke this computer at ' + config.url + '/account/devices.');
     return;

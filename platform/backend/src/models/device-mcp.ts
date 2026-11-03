@@ -20,6 +20,7 @@ export default class DeviceMcpModel {
         organizationId: devices.organizationId,
         userId: devices.userId,
         catalogId: devices.catalogId,
+        localDeviceId: devices.localDeviceId,
         name: devices.name,
         configVersion: devices.configVersion,
         configDigest: devices.configDigest,
@@ -56,6 +57,79 @@ export default class DeviceMcpModel {
       .limit(20);
   }
 
+  static async managed(
+    localDeviceId: string,
+    organizationId: string,
+    userId: string,
+  ) {
+    return db
+      .select()
+      .from(devices)
+      .where(
+        and(
+          eq(devices.localDeviceId, localDeviceId),
+          eq(devices.organizationId, organizationId),
+          eq(devices.userId, userId),
+          isNull(devices.revokedAt),
+        ),
+      )
+      .limit(32);
+  }
+  static async findManaged(
+    id: string,
+    localDeviceId: string,
+    organizationId: string,
+    userId: string,
+  ) {
+    const [row] = await db
+      .select()
+      .from(devices)
+      .where(
+        and(
+          eq(devices.id, id),
+          eq(devices.localDeviceId, localDeviceId),
+          eq(devices.organizationId, organizationId),
+          eq(devices.userId, userId),
+          isNull(devices.revokedAt),
+        ),
+      );
+    if (!row) throw new ApiError(404, "Personal MCP installation not found");
+    return row;
+  }
+  static async openManaged(
+    device: DeviceMcpConnection,
+    tokenHash: string,
+    expiresAt: Date,
+  ) {
+    const [row] = await db
+      .update(devices)
+      .set({
+        tokenHash,
+        tokenExpiresAt: expiresAt,
+        sessionId: null,
+        lastSeenAt: null,
+      })
+      .where(
+        and(
+          eq(devices.id, device.id),
+          eq(devices.configDigest, device.configDigest),
+          isNull(devices.revokedAt),
+        ),
+      )
+      .returning();
+    if (!row)
+      throw new ApiError(
+        409,
+        "MCP installation changed. Review it again in the registry.",
+      );
+    await db
+      .update(commands)
+      .set({ status: "unknown", arguments: {} })
+      .where(
+        and(eq(commands.deviceId, device.id), ne(commands.status, "completed")),
+      );
+    return row;
+  }
   static async createPairing(
     values: typeof devices.$inferInsert,
     replaceExisting: boolean,

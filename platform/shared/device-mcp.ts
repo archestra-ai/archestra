@@ -32,6 +32,7 @@ export const DeviceMcpConfigSchema = z
       .object({
         darwin: DeviceMcpLaunchSchema,
         win32: DeviceMcpLaunchSchema,
+        linux: DeviceMcpLaunchSchema.optional(),
       })
       .strict(),
     tools: z

@@ -171,8 +171,11 @@ export const DEVICE_MCP_PROOF_PATHS = new Set([
   "/api/device-mcp/result",
 ]);
 
-/** Local device proofs are independent of browser cookies and grant presence only. */
+/** Device bearer proofs are independent of browser cookies. MCP access additionally requires a user-approved installation bound to that computer. */
 export const LOCAL_DEVICE_PROOF_PATHS = new Set([
+  "/api/local-devices/mcp-sync",
+  "/api/local-devices/mcp-open",
+  "/api/local-devices/mcp-worker",
   "/api/local-devices/install",
   "/api/local-devices/remove-agent",
   "/api/local-devices/inspect",

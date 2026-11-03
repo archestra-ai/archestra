@@ -23,24 +23,47 @@ export function useDeviceMcpConnections(catalogId: string, enabled: boolean) {
   });
 }
 
-export function usePairDeviceMcp() {
-  const queryClient = useQueryClient();
+export function useDeviceMcpReview(catalogId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["device-mcp-review", catalogId],
+    enabled,
+    staleTime: 0,
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getDeviceMcpReview({
+        query: { catalogId },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      if (!data) throw new Error("No reviewed configuration received");
+      return data;
+    },
+  });
+}
+export function useInstallManagedDeviceMcp() {
+  const client = useQueryClient();
   return useMutation({
     mutationFn: async (body: {
       catalogId: string;
-      name: string;
+      localDeviceId: string;
+      configDigest: string;
       replaceExisting: boolean;
     }) => {
-      const { data, error } = await archestraApiSdk.pairDeviceMcp({ body });
+      const { data, error } = await archestraApiSdk.installManagedDeviceMcp({
+        body,
+      });
       if (error) {
         handleApiError(error);
         throw toApiError(error);
       }
-      if (!data) throw new Error("No pairing response received");
       return data;
     },
+    onError: () => {
+      void client.invalidateQueries({ queryKey: ["device-mcp-review"] });
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: deviceMcpKeys.all });
+      void client.invalidateQueries({ queryKey: deviceMcpKeys.all });
+      toast.success(
+        "Installation approved. Your computer will start the MCP when connected.",
+      );
     },
   });
 }

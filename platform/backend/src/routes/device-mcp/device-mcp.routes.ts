@@ -26,6 +26,7 @@ const SuccessSchema = z.object({ success: z.literal(true) });
 const SessionSchema = z.object({ sessionId: z.string().uuid() });
 const StatusSchema = z.object({
   id: z.string().uuid(),
+  localDeviceId: z.string().uuid().nullable(),
   name: z.string(),
   configVersion: z.string(),
   lastSeenAt: z.string().nullable(),
@@ -136,6 +137,48 @@ const deviceMcpRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
         catalogId: query.catalogId,
+      }),
+  );
+
+  fastify.get(
+    "/api/device-mcp/review",
+    {
+      schema: {
+        operationId: RouteId.GetDeviceMcpReview,
+        tags: ["Device MCP"],
+        querystring: z.object({ catalogId: z.string().uuid() }),
+        response: constructResponseSchema(ConfigResponseSchema),
+      },
+    },
+    async (request) =>
+      deviceMcpService.review({
+        catalogId: request.query.catalogId,
+        organizationId: request.organizationId,
+        userId: request.user.id,
+      }),
+  );
+  fastify.post(
+    "/api/device-mcp/install",
+    {
+      schema: {
+        operationId: RouteId.InstallManagedDeviceMcp,
+        tags: ["Device MCP"],
+        body: z
+          .object({
+            catalogId: z.string().uuid(),
+            localDeviceId: z.string().uuid(),
+            configDigest: z.string().regex(/^[a-f0-9]{64}$/),
+            replaceExisting: z.boolean().default(false),
+          })
+          .strict(),
+        response: constructResponseSchema(z.object({ id: z.string().uuid() })),
+      },
+    },
+    async (request) =>
+      deviceMcpService.installManaged({
+        ...request.body,
+        organizationId: request.organizationId,
+        userId: request.user.id,
       }),
   );
 

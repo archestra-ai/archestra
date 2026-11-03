@@ -888,8 +888,15 @@ function ConnectArea({
                 <>
                   Run it in a terminal on the computer where you use{" "}
                   {nameOf(client)}. It needs Node.js{" "}
-                  <span>{client.id === "pi" ? "22.19" : "18"}</span> or newer,
-                  opens a browser page, and changes nothing until you approve.
+                  <span>
+                    {client.id === "pi"
+                      ? "22.19"
+                      : data.localDevicesEnabled
+                        ? "22"
+                        : "18"}
+                  </span>{" "}
+                  or newer, opens a browser page, and changes nothing until you
+                  approve.
                   {client.id === "kimi-code" && (
                     <span>
                       {" "}

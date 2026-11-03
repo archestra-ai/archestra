@@ -20,6 +20,7 @@ import os from "node:os";
 import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { vector } from "@electric-sql/pglite/vector";
+import { buildSync } from "esbuild";
 import { buildExtAppsInlineBundle } from "../standalone-scripts/build-ext-apps-inline";
 import { getMigrationsSql, SNAPSHOT_PATH_ENV } from "./migrations-helper.js";
 
@@ -36,6 +37,16 @@ export default async function setup() {
   if (!fs.existsSync(path.resolve("src/static/ext-apps-app.global.js"))) {
     buildExtAppsInlineBundle();
   }
+
+  buildSync({
+    entryPoints: ["src/device-mcp-client/managed-worker.ts"],
+    outfile: "src/static/device-mcp-worker.cjs",
+    bundle: true,
+    packages: "bundle",
+    platform: "node",
+    target: "node22",
+    format: "cjs",
+  });
 
   const pg = new PGlite("memory://", { extensions: { vector } });
 

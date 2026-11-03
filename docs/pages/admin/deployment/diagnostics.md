@@ -11,7 +11,7 @@ lastUpdated: 2026-11-03
 
 Ask the SRE agent why an Archestra pod keeps restarting, and it reads that pod's events and logs, then answers with ranked hypotheses and the evidence for each. It sees only Archestra's own namespace, through a read-only Kubernetes MCP server that the chart runs under a dedicated `-sre` ServiceAccount. That account cannot read Secrets or ConfigMaps or change anything.
 
-By default, only Admin and Platform Admin roles can use the SRE agent or its Kubernetes MCP Registry entry. To change access, edit **Who can use it** on the agent and the entry separately.
+By default, only Admin and Platform Admin roles can use the SRE agent or its Kubernetes MCP Registry entry. To change access, edit **Who can use it** on the agent and the entry separately. Pod specs can contain other MCP servers' credentials, so grant access only to people who may see them.
 
 1. Find the Kubernetes API server endpoint IPs with `kubectl get endpoints kubernetes -n default`. Use these IPs (with `/32`), not the `kubernetes` Service IP.
 2. Turn the agent on in your Helm values, then run `helm upgrade`:

@@ -449,6 +449,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           VALIDATION_ONLY: "true"
+          REQUIRE_LABELED_CAPTURE: ${{ github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'run-e2e' }}
           CAPTURE_RESULT: ${{ needs.docs-screenshot-capture.result }}
         run: python3 .github/scripts/check-docs-screenshot-result.py
 

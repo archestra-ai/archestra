@@ -21,7 +21,10 @@ import { rememberErrorTrackingServerSpan } from "@/observability/request-context
 import { ATTR_MCP_METHOD_NAME } from "@/observability/tracing";
 import { isLongLivedMcpStream } from "@/observability/utils";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import mcpGatewayRoutes from "./index";
+
+setupTestCacheManager();
 
 describe("MCP Gateway - subscriptions/listen route", () => {
   let app: FastifyInstance;

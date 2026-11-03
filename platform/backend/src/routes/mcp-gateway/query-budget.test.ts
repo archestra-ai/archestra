@@ -19,8 +19,11 @@ import {
   UserTokenModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { recordQueries } from "@/test/query-counter";
 import mcpGatewayRoutes from "./index";
+
+setupTestCacheManager();
 
 describe("MCP gateway tools/list query budget", () => {
   let app: FastifyInstance;

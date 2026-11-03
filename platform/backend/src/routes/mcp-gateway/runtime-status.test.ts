@@ -13,8 +13,11 @@ import {
   UserTokenModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { ApiError } from "@/types";
 import mcpGatewayRoutes from "./index";
+
+setupTestCacheManager();
 
 describe("Agent Runtime status callback", () => {
   let app: FastifyInstance;

@@ -15,11 +15,15 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import mcpGatewayRoutes from "./index";
+
 import {
   LEGACY_MCP_PROTOCOL_REVISION,
   STATELESS_MCP_PROTOCOL_REVISION,
 } from "./protocol";
+
+setupTestCacheManager();
 
 function makeMcpHeaders(
   token: string,

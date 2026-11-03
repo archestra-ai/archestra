@@ -173,27 +173,35 @@ describe("DELETE /api/llm-models/:id", () => {
     expect((await remove(otherProvider.id)).statusCode).toBe(200);
   });
 
-  test("preserves a model selected only by an existing chat", async ({
-    makeAgent,
-    makeConversation,
-  }) => {
-    const model = await createModel();
-    const agent = await makeAgent();
-    const conversation = await makeConversation(agent.id, {
-      userId: adminId,
-      organizationId,
-      modelId: model.id,
+  for (const inTrash of [false, true]) {
+    test(`preserves a chat model (in trash: ${inTrash})`, async ({
+      makeAgent,
+      makeConversation,
+    }) => {
+      const model = await createModel();
+      const agent = await makeAgent();
+      const conversation = await makeConversation(agent.id, {
+        userId: adminId,
+        organizationId,
+        modelId: model.id,
+      });
+      if (inTrash) {
+        await db
+          .update(schema.conversationsTable)
+          .set({ deletedAt: new Date() })
+          .where(eq(schema.conversationsTable.id, conversation.id));
+      }
+      const response = await remove(model.id);
+      expect(response.statusCode, response.body).toBe(409);
+      expect(response.json().error.message).toContain("an existing chat");
+      const [after] = await db
+        .select()
+        .from(schema.conversationsTable)
+        .where(eq(schema.conversationsTable.id, conversation.id));
+      expect(after.modelId).toBe(model.id);
+      expect(await ModelModel.findById(model.id)).not.toBeNull();
     });
-    const response = await remove(model.id);
-    expect(response.statusCode, response.body).toBe(409);
-    expect(response.json().error.message).toContain("an existing chat");
-    const [after] = await db
-      .select()
-      .from(schema.conversationsTable)
-      .where(eq(schema.conversationsTable.id, conversation.id));
-    expect(after.modelId).toBe(model.id);
-    expect(await ModelModel.findById(model.id)).not.toBeNull();
-  });
+  }
 
   test("protects pool members including disabled members without blocking another provider", async ({
     makeLlmProviderApiKey,

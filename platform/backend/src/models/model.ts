@@ -798,7 +798,7 @@ class ModelModel {
         )
         UNION ALL SELECT 'an existing chat' WHERE EXISTS (
           SELECT 1 FROM ${schema.conversationsTable}
-          WHERE model_id = ${id} AND deleted_at IS NULL
+          WHERE model_id = ${id}
         )
         UNION ALL SELECT 'guardrails' WHERE EXISTS (
           SELECT 1 FROM ${schema.guardrailsDeploymentTable} WHERE annotator_model_id = ${id}

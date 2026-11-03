@@ -85,7 +85,7 @@ describe("buildCurlExample", () => {
       expect(edit).toContain(`X-Archestra-Virtual-Key: ${key}`);
   });
 
-  it("does not advertise an Azure image request on the Model Router or another provider", () => {
+  it("does not advertise an Azure image request on the Unified API or another provider", () => {
     for (const target of [
       { kind: "model-router" as const },
       { kind: "provider" as const, provider: "openai" as const },
@@ -114,7 +114,7 @@ describe("buildCurlExample", () => {
     });
     expect(edit).toContain("--form-string 'model=studio'\\''s-image'");
   });
-  it("sends a standard key as the bearer token on the Model Router", () => {
+  it("sends a standard key as the bearer token on the Unified API", () => {
     expect(
       buildCurlExample({
         connectionBaseUrl: base,
@@ -123,7 +123,7 @@ describe("buildCurlExample", () => {
         keyValue: key,
         model: "openai:gpt-5.4",
       }),
-    ).toBe(`curl "${base}/model-router/chat/completions" \\
+    ).toBe(`curl "${base}/unified-api/chat/completions" \\
   -H "Authorization: Bearer ${key}" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -172,7 +172,7 @@ describe("buildCurlExample", () => {
       model: "github-copilot:gpt-5.4-codex",
       supportedEndpoints: ["/responses"],
     });
-    expect(example).toContain(`curl "${base}/model-router/responses"`);
+    expect(example).toContain(`curl "${base}/unified-api/responses"`);
     expect(example).toContain('"input": "Hello!"');
   });
 
@@ -227,7 +227,7 @@ describe("buildCurlExample", () => {
     expect(example).toContain(`-H "X-Archestra-Virtual-Key: ${key}"`);
   });
 
-  it("has no Model Router request for a passthrough key", () => {
+  it("has no Unified API request for a passthrough key", () => {
     expect(
       buildCurlExample({
         connectionBaseUrl: base,

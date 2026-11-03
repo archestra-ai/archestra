@@ -1,8 +1,8 @@
 /**
  * The model a forked subagent runs on for a tier (`fast` / `smart`), and the
  * organization trio's tier checks. A tier's model runs on a key the user may
- * use for it, chosen as the Model Router chooses one, so this sits above the
- * Model Router's key eligibility rather than in utils/llm-resolution.ts.
+ * use for it, chosen as the Unified API chooses one, so this sits above the
+ * Unified API's key eligibility rather than in utils/llm-resolution.ts.
  */
 import {
   findTierDefault,
@@ -37,7 +37,7 @@ const ORGANIZATION_TIER_FIELD = {
  * The model and key a forked subagent runs on for `tier`: the organization
  * trio's model for that tier, else the provider's default tier model on the
  * parent's key. The trio's model runs on the parent's key when it serves the
- * model, else on a key the user may use for it, chosen as the Model Router
+ * model, else on a key the user may use for it, chosen as the Unified API
  * chooses one for the user. Falls back to the parent's own selection.
  */
 export async function resolveSubagentTierSelection(params: {

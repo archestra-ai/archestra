@@ -1,7 +1,7 @@
 import type { FastifyRequest } from "fastify";
 import type { AutoRoutingRequestContext } from "@/types/auto-routing";
 
-/** Set by the Model Router when it routed an "auto" request; read when the interaction is recorded. */
+/** Set by the Unified API when it routed an "auto" request; read when the interaction is recorded. */
 export function setAutoRoutingContext(
   request: FastifyRequest,
   context: AutoRoutingRequestContext,

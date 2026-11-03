@@ -90,7 +90,7 @@ export type ModelRouterCredential =
   | { kind: "denied"; error: ApiError };
 
 /**
- * The user a Model Router credential proves: an OAuth user, or the author of a
+ * The user a Unified API credential proves: an OAuth user, or the author of a
  * personal virtual key. Organization keys, OAuth clients and service accounts
  * identify no user.
  */
@@ -109,7 +109,7 @@ export function modelRouterAuthenticatedUserId(
   }
 }
 
-/** The agent a Model Router request is served by, as usage limits scope it. */
+/** The agent a Unified API request is served by, as usage limits scope it. */
 export type ModelRouterLimitAgent = {
   id: string;
   organizationId: string;
@@ -117,7 +117,7 @@ export type ModelRouterLimitAgent = {
 };
 
 /**
- * The identity the proxy checks usage limits for on a Model Router request,
+ * The identity the proxy checks usage limits for on a Unified API request,
  * matching what `applyModelRouterAuthOverride` hands the proxy.
  */
 export function modelRouterLimitScope(
@@ -139,7 +139,7 @@ export function modelRouterLimitScope(
 }
 
 /**
- * The provider credential a Model Router request for `resolution` would be
+ * The provider credential a Unified API request for `resolution` would be
  * sent with, or why it may not be sent. Reads only.
  */
 export async function selectModelRouterCredential(params: {
@@ -157,7 +157,7 @@ export async function selectModelRouterCredential(params: {
       kind: "denied",
       error: new ApiError(
         400,
-        `Model Router credential is not mapped to provider "${provider}".`,
+        `Unified API credential is not mapped to provider "${provider}".`,
       ),
     };
   }
@@ -188,7 +188,7 @@ export async function selectModelRouterCredential(params: {
 }
 
 /**
- * Every provider key `userId` may use, as Model Router mappings in preference
+ * Every provider key `userId` may use, as Unified API mappings in preference
  * order; a request takes the first one linked to its model
  * (`selectMappedProviderKey`).
  */

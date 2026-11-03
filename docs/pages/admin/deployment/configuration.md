@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 6
-lastUpdated: 2026-10-31
+lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -527,7 +527,7 @@ These variables set each provider's deployment-wide endpoint and authentication.
 - **`ARCHESTRA_JEV_BASE_URL`** - Full Jev decisions endpoint. See [Jev](/docs/llm-proxy/providers#jev).
   - Default: `https://api.typesafe.ai/v1/systemone`
 
-- **`ARCHESTRA_AUTO_ROUTING_ENABLED`** - Turns on the alpha [Auto Routing](/docs/llm-proxy/auto-routing) model for the Model Router.
+- **`ARCHESTRA_AUTO_ROUTING_ENABLED`** - Turns on the alpha [Auto Routing](/docs/llm-proxy/auto-routing) model for the Unified API.
   - Default: unset (off)
   - Values: `true`, `false`. Blank follows [`ARCHESTRA_BETA`](/docs/admin/deployment/configuration#ARCHESTRA_BETA).
 

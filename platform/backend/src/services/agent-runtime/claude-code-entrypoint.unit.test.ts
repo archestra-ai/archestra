@@ -252,7 +252,7 @@ fi
           ARCHESTRA_MCP_GATEWAY_URL: "http://localhost:9000/v1/mcp/test",
           ARCHESTRA_MCP_GATEWAY_TOKEN: "test-token",
           ANTHROPIC_AUTH_TOKEN: "test-key",
-          ANTHROPIC_BASE_URL: "http://localhost:9000/v1/model-router/test",
+          ANTHROPIC_BASE_URL: "http://localhost:9000/v1/unified-api/test",
         },
       });
 

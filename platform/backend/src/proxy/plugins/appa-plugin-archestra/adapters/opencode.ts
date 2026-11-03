@@ -250,7 +250,7 @@ function nativeOpenCodeToolName(name: string): string {
 /**
  * The text of a tool result as a provider wire carries it: a string, text
  * parts, or an object that wraps either in `content` (Gemini's
- * functionResponse, as the Model Router translates a tool message).
+ * functionResponse, as the Unified API translates a tool message).
  */
 function resultText(content: unknown): string | undefined {
   if (typeof content === "string") return content;

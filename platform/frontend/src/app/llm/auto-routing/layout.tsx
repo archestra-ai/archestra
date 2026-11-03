@@ -31,8 +31,8 @@ export default function AutoRoutingLayout({
       title="Auto Routing"
       description={
         <>
-          The <code>auto</code> model on the Model Router picks a fast, normal
-          or smart model per session within a daily budget.
+          The <code>auto</code> model on the Unified API picks a fast, normal or
+          smart model per session within a daily budget.
           {docsUrl && (
             <span>
               {" "}
@@ -44,7 +44,7 @@ export default function AutoRoutingLayout({
           <span className="block">
             Clients use it by requesting model <code>auto</code> through the{" "}
             <Link href="/llm/proxy" className="underline">
-              Model Router
+              Unified API
             </Link>
             .
           </span>

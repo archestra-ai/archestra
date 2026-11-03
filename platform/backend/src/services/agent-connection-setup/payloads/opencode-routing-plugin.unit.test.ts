@@ -420,7 +420,7 @@ describe("OpenCode routing plugin", () => {
           "archestra-anthropic": {
             options: {
               apiKey: "{file:~/.archestra/kilo-primary.key}",
-              baseURL: "https://example.com/v1/model-router",
+              baseURL: "https://example.com/v1/unified-api",
             },
           },
         },

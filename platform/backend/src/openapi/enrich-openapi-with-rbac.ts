@@ -247,7 +247,7 @@ function createLlmProxyAuthenticationSection(operationId?: string): string {
     return [
       "Authentication:",
       "",
-      "Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+      "Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified API](/docs/llm-proxy/unified-api).",
     ].join("\n");
   if (operationId && PROVIDER_FILE_ROUTES.has(operationId))
     return [

@@ -129,18 +129,20 @@ test("preserves native Responses reasoning, replay state and tool calls through 
   app.setSerializerCompiler(serializerCompiler);
   await app.register(modelRouterProxyRoutes);
   try {
-    const response = await app.inject({
-      method: "POST",
-      url: `/v1/model-router/${agent.id}/responses`,
-      headers: {
-        authorization: `Bearer ${value}`,
-        "user-agent": "test-client",
-      },
-      payload,
-    });
-    expect(response.statusCode, response.body).toBe(200);
-    expect(upstream).toMatchObject({ ...payload, model: "gpt-5.4" });
-    expect(response.json().output).toEqual([message, call]);
+    for (const path of ["unified-api", "model-router"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/${path}/${agent.id}/responses`,
+        headers: {
+          authorization: `Bearer ${value}`,
+          "user-agent": "test-client",
+        },
+        payload,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(upstream).toMatchObject({ ...payload, model: "gpt-5.4" });
+      expect(response.json().output).toEqual([message, call]);
+    }
   } finally {
     await app.close();
   }

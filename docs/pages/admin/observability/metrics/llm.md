@@ -2,7 +2,7 @@
 title: LLM Metrics
 description: Look up LLM latency, token usage, prompt caching, and cost metrics.
 order: 1
-lastUpdated: 2026-10-31
+lastUpdated: 2026-11-03
 ---
 
 Track LLM request latency, token usage, and billed spend across providers and models. See [Labels](/docs/admin/observability/metrics#labels) for request and agent dimensions.
@@ -12,7 +12,7 @@ Track LLM request latency, token usage, and billed spend across providers and mo
 | Metric | Type | Extra Labels | Measures |
 | --- | --- | --- | --- |
 | <span id="llm_request_duration_seconds"></span>`llm_request_duration_seconds` | Histogram | `status_code` | Upstream-call latency; streaming measures establishment, not completion. Retries can add observations. |
-| <span id="llm_proxy_request_duration_seconds"></span>`llm_proxy_request_duration_seconds` | Histogram | `provider`, `operation`, `stream`, `outcome`, `error_origin`, `status_code` only | End-to-end logical proxy and model router inference duration, including preflight, retries, and full stream completion |
+| <span id="llm_proxy_request_duration_seconds"></span>`llm_proxy_request_duration_seconds` | Histogram | `provider`, `operation`, `stream`, `outcome`, `error_origin`, `status_code` only | End-to-end logical proxy and unified API inference duration, including preflight, retries, and full stream completion |
 | <span id="llm_tokens_total"></span>`llm_tokens_total` | Counter | `type` (`input`, `output`) | Tokens used. `input` excludes prompt-cache tokens. |
 | <span id="llm_cache_tokens_total"></span>`llm_cache_tokens_total` | Counter | `cache_type` (`read`, `write`) | Prompt-cache tokens read from or written to the provider cache |
 | <span id="llm_token_usage"></span>`llm_token_usage` | Histogram | | Input plus output tokens per request |
@@ -44,15 +44,15 @@ Upstream LLM latency, token, cache, and cost observations can carry trace exempl
 
 ## Proxy Request Outcomes
 
-Track end-to-end request outcomes, throttling, and latency across the [LLM Proxy](/docs/llm-proxy) and model router with `llm_proxy_request_duration_seconds`, separating Archestra policy decisions from upstream provider and client failures.
+Track end-to-end request outcomes, throttling, and latency across the [LLM Proxy](/docs/llm-proxy) and unified API with `llm_proxy_request_duration_seconds`, separating Archestra policy decisions from upstream provider and client failures.
 
 Each observation records one logical inference request from handler entry through completion, including preflight, retries, failovers, and the full response stream. Use `llm_proxy_request_duration_seconds_count` as the request counter; Archestra does not emit a separate counter metric. Use the existing `llm_request_duration_seconds` for upstream-call latency: its count can include retries, and misses preflight refusals and failures after streaming headers.
 
-The metric covers inference requests handled by the shared proxy and model router. It excludes requests rejected by authentication or validation before reaching those handlers, model listing, unsupported passthrough endpoints, and provider file routes.
+The metric covers inference requests handled by the shared proxy and unified API. It excludes requests rejected by authentication or validation before reaching those handlers, model listing, unsupported passthrough endpoints, and provider file routes.
 
 | Label | Values |
 | --- | --- |
-| `provider` | Resolved provider name (such as `openai` or `anthropic`), or `router` when a model-router request fails before routing selects a provider |
+| `provider` | Resolved provider name (such as `openai` or `anthropic`), or `router` when a unified-api request fails before routing selects a provider |
 | `operation` | Inference operation, such as `chat`, `generate_content`, or `embedding` |
 | `stream` | `true` or `false` |
 | `outcome` | `success`, `incomplete`, `error`, `throttled`, `denied`, `cancelled`, `timeout`, or `overloaded` |

@@ -109844,7 +109844,7 @@ export type ModelRouterImageEditsWithDefaultAgentData = {
     };
     path?: never;
     query?: never;
-    url: '/v1/model-router/images/edits';
+    url: '/v1/unified-api/images/edits';
 };
 
 export type ModelRouterImageEditsWithDefaultAgentErrors = {
@@ -109977,7 +109977,7 @@ export type ModelRouterImageEditsWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/model-router/{agentId}/images/edits';
+    url: '/v1/unified-api/{agentId}/images/edits';
 };
 
 export type ModelRouterImageEditsWithAgentErrors = {
@@ -110097,7 +110097,7 @@ export type ModelRouterAudioSpeechWithDefaultAgentData = {
     };
     path?: never;
     query?: never;
-    url: '/v1/model-router/audio/speech';
+    url: '/v1/unified-api/audio/speech';
 };
 
 export type ModelRouterAudioSpeechWithDefaultAgentResponses = {
@@ -110134,7 +110134,7 @@ export type ModelRouterAudioSpeechWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/model-router/{agentId}/audio/speech';
+    url: '/v1/unified-api/{agentId}/audio/speech';
 };
 
 export type ModelRouterAudioSpeechWithAgentResponses = {
@@ -110180,7 +110180,7 @@ export type ModelRouterAudioTranscriptionsWithDefaultAgentData = {
     };
     path?: never;
     query?: never;
-    url: '/v1/model-router/audio/transcriptions';
+    url: '/v1/unified-api/audio/transcriptions';
 };
 
 export type ModelRouterAudioTranscriptionsWithDefaultAgentResponses = {
@@ -110228,7 +110228,7 @@ export type ModelRouterAudioTranscriptionsWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/model-router/{agentId}/audio/transcriptions';
+    url: '/v1/unified-api/{agentId}/audio/transcriptions';
 };
 
 export type ModelRouterAudioTranscriptionsWithAgentResponses = {
@@ -110274,7 +110274,7 @@ export type ModelRouterAudioTranslationsWithDefaultAgentData = {
     };
     path?: never;
     query?: never;
-    url: '/v1/model-router/audio/translations';
+    url: '/v1/unified-api/audio/translations';
 };
 
 export type ModelRouterAudioTranslationsWithDefaultAgentResponses = {
@@ -110322,7 +110322,7 @@ export type ModelRouterAudioTranslationsWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/model-router/{agentId}/audio/translations';
+    url: '/v1/unified-api/{agentId}/audio/translations';
 };
 
 export type ModelRouterAudioTranslationsWithAgentResponses = {
@@ -110361,7 +110361,7 @@ export type ModelRouterImagesWithDefaultAgentData = {
     };
     path?: never;
     query?: never;
-    url: '/v1/model-router/images/generations';
+    url: '/v1/unified-api/images/generations';
 };
 
 export type ModelRouterImagesWithDefaultAgentErrors = {
@@ -110487,7 +110487,7 @@ export type ModelRouterImagesWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/model-router/{agentId}/images/generations';
+    url: '/v1/unified-api/{agentId}/images/generations';
 };
 
 export type ModelRouterImagesWithAgentErrors = {
@@ -110586,7 +110586,7 @@ export type ModelRouterListModelsWithDefaultAgentData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/v1/model-router/models';
+    url: '/v1/unified-api/models';
 };
 
 export type ModelRouterListModelsWithDefaultAgentErrors = {
@@ -110680,7 +110680,7 @@ export type ModelRouterListModelsWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/model-router/{agentId}/models';
+    url: '/v1/unified-api/{agentId}/models';
 };
 
 export type ModelRouterListModelsWithAgentErrors = {
@@ -110817,7 +110817,7 @@ export type ModelRouterResponsesWithDefaultAgentData = {
     };
     path?: never;
     query?: never;
-    url: '/v1/model-router/responses';
+    url: '/v1/unified-api/responses';
 };
 
 export type ModelRouterResponsesWithDefaultAgentErrors = {
@@ -110991,7 +110991,7 @@ export type ModelRouterResponsesWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/model-router/{agentId}/responses';
+    url: '/v1/unified-api/{agentId}/responses';
 };
 
 export type ModelRouterResponsesWithAgentErrors = {
@@ -111133,7 +111133,7 @@ export type ModelRouterEmbeddingsWithDefaultAgentData = {
     };
     path?: never;
     query?: never;
-    url: '/v1/model-router/embeddings';
+    url: '/v1/unified-api/embeddings';
 };
 
 export type ModelRouterEmbeddingsWithDefaultAgentErrors = {
@@ -111246,7 +111246,7 @@ export type ModelRouterEmbeddingsWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/model-router/{agentId}/embeddings';
+    url: '/v1/unified-api/{agentId}/embeddings';
 };
 
 export type ModelRouterEmbeddingsWithAgentErrors = {
@@ -111821,7 +111821,7 @@ export type ModelRouterChatCompletionsWithDefaultAgentData = {
     };
     path?: never;
     query?: never;
-    url: '/v1/model-router/chat/completions';
+    url: '/v1/unified-api/chat/completions';
 };
 
 export type ModelRouterChatCompletionsWithDefaultAgentErrors = {
@@ -112454,7 +112454,7 @@ export type ModelRouterChatCompletionsWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/model-router/{agentId}/chat/completions';
+    url: '/v1/unified-api/{agentId}/chat/completions';
 };
 
 export type ModelRouterChatCompletionsWithAgentErrors = {

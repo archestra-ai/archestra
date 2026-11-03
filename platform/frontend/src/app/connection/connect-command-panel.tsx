@@ -1332,7 +1332,7 @@ export function ConnectCommandPanel({
           </span>
         ) : providers.length ? (
           <span>
-            {`Cursor's models go through the ${appName} Model Router with a personal virtual key for ${formatList(providers.map((p) => providerCatalog.label(p)))}. Setup writes the router URL and key into Cursor's settings.`}
+            {`Cursor's models go through the ${appName} Unified API with a personal virtual key for ${formatList(providers.map((p) => providerCatalog.label(p)))}. Setup writes the router URL and key into Cursor's settings.`}
           </span>
         ) : (
           <span>{CURSOR_NO_KEYS_MESSAGE}</span>
@@ -1811,7 +1811,7 @@ export function ConnectCommandPanel({
                 {client.id === "cursor" ? (
                   <span>
                     {!cursorRoutingUnavailable
-                      ? `Route Cursor's models (${providers.length} ${providers.length === 1 ? "provider" : "providers"}) through the Model Router using a virtual key`
+                      ? `Route Cursor's models (${providers.length} ${providers.length === 1 ? "provider" : "providers"}) through the Unified API using a virtual key`
                       : "Cursor keeps its own models"}
                   </span>
                 ) : allPrimaryProviders ? (

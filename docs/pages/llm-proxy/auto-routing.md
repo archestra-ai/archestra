@@ -3,7 +3,7 @@ title: Auto Routing
 description: Let Archestra pick a fast, normal, or smart model for each session of agents and chats on the organization default, and of apps
 order: 6
 alpha: "Set [`ARCHESTRA_AUTO_ROUTING_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_ENABLED) to turn it on."
-lastUpdated: 2026-11-02
+lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -26,7 +26,7 @@ Each tier can come from a different provider.
 Routing is the admin's call: whatever runs on the organization default is routed, and everything with a model of its own is not.
 
 - **Agents and chats:** an agent with no model or [model pool](/docs/llm-proxy/model-pools) of its own, and its chats on the default model. In the agent form and the chat model list, **Organization default** names the three tiers while routing is on.
-- **Apps:** send `auto` as the model to the [Model Router](/docs/llm-proxy/model-router) with a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys). `auto` appears in a key's model list only when the key can reach all three tiers. Native provider routes answer `auto` from an app with a 400 error.
+- **Apps:** send `auto` as the model to the [Unified API](/docs/llm-proxy/unified-api) with a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys). `auto` appears in a key's model list only when the key can reach all three tiers. Native provider routes answer `auto` from an app with a 400 error.
 
 What to know:
 

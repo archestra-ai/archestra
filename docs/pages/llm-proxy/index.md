@@ -2,7 +2,7 @@
 title: LLM Proxy
 description: See and control every model call your company makes, from coding agents to your own apps
 order: 4
-lastUpdated: 2026-10-27
+lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -13,7 +13,7 @@ The LLM Proxy sits between your clients and your model providers. Clients keep t
 
 - Guardrails on every tool call the model asks for. Archestra blocks the calls your policy does not allow. See [Guardrails](/docs/agents/guardrails).
 - No provider keys in your apps. An app gets a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys). Archestra holds the real key, and you can revoke one app's access alone.
-- One URL for every provider. The [Model Router](/docs/llm-proxy/model-router) sends `anthropic:claude-sonnet-4-6` to Anthropic and `openai:gpt-5.4` to OpenAI.
+- One URL for every provider. The [Unified API](/docs/llm-proxy/unified-api) sends `anthropic:claude-sonnet-4-6` to Anthropic and `openai:gpt-5.4` to OpenAI.
 - Failover between provider keys. A [model pool](/docs/llm-proxy/model-pools) serves one model name from several keys, and moves to the next key when one fails.
 - Cost per person, team, and app, with budgets that block requests when spend reaches them. Claude and ChatGPT subscription traffic shows separately, at $0 billed. See [Costs & Limits](/docs/llm-proxy/costs-and-limits).
 - A log of every request, with the model, the caller, tokens, and cost. See [Logs and Auditing](/docs/admin/logs).
@@ -63,7 +63,7 @@ To tie a request to a person for certain, use a credential that names them. See 
 
 `X-Archestra-Session-Id` only labels requests in logs. To enforce Guardrails on custom clients or workflows, send [`X-Appa-Session-ID`](/docs/agents/guardrails/clients#session-headers) with the conversation ID. When you send both headers, use the same value.
 
-<span id="authentication"></span><span id="openai-compatible-model-router"></span><span id="supported-providers"></span>
+<span id="authentication"></span><span id="openai-compatible-unified-api"></span><span id="supported-providers"></span>
 
 ## What to Know
 

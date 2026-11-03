@@ -3,7 +3,7 @@ import type { AppaDelegationMarker } from "@/openappa/delegation";
 
 /**
  * Delegation markers a route collected from the wire the client sent, before
- * translating it for the provider. The Model Router's Chat Completions
+ * translating it for the provider. The Unified API's Chat Completions
  * translation can join a message's text parts, leaving a marker mid-text, so
  * the handler prefers these over a collection from the translated body.
  */

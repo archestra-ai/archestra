@@ -754,7 +754,7 @@ function observedAppaSession(params: {
 
 /**
  * The session the client reports. On a wire OpenAPPA does not read, it is
- * read from the client's own wire when a Model Router route translated it,
+ * read from the client's own wire when a Unified API route translated it,
  * and otherwise from the headers alone.
  */
 function clientSessionIdentity(params: {

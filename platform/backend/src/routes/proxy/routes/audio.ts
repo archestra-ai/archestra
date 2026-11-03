@@ -131,7 +131,7 @@ export async function parseAudioUploadRequest(
   return { ...validated.data, file };
 }
 
-/** Shared with the model router; credentials and budgets stay in handleLLMProxy. */
+/** Shared with the unified API; credentials and budgets stay in handleLLMProxy. */
 export function handleAudioProxy(params: {
   body: AudioProxyBody;
   request: FastifyRequest;

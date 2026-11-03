@@ -73,6 +73,7 @@ describe("requestScope", () => {
     expect(share("POST", "/v1/anthropic/agent-id/v1/messages")).toBe(true);
     expect(share("POST", "/v1/openai/chat/completions")).toBe(true);
     expect(share("POST", "/v1/model-router/agent-id/responses")).toBe(true);
+    expect(share("POST", "/v1/unified-api/agent-id/responses")).toBe(true);
     expect(share("GET", "/v1/gemini/v1beta/models")).toBe(true);
     expect(share("POST", "/v1/mcp/agent-id")).toBe(false);
     expect(share("POST", "/v1/a2a/agent-id")).toBe(false);

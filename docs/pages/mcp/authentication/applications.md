@@ -3,7 +3,7 @@ title: Gateway Access for Apps
 sidebarTitle: Apps and Services
 description: Let your own app or service call an MCP Gateway with an OAuth client
 order: 2
-lastUpdated: 2026-10-29
+lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -71,7 +71,7 @@ Ask for only the enabled capabilities each token needs:
 | --- | --- |
 | `mcp` | MCP Gateway |
 | `a2a` | Agent A2A endpoints |
-| `llm:proxy` | LLM Proxy and Model Router |
+| `llm:proxy` | LLM Proxy and Unified API |
 
 For example, `scope=mcp llm:proxy` gets one token for tools and inference. Each requested scope must be enabled on the client. Omitting `scope` in a client credentials request grants all its configured capabilities. A token cannot gain a capability added after it was issued; request a new token. Removing a capability or disabling the client blocks its use immediately.
 

@@ -136,7 +136,7 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
         ARCHESTRA_MCP_GATEWAY_TOKEN: "test-token",
         ARCHESTRA_AGENT_ATTENTION_COMMAND: attentionCommand,
         OPENAI_API_KEY: "test-key",
-        OPENAI_BASE_URL: "http://localhost:9000/v1/model-router/test",
+        OPENAI_BASE_URL: "http://localhost:9000/v1/unified-api/test",
       };
 
       if (mode === "continuation") {

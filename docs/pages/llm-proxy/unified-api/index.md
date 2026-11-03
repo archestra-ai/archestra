@@ -1,8 +1,8 @@
 ---
-title: Model Router
+title: Unified API
 description: Call models from multiple providers through an OpenAI-compatible endpoint
 order: 4
-lastUpdated: 2026-10-30
+lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -11,25 +11,23 @@ Use one OpenAI-compatible URL for every provider. Any app built on the OpenAI SD
 
 ## Connect an App
 
-Give your app a virtual key and the router URL. Then name each model with its provider in front of it.
+Give your app a virtual key and the Unified API URL. Then name each model with its provider in front of it.
 
 1. Add the provider keys you need on [Model Providers](/docs/llm-proxy/providers).
 2. Create a [standard virtual key](/docs/llm-proxy/authentication#standard-virtual-keys), and map those provider keys to it.
-3. Set your app's base URL to `https://<archestra-host>/v1/model-router`, and use the virtual key as its API key.
-
-   ![The new virtual key dialog, with the key and the Model Router base URL to copy](/docs/automated_screenshots/llm-proxy_model-router-key.webp)
+3. Set your app's base URL to `https://<archestra-host>/v1/unified-api`, and use the virtual key as its API key.
 
 4. List the models the key can reach:
 
    ```bash
-   curl "https://<archestra-host>/v1/model-router/models" \
+   curl "https://<archestra-host>/v1/unified-api/models" \
      -H "Authorization: Bearer $ARCHESTRA_VIRTUAL_KEY"
    ```
 
 5. Send a request with one of those IDs:
 
    ```bash
-   curl "https://<archestra-host>/v1/model-router/chat/completions" \
+   curl "https://<archestra-host>/v1/unified-api/chat/completions" \
      -H "Authorization: Bearer $ARCHESTRA_VIRTUAL_KEY" \
      -H "Content-Type: application/json" \
      -d '{"model":"openai:gpt-5.4","messages":[{"role":"user","content":"Hello"}]}'
@@ -37,26 +35,26 @@ Give your app a virtual key and the router URL. Then name each model with its pr
 
 The answer comes back in OpenAI format, from any provider.
 
-- **Model IDs** start with the provider: `openai:gpt-5.4`, `anthropic:claude-sonnet-4-6`. The router sends the rest of the ID to that provider.
+- **Model IDs** start with the provider: `openai:gpt-5.4`, `anthropic:claude-sonnet-4-6`. The API sends the rest of the ID to that provider.
 - **One provider only?** When the key maps to one provider, plain IDs such as `gpt-5.4` also work.
 
 ## Endpoints and Credentials
 
-The router speaks the OpenAI API. It supports these endpoints:
+The Unified API speaks the OpenAI API. It supports these endpoints:
 
 | Endpoint | Works with |
 | --- | --- |
-| `/chat/completions` | All router providers |
-| `/responses` | All router providers except Kimi (Moonshot AI) and Kimi Code, whose thinking models need their reasoning sent back on tool-call turns, which the Responses translation does not carry |
+| `/chat/completions` | All supported providers |
+| `/responses` | All supported providers except Kimi (Moonshot AI) and Kimi Code, whose thinking models need their reasoning sent back on tool-call turns, which the Responses translation does not carry |
 | `/models` | Lists only the models your credential can reach |
-| `/embeddings` | All router providers except Anthropic, Bedrock, Cohere, and GitHub Copilot |
+| `/embeddings` | All supported providers except Anthropic, Bedrock, Cohere, and GitHub Copilot |
 | `/images/generations` | OpenAI, Azure, and Gemini image models |
 | `/images/edits` | OpenAI, Azure, and Gemini image models |
 | `/audio/speech` | OpenAI and Azure speech models |
 | `/audio/transcriptions` and `/audio/translations` | OpenAI and Azure models that support the requested operation |
 | `/realtime` (WebSocket) | OpenAI realtime models |
 
-Sign in with a [standard virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) or an [OAuth client](/docs/llm-proxy/authentication#oauth-clients) token. The router does not accept a [passthrough key](/docs/llm-proxy/authentication#passthrough-virtual-keys), a [provider's own key](/docs/llm-proxy/authentication#direct-provider-api-key), or an [identity provider JWT](/docs/llm-proxy/authentication#jwks-external-identity-provider).
+Sign in with a [standard virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) or an [OAuth client](/docs/llm-proxy/authentication#oauth-clients) token. The Unified API does not accept a [passthrough key](/docs/llm-proxy/authentication#passthrough-virtual-keys), a [provider's own key](/docs/llm-proxy/authentication#direct-provider-api-key), or an [identity provider JWT](/docs/llm-proxy/authentication#jwks-external-identity-provider).
 
 ## Images and Audio
 
@@ -65,13 +63,13 @@ Use the same OpenAI SDK client, base URL, and virtual key for text, images, and 
 ```python
 from openai import OpenAI
 
-client = OpenAI(base_url="https://<archestra-host>/v1/model-router", api_key="<virtual-key>")
+client = OpenAI(base_url="https://<archestra-host>/v1/unified-api", api_key="<virtual-key>")
 image = client.images.generate(model="azure:<image-deployment>", prompt="Draw a blue circle.")
 with open("speech.wav", "rb") as audio:
     transcript = client.audio.transcriptions.create(model="openai:<transcription-model>", file=audio)
 ```
 
-Image responses carry the provider's image data, and transcriptions carry a `text` field. Speech responses are the audio bytes, and streamed transcriptions are SSE events, as the provider sends them. Add `/<proxy-id>` after `/v1/model-router` to select a specific LLM proxy.
+Image responses carry the provider's image data, and transcriptions carry a `text` field. Speech responses are the audio bytes, and streamed transcriptions are SSE events, as the provider sends them. Add `/<proxy-id>` after `/v1/unified-api` to select a specific LLM proxy.
 
 Audio chat models such as `openai:gpt-audio` answer `/chat/completions` in text, or in speech when the request sets `modalities` and `audio`. Their audio tokens are priced at OpenAI's audio rates.
 
@@ -80,7 +78,7 @@ Audio chat models such as `openai:gpt-audio` answer `/chat/completions` in text,
 - **Pricing:** image, speech, transcription, and translation calls are priced at the vendor's published media rates: per image token, per speech character, per minute of audio. A translation or a text-format transcript reports no usage, so Archestra reads its length from the uploaded file. A WebM upload has no readable length and records no cost. **Models** lists each media model's rates.
 - **Budgets:** a priced media call counts toward cost budgets like a chat call. A cost budget rejects a call that cannot be priced, such as a translation of a WebM file, before it reaches the provider.
 
-Azure file operations stay on the Azure provider route: a router model name cannot select a file account, and a file id cannot replace a multipart image upload.
+Azure file operations stay on the Azure provider route: a provider-qualified model name cannot select a file account, and a file id cannot replace a multipart image upload.
 
 ## Realtime
 
@@ -103,16 +101,16 @@ Each response of the session is one row under **Logs → LLM Proxy**, with its t
 
 ## Fix a Failed Request
 
-Most failures come from the model name or from which provider keys your credential can use. The router names the problem in the error message. Find it below:
+Most failures come from the model name or from which provider keys your credential can use. The response names the problem in the error message. Find it below:
 
 | Error message | Cause and fix |
 | --- | --- |
 | `Model "gpt-5.4" is not available. Use a provider-qualified model id…` | The ID has no provider, or your credential cannot use that model. Copy the exact ID from `/models`, such as `openai:gpt-5.4`. |
-| `Model "anthropic:…" is scoped to provider "anthropic", but the Model Router virtual key is not mapped to that provider.` | Edit the virtual key, and map a key for that provider to it. |
+| `Model "anthropic:…" is scoped to provider "anthropic", but the Unified API virtual key is not mapped to that provider.` | Edit the virtual key, and map a key for that provider to it. |
 | `Virtual API key has no provider API keys configured.` | Map at least one provider key to the virtual key. |
 | `Model … is only served over the Responses API.` | Send the request to `/responses`, not `/chat/completions`. |
-| `Provider "…" is not yet available through the OpenAI-compatible model router.` | The router does not support that provider. Use the provider's own [proxy endpoint](/docs/llm-proxy#start-using-it). |
-| `Model router requests require a mapped virtual API key or LLM OAuth client access token.` | You sent a passthrough key, a provider key, or an identity provider JWT. Use a standard virtual key or an OAuth client token. |
+| `Provider "…" is not yet available through the OpenAI-compatible unified API.` | The Unified API does not support that provider. Use the provider's own [proxy endpoint](/docs/llm-proxy#start-using-it). |
+| `Unified API requests require a mapped virtual API key or LLM OAuth client access token.` | You sent a passthrough key, a provider key, or an identity provider JWT. Use a standard virtual key or an OAuth client token. |
 | `… is per-user: it can only be used through the same user's own personal credential.` | A subscription key, such as GitHub Copilot, works only for the person who added it. Use your personal virtual key. |
 
 Two problems return no error:

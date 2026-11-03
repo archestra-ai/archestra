@@ -2,7 +2,7 @@
 title: Ollama
 description: Connect an Ollama server and choose its native or OpenAI-compatible transport
 order: 6
-lastUpdated: 2026-10-05
+lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -22,9 +22,9 @@ The server's pulled models appear under **Models**. Add one key entry per server
 | Transport | Proxy URL | Use |
 | --- | --- | --- |
 | Native | `https://<archestra-host>/v1/ollama-native` | Ollama `/api/chat` and generation parameters |
-| OpenAI-compatible | `https://<archestra-host>/v1/ollama` | Chat Completions, Embeddings, and Model Router |
+| OpenAI-compatible | `https://<archestra-host>/v1/ollama` | Chat Completions, Embeddings, and Unified API |
 
-Native model IDs cannot be used through the Model Router. For that endpoint, connect the OpenAI-compatible transport and use `ollama:<model-id>`.
+Native model IDs cannot be used through the Unified API. For that endpoint, connect the OpenAI-compatible transport and use `ollama:<model-id>`.
 
 ## Generation Parameters
 

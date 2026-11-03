@@ -2,7 +2,7 @@
 title: Observability
 description: Connect your monitoring stack and install dashboards
 order: 8
-lastUpdated: 2026-10-30
+lastUpdated: 2026-11-03
 ---
 
 Monitor your instance in your existing stack. For individual requests and conversations inside Archestra, use [Logs](/docs/admin/logs).
@@ -30,7 +30,7 @@ Archestra publishes eight prebuilt Grafana dashboards. Core operational dashboar
 
 | Dashboard | Key Visualizations | Data Sources |
 | --- | --- | --- |
-| LLM Proxy (`archestra-genai-observability`) | Proxy and model router outcomes, upstream and streaming latency, token rates, and prompt-cache usage | Prometheus (optional Tempo for exemplars) |
+| LLM Proxy (`archestra-genai-observability`) | Proxy and unified API outcomes, upstream and streaming latency, token rates, and prompt-cache usage | Prometheus (optional Tempo for exemplars) |
 | Costs & Limits | Metered and subscription spend, prompt-cache savings, limit rule evaluations, storage errors, and recent exhausted allowances | Prometheus |
 | Agent Runtime | Fleet-wide run lifecycle, provisioning latency, steering, completion delivery, boundary refusals, task health, and optional Kubernetes pod resources | Prometheus (optional Kubernetes Prometheus with cAdvisor and `kube-state-metrics`) |
 | Guardrails / OpenAPPA | Embedded OpenAPPA hook dispatches and latency by hook and decision, runtime boundary refusals and engine operations | Prometheus |

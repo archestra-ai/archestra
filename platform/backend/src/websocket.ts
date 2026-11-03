@@ -54,7 +54,7 @@ import type { AgentRunRecord } from "@/types";
 
 /** `/v1/model-router/realtime` and `/v1/openai/realtime`, with or without an agent id. */
 const REALTIME_UPGRADE_PATH =
-  /^\/v1\/(?:model-router|openai)(?:\/[0-9a-f-]{36})?\/realtime$/i;
+  /^\/v1\/(?:unified-api|model-router|openai)(?:\/[0-9a-f-]{36})?\/realtime$/i;
 
 interface McpLogsSubscription {
   serverId: string;

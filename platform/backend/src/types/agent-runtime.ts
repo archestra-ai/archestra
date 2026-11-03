@@ -289,7 +289,7 @@ export type AgentRuntimeEnvironmentEntry = z.infer<
 export const AgentRuntimeSchema = z.object({
   image: z.string().trim().min(1).max(2_000),
   command: z.array(z.string()).nullable(),
-  /** Wire protocol the image uses to reach Archestra's model router. */
+  /** Wire protocol the image uses to reach Archestra's unified API. */
   inferenceProtocol: z.enum(["openai_responses", "openai_chat", "anthropic"]),
   backend: AgentRuntimeBackendSchema,
   steerMode: AgentRuntimeSteerModeSchema,

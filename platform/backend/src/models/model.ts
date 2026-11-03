@@ -382,7 +382,7 @@ class ModelModel {
 
   /**
    * Find text chat models by exact model ID across providers.
-   * Used by the OpenAI-compatible model router to resolve a client-supplied
+   * Used by the OpenAI-compatible unified API to resolve a client-supplied
    * model name to the provider that owns it.
    */
   static async findTextChatModelsByModelId(params: {

@@ -3,7 +3,7 @@
  *
  * xAI uses an OpenAI-compatible API at https://api.x.ai/v1.
  *
- * `/responses` is served over xAI's chat completions, as the model router
+ * `/responses` is served over xAI's chat completions, as the unified API
  * serves it: OpenAI-compatible clients (the AI SDK's xAI provider, Kilo Code's
  * SuperGrok sign-in) send Responses requests, and the xAI SuperGrok
  * subscription upstream speaks chat completions only.

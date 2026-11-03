@@ -147,7 +147,7 @@ export async function planModelPool(params: {
   poolId?: string;
   inbound: PoolWire;
   caller: ModelPoolCaller;
-  /** Set when the Model Router already let this caller use the pool. */
+  /** Set when the Unified API already let this caller use the pool. */
   grantedPoolId?: string;
   sessionId?: string | null;
 }): Promise<ModelPoolPlan | null> {

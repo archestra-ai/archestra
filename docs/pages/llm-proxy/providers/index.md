@@ -2,7 +2,7 @@
 title: Model Providers
 description: Connect provider API keys and personal subscriptions for Chat and the LLM Proxy
 order: 2
-lastUpdated: 2026-10-30
+lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -70,7 +70,7 @@ When one level has several keys, the **Primary** key wins, then the oldest one.
 
 ## Supported Providers
 
-Each provider has its own proxy URL, `https://<archestra-host>/v1/<path>`, with the provider's own API. A client that works with the provider works with the proxy. Providers marked **Router** also work through the [Model Router](/docs/llm-proxy/model-router). A linked name has a setup page.
+Each provider has its own proxy URL, `https://<archestra-host>/v1/<path>`, with the provider's own API. A client that works with the provider works with the proxy. Providers marked **Router** also work through the [Unified API](/docs/llm-proxy/unified-api). A linked name has a setup page.
 
 | Provider | Path | APIs | Router | Notes |
 | --- | --- | --- | --- | --- |

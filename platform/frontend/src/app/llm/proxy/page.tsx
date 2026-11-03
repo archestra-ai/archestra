@@ -95,13 +95,13 @@ export default function LlmProxyPage() {
   >("model-router");
   const [auth, setAuth] = useState<AuthMethod>("standard");
   const providers = getProxyEndpointProviders(organization);
-  // Passthrough has no Model Router route; picking the router falls back to
+  // Passthrough has no Unified API route; picking the router falls back to
   // a standard key, and the choice returns when a provider is picked again.
   const effectiveAuth =
     selected === "model-router" && auth === "passthrough" ? "standard" : auth;
   const targetLabel =
     selected === "model-router"
-      ? "Model Router"
+      ? "Unified API"
       : providerCatalog.label(selected);
 
   return (
@@ -169,10 +169,10 @@ function endpointTabClass(active: boolean) {
 }
 
 /**
- * A terminal block with a Model Router tab and per-provider tabs (primary
+ * A terminal block with a Unified API tab and per-provider tabs (primary
  * providers inline, the rest behind a searchable "More providers"). URLs are
  * id-less — the proxy is a singleton, so the path is just `/v1/<provider>` or
- * `/v1/model-router`.
+ * `/v1/unified-api`.
  */
 function ProxyEndpointCard({
   baseUrl,
@@ -238,7 +238,7 @@ function ProxyEndpointCard({
             className={endpointTabClass(selected === "model-router")}
           >
             <Waypoints className="size-3.5" />
-            Model Router
+            Unified API
           </UnstyledButton>
           {tabProviders.map((provider) => (
             <UnstyledButton
@@ -337,7 +337,7 @@ const AUTH_METHODS: AuthMethodOption<AuthMethod>[] = [
 ];
 
 const PASSTHROUGH_ROUTER_REASON =
-  "The Model Router calls providers with your organization's provider keys, so it can't take your own. Pick a provider endpoint to use passthrough.";
+  "The Unified API calls providers with your organization's provider keys, so it can't take your own. Pick a provider endpoint to use passthrough.";
 
 // =========================================================================
 // 3 · Connect
@@ -1219,7 +1219,7 @@ function endpointUrl(
   baseUrl: string,
   selected: "model-router" | ProxyEndpointProvider,
 ) {
-  if (selected === "model-router") return `${baseUrl}/model-router`;
+  if (selected === "model-router") return `${baseUrl}/unified-api`;
   if (selected === "jev") return `${baseUrl}/jev/decisions`;
   return `${baseUrl}/${selected}`;
 }

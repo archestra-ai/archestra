@@ -78,6 +78,12 @@ export type InterruptPrompt = {
   confirmLabel: string;
 };
 
+/** A Ctrl+C held back for confirmation, and the session it was typed in. */
+type PendingInterrupt = {
+  sessionKey: string;
+  transport: ExecSessionTransport;
+};
+
 export type ExecSessionTransport = {
   /**
    * Open the session and return a teardown that also detaches server-side.
@@ -162,7 +168,10 @@ export function ExecTerminal({
   claudeMouseWorkaroundRef.current = claudeMouseWorkaround;
   const interruptPromptRef = useRef(interruptPrompt);
   interruptPromptRef.current = interruptPrompt;
-  const [interruptPending, setInterruptPending] = useState(false);
+  // Bound to the session whose terminal took the key: a confirmation that
+  // outlives a session change must not stop the session that replaced it.
+  const [pendingInterrupt, setPendingInterrupt] =
+    useState<PendingInterrupt | null>(null);
   // Enter on the open prompt means "keep running": the safe answer first.
   const cancelInterruptRef = useRef<HTMLButtonElement>(null);
   const initialProgressRef = useRef(initialProgress);
@@ -302,7 +311,10 @@ export function ExecTerminal({
           // interrupt. Ask first: a person who dragged over the agent's own
           // interface meant to copy.
           event.preventDefault();
-          setInterruptPending(true);
+          setPendingInterrupt({
+            sessionKey,
+            transport: transportRef.current,
+          });
           return false;
         }
         return true;
@@ -394,7 +406,7 @@ export function ExecTerminal({
           onError: (message) => {
             if (disposed) return;
             setStatus("error");
-            setInterruptPending(false);
+            setPendingInterrupt(null);
             setErrorMessage(message);
             onErrorRef.current?.();
           },
@@ -402,7 +414,7 @@ export function ExecTerminal({
             if (disposed) return;
             setClosedReason(reason);
             setStatus("disconnected");
-            setInterruptPending(false);
+            setPendingInterrupt(null);
             onClosedRef.current?.();
           },
         });
@@ -485,14 +497,23 @@ export function ExecTerminal({
     [onDropFiles, status],
   );
 
+  // A session change or deactivation disposes the terminal that asked, and
+  // its own close callback is ignored by then, so dismiss the question here.
+  useEffect(() => {
+    return () => setPendingInterrupt(null);
+  }, [sessionKey, isActive]);
+
   const closeInterruptPrompt = useCallback(() => {
-    setInterruptPending(false);
+    setPendingInterrupt(null);
   }, []);
 
   const sendInterrupt = useCallback(() => {
-    setInterruptPending(false);
-    transportRef.current.sendInput("\x03");
-  }, []);
+    const pending = pendingInterrupt;
+    setPendingInterrupt(null);
+    // Sent to the session that asked, and only while it is the one shown.
+    if (!pending || pending.sessionKey !== sessionKey) return;
+    pending.transport.sendInput("\x03");
+  }, [pendingInterrupt, sessionKey]);
 
   const handleCopyCommand = useCallback(async () => {
     if (!command) return;
@@ -674,7 +695,7 @@ export function ExecTerminal({
       )}
       {interruptPrompt && (
         <FormDialog
-          open={interruptPending}
+          open={pendingInterrupt !== null}
           onOpenChange={(open) => {
             if (!open) closeInterruptPrompt();
           }}

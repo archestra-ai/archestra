@@ -293,6 +293,81 @@ describe("ExecTerminal", () => {
     expect(transport.sendInput).toHaveBeenCalledOnce();
   });
 
+  it("drops a pending Ctrl+C confirmation when the session it was typed in is replaced", async () => {
+    const makeTransport = (): ExecSessionTransport => ({
+      open: (handlers) => {
+        handlers.onStarted(null);
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    });
+    const prompt = {
+      title: "Send Ctrl+C to the agent?",
+      description: "It stops the running turn.",
+      confirmLabel: "Send Ctrl+C",
+    };
+    const first = makeTransport();
+    const view = render(
+      <ExecTerminal
+        sessionKey="session-a"
+        transport={first}
+        isActive
+        interruptPrompt={prompt}
+      />,
+    );
+    await screen.findByText("Connected");
+    const askInCurrentSession = () => {
+      const keyHandler = terminalHarness.keyHandler;
+      if (!keyHandler) throw new Error("Terminal did not initialize");
+      expect(
+        keyHandler(
+          new KeyboardEvent("keydown", {
+            key: "c",
+            ctrlKey: true,
+            cancelable: true,
+          }),
+        ),
+      ).toBe(false);
+    };
+    askInCurrentSession();
+    await screen.findByRole("dialog", { name: "Send Ctrl+C to the agent?" });
+
+    // Another session takes the terminal while the question is open: the
+    // question goes away and neither session is interrupted.
+    const second = makeTransport();
+    view.rerender(
+      <ExecTerminal
+        sessionKey="session-b"
+        transport={second}
+        isActive
+        interruptPrompt={prompt}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    await screen.findByText("Connected");
+    expect(first.sendInput).not.toHaveBeenCalled();
+    expect(second.sendInput).not.toHaveBeenCalled();
+
+    // Hiding the terminal dismisses it as well.
+    askInCurrentSession();
+    await screen.findByRole("dialog", { name: "Send Ctrl+C to the agent?" });
+    view.rerender(
+      <ExecTerminal
+        sessionKey="session-b"
+        transport={second}
+        isActive={false}
+        interruptPrompt={prompt}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(second.sendInput).not.toHaveBeenCalled();
+  });
+
   it("restores browser defaults and blocks mouse, keyboard, paste and pending input when off", async () => {
     const transport: ExecSessionTransport = {
       open: (handlers) => {

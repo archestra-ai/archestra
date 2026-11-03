@@ -13,8 +13,9 @@ import {
 } from "@/models";
 import AuditLogModel from "@/models/audit-log";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import { INTERRUPT_AUDIT_WINDOW_MS } from "@/services/agent-runtime/terminal-audit";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import websocketService from "@/websocket";
+import websocketService, { WebSocketService } from "@/websocket";
 
 const service = websocketService as unknown as {
   handleMessage: (message: ClientWebSocketMessage, ws: WS) => Promise<void>;
@@ -463,16 +464,30 @@ describe("websocket Agent run attach ownership", () => {
       expect(attempt.input).toEqual(["ls\r", "\x03", "\x03", "y\x03"]),
     );
 
+    // Once the window has passed, the next Ctrl+C is a new event.
+    const realNow = Date.now;
+    vi.spyOn(Date, "now").mockImplementation(
+      () => realNow() + INTERRUPT_AUDIT_WINDOW_MS + 1_000,
+    );
     await service.handleMessage(
-      { type: "unsubscribe_agent_run_attach", payload: { runId } },
+      { type: "agent_run_attach_input", payload: { runId, data: "\x03" } },
       ws,
     );
     await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(3));
     expect(create.mock.calls[2][0]).toMatchObject({
+      action: "agentRun.terminal_interrupted",
+    });
+
+    await service.handleMessage(
+      { type: "unsubscribe_agent_run_attach", payload: { runId } },
+      ws,
+    );
+    await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(4));
+    expect(create.mock.calls[3][0]).toMatchObject({
       action: "agentRun.terminal_detached",
       actorId: context.userId,
       resourceId: runId,
-      after: { durationSeconds: expect.any(Number), interruptCount: 3 },
+      after: { durationSeconds: expect.any(Number), interruptCount: 4 },
     });
     // The rows were written, not only attempted.
     for (const call of create.mock.results) await call.value;
@@ -492,5 +507,37 @@ describe("websocket Agent run attach ownership", () => {
       ws,
     );
     expect(create).not.toHaveBeenCalled();
+  });
+
+  test("ends live terminals at shutdown so their detach rows are written", async () => {
+    const context = service.clientContexts.get(ws);
+    assert(context);
+    // A replica of its own, so stopping it leaves the shared service alone.
+    const replica = new WebSocketService();
+    const internals = replica as unknown as typeof service & {
+      stop: () => void;
+    };
+    const replicaWs = { readyState: WS.OPEN, send: vi.fn() } as unknown as WS;
+    internals.clientContexts.set(replicaWs, { ...context });
+    const create = vi.spyOn(AuditLogModel, "create");
+    const index = pending.length;
+    const done = internals.handleMessage(
+      { type: "subscribe_agent_run_attach", payload: { runId } },
+      replicaWs,
+    );
+    await vi.waitFor(() => expect(pending).toHaveLength(index + 1));
+    pending[index].resolve();
+    await done;
+    await vi.waitFor(() => expect(create).toHaveBeenCalledOnce());
+
+    internals.stop();
+    await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+    expect(create.mock.calls[1][0]).toMatchObject({
+      action: "agentRun.terminal_detached",
+      actorId: context.userId,
+      resourceId: runId,
+    });
+    expect(pending[index].socket.close).toHaveBeenCalled();
+    for (const call of create.mock.results) await call.value;
   });
 });

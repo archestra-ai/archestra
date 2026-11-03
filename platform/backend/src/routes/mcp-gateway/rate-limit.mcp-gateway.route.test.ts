@@ -14,10 +14,60 @@ describe("MCP Gateway authentication rate limiting", () => {
   let app: ReturnType<typeof createFastifyInstance>;
   beforeEach(async () => {
     config.api.trustProxy = false;
+    config.authRateLimitDisabled = false;
     app = createFastifyInstance();
     await app.register(mcpGatewayRoutes);
   });
   afterEach(async () => app.close());
+
+  test("keeps tokenless OAuth discovery available after the IP budget is exhausted", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const gateway = await makeAgent({ organizationId: org.id });
+    const url = `/v1/mcp/${gateway.id}`;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      expect(
+        (
+          await app.inject({
+            method: "GET",
+            url,
+            headers: { authorization: `Bearer ${randomUUID()}` },
+          })
+        ).statusCode,
+      ).toBe(401);
+    }
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      const response = await app.inject({ method: "GET", url });
+      expect(response.statusCode).toBe(401);
+      expect(response.headers["www-authenticate"]).toContain(
+        "resource_metadata",
+      );
+      expect(response.headers["retry-after"]).toBeUndefined();
+    }
+  });
+
+  test("honors the auth rate-limit disable setting without bypassing authentication", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    config.authRateLimitDisabled = true;
+    const org = await makeOrganization();
+    const gateway = await makeAgent({ organizationId: org.id });
+    const authorization = `Bearer ${randomUUID()}`;
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/mcp/${gateway.id}`,
+        headers: { authorization },
+      });
+      expect(response.statusCode).toBe(401);
+      expect(response.headers["www-authenticate"]).toContain(
+        "resource_metadata",
+      );
+    }
+  });
 
   test("shares the failed-credential budget across transports and returns Retry-After without OAuth discovery", async ({
     makeOrganization,

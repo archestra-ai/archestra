@@ -675,6 +675,9 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
     gateway: (request.params as { profileId?: string }).profileId ?? "",
   });
   fastify.addHook("onRequest", async (request, reply) => {
+    // Tokenless requests only return the OAuth discovery challenge; they do
+    // not perform credential validation and must remain usable behind a NAT.
+    if (config.authRateLimitDisabled || !extractBearerToken(request)) return;
     try {
       // request.ip follows Fastify's configured trustProxy policy.
       await rateLimiter.consume(request.ip, 1, rateLimitCaller(request));
@@ -699,7 +702,11 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
     }
   });
   fastify.addHook("onSend", async (request, reply, payload) => {
-    if (reply.statusCode === 401 || reply.statusCode === 403) {
+    if (
+      !config.authRateLimitDisabled &&
+      extractBearerToken(request) &&
+      (reply.statusCode === 401 || reply.statusCode === 403)
+    ) {
       await rateLimiter.recordDenial(rateLimitCaller(request));
     }
     return payload;

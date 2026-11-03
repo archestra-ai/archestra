@@ -18,7 +18,9 @@ function identity(url, userId) {
   return { id, label: 'ai.archestra.device.' + id, root: join(homedir(), '.local', 'share', 'archestra-device', id) };
 }
 function command(file, args, input, operation = file) {
-  const result = spawnSync(file, args, { input, encoding: 'utf8', timeout: 30000, maxBuffer: 1024 * 1024, windowsHide: true, shell: false });
+  // PowerShell 7 module paths cannot be loaded by Windows PowerShell 5.1.
+  const env = file === 'powershell.exe' ? Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toUpperCase() !== 'PSMODULEPATH')) : process.env;
+  const result = spawnSync(file, args, { input, env, encoding: 'utf8', timeout: 30000, maxBuffer: 1024 * 1024, windowsHide: true, shell: false });
   if (result.error || result.status !== 0) {
     const diagnostic = String(result.stderr || '').match(/DEVICE_AGENT_ERROR:([A-Za-z0-9_.,:+-]{1,240})/);
     const error = new Error('Could not complete ' + operation + ' (exit ' + result.status + (result.error ? ', ' + result.error.code : '') + (diagnostic ? ', ' + diagnostic[1] : '') + '). Check your user service manager and unlocked credential store.');
@@ -293,7 +295,15 @@ function mcpSupervisor(config, spec, token) {
           await writePrivate(join(spec.root, 'mcp-worker.cjs'), bundle.source);
           cachedHash = bundle.sha256;
         }
-        const session = await request(config.url, 'mcp-open', { id: installation.id, configDigest: installation.configDigest }, token);
+        let session;
+        try { session = await request(config.url, 'mcp-open', { id: installation.id, configDigest: installation.configDigest }, token); }
+        catch (error) {
+          // The installation can change between manifest and session creation.
+          // Its removal or new approval must not revoke the computer's credential.
+          if (![403, 404, 409].includes(error.status)) throw error;
+          workers.set(installation.id, { child: null, digest: installation.configDigest, state: 'failed', reason: 'Installation changed; waiting for current approval', retryAt: Date.now() + 15000, failures: 0 });
+          continue;
+        }
         if (session.configDigest !== installation.configDigest || createHash('sha256').update(JSON.stringify(session.config)).digest('hex') !== installation.configDigest) throw new Error('MCP approval changed.');
         const environment = {};
         for (const key of ['HOME', 'USERPROFILE', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'APPDATA', 'LOCALAPPDATA', 'LANG', 'XDG_RUNTIME_DIR', 'DBUS_SESSION_BUS_ADDRESS']) if (process.env[key]) environment[key] = process.env[key];

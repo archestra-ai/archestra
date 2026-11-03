@@ -20,7 +20,10 @@ import {
   vi,
 } from "vitest";
 import { postConnected } from "@/lib/connect-signal";
-import { useOrganization } from "@/lib/organization.query";
+import {
+  useAppearanceSettings,
+  useOrganization,
+} from "@/lib/organization.query";
 import { ClientConnectionApproval } from "./client-connection-approval";
 
 vi.mock("sonner");
@@ -40,6 +43,9 @@ afterEach(() => {
 });
 beforeEach(() => {
   requests.length = 0;
+  vi.mocked(useAppearanceSettings).mockReturnValue({
+    data: undefined,
+  } as ReturnType<typeof useAppearanceSettings>);
   vi.mocked(useOrganization).mockReturnValue({
     data: { deviceMcpEnabled: false },
     isPending: false,

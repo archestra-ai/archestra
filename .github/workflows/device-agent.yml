@@ -5,11 +5,23 @@ on:
       - platform/backend/src/services/agent-connection-setup/bootstrap/**
       - platform/backend/src/services/client-connection.ts
       - platform/backend/src/services/local-device*.ts
+      - platform/backend/src/services/device-mcp*.ts
+      - platform/backend/src/device-mcp-client/**
+      - platform/backend/src/routes/device-mcp/**
+      - platform/backend/src/models/device-mcp.ts
+      - platform/backend/src/models/local-device.ts
+      - platform/backend/src/types/device-mcp.ts
+      - platform/backend/src/types/local-device.ts
+      - platform/backend/src/database/schemas/device-mcp.ts
+      - platform/backend/src/database/schemas/local-device.ts
       - platform/backend/src/routes/local-device/**
       - platform/backend/src/routes/client-connection/**
       - platform/backend/src/routes/connection-setup/**
       - platform/frontend/src/app/connection/**
       - platform/frontend/src/app/account/**
+      - platform/frontend/src/components/device-mcp-setup*
+      - platform/frontend/src/lib/mcp/device-mcp.query.ts
+      - platform/frontend/src/lib/local-devices.query.ts
       - platform/scripts/device-agent-ci.test.mjs
       - .github/workflows/device-agent.yml
   workflow_dispatch:
@@ -65,9 +77,12 @@ jobs:
       - name: Verify device visibility and browser consent
         if: ${{ !cancelled() }}
         run: pnpm --dir frontend exec vitest run --maxWorkers=1 src/app/account/credentials/page.test.tsx src/app/account/_parts/local-device-cards.test.tsx src/app/account/_parts/use-local-devices-controller.test.tsx src/app/connection/client-connection-approval.test.tsx src/app/settings/mcp/page.test.tsx src/components/device-mcp-setup.test.tsx
-      - name: Check types and unused exports
+      - name: Check backend types
         if: ${{ !cancelled() }}
-        run: |
-          pnpm --dir backend type-check
-          pnpm --dir frontend type-check
-          pnpm --dir frontend knip
+        run: pnpm --dir backend type-check
+      - name: Check frontend types
+        if: ${{ !cancelled() }}
+        run: pnpm --dir frontend type-check
+      - name: Check frontend unused exports
+        if: ${{ !cancelled() }}
+        run: pnpm --dir frontend knip

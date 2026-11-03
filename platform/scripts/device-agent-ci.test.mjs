@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { randomUUID, randomBytes } from 'node:crypto';
+import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
@@ -74,6 +74,56 @@ test('a superseded session preserves the credential and stops reconnecting', asy
     await api.run({ url: 'https://example.com', deviceId: randomUUID(), expiresAt: new Date(Date.now() + 60000).toISOString() }, { root: dir, label: 'test', id: 'test' });
     assert.ok(!actions.includes('delete-generic-password'));
     assert.equal(JSON.parse(await readFile(join(dir, 'status.json'), 'utf8')).state, 'superseded');
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('an installation changing during reconnect does not supersede the computer', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'device-agent-race-'));
+  const actions = [];
+  const worker = '// unused worker';
+  const sha256 = createHash('sha256').update(worker).digest('hex');
+  let heartbeats = 0;
+  const fakeProcess = Object.create(process);
+  Object.defineProperty(fakeProcess, 'platform', { value: 'darwin' });
+  const api = runtime({ process: fakeProcess, setTimeout: fn => setTimeout(fn, 0), require: name => name === 'node:child_process' ? { spawnSync: (_file, args) => { actions.push(args[0]); return { status: 0, stdout: 'a'.repeat(64) }; } } : require(name), fetch: async url => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/session')) return Response.json({ sessionId: randomUUID() });
+    if (path.endsWith('/heartbeat')) return ++heartbeats === 1 ? Response.json({ success: true }) : Response.json({}, { status: 401 });
+    if (path.endsWith('/mcp-sync')) return Response.json({ installations: [{ id: randomUUID(), configDigest: 'a'.repeat(64) }], workerSha256: sha256 });
+    if (path.endsWith('/mcp-worker')) return Response.json({ source: worker, sha256 });
+    if (path.endsWith('/mcp-open')) return Response.json({}, { status: 409 });
+    return Response.json({ success: true });
+  } });
+  try {
+    await api.run({ url: 'https://example.com', deviceId: randomUUID(), expiresAt: new Date(Date.now() + 60000).toISOString() }, { root: dir, label: 'test', id: 'test' });
+    assert.equal(heartbeats, 2);
+    assert.ok(actions.includes('delete-generic-password'));
+    assert.equal(JSON.parse(await readFile(join(dir, 'status.json'), 'utf8')).state, 'revoked');
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('Windows credential operations rebuild the Windows PowerShell module path', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'device-agent-powershell-'));
+  const environments = [];
+  let probe;
+  const fakeProcess = Object.create(process);
+  Object.defineProperty(fakeProcess, 'platform', { value: 'win32' });
+  Object.defineProperty(fakeProcess, 'env', { value: { ...process.env, PSModulePath: 'incompatible-powershell-7-modules', PsModulePath: 'also-incompatible' } });
+  const api = runtime({ process: fakeProcess, require: name => {
+    if (name === 'node:os') return { homedir: () => dir };
+    if (name !== 'node:child_process') return require(name);
+    return { spawnSync: (_file, args, options) => {
+      environments.push(options.env);
+      const script = Buffer.from(args.at(-1), 'base64').toString('utf16le');
+      if (script.includes('-AsPlainText')) { probe = JSON.parse(options.input).value; return { status: 0, stdout: 'encrypted-probe' }; }
+      return { status: 0, stdout: script.includes('PtrToStringBSTR') ? probe : '' };
+    } };
+  } });
+  try {
+    await api.preflight({ url: 'https://example.com', userId: 'test' });
+    assert.equal(environments.length, 3);
+    for (const env of environments) assert.ok(Object.keys(env).every(key => key.toUpperCase() !== 'PSMODULEPATH'));
+    assert.equal(fakeProcess.env.PSModulePath, 'incompatible-powershell-7-modules');
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 

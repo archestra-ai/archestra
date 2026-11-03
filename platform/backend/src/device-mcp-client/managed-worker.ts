@@ -40,6 +40,6 @@ process.once("message", async (message: unknown) => {
       process.exitCode = 1;
     }
   } finally {
-    if (process.connected) process.disconnect();
+    if (process.connected) process.disconnect?.();
   }
 });

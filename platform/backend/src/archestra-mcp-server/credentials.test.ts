@@ -49,7 +49,11 @@ beforeEach(
     const actor = await makeUser();
     actorId = actor.id;
     await makeMember(actorId, organizationId, { role: "admin" });
-    const callingAgent = await makeAgent({ organizationId, authorId: actorId });
+    const callingAgent = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      accessAllSubagents: true,
+    });
     await seedAndAssignArchestraTools(callingAgent.id);
     context = {
       agent: { id: callingAgent.id, name: callingAgent.name },
@@ -364,10 +368,20 @@ test("refuses to transfer a credential to an excluded or non-allowlisted subagen
     target.id,
   ]);
 
-  const result = await declare(target.id);
+  const excludedResult = await declare(target.id);
 
-  expect(result.isError).toBe(true);
-  expect(textOf(result)).toContain(
+  expect(excludedResult.isError).toBe(true);
+  expect(textOf(excludedResult)).toContain(
+    `Agent "${target.name}" is not an allowed subagent of "${context.agent.name}".`,
+  );
+
+  await AgentExcludedSubagentModel.replaceForAgent(context.agent.id, []);
+  await AgentModel.update(context.agent.id, { accessAllSubagents: false });
+
+  const nonAllowlistedResult = await declare(target.id);
+
+  expect(nonAllowlistedResult.isError).toBe(true);
+  expect(textOf(nonAllowlistedResult)).toContain(
     `Agent "${target.name}" is not an allowed subagent of "${context.agent.name}".`,
   );
 });

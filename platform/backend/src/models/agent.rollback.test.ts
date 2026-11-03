@@ -366,6 +366,7 @@ describe("AgentModel", () => {
           id: includedAgent.id,
           name: "Included Agent",
           agentType: includedAgent.agentType,
+          environmentId: includedAgent.environmentId,
         },
       ]);
     });
@@ -402,11 +403,13 @@ describe("AgentModel", () => {
           id: newerAgent.id,
           name: "Newer Agent",
           agentType: newerAgent.agentType,
+          environmentId: newerAgent.environmentId,
         },
         {
           id: olderAgent.id,
           name: "Older Agent",
           agentType: olderAgent.agentType,
+          environmentId: olderAgent.environmentId,
         },
       ]);
     });

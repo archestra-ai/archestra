@@ -82,6 +82,7 @@ import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE,
+  type Agent,
   AgentRunAttentionStateSchema,
   type AgentRunLimits,
   type AgentRunLimitsRequest,
@@ -115,12 +116,11 @@ import type { ArchestraContext } from "./types";
  * subagent when `callerAgentId !== targetAgent.id`.
  *
  * Enforces environment isolation, explicit `agent_excluded_subagents` rows,
- * and `accessAllSubagents: false` allowlists (when the caller has explicit
- * `delegateToAgentId` tools or `githubActionsAccess` configured).
+ * and `accessAllSubagents: false` custom allowlists (`delegateToAgentId` tools).
  */
 export async function checkCallerSubagentAccess(
   callerAgentId: string,
-  targetAgent: { id: string; name: string; environmentId?: string | null },
+  targetAgent: Pick<Agent, "id" | "name" | "environmentId">,
 ): Promise<
   | { allowed: true }
   | { allowed: false; reason: "agent_not_found" | "refused"; message: string }
@@ -132,10 +132,7 @@ export async function checkCallerSubagentAccess(
   if (!callerAgent) {
     return { allowed: true };
   }
-  if (
-    targetAgent.environmentId !== undefined &&
-    callerAgent.environmentId !== targetAgent.environmentId
-  ) {
+  if (callerAgent.environmentId !== targetAgent.environmentId) {
     return {
       allowed: false,
       reason: "agent_not_found",
@@ -155,11 +152,7 @@ export async function checkCallerSubagentAccess(
     const delegatedAgentIds = callerAgent.tools
       .map((tool) => tool.delegateToAgentId)
       .filter((id): id is string => Boolean(id));
-    if (
-      (delegatedAgentIds.length > 0 ||
-        callerAgent.githubActionsAccess !== null) &&
-      !delegatedAgentIds.includes(targetAgent.id)
-    ) {
+    if (!delegatedAgentIds.includes(targetAgent.id)) {
       return {
         allowed: false,
         reason: "refused",

@@ -30,6 +30,7 @@ import {
   extractCommonMessageText,
   extractCommonToolCallArguments,
 } from "@/types";
+import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { isApprovedAsSent } from "../utils/approved-as-sent";
 import { wordToolCallId } from "../utils/tool-call-ids";
 import {
@@ -550,7 +551,9 @@ function isReasoningContentBlock(
 }
 
 /** Tool-use ids Bedrock accepts; see `wordToolCallId`. */
-function withBedrockToolCallIds(messages: BedrockMessages): BedrockMessages {
+export function withBedrockToolCallIds(
+  messages: BedrockMessages,
+): BedrockMessages {
   return messages.map((message) => {
     if (!Array.isArray(message.content)) return message;
     let changed = false;
@@ -1926,7 +1929,10 @@ export const bedrockAdapterFactory: LLMProvider<
     return buildBedrockClient({
       apiKey: apiKey ?? null,
       baseUrl: options?.baseUrl,
-      fetch: fetchWithLlmUpstreamDispatcher,
+      fetch: fetchWithAbortSignal(
+        fetchWithLlmUpstreamDispatcher,
+        options?.abortSignal,
+      ),
     });
   },
 

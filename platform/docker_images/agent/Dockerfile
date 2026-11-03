@@ -184,12 +184,12 @@ RUN --network=none \
 
 FROM agent-base AS agent-claude-code
 USER root
-RUN pnpm --config.ignore-scripts=false add --global @anthropic-ai/claude-code@2.1.309 \
+RUN pnpm --config.ignore-scripts=false add --global @anthropic-ai/claude-code@2.1.311 \
  && CLAUDE_PACKAGE_DIR=$(pnpm list --global --json @anthropic-ai/claude-code | jq -r '.[0].dependencies["@anthropic-ai/claude-code"].path') \
  && node "$CLAUDE_PACKAGE_DIR/install.cjs" \
  && claude --version \
  && mkdir -p /home/node/.claude \
- && printf '%s\n' '{"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.309","theme":"dark","shiftEnterKeyBindingInstalled":true,"projects":{"/home/node/workspace":{"allowedTools":[],"hasTrustDialogAccepted":true}}}' > /home/node/.claude.json \
+ && printf '%s\n' '{"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.311","theme":"dark","shiftEnterKeyBindingInstalled":true,"projects":{"/home/node/workspace":{"allowedTools":[],"hasTrustDialogAccepted":true}}}' > /home/node/.claude.json \
  && printf '%s\n' '{"skipDangerousModePermissionPrompt":true}' > /home/node/.claude/settings.json \
  && chmod 0600 /home/node/.claude.json /home/node/.claude/settings.json \
  && chown -R 1000:1000 /home/node
@@ -403,13 +403,13 @@ FROM agent-base AS agent-copilot
 USER root
 ENV COPILOT_AUTO_UPDATE=false
 RUN case "$TARGETARCH" in \
-      amd64) copilot_arch=x64; copilot_checksum=f6a36bceb79c0d32f837de2d3ecc687170b5049f82ca45c68b029039d558ce9cb6e89778dea2ed19f60d22baebe22422f6502140fa7ae10e540c0910dc966057 ;; \
-      arm64) copilot_arch=arm64; copilot_checksum=40afab4a82f1183efda96a4f19906157ff4a07fc803a77d3916b0001c44174544ede5a1214efdb90a0dbf3c695ad2318fe0b9ed7aee04ce4a947605674539b8e ;; \
+      amd64) copilot_arch=x64; copilot_checksum=1c6c53024c2b973200a10450db9b96a0a4e8ba31f398ed6c282d2a18fff2413bfc5215ae7c76061ca9078f8b2311b1e146ac177d9bdc53328bf6dfef52d92516 ;; \
+      arm64) copilot_arch=arm64; copilot_checksum=ac9e1fd83822fa36ece097ffb7ff689a660a852d5eefccf1331ecd2ae39890bb9b9e3c33a8bfdc59e1be519578b3197cb93686d41ea99dcd47af93ae79c43ccc ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /opt/copilot \
  && cd /tmp \
- && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.103)" copilot.tgz \
+ && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.104)" copilot.tgz \
  && echo "$copilot_checksum  copilot.tgz" | sha512sum -c - \
  && tar -xzf copilot.tgz --strip-components=1 -C /opt/copilot \
  && test -s /opt/copilot/LICENSE.md \

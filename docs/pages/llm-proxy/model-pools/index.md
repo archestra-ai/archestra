@@ -120,5 +120,5 @@ Each attempt is priced as the member that made it, with that member's provider a
 ## Limits
 
 - Clients on the OpenAI Responses API, such as OpenCode, can't use pools yet. That includes `/responses` on the Unified API.
-- Members can be keys for Anthropic, AWS Bedrock, OpenAI, Azure AI Foundry, and OpenAI-compatible providers such as vLLM, OpenRouter, and Mistral AI. Gemini and Vertex AI keys can't be members yet.
+- Members can use credentials for Anthropic, AWS Bedrock, Gemini (including Vertex AI), OpenAI, Azure AI Foundry, and OpenAI-compatible providers such as vLLM, OpenRouter, and Mistral AI. Bedrock Converse clients can't reach Gemini members.
 - Timeouts and cooldown are set for the whole pool, not for one member. Pools don't route by a key's rate or token limits.

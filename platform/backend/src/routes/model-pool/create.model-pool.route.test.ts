@@ -96,6 +96,52 @@ describe("POST /api/model-pools", () => {
     ]);
   });
 
+  test("creates and edits two Gemini models on a shared keyless Vertex credential", async ({
+    makeLlmProviderApiKey,
+  }) => {
+    const key = await makeLlmProviderApiKey(organizationId, null, {
+      provider: "gemini",
+      name: "Vertex AI (Gemini)",
+    });
+    const members = ["gemini-2.5-flash", "gemini-2.5-flash-lite"].map(
+      (modelId, index) => ({
+        providerApiKeyId: key.id,
+        modelId,
+        priority: index + 1,
+      }),
+    );
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/model-pools",
+      payload: { name: "gemini-fallback", members },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    const updated = await app.inject({
+      method: "PUT",
+      url: `/api/model-pools/${created.json().id}`,
+      payload: {
+        name: "gemini-fallback",
+        members: members.map((member) => ({
+          ...member,
+          priority: 3 - member.priority,
+        })),
+      },
+    });
+    expect(updated.statusCode, updated.body).toBe(200);
+    const listed = await app.inject({ method: "GET", url: "/api/model-pools" });
+    expect(listed.json()[0].members).toEqual(
+      expect.arrayContaining(
+        members.map((member) =>
+          expect.objectContaining({
+            ...member,
+            provider: "gemini",
+            priority: 3 - member.priority,
+          }),
+        ),
+      ),
+    );
+  });
+
   test("stores the pool's own timeouts and cooldown, kept when an update leaves them out", async ({
     makeLlmProviderApiKey,
   }) => {
@@ -188,13 +234,13 @@ describe("POST /api/model-pools", () => {
     const personal = await makeLlmProviderApiKey(organizationId, null, {
       userId: user.id,
     });
-    const gemini = await makeLlmProviderApiKey(organizationId, null, {
-      provider: "gemini",
+    const cohere = await makeLlmProviderApiKey(organizationId, null, {
+      provider: "cohere",
     });
 
     for (const member of [
       { providerApiKeyId: personal.id, modelId: "claude-haiku-4-5" },
-      { providerApiKeyId: gemini.id, modelId: "claude-haiku-4-5" },
+      { providerApiKeyId: cohere.id, modelId: "claude-haiku-4-5" },
       { providerApiKeyId: shared.id, modelId: "claude-haiku-4-5" },
     ]) {
       const response = await app.inject({

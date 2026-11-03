@@ -49,10 +49,16 @@ export function useEnableTwoFactorMutation() {
       const { data, error } = await authClient.twoFactor.enable({
         password: params.password,
         issuer: params.issuer,
+        method: "totp",
       });
 
       if (error) {
         toast.error(getAuthErrorMessage(error, "Failed to enable two-factor"));
+        return null;
+      }
+
+      if (!data || data.method !== "totp") {
+        toast.error("Failed to set up the authenticator app");
         return null;
       }
 

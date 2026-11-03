@@ -1,6 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { SetupDialog } from "./setup-dialog";
 
 // embla-carousel needs matchMedia, ResizeObserver, IntersectionObserver as constructors
@@ -34,6 +34,13 @@ Object.defineProperty(window, "matchMedia", {
 });
 
 describe("SetupDialog", () => {
+  afterEach(async () => {
+    cleanup();
+    // Radix restores focus on a timer after unmount. Finish it while this
+    // document's event constructors are still active, before JSDOM teardown.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  });
+
   const defaultProps = {
     open: true,
     onOpenChange: vi.fn(),

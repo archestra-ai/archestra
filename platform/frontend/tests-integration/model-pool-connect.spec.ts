@@ -228,6 +228,57 @@ async function openConnectDialog(page: Page) {
 }
 
 test.describe("Model pool Connect dialog", () => {
+  for (const { label, granted, member, memberKey } of [
+    {
+      label: "Virtual key",
+      granted: "Listed by the pool",
+      member: "Maps a member key",
+      memberKey: openaiKey.name,
+    },
+    {
+      label: "OAuth client",
+      granted: "Granted the pool",
+      member: "CI pipeline",
+      memberKey: anthropicKey.name,
+    },
+  ]) {
+    test(`explains pool-only access for a selected ${label}`, async ({
+      page,
+      mswControl,
+      request,
+    }) => {
+      await mockPool({ mswControl, request });
+      const dialog = await openConnectDialog(page);
+      if (label === "OAuth client") {
+        await dialog.getByText(label, { exact: true }).click();
+      }
+      const grantDetail = dialog.getByText(`Granted access to ${POOL_NAME}`);
+      await expect(grantDetail).toHaveCount(0);
+      await expect(dialog.getByText(memberKey, { exact: false })).toBeVisible();
+
+      await dialog.getByRole("combobox", { name: label }).click();
+      await page.getByRole("option").filter({ hasText: granted }).click();
+      await expect(grantDetail).toBeVisible();
+      await expect(
+        dialog.getByText(geminiKey.name, { exact: false }),
+      ).toHaveCount(0);
+
+      // Browser translation replaces text nodes with its own elements.
+      await grantDetail.evaluate((detail) => {
+        for (const node of Array.from(detail.childNodes)) {
+          if (node.nodeType !== Node.TEXT_NODE) continue;
+          const translated = document.createElement("font");
+          translated.textContent = node.textContent;
+          detail.replaceChild(translated, node);
+        }
+      });
+      await dialog.getByRole("combobox", { name: label }).click();
+      await page.getByRole("option").filter({ hasText: member }).click();
+      await expect(grantDetail).toHaveCount(0);
+      await expect(dialog.getByText(memberKey, { exact: false })).toBeVisible();
+    });
+  }
+
   test("offers only virtual keys that can call the pool and asks for it by name", async ({
     page,
     mswControl,

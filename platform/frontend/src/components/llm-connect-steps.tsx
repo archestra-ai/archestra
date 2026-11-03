@@ -324,15 +324,18 @@ export function LlmConnectSteps({
       providerApiKeyId: string;
       providerApiKeyName: string;
     }>,
-  ) => (
-    <span className="flex flex-wrap gap-1.5">
-      {mappings
-        .filter((mapping) =>
-          pool
-            ? memberKeyIds.has(mapping.providerApiKeyId)
-            : servesTarget(mapping.provider),
-        )
-        .map((mapping) => (
+  ) => {
+    const visibleMappings = mappings.filter((mapping) =>
+      pool
+        ? memberKeyIds.has(mapping.providerApiKeyId)
+        : servesTarget(mapping.provider),
+    );
+    if (pool && visibleMappings.length === 0) {
+      return <span key="pool-grant">Granted access to {pool.name}</span>;
+    }
+    return (
+      <span key="mappings" className="flex flex-wrap gap-1.5">
+        {visibleMappings.map((mapping) => (
           <span
             key={mapping.providerApiKeyId}
             className="inline-flex items-center gap-1.5 rounded-full border bg-muted py-0.5 pr-2 pl-1.5 text-xs text-foreground"
@@ -346,8 +349,9 @@ export function LlmConnectSteps({
             </span>
           </span>
         ))}
-    </span>
-  );
+      </span>
+    );
+  };
   const target: RequestTarget = isRouter
     ? { kind: "model-router" }
     : { kind: "provider", provider: selected };

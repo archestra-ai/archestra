@@ -14,6 +14,63 @@ beforeEach(() => {
 });
 afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
+test("published frontend keys change when standalone packaging changes", () => {
+  const platform = path.resolve(__dirname, "../../..");
+  const scripts = path.join(dir, "platform/scripts");
+  fs.mkdirSync(scripts, { recursive: true });
+  for (const file of ["frontend-prebuilt.mjs", "dev-lite.sh"]) {
+    fs.copyFileSync(
+      path.join(platform, "scripts", file),
+      path.join(scripts, file),
+    );
+  }
+  const env = isolatedGitEnvironment();
+  const git = (...args: string[]) => {
+    const result = spawnSync("git", args, { cwd: dir, encoding: "utf8", env });
+    expect(result.status, result.stderr).toBe(0);
+  };
+  const commit = () => {
+    git("add", ".");
+    git(
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.com",
+      "-c",
+      "commit.gpgsign=false",
+      "-c",
+      "core.hooksPath=/dev/null",
+      "commit",
+      "-qm",
+      "fixture",
+    );
+  };
+  git("init", "--quiet");
+  commit();
+  const key = () => {
+    const result = spawnSync(
+      process.execPath,
+      [path.join(scripts, "frontend-prebuilt.mjs"), "--key"],
+      { cwd: dir, encoding: "utf8", env },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    return result.stdout.trim();
+  };
+  const before = key();
+  const recipe = path.join(scripts, "dev-lite.sh");
+  fs.writeFileSync(
+    recipe,
+    fs
+      .readFileSync(recipe, "utf8")
+      .replace(
+        "prepare_frontend_standalone() {\n",
+        "prepare_frontend_standalone() {\n  echo changed-package-format\n",
+      ),
+  );
+  commit();
+  expect(key()).not.toBe(before);
+});
+
 test("frontend builds refresh cached artifacts after their shared launcher changes", () => {
   const platform = path.resolve(__dirname, "../../..");
   const rootConfig = JSON.parse(
@@ -52,10 +109,7 @@ test("frontend builds refresh cached artifacts after their shared launcher chang
   const launcher = path.join(dir, "scripts/dev-lite.sh");
   fs.writeFileSync(launcher, "first build");
   fs.writeFileSync(path.join(dir, ".gitignore"), ".turbo/\nfrontend/.next/\n");
-  const env: NodeJS.ProcessEnv = { ...process.env, DO_NOT_TRACK: "1" };
-  for (const key of Object.keys(env)) {
-    if (key.startsWith("GIT_")) delete env[key];
-  }
+  const env = isolatedGitEnvironment();
   for (const args of [
     ["init", "--quiet"],
     ["add", "."],
@@ -107,6 +161,14 @@ test("a later tool starts only after the earlier process releases its resources"
   expect(status).toBe(0);
   expect(fs.readFileSync(observed, "utf8")).toBe("done");
 });
+
+function isolatedGitEnvironment(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, DO_NOT_TRACK: "1" };
+  for (const key of Object.keys(env)) {
+    if (key.startsWith("GIT_")) delete env[key];
+  }
+  return env;
+}
 
 test("a tool failure preserves its exit code and prevents later tools from running", () => {
   const later = path.join(dir, "later");

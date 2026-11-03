@@ -10,6 +10,7 @@ import {
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { RateLimiterRes } from "rate-limiter-flexible";
 import { z } from "zod";
 
 import { archestraMcpBranding } from "@/archestra-mcp-server";
@@ -34,11 +35,13 @@ import {
   resolveRuntimeSessionForWorkspace,
 } from "@/services/agent-runtime/runtime-identity";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
+import { McpGatewayRateLimiter } from "@/services/mcp-gateway-rate-limit";
 import {
   AgentRunAttentionStateSchema,
   type AgentRunRecord,
   ApiError,
   constructResponseSchema,
+  generateErrorResponseSchema,
   type McpGatewayCallSource,
   UuidOrSlugSchema,
 } from "@/types";
@@ -662,6 +665,46 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
     legacySseSessions.close();
   });
 
+  const rateLimitResponses = {
+    429: generateErrorResponseSchema("api_rate_limit_error"),
+    503: generateErrorResponseSchema("api_service_unavailable_error"),
+  };
+  const rateLimiter = new McpGatewayRateLimiter();
+  const rateLimitCaller = (request: FastifyRequest) => ({
+    credential: request.headers.authorization,
+    gateway: (request.params as { profileId?: string }).profileId ?? "",
+  });
+  fastify.addHook("onRequest", async (request, reply) => {
+    try {
+      // request.ip follows Fastify's configured trustProxy policy.
+      await rateLimiter.consume(request.ip, 1, rateLimitCaller(request));
+    } catch (error) {
+      reply.header("Cache-Control", "no-store");
+      if (error instanceof RateLimiterRes) {
+        const limited = new ApiError(
+          429,
+          "Too many gateway authentication attempts. Retry after the indicated delay.",
+        );
+        limited.retryAfterSeconds = Math.max(
+          1,
+          Math.ceil(error.msBeforeNext / 1000),
+        );
+        throw limited;
+      }
+      logger.error({ err: error }, "Gateway rate-limit storage unavailable");
+      throw new ApiError(
+        503,
+        "Gateway authentication is temporarily unavailable",
+      );
+    }
+  });
+  fastify.addHook("onSend", async (request, reply, payload) => {
+    if (reply.statusCode === 401 || reply.statusCode === 403) {
+      await rateLimiter.recordDenial(rateLimitCaller(request));
+    }
+    return payload;
+  });
+
   // GET opens the legacy HTTP+SSE stream for a client that asks for one. Any
   // other GET is answered 405: the gateway offers nothing else on GET, and a
   // Streamable HTTP client reads 405 as "no standalone stream" and stops.
@@ -675,6 +718,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
           profileId: UuidOrSlugSchema,
         }),
         response: {
+          ...rateLimitResponses,
           405: z.object({
             jsonrpc: z.literal("2.0"),
             error: z.object({
@@ -712,6 +756,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         profileId,
         token,
       );
+      if (tokenAuth) await rateLimiter.recordSuccess(rateLimitCaller(request));
       if (!tokenAuth) {
         const forbidden = reason === "no_gateway_access";
         if (!forbidden) setWWWAuthenticateHeader(request, reply);
@@ -760,6 +805,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
     {
       schema: {
         operationId: RouteId.McpGatewayDelete,
+        response: { 204: z.void(), ...rateLimitResponses },
         hide: true,
         params: z.object({
           profileId: UuidOrSlugSchema,
@@ -779,6 +825,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         profileId,
         token,
       );
+      if (tokenAuth) await rateLimiter.recordSuccess(rateLimitCaller(request));
       if (!tokenAuth) {
         const forbidden = reason === "no_gateway_access";
         if (!forbidden) setWWWAuthenticateHeader(request, reply);
@@ -824,6 +871,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         }),
         body: z.record(z.string(), z.unknown()),
         response: {
+          ...rateLimitResponses,
           202: z.object({ accepted: z.literal(true) }),
           401: z.object({
             error: z.string(),
@@ -860,6 +908,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         profileId,
         token,
       );
+      if (tokenAuth) await rateLimiter.recordSuccess(rateLimitCaller(request));
       if (!tokenAuth) {
         const forbidden = reason === "no_gateway_access";
         if (!forbidden) setWWWAuthenticateHeader(request, reply);
@@ -918,7 +967,10 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
           taskId: z.string().uuid(),
           attentionState: z.union([AgentRunAttentionStateSchema, z.null()]),
         }),
-        response: constructResponseSchema(z.object({ updated: z.boolean() })),
+        response: {
+          ...constructResponseSchema(z.object({ updated: z.boolean() })),
+          ...rateLimitResponses,
+        },
       },
     },
     async (request, reply) => {
@@ -931,6 +983,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
       }
 
       const tokenAuth = await validateMCPGatewayToken(profileId, token);
+      if (tokenAuth) await rateLimiter.recordSuccess(rateLimitCaller(request));
       if (!tokenAuth) {
         throw new ApiError(401, "Unauthorized");
       }
@@ -961,6 +1014,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
     {
       schema: {
         operationId: "mcpGatewayPost",
+        response: { default: z.unknown(), ...rateLimitResponses },
         tags: ["MCP Gateway"],
         params: z.object({
           profileId: UuidOrSlugSchema,
@@ -1002,6 +1056,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         token,
         lookups,
       );
+      if (tokenAuth) await rateLimiter.recordSuccess(rateLimitCaller(request));
       if (!tokenAuth) {
         const forbidden = reason === "no_gateway_access";
         // A gateway grant cannot be obtained by signing in again or requesting

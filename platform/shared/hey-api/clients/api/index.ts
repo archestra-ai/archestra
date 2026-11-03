@@ -3989,6 +3989,8 @@ export type {
   McpGatewayGetError,
   McpGatewayGetErrors,
   McpGatewayPostData,
+  McpGatewayPostError,
+  McpGatewayPostErrors,
   McpGatewayPostResponses,
   McpGatewaySseMessageData,
   McpGatewaySseMessageError,

@@ -131,3 +131,59 @@ it("edits the uploaded files environment through the knowledge base API without 
   );
   await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
 });
+
+it("renames a knowledge base without reassigning its unchanged restricted environment", async () => {
+  const saved: unknown[] = [];
+  server.use(
+    http.get("http://localhost:9000/api/environments", () =>
+      HttpResponse.json({
+        environments: [
+          { id: environmentId, name: "Support", canDeploy: false },
+        ],
+      }),
+    ),
+    http.put(
+      "http://localhost:9000/api/knowledge-bases/:id",
+      async ({ request }) => {
+        const body = await request.json();
+        saved.push(body);
+        if (Object.hasOwn(body as object, "uploadedFilesEnvironmentId")) {
+          return HttpResponse.json(
+            { message: "Cannot assign this environment" },
+            { status: 403 },
+          );
+        }
+        return HttpResponse.json({ ...knowledgeBase, ...(body as object) });
+      },
+    ),
+  );
+  const onOpenChange = vi.fn();
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <EditKnowledgeBaseDialog
+        knowledgeBase={{
+          ...knowledgeBase,
+          uploadedFilesEnvironmentId: environmentId,
+        }}
+        open
+        onOpenChange={onOpenChange}
+      />
+    </QueryClientProvider>,
+  );
+  const user = userEvent.setup();
+  await user.clear(screen.getByRole("textbox", { name: "Name" }));
+  await user.type(
+    screen.getByRole("textbox", { name: "Name" }),
+    "Updated policies",
+  );
+  await user.click(screen.getByRole("button", { name: "Save Changes" }));
+  await waitFor(() =>
+    expect(saved).toEqual([
+      { name: "Updated policies", description: null, labels: [] },
+    ]),
+  );
+  await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+});

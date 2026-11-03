@@ -92,9 +92,11 @@ export function EditKnowledgeBaseDialog({
         name: values.name,
         description: values.description || null,
         labels: finalLabels,
-        ...(knowledgeBase.uploadedFilesEnvironmentId !== undefined && {
-          uploadedFilesEnvironmentId: values.uploadedFilesEnvironmentId,
-        }),
+        ...(knowledgeBase.uploadedFilesEnvironmentId !== undefined &&
+          values.uploadedFilesEnvironmentId !==
+            knowledgeBase.uploadedFilesEnvironmentId && {
+            uploadedFilesEnvironmentId: values.uploadedFilesEnvironmentId,
+          }),
       },
     });
     if (result) {

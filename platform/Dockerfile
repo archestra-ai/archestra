@@ -337,6 +337,7 @@ COPY --from=deps /app/frontend/node_modules ./frontend/node_modules
 COPY --from=deps /app/shared/node_modules ./shared/node_modules
 COPY turbo.json ./
 COPY vitest.resources.ts ./
+COPY Tiltfile .env.example ./
 COPY scripts ./scripts
 COPY patches ./patches
 COPY backend ./backend

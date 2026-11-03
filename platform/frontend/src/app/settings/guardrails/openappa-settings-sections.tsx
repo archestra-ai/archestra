@@ -85,9 +85,10 @@ export function OpenAppaEnforcementSetting() {
 }
 
 /**
- * Break the glass: what happens to a call waiting for human approval, to a
- * call no remedy can lift (a soft block), and to a session whose agent calls
- * `yell`. One group, since together they say how much Guardrails let through.
+ * Break the glass, in display order: what a yell does to its session (Yell
+ * tool), what happens to a call waiting for human approval (Human approval),
+ * and to a blocked call without an approval option (Other blocked calls).
+ * One group, since together they say how much Guardrails let through.
  */
 export function OpenAppaBreakTheGlassSettings() {
   const deployment = useGuardrailsDeployment({ poll: true });

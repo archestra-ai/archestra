@@ -5365,12 +5365,11 @@ describe("Claude Code task output reads", () => {
         ),
       ).toEqual(["bash-output", "bash-output-tail", "bash-output-chained"]);
       expect(outcome).toMatchObject({
-        blocked: [
-          { id: "bash-output-then-transcript" },
-          { id: "transcript-behind-dot-dot" },
-          { id: "agent-transcript" },
-          { id: "glob-transcripts" },
-        ],
+        decision: "refuse",
+        refusal: {
+          reason: "openappa_no_notice_tool",
+          blockedToolId: "bash-output-then-transcript",
+        },
       });
     } finally {
       evaluateToolCalls.mockRestore();

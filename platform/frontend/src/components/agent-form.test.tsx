@@ -4716,6 +4716,53 @@ describe("AgentForm save payload and failure handling", () => {
     expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
   });
 
+  it("keeps the Claude account radio cards visible with personal subscription disabled and a command notice when a Claude runtime uses a custom command", () => {
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          llmApiKeyId: "key-1",
+          modelId: "claude-model",
+          runtime: {
+            image: "example.com/claude-code:latest",
+            command: ["archestra-claude-code-runtime"],
+            claudeCode: {
+              authentication: "provider",
+              model: "opus",
+            },
+            inferenceProtocol: "anthropic",
+            backend: "kubernetes",
+            steerMode: "tmux_keys",
+            privileged: false,
+            environment: null,
+            credentials: null,
+            ttlHours: null,
+            maxCostUsd: null,
+            idleTimeoutMinutes: null,
+          },
+        }}
+        sections={["configuration"]}
+      />,
+    );
+
+    expect(screen.getByText("Whose Claude account runs it")).toBeVisible();
+    const subscriptionRadio = screen.getByRole("radio", {
+      name: /Each person's Claude subscription/,
+    });
+    const providerRadio = screen.getByRole("radio", {
+      name: /A company API key/,
+    });
+    expect(subscriptionRadio).toBeDisabled();
+    expect(subscriptionRadio).not.toBeChecked();
+    expect(providerRadio).toBeChecked();
+    expect(
+      screen.getByText(
+        "To use personal Claude subscriptions, change Dedicated runtime → Container → Command to archestra-claude-code. Any custom logic in the current archestra-claude-code-runtime entrypoint will be lost.",
+      ),
+    ).toBeVisible();
+  });
+
   it("marks the image row until a container image and command are supplied", async () => {
     vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
     const user = userEvent.setup();

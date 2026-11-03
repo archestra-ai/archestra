@@ -87,6 +87,20 @@ export function defaultAgentRuntime(): AgentRuntimeConfig {
   return buildCustomAgentRuntime({ image: "" });
 }
 
+export function isClaudeCodeRuntimeConfig(
+  runtime:
+    | Pick<AgentRuntimeConfig, "command" | "claudeCode" | "inferenceProtocol">
+    | null
+    | undefined,
+): boolean {
+  if (!runtime) return false;
+  return (
+    runtime.command?.[0] === "archestra-claude-code" ||
+    Boolean(runtime.claudeCode) ||
+    runtime.inferenceProtocol === "anthropic"
+  );
+}
+
 export function AgentRuntimeFields({
   value,
   onChange,
@@ -415,8 +429,6 @@ export function AgentRuntimeProtocolField({
   compact?: boolean;
 }) {
   const config = value;
-  const update = (patch: Partial<AgentRuntimeConfig>) =>
-    onChange({ ...config, ...patch });
   const appName = useAppName();
   const allowedProtocols = getAgentRuntimeAllowedProtocols(
     constrainToHarness ? value.command : null,
@@ -446,7 +458,13 @@ export function AgentRuntimeProtocolField({
         value={config.inferenceProtocol}
         onValueChange={(
           inferenceProtocol: "openai_responses" | "openai_chat" | "anthropic",
-        ) => update({ inferenceProtocol })}
+        ) => {
+          const { claudeCode: _claudeCode, ...withoutClaudeCode } = config;
+          onChange({
+            ...(inferenceProtocol === "anthropic" ? config : withoutClaudeCode),
+            inferenceProtocol,
+          });
+        }}
       >
         <SelectTrigger id="agent-runtime-inference-protocol" className="w-full">
           <SelectValue />

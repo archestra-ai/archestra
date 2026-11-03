@@ -73,6 +73,7 @@ import {
 import {
   type AgentRuntimeConfig,
   AgentRuntimeFields,
+  isClaudeCodeRuntimeConfig,
 } from "@/components/agent-runtime-fields";
 import { AgentRuntimeHowItWorks } from "@/components/agent-runtime-how-it-works";
 import { AgentRuntimePicker } from "@/components/agent-runtime-picker";
@@ -1513,7 +1514,9 @@ export function AgentForm({
   const agentHooksEnabled = useFeature("agentHooksEnabled");
   const anthropicVertexAiEnabled =
     useFeature("anthropicVertexAiEnabled") === true;
-  const isClaudeCodeRuntime = runtime?.command?.[0] === "archestra-claude-code";
+  const supportsClaudeCodeSubscription =
+    runtime?.command?.[0] === "archestra-claude-code";
+  const isClaudeCodeRuntime = isClaudeCodeRuntimeConfig(runtime);
   const agentRuntimeEnabled = useFeature("agentRuntime") === true;
   // A runtime saved before the deployment turned Agent Runtime off stays
   // editable, so it can be switched off.
@@ -1993,7 +1996,7 @@ export function AgentForm({
   const effectiveLlmModelRow =
     selectedLlmModelRow ?? organizationDefaultModel.model;
   const usesClaudeSubscription =
-    isClaudeCodeRuntime &&
+    supportsClaudeCodeSubscription &&
     (runtime?.claudeCode?.authentication === "subscription" ||
       (!runtime?.claudeCode &&
         (selectedApiKey?.provider ?? effectiveLlmModelRow?.provider) !==
@@ -2242,6 +2245,18 @@ export function AgentForm({
       !agent && showActivationSkills
         ? agentActivationSkillsEditorRef.current?.getCreatePolicy()
         : undefined;
+    const runtimeToSave =
+      runtime &&
+      !supportsClaudeCodeSubscription &&
+      runtime.claudeCode?.authentication === "subscription"
+        ? {
+            ...runtime,
+            claudeCode: {
+              ...runtime.claudeCode,
+              authentication: "provider" as const,
+            },
+          }
+        : runtime;
 
     setIsSaving(true);
 
@@ -2335,7 +2350,7 @@ export function AgentForm({
               ...(isInternalAgent && {
                 systemPrompt: trimmedSystemPrompt || null,
                 ...(isClaudeCodeRuntime &&
-                  runtimeHasLocalChanges && { runtime }),
+                  runtimeHasLocalChanges && { runtime: runtimeToSave }),
                 ...(llmSelectionChanged && {
                   llmApiKeyId: llmApiKeyId || null,
                   modelId: llmModel || null,
@@ -2370,7 +2385,7 @@ export function AgentForm({
             }),
             ...(showRuntimeSection &&
               runtimeEditable &&
-              canConfigureRuntime === true && { runtime }),
+              canConfigureRuntime === true && { runtime: runtimeToSave }),
             // The tools group: what the agent may reach, and how.
             ...(showToolsSections && {
               knowledgeBaseIds: knowledgeBaseIds,
@@ -2436,7 +2451,7 @@ export function AgentForm({
               passthroughHeaders.length > 0 ? passthroughHeaders : null,
           }),
           ...(agentRuntimeEnabled && {
-            runtime,
+            runtime: runtimeToSave,
           }),
         });
         if (!created) return false;
@@ -2718,6 +2733,7 @@ export function AgentForm({
     runtime,
     channelAssignmentsDirty,
     isClaudeCodeRuntime,
+    supportsClaudeCodeSubscription,
     runtimeHasLocalChanges,
   ]);
 
@@ -2993,7 +3009,11 @@ export function AgentForm({
           handleLlmApiKeyChange(keyId);
         }}
         onAddApiKey={onAddApiKey}
-        onUseSubscription={() => setClaudeAuthentication("subscription")}
+        onUseSubscription={
+          supportsClaudeCodeSubscription
+            ? () => setClaudeAuthentication("subscription")
+            : undefined
+        }
         disabled={readOnly}
       />
       {createApiKeyDialog}
@@ -3141,6 +3161,7 @@ export function AgentForm({
                   usesClaudeSubscription ? "subscription" : "provider"
                 }
                 onAuthenticationChange={setClaudeAuthentication}
+                runtimeCommand={runtime?.command?.[0] ?? null}
                 model={runtime?.claudeCode?.model}
                 onModelChange={(model) => {
                   if (!runtime || canConfigureRuntime !== true) return;

@@ -6169,7 +6169,8 @@ describe("rendering runtime text for this client", () => {
         .spyOn(appaService, "evaluateToolCalls")
         .mockImplementation(async (_session, calls) =>
           calls.map((call) =>
-            call.name === "post_message"
+            call.name === "post_message" ||
+            call.name === "archestra__start_agent_run"
               ? {
                   kind: "deny" as const,
                   feedback:
@@ -6194,6 +6195,11 @@ describe("rendering runtime text for this client", () => {
       const run = async (
         sessionId: string,
         how: "header" | "runtime" | "attended",
+        toolCalls: { id: string; name: string; arguments: object }[] = [
+          { id: "post", name: "post_message", arguments: {} },
+          { id: "send", name: "send_email", arguments: {} },
+          { id: "read", name: "read_file", arguments: {} },
+        ],
       ) => {
         const plugin = new AppaPluginArchestra([]);
         const context = requestContext({ sessionId, organizationId });
@@ -6230,14 +6236,7 @@ describe("rendering runtime text for this client", () => {
           declaredTools: [{ name: "archestra__get_remedy_plans" }],
         };
         await plugin.onSessionInit(context);
-        return plugin.onToolCalls({
-          ...context,
-          toolCalls: [
-            { id: "post", name: "post_message", arguments: {} },
-            { id: "send", name: "send_email", arguments: {} },
-            { id: "read", name: "read_file", arguments: {} },
-          ],
-        });
+        return plugin.onToolCalls({ ...context, toolCalls });
       };
       const restore = () => {
         cancelCalls.mockRestore();
@@ -6303,6 +6302,38 @@ describe("rendering runtime text for this client", () => {
         // With the Yell tool only recording, the session stays governed.
         expect(
           await isUnenforcedSession(session(organizationId, "runtime-run")),
+        ).toBe(false);
+      } finally {
+        restore();
+      }
+    });
+
+    test("a batch whose only denial is a runtime call still notes the session, and an attended batch withdraws the note", async ({
+      makeOrganization,
+    }) => {
+      const organizationId = (await makeOrganization()).id;
+      const { run, restore } = await harness(organizationId, {
+        breakTheGlassEnabled: false,
+      });
+      const runtimeOnly = [
+        {
+          id: "start",
+          name: "archestra__start_agent_run",
+          arguments: { agent_id: "agent", message: "go" },
+        },
+      ];
+      try {
+        // The runtime call itself is not waived at the proxy, but the gateway
+        // that decides its review learns the session is unattended.
+        await run("runtime-only", "header", runtimeOnly);
+        expect(
+          await isUnattendedSession(session(organizationId, "runtime-only")),
+        ).toBe(true);
+        expect(await yellsOf(organizationId)).toEqual([]);
+        // A person resumes the session: the same batch withdraws the note.
+        await run("runtime-only", "attended", runtimeOnly);
+        expect(
+          await isUnattendedSession(session(organizationId, "runtime-only")),
         ).toBe(false);
       } finally {
         restore();

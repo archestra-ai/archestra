@@ -124,10 +124,11 @@ export function isUnattendedRequest(params: {
  * Notes for the gateway whether the proxy admitted this session's latest
  * request as unattended: a remedy plan the agent runs there can need a
  * person's review, and the gateway sees the runtime credential and the
- * client's headers only through this note. The proxy writes it on every
- * request and withdraws it once a person is back (a session resumed without
- * the header), so a lost note costs one review that waits for a person, as it
- * did before.
+ * client's headers only through this note. The proxy writes or withdraws it
+ * when it handles a denied batch with Human approval waived in unattended
+ * sessions, the only mode in which the gateway reads it, so the note is
+ * current when a review follows that batch. A lost note costs one review
+ * that waits for a person, as it did before.
  */
 export async function rememberUnattendedSession(
   session: OpenAppaSession,

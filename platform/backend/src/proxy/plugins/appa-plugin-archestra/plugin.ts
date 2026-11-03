@@ -1824,12 +1824,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // Runtime, spawn and relay calls need the runtime's own release or
       // rewrite, so they stay denied. The record is written after the loop,
       // once the batch is known to reach the client.
-      if (
-        decision.kind === "deny" &&
-        evaluatedIds.has(call.id) &&
-        !runtimeCalls.has(call.id) &&
-        !withheldRelayDecisions.has(call.id)
-      ) {
+      if (decision.kind === "deny" && evaluatedIds.has(call.id)) {
         breakTheGlass ??= getGuardrailsDeployment();
         let settings: Awaited<typeof breakTheGlass>;
         try {
@@ -1841,13 +1836,19 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         // The gateway decides a remedy plan's review without the runtime
         // credential or the client's headers, so it learns from the proxy
         // whether a person answers for this session: noted once per denied
-        // batch, and only in the mode that reads the note.
+        // batch, whatever the denied call (a runtime call's review is decided
+        // there too), and only in the mode that reads the note.
         if (!unattendedNoted && unattendedNoteMatters(settings)) {
           unattendedNoted = true;
           await rememberUnattendedSession(binding.session, binding.unattended);
         }
-        if (binding.adapter && isChildSpawnCall(binding.adapter, call)) {
-          // A spawn is never waived here: its child needs the runtime's release.
+        if (
+          runtimeCalls.has(call.id) ||
+          withheldRelayDecisions.has(call.id) ||
+          (binding.adapter && isChildSpawnCall(binding.adapter, call))
+        ) {
+          // A runtime call, a withheld relay or a spawn is never waived here:
+          // the runtime releases those itself.
         } else {
           const waiver = waiverFor({
             decision,

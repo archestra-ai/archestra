@@ -26,7 +26,7 @@ import { AgentIcon } from "@/components/agent-icon";
 import { CATALOG_AGENT_ICONS } from "@/components/agent-icon.utils";
 import { AgentRuntimeUnavailableNotice } from "@/components/agent-runtime-unavailable-notice";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
-import { CHANNEL_ICON_SRC, ChannelIcon } from "@/components/channel-icon";
+import { ChannelIcon } from "@/components/channel-icon";
 import { ClientMarkTile } from "@/components/client-mark-tile";
 import { CATALOG_AGENT_MARKS } from "@/components/client-marks";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -461,8 +461,9 @@ function CatalogSection({
 function GiveItWorkFrom() {
   const appName = useAppName();
   const { visibleIds } = useMessagingChannelCatalog();
-  // Chat apps only, and only the ones the admins left switched on.
-  const messengers = visibleIds.filter((id) => id in CHANNEL_ICON_SRC);
+  // A2A is represented by "Other agents" below; include every enabled
+  // external messaging channel, including email’s generated icon.
+  const messengers = visibleIds.filter((id) => id !== "a2a");
   const source = ({
     Icon,
     label,

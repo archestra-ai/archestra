@@ -502,10 +502,12 @@ describe("custom runtime catalog permission integration", () => {
       image: runtime.image,
     };
     let resolutions = 0;
+    let catalogReads = 0;
     server.use(
-      http.get("http://localhost:9000/api/agent-runtime-templates", () =>
-        HttpResponse.json([summary]),
-      ),
+      http.get("http://localhost:9000/api/agent-runtime-templates", () => {
+        catalogReads++;
+        return HttpResponse.json([summary]);
+      }),
       http.get(
         `http://localhost:9000/api/agent-runtime-templates/${id}`,
         () => {
@@ -526,11 +528,11 @@ describe("custom runtime catalog permission integration", () => {
       />,
       { wrapper: QueryWrapper },
     );
-    const choice = await screen.findByRole("button", {
-      name: /Team workspace/,
-    });
     const user = userEvent.setup();
     if (allowed) {
+      const choice = await screen.findByRole("button", {
+        name: /Team workspace/,
+      });
       expect(choice).toBeEnabled();
       await user.click(choice);
       await waitFor(() =>
@@ -543,11 +545,13 @@ describe("custom runtime catalog permission integration", () => {
       );
       expect(resolutions).toBe(1);
     } else {
-      expect(choice).toBeDisabled();
-      expect(choice).toHaveAccessibleDescription(
-        "Requires Configure runtime permission.",
-      );
-      await user.click(choice);
+      await waitFor(() => expect(catalogReads).toBeGreaterThan(0));
+      expect(
+        screen.queryByRole("button", { name: /Team workspace/ }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /Custom image/ }),
+      ).not.toBeInTheDocument();
       expect(resolutions).toBe(0);
       expect(onSelect).not.toHaveBeenCalled();
       expect(

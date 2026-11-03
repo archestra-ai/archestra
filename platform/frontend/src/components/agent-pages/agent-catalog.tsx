@@ -13,7 +13,6 @@ import {
 import {
   Bot,
   Code,
-  Info,
   Laptop,
   type LucideIcon,
   MessageSquare,
@@ -31,11 +30,6 @@ import { CHANNEL_ICON_SRC, ChannelIcon } from "@/components/channel-icon";
 import { ClientMarkTile } from "@/components/client-mark-tile";
 import { CATALOG_AGENT_MARKS } from "@/components/client-marks";
 import { QueryLoadError } from "@/components/query-load-error";
-import {
-  InlineNotice,
-  InlineNoticeBody,
-  InlineNoticeText,
-} from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
 import { runtimeTemplatePosition } from "@/lib/agent-runtime-template-order";
 import {
@@ -254,26 +248,14 @@ export function AgentCatalog({
   });
   return (
     <div className="space-y-6">
-      {runtimeAvailable === false && <AgentRuntimeUnavailableNotice />}
+      {canConfigureRuntime === true && runtimeAvailable === false && (
+        <AgentRuntimeUnavailableNotice />
+      )}
       <div className="space-y-12">
         <CatalogSection
           title="Choose an agent"
           description={`Start with ${appName} or another agent. Configure it on the next page.`}
         >
-          {canConfigureRuntime === false && (
-            <InlineNotice variant="info">
-              <Info className="size-4 shrink-0" />
-              <InlineNoticeBody>
-                <span className="font-medium">
-                  Configure runtime permission required
-                </span>
-                <InlineNoticeText>
-                  You can still create ordinary agents. Ask an administrator to
-                  enable runtime configuration for your role.
-                </InlineNoticeText>
-              </InlineNoticeBody>
-            </InlineNotice>
-          )}
           <GiveItWorkFrom />
           <div className="grid auto-rows-fr gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <CatalogSourceCard
@@ -284,52 +266,75 @@ export function AgentCatalog({
               disabled={!canCreateAgent}
               disabledReason="Requires permission to create agents."
             />
-            {runtimeAvailable === undefined || isLoading ? (
-              <output className="contents" aria-label="Loading Agent Runtimes">
-                {[0, 1, 2].map((index) => (
-                  <Skeleton key={index} className="h-[132px] rounded-xl" />
-                ))}
-              </output>
-            ) : isError ? (
-              <div className="col-span-full">
-                <QueryLoadError
-                  title="Could not load Agent Runtimes"
-                  onRetry={() => refetch()}
-                />
-              </div>
-            ) : (
-              <>
-                {templates.map((item) => (
+            {canConfigureRuntime === true &&
+              (runtimeAvailable === undefined || isLoading ? (
+                <output
+                  className="contents"
+                  aria-label="Loading Agent Runtimes"
+                >
+                  {[0, 1, 2].map((index) => (
+                    <Skeleton key={index} className="h-[132px] rounded-xl" />
+                  ))}
+                </output>
+              ) : isError ? (
+                <div className="col-span-full">
+                  <QueryLoadError
+                    title="Could not load Agent Runtimes"
+                    onRetry={() => refetch()}
+                  />
+                </div>
+              ) : (
+                <>
+                  {templates.map((item) => (
+                    <CatalogSourceCard
+                      key={item.id}
+                      icon={
+                        item.customTemplateId ? (
+                          <AgentIcon icon={item.icon} size={22} />
+                        ) : (
+                          <CatalogAgentIcon id={item.id as AgentCatalogId} />
+                        )
+                      }
+                      title={item.name}
+                      description={item.summary}
+                      onClick={() => {
+                        if (item.customTemplateId)
+                          resolver.mutate(item.customTemplateId, {
+                            onSuccess: (template) =>
+                              onSelect({
+                                ...item,
+                                initialValues: {
+                                  ...item.initialValues,
+                                  runtime: template.runtime,
+                                },
+                              }),
+                          });
+                        else onSelect(item);
+                      }}
+                      disabled={
+                        !canCreateAgent ||
+                        !canConfigureRuntime ||
+                        !runtimeAvailable ||
+                        resolver.isPending
+                      }
+                      disabledReason={
+                        canCreateAgent
+                          ? !canConfigureRuntime
+                            ? "Requires Configure runtime permission."
+                            : "Requires the Agent Sandbox controller."
+                          : "Requires permission to create agents."
+                      }
+                    />
+                  ))}
                   <CatalogSourceCard
-                    key={item.id}
-                    icon={
-                      item.customTemplateId ? (
-                        <AgentIcon icon={item.icon} size={22} />
-                      ) : (
-                        <CatalogAgentIcon id={item.id as AgentCatalogId} />
-                      )
-                    }
-                    title={item.name}
-                    description={item.summary}
-                    onClick={() => {
-                      if (item.customTemplateId)
-                        resolver.mutate(item.customTemplateId, {
-                          onSuccess: (template) =>
-                            onSelect({
-                              ...item,
-                              initialValues: {
-                                ...item.initialValues,
-                                runtime: template.runtime,
-                              },
-                            }),
-                        });
-                      else onSelect(item);
-                    }}
+                    icon={<Code className="size-5" />}
+                    title="Custom image"
+                    description="Run your own container image and command."
+                    onClick={onStartFromImage}
                     disabled={
                       !canCreateAgent ||
                       !canConfigureRuntime ||
-                      !runtimeAvailable ||
-                      resolver.isPending
+                      !runtimeAvailable
                     }
                     disabledReason={
                       canCreateAgent
@@ -339,25 +344,8 @@ export function AgentCatalog({
                         : "Requires permission to create agents."
                     }
                   />
-                ))}
-                <CatalogSourceCard
-                  icon={<Code className="size-5" />}
-                  title="Custom image"
-                  description="Run your own container image and command."
-                  onClick={onStartFromImage}
-                  disabled={
-                    !canCreateAgent || !canConfigureRuntime || !runtimeAvailable
-                  }
-                  disabledReason={
-                    canCreateAgent
-                      ? !canConfigureRuntime
-                        ? "Requires Configure runtime permission."
-                        : "Requires the Agent Sandbox controller."
-                      : "Requires permission to create agents."
-                  }
-                />
-              </>
-            )}
+                </>
+              ))}
           </div>
         </CatalogSection>
 

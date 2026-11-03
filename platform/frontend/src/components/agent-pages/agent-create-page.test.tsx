@@ -211,34 +211,40 @@ describe("AgentCreatePage", () => {
     }
   });
 
-  it("allows ordinary agents but denies runtime templates without Configure runtime", () => {
-    vi.mocked(useFeature).mockImplementation((feature) =>
-      feature === "agentRuntime" ? true : undefined,
-    );
+  it.each([
+    false,
+    undefined,
+  ])("hides runtime choices until Configure runtime is granted (%s)", (allowed) => {
     vi.mocked(useHasPermissions).mockImplementation(
       (permissions) =>
         ({
-          data: !permissions.agent?.includes("configure-runtime"),
-          isPending: false,
+          data: permissions.agent?.includes("configure-runtime")
+            ? allowed
+            : true,
+          isPending:
+            permissions.agent?.includes("configure-runtime") &&
+            allowed === undefined,
         }) as ReturnType<typeof useHasPermissions>,
     );
     renderAgentCreatePage();
     expect(
-      screen.getByText("Configure runtime permission required"),
-    ).toBeVisible();
-    expect(
       screen.getByRole("button", { name: /^archestra built into/i }),
     ).toBeEnabled();
-    for (const name of [/codex/i, /custom image/i]) {
-      const choice = screen.getByRole("button", { name });
-      expect(choice).toBeDisabled();
-      expect(choice).toHaveAccessibleDescription(
-        "Requires Configure runtime permission.",
-      );
-    }
     expect(
       screen.getByRole("button", { name: /connect via a2a/i }),
     ).toBeEnabled();
+    for (const name of [/claude code/i, /codex/i, /custom image/i]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
+    expect(
+      screen.queryByText("Configure runtime permission required"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Some agent options are unavailable."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("status", { name: "Loading Agent Runtimes" }),
+    ).not.toBeInTheDocument();
   });
 
   it("offers maintained Agent templates and prefills the existing create wizard", async () => {

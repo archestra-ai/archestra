@@ -9,7 +9,7 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { createEnvironment } from "@/services/environments/environment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createRestrictedEnvironment } from "@/test/environments";
-import type { User } from "@/types";
+import type { AclEntry, User } from "@/types";
 import { drainBackgroundWork } from "@/utils/background-work";
 import knowledgeBaseRoutes from "../knowledge-base";
 import knowledgeFileRoutes from "./knowledge-file.routes";
@@ -79,7 +79,7 @@ describe("uploaded files connector environment", () => {
     const connector = connectors[0];
     const search = (
       environmentId: string | null,
-      userAcl = [`principal:${user.id}`, `user_email:${user.email}`],
+      userAcl: AclEntry[] = [`principal:${user.id}`, `user_email:${user.email}`],
     ) =>
       KbChunkModel.fullTextSearch({
         connectorIds: [connector.id],

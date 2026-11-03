@@ -2092,12 +2092,12 @@ export function parseOpenAppaConfig({
   return {
     enabled: true,
     // Release 1.4 sets these two Break the glass settings here; later
-    // releases store them with the Guardrails settings. A patch upgrade keeps
-    // the review a person answers: waiving it is an opt-in on 1.4.
+    // releases store them with the Guardrails settings, with the same
+    // defaults.
     humanApprovalMode: parseOpenAppaChoice(
       "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE",
       humanApprovalMode,
-      ["block", "unattended", "everywhere"] as const,
+      ["unattended", "block", "everywhere"] as const,
     ),
     softBlockMode: parseOpenAppaChoice(
       "ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE",

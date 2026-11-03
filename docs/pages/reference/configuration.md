@@ -1481,10 +1481,10 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - Set it to rotate this key separately from the session secret.
 
 - **`ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE`** - Whether a call or remedy plan waiting for human approval runs anyway, with a yell. Shown read-only under [Break the glass](/docs/agents/guardrails/policies#yells) in **Settings → Guardrails**.
-  - Default: `block`
+  - Default: `unattended`
   - Values: `block` (wait for a person), `unattended` (waive in Agent Runtime runs, Scheduled task runs, workloads, and clients sending `X-Archestra-Unattended: 1`), `everywhere`. Other values stop startup.
   - With the default **Yell tool** setting, each waiver's yell also turns Guardrails off for the rest of that session.
-  - Release 1.4 only. Later releases make this an editable setting with the default `unattended`; a value set here is not carried over.
+  - Release 1.4 only. Later releases make this an editable setting with the same default; a value set here is not carried over.
 
 - **`ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE`** - Whether a blocked call that no approval can lift runs anyway, with a yell. Calls the policy marks `blocked` always stay blocked. Shown read-only under [Break the glass](/docs/agents/guardrails/policies#yells) in **Settings → Guardrails**.
   - Default: `refuse`

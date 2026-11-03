@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
+import { type archestraApiTypes, BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
   filterAndSortInitialAgents,
@@ -11,7 +11,7 @@ const userId = "user-1";
 function makeAgent(
   overrides: Partial<{
     builtIn: boolean;
-    builtInAgentConfig: { name: string } | null;
+    builtInAgentConfig: archestraApiTypes.GetChatAgentRosterResponses["200"][number]["builtInAgentConfig"];
     id: string;
     name: string;
     scope: "personal" | "team" | "org";

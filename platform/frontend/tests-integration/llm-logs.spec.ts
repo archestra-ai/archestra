@@ -78,6 +78,7 @@ test.describe("LLM logs — Client filter", () => {
       "Claude Desktop",
       "Cursor",
       "Codex",
+      "ChatGPT",
       "OpenCode",
       "Kilo Code",
       "Pi",

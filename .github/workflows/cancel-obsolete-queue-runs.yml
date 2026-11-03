@@ -18,12 +18,13 @@ concurrency:
 
 jobs:
   cancel:
+    name: Cancel Obsolete Merge Groups
     if: github.event_name != 'delete' || (github.event.ref_type == 'branch' && startsWith(github.event.ref, 'gh-readonly-queue/'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      contents: read
-      actions: write
+      contents: read # Read trusted observer code and queue refs.
+      actions: write # List active runs and cancel only verified obsolete run IDs.
     steps:
       # Privileged observer: only execute trusted default-branch code. Never
       # checkout the PR/merge-group ref or download its artifacts here.

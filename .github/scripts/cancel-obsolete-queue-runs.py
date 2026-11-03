@@ -4,6 +4,7 @@ Runs from the default branch with no checkout/artifact from the observed runs.
 API errors leave jobs running. Recheck identity and the ref before each cancel.
 """
 
+from datetime import datetime, timedelta, timezone
 import json
 import os
 import re
@@ -69,6 +70,9 @@ def main():
     # Verify contents access before treating a queue ref's 404 as absence.
     if api.ref_sha(repo["default_branch"]) is None:
         raise RuntimeError("Cannot verify repository refs; leaving all jobs running")
+    # Allow newly created queue refs to become visible before interpreting 404s.
+    cutoff = (datetime.fromisoformat(observer["created_at"].replace("Z", "+00:00"))
+              - timedelta(minutes=2)).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     runs = {}
     for status in sorted(ACTIVE):
         for page in range(1, 11):
@@ -79,7 +83,7 @@ def main():
     count = 0
     for run in runs.values():
         try:
-            count += cancel_obsolete(api, run, observer["created_at"], os.environ.get("DRY_RUN") == "true")
+            count += cancel_obsolete(api, run, cutoff, os.environ.get("DRY_RUN") == "true")
         except (urllib.error.URLError, KeyError, ValueError) as error:
             print(f'Leaving run {run["id"]} running: {type(error).__name__}')
     print(f"Obsolete runs identified: {count}")

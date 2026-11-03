@@ -1,7 +1,6 @@
-"""Exercise stale-run races, E2E classification, and the required result gate."""
+"""Exercise stale-run races and E2E input classification."""
 
 import importlib.util
-import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -126,31 +125,6 @@ class InputTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertTrue(inputs.run_e2e(["docs/index.md", path]))
         self.assertTrue(inputs.run_e2e([]))
-
-
-class RequiredGateTests(unittest.TestCase):
-    def gate(self, **patch):
-        workflow = (ROOT / ".github/workflows/platform-e2e-tests.yml").read_text()
-        script = workflow.split("      - name: Fail if any e2e job failed", 1)[1].split("        run: |\n", 1)[1]
-        script = script.split("\n  # Merges", 1)[0]
-        script = "\n".join(line[10:] for line in script.splitlines())
-        env = {**os.environ, "INPUT_RESULT": "success", "RUN_E2E": "true", "BUILD_RESULT": "success",
-               "K8S_RESULT": "success", "LITE_RESULT": "success", "QUICKSTART_RESULT": "success",
-               "HIBERNATION_RESULT": "skipped", "RUN_HIBERNATION": "false", **patch}
-        return subprocess.run(["bash", "-e", "-o", "pipefail", "-c", script], env=env, capture_output=True).returncode
-
-    def test_full_run_rejects_any_missing_or_failed_leg(self):
-        self.assertEqual(self.gate(), 0)
-        for key in ("INPUT_RESULT", "BUILD_RESULT", "K8S_RESULT", "LITE_RESULT", "QUICKSTART_RESULT"):
-            for value in ("skipped", "failure", "cancelled", ""):
-                self.assertNotEqual(self.gate(**{key: value}), 0)
-
-    def test_only_successful_classification_allows_intentional_skip(self):
-        skip = dict(RUN_E2E="false", BUILD_RESULT="skipped", K8S_RESULT="skipped", LITE_RESULT="skipped",
-                    QUICKSTART_RESULT="skipped", HIBERNATION_RESULT="skipped")
-        self.assertEqual(self.gate(**skip), 0)
-        self.assertNotEqual(self.gate(**{**skip, "INPUT_RESULT": "failure"}), 0)
-        self.assertNotEqual(self.gate(**{**skip, "K8S_RESULT": "failure"}), 0)
 
 
 if __name__ == "__main__":

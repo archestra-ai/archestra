@@ -11,6 +11,7 @@ import {
   AgentWorkspaceModel,
   ServiceAccountModel,
 } from "@/models";
+import AuditLogModel from "@/models/audit-log";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import websocketService from "@/websocket";
@@ -407,5 +408,78 @@ describe("websocket Agent run attach ownership", () => {
     old.socket.emit("close");
     expect(send).not.toHaveBeenCalled();
     expect(current.socket.close).not.toHaveBeenCalled();
+  });
+  test("records who attached, each interrupt burst they sent, and the detach", async () => {
+    const create = vi.spyOn(AuditLogModel, "create");
+    const context = service.clientContexts.get(ws);
+    assert(context);
+    const attempt = await startAttach();
+    attempt.resolve();
+    await attempt.done;
+    await vi.waitFor(() => expect(create).toHaveBeenCalledOnce());
+    expect(create.mock.calls[0][0]).toMatchObject({
+      action: "agentRun.terminal_attached",
+      actorType: "user",
+      actorId: context.userId,
+      organizationId: context.organizationId,
+      resourceType: "agentRun",
+      resourceId: runId,
+      after: { runId, taskId: runId, podName: "agent-run-pod" },
+    });
+
+    // Ordinary typing is not an event.
+    await service.handleMessage(
+      { type: "agent_run_attach_input", payload: { runId, data: "ls\r" } },
+      ws,
+    );
+    await vi.waitFor(() => expect(attempt.input).toEqual(["ls\r"]));
+    expect(create).toHaveBeenCalledOnce();
+
+    // Ctrl+C is: it stops the agent's turn. A burst is one row.
+    for (const data of ["\x03", "\x03", "y\x03"]) {
+      await service.handleMessage(
+        { type: "agent_run_attach_input", payload: { runId, data } },
+        ws,
+      );
+    }
+    await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+    expect(create.mock.calls[1][0]).toMatchObject({
+      action: "agentRun.terminal_interrupted",
+      actorId: context.userId,
+      resourceId: runId,
+    });
+    await vi.waitFor(() =>
+      expect(attempt.input).toEqual(["ls\r", "\x03", "\x03", "y\x03"]),
+    );
+
+    await service.handleMessage(
+      { type: "unsubscribe_agent_run_attach", payload: { runId } },
+      ws,
+    );
+    await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(3));
+    expect(create.mock.calls[2][0]).toMatchObject({
+      action: "agentRun.terminal_detached",
+      actorId: context.userId,
+      resourceId: runId,
+      after: { durationSeconds: expect.any(Number) },
+    });
+    // The rows were written, not only attempted.
+    for (const call of create.mock.results) await call.value;
+  });
+
+  test("records nothing for an attach that never became live", async () => {
+    const create = vi.spyOn(AuditLogModel, "create");
+    const attempt = await startAttach();
+    attempt.reject(new Error("pod is gone"));
+    await attempt.done;
+    expect(messages().at(-1)).toMatchObject({
+      type: "agent_run_attach_error",
+      payload: { runId, error: "pod is gone" },
+    });
+    await service.handleMessage(
+      { type: "unsubscribe_agent_run_attach", payload: { runId } },
+      ws,
+    );
+    expect(create).not.toHaveBeenCalled();
   });
 });

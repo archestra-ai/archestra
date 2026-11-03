@@ -40,6 +40,12 @@ import {
   RETAINED_LOG_BYTES,
 } from "@/services/agent-runtime/output-capture";
 import { mayAttachAgentRun } from "@/services/agent-runtime/run-access";
+import {
+  auditTerminal,
+  containsInterrupt,
+  INTERRUPT_AUDIT_WINDOW_MS,
+  type TerminalAttachment,
+} from "@/services/agent-runtime/terminal-audit";
 import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 import { projectMcpDeploymentStatuses } from "@/services/mcp-deployment-statuses";
@@ -73,6 +79,8 @@ interface AgentRunAttachSubscription {
     close: () => void;
     send: (data: Buffer) => void;
   } | null;
+  /** Set once the terminal is live; the audit trail's subject. */
+  attachment: TerminalAttachment | null;
 }
 
 type PausableWebSocket = WebSocket & {
@@ -255,6 +263,19 @@ export class WebSocketService {
       const subscription = this.agentRunAttachSubscriptions.get(ws);
       if (subscription?.runId !== message.payload.runId || !subscription.socket)
         return;
+      const { attachment } = subscription;
+      if (attachment && containsInterrupt(message.payload.data)) {
+        // Ctrl+C reaches the agent's own input loop, where it stops the
+        // running turn. Record it once per burst so a held key is one event.
+        const now = Date.now();
+        if (
+          attachment.lastInterruptAt === null ||
+          now - attachment.lastInterruptAt >= INTERRUPT_AUDIT_WINDOW_MS
+        ) {
+          attachment.lastInterruptAt = now;
+          auditTerminal("agentRun.terminal_interrupted", attachment);
+        }
+      }
       const accepted = subscription.stdin.write(message.payload.data);
       if (!accepted && !subscription.inputPaused) {
         subscription.inputPaused = true;
@@ -627,6 +648,7 @@ export class WebSocketService {
       stderr: new PassThrough(),
       inputPaused: false,
       socket: null,
+      attachment: null,
     };
     // Claim ownership before awaiting lookup or attachment so unsubscribe and
     // a newer subscribe also invalidate work that is still connecting.
@@ -715,6 +737,15 @@ export class WebSocketService {
       }
       subscription.socket =
         socket as unknown as AgentRunAttachSubscription["socket"];
+      subscription.attachment = {
+        session,
+        requestedRunId: runId,
+        actorUserId: clientContext.userId,
+        podName: resourceName,
+        attachedAt: Date.now(),
+        lastInterruptAt: null,
+      };
+      auditTerminal("agentRun.terminal_attached", subscription.attachment);
 
       for (const stream of [stdout, stderr]) {
         stream.on("data", (chunk: Buffer) => {
@@ -756,6 +787,14 @@ export class WebSocketService {
     const subscription = this.agentRunAttachSubscriptions.get(ws);
     if (!subscription) return;
     this.agentRunAttachSubscriptions.delete(ws);
+    if (subscription.attachment) {
+      auditTerminal("agentRun.terminal_detached", subscription.attachment, {
+        durationSeconds: Math.round(
+          (Date.now() - subscription.attachment.attachedAt) / 1000,
+        ),
+      });
+      subscription.attachment = null;
+    }
     subscription.stdin.destroy();
     subscription.stdout.destroy();
     subscription.stderr.destroy();

@@ -87,7 +87,7 @@ export function useUpdateUnsupportedClientAction() {
 
 /**
  * The Break the glass setting the page can save. Release 1.4 sets Human
- * approval and Soft block in the environment.
+ * approval and Other blocked calls in the environment.
  */
 export function useUpdateBreakTheGlass() {
   const client = useQueryClient();

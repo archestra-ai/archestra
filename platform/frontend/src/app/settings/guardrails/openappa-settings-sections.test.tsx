@@ -224,7 +224,7 @@ test.each([
   ).toBeDisabled();
 });
 
-test("an administrator changes the Yell tool, and the environment sets Human approval and Soft block", async () => {
+test("an administrator changes the Yell tool, and the environment sets Human approval and Other blocked calls", async () => {
   const updates: unknown[] = [];
   server.use(
     http.put(`${api}/guardrails-deployment`, async ({ request }) => {
@@ -267,7 +267,7 @@ test("an administrator changes the Yell tool, and the environment sets Human app
     screen.queryByRole("combobox", { name: "Human approval" }),
   ).not.toBeInTheDocument();
   expect(
-    screen.queryByRole("combobox", { name: "Soft block" }),
+    screen.queryByRole("combobox", { name: "Other blocked calls" }),
   ).not.toBeInTheDocument();
   // The Yell tool row maps its two choices onto the stored boolean.
   await change(

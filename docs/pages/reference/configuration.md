@@ -1486,7 +1486,7 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - With the default **Yell tool** setting, each waiver's yell also turns Guardrails off for the rest of that session.
   - Release 1.4 only. Later releases make this an editable setting with the default `unattended`; a value set here is not carried over.
 
-- **`ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE`** - Whether a blocked call that no approval can lift runs anyway, with a yell. Calls the policy marks `blocked` always stay blocked. Shown read-only under [Break the glass](/docs/agents/guardrails/policies#yells) in **Settings → Guardrails**.
+- **`ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE`** - Whether a blocked call without an approval option runs anyway, with a yell. A call the policy blocks explicitly (the `blocked` mark) always stays blocked. Shown read-only as **Other blocked calls** under [Break the glass](/docs/agents/guardrails/policies#yells) in **Settings → Guardrails**.
   - Default: `refuse`
   - Values: `refuse` (keep the block), `allow` (waive it). Other values stop startup.
   - Release 1.4 only. Later releases make this an editable setting and keep the same default; a value set here is not carried over.

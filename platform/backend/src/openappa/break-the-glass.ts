@@ -406,5 +406,5 @@ const noted = registerProcessLocalCache(
 
 const WAIVER_MESSAGE: Record<WaiverKind, string> = {
   approval_waived: "Break the glass waived human approval for",
-  block_waived: "Soft block let a blocked call through:",
+  block_waived: "Break the glass let a blocked call through:",
 };

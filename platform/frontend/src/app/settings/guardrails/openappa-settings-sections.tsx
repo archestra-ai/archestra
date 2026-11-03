@@ -105,6 +105,21 @@ export function OpenAppaBreakTheGlassSettings() {
       contentClassName="divide-y rounded-lg border"
     >
       <BreakTheGlassRow
+        title="Yell tool"
+        description="What a yell does to its session: the agent's own, or one for a waived call."
+        value={
+          data ? (data.breakTheGlassEnabled ? "off" : "record") : undefined
+        }
+        disabled={disabled}
+        options={[
+          { value: "record", label: "Record only" },
+          { value: "off", label: "Record and turn Guardrails off" },
+        ]}
+        onChange={(value) =>
+          update.mutate({ breakTheGlassEnabled: value === "off" })
+        }
+      />
+      <BreakTheGlassRow
         title="Human approval"
         description="Calls and remedy plans waiting for human approval."
         value={data?.humanApprovalMode}
@@ -122,8 +137,8 @@ export function OpenAppaBreakTheGlassSettings() {
         ]}
       />
       <BreakTheGlassRow
-        title="Soft block"
-        description="Blocks no approval can lift."
+        title="Other blocked calls"
+        description="Blocks without approval option. Explicitly blocking a call in the policy can't waive regardless of this setting."
         value={data?.unapprovableBlockMode}
         disabled={disabled}
         environmentVariable="ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE"
@@ -131,21 +146,6 @@ export function OpenAppaBreakTheGlassSettings() {
           { value: "refuse", label: "Keep the block" },
           { value: "allow", label: "Waive the block" },
         ]}
-      />
-      <BreakTheGlassRow
-        title="Yell tool"
-        description="What a yell does to its session: the agent's own, or one for a waived call."
-        value={
-          data ? (data.breakTheGlassEnabled ? "off" : "record") : undefined
-        }
-        disabled={disabled}
-        options={[
-          { value: "record", label: "Record only" },
-          { value: "off", label: "Record and turn Guardrails off" },
-        ]}
-        onChange={(value) =>
-          update.mutate({ breakTheGlassEnabled: value === "off" })
-        }
       />
     </SettingsBlock>
   );

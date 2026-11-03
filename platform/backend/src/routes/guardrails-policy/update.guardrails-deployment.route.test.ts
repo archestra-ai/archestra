@@ -138,7 +138,7 @@ describe("Deployment-wide Guardrails v2 switch", () => {
     expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(false);
   });
 
-  test("the environment sets Human approval and Soft block, and the API cannot change them", async () => {
+  test("the environment sets Human approval and Other blocked calls, and the API cannot change them", async () => {
     await set(true);
     const previous = {
       humanApprovalMode: config.openappa.humanApprovalMode,

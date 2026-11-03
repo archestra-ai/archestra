@@ -890,7 +890,7 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
 
   test("Claude Code names_children matches minted child ids for documented files", () => {
     expect(claudeCode.childTranscriptPaths).toEqual([
-      { prefix: "tasks/", suffix: ".output" },
+      { prefix: "tasks/", suffix: ".output", ownOutputId: /^b[0-9a-z]{8}$/u },
       { prefix: "subagents/agent-", suffix: ".jsonl" },
     ]);
     expect(

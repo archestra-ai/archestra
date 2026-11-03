@@ -43,7 +43,11 @@ jobs:
           fetch-depth: 0
       - uses: $/.github/actions/setup-env
       - name: Validate upgrades across release tracks
-        run: python3 ../.github/scripts/check-migration-upgrades.py --base-branch main
+        env:
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+        run: |
+          python3 ../.github/scripts/test_check_migration_upgrades.py
+          python3 ../.github/scripts/check-migration-upgrades.py --base-branch "${BASE_BRANCH#refs/heads/}"
       - name: Validate migration metadata
         run: pnpm --dir backend exec drizzle-kit check
       - name: Test function upgrade and compare append timings

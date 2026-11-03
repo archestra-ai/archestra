@@ -13,6 +13,12 @@ export function breakTheGlassSummary(
   deployment: Deployment,
 ): { label: string; value: string }[] {
   const lines: { label: string; value: string }[] = [];
+  // Same order as Settings: the Yell tool first.
+  if (deployment.breakTheGlassEnabled)
+    lines.push({
+      label: "Yell:",
+      value: "turns Guardrails off for the session",
+    });
   if (deployment.humanApprovalMode !== "block")
     lines.push({
       label: "Human approval:",
@@ -23,13 +29,8 @@ export function breakTheGlassSummary(
     });
   if (deployment.unapprovableBlockMode === "allow")
     lines.push({
-      label: "Soft block:",
+      label: "Other blocked calls:",
       value: "waived",
-    });
-  if (deployment.breakTheGlassEnabled)
-    lines.push({
-      label: "Yell:",
-      value: "turns Guardrails off for the session",
     });
   return lines;
 }

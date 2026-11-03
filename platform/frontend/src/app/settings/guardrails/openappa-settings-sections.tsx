@@ -85,9 +85,10 @@ export function OpenAppaEnforcementSetting() {
 }
 
 /**
- * Break the glass: what happens to a call waiting for human approval, to a
- * call no remedy can lift (a soft block), and to a session whose agent calls
- * `yell`. One group, since together they say how much Guardrails let through.
+ * Break the glass, in display order: what a yell does to its session (Yell
+ * tool), what happens to a call waiting for human approval (Human approval),
+ * and to a blocked call without an approval option (Other blocked calls).
+ * One group, since together they say how much Guardrails let through.
  */
 export function OpenAppaBreakTheGlassSettings() {
   const deployment = useGuardrailsDeployment({ poll: true });
@@ -104,6 +105,21 @@ export function OpenAppaBreakTheGlassSettings() {
       description="Let blocked calls through and record a yell instead of stopping the agent. Use it to see what the policy would block without blocking it."
       contentClassName="divide-y rounded-lg border"
     >
+      <BreakTheGlassRow
+        title="Yell tool"
+        description="What a yell does to its session: the agent's own, or one for a waived call."
+        value={
+          data ? (data.breakTheGlassEnabled ? "off" : "record") : undefined
+        }
+        disabled={disabled}
+        options={[
+          { value: "record", label: "Record only" },
+          { value: "off", label: "Record and turn Guardrails off" },
+        ]}
+        onChange={(value) =>
+          update.mutate({ breakTheGlassEnabled: value === "off" })
+        }
+      />
       <BreakTheGlassRow
         title="Human approval"
         description="Calls and remedy plans waiting for human approval."
@@ -122,8 +138,14 @@ export function OpenAppaBreakTheGlassSettings() {
         onChange={(humanApprovalMode) => update.mutate({ humanApprovalMode })}
       />
       <BreakTheGlassRow
-        title="Soft block"
-        description="Blocks no approval can lift."
+        title="Other blocked calls"
+        description={
+          <>
+            How to handle denials that can't be approved. Calls explicitly set
+            to <code className="font-mono text-xs">blocked</code> in the policy
+            will never waive.
+          </>
+        }
         value={data?.unapprovableBlockMode}
         disabled={disabled}
         options={[
@@ -132,21 +154,6 @@ export function OpenAppaBreakTheGlassSettings() {
         ]}
         onChange={(unapprovableBlockMode) =>
           update.mutate({ unapprovableBlockMode })
-        }
-      />
-      <BreakTheGlassRow
-        title="Yell tool"
-        description="What a yell does to its session: the agent's own, or one for a waived call."
-        value={
-          data ? (data.breakTheGlassEnabled ? "off" : "record") : undefined
-        }
-        disabled={disabled}
-        options={[
-          { value: "record", label: "Record only" },
-          { value: "off", label: "Record and turn Guardrails off" },
-        ]}
-        onChange={(value) =>
-          update.mutate({ breakTheGlassEnabled: value === "off" })
         }
       />
     </SettingsBlock>

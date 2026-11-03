@@ -20,14 +20,15 @@ function identity(url, userId) {
 function command(file, args, input, operation = file) {
   const result = spawnSync(file, args, { input, encoding: 'utf8', timeout: 30000, maxBuffer: 1024 * 1024, windowsHide: true, shell: false });
   if (result.error || result.status !== 0) {
-    const error = new Error('Could not complete ' + operation + ' (exit ' + result.status + (result.error ? ', ' + result.error.code : '') + '). Check your user service manager and unlocked credential store.');
+    const diagnostic = String(result.stderr || '').match(/DEVICE_AGENT_ERROR:([A-Za-z0-9_.,:+-]{1,240})/);
+    const error = new Error('Could not complete ' + operation + ' (exit ' + result.status + (result.error ? ', ' + result.error.code : '') + (diagnostic ? ', ' + diagnostic[1] : '') + '). Check your user service manager and unlocked credential store.');
     error.status = result.status;
     throw error;
   }
   return result.stdout.trim();
 }
 function powershell(script, value, operation) {
-  return command('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from('[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding; [Console]::InputEncoding = New-Object System.Text.UTF8Encoding; $ErrorActionPreference = "Stop"; $p = [Console]::In.ReadToEnd() | ConvertFrom-Json; ' + script, 'utf16le').toString('base64')], JSON.stringify(value), operation || 'Windows user service operation');
+  return command('powershell.exe', ['-NoProfile', '-NonInteractive', '-InputFormat', 'Text', '-OutputFormat', 'Text', '-EncodedCommand', Buffer.from('try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding; [Console]::InputEncoding = New-Object System.Text.UTF8Encoding; $ErrorActionPreference = "Stop"; $p = [Console]::In.ReadToEnd() | ConvertFrom-Json; ' + script + ' } catch { [Console]::Error.WriteLine("DEVICE_AGENT_ERROR:" + $_.FullyQualifiedErrorId + ":" + $_.Exception.HResult); exit 1 }', 'utf16le').toString('base64')], JSON.stringify(value), operation || 'Windows user service operation');
 }
 function keychainQuote(value) { return '"' + value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\r\n]/g, '') + '"'; }
 async function writePrivate(path, value) {

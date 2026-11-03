@@ -63,8 +63,10 @@ jobs:
       - name: Verify approved Connect enrollment and installer
         run: pnpm --dir backend exec vitest run --maxWorkers=1 src/routes/client-connection/decision.client-connection.route.test.ts src/routes/local-device/enroll.local-device.route.test.ts src/routes/device-mcp/managed.device-mcp.route.test.ts src/clients/mcp-client.device.test.ts src/device-mcp-client/client.unit.test.ts src/services/agent-connection-setup/bootstrap/client-connection-installer.unit.test.ts
       - name: Verify device visibility and browser consent
+        if: ${{ !cancelled() }}
         run: pnpm --dir frontend exec vitest run --maxWorkers=1 src/app/account/credentials/page.test.tsx src/app/account/_parts/local-device-cards.test.tsx src/app/account/_parts/use-local-devices-controller.test.tsx src/app/connection/client-connection-approval.test.tsx src/app/settings/mcp/page.test.tsx src/components/device-mcp-setup.test.tsx
       - name: Check types and unused exports
+        if: ${{ !cancelled() }}
         run: |
           pnpm --dir backend type-check
           pnpm --dir frontend type-check

@@ -515,51 +515,6 @@ describe("browser-approved client connection", () => {
       ),
     ).toBeNull();
   });
-});
-
-describe("client connection authentication boundary", () => {
-  test("public bootstrap works without a session while review and decision require authentication", async () => {
-    const app = createFastifyInstance();
-    app.addHook("preHandler", new Authnz().handle);
-    await app.register(routes);
-    await app.register(localDeviceRoutes);
-    try {
-      expect(
-        (await app.inject({ url: "/api/client-connections/installer" }))
-          .statusCode,
-      ).toBe(200);
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/client-connections",
-        payload: { clientId: "cursor", platform: "macos" },
-      });
-      expect(response.statusCode).toBe(200);
-      const { id, deviceCode } = response.json();
-      expect(
-        (
-          await app.inject({
-            method: "POST",
-            url: "/api/client-connections/poll",
-            payload: { deviceCode },
-          })
-        ).statusCode,
-      ).toBe(200);
-      expect(
-        (await app.inject({ url: `/api/client-connections/${id}` })).statusCode,
-      ).toBe(401);
-      expect(
-        (
-          await app.inject({
-            method: "POST",
-            url: `/api/client-connections/${id}/decision`,
-            payload: { decision: "deny" },
-          })
-        ).statusCode,
-      ).toBe(401);
-    } finally {
-      await app.close();
-    }
-  });
   test("browser approval installs one device and repeat Connect reuses its saved credential", async () => {
     await OrganizationModel.patch(organizationId, { deviceMcpEnabled: true });
     const approve = async () => {
@@ -699,5 +654,50 @@ describe("client connection authentication boundary", () => {
       },
     });
     expect(replay.statusCode).toBe(410);
+  });
+});
+
+describe("client connection authentication boundary", () => {
+  test("public bootstrap works without a session while review and decision require authentication", async () => {
+    const app = createFastifyInstance();
+    app.addHook("preHandler", new Authnz().handle);
+    await app.register(routes);
+    await app.register(localDeviceRoutes);
+    try {
+      expect(
+        (await app.inject({ url: "/api/client-connections/installer" }))
+          .statusCode,
+      ).toBe(200);
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/client-connections",
+        payload: { clientId: "cursor", platform: "macos" },
+      });
+      expect(response.statusCode).toBe(200);
+      const { id, deviceCode } = response.json();
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: "/api/client-connections/poll",
+            payload: { deviceCode },
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(
+        (await app.inject({ url: `/api/client-connections/${id}` })).statusCode,
+      ).toBe(401);
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: `/api/client-connections/${id}/decision`,
+            payload: { decision: "deny" },
+          })
+        ).statusCode,
+      ).toBe(401);
+    } finally {
+      await app.close();
+    }
   });
 });

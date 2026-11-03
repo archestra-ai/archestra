@@ -1,4 +1,5 @@
 import {
+  CHATGPT_MARK,
   CLAUDE_CODE_PROXY_ENV_KEYS,
   CLAUDE_DESKTOP_CLIENT_ID,
   type ClientMark,
@@ -22,7 +23,6 @@ import {
   CODEX_MARK,
   GROK_MARK,
   HERMES_AGENT_MARK,
-  OPENAI_MARK,
   OPENCLAW_MARK,
 } from "@/components/client-marks";
 
@@ -556,9 +556,7 @@ claude`,
     id: "chatgpt",
     label: "ChatGPT",
     sub: "Desktop, Chat and Work",
-    ...markFields(OPENAI_MARK),
-    iconColor: "#171717",
-    tileBg: "#f4f4f5",
+    ...markFields(CHATGPT_MARK),
     mcp: {
       kind: "custom",
       supportedAuth: "oauth",
@@ -584,10 +582,20 @@ claude`,
         },
       ],
     },
+    // The desktop app's Work and Codex tabs read Codex's config.toml, so the
+    // Codex setup routes them; chats and dots run on OpenAI's servers.
     proxy: {
-      kind: "unsupported",
-      reason:
-        "Plugin archives do not configure inference. Local ChatGPT Work supports separate native model-gateway configuration; cloud chats and dots do not inherit that local setting.",
+      kind: "custom",
+      supportedProviders: ["openai"],
+      build: ({ appName }) => ({
+        kind: "steps",
+        steps: [
+          {
+            title: `Run the ${appName} setup command for Codex`,
+            body: "The ChatGPT desktop app's Work and Codex tabs use the Codex settings on your computer, so the Codex setup routes them too. Restart ChatGPT when it is done.",
+          },
+        ],
+      }),
     },
   },
   {

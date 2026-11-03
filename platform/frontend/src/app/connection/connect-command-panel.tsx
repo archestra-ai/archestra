@@ -114,7 +114,12 @@ import {
   FINISH_OAUTH_FLOW_TITLE,
   type InstallerClientId,
 } from "./clients";
-import { ScriptBlock, useCopy } from "./connect-page-parts";
+import {
+  ScriptBlock,
+  SetupActionArea,
+  SetupActionRow,
+  useCopy,
+} from "./connect-page-parts";
 import {
   ConnectionConsentOptions,
   type ConsentProxyMode,
@@ -956,7 +961,9 @@ export function ConnectCommandPanel({
     canAttribute === true &&
     (((client.id === "claude-code" || client.id === "claude-desktop") &&
       (provider === "anthropic" || provider === "bedrock")) ||
-      ((client.id === "codex" || client.id === "pi") &&
+      ((client.id === "codex" ||
+        client.id === "chatgpt" ||
+        client.id === "pi") &&
         provider === "openai") ||
       (client.id === "kimi-code" &&
         (provider === "kimi-code" || provider === "kimi")) ||
@@ -1332,7 +1339,7 @@ export function ConnectCommandPanel({
           </span>
         ) : providers.length ? (
           <span>
-            {`Cursor's models go through the ${appName} Model Router with a personal virtual key for ${formatList(providers.map((p) => providerCatalog.label(p)))}. Setup writes the router URL and key into Cursor's settings.`}
+            {`Cursor's models go through the ${appName} Unified Model API with a personal virtual key for ${formatList(providers.map((p) => providerCatalog.label(p)))}. Setup writes the router URL and key into Cursor's settings.`}
           </span>
         ) : (
           <span>{CURSOR_NO_KEYS_MESSAGE}</span>
@@ -1811,7 +1818,7 @@ export function ConnectCommandPanel({
                 {client.id === "cursor" ? (
                   <span>
                     {!cursorRoutingUnavailable
-                      ? `Route Cursor's models (${providers.length} ${providers.length === 1 ? "provider" : "providers"}) through the Model Router using a virtual key`
+                      ? `Route Cursor's models (${providers.length} ${providers.length === 1 ? "provider" : "providers"}) through the Unified Model API using a virtual key`
                       : "Cursor keeps its own models"}
                   </span>
                 ) : allPrimaryProviders ? (
@@ -2417,7 +2424,7 @@ function DesktopDownload({
     const shown = wrappedCommand(command);
     return (
       // The command box every agent uses.
-      <ActionArea sizingCommand={command}>
+      <SetupActionArea sizingCommand={shown}>
         <ScriptBlock
           command={shown}
           copied={copied}
@@ -2430,13 +2437,13 @@ function DesktopDownload({
           // with the link, may use the full width.
           className="mt-0 pb-1.5 [&_pre]:pr-5 [&_pre]:[scrollbar-width:thin]"
         />
-      </ActionArea>
+      </SetupActionArea>
     );
   }
   if (terminal)
     return (
-      <ActionArea sizingCommand={sizingCommand}>
-        <ActionRow>
+      <SetupActionArea sizingCommand={wrappedCommand(sizingCommand)}>
+        <SetupActionRow>
           {failed ? (
             <>
               <span role="alert" className="min-w-0 flex-1 truncate text-sm">
@@ -2469,13 +2476,13 @@ function DesktopDownload({
               </span>
             </>
           )}
-        </ActionRow>
-      </ActionArea>
+        </SetupActionRow>
+      </SetupActionArea>
     );
   const downloaded = !!installerUrl && downloadedUrl === installerUrl;
   return (
-    <ActionArea sizingCommand={sizingCommand}>
-      <ActionRow>
+    <SetupActionArea sizingCommand={wrappedCommand(sizingCommand)}>
+      <SetupActionRow>
         <Download className="size-4 shrink-0 text-muted-foreground" />
         {failed ? (
           <span role="alert" className="min-w-0 flex-1 truncate text-sm">
@@ -2532,50 +2539,8 @@ function DesktopDownload({
             </span>
           </Button>
         )}
-      </ActionRow>
-    </ActionArea>
-  );
-}
-
-/**
- * Where the Desktop band's download box and command box sit. An invisible
- * command box under them sets the height: as tall as the command, wrapped at
- * this width, so switching between the two, or a command arriving, moves
- * nothing.
- */
-function ActionArea({
-  sizingCommand,
-  children,
-}: {
-  sizingCommand: string;
-  children: React.ReactNode;
-}) {
-  return (
-    // minmax(0, 1fr): the column follows the card's width, not the command's
-    // longest line, which scrolls inside its box on a narrow window.
-    <div className="mt-2 grid grid-cols-[minmax(0,1fr)]">
-      <div aria-hidden data-sizer className="invisible min-w-0 [grid-area:1/1]">
-        <ScriptBlock
-          command={wrappedCommand(sizingCommand)}
-          copied={false}
-          disabled
-          onCopy={() => {}}
-          className="mt-0 pb-1.5 [&_pre]:pr-5 [&_pre]:[scrollbar-width:thin]"
-        />
-      </div>
-      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] [grid-area:1/1]">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-/** The download box: the command box's surface, filling the action area. */
-function ActionRow({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex min-h-20 items-center gap-3 rounded-2xl border bg-background pr-2 pl-5 shadow-sm">
-      {children}
-    </div>
+      </SetupActionRow>
+    </SetupActionArea>
   );
 }
 

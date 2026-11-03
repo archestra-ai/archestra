@@ -256,7 +256,10 @@ function AgentDetails({
     isBuiltIn,
     isPending: isAccessPending,
   } = useAgentAccess(agent, kind);
-  const runtimeEnabled = useFeature("agentRuntime") === true;
+  const runtimeFeature = useFeature("agentRuntime");
+  const runtimeEnabled = runtimeFeature === true;
+  const isRuntimeFeaturePending =
+    kind === "agent" && agent.runtime != null && runtimeFeature === undefined;
   const permissionResource =
     agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent";
   // The same query as the access block, so the header chip reflects what
@@ -394,7 +397,11 @@ function AgentDetails({
         return;
       }
     }
-    if (sectionParam === "runs" && hasAgentRuntime && runsQuery.isPending)
+    // Wait for configuration before treating the requested tab as invalid.
+    if (
+      sectionParam === "runs" &&
+      (isRuntimeFeaturePending || (hasAgentRuntime && runsQuery.isPending))
+    )
       return;
     router.replace(agentDetailHref(kind, agent.id, section), { scroll: false });
   }, [
@@ -405,6 +412,7 @@ function AgentDetails({
     agent.id,
     router,
     hasAgentRuntime,
+    isRuntimeFeaturePending,
     runsQuery.isPending,
     overviewOnly,
     showConnect,

@@ -281,7 +281,7 @@ test.for([
   for (const artifact of ["routing-v1.mjs", "routing-v2.mjs"]) {
     const source = response.json().artifacts[artifact].source as string;
     expect(source).toContain(
-      `"archestra-${provider}":"https://deployment.example.com/v1/model-router/${proxy.id}"`,
+      `"archestra-${provider}":"https://deployment.example.com/v1/unified-model/${proxy.id}"`,
     );
     expect(source).toContain('"id":"custom-deployment"');
     expect(source).not.toContain(virtualKey.value);

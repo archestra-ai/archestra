@@ -52,6 +52,10 @@ export default defineConfig({
         __dirname,
         "../shared/built-in-agents.ts",
       ),
+      "@archestra/shared/chatgpt-plugin": path.resolve(
+        __dirname,
+        "../shared/chatgpt-plugin.ts",
+      ),
       "@archestra/shared/consts": path.resolve(
         __dirname,
         "../shared/consts.ts",

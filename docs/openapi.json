@@ -121561,6 +121561,9 @@
                 "agentRun.bulk_deleted",
                 "agentRun.bulk_files_deleted",
                 "agentRun.reviewDecided",
+                "agentRun.terminal_attached",
+                "agentRun.terminal_detached",
+                "agentRun.terminal_interrupted",
                 "agentRun.shared",
                 "agentRun.unshared",
                 "browserStorageState.deleted",
@@ -121913,6 +121916,9 @@
                                   "agentRun.bulk_deleted",
                                   "agentRun.bulk_files_deleted",
                                   "agentRun.reviewDecided",
+                                  "agentRun.terminal_attached",
+                                  "agentRun.terminal_detached",
+                                  "agentRun.terminal_interrupted",
                                   "agentRun.shared",
                                   "agentRun.unshared",
                                   "browserStorageState.deleted",
@@ -122901,6 +122907,9 @@
                             "agentRun.bulk_deleted",
                             "agentRun.bulk_files_deleted",
                             "agentRun.reviewDecided",
+                            "agentRun.terminal_attached",
+                            "agentRun.terminal_detached",
+                            "agentRun.terminal_interrupted",
                             "agentRun.shared",
                             "agentRun.unshared",
                             "browserStorageState.deleted",
@@ -193676,6 +193685,7 @@
                       "claude-code",
                       "cursor",
                       "codex",
+                      "chatgpt",
                       "claude-desktop",
                       "copilot-cli",
                       "opencode",
@@ -194335,6 +194345,7 @@
                         "claude-code",
                         "cursor",
                         "codex",
+                        "chatgpt",
                         "claude-desktop",
                         "copilot-cli",
                         "opencode",
@@ -194724,6 +194735,7 @@
                         "claude-code",
                         "cursor",
                         "codex",
+                        "chatgpt",
                         "claude-desktop",
                         "copilot-cli",
                         "opencode",
@@ -198132,6 +198144,9 @@
                           "hasSkills": {
                             "type": "boolean"
                           },
+                          "connectionPlugin": {
+                            "type": "boolean"
+                          },
                           "pluginNames": {
                             "maxItems": 555,
                             "type": "array",
@@ -199362,6 +199377,7 @@
                       "claude-code",
                       "cursor",
                       "codex",
+                      "chatgpt",
                       "claude-desktop",
                       "copilot-cli",
                       "opencode",
@@ -199560,6 +199576,7 @@
                               "claude-code",
                               "cursor",
                               "codex",
+                              "chatgpt",
                               "claude-desktop",
                               "copilot-cli",
                               "opencode",
@@ -228017,6 +228034,21 @@
                     "breakTheGlassEnabled": {
                       "type": "boolean"
                     },
+                    "humanApprovalMode": {
+                      "type": "string",
+                      "enum": [
+                        "block",
+                        "unattended",
+                        "everywhere"
+                      ]
+                    },
+                    "unapprovableBlockMode": {
+                      "type": "string",
+                      "enum": [
+                        "refuse",
+                        "allow"
+                      ]
+                    },
                     "annotatorModelId": {
                       "nullable": true,
                       "type": "string",
@@ -228040,6 +228072,8 @@
                     "enabled",
                     "unsupportedClientAction",
                     "breakTheGlassEnabled",
+                    "humanApprovalMode",
+                    "unapprovableBlockMode",
                     "annotatorModelId",
                     "annotatorLlmApiKeyId",
                     "featureEnabled",
@@ -228315,6 +228349,21 @@
                   "breakTheGlassEnabled": {
                     "type": "boolean"
                   },
+                  "humanApprovalMode": {
+                    "type": "string",
+                    "enum": [
+                      "block",
+                      "unattended",
+                      "everywhere"
+                    ]
+                  },
+                  "unapprovableBlockMode": {
+                    "type": "string",
+                    "enum": [
+                      "refuse",
+                      "allow"
+                    ]
+                  },
                   "annotatorModelId": {
                     "nullable": true,
                     "type": "string",
@@ -228354,6 +228403,21 @@
                     "breakTheGlassEnabled": {
                       "type": "boolean"
                     },
+                    "humanApprovalMode": {
+                      "type": "string",
+                      "enum": [
+                        "block",
+                        "unattended",
+                        "everywhere"
+                      ]
+                    },
+                    "unapprovableBlockMode": {
+                      "type": "string",
+                      "enum": [
+                        "refuse",
+                        "allow"
+                      ]
+                    },
                     "annotatorModelId": {
                       "nullable": true,
                       "type": "string",
@@ -228377,6 +228441,8 @@
                     "enabled",
                     "unsupportedClientAction",
                     "breakTheGlassEnabled",
+                    "humanApprovalMode",
+                    "unapprovableBlockMode",
                     "annotatorModelId",
                     "annotatorLlmApiKeyId",
                     "featureEnabled",
@@ -286406,6 +286472,7 @@
                 "claude-code",
                 "claude-desktop",
                 "codex",
+                "chatgpt",
                 "copilot-cli",
                 "cursor",
                 "opencode",
@@ -367270,6 +367337,12 @@
                               "additionalProperties": false
                             }
                           },
+                          "uploadedFilesEnvironmentId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
                           "connectors": {
                             "type": "array",
                             "items": {
@@ -368055,6 +368128,12 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "uploadedFilesEnvironmentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     }
                   },
                   "required": [
@@ -368456,6 +368535,12 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "uploadedFilesEnvironmentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     }
                   },
                   "required": [
@@ -368739,6 +368824,13 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "uploadedFilesEnvironmentId": {
+                    "description": "Environment for this knowledge base's indexed uploaded files. Requires uploaded files to have been indexed; omit to leave it unchanged.",
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
                   "labels": {
                     "type": "array",
                     "items": {
@@ -368911,6 +369003,12 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "uploadedFilesEnvironmentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     }
                   },
                   "required": [
@@ -400150,7 +400248,7 @@
         "tags": [
           "LLM Models"
         ],
-        "description": "Update several LLM models in one request. Today the only bulk-editable field is `ignored`, which hides a model from the pickers without deleting anything. Ids that match no model are reported in `failed` and leave the rest of the batch applied.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Update several LLM models in one request. Today the only bulk-editable field is `ignored`, which hides a model from pickers and blocks new executions, including direct provider requests, without deleting it. Ids that match no model are reported in `failed` and leave the rest of the batch applied.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -434112,13 +434210,13 @@
         }
       }
     },
-    "/v1/model-router/images/edits": {
+    "/v1/unified-model/images/edits": {
       "post": {
         "operationId": "modelRouterImageEditsWithDefaultAgent",
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Edit images through a mapped OpenAI, Azure or Gemini image model using bounded multipart reference images and an optional mask.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "description": "Edit images through a mapped OpenAI, Azure or Gemini image model using bounded multipart reference images and an optional mask.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "requestBody": {
           "required": true,
           "content": {
@@ -434610,13 +434708,13 @@
         }
       }
     },
-    "/v1/model-router/{agentId}/images/edits": {
+    "/v1/unified-model/{agentId}/images/edits": {
       "post": {
         "operationId": "modelRouterImageEditsWithAgent",
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Edit images through a mapped OpenAI, Azure or Gemini image model using bounded multipart reference images and an optional mask.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "description": "Edit images through a mapped OpenAI, Azure or Gemini image model using bounded multipart reference images and an optional mask.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "requestBody": {
           "required": true,
           "content": {
@@ -435118,13 +435216,13 @@
         }
       }
     },
-    "/v1/model-router/audio/speech": {
+    "/v1/unified-model/audio/speech": {
       "post": {
         "operationId": "modelRouterAudioSpeechWithDefaultAgent",
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Use mapped Azure or OpenAI credentials for governed native audio responses. Raw audio is excluded from interaction logs.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "description": "Use mapped Azure or OpenAI credentials for governed native audio responses. Raw audio is excluded from interaction logs.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "requestBody": {
           "required": true,
           "content": {
@@ -435229,13 +435327,13 @@
         }
       }
     },
-    "/v1/model-router/{agentId}/audio/speech": {
+    "/v1/unified-model/{agentId}/audio/speech": {
       "post": {
         "operationId": "modelRouterAudioSpeechWithAgent",
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Use mapped Azure or OpenAI credentials for governed native audio responses. Raw audio is excluded from interaction logs.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "description": "Use mapped Azure or OpenAI credentials for governed native audio responses. Raw audio is excluded from interaction logs.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "requestBody": {
           "required": true,
           "content": {
@@ -435350,13 +435448,13 @@
         }
       }
     },
-    "/v1/model-router/audio/transcriptions": {
+    "/v1/unified-model/audio/transcriptions": {
       "post": {
         "operationId": "modelRouterAudioTranscriptionsWithDefaultAgent",
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Use mapped Azure or OpenAI credentials for governed native audio responses. Raw audio is excluded from interaction logs.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "description": "Use mapped Azure or OpenAI credentials for governed native audio responses. Raw audio is excluded from interaction logs.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "requestBody": {
           "required": true,
           "content": {
@@ -435524,13 +435622,13 @@
         }
       }
     },
-    "/v1/model-router/{agentId}/audio/transcriptions": {
+    "/v1/unified-model/{agentId}/audio/transcriptions": {
       "post": {
         "operationId": "modelRouterAudioTranscriptionsWithAgent",
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Use mapped Azure or OpenAI credentials for governed native audio responses. Raw audio is excluded from interaction logs.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "description": "Use mapped Azure or OpenAI credentials for governed native audio responses. Raw audio is excluded from interaction logs.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "requestBody": {
           "required": true,
           "content": {
@@ -435708,13 +435806,13 @@
         }
       }
     },
-    "/v1/model-router/audio/translations": {
+    "/v1/unified-model/audio/translations": {
       "post": {
         "operationId": "modelRouterAudioTranslationsWithDefaultAgent",
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Use mapped Azure or OpenAI credentials for governed native audio responses. Raw audio is excluded from interaction logs.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "description": "Use mapped Azure or OpenAI credentials for governed native audio responses. Raw audio is excluded from interaction logs.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "requestBody": {
           "required": true,
           "content": {
@@ -435882,13 +435980,13 @@
         }
       }
     },
-    "/v1/model-router/{agentId}/audio/translations": {
+    "/v1/unified-model/{agentId}/audio/translations": {
       "post": {
         "operationId": "modelRouterAudioTranslationsWithAgent",
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Use mapped Azure or OpenAI credentials for governed native audio responses. Raw audio is excluded from interaction logs.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "description": "Use mapped Azure or OpenAI credentials for governed native audio responses. Raw audio is excluded from interaction logs.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "requestBody": {
           "required": true,
           "content": {
@@ -436066,13 +436164,13 @@
         }
       }
     },
-    "/v1/model-router/images/generations": {
+    "/v1/unified-model/images/generations": {
       "post": {
         "operationId": "modelRouterImagesWithDefaultAgent",
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Generate images through the OpenAI-compatible Model Router. Unsupported provider parameters and streaming are rejected.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "description": "Generate images through the OpenAI-compatible Unified Model API. Unsupported provider parameters and streaming are rejected.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "requestBody": {
           "required": true,
           "content": {
@@ -436501,13 +436599,13 @@
         }
       }
     },
-    "/v1/model-router/{agentId}/images/generations": {
+    "/v1/unified-model/{agentId}/images/generations": {
       "post": {
         "operationId": "modelRouterImagesWithAgent",
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Generate images through the OpenAI-compatible Model Router. Unsupported provider parameters and streaming are rejected.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "description": "Generate images through the OpenAI-compatible Unified Model API. Unsupported provider parameters and streaming are rejected.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "requestBody": {
           "required": true,
           "content": {
@@ -436946,13 +437044,13 @@
         }
       }
     },
-    "/v1/model-router/models": {
+    "/v1/unified-model/models": {
       "get": {
         "operationId": "modelRouterListModelsWithDefaultAgent",
         "tags": [
           "LLM Proxy"
         ],
-        "description": "List OpenAI-compatible model ids available through the model router (default LLM proxy)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "description": "List OpenAI-compatible model ids available through the Unified Model API (default LLM proxy)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -437242,13 +437340,13 @@
         }
       }
     },
-    "/v1/model-router/{agentId}/models": {
+    "/v1/unified-model/{agentId}/models": {
       "get": {
         "operationId": "modelRouterListModelsWithAgent",
         "tags": [
           "LLM Proxy"
         ],
-        "description": "List OpenAI-compatible model ids available through the model router (specific attribution Agent)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "description": "List OpenAI-compatible model ids available through the Unified Model API (specific attribution Agent)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "parameters": [
           {
             "schema": {
@@ -437550,13 +437648,13 @@
         }
       }
     },
-    "/v1/model-router/responses": {
+    "/v1/unified-model/responses": {
       "post": {
         "operationId": "modelRouterResponsesWithDefaultAgent",
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a response through the OpenAI-compatible model router (default LLM proxy)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "description": "Create a response through the OpenAI-compatible Unified Model API (default LLM proxy)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "requestBody": {
           "required": true,
           "content": {
@@ -438137,13 +438235,13 @@
         }
       }
     },
-    "/v1/model-router/{agentId}/responses": {
+    "/v1/unified-model/{agentId}/responses": {
       "post": {
         "operationId": "modelRouterResponsesWithAgent",
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a response through the OpenAI-compatible model router (specific attribution Agent)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "description": "Create a response through the OpenAI-compatible Unified Model API (specific attribution Agent)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "requestBody": {
           "required": true,
           "content": {
@@ -438734,13 +438832,13 @@
         }
       }
     },
-    "/v1/model-router/embeddings": {
+    "/v1/unified-model/embeddings": {
       "post": {
         "operationId": "modelRouterEmbeddingsWithDefaultAgent",
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create embeddings through the OpenAI-compatible model router (default LLM proxy)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "description": "Create embeddings through the OpenAI-compatible Unified Model API (default LLM proxy)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "requestBody": {
           "required": true,
           "content": {
@@ -439118,13 +439216,13 @@
         }
       }
     },
-    "/v1/model-router/{agentId}/embeddings": {
+    "/v1/unified-model/{agentId}/embeddings": {
       "post": {
         "operationId": "modelRouterEmbeddingsWithAgent",
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create embeddings through the OpenAI-compatible model router (specific attribution Agent)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "description": "Create embeddings through the OpenAI-compatible Unified Model API (specific attribution Agent)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "requestBody": {
           "required": true,
           "content": {
@@ -439512,13 +439610,13 @@
         }
       }
     },
-    "/v1/model-router/chat/completions": {
+    "/v1/unified-model/chat/completions": {
       "post": {
         "operationId": "modelRouterChatCompletionsWithDefaultAgent",
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion through the OpenAI-compatible model router (default LLM proxy)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "description": "Create a chat completion through the OpenAI-compatible Unified Model API (default LLM proxy)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "requestBody": {
           "required": true,
           "content": {
@@ -441804,13 +441902,13 @@
         }
       }
     },
-    "/v1/model-router/{agentId}/chat/completions": {
+    "/v1/unified-model/{agentId}/chat/completions": {
       "post": {
         "operationId": "modelRouterChatCompletionsWithAgent",
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion through the OpenAI-compatible model router (specific attribution Agent)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "description": "Create a chat completion through the OpenAI-compatible Unified Model API (specific attribution Agent)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
         "requestBody": {
           "required": true,
           "content": {
@@ -477111,6 +477209,19 @@
                           "superyell": {
                             "type": "boolean"
                           },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "agent",
+                              "approval_waived",
+                              "block_waived"
+                            ]
+                          },
+                          "count": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -477237,6 +477348,8 @@
                           "message",
                           "withTrajectory",
                           "superyell",
+                          "kind",
+                          "count",
                           "createdAt",
                           "reportedAt",
                           "reportFailed",
@@ -477850,6 +477963,19 @@
                     "superyell": {
                       "type": "boolean"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "agent",
+                        "approval_waived",
+                        "block_waived"
+                      ]
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -477976,6 +478102,8 @@
                     "message",
                     "withTrajectory",
                     "superyell",
+                    "kind",
+                    "count",
                     "createdAt",
                     "reportedAt",
                     "reportFailed",
@@ -478302,6 +478430,19 @@
                     "superyell": {
                       "type": "boolean"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "agent",
+                        "approval_waived",
+                        "block_waived"
+                      ]
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -478428,6 +478569,8 @@
                     "message",
                     "withTrajectory",
                     "superyell",
+                    "kind",
+                    "count",
                     "createdAt",
                     "reportedAt",
                     "reportFailed",
@@ -563350,6 +563493,7 @@
                 "claude-code",
                 "claude-desktop",
                 "codex",
+                "chatgpt",
                 "copilot-cli",
                 "cursor",
                 "opencode",

@@ -18,7 +18,12 @@ import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { ModelPoolModel } from "@/models";
-import type { ModelPool, ModelPoolMember, ModelPoolWithHealth } from "@/types";
+import {
+  ApiError,
+  type ModelPool,
+  type ModelPoolMember,
+  type ModelPoolWithHealth,
+} from "@/types";
 import { poolFailoverReason } from "./llm-proxy-helpers";
 import {
   canReachMember,
@@ -53,6 +58,8 @@ export const MODEL_POOL_MAX_RESPONSE_TIMEOUT_MS = 30 * 60_000;
 
 /** What a request's interaction rows record about the attempt that wrote them. */
 export interface UpstreamAttempt {
+  /** The terminal pool failure already has an interaction and settled spend. */
+  interactionRecorded?: boolean;
   modelAliases?: string[];
   billingEndpoint?: "fireworks" | "other";
   requestedModel?: string;
@@ -147,7 +154,7 @@ export async function planModelPool(params: {
   poolId?: string;
   inbound: PoolWire;
   caller: ModelPoolCaller;
-  /** Set when the Model Router already let this caller use the pool. */
+  /** Set when the Unified Model API already let this caller use the pool. */
   grantedPoolId?: string;
   sessionId?: string | null;
 }): Promise<ModelPoolPlan | null> {
@@ -293,6 +300,8 @@ export async function openThroughModelPool<T>(params: {
     member: PlannedMember,
     signal: AbortSignal,
   ) => Promise<MemberTransport>;
+  /** Resolve the member and reject hidden models before limits or provider work. */
+  prepareAttempt?: (member: PlannedMember) => Promise<void>;
   /** Request-level checks run outside provider timeouts and failover handling. */
   beforeAttempt?: (member: PlannedMember) => Promise<void>;
   open: (transport: MemberTransport) => Promise<T>;
@@ -308,21 +317,75 @@ export async function openThroughModelPool<T>(params: {
     delayMs: number;
     error: unknown;
   }) => void;
-  recordFailedAttempt: (attempt: UpstreamAttempt) => Promise<void>;
+  /** Record and settle this failure now; finalize its routing outcome when the next choice is known. */
+  prepareFailedAttempt: (
+    attempt: UpstreamAttempt,
+  ) => Promise<(outcome: "failed" | "failed_over") => Promise<void>>;
 }): Promise<T> {
   const { plan, attempt } = params;
   attempt.modelPoolId = plan.poolId;
+  let lastFailure:
+    | {
+        error: unknown;
+        attempt: UpstreamAttempt;
+        record?: (outcome: "failed" | "failed_over") => Promise<void>;
+      }
+    | undefined;
+  const recordPreviousFailure = async (
+    outcome: "failed" | "failed_over",
+  ): Promise<boolean> => {
+    if (!lastFailure?.record) return false;
+    try {
+      await lastFailure.record(outcome);
+      return true;
+    } catch (recordError) {
+      logger.error(
+        { err: recordError, poolId: plan.poolId },
+        "Failed to record a failed model pool attempt",
+      );
+      return false;
+    }
+  };
+  let hiddenError: ApiError | undefined;
+  let attempted = 0;
   for (const [index, member] of plan.members.entries()) {
     attempt.providerApiKeyId = member.providerApiKeyId;
     attempt.provider = member.provider;
     attempt.modelId = member.modelId;
-    attempt.attempt = index + 1;
+    attempt.attempt = attempted + 1;
     attempt.failureReason = undefined;
+    attempt.interactionRecorded = undefined;
     attempt.cutOff = undefined;
-    attempt.startedAt = index > 0 ? Date.now() : undefined;
-    await params.beforeAttempt?.(member);
+    attempt.startedAt = attempted > 0 ? Date.now() : undefined;
+    try {
+      await params.prepareAttempt?.(member);
+    } catch (error) {
+      if (
+        !(error instanceof ApiError) ||
+        error.internalCode !== "model_hidden"
+      ) {
+        await recordPreviousFailure("failed_over");
+        throw error;
+      }
+      hiddenError = error;
+      continue;
+    }
+    try {
+      await params.beforeAttempt?.(member);
+    } catch (error) {
+      // A visible sibling's admission refusal keeps the preceding failover
+      // outcome. Only skipped hidden members leave that failure terminal.
+      await recordPreviousFailure("failed_over");
+      throw error;
+    }
+    attempted++;
+    // Last means last in this request's plan. Availability is checked just
+    // before each member is attempted, so hidden trailing members do not
+    // extend an earlier member's timeout or enable its connection retries.
+    // Keep that bounded timing even if every remaining member is later hidden.
     const isLast = index === plan.members.length - 1;
     const abort = new AbortController();
+    let retryFailure: unknown;
     try {
       const transport = await params
         .transportFor(member, abort.signal)
@@ -336,11 +399,30 @@ export async function openThroughModelPool<T>(params: {
         // than retrying a member that may be down.
         isRetryable: isLast ? params.isRetryable : () => false,
         shouldContinue: params.shouldContinue,
-        onRetry: params.onRetry,
+        onRetry: (event) => {
+          retryFailure = event.error;
+          params.onRetry?.(event);
+        },
       });
+      await recordPreviousFailure("failed_over");
       attempt.attemptOutcome = "answered";
       return result;
-    } catch (error) {
+    } catch (caught) {
+      // A hide during connection-retry backoff stops the retry, but the
+      // dispatched member still failed: retain that failure and its accounting.
+      const error =
+        caught instanceof ApiError &&
+        caught.internalCode === "model_hidden" &&
+        retryFailure !== undefined
+          ? retryFailure
+          : caught;
+      if (error instanceof ApiError && error.internalCode === "model_hidden") {
+        hiddenError = error;
+        attempted--;
+        continue;
+      }
+      await recordPreviousFailure("failed_over");
+      lastFailure = undefined;
       const failover =
         error instanceof MemberUnavailableError
           ? { reason: "key_unavailable", retryAfterMs: undefined }
@@ -371,20 +453,29 @@ export async function openThroughModelPool<T>(params: {
         },
         "Model pool member failed before answering; trying the next member",
       );
+      lastFailure = {
+        error: error instanceof MemberUnavailableError ? error.cause : error,
+        attempt: { ...attempt },
+      };
       try {
-        await params.recordFailedAttempt({
-          ...attempt,
-          attemptOutcome: "failed_over",
-        });
+        lastFailure.record = await params.prepareFailedAttempt(
+          lastFailure.attempt,
+        );
       } catch (recordError) {
         logger.error(
           { err: recordError, poolId: plan.poolId },
-          "Failed to record a failed model pool attempt",
+          "Failed to prepare a failed model pool attempt",
         );
       }
     }
   }
-  // Unreachable: the plan has at least one member and the last one returns or throws.
+  if (lastFailure) {
+    Object.assign(attempt, lastFailure.attempt);
+    attempt.interactionRecorded = await recordPreviousFailure("failed");
+    throw lastFailure.error;
+  }
+  if (hiddenError) throw hiddenError;
+  // The plan must have at least one member.
   throw new Error("Model pool plan has no members");
 }
 

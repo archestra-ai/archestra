@@ -1,7 +1,10 @@
 import {
+  CHATGPT_CLIENT_ID,
   CLAUDE_CLIENT_ID,
   CODEX_CLIENT_ID,
   CURSOR_CLIENT_ID,
+  isChatGptOriginator,
+  isChatGptUserAgent,
   isCodexClientMetadata,
   isCodexOriginator,
   isCodexUserAgent,
@@ -81,6 +84,26 @@ export function detectCodexClientId(
     isCodexUserAgent(getHeaderValue(headers, "user-agent"))
   ) {
     return CODEX_CLIENT_ID;
+  }
+  return undefined;
+}
+
+/**
+ * ChatGPT desktop app auto-discovery. The app's Work and Codex tabs run
+ * Codex's app server, so their requests are Codex requests on the wire; only
+ * the originator names the app: `Codex Desktop` for the process, and a Work
+ * thread's own `codex_work_desktop` (see {@link isChatGptOriginator}). The
+ * User-Agent leads with the process originator, so it names the app also on a
+ * CLI thread the app resumes.
+ */
+export function detectChatGptClientId(
+  headers: Record<string, string | string[] | undefined>,
+): typeof CHATGPT_CLIENT_ID | undefined {
+  if (
+    isChatGptOriginator(getHeaderValue(headers, "originator")) ||
+    isChatGptUserAgent(getHeaderValue(headers, "user-agent"))
+  ) {
+    return CHATGPT_CLIENT_ID;
   }
   return undefined;
 }

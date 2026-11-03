@@ -9,7 +9,11 @@ import { verifyDelegatedPrompt } from "@/openappa/delegation";
 import { isWellFormedAppaId } from "@/openappa/service";
 import { ApiError } from "@/types";
 import { asRecord } from "@/utils/as-record";
-import type { AppaChildTrajectory, AppaMatchContext } from "../types";
+import type {
+  AppaChildTrajectory,
+  AppaChildTranscriptPath,
+  AppaMatchContext,
+} from "../types";
 import { readHeader, withCallerScope, withoutCallerScope } from "../utils";
 
 /** Validates opaque native IDs before any fallback or minted child binding. */
@@ -27,21 +31,33 @@ export function nativeId(
 /** Recognizes native transcript paths even when their child id is a glob. */
 export function referencesChildTranscriptPath(params: {
   arguments: unknown;
-  pathPatterns: ReadonlyArray<{ prefix: string; suffix: string }>;
+  pathPatterns: ReadonlyArray<AppaChildTranscriptPath>;
 }): boolean {
   const visit = (value: unknown): boolean => {
     if (typeof value === "string") {
       // Tokenizes once to prevent quadratic scanning.
       // Normalizes path separators and relative segments before inspection.
       return value.split(/\s+/u).some((token) => {
-        const path = posix.normalize(token.replaceAll("\\", "/"));
-        return params.pathPatterns.some(({ prefix, suffix }) => {
+        const raw = token.replaceAll("\\", "/");
+        const path = posix.normalize(raw);
+        return params.pathPatterns.some(({ prefix, suffix, ownOutputId }) => {
           const start = path.indexOf(prefix);
-          return (
-            start >= 0 &&
-            (start === 0 || path.charAt(start - 1) === "/") &&
-            path.indexOf(suffix, start + prefix.length) >= 0
-          );
+          if (start < 0 || (start > 0 && path.charAt(start - 1) !== "/")) {
+            return false;
+          }
+          const rest = path.slice(start + prefix.length);
+          const file = rest.replace(/["'`;|&)]+$/u, "");
+          // Normalization can drop segments that name a child, so only an
+          // already-normal token is exempt.
+          if (
+            ownOutputId &&
+            path === raw &&
+            file.endsWith(suffix) &&
+            ownOutputId.test(file.slice(0, -suffix.length))
+          ) {
+            return false;
+          }
+          return rest.includes(suffix);
         });
       });
     }
@@ -72,7 +88,7 @@ export function localToolName(name: string): string {
 export function namesChildrenFromArguments(params: {
   rootId: string;
   arguments: unknown;
-  pathPatterns: ReadonlyArray<{ prefix: string; suffix: string }>;
+  pathPatterns: ReadonlyArray<AppaChildTranscriptPath>;
   idKeys?: readonly string[];
 }): string[] {
   const agents: string[] = [];
@@ -131,11 +147,14 @@ export function bindMintedChildTrajectory(params: {
     childNativeId,
     expectedParentId: delegated?.parentId,
   });
+  // A client that mints children from the spawn call names no native child
+  // id; the signed spawn call id identifies the child instead.
+  const childIdentity = childNativeId ?? delegated?.spawnCallId;
   const anchor = workspaceAnchor({
     context: params.context,
     claimedSession: claims.sessionId,
     parentNativeId,
-    childNativeId,
+    childIdentity,
   });
   const nested = runtimeNest({
     context: params.context,
@@ -144,8 +163,8 @@ export function bindMintedChildTrajectory(params: {
     delegated,
     recorded,
   });
-  if (anchor && childNativeId && !nested) {
-    const mintedChild = childSessionId(anchor, childNativeId);
+  if (anchor && childIdentity && !nested) {
+    const mintedChild = childSessionId(anchor, childIdentity);
     if (
       (delegated && delegated.parentId !== anchor) ||
       (recorded &&
@@ -440,6 +459,7 @@ function runtimeNest(params: {
   childNativeId: string | undefined;
   delegated?: {
     parentId: string;
+    spawnCallId?: string;
     runtimeSessionId?: string;
   };
   recorded?: {
@@ -456,10 +476,13 @@ function runtimeNest(params: {
   const trusted = params.context.trustedContext;
   const runtimeRoot = trusted?.runtimeSessionId;
   const session = trusted?.session;
+  // A client that mints children from the spawn call names no native child
+  // id; the signed spawn call id identifies the child, as it does outside a nest.
+  const childKey = params.childNativeId ?? params.delegated?.spawnCallId;
   if (
     !runtimeRoot ||
     !session ||
-    !params.childNativeId ||
+    !childKey ||
     (markerAnchor && markerAnchor !== runtimeRoot) ||
     (receiptAnchor && receiptAnchor !== runtimeRoot) ||
     (params.delegated &&
@@ -483,7 +506,7 @@ function runtimeNest(params: {
   }
   const parentId = params.delegated?.parentId ?? params.recorded?.parentId;
   if (!parentId || parentId === runtimeClaim) return undefined;
-  const minted = childSessionId(parentId, params.childNativeId);
+  const minted = childSessionId(parentId, childKey);
   if (params.recorded && params.recorded.childId !== minted) {
     throw correlationError(
       "OpenAPPA signed child lineage does not match the authenticated session root",
@@ -498,29 +521,31 @@ function runtimeNest(params: {
 
 /**
  * The already-bound trusted session, when the client header names that same
- * root and native metadata names a child of it. An explicit child-session
- * claim, a parent header for a different trajectory, or a client with no
- * native child id is not an anchor.
+ * root and native metadata or a signed spawn call names a child of it. An
+ * explicit child-session claim, a parent header for a different trajectory,
+ * or a child with neither a native id nor a signed spawn call id is not an
+ * anchor.
  */
 function workspaceAnchor(params: {
   context: AppaMatchContext;
   claimedSession: string | undefined;
   parentNativeId: string;
-  childNativeId: string | undefined;
+  /** The native child id, or the signed spawn call id of a minted child. */
+  childIdentity: string | undefined;
 }): string | undefined {
   const session = params.context.trustedContext?.session;
-  if (!session || !params.claimedSession || !params.childNativeId) {
+  if (!session || !params.claimedSession || !params.childIdentity) {
     return undefined;
   }
   const root = withoutCallerScope(session, session.session_id);
   if (
     !root ||
     root !== params.claimedSession ||
-    root === params.childNativeId
+    root === params.childIdentity
   ) {
     return undefined;
   }
-  if (root === childSessionId(params.parentNativeId, params.childNativeId)) {
+  if (root === childSessionId(params.parentNativeId, params.childIdentity)) {
     return undefined;
   }
   const claimedParent = claimedIds(params.context).parentId;
@@ -555,7 +580,7 @@ function correlationError(message: string): ApiError {
 function collectNamedChildren(
   value: unknown,
   agents: string[],
-  pathPatterns: ReadonlyArray<{ prefix: string; suffix: string }>,
+  pathPatterns: ReadonlyArray<AppaChildTranscriptPath>,
   idKeys: readonly string[] | undefined,
 ): void {
   if (typeof value === "string") {

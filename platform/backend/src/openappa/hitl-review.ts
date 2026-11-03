@@ -14,6 +14,7 @@ import {
 } from "./hitl-review-overview";
 import { summarizeHitlReview } from "./hitl-review-summary";
 import {
+  displayedReview,
   formatArgumentLines,
   parseReviewedArguments,
   reviewedToolLabel,
@@ -422,7 +423,8 @@ export async function getHitlAskUserArguments(params: {
  * the shape read here, the full text is shown and nothing it covers is left
  * out.
  */
-function buildHitlAskUserCard(review: PendingHitlReview): HitlAskUserArguments {
+function buildHitlAskUserCard(staged: PendingHitlReview): HitlAskUserArguments {
+  const review = displayedReview(staged);
   const offerId = review.offerId;
   const options = [
     { label: "Approve", description: "Allow this exact tool call." },

@@ -27,7 +27,9 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   type AgentRuntimeConfig,
   AgentRuntimeFields,
+  AgentRuntimeProtocolField,
   defaultAgentRuntime,
+  isClaudeCodeRuntimeConfig,
 } from "./agent-runtime-fields";
 
 Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
@@ -513,6 +515,71 @@ describe("AgentRuntimeFields", () => {
         selector: "[id='env-var-credential-binding'] *",
       }),
     ).toBeVisible();
+  });
+
+  it("classifies only archestra-claude-code or custom Anthropic/claudeCode runtimes as Claude Code", () => {
+    expect(
+      isClaudeCodeRuntimeConfig({
+        command: ["archestra-claude-code"],
+        inferenceProtocol: "anthropic",
+      }),
+    ).toBe(true);
+    expect(
+      isClaudeCodeRuntimeConfig({
+        command: ["archestra-claude-code-runtime"],
+        inferenceProtocol: "anthropic",
+      }),
+    ).toBe(true);
+    expect(
+      isClaudeCodeRuntimeConfig({
+        command: ["archestra-opencode"],
+        inferenceProtocol: "anthropic",
+      }),
+    ).toBe(false);
+    expect(
+      isClaudeCodeRuntimeConfig({
+        command: ["archestra-hermes"],
+        inferenceProtocol: "anthropic",
+      }),
+    ).toBe(false);
+    expect(
+      isClaudeCodeRuntimeConfig({
+        command: ["archestra-openclaw"],
+        inferenceProtocol: "anthropic",
+      }),
+    ).toBe(false);
+  });
+
+  it("strips claudeCode when switching the inference protocol away from anthropic", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <AgentRuntimeProtocolField
+        value={{
+          ...defaultAgentRuntime(),
+          image: "example.com/custom:latest",
+          command: ["my-entrypoint"],
+          inferenceProtocol: "anthropic",
+          claudeCode: {
+            authentication: "provider",
+            model: "claude-sonnet-4-6",
+          },
+        }}
+        onChange={onChange}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Inference API" }));
+    await user.click(
+      await screen.findByRole("option", { name: "OpenAI Chat Completions" }),
+    );
+
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        inferenceProtocol: "openai_chat",
+      }),
+    );
+    expect(onChange.mock.calls[0][0].claudeCode).toBeUndefined();
   });
 });
 

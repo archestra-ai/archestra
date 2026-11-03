@@ -35,7 +35,7 @@ export function ClaudeProviderConnections({
   onSelect: (keyId: string) => void;
   canRunClaude: (provider: SupportedProvider) => boolean;
   onAddApiKey?: () => void;
-  onUseSubscription: () => void;
+  onUseSubscription?: () => void;
   disabled?: boolean;
 }) {
   const id = useId();
@@ -63,15 +63,17 @@ export function ClaudeProviderConnections({
               Add an Anthropic key
             </Button>
           )}
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={onUseSubscription}
-            disabled={disabled}
-          >
-            Use each person&apos;s subscription
-          </Button>
+          {onUseSubscription && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={onUseSubscription}
+              disabled={disabled}
+            >
+              Use each person&apos;s subscription
+            </Button>
+          )}
         </div>
       </div>
     );

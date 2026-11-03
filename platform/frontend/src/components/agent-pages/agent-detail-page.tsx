@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BUILT_IN_AGENT_IDS,
   DocsPage,
   E2eTestId,
   getDocsUrl,
@@ -808,6 +809,15 @@ function AgentDetails({
                 agentName={agent.name}
               />
             )}
+            {overviewOnly &&
+              section === "general" &&
+              agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.SRE && (
+                <ResourcePermissions
+                  resource="agent"
+                  scope={agent.id}
+                  standalone
+                />
+              )}
             {activeFormGroups.length > 0 && (
               <AgentForm
                 afterDescription={

@@ -1,4 +1,8 @@
-import { archestraApiClient, E2eTestId } from "@archestra/shared";
+import {
+  archestraApiClient,
+  BUILT_IN_AGENT_IDS,
+  E2eTestId,
+} from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -158,6 +162,21 @@ describe("AgentEditPage", () => {
     expect(
       screen.getByText("showing: configuration,runtime"),
     ).toBeInTheDocument();
+    expect(screen.getByTestId("resource-permissions")).toBeVisible();
+  });
+
+  it("keeps permissions editable for the built-in SRE agent", () => {
+    access = { ...access, isBuiltIn: true };
+    vi.mocked(useProfile).mockReturnValue({
+      data: {
+        ...agent,
+        builtIn: true,
+        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.SRE },
+      },
+      isPending: false,
+    } as unknown as ReturnType<typeof useProfile>);
+    render(<AgentEditPage id="a1" />);
+
     expect(screen.getByTestId("resource-permissions")).toBeVisible();
   });
 

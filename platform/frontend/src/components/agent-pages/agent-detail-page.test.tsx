@@ -1,3 +1,4 @@
+import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -471,6 +472,18 @@ describe("AgentDetailPage", () => {
       screen.queryByRole("link", { name: "Tools, Skills & Knowledge" }),
     ).toBeNull();
     expect(screen.queryByText("connect content")).toBeNull();
+  });
+
+  it("shows object permissions on the built-in SRE agent detail page", () => {
+    access = { ...access, isBuiltIn: true };
+    mockAgent({
+      ...baseAgent,
+      builtIn: true,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.SRE },
+    });
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    expect(screen.getByTestId("resource-permissions")).toBeVisible();
   });
 
   it("reveals audience and owner on keyboard focus without crowding the header", async () => {

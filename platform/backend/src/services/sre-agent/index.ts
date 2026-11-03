@@ -70,13 +70,6 @@ class SreAgentService {
         return;
       }
       await this.seedResources(serviceAccount);
-      const catalog = await SreRuntimeModel.findCatalog(SRE_CATALOG_ID);
-      if (catalog && !catalog.deletedAt && catalog.organizationId) {
-        await SreRuntimeModel.migrateLegacyRoleAccess(
-          catalog.organizationId,
-          catalog.id,
-        );
-      }
       await SreRuntimeModel.markAgentBuiltIn(SRE_AGENT_ID);
       await this.upgradeSourceClone();
     } catch (error) {

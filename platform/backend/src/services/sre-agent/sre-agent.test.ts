@@ -683,48 +683,6 @@ describe("sreAgentService", () => {
     );
   });
 
-  test("moves legacy SRE role access to a catalog grant once", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeCustomRole,
-  }) => {
-    const { organizationId } = await seedSreInstall({
-      makeOrganization,
-      makeUser,
-      makeMember,
-    });
-    const role = await makeCustomRole(organizationId, {
-      permission: { agent: ["read"] },
-    });
-    await db
-      .update(schema.organizationRolesTable)
-      .set({ permission: JSON.stringify({ agent: ["read"], sre: ["read"] }) })
-      .where(eq(schema.organizationRolesTable.id, role.id));
-
-    await sreAgentService.seed();
-    await sreAgentService.seed();
-
-    const catalogPolicy = await ResourcePermissionPolicyModel.find({
-      organizationId,
-      resource: "mcpRegistry",
-      scope: SRE_CATALOG_ID,
-    });
-    expect(
-      catalogPolicy?.grants.filter(
-        (grant) =>
-          grant.subject.type === "role" && grant.subject.id === role.id,
-      ),
-    ).toEqual([
-      { subject: { type: "role", id: role.id }, actions: ["read", "use"] },
-    ]);
-    const [storedRole] = await db
-      .select({ permission: schema.organizationRolesTable.permission })
-      .from(schema.organizationRolesTable)
-      .where(eq(schema.organizationRolesTable.id, role.id));
-    expect(JSON.parse(storedRole.permission)).toEqual({ agent: ["read"] });
-  });
-
   test("upgrading the source clone of an agent an interrupted run left without tools still lets it get them", async ({
     makeOrganization,
     makeUser,

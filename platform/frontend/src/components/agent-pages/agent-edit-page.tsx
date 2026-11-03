@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId } from "@archestra/shared";
+import { BUILT_IN_AGENT_IDS, E2eTestId } from "@archestra/shared";
 import { ArrowLeft, ArrowRight, Info, Loader2, PackageX } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -139,7 +139,8 @@ function AgentEditor({ agent }: { agent: Agent }) {
         ]
       : [id];
   const mountedGroups = steps.flatMap((entry) => groupsForStep(entry.id));
-  const showPermissions = !isBuiltIn;
+  const showPermissions =
+    !isBuiltIn || agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.SRE;
   const permissionResource =
     agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent";
   const overviewHref = agentDetailHref("agent", agent.id);

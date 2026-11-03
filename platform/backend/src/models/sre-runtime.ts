@@ -1,8 +1,7 @@
 import { ADMIN_ROLE_NAME, BUILT_IN_AGENT_IDS } from "@archestra/shared";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 // === Public API ===
 
@@ -12,115 +11,6 @@ import ResourcePermissionPolicyModel from "./resource-permission-policy";
  * seeded again.
  */
 class SreRuntimeModel {
-  /** Transfer legacy custom-role SRE access to the catalog's object policy. */
-  static async migrateLegacyRoleAccess(
-    organizationId: string,
-    catalogId: string,
-  ): Promise<void> {
-    const roles = await db
-      .select({
-        id: schema.organizationRolesTable.id,
-        role: schema.organizationRolesTable.role,
-        permission: schema.organizationRolesTable.permission,
-      })
-      .from(schema.organizationRolesTable)
-      .where(eq(schema.organizationRolesTable.organizationId, organizationId));
-    for (const role of roles) {
-      let permissions: Record<string, unknown>;
-      try {
-        permissions = JSON.parse(role.permission);
-      } catch {
-        continue;
-      }
-      if (
-        !permissions ||
-        typeof permissions !== "object" ||
-        Array.isArray(permissions)
-      )
-        continue;
-      if (!Array.isArray(permissions.sre) || !permissions.sre.includes("read"))
-        continue;
-      const key = {
-        organizationId,
-        resource: "mcpRegistry" as const,
-        scope: catalogId,
-      };
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const policy = await ResourcePermissionPolicyModel.find(key);
-        if (!policy) break;
-        const granted = policy.grants.some(
-          (grant) =>
-            grant.subject.type === "role" &&
-            grant.subject.id === role.id &&
-            grant.actions.includes("read") &&
-            grant.actions.includes("use"),
-        );
-        if (granted) break;
-        const current = policy.grants.find(
-          (grant) =>
-            grant.subject.type === "role" && grant.subject.id === role.id,
-        );
-        const grants = policy.grants.filter(
-          (grant) =>
-            !(grant.subject.type === "role" && grant.subject.id === role.id),
-        );
-        grants.push({
-          subject: { type: "role", id: role.id },
-          actions: [
-            ...new Set([...(current?.actions ?? []), "read", "use"] as const),
-          ],
-        });
-        const updated = await db
-          .update(schema.resourcePermissionPoliciesTable)
-          .set({
-            grants,
-            revision: sql`${schema.resourcePermissionPoliciesTable.revision} + 1`,
-          })
-          .where(
-            and(
-              eq(
-                schema.resourcePermissionPoliciesTable.organizationId,
-                organizationId,
-              ),
-              eq(
-                schema.resourcePermissionPoliciesTable.resource,
-                "mcpRegistry",
-              ),
-              eq(schema.resourcePermissionPoliciesTable.scope, catalogId),
-              eq(
-                schema.resourcePermissionPoliciesTable.revision,
-                policy.revision,
-              ),
-            ),
-          )
-          .returning({
-            revision: schema.resourcePermissionPoliciesTable.revision,
-          });
-        if (updated.length > 0) break;
-      }
-      const policy = await ResourcePermissionPolicyModel.find(key);
-      if (
-        !policy?.grants.some(
-          (grant) =>
-            grant.subject.type === "role" &&
-            grant.subject.id === role.id &&
-            grant.actions.includes("read") &&
-            grant.actions.includes("use"),
-        )
-      )
-        continue;
-      delete permissions.sre;
-      await db
-        .update(schema.organizationRolesTable)
-        .set({ permission: JSON.stringify(permissions) })
-        .where(
-          and(
-            eq(schema.organizationRolesTable.id, role.id),
-            eq(schema.organizationRolesTable.permission, role.permission),
-          ),
-        );
-    }
-  }
   /** Upgrade a live legacy SRE row in place, keeping its ID and grants. */
   static async markAgentBuiltIn(id: string): Promise<void> {
     await db

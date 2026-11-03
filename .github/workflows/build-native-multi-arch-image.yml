@@ -326,7 +326,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 1
+          fetch-depth: ${{ startsWith(inputs.checkout_ref, 'platform-v') && '0' || '1' }}
           ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
 
       - name: Download digests
@@ -429,8 +429,8 @@ jobs:
             git rev-parse HEAD > "/tmp/digests/${digest#sha256:}"
           done
 
-      # Every per-arch digest comes from this run's successful build matrix,
-      # checked out at checkout_ref. Validate the complete set before scanning
+      # Every per-arch digest comes from this attempt's build matrix or from
+      # freshly verified current-attempt candidate archives. Validate the set before scanning
       # or assigning a public version tag; never substitute a previous scan.
       - name: Resolve release scan inputs
         id: release-scan

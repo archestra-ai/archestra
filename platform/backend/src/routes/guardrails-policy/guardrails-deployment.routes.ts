@@ -18,6 +18,13 @@ const status = z.object({
   breakTheGlassEnabled: z.boolean(),
   humanApprovalMode: HumanApprovalModeSchema,
   unapprovableBlockMode: UnapprovableBlockModeSchema,
+  /** Settings an environment variable sets; the API refuses to change them. */
+  environmentOverrides: z.array(
+    z.object({
+      setting: z.enum(["humanApprovalMode", "unapprovableBlockMode"]),
+      variable: z.string(),
+    }),
+  ),
   annotatorModelId: z.string().uuid().nullable(),
   annotatorLlmApiKeyId: z.string().uuid().nullable(),
   featureEnabled: z.boolean(),

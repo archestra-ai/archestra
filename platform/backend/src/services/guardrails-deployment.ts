@@ -1,4 +1,5 @@
 import { userHasPermission } from "@/auth";
+import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import { OrganizationModel } from "@/models";
@@ -49,12 +50,18 @@ export async function getGuardrailsDeploymentFromSnapshot(
     annotatorModelId,
     annotatorLlmApiKeyId,
   } = await GuardrailsDeploymentModel.get(snapshot);
+  // An environment variable, while set, wins over the stored setting.
+  const overrides = config.openappa.breakTheGlassOverrides ?? {};
   return {
     enabled,
     unsupportedClientAction,
     breakTheGlassEnabled,
-    humanApprovalMode,
-    unapprovableBlockMode,
+    humanApprovalMode: overrides.humanApprovalMode ?? humanApprovalMode,
+    unapprovableBlockMode:
+      overrides.unapprovableBlockMode ?? unapprovableBlockMode,
+    environmentOverrides: BREAK_THE_GLASS_VARIABLES.filter(
+      ({ setting }) => overrides[setting] !== undefined,
+    ),
     annotatorModelId,
     annotatorLlmApiKeyId,
     featureEnabled: enterpriseTier.isOpenappaActive(),
@@ -112,6 +119,13 @@ export async function setGuardrailsDeployment(
       );
   }
   const before = await getGuardrailsDeployment();
+  for (const { setting, variable } of before.environmentOverrides) {
+    if (update[setting] !== undefined)
+      throw new ApiError(
+        400,
+        `${variable} sets this deployment's ${setting}. Unset it to edit this setting.`,
+      );
+  }
   await GuardrailsDeploymentModel.set(update);
   const after = await getGuardrailsDeployment();
   // A switch changes what every running session and runtime may do, so the
@@ -285,3 +299,15 @@ async function refusedPolicies(): Promise<string[]> {
   }
   return refusals;
 }
+
+/** The Break the glass settings an environment variable can set, and its name. */
+const BREAK_THE_GLASS_VARIABLES = [
+  {
+    setting: "humanApprovalMode",
+    variable: "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE",
+  },
+  {
+    setting: "unapprovableBlockMode",
+    variable: "ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE",
+  },
+] as const;

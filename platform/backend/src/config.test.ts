@@ -3662,6 +3662,32 @@ describe("OpenAPPA feature configuration", () => {
     );
   });
 
+  test("the Break the glass variables override only while set, and refuse other values", () => {
+    expect(parseOpenAppaConfig()).not.toHaveProperty("breakTheGlassOverrides");
+    expect(
+      parseOpenAppaConfig({ humanApprovalMode: "", softBlockMode: " " }),
+    ).not.toHaveProperty("breakTheGlassOverrides");
+    expect(
+      parseOpenAppaConfig({ humanApprovalMode: "block" })
+        .breakTheGlassOverrides,
+    ).toEqual({ humanApprovalMode: "block" });
+    expect(
+      parseOpenAppaConfig({
+        humanApprovalMode: " unattended ",
+        softBlockMode: "allow",
+      }).breakTheGlassOverrides,
+    ).toEqual({
+      humanApprovalMode: "unattended",
+      unapprovableBlockMode: "allow",
+    });
+    expect(() => parseOpenAppaConfig({ humanApprovalMode: "always" })).toThrow(
+      "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE must be one of: block, unattended, everywhere",
+    );
+    expect(() => parseOpenAppaConfig({ softBlockMode: "waive" })).toThrow(
+      "ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE must be one of: refuse, allow",
+    );
+  });
+
   test("enables database policies without a container path", () => {
     expect(parseOpenAppaConfig()).toEqual({
       enabled: true,

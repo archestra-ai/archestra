@@ -1496,6 +1496,16 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - Values: at least 32 characters, the same on every replica. A shorter value stops startup.
   - Set it to rotate this key separately from the session secret.
 
+- **`ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE`** - Sets **Human approval** under [Break the glass](/docs/agents/guardrails/policies#yells) for the whole deployment. While it is set, it overrides the value saved in **Settings → Guardrails**, and the setting cannot be edited there. Unset it to edit the setting again.
+  - Default: unset (the saved setting applies, `block` unless changed)
+  - Values: `block`, `unattended`, `everywhere`. Other values stop startup.
+  - Release 1.4 configures this setting only with this variable. Keep it set when you upgrade from 1.4 to keep the same behaviour.
+
+- **`ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE`** - Sets **Other blocked calls** under [Break the glass](/docs/agents/guardrails/policies#yells): whether a blocked call without an approval option runs anyway, with a yell. While it is set, it overrides the value saved in **Settings → Guardrails**, and the setting cannot be edited there. A call the policy blocks explicitly (the `blocked` mark) always stays blocked.
+  - Default: unset (the saved setting applies, `refuse` unless changed)
+  - Values: `refuse`, `allow`. Other values stop startup.
+  - Release 1.4 configures this setting only with this variable. Keep it set when you upgrade from 1.4 to keep the same behaviour.
+
 - **`ARCHESTRA_OPENAPPA_YELL_ENABLED`** - Lets agents report confusing blocks with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. Reports are stored locally.
   - Default: `true`
   - Values: `true`, `false`

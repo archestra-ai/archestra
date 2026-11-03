@@ -453,7 +453,8 @@ class OpenAppaDeclarations {
         },
       }),
     });
-    // A check answers as the served composition does, the yell rule included.
+    // A check answers as the served composition does, its host tool rules (yell
+    // and the peer read) included.
     const content = composed.content ?? null;
     return content === null
       ? composed

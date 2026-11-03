@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Select each build leg's newest digest artifact across workflow rerun attempts."""
 
+import os
 import re
 import shutil
 import subprocess
@@ -24,7 +25,7 @@ def main() -> None:
         if not artifact.is_dir() or artifact.is_symlink():
             raise ValueError(f"Unsafe digest artifact: {artifact}")
         leg, attempt = map(int, match.groups())
-        if attempt > int(__import__("os").environ["GITHUB_RUN_ATTEMPT"]):
+        if attempt > int(os.environ["GITHUB_RUN_ATTEMPT"]):
             raise ValueError(f"Future digest artifact: {artifact.name}")
         if leg not in selected or attempt > selected[leg][0]:
             selected[leg] = (attempt, artifact)

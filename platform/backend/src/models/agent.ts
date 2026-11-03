@@ -1061,8 +1061,11 @@ class AgentModel {
     // SPDX-SnippetEnd
     const where = and(
       base,
-      or(eq(table.authorId, params.userId), nonPersonalAudience),
-      eq(table.builtIn, false),
+      or(
+        eq(table.authorId, params.userId),
+        nonPersonalAudience,
+        eq(table.builtIn, true),
+      ),
       pattern
         ? or(ilike(table.name, pattern), ilike(table.description, pattern))
         : undefined,
@@ -1073,7 +1076,6 @@ class AgentModel {
       return AgentModel.findChatOrderedRosterPage({
         where: and(
           base,
-          eq(table.builtIn, false),
           pattern
             ? or(ilike(table.name, pattern), ilike(table.description, pattern))
             : undefined,

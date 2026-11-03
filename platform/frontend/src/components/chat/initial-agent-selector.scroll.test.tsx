@@ -1,4 +1,4 @@
-import { archestraApiClient } from "@archestra/shared";
+import { archestraApiClient, BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
@@ -178,6 +178,41 @@ it("loads one bounded page per bottom scroll, appends without duplicate selectio
   act(() => screen.getByRole("option", { name: /Choice 43/ }).focus());
   await userEvent.keyboard("{ArrowDown}{Enter}");
   expect(onChange).toHaveBeenCalledWith("choice-44");
+});
+
+it("finds and selects the chat-capable built-in agent by search", async () => {
+  const policyAssistant = makeAgent({
+    id: "policy-assistant",
+    name: "Policy Assistant",
+    scope: "org",
+    authorId: null,
+    builtIn: true,
+    builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+  });
+  const searches: string[] = [];
+  server.use(
+    http.get(`${origin}/api/agents/chat-roster/page`, ({ request }) => {
+      const search = new URL(request.url).searchParams.get("search") ?? "";
+      searches.push(search);
+      const rows = search ? [policyAssistant] : choices.slice(0, 20);
+      return HttpResponse.json({
+        data: rows,
+        pagination: { limit: 20, hasNext: false, nextCursor: null },
+      });
+    }),
+  );
+
+  const onChange = setup();
+  await userEvent.click(
+    await screen.findByRole("combobox", { name: "Choice 00" }),
+  );
+  await userEvent.type(screen.getByPlaceholderText("Search agents"), "Policy");
+  const option = await screen.findByRole("option", {
+    name: /Policy Assistant/,
+  });
+  expect(searches).toContain("Policy");
+  await userEvent.click(option);
+  expect(onChange).toHaveBeenCalledWith(policyAssistant.id);
 });
 
 it("retries an initial page failure from the search action with the keyboard", async () => {

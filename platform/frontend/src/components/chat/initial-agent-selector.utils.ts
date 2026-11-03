@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@archestra/shared";
+import { type archestraApiTypes, BUILT_IN_AGENT_IDS } from "@archestra/shared";
 
 type InternalAgent =
   archestraApiTypes.GetChatAgentRosterResponses["200"][number];
@@ -13,6 +13,7 @@ type InitialAgentListItem = Pick<
   | "icon"
   | "runtime"
   | "builtIn"
+  | "builtInAgentConfig"
 >;
 
 export function filterAndSortInitialAgents<
@@ -26,7 +27,11 @@ export function filterAndSortInitialAgents<
   const { allAgents, currentAgentId, search, userId } = params;
 
   let result = allAgents.filter((agent) => {
-    if (agent.builtIn) return false;
+    if (
+      agent.builtIn &&
+      agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG
+    )
+      return false;
     if (agent.scope === "personal") {
       return agent.authorId === userId;
     }

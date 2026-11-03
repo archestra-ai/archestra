@@ -75,27 +75,44 @@ gh() {
         for draft in (False, True):
             with self.subTest(draft=draft):
                 self.assert_blocked(self.run_guard([
-                    {"tag_name": "platform-v1.4.0", "prerelease": False, "draft": draft}
+                    {"tag_name": "platform-v1.3.52", "prerelease": False, "draft": draft}
                 ]))
 
-    def test_retired_line_security_patches_preserve_newer_channels(self):
-        releases = [{"tag_name": "platform-v1.4.4", "prerelease": False}]
-        for version in ("1.3.78", "1.3.79"):
-            with self.subTest(version=version):
-                result = self.run_guard(releases, version=version)
-                self.assert_allowed(result)
-                self.assertEqual(result.policy_output, "preserve_latest=true\n")
-        for ref, version in (("main", "1.3.78"), ("main", "1.3.79"), ("release/1.3", "1.3.80")):
-            with self.subTest(ref=ref, version=version):
-                self.assert_blocked(self.run_guard(releases, ref=ref, version=version))
-        for version, newer in (("1.3.78", "1.3.79"), ("1.3.79", "1.3.80")):
+    def test_older_lines_publish_without_taking_over_newer_channels(self):
+        for version, newer in (
+            ("1.3.80", "1.4.17"), ("1.3.81", "1.4.18"),
+            ("1.4.18", "1.5.0"), ("1.5.9", "1.6.0"), ("2.9.7", "2.10.0"),
+        ):
+            for draft in (False, True):
+                with self.subTest(version=version, newer=newer, draft=draft):
+                    releases = [{"tag_name": f"platform-v{newer}", "prerelease": False, "draft": draft}]
+                    result = self.run_guard(releases, version=version, ref=f"release/{version.rsplit('.', 1)[0]}")
+                    self.assert_allowed(result)
+                    self.assertEqual(result.policy_output, "preserve_latest=true\n")
+                    self.assert_blocked(self.run_guard(releases, version=version, freeze="true"))
+                    self.assert_blocked(self.run_guard(releases, version=version, api_status=1))
+
+    def test_same_line_newer_patch_blocks_partial_publication_and_retries(self):
+        for version, newer in (("1.3.80", "1.3.81"), ("1.4.18", "1.4.19"), ("1.5.9", "1.5.10")):
             for draft in (False, True):
                 with self.subTest(version=version, newer=newer, draft=draft):
                     self.assert_blocked(self.run_guard([
-                        {"tag_name": f"platform-v{newer}", "prerelease": False, "draft": draft}
-                    ], version=version))
-            self.assert_blocked(self.run_guard(releases, version=version, freeze="true"))
-            self.assert_blocked(self.run_guard(releases, version=version, api_status=1))
+                        {"tag_name": "platform-v9.0.0", "prerelease": False},
+                        {"tag_name": f"platform-v{newer}", "prerelease": False, "draft": draft},
+                    ], version=version, ref=f"release/{version.rsplit('.', 1)[0]}"))
+
+    def test_stable_version_must_match_release_branch(self):
+        for ref in ("main", "release/1.4", "release/1.30", "feature/example"):
+            with self.subTest(ref=ref):
+                self.assert_blocked(self.run_guard(version="1.3.80", ref=ref))
+
+    def test_newest_stable_line_promotes_latest(self):
+        result = self.run_guard([
+            {"tag_name": "platform-v1.3.99", "prerelease": False},
+            {"tag_name": "platform-v1.4.18", "prerelease": False, "draft": True},
+        ], version="1.4.18", ref="release/1.4")
+        self.assert_allowed(result)
+        self.assertEqual(result.policy_output, "preserve_latest=false\n")
 
     def test_older_and_same_stable_allow_retry(self):
         self.assert_allowed(self.run_guard([
@@ -104,9 +121,11 @@ gh() {
         ]))
 
     def test_numeric_version_ordering(self):
-        self.assert_blocked(self.run_guard([
+        result = self.run_guard([
             {"tag_name": "platform-v1.10.0", "prerelease": False}
-        ], version="1.9.1"))
+        ], version="1.9.1", ref="release/1.9")
+        self.assert_allowed(result)
+        self.assertEqual(result.policy_output, "preserve_latest=true\n")
 
     def test_prereleases_and_other_components_do_not_block(self):
         self.assert_allowed(self.run_guard([
@@ -208,7 +227,9 @@ docker() { printf 'docker %s\\n' "$*"; }
             (published("1.4.0-rc.9"), "1.4.0-rc.10", True),
             (published("1.4.0-beta.13"), "1.4.0-rc.14", True),
             (published("1.4.0-rc.22"), "1.4.0", True),
-            (published("1.5.0-rc.1", draft=True), "1.4.0-rc.22", True),
+            (published("1.4.0-rc.22", draft=True), "1.4.0-rc.22", True),
+            (published("1.4.0-rc.23", draft=True), "1.4.0-rc.22", False),
+            (published("1.5.0-rc.1", draft=True), "1.4.0-rc.22", False),
             ([{"tag_name": "other-v9.0.0", "draft": False}], "1.4.0-rc.22", True),
             (published("1.4.0-rc.22", "1.3.66"), "1.3.67", False),
             (published("1.10.0-rc.1"), "1.9.3", False),
@@ -277,27 +298,33 @@ docker() { printf 'docker %s\\n' "$*"; }
         self.assertNotIn("docker", result.stdout)
         self.assertIn("Cannot list releases", result.stdout)
 
-    def test_security_patch_never_moves_platform_latest(self):
-        result = self.run_platform_latest(version="1.3.78", preserve_latest="true")
+    def test_older_line_patch_never_moves_platform_latest(self):
+        result = self.run_platform_latest(version="1.3.80", preserve_latest="true")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("docker", result.stdout)
 
-    def test_security_patch_publishes_chart_and_github_release_without_latest(self):
+    def test_older_line_patch_publishes_chart_and_github_release_without_latest(self):
         source = WORKFLOW.read_text()
         def script(name):
             section = source.split(f"      - name: {name}\n", 1)[1].split("      - name:", 1)[0]
-            return textwrap.dedent(section.split("        run: |\n", 1)[1])
+            lines = section.split("        run: |\n", 1)[1].splitlines()
+            script_lines = []
+            for line in lines:
+                if line.strip() and not line.startswith("          "):
+                    break
+                script_lines.append(line)
+            return textwrap.dedent("\n".join(script_lines))
         with tempfile.TemporaryDirectory() as directory:
             images = Path(directory) / "release-images"
             images.mkdir()
             (images / "mcp-server-base").write_text("registry.example.invalid/mcp@sha256:" + "a" * 64)
-            env = os.environ | {"VERSION": "1.3.78", "TAG_NAME": "platform-v1.3.78", "PRESERVE_LATEST": "true"}
+            env = os.environ | {"VERSION": "1.3.80", "TAG_NAME": "platform-v1.3.80", "PRESERVE_LATEST": "true"}
             result = subprocess.run(
                 ["bash", "-eo", "pipefail", "-c", 'helm() { echo "helm $*"; }; docker() { echo "docker $*"; };\n' + script("Publish approved stable artifacts without rebuilding")],
                 cwd=directory, env=env, capture_output=True, text=True, timeout=10,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("helm push archestra-platform-1.3.78.tgz", result.stdout)
+            self.assertIn("helm push archestra-platform-1.3.80.tgz", result.stdout)
             self.assertFalse(any(line.startswith("docker ") for line in result.stdout.splitlines()))
             result = subprocess.run(
                 ["bash", "-eo", "pipefail", "-c", 'gh() { if [ "$1 $2" = "release view" ]; then echo true; else echo "gh $*"; fi; };\n' + script("Publish GitHub release")],

@@ -1,5 +1,8 @@
 import { Readable } from "node:stream";
-import type { SupportedProvider } from "@archestra/shared";
+import {
+  type SupportedProvider,
+  SupportedProvidersSchema,
+} from "@archestra/shared";
 import {
   errorCodes,
   type FastifyReply,
@@ -10,10 +13,16 @@ import { mayHoldAttestationToken } from "@/archestra-mcp-server/tool-attestation
 import logger from "@/logging";
 import { LimitValidationService } from "@/models/limit";
 import LlmThroughputModel from "@/models/llm-throughput";
+import ModelModel from "@/models/model";
 import {
   mayHoldOpenAppaPayload,
   sanitizeForwardedRequest,
 } from "@/openappa/request";
+import {
+  fireworksModelAliases,
+  isFireworksEndpoint,
+  resolveFireworksModel,
+} from "@/services/fireworks-model";
 import { ThroughputError } from "@/services/llm-throughput";
 import { ApiError } from "@/types";
 import {
@@ -67,6 +76,11 @@ export function createProxyPreHandler(params: {
   logProvider?: SupportedProvider;
 }) {
   const { apiPrefix, endpointSuffix, upstream, providerName } = params;
+  // Provider identity comes from this route's configured namespace, never the
+  // body or caller's credential. Custom compatible models keep that identity.
+  const provider = SupportedProvidersSchema.safeParse(
+    apiPrefix.split("/").at(-1),
+  );
   const beforeCleanBody = params.logProvider
     ? async (request: FastifyRequest, body: unknown) => {
         notePassthroughRequestBody(request, body);
@@ -170,7 +184,13 @@ export function createProxyPreHandler(params: {
 
     // Strip last: the body hooks (e.g. Claude Code's count observer) still
     // read X-Archestra-* headers such as the agent id.
-    cleanForwardedBody(request, beforeCleanBody).then(() => {
+    cleanForwardedBody(
+      request,
+      beforeCleanBody,
+      provider.success
+        ? { provider: provider.data, baseUrl: upstream }
+        : undefined,
+    ).then(() => {
       stripArchestraRequestHeaders(request);
       next();
     }, next);
@@ -272,9 +292,77 @@ export function createProxyPreHandler(params: {
 export async function cleanForwardedBody(
   request: FastifyRequest,
   beforeCleanBody?: (request: FastifyRequest, body: unknown) => Promise<void>,
+  availability?: { provider: SupportedProvider; baseUrl?: string },
 ): Promise<void> {
+  const path = request.url.split("?")[0].replace(/\/+$/, "");
+  const metadata =
+    isNonInferenceOperation(request) ||
+    /\/(?:tokenize|detokenize)$/.test(path) ||
+    ((availability?.provider === "ollama" ||
+      availability?.provider === "ollama-native") &&
+      /\/api\/(?:show|pull|push|create|copy|delete)$/.test(path));
+  const validateBody =
+    availability && !metadata
+      ? async (body: unknown) => {
+          // Fastify may already have parsed text/plain into a string, while
+          // the catch-all parser leaves other bodies as raw streams.
+          if (typeof body === "string" || Buffer.isBuffer(body)) {
+            try {
+              body = JSON.parse(body.toString());
+            } catch {
+              return;
+            }
+          }
+          if (!body || typeof body !== "object") return;
+          let model = "model" in body ? body.model : undefined;
+          if (
+            availability.provider === "ollama" ||
+            availability.provider === "ollama-native"
+          ) {
+            // Go accepts case-insensitive field names, but its null/duplicate
+            // handling differs from JSON.parse. Never authorize one model and
+            // forward an ambiguous body that Ollama could decode as another.
+            const fields = Object.entries(body).filter(
+              ([key]) => key.toLowerCase() === "model",
+            );
+            if (
+              fields.length > 1 ||
+              (fields.length === 1 && typeof fields[0][1] !== "string")
+            ) {
+              throw new ApiError(
+                400,
+                "Native Ollama requests must name a single string model.",
+              );
+            }
+            model = fields[0]?.[1];
+          }
+          if (typeof model !== "string") return;
+          const resolved = await resolveFireworksModel({
+            provider: availability.provider,
+            model,
+            baseUrl: availability.baseUrl,
+          });
+          await ModelModel.assertAvailable({
+            provider: availability.provider,
+            modelId: resolved.model,
+            aliases: isFireworksEndpoint(availability.baseUrl)
+              ? fireworksModelAliases(resolved.model)
+              : undefined,
+          });
+        }
+      : undefined;
   const body = request.body;
-  if (!(body instanceof Readable) || !isUncompressedJson(request.headers)) {
+  if (!(body instanceof Readable)) {
+    await validateBody?.(body);
+    return;
+  }
+  const encoding = request.headers["content-encoding"]?.trim().toLowerCase();
+  // Native endpoints can parse JSON regardless of Content-Type. Inspect those
+  // bytes for availability too; otherwise a different header bypasses Hidden.
+  if (
+    (encoding && encoding !== "identity") ||
+    (!isUncompressedJson(request.headers) && !validateBody)
+  ) {
     return;
   }
   const raw = await readBody({
@@ -288,6 +376,7 @@ export async function cleanForwardedBody(
     (await cleanedJson(
       raw,
       beforeCleanBody && ((body) => beforeCleanBody(request, body)),
+      validateBody,
     )) ?? Readable.from([raw], { objectMode: false });
 }
 
@@ -316,10 +405,11 @@ export function stripArchestraRequestHeaders(request: FastifyRequest): void {
 async function cleanedJson(
   raw: Buffer,
   beforeCleanBody?: (body: unknown) => Promise<void>,
+  validateBody?: (body: unknown) => Promise<void>,
 ): Promise<object | null> {
   const markers = mayHoldAttestationToken(raw);
   const payloads = mayHoldOpenAppaPayload(raw);
-  if (!markers && !payloads && !beforeCleanBody) return null;
+  if (!markers && !payloads && !beforeCleanBody && !validateBody) return null;
   let body: unknown;
   try {
     body = JSON.parse(raw.toString("utf8"));
@@ -327,6 +417,9 @@ async function cleanedJson(
     return null;
   }
   if (typeof body !== "object" || body === null) return null;
+  // Availability is an execution gate, unlike the optional logging observer.
+  // Its errors must reach Fastify and stop forwarding.
+  await validateBody?.(body);
   if (beforeCleanBody) {
     try {
       await beforeCleanBody(body);

@@ -75,7 +75,7 @@ Missing values are omitted. Behind a trusted reverse proxy, configure [`ARCHESTR
 
 For invalid credentials, malformed requests, and other requests rejected before an LLM proxy handler runs, use your ingress or reverse-proxy access logs. Capture the timestamp, method, path, response status, client address, and request ID where available; do not log credentials or request bodies. Route those access logs to your security monitoring system and set retention for your investigation needs.
 
-These early rejections do not produce an `archestra.llm_proxy.request` event or a proxy duration metric. They are also outside the administrative audit events returned by `GET /api/audit-logs` and exported as `archestra.audit.*` logs. A denied administrative action that reached an authenticated, audited route is a different case: look for `archestra.audit.outcome` set to `denied`.
+These early rejections do not produce an `archestra.llm_proxy.request` event or a proxy duration metric. They are also outside the administrative audit events returned by [`GET /api/audit-logs`](/docs/reference/api#/Audit%20Log/getAuditLogs) and exported as `archestra.audit.*` logs. A denied administrative action that reached an authenticated, audited route is a different case: look for `archestra.audit.outcome` set to `denied`.
 
 ## Retrieve Events Through the API
 

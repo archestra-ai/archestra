@@ -30,6 +30,7 @@ import {
   type RequestTarget,
 } from "@/components/virtual-key-request-example";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
+import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { cn } from "@/lib/utils/tailwind";
 
 /** What the view needs of a pool, which a pool just created also has. */
@@ -93,6 +94,9 @@ export function ConnectPoolDialog({
   const providerCatalog = useModelProviderCatalog({ fresh: true });
   const [endpoint, setEndpoint] = useState<Endpoint>("model-router");
   const [credential, setCredential] = useState<Credential>("standard");
+  const { data: usableProviderKeys = [] } = useAvailableLlmProviderApiKeys({
+    toastOnError: false,
+  });
   const target: RequestTarget =
     endpoint === "model-router"
       ? { kind: "model-router" }
@@ -148,6 +152,7 @@ export function ConnectPoolDialog({
             auth={credential}
             targetLabel={targetLabel}
             pool={pool}
+            usableProviderKeyIds={usableProviderKeys.map((key) => key.id)}
           />
         </ol>
       </DialogBody>

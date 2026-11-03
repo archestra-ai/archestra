@@ -104,6 +104,7 @@ export function LlmConnectSteps({
   auth,
   targetLabel,
   pool,
+  usableProviderKeyIds,
 }: {
   /** The rail's number for the first of these steps. */
   firstNumber: number;
@@ -117,6 +118,8 @@ export function LlmConnectSteps({
    * asks for the pool by name.
    */
   pool?: ConnectablePoolDetails;
+  /** With a pool: provider keys the reader may use, so a new one may map. */
+  usableProviderKeyIds?: string[];
 }) {
   const providerCatalog = useModelProviderCatalog({ fresh: true });
   const isRouter = selected === "model-router";
@@ -180,7 +183,7 @@ export function LlmConnectSteps({
   // endpoint's provider reaches the pool through that key alone; otherwise
   // any member's key will do.
   const poolMappings = pool
-    ? poolKeyMappings(pool, new Set(providerApiKeys.map((key) => key.id)))
+    ? poolKeyMappings(pool, new Set(usableProviderKeyIds))
     : undefined;
   const memberKeyIds = new Set(
     (pool?.members ?? []).map((member) => member.providerApiKeyId),

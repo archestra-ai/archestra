@@ -17,6 +17,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import { ModelModel } from "@/models";
 import { afterEach, describe, expect, test } from "@/test";
 import { bedrockAdapterFactory } from "../adapters/bedrock";
 import bedrockProxyRoutes from "./bedrock";
@@ -267,5 +268,79 @@ describe("Bedrock Converse proxy — reasoning content", () => {
       { reasoningContent: { redactedReasoning: { data: REDACTED_BLOB } } },
       { text: "Seven." },
     ]);
+  });
+});
+
+describe("Bedrock Converse proxy — context limits", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  test("rejects an oversized Converse prompt before opening a Bedrock stream", async ({
+    makeAgent,
+  }) => {
+    const guardedModel = "global.anthropic.claude-sonnet-4-6";
+    await ModelModel.create({
+      externalId: `bedrock/${guardedModel}`,
+      provider: "bedrock",
+      modelId: guardedModel,
+      contextLength: 1_000_000,
+      customContextLength: 0,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    const converseStream = vi.fn(async () => asyncIterable([]));
+    vi.spyOn(bedrockAdapterFactory, "createClient").mockReturnValue({
+      converseStream,
+    } as never);
+
+    const app = createFastifyApp();
+    await app.register(bedrockProxyRoutes);
+    const agent = await makeAgent({ name: "bedrock-prompt-budget-agent" });
+    let failure: unknown;
+    app.addHook("onError", async (_request, _reply, error) => {
+      failure = error;
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/bedrock/${agent.id}/converse-stream`,
+      headers: HEADERS,
+      payload: {
+        modelId: guardedModel,
+        messages: [
+          { role: "user", content: [{ text: "a ".repeat(1_050_000) }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(failure).toMatchObject({
+      statusCode: 400,
+      internalCode: "context_length_exceeded",
+    });
+    expect(converseStream).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  test("classifies fetch-based Bedrock prompt overflow errors", () => {
+    const error = Object.assign(
+      new Error("Bedrock API error (400): prompt is too long"),
+      {
+        statusCode: 400,
+        responseBody: JSON.stringify({
+          __type: "ValidationException",
+          message: "prompt is too long",
+        }),
+      },
+    );
+    expect(bedrockAdapterFactory.extractInternalCode(error)).toBe(
+      "context_length_exceeded",
+    );
+    const withoutAwsType = Object.assign(
+      new Error("Bedrock API error (400): prompt is too long"),
+      { statusCode: 400, responseBody: '{"message":"prompt is too long"}' },
+    );
+    expect(bedrockAdapterFactory.extractInternalCode(withoutAwsType)).toBe(
+      "context_length_exceeded",
+    );
   });
 });

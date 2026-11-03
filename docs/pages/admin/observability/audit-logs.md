@@ -7,6 +7,8 @@ lastUpdated: 2026-10-28
 
 Send key changes, permission updates, and other recorded administrative actions to your security monitoring stack. Archestra exports metadata from the same persisted events available through its audit API as OpenTelemetry logs.
 
+Invalid LLM Proxy credentials and malformed proxy requests rejected before the handler are recorded as [proxy rejection events](/docs/admin/observability/tracing#proxy-request-log-events) in application logs and OpenTelemetry logs. They are not administrative audit events and do not appear in the Audit tab or audit API. For requests blocked before reaching Archestra, use ingress access logs.
+
 ## Connect Your Collector
 
 Use a collector that accepts OTLP over HTTP and forwards logs to your destination.

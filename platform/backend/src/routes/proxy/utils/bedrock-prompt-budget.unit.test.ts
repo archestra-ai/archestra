@@ -36,6 +36,19 @@ describe("Bedrock prompt budget", () => {
     expect(isBedrockPromptOverBudget(withToolResult, MODEL, 100)).toBe(true);
   });
 
+  test("allows prompts above 85% of the window and catches clear overflow", () => {
+    const request = (tokens: number) => ({
+      inferenceConfig: { maxTokens: 1 },
+      messages: [{ role: "user", content: [{ text: "a ".repeat(tokens) }] }],
+    });
+    expect(isBedrockPromptOverBudget(request(175_000), MODEL, 200_000)).toBe(
+      false,
+    );
+    expect(isBedrockPromptOverBudget(request(210_000), MODEL, 200_000)).toBe(
+      true,
+    );
+  });
+
   test("does not count encoded binary media as text", () => {
     const request = {
       messages: [

@@ -62,15 +62,12 @@ export function estimateBedrockPromptTokens(
   );
 }
 
-/** Leave room for tokenizer variance, wire overhead, and the model's output. */
+/** Catch estimated overflows; leave requests near the limit to the provider. */
 export function isBedrockPromptOverBudget(
   request: unknown,
   modelId: string,
   contextLength: number | null | undefined,
 ): boolean {
   if (!contextLength || contextLength <= 0) return false;
-  return (
-    estimateBedrockPromptTokens(request, modelId) >
-    Math.floor(contextLength * 0.85)
-  );
+  return estimateBedrockPromptTokens(request, modelId) > contextLength;
 }

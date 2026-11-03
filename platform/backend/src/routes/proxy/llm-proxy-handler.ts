@@ -1650,12 +1650,14 @@ export async function handleLLMProxy<
         isBedrockPromptOverBudget(
           finalRequest,
           actualModel,
-          contextModel?.customContextLength ?? contextModel?.contextLength,
+          contextModel
+            ? ModelModel.resolveArchitecturalContextLength(contextModel)
+            : null,
         )
       ) {
         throw new ApiError(
-          413,
-          "The prompt is too large for this model's context window. Shorten the conversation or start a new session.",
+          400,
+          "The prompt is too long for this model's context window. Shorten the conversation or start a new session.",
           ArchestraInternalErrorCode.ContextLengthExceeded,
         );
       }

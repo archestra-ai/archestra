@@ -1482,7 +1482,7 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 
 - **`ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE`** - Whether a call or remedy plan waiting for human approval runs anyway, with a yell. Shown read-only under [Break the glass](/docs/agents/guardrails/policies#yells) in **Settings → Guardrails**.
   - Default: `block`
-  - Values: `block` (wait for a person), `unattended` (waive in Agent Runtime runs, Scheduled task runs, workloads, and clients sending `X-Archestra-Unattended: 1`), `everywhere`. Other values stop startup.
+  - Values: `block` (wait for a person), `unattended` (waive in Agent Runtime runs, Scheduled task runs, and clients sending `X-Archestra-Unattended: 1`; a remedy plan a workload runs counts too), `everywhere`. Other values stop startup.
   - With the default **Yell tool** setting, each waiver's yell also turns Guardrails off for the rest of that session.
   - Release 1.4 only. Later releases make this an editable setting with the default `unattended`; a value set here is not carried over.
 

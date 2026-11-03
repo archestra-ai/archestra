@@ -4718,6 +4718,169 @@ describe("AgentForm save payload and failure handling", () => {
     expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
   });
 
+  it("keeps the Claude account radio cards visible with personal subscription disabled, shows the command notice, and rewrites subscription to provider on save when a Claude runtime uses a custom command", async () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
+    useAvailableLlmProviderApiKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "key-1",
+          name: "Anthropic key",
+          provider: "anthropic",
+          scope: "org",
+          bestModelId: "claude-model",
+        },
+      ],
+    });
+    useLlmModelsByProviderMock.mockReturnValue({
+      modelsByProvider: {
+        anthropic: [
+          {
+            dbId: "claude-model",
+            id: "claude-sonnet-4-6",
+            displayName: "Claude Sonnet",
+            provider: "anthropic",
+            isFree: false,
+          },
+        ],
+      },
+    });
+    const user = userEvent.setup();
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          llmApiKeyId: "key-1",
+          modelId: "claude-model",
+          runtime: {
+            image: "example.com/claude-code:latest",
+            command: ["archestra-claude-code-runtime"],
+            claudeCode: {
+              authentication: "subscription",
+              model: "opus",
+            },
+            inferenceProtocol: "anthropic",
+            backend: "kubernetes",
+            steerMode: "tmux_keys",
+            privileged: false,
+            environment: null,
+            credentials: null,
+            ttlHours: null,
+            maxCostUsd: null,
+            idleTimeoutMinutes: null,
+          },
+        }}
+        sections={["configuration"]}
+      />,
+    );
+
+    expect(screen.getByText("Whose Claude account runs it")).toBeVisible();
+    const subscriptionRadio = screen.getByRole("radio", {
+      name: /Each person's Claude subscription/,
+    });
+    const providerRadio = screen.getByRole("radio", {
+      name: /A company API key/,
+    });
+    expect(subscriptionRadio).toBeDisabled();
+    expect(subscriptionRadio).not.toBeChecked();
+    expect(providerRadio).toBeChecked();
+    expect(
+      screen.getByText(
+        "To use personal Claude subscriptions, change Dedicated runtime → Container → Command to archestra-claude-code. Any custom logic in the current archestra-claude-code-runtime entrypoint will be lost.",
+      ),
+    ).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: /update/i }));
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(savedBody().runtime).toMatchObject({
+      command: ["archestra-claude-code-runtime"],
+      claudeCode: {
+        authentication: "provider",
+        model: "opus",
+      },
+    });
+  });
+
+  it("omits runtime from the configuration save when the caller lacks configure-runtime permission even if claudeCode.authentication is subscription on a custom command", async () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
+    vi.mocked(useHasPermissions).mockImplementation((permissions) => {
+      const requested = permissions as { agent?: string[] };
+      const hasConfigureRuntime =
+        requested.agent?.includes("configure-runtime") ?? false;
+      return {
+        data: !hasConfigureRuntime,
+      } as unknown as ReturnType<typeof useHasPermissions>;
+    });
+    const user = userEvent.setup();
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          llmApiKeyId: "key-1",
+          modelId: "claude-model",
+          runtime: {
+            image: "example.com/claude-code:latest",
+            command: ["archestra-claude-code-runtime"],
+            claudeCode: {
+              authentication: "subscription",
+              model: "opus",
+            },
+            inferenceProtocol: "anthropic",
+            backend: "kubernetes",
+            steerMode: "tmux_keys",
+            privileged: false,
+            environment: null,
+            credentials: null,
+            ttlHours: null,
+            maxCostUsd: null,
+            idleTimeoutMinutes: null,
+          },
+        }}
+        sections={["configuration"]}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /update/i }));
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(savedBody().runtime).toBeUndefined();
+  });
+
+  it("does not treat a maintained non-Claude harness on the Anthropic protocol as Claude Code", () => {
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          llmApiKeyId: "key-1",
+          modelId: "claude-model",
+          runtime: {
+            image: "example.com/opencode:latest",
+            command: ["archestra-opencode"],
+            inferenceProtocol: "anthropic",
+            backend: "kubernetes",
+            steerMode: "tmux_keys",
+            privileged: false,
+            environment: null,
+            credentials: null,
+            ttlHours: null,
+            maxCostUsd: null,
+            idleTimeoutMinutes: null,
+          },
+        }}
+        sections={["configuration"]}
+      />,
+    );
+
+    expect(
+      screen.queryByText("Whose Claude account runs it"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/change Dedicated runtime → Container → Command/),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pick API key" })).toBeVisible();
+  });
+
   it("marks the image row until a container image and command are supplied", async () => {
     vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
     const user = userEvent.setup();

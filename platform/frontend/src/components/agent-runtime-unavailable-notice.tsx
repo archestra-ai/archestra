@@ -28,10 +28,10 @@ export function AgentRuntimeUnavailableNotice({
     : capabilities?.agentSandbox?.message;
 
   return (
-    <InlineNotice variant="info" className={className}>
+    <InlineNotice variant="info" mobileLayout="stacked" className={className}>
       <Info />
       <InlineNoticeText>
-        <span className="font-medium">Agent Runtime unavailable.</span>{" "}
+        <span className="font-medium">Some agent options are unavailable.</span>{" "}
         <span>
           {canInspectCluster
             ? "The Agent Sandbox controller is not installed."
@@ -49,7 +49,7 @@ export function AgentRuntimeUnavailableNotice({
         </span>
       )}
       {canInspectCluster && diagnostics && (
-        <InlineNoticeDetails>{diagnostics}</InlineNoticeDetails>
+        <InlineNoticeDetails expandOnMobile>{diagnostics}</InlineNoticeDetails>
       )}
     </InlineNotice>
   );

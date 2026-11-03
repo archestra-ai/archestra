@@ -53,6 +53,7 @@ import {
   peerProofAuthorizes,
   verifyPeerProof,
 } from "@/openappa/peer-claims";
+import { displayedReview } from "@/openappa/review-display";
 import {
   chatOpenAppaSession,
   executeRemedyByOffer,
@@ -1240,14 +1241,15 @@ const registry = defineArchestraTools([
                 session: reviewSession,
                 offerIds: [remedy.offer_id],
               });
+              const shown = displayedReview(review);
               const outcome = await context.elicitation.elicit({
                 toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
-                message: prepared?.question ?? review.text,
+                message: prepared?.question ?? shown.text,
                 requestedSchema: HITL_RULING_SCHEMA,
                 kind: "openappa_review",
-                ...(review.tool ? { reviewedTool: review.tool } : {}),
-                ...(review.arguments
-                  ? { reviewedArguments: review.arguments }
+                ...(shown.tool ? { reviewedTool: shown.tool } : {}),
+                ...(shown.arguments
+                  ? { reviewedArguments: shown.arguments }
                   : {}),
               });
               if (outcome.status === "answered") {

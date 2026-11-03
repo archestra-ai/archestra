@@ -467,8 +467,9 @@ requires = { audience = { contains = ["self"] } }
       "kimi-read-env": ["allow", "authority human-approval"],
       "kimi-read-env-windows": ["allow", "authority human-approval"],
       "kimi-read-path-only": ["allow", "allow"],
-      "kimi-fetch": ["allow", "allow"],
-      "claude-fetch": ["allow", "allow"],
+      // A fetch outside the documentation hosts is labeled per call.
+      "kimi-fetch": ["claude-code.fetch-requirements"],
+      "claude-fetch": ["claude-code.fetch-requirements"],
       "git-push": ["claude-code.bash-repository-requirements"],
       "cowork-credentials": ["allow", "authority human-approval"],
       "cowork-git-push": ["claude-code.bash-repository-requirements"],

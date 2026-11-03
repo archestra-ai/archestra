@@ -413,6 +413,7 @@ export function RequestExample({
   credentialEnvVar = "ARCHESTRA_LLM_VIRTUAL_KEY",
   secret,
   credentialField,
+  model: fixedModel,
 }: {
   connectionBaseUrl: string;
   target: RequestTarget;
@@ -434,12 +435,18 @@ export function RequestExample({
    * set {@link credentialEnvVar}.
    */
   credentialField?: React.ReactNode;
+  /**
+   * The model the request asks for, such as a model pool's name, in place of
+   * one picked from what the credential can reach.
+   */
+  model?: string;
 }) {
   const providerCatalog = useModelProviderCatalog();
   const isPassthrough = keyType === "passthrough";
   // A credential with no provider keys of its own (passthrough, an identity
   // provider's JWT) can reach the whole catalog.
-  const usesCatalog = keyType !== "standard" && mappedProviderKeys.length === 0;
+  const usesCatalog =
+    !fixedModel && keyType !== "standard" && mappedProviderKeys.length === 0;
   const { data: passthroughModels, isPending: passthroughModelsPending } =
     useLlmModels({ enabled: usesCatalog });
   // The general catalog spans every key the creator can access. For mapped
@@ -448,7 +455,8 @@ export function RequestExample({
   const mappedKeyIds = new Set(
     mappedProviderKeys.map((mapping) => mapping.providerApiKeyId),
   );
-  const readsLinkedModels = !usesCatalog && mappedKeyIds.size > 0;
+  const readsLinkedModels =
+    !fixedModel && !usesCatalog && mappedKeyIds.size > 0;
   const { data: linkedModels, isPending: linkedModelsPending } =
     useModelsWithApiKeys({
       enabled: readsLinkedModels,
@@ -495,6 +503,7 @@ export function RequestExample({
               )
             : null,
         }));
+  // With a fixed model both queries are off, so there are no candidates.
   const modelOptions = candidates
     .filter((model) => !model.isImage || imageOperations.length > 0)
     .filter((model) =>
@@ -523,7 +532,13 @@ export function RequestExample({
     target.kind === "provider"
       ? PROVIDER_MODEL_TIERS[target.provider]?.normal
       : undefined;
-  if (!isPending && modelOptions.length === 0 && defaultModel) {
+  if (fixedModel) {
+    modelOptions.push({
+      value: fixedModel,
+      supportedEndpoints: null,
+      isImage: false,
+    });
+  } else if (!isPending && modelOptions.length === 0 && defaultModel) {
     modelOptions.push({
       value: defaultModel,
       supportedEndpoints: null,
@@ -614,69 +629,71 @@ export function RequestExample({
           )}
         </p>
       )}
-      <div
-        className={cn(
-          "grid gap-3",
-          showImageOperationPicker ? "sm:grid-cols-2" : "sm:max-w-80",
-        )}
-      >
-        <div className="space-y-1.5">
-          <Label htmlFor="virtual-key-example-model">Model</Label>
-          <Select
-            value={model ?? ""}
-            onValueChange={setPickedModel}
-            disabled={isPending || modelOptions.length === 0}
-          >
-            <SelectTrigger id="virtual-key-example-model" className="w-full">
-              <SelectValue
-                placeholder={
-                  isPending ? "Loading models…" : "No models found for this key"
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {modelOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.value}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {usesCatalog && (
-            <p className="text-xs text-muted-foreground">
-              From your organization&apos;s model catalog. Your own key may have
-              access to different models.
-            </p>
+      {!fixedModel && (
+        <div
+          className={cn(
+            "grid gap-3",
+            showImageOperationPicker ? "sm:grid-cols-2" : "sm:max-w-80",
           )}
-        </div>
-        {showImageOperationPicker && (
+        >
           <div className="space-y-1.5">
-            <Label htmlFor="virtual-key-image-operation">Image operation</Label>
+            <Label htmlFor="virtual-key-example-model">Model</Label>
             <Select
-              value={selectedImageOperation}
-              onValueChange={(value) =>
-                setImageOperation(value as ImageExampleOperation)
-              }
+              value={model ?? ""}
+              onValueChange={setPickedModel}
+              disabled={isPending || modelOptions.length === 0}
             >
-              <SelectTrigger
-                id="virtual-key-image-operation"
-                className="w-full"
-              >
-                <SelectValue />
+              <SelectTrigger id="virtual-key-example-model" className="w-full">
+                <SelectValue
+                  placeholder={
+                    isPending ? "Loading models…" : "No models found for this key"
+                  }
+                />
               </SelectTrigger>
               <SelectContent>
-                {imageOperations.map((operation) => (
-                  <SelectItem key={operation} value={operation}>
-                    {operation === "generate"
-                      ? "Generate an image"
-                      : "Edit an image"}
+                {modelOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.value}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {usesCatalog && (
+              <p className="text-xs text-muted-foreground">
+                From your organization&apos;s model catalog. Your own key may have
+                access to different models.
+              </p>
+            )}
           </div>
-        )}
-      </div>
+          {showImageOperationPicker && (
+            <div className="space-y-1.5">
+              <Label htmlFor="virtual-key-image-operation">Image operation</Label>
+              <Select
+                value={selectedImageOperation}
+                onValueChange={(value) =>
+                  setImageOperation(value as ImageExampleOperation)
+                }
+              >
+                <SelectTrigger
+                  id="virtual-key-image-operation"
+                  className="w-full"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {imageOperations.map((operation) => (
+                    <SelectItem key={operation} value={operation}>
+                      {operation === "generate"
+                        ? "Generate an image"
+                        : "Edit an image"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+      )}
       {selectedImageOperation === "edit" && (
         <p className="text-xs text-muted-foreground">
           Save your input image as <InlineCode>edit.png</InlineCode> in the

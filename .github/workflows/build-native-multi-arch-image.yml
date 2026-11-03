@@ -329,19 +329,12 @@ jobs:
           fetch-depth: 1
           ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
 
-      # A "rerun failed jobs" keeps successful build legs from prior attempts.
-      # Select the newest successful digest for each leg from this run.
       - name: Download digests
         uses: $/.github/actions/github-download-artifact
         with:
-          path: /tmp/all-digests
-          pattern: ${{ inputs.image_name }}-digests-*
-
-      - name: Select digests across rerun attempts
-        env:
-          IMAGE_NAME: ${{ inputs.image_name }}
-          EXPECTED_LEGS: ${{ inputs.amd64_only && '1' || '2' }}
-        run: python3 .github/scripts/select-digest-artifacts.py /tmp/all-digests /tmp/digests "$IMAGE_NAME" "$EXPECTED_LEGS"
+          path: /tmp/digests
+          pattern: ${{ inputs.image_name }}-digests-*-${{ github.run_attempt }}
+          merge-multiple: true
 
       # No builder setup needed: `docker buildx imagetools` is a pure registry
       # manifest operation and runs on the preinstalled buildx CLI.

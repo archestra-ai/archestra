@@ -789,6 +789,7 @@ function recomputeReceipt(params: {
     : ("complete" as const);
   const usage: PricedBillingUsage = {
     ...before,
+    mode: "enforce",
     status,
     issues,
     components,

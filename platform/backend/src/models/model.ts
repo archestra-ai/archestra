@@ -33,6 +33,7 @@ import type {
   ProviderModelPricing,
   ProviderPricedModel,
 } from "@/types/provider-model-pricing";
+import LegacySpendModel from "./legacy-spend";
 import ModelTeamModel from "./model-team";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import type { ResourceAccessFilter } from "./resource-permission-subject";
@@ -194,6 +195,16 @@ function readOllamaDefaultNumCtx(
 }
 
 class ModelModel {
+  /** Freeze legacy estimates before startup can refresh catalog or bundled rates. */
+  static async freezeLegacySpendOnStart(): Promise<void> {
+    await withDbTransaction(async (tx) => {
+      await ModelModel.freezeLegacySpend(
+        tx,
+        await LegacySpendModel.pendingModelIds(tx),
+      );
+    });
+  }
+
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -429,6 +440,7 @@ class ModelModel {
    */
   static async create(data: CreateModel): Promise<Model> {
     return withDbTransaction(async (tx) => {
+      await ModelModel.freezeLegacySpend(tx, [data.modelId]);
       const [result] = await tx
         .insert(schema.modelsTable)
         .values(data)
@@ -452,6 +464,7 @@ class ModelModel {
    */
   static async upsert(data: CreateModel): Promise<Model> {
     return withDbTransaction(async (tx) => {
+      await ModelModel.freezeLegacySpend(tx, [data.modelId]);
       const [result] = await tx
         .insert(schema.modelsTable)
         .values(data)
@@ -532,6 +545,10 @@ class ModelModel {
 
     // Wrap all batches in a transaction to ensure atomicity
     const results = await withDbTransaction(async (tx) => {
+      await ModelModel.freezeLegacySpend(
+        tx,
+        dataArray.map((data) => data.modelId),
+      );
       const batchResults: Model[] = [];
 
       for (let i = 0; i < dataArray.length; i += BATCH_SIZE) {
@@ -636,6 +653,10 @@ class ModelModel {
     );
 
     const results = await withDbTransaction(async (tx) => {
+      await ModelModel.freezeLegacySpend(
+        tx,
+        dataArray.map((data) => data.modelId),
+      );
       const batchResults: Model[] = [];
 
       for (let i = 0; i < dataArray.length; i += BATCH_SIZE) {
@@ -775,14 +796,17 @@ class ModelModel {
       return false;
     }
 
-    await db
-      .delete(schema.modelsTable)
-      .where(
-        and(
-          eq(schema.modelsTable.provider, provider),
-          eq(schema.modelsTable.modelId, modelId),
-        ),
-      );
+    await withDbTransaction(async (tx) => {
+      await ModelModel.freezeLegacySpend(tx, [modelId]);
+      await tx
+        .delete(schema.modelsTable)
+        .where(
+          and(
+            eq(schema.modelsTable.provider, provider),
+            eq(schema.modelsTable.modelId, modelId),
+          ),
+        );
+    });
 
     return true;
   }
@@ -791,7 +815,16 @@ class ModelModel {
    * Delete all models
    */
   static async deleteAll(): Promise<void> {
-    await db.delete(schema.modelsTable);
+    await withDbTransaction(async (tx) => {
+      const models = await tx
+        .select({ modelId: schema.modelsTable.modelId })
+        .from(schema.modelsTable);
+      await ModelModel.freezeLegacySpend(
+        tx,
+        models.map((model) => model.modelId),
+      );
+      await tx.delete(schema.modelsTable);
+    });
   }
 
   /**
@@ -800,24 +833,53 @@ class ModelModel {
    * can define custom token pricing for metrics.
    */
   static async deleteOrphanedModels(): Promise<number> {
-    const orphaned = await db
-      .delete(schema.modelsTable)
-      .where(
-        and(
-          eq(schema.modelsTable.discoveredViaLlmProxy, false),
-          notInArray(
-            schema.modelsTable.id,
-            db
-              .selectDistinct({
-                modelId: schema.llmProviderApiKeyModelsTable.modelId,
-              })
-              .from(schema.llmProviderApiKeyModelsTable),
+    return withDbTransaction(async (tx) => {
+      const candidates = await tx
+        .select({
+          id: schema.modelsTable.id,
+          modelId: schema.modelsTable.modelId,
+        })
+        .from(schema.modelsTable)
+        .where(
+          and(
+            eq(schema.modelsTable.discoveredViaLlmProxy, false),
+            notInArray(
+              schema.modelsTable.id,
+              tx
+                .selectDistinct({
+                  modelId: schema.llmProviderApiKeyModelsTable.modelId,
+                })
+                .from(schema.llmProviderApiKeyModelsTable),
+            ),
           ),
-        ),
-      )
-      .returning({ id: schema.modelsTable.id });
-
-    return orphaned.length;
+        );
+      await ModelModel.freezeLegacySpend(
+        tx,
+        candidates.map((model) => model.modelId),
+      );
+      if (!candidates.length) return 0;
+      const orphaned = await tx
+        .delete(schema.modelsTable)
+        .where(
+          and(
+            inArray(
+              schema.modelsTable.id,
+              candidates.map((model) => model.id),
+            ),
+            eq(schema.modelsTable.discoveredViaLlmProxy, false),
+            notInArray(
+              schema.modelsTable.id,
+              tx
+                .selectDistinct({
+                  modelId: schema.llmProviderApiKeyModelsTable.modelId,
+                })
+                .from(schema.llmProviderApiKeyModelsTable),
+            ),
+          ),
+        )
+        .returning({ id: schema.modelsTable.id });
+      return orphaned.length;
+    });
   }
 
   /**
@@ -869,13 +931,28 @@ class ModelModel {
       set.customOutputLength = data.customOutputLength;
     }
 
-    const [result] = await db
-      .update(schema.modelsTable)
-      .set(set)
-      .where(eq(schema.modelsTable.id, id))
-      .returning();
-
-    return result || null;
+    return withDbTransaction(async (tx) => {
+      const existing = await tx
+        .select({ modelId: schema.modelsTable.modelId })
+        .from(schema.modelsTable)
+        .where(eq(schema.modelsTable.id, id));
+      if (
+        Object.keys(data).some(
+          (key) =>
+            key.startsWith("customPrice") || key.startsWith("longContext"),
+        )
+      )
+        await ModelModel.freezeLegacySpend(
+          tx,
+          existing.map((model) => model.modelId),
+        );
+      const [result] = await tx
+        .update(schema.modelsTable)
+        .set(set)
+        .where(eq(schema.modelsTable.id, id))
+        .returning();
+      return result ?? null;
+    });
   }
 
   /**
@@ -942,10 +1019,20 @@ class ModelModel {
       supportsReasoningEffort: boolean | null;
     },
   ): Promise<void> {
-    await db
-      .update(schema.modelsTable)
-      .set({ ...capabilities, lastSyncedAt: new Date() })
-      .where(eq(schema.modelsTable.id, id));
+    await withDbTransaction(async (tx) => {
+      const existing = await tx
+        .select({ modelId: schema.modelsTable.modelId })
+        .from(schema.modelsTable)
+        .where(eq(schema.modelsTable.id, id));
+      await ModelModel.freezeLegacySpend(
+        tx,
+        existing.map((model) => model.modelId),
+      );
+      await tx
+        .update(schema.modelsTable)
+        .set({ ...capabilities, lastSyncedAt: new Date() })
+        .where(eq(schema.modelsTable.id, id));
+    });
   }
 
   /** Attach rates for a selected instance, without mutating the shared catalog.
@@ -1105,9 +1192,16 @@ class ModelModel {
     };
   }
 
-  /**
-   * Resolve the effective input/output price (per million) and its source.
-   */
+  private static async freezeLegacySpend(tx: Transaction, modelIds: string[]) {
+    await LegacySpendModel.freeze({
+      tx,
+      modelIds,
+      prices: (model, modelId) =>
+        ModelModel.getEffectivePricing(model, modelId),
+    });
+  }
+
+  /** Resolve the effective input/output price (per million) and its source. */
   private static getEffectiveBasePricing(
     model: Model | null,
     modelId?: string,

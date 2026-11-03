@@ -22,9 +22,9 @@ export function EstimatedSpendBadge() {
         </Badge>
       </TooltipTrigger>
       <TooltipContent className="max-w-72">
-        Part of this spend is estimated: some requests used tokens their model
-        has no price for. Set the model's prices under Models, then recompute
-        its past costs.
+        This spend includes estimated prices or a frozen legacy balance.
+        Recomputing past costs corrects recorded requests. Legacy balances
+        without request-level accounting stay fixed until the limit resets.
       </TooltipContent>
     </Tooltip>
   );

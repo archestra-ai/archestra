@@ -417,7 +417,7 @@ class LimitModel {
         userId: interactions.userId,
         createdAt: interactions.createdAt,
       }),
-      sql`NOT EXISTS (SELECT 1 FROM ${schema.interactionBillingTable} WHERE ${schema.interactionBillingTable.interactionId} = ${interactions.id} AND ${schema.interactionBillingTable.usage}->>'mode' = 'enforce')`,
+      sql`NOT EXISTS (SELECT 1 FROM ${schema.interactionBillingTable} WHERE ${schema.interactionBillingTable.interactionId} = ${interactions.id} AND ${schema.interactionBillingTable.usage}->>'mode' IN ('enforce', 'legacy'))`,
     ];
     if (params.models && params.models.length > 0) {
       conditions.push(inArray(interactions.model, params.models) as SQL);
@@ -544,7 +544,10 @@ class LimitModel {
           isNotNull(receipt.userId),
           eq(receipt.billingMode, "metered"),
           isNull(receipt.billingTeamId),
-          sql`${receipt.usage}->>'mode' = 'enforce'`,
+          sql`${receipt.usage}->>'mode' IN ('enforce', 'legacy')`,
+          params.environmentId
+            ? undefined
+            : sql`COALESCE(${receipt.usage}->>'legacyDefaultEnvironmentOnly', 'false') <> 'true'`,
           buildUsagePeriodStartCondition(
             params.cleanupInterval,
             receipt.createdAt,
@@ -2632,7 +2635,7 @@ async function getDefaultUserLimitUsage(params: {
       userId: sql`${params.userId}`,
       createdAt: schema.interactionsTable.createdAt,
     }),
-    sql`NOT EXISTS (SELECT 1 FROM ${schema.interactionBillingTable} WHERE ${schema.interactionBillingTable.interactionId} = ${schema.interactionsTable.id} AND ${schema.interactionBillingTable.usage}->>'mode' = 'enforce')`,
+    sql`NOT EXISTS (SELECT 1 FROM ${schema.interactionBillingTable} WHERE ${schema.interactionBillingTable.interactionId} = ${schema.interactionsTable.id} AND ${schema.interactionBillingTable.usage}->>'mode' IN ('enforce', 'legacy'))`,
   ];
 
   if (params.models && params.models.length > 0) {
@@ -2722,7 +2725,10 @@ async function getDefaultUserLimitUsage(params: {
         eq(receipt.userId, params.userId),
         eq(receipt.billingMode, "metered"),
         isNull(receipt.billingTeamId),
-        sql`${receipt.usage}->>'mode' = 'enforce'`,
+        sql`${receipt.usage}->>'mode' IN ('enforce', 'legacy')`,
+        params.environmentId
+          ? undefined
+          : sql`COALESCE(${receipt.usage}->>'legacyDefaultEnvironmentOnly', 'false') <> 'true'`,
         buildUsagePeriodStartCondition(
           params.cleanupInterval,
           receipt.createdAt,

@@ -94,7 +94,7 @@ import { enterpriseLicenseMiddleware } from "@/middleware";
 import { initAuditDecisions } from "@/middleware/audit-decisions";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { initAuditRegistry } from "@/middleware/audit-log-registry";
-import { PlaywrightRuntimeModel } from "@/models";
+import { ModelModel, PlaywrightRuntimeModel } from "@/models";
 import InteractionSessionHeadModel from "@/models/interaction-session-head";
 import OrganizationModel from "@/models/organization";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
@@ -937,6 +937,11 @@ const startWebServer = async () => {
 
     // Initialize database connection first
     await initializeDatabase();
+
+    // Legacy counters have no historical price snapshot. Freeze their current
+    // estimate before seeding/catalog sync or accepting price edits. Replays
+    // use the existing covered counters and receipts and add no further cost.
+    await ModelModel.freezeLegacySpendOnStart();
 
     // Start the cache manager before seeding: seeding invalidates cached
     // entries, and against an unstarted manager those deletes are skipped.

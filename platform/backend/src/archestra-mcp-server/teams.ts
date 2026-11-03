@@ -471,7 +471,7 @@ async function findTeamInOrg(
 
 /**
  * Whether the caller can manage every team in the org. Mirrors the REST route:
- * the org-level `team:create` permission is the "team manager" signal (held by
+ * the org-level `team:update` permission is the "team manager" signal (held by
  * admins and custom roles granted it). MCP sessions carry no request headers,
  * so this resolves from the user's role permissions.
  */
@@ -483,7 +483,7 @@ async function isOrgTeamManager(context: ArchestraContext): Promise<boolean> {
     context.userId,
     context.organizationId,
     "team",
-    "create",
+    "update",
   );
 }
 

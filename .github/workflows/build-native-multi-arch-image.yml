@@ -347,9 +347,9 @@ jobs:
         run: |
           shopt -s nullglob
           digest_files=(/tmp/digests/*)
-          if (("${#digest_files[@]}" == "$EXPECTED_LEGS")); then
+          if [ "${#digest_files[@]}" -eq "$EXPECTED_LEGS" ]; then
             echo "recover=false" >> "$GITHUB_OUTPUT"
-          elif (("${#digest_files[@]}" < "$EXPECTED_LEGS")); then
+          elif [ "${#digest_files[@]}" -lt "$EXPECTED_LEGS" ]; then
             echo "recover=true" >> "$GITHUB_OUTPUT"
           else
             echo "::error::Unexpected number of current-attempt digest files"

@@ -368,6 +368,73 @@ describe("ExecTerminal", () => {
     expect(second.sendInput).not.toHaveBeenCalled();
   });
 
+  it("drops a pending Ctrl+C confirmation when the attachment is replaced or its connection drops", async () => {
+    let sessionHandlers: ExecSessionHandlers | null = null;
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        sessionHandlers = handlers;
+        handlers.onStarted(null);
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+    render(
+      <ExecTerminal
+        sessionKey="reattach"
+        transport={transport}
+        isActive
+        interruptPrompt={{
+          title: "Send Ctrl+C to the agent?",
+          description: "It stops the running turn.",
+          confirmLabel: "Send Ctrl+C",
+        }}
+      />,
+    );
+    await screen.findByText("Connected");
+    const ask = () => {
+      const keyHandler = terminalHarness.keyHandler;
+      if (!keyHandler) throw new Error("Terminal did not initialize");
+      expect(
+        keyHandler(
+          new KeyboardEvent("keydown", {
+            key: "c",
+            ctrlKey: true,
+            cancelable: true,
+          }),
+        ),
+      ).toBe(false);
+    };
+    const dialogGone = () =>
+      waitFor(() =>
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+      );
+
+    // The socket drops with the question open: the question is void.
+    ask();
+    await screen.findByRole("dialog", { name: "Send Ctrl+C to the agent?" });
+    act(() => sessionHandlers?.onConnectionLost?.());
+    await dialogGone();
+    expect(transport.sendInput).not.toHaveBeenCalled();
+
+    // The transport attaches again, possibly to a newer turn, while the
+    // question is open: the question is about the old attachment.
+    act(() => sessionHandlers?.onStarted(null));
+    ask();
+    await screen.findByRole("dialog", { name: "Send Ctrl+C to the agent?" });
+    act(() => sessionHandlers?.onStarted(null));
+    await dialogGone();
+    expect(transport.sendInput).not.toHaveBeenCalled();
+
+    // The live attachment still gets its interrupt when confirmed.
+    ask();
+    fireEvent.click(await screen.findByRole("button", { name: "Send Ctrl+C" }));
+    await waitFor(() =>
+      expect(transport.sendInput).toHaveBeenCalledWith("\x03"),
+    );
+    expect(transport.sendInput).toHaveBeenCalledOnce();
+  });
+
   it("restores browser defaults and blocks mouse, keyboard, paste and pending input when off", async () => {
     const transport: ExecSessionTransport = {
       open: (handlers) => {

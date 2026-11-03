@@ -55,6 +55,12 @@ export type ExecSessionHandlers = {
    * the plain connecting state instead.
    */
   onProgress?: (progress: ExecSessionProgress) => void;
+  /**
+   * The connection under the session dropped; the transport will attach
+   * again on its own and report `onStarted` when it has. Optional: a
+   * transport that cannot see its own link reports nothing.
+   */
+  onConnectionLost?: () => void;
 };
 
 /**
@@ -78,10 +84,12 @@ export type InterruptPrompt = {
   confirmLabel: string;
 };
 
-/** A Ctrl+C held back for confirmation, and the session it was typed in. */
+/** A Ctrl+C held back for confirmation, and the attachment it was typed in. */
 type PendingInterrupt = {
   sessionKey: string;
   transport: ExecSessionTransport;
+  /** The attachment at the time of the key; a reattach is a different one. */
+  generation: number;
 };
 
 export type ExecSessionTransport = {
@@ -172,6 +180,10 @@ export function ExecTerminal({
   // outlives a session change must not stop the session that replaced it.
   const [pendingInterrupt, setPendingInterrupt] =
     useState<PendingInterrupt | null>(null);
+  // Counts attachments of this terminal: a reconnect lands in a new one, which
+  // can be a newer turn of the same run, so a question asked in the old one
+  // must not be answered into it.
+  const attachGenerationRef = useRef(0);
   // Enter on the open prompt means "keep running": the safe answer first.
   const cancelInterruptRef = useRef<HTMLButtonElement>(null);
   const initialProgressRef = useRef(initialProgress);
@@ -314,6 +326,7 @@ export function ExecTerminal({
           setPendingInterrupt({
             sessionKey,
             transport: transportRef.current,
+            generation: attachGenerationRef.current,
           });
           return false;
         }
@@ -386,6 +399,9 @@ export function ExecTerminal({
           },
           onStarted: (startedCommand) => {
             if (disposed) return;
+            // A new attachment, not the one any open question was about.
+            attachGenerationRef.current += 1;
+            setPendingInterrupt(null);
             setStatus("connected");
             setProgress(null);
             setCommand(startedCommand);
@@ -406,6 +422,7 @@ export function ExecTerminal({
           onError: (message) => {
             if (disposed) return;
             setStatus("error");
+            attachGenerationRef.current += 1;
             setPendingInterrupt(null);
             setErrorMessage(message);
             onErrorRef.current?.();
@@ -414,8 +431,16 @@ export function ExecTerminal({
             if (disposed) return;
             setClosedReason(reason);
             setStatus("disconnected");
+            attachGenerationRef.current += 1;
             setPendingInterrupt(null);
             onClosedRef.current?.();
+          },
+          onConnectionLost: () => {
+            if (disposed) return;
+            // The next attachment may be a newer turn; a question asked in
+            // this one is void.
+            attachGenerationRef.current += 1;
+            setPendingInterrupt(null);
           },
         });
       };
@@ -467,6 +492,9 @@ export function ExecTerminal({
       disposed = true;
       cleanupPromise?.then((cleanupFn) => cleanupFn?.());
       cleanup();
+      // The terminal that asked is gone with its session, and its own close
+      // callback is ignored from here on, so dismiss the question here.
+      setPendingInterrupt(null);
     };
   }, [isActive, sessionKey, cleanup]);
 
@@ -497,12 +525,6 @@ export function ExecTerminal({
     [onDropFiles, status],
   );
 
-  // A session change or deactivation disposes the terminal that asked, and
-  // its own close callback is ignored by then, so dismiss the question here.
-  useEffect(() => {
-    return () => setPendingInterrupt(null);
-  }, [sessionKey, isActive]);
-
   const closeInterruptPrompt = useCallback(() => {
     setPendingInterrupt(null);
   }, []);
@@ -510,10 +532,18 @@ export function ExecTerminal({
   const sendInterrupt = useCallback(() => {
     const pending = pendingInterrupt;
     setPendingInterrupt(null);
-    // Sent to the session that asked, and only while it is the one shown.
-    if (!pending || pending.sessionKey !== sessionKey) return;
+    // Sent to the attachment that asked, and only while it is still the live
+    // one: not to a later turn the transport attached to in the meantime.
+    if (
+      !pending ||
+      pending.sessionKey !== sessionKey ||
+      pending.generation !== attachGenerationRef.current ||
+      status !== "connected"
+    ) {
+      return;
+    }
     pending.transport.sendInput("\x03");
-  }, [pendingInterrupt, sessionKey]);
+  }, [pendingInterrupt, sessionKey, status]);
 
   const handleCopyCommand = useCallback(async () => {
     if (!command) return;

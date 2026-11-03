@@ -149,7 +149,10 @@ export function createAgentRunTransport(taskId: string): ExecSessionTransport {
         });
       const unsubscribeConnection = websocketService.onConnectionChange(
         (connected) => {
+          // A dropped socket loses the server's subscription; attach again
+          // when it returns, and let the terminal know in between.
           if (connected) openSession();
+          else handlers.onConnectionLost?.();
         },
       );
       if (websocketService.isConnected()) {

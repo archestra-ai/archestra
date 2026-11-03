@@ -3866,7 +3866,7 @@ Required RBAC permission: [`team:create`](/docs/reference/permissions#team:creat
 
 Required RBAC permission: [`team:read`](/docs/reference/permissions#team:read)
 
-Additional access requirement: Callers without organization-level team management ([`team:create`](/docs/reference/permissions#team:create)) can only read teams they are a member of.
+Additional access requirement: Callers without organization-level team management ([`team:update`](/docs/reference/permissions#team:update)) can only read teams they are a member of.
 
 ##### Input
 
@@ -3898,7 +3898,7 @@ Additional access requirement: Callers without organization-level team managemen
 
 Required RBAC permission: [`team:read`](/docs/reference/permissions#team:read)
 
-Additional access requirement: Callers without organization-level team management ([`team:create`](/docs/reference/permissions#team:create)) only see teams they are a member of.
+Additional access requirement: Callers without organization-level team management ([`team:update`](/docs/reference/permissions#team:update)) only see teams they are a member of.
 
 ##### Input
 
@@ -3982,7 +3982,7 @@ Required RBAC permission: [`team:delete`](/docs/reference/permissions#team:delet
 
 Required RBAC permission: [`team:read`](/docs/reference/permissions#team:read)
 
-Additional access requirement: Callers without organization-level team management ([`team:create`](/docs/reference/permissions#team:create)) can only read members of teams they are a member of.
+Additional access requirement: Callers without organization-level team management ([`team:update`](/docs/reference/permissions#team:update)) can only read members of teams they are a member of.
 
 ##### Input
 
@@ -4008,7 +4008,7 @@ Additional access requirement: Callers without organization-level team managemen
 
 Required RBAC permission: [`team:read`](/docs/reference/permissions#team:read)
 
-Additional access requirement: Beyond [`team:read`](/docs/reference/permissions#team:read), the caller must be an organization-level team manager (a role granting [`team:create`](/docs/reference/permissions#team:create)) or an **admin** of the target team.
+Additional access requirement: Beyond [`team:read`](/docs/reference/permissions#team:read), the caller must be an organization-level team manager (a role granting [`team:update`](/docs/reference/permissions#team:update)) or an **admin** of the target team.
 
 ##### Input
 
@@ -4036,7 +4036,7 @@ Additional access requirement: Beyond [`team:read`](/docs/reference/permissions#
 
 Required RBAC permission: [`team:read`](/docs/reference/permissions#team:read)
 
-Additional access requirement: Beyond [`team:read`](/docs/reference/permissions#team:read), the caller must be an organization-level team manager (a role granting [`team:create`](/docs/reference/permissions#team:create)) or an **admin** of the target team.
+Additional access requirement: Beyond [`team:read`](/docs/reference/permissions#team:read), the caller must be an organization-level team manager (a role granting [`team:update`](/docs/reference/permissions#team:update)) or an **admin** of the target team.
 
 ##### Input
 
@@ -4064,7 +4064,7 @@ Additional access requirement: Beyond [`team:read`](/docs/reference/permissions#
 
 Required RBAC permission: [`team:read`](/docs/reference/permissions#team:read)
 
-Additional access requirement: Beyond [`team:read`](/docs/reference/permissions#team:read), the caller must be an organization-level team manager (a role granting [`team:create`](/docs/reference/permissions#team:create)) or an **admin** of the target team.
+Additional access requirement: Beyond [`team:read`](/docs/reference/permissions#team:read), the caller must be an organization-level team manager (a role granting [`team:update`](/docs/reference/permissions#team:update)) or an **admin** of the target team.
 
 ##### Input
 

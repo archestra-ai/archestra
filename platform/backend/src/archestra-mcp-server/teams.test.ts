@@ -682,6 +682,37 @@ describe("team tool execution", () => {
 
   // === RBAC ===
 
+  test("team creation permission cannot promote a member of an existing team", async ({
+    makeTeam,
+    makeUser,
+    makeCustomRole,
+    makeMember,
+    makeTeamMember,
+  }) => {
+    const team = await makeTeam(organizationId, adminUserId);
+    const user = await makeUser({ email: "team-creator@test.com" });
+    const role = await makeCustomRole(organizationId, {
+      permission: { team: ["read", "create"] },
+    });
+    await makeMember(user.id, organizationId, { role: role.role });
+    await makeTeamMember(team.id, user.id, { role: "member" });
+    const context: ArchestraContext = {
+      agent: { id: testAgent.id, name: testAgent.name },
+      userId: user.id,
+      organizationId,
+    };
+
+    const result = await executeArchestraTool(
+      toolName("update_team_member_role"),
+      { team_id: team.id, user_id: user.id, role: "admin" },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("must be a team admin");
+    expect(await TeamModel.getMemberRole(team.id, user.id)).toBe("member");
+  });
+
   test("create_team is denied without team:create permission", async ({
     makeUser,
     makeMember,

@@ -447,6 +447,20 @@ test.each([
   },
   {
     command: "build",
+    fail: "wrapper-signal",
+    expected: 143,
+    modes: ["default"],
+    args: ["--webpack"],
+  },
+  {
+    command: "build",
+    fail: "wrapper-signal",
+    expected: 143,
+    modes: ["cache", "compile"],
+    args: [],
+  },
+  {
+    command: "build",
     fail: "",
     expected: 0,
     modes: ["compile"],
@@ -540,26 +554,51 @@ fs.mkdirSync(".next/static", { recursive: true });
 fs.writeFileSync(".next/static/current.js", "current js");
 fs.mkdirSync(".next/standalone/frontend/.next", { recursive: true });
 fs.writeFileSync(".next/standalone/frontend/server.js", "current server");
+if (process.env.ARCHESTRA_TEST_NEXT_FAIL === "wrapper-signal") {
+  fs.writeFileSync(log + ".ready", "");
+  setInterval(() => {}, 1000);
+}
 if (mode === process.env.ARCHESTRA_TEST_NEXT_FAIL) process.exit(mode === "compile" ? 17 : 23);
 if ((mode === "compile" || mode === "default") && process.env.ARCHESTRA_TEST_NEXT_FAIL === "signal") process.kill(process.pid, "SIGTERM");
 if (process.env.ARCHESTRA_TEST_NEXT_FAIL === "assets") fs.rmSync(".next/static", { recursive: true });
 `,
   );
+  const buildArgs = [
+    path.join(scripts, "dev-lite.sh"),
+    "frontend-artifact",
+    command,
+    ...(command === "pack"
+      ? [dir]
+      : [
+          ...(args.includes("--webpack") ? [] : ["--turbopack"]),
+          "--debug-build-paths",
+          "app/page with $literal",
+          ...args,
+        ]),
+  ];
+  const supervisor = `
+const { spawn } = require("node:child_process");
+const fs = require("node:fs");
+const child = spawn("bash", process.argv.slice(1), { detached: true, stdio: ["ignore", "pipe", "pipe"] });
+child.stdout.pipe(process.stdout);
+child.stderr.pipe(process.stderr);
+const stop = () => process.kill(-child.pid, "SIGTERM");
+const timeout = setTimeout(stop, 10000);
+const ready = setInterval(() => {
+  if (fs.existsSync(process.env.ARCHESTRA_TEST_NEXT_LOG + ".ready")) {
+    clearInterval(ready);
+    stop();
+  }
+}, 10);
+child.on("close", (code, signal) => {
+  clearInterval(ready);
+  clearTimeout(timeout);
+  process.exitCode = code ?? (128 + require("node:os").constants.signals[signal]);
+});
+`;
   const result = spawnSync(
-    "bash",
-    [
-      path.join(scripts, "dev-lite.sh"),
-      "frontend-artifact",
-      command,
-      ...(command === "pack"
-        ? [dir]
-        : [
-            ...(args.includes("--webpack") ? [] : ["--turbopack"]),
-            "--debug-build-paths",
-            "app/page with $literal",
-            ...args,
-          ]),
-    ],
+    fail === "wrapper-signal" ? process.execPath : "bash",
+    fail === "wrapper-signal" ? ["-e", supervisor, ...buildArgs] : buildArgs,
     {
       cwd: platform,
       encoding: "utf8",
@@ -574,6 +613,9 @@ if (process.env.ARCHESTRA_TEST_NEXT_FAIL === "assets") fs.rmSync(".next/static",
     },
   );
   expect(result.status, result.stderr).toBe(expected);
+  if (fail === "wrapper-signal") {
+    expect(fs.existsSync(`${log}.ready`)).toBe(true);
+  }
   const events = fs
     .readFileSync(log, "utf8")
     .trim()
@@ -606,7 +648,7 @@ if (process.env.ARCHESTRA_TEST_NEXT_FAIL === "assets") fs.rmSync(".next/static",
     expect(fs.existsSync(path.join(served, ".next/static/current.js"))).toBe(
       false,
     );
-    if (args.includes("--webpack")) {
+    if (command === "build") {
       expect(fs.readFileSync(path.join(served, "server.js"), "utf8")).toBe(
         "previous server",
       );

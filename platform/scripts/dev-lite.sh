@@ -674,6 +674,56 @@ prepare_frontend_standalone() {
     || die "could not copy the frontend's static and public files next to its server"
 }
 
+# A subshell keeps these lifetime traps out of callers that source dev-lite.
+# Cancellation may terminate the whole build group, including this shell.
+run_frontend_artifact_build() (
+  local launcher="$1" split="$2" package_assets="$3"
+  shift 3
+  local standalone_root="$PLATFORM_DIR/frontend/.next/standalone" previous="" complete=0 build_started=0 mode
+  cleanup_frontend_artifact() {
+    local status=$?
+    trap - EXIT
+    trap '' HUP INT TERM
+    if [ "$complete" = 0 ]; then
+      if [ -n "$previous" ] && [ -d "$previous/tree" ]; then
+        rm -rf "$standalone_root" && mv "$previous/tree" "$standalone_root" \
+          || die "could not restore the frontend's previous standalone build"
+      elif [ "$build_started" = 1 ]; then
+        rm -rf "$standalone_root" || die "could not remove the incomplete standalone build"
+      fi
+    fi
+    if [ -n "$previous" ]; then
+      rm -rf "$previous" || die "could not remove the previous standalone build's backup"
+    fi
+    exit "$status"
+  }
+  trap cleanup_frontend_artifact EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  # Next can clear .next and replace server.js before failing. Keep the whole
+  # serving tree outside .next until generation and asset packaging succeed.
+  if [ -d "$standalone_root" ]; then
+    previous="$(mktemp -d "$PLATFORM_DIR/frontend/.standalone-previous.XXXXXX")" \
+      && mv "$standalone_root" "$previous/tree" \
+      || die "could not preserve the frontend's previous standalone build"
+  fi
+  build_started=1
+  if [ "$split" = 1 ]; then
+    # Release Turbopack's compiler heap before starting generation workers.
+    for mode in compile generate; do
+      frontend_build_node -e "$launcher" -- "$@" "--experimental-build-mode=$mode" || exit $?
+    done
+  else
+    frontend_build_node -e "$launcher" -- "$@" || exit $?
+  fi
+  if [ "$package_assets" = 1 ]; then
+    prepare_frontend_standalone
+    complete=1
+  fi
+  exit 0
+)
+
 # CI (.github/workflows/frontend-dev-cache.yml): `key` prints the key of this
 # checkout's frontend as an Agent Runtime's stack builds it, `pack <dir>`
 # builds it that way and collects the artifacts to publish. `build` uses the
@@ -704,40 +754,15 @@ cmd_frontend_artifact() {
       # build keeps its usual single phase, but still packages assets before
       # the heavy lane resumes the standalone server.
       local launcher='const { status, signal } = require("node:child_process").spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build", ...process.argv.slice(1)], { stdio: "inherit" }); process.exit(status ?? (signal ? 128 + require("node:os").constants.signals[signal] : 1));'
-      if [ "$webpack" = 1 ]; then
-        local standalone_root="$PLATFORM_DIR/frontend/.next/standalone" previous="" status=0
-        # Next can replace server.js before failing. Keep the complete last
-        # serving tree, including traced dependencies, until packaging succeeds.
-        if [ -d "$standalone_root" ]; then
-          previous="$(mktemp -d "$PLATFORM_DIR/frontend/.standalone-previous.XXXXXX")" \
-            && mv "$standalone_root" "$previous/tree" \
-            || die "could not preserve the frontend's previous standalone build"
-        fi
-        frontend_build_node -e "$launcher" -- "$@" || status=$?
-        if [ "$status" = 0 ] && { [ "$explicit_mode" = 0 ] || [ "$selected_mode" = generate ]; }; then
-          (prepare_frontend_standalone) || status=$?
-        fi
-        if [ "$status" != 0 ] || { [ "$explicit_mode" = 1 ] && [ "$selected_mode" != generate ]; }; then
-          rm -rf "$standalone_root" \
-            && { [ -z "$previous" ] || mv "$previous/tree" "$standalone_root"; } \
-            || die "could not restore the frontend's previous standalone build"
-        fi
-        if [ -n "$previous" ]; then rm -rf "$previous"; fi
-        return "$status"
-      fi
-      frontend_prebuilt install-cache || true
-      if [ "$explicit_mode" = 1 ]; then
-        frontend_build_node -e "$launcher" -- "$@" || return $?
-      else
-        # Turbopack retains its native compiler heap after compilation.
-        # A new process for generation keeps it out of the page worker's budget.
-        for mode in compile generate; do
-          frontend_build_node -e "$launcher" -- "$@" "--experimental-build-mode=$mode" || return $?
-        done
+      local split=0 package_assets=0
+      if [ "$webpack" = 0 ]; then
+        frontend_prebuilt install-cache || true
+        if [ "$explicit_mode" = 0 ]; then split=1; fi
       fi
       if [ "$explicit_mode" = 0 ] || [ "$selected_mode" = generate ]; then
-        prepare_frontend_standalone
+        package_assets=1
       fi
+      run_frontend_artifact_build "$launcher" "$split" "$package_assets" "$@"
       ;;
     pack)
       [ -n "${2:-}" ] || die "frontend-artifact pack: expected an output directory"

@@ -26,6 +26,9 @@ import {
 
 export type WaiverKind = Exclude<OpenAppaYellKind, "agent">;
 
+/** Whether a waived review's yell exists for the agent to point the user to. */
+export type WaivedReviewRecord = "recorded" | "reports_off" | "failed";
+
 type BreakTheGlassSettings = {
   active: boolean;
   humanApprovalMode: HumanApprovalMode;
@@ -38,7 +41,8 @@ type BreakTheGlassSettings = {
  * waiting for human approval (it offers a review) under `humanApprovalMode`,
  * or a call no remedy can lift under `unapprovableBlockMode`. A call that
  * needs the `blocked` mark is never let through, and a call with remedies the
- * agent can run itself is left to them.
+ * agent can run itself, an offer of its own or another tool to run first, is
+ * left to them.
  */
 export function waiverFor(params: {
   decision: {
@@ -55,6 +59,8 @@ export function waiverFor(params: {
   if (!settings.active || decision.recorded !== true || decision.unanswered)
     return null;
   if (HARD_BLOCK.test(decision.feedback)) return null;
+  // Another tool to run first is a remedy with no offer id; the agent runs it.
+  if (REDISPATCH.test(decision.feedback)) return null;
   if (decision.review?.length) {
     // A remedy the agent can run itself is left to the agent: the setting
     // stands in for a person, not for the agent's own plans.
@@ -111,22 +117,26 @@ export function isUnattendedRequest(params: {
 }
 
 /**
- * Notes that the proxy admitted a request of this session as unattended, for
- * the gateway: a remedy plan the agent runs there can need a person's review,
- * and the gateway sees the runtime credential and the client's headers only
- * through this note. The proxy refreshes it on every request, so a lost note
- * costs one review that waits for a person, as it did before.
+ * Notes for the gateway whether the proxy admitted this session's latest
+ * request as unattended: a remedy plan the agent runs there can need a
+ * person's review, and the gateway sees the runtime credential and the
+ * client's headers only through this note. The proxy writes it on every
+ * request and withdraws it once a person is back (a session resumed without
+ * the header), so a lost note costs one review that waits for a person, as it
+ * did before.
  */
 export async function rememberUnattendedSession(
   session: OpenAppaSession,
+  unattended: boolean,
 ): Promise<void> {
   const key = unattendedSessionKey(session);
-  // A session sends many requests; one note per process every few minutes
-  // keeps the day-long note fresh.
-  if (noted.get(key)) return;
+  // A session sends many requests; one write per process every few minutes
+  // keeps the day-long note fresh, and a changed answer is written at once.
+  if (noted.get(key) === unattended) return;
   try {
-    await cacheManager.set<true>(key, true, TimeInMs.Day);
-    noted.set(key, true);
+    if (unattended) await cacheManager.set<true>(key, true, TimeInMs.Day);
+    else await cacheManager.delete(key);
+    noted.set(key, unattended);
   } catch (error) {
     logger.warn(
       { err: error, sessionId: session.session_id },
@@ -228,49 +238,38 @@ export async function recordWaivedCalls(params: {
   return true;
 }
 
-/** `recordWaivedCalls` for one call. */
-export async function recordWaivedCall(params: {
-  session: OpenAppaSession;
-  toolCallId: string;
-  tool: string;
-  kind: WaiverKind;
-  superyell: boolean;
-}): Promise<boolean> {
-  const { session, superyell, ...call } = params;
-  return recordWaivedCalls({ session, calls: [call], superyell });
-}
-
 /**
  * Records a review the platform waived at the gateway, when a remedy plan
  * needed a person's approval in an unattended session: the yell, and with
- * `superyell` the session bypass, as `recordWaivedCall` does. The runtime
+ * `superyell` the session bypass, as `recordWaivedCalls` does. The runtime
  * authorizes the plan itself, so no call marker is needed; the record follows
- * that authorization. Returns false when the record fails, so the receipt can
- * say so.
+ * that authorization. Says when there is no yell to point the user to: the
+ * record failed, or reports are off.
  */
 export async function recordWaivedReview(params: {
   session: OpenAppaSession;
   tool: string;
   superyell: boolean;
-}): Promise<boolean> {
+}): Promise<WaivedReviewRecord> {
+  const waiver = { ...params, kind: "approval_waived" as const, review: true };
   // Reports off: nothing to record a yell in, so nothing turns the session off.
-  const superyell = params.superyell && openappaYellEnabled();
+  if (!openappaYellEnabled()) {
+    logWaiver({ ...waiver, superyell: false });
+    return "reports_off";
+  }
   try {
     await withDbTransaction((tx) =>
-      recordWaiver(
-        { ...params, superyell, kind: "approval_waived", calls: 1 },
-        tx,
-      ),
+      recordWaiver({ ...params, kind: "approval_waived", calls: 1 }, tx),
     );
   } catch (err) {
     logger.warn(
       { err, sessionId: params.session.session_id, tool: params.tool },
       "OpenAPPA could not record a waived review",
     );
-    return false;
+    return "failed";
   }
-  logWaiver({ ...params, superyell, kind: "approval_waived", review: true });
-  return true;
+  logWaiver(waiver);
+  return "recorded";
 }
 
 // ===
@@ -334,13 +333,17 @@ function unattendedSessionKey(session: OpenAppaSession): AllowedCacheKey {
   return `${CacheKey.OpenAppaUnattendedSession}-${digest}`;
 }
 
-// The runtime renders the missing marks as `requires attention: <mark>, …`;
-// newer OpenAPPA names the reserved mark `hard-block`. The deny decision
-// carries no structured mark list, so the rendering is what there is to read.
+// The deny decision carries no structured gap list, so the runtime's rendering
+// is what there is to read. It renders the missing marks as `requires
+// attention: <mark>, …`; the reserved mark is `blocked`, which an upstream
+// OpenAPPA prototype renames `hard-block` (653c7e3b0), and a miss here would
+// let a hard block through. A tool to run first (a redispatch, which mints no offer) renders as
+// `- Run <tool> first; it clears: <gaps>.` under `Continue:`.
 const HARD_BLOCK = /requires attention: [^\n]*\b(?:blocked|hard-block)\b/;
+const REDISPATCH = /^\s*- Run .+ first; it clears: /m;
 
 const noted = registerProcessLocalCache(
-  new LRUCacheManager<true>({
+  new LRUCacheManager<boolean>({
     maxSize: 10_000,
     defaultTtl: TimeInMs.Minute * 10,
   }),

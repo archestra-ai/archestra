@@ -9,7 +9,6 @@ import {
   humanApprovalWaived,
   isUnattendedRequest,
   isUnattendedSession,
-  recordWaivedCall,
   recordWaivedCalls,
   recordWaivedReview,
   rememberUnattendedSession,
@@ -19,6 +18,18 @@ import { findUnenforcedCalls, isUnenforcedSession } from "./unenforced";
 
 // The unattended note lives in the real cache.
 setupTestCacheManager();
+
+/** `recordWaivedCalls` for one call. */
+function recordWaivedCall(params: {
+  session: Parameters<typeof recordWaivedCalls>[0]["session"];
+  toolCallId: string;
+  tool: string;
+  kind: "approval_waived" | "block_waived";
+  superyell: boolean;
+}) {
+  const { session, superyell, ...call } = params;
+  return recordWaivedCalls({ session, calls: [call], superyell });
+}
 
 const on = {
   active: true,
@@ -88,7 +99,7 @@ describe("waiverFor", () => {
     ).toBe("block_waived");
   });
 
-  test("never lets through the blocked mark, unrecorded denials, remedies the agent can run, or anything while enforcement is off", () => {
+  test("never lets through the blocked mark, unrecorded denials, remedies the agent can run (an offer or a tool to run first), or anything while enforcement is off", () => {
     const everything = {
       active: true,
       humanApprovalMode: "everywhere" as const,
@@ -98,6 +109,17 @@ describe("waiverFor", () => {
       { ...noRemedy, feedback: "requires attention: blocked" },
       { ...noRemedy, feedback: "requires attention: hard-block" },
       { ...noRemedy, feedback: "requires attention: signoff, blocked" },
+      // A redispatch names another tool to run first and mints no offer.
+      {
+        ...noRemedy,
+        feedback:
+          "[appa] Blocked: send_email cannot run yet.\n\nWhy:\n  - requires a prior scan effect\n\nContinue:\n  - Run scan first; it clears: requires a prior scan effect.",
+      },
+      {
+        ...review,
+        feedback:
+          "requires attention: human-approval\n\nContinue:\n  - Run scan first; it clears: requires a prior scan effect.",
+      },
       { ...review, feedback: "requires attention: blocked" },
       { feedback: "annotator failed", unanswered: true, offers: [] },
       { feedback: "not loaded" },
@@ -299,7 +321,7 @@ test("a waived review records a yell for the reviewed tool and follows the Yell 
       tool: "host/archestra/Agent",
       superyell: false,
     }),
-  ).toBe(true);
+  ).toBe("recorded");
   expect(await isUnenforcedSession(session)).toBe(false);
   expect(
     await recordWaivedReview({
@@ -307,7 +329,7 @@ test("a waived review records a yell for the reviewed tool and follows the Yell 
       tool: "host/archestra/Agent",
       superyell: true,
     }),
-  ).toBe(true);
+  ).toBe("recorded");
   expect(await isUnenforcedSession(session)).toBe(true);
   expect(await yellsOf(organizationId, session.session_id)).toEqual([
     expect.objectContaining({
@@ -317,15 +339,30 @@ test("a waived review records a yell for the reviewed tool and follows the Yell 
       message: expect.stringContaining("host/archestra/Agent"),
     }),
   ]);
+  // A failed write says so; the receipt then tells the user.
+  const failing = vi
+    .spyOn(OpenAppaYellModel, "recordWaiver")
+    .mockRejectedValueOnce(new Error("yell storage down"));
+  try {
+    expect(
+      await recordWaivedReview({
+        session,
+        tool: "host/archestra/Agent",
+        superyell: true,
+      }),
+    ).toBe("failed");
+  } finally {
+    failing.mockRestore();
+  }
 });
 
-test("the proxy's unattended note is read for that session only", async ({
+test("the proxy's unattended note is read for that session only, and withdrawn once a person is back", async ({
   makeOrganization,
 }) => {
   const organizationId = (await makeOrganization()).id;
   const session = { organization_id: organizationId, session_id: "s6" };
   expect(await isUnattendedSession(session)).toBe(false);
-  await rememberUnattendedSession(session);
+  await rememberUnattendedSession(session, true);
   expect(await isUnattendedSession(session)).toBe(true);
   expect(await isUnattendedSession({ ...session, session_id: "s7" })).toBe(
     false,
@@ -333,6 +370,9 @@ test("the proxy's unattended note is read for that session only", async ({
   expect(
     await isUnattendedSession({ ...session, organization_id: "other" }),
   ).toBe(false);
+  // A session resumed with a person present stops being answered for.
+  await rememberUnattendedSession(session, false);
+  expect(await isUnattendedSession(session)).toBe(false);
 });
 
 test("humanApprovalWaived reaches an unattended session, everywhere, or nowhere", () => {
@@ -435,6 +475,16 @@ test("a batch's waived calls commit together as one yell per tool, and reports o
         superyell: true,
       }),
     ).toBe(true);
+    expect(await yellsOf(organizationId, quiet.session_id)).toEqual([]);
+    expect(await isUnenforcedSession(quiet)).toBe(false);
+    // A waived review says there is no yell to point to.
+    expect(
+      await recordWaivedReview({
+        session: quiet,
+        tool: "host/archestra/Agent",
+        superyell: true,
+      }),
+    ).toBe("reports_off");
     expect(await yellsOf(organizationId, quiet.session_id)).toEqual([]);
     expect(await isUnenforcedSession(quiet)).toBe(false);
   } finally {

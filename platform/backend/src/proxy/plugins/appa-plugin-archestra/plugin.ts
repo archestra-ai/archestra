@@ -403,9 +403,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
     this.bindings.set(context.resources, binding);
     // The gateway decides a remedy plan's review without the runtime
-    // credential or the client's headers, so it learns from the proxy that no
-    // person answers for this session.
-    if (binding.unattended) await rememberUnattendedSession(binding.session);
+    // credential or the client's headers, so it learns from the proxy whether
+    // a person answers for this session.
+    await rememberUnattendedSession(binding.session, binding.unattended);
   }
 
   async onToolResults(
@@ -1673,6 +1673,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const notice = binding.request.tools?.notice;
     // Only the ordinary calls the runtime ruled on here can be waived.
     const evaluatedIds = new Set(rest.map((call) => call.id));
+    // The calls the runtime admitted; a batch that never reaches the client
+    // cancels them, so no call stays open that will never run.
+    const admittedCalls = () =>
+      rest.flatMap((each) =>
+        decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
+      );
     // Read once for the batch, by the first denial.
     let breakTheGlass: ReturnType<typeof getGuardrailsDeployment> | undefined;
     // The denied calls Break the glass lets through, recorded together once
@@ -1828,7 +1834,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         !(binding.adapter && isChildSpawnCall(binding.adapter, call))
       ) {
         breakTheGlass ??= getGuardrailsDeployment();
-        const settings = await breakTheGlass;
+        let settings: Awaited<typeof breakTheGlass>;
+        try {
+          settings = await breakTheGlass;
+        } catch (error) {
+          await cancelCalls(session, admittedCalls(), policy);
+          throw error;
+        }
         const waiver = waiverFor({
           decision,
           settings,
@@ -2034,13 +2046,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         superyell: waiverSuperyell,
       }))
     ) {
-      await cancelCalls(
-        session,
-        rest.flatMap((each) =>
-          decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
-        ),
-        policy,
-      );
+      await cancelCalls(session, admittedCalls(), policy);
       throw new ApiError(
         503,
         "OpenAPPA could not record the calls it let through; retry the request",

@@ -11,8 +11,8 @@ export type UnsupportedAppaClientAction = z.infer<
 /**
  * What happens to a call waiting for human approval: it waits for a person
  * (`block`), or the platform lets it through and records a yell in sessions
- * sent with the unattended header (`unattended`) or in every session
- * (`everywhere`).
+ * no person answers for (`unattended`: Agent Runtime runs, workloads, and any
+ * request sending the unattended header) or in every session (`everywhere`).
  */
 export const HumanApprovalModeSchema = z.enum([
   "block",

@@ -1877,10 +1877,10 @@ describe("OpenAPPA tool execution", () => {
           result: { content: [{ type: "text", text: "Authorized" }] },
           known: true,
         });
-      await rememberUnattendedSession({
-        organization_id: orgId,
-        session_id: "session-1",
-      });
+      await rememberUnattendedSession(
+        { organization_id: orgId, session_id: "session-1" },
+        true,
+      );
 
       const result = await remedy();
 
@@ -1919,6 +1919,45 @@ describe("OpenAPPA tool execution", () => {
       ).toBe(false);
     });
 
+    test("with yell reports off, the plan still goes through and the receipt says no yell was recorded", async () => {
+      const yellEnabled = config.openappa.yellEnabled;
+      config.openappa.yellEnabled = false;
+      try {
+        await settings("unattended", true);
+        vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue(
+          offerReview,
+        );
+        vi.spyOn(openappaService, "executeRemedyByOffer").mockResolvedValue({
+          result: { content: [{ type: "text", text: "Authorized" }] },
+          known: true,
+        });
+        await rememberUnattendedSession(
+          { organization_id: orgId, session_id: "session-1" },
+          true,
+        );
+
+        const result = await remedy();
+
+        expect(result.content).toEqual([
+          { type: "text", text: "Authorized" },
+          {
+            type: "text",
+            text: expect.stringContaining("no yell was recorded"),
+          },
+        ]);
+        expect(await yells()).toEqual([]);
+        // Nothing recorded a yell, so nothing turned the session off.
+        expect(
+          await isUnenforcedSession({
+            organization_id: orgId,
+            session_id: "session-1",
+          }),
+        ).toBe(false);
+      } finally {
+        config.openappa.yellEnabled = yellEnabled;
+      }
+    });
+
     test("with the Yell tool turning Guardrails off, the session leaves OpenAPPA as after an agent's yell", async () => {
       config.openappa.yellEnabled = true;
       await settings("unattended", true);
@@ -1929,10 +1968,10 @@ describe("OpenAPPA tool execution", () => {
         result: { content: [{ type: "text", text: "Authorized" }] },
         known: true,
       });
-      await rememberUnattendedSession({
-        organization_id: orgId,
-        session_id: "session-1",
-      });
+      await rememberUnattendedSession(
+        { organization_id: orgId, session_id: "session-1" },
+        true,
+      );
       expect((await remedy()).isError).toBeFalsy();
       expect(await yells()).toEqual([
         expect.objectContaining({ kind: "approval_waived", superyell: true }),
@@ -2014,10 +2053,10 @@ describe("OpenAPPA tool execution", () => {
         offerReview,
       );
       const executeSpy = vi.spyOn(openappaService, "executeRemedyByOffer");
-      await rememberUnattendedSession({
-        organization_id: orgId,
-        session_id: "session-1",
-      });
+      await rememberUnattendedSession(
+        { organization_id: orgId, session_id: "session-1" },
+        true,
+      );
       expect((await remedy()).structuredContent).toMatchObject({
         outcome: "review_required",
       });
@@ -2057,10 +2096,10 @@ describe("OpenAPPA tool execution", () => {
         result: refused,
         known: true,
       });
-      await rememberUnattendedSession({
-        organization_id: orgId,
-        session_id: "session-1",
-      });
+      await rememberUnattendedSession(
+        { organization_id: orgId, session_id: "session-1" },
+        true,
+      );
       expect(await remedy()).toEqual(refused);
       expect(await yells()).toEqual([]);
       expect(
@@ -2083,10 +2122,10 @@ describe("OpenAPPA tool execution", () => {
           result: { content: [{ type: "text", text: "Denied" }] },
           known: true,
         });
-      await rememberUnattendedSession({
-        organization_id: orgId,
-        session_id: "session-1",
-      });
+      await rememberUnattendedSession(
+        { organization_id: orgId, session_id: "session-1" },
+        true,
+      );
       // A person answered the staged review before this remedy call.
       const session = { organization_id: orgId, session_id: "session-1" };
       await stageHitlReview({

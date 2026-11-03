@@ -60,19 +60,22 @@ function renderNotice() {
 }
 
 describe("Agent Runtime unavailable notice", () => {
-  it("reveals the discovered missing API resources only when requested", async () => {
+  it("keeps diagnostics available on mobile and toggles them on larger screens", async () => {
     renderNotice();
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Agent Runtime unavailable. The Agent Sandbox controller is not installed.",
+      "Some agent options are unavailable. The Agent Sandbox controller is not installed.",
     );
     const toggle = await screen.findByRole("button", { name: "Show details" });
-    expect(screen.queryByText(/Missing API resources/)).not.toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(toggle);
     expect(screen.getByText(/Missing API resources/)).toHaveTextContent(
       "sandboxclaims.extensions.agents.x-k8s.io",
     );
     fireEvent.click(screen.getByRole("button", { name: "Hide details" }));
-    expect(screen.queryByText(/Missing API resources/)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Show details" }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText(/Missing API resources/)).toBeInTheDocument();
   });
 
   it("does not inspect the cluster or expose diagnostics to members", () => {

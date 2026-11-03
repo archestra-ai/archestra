@@ -145,11 +145,13 @@ describe("AgentCreatePage", () => {
       screen
         .getAllByRole("heading", { level: 2 })
         .map((heading) => heading.textContent),
-    ).toEqual(["Agent Runtimes Beta", "External agents"]);
-    expect(screen.getByText("Agent Runtime unavailable.")).toBeVisible();
+    ).toEqual(["Choose an agent", "Connect an external agent"]);
     expect(
-      screen.queryByText(/sandboxes\.agents\.x-k8s\.io/),
-    ).not.toBeInTheDocument();
+      screen.getByText("Some agent options are unavailable."),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Show details" }),
+    ).toHaveAttribute("aria-expanded", "false");
     await user.click(screen.getByRole("button", { name: "Show details" }));
     expect(screen.getByText(/Missing API resources/)).toHaveTextContent(
       "sandboxes.agents.x-k8s.io",
@@ -173,7 +175,7 @@ describe("AgentCreatePage", () => {
     await user.click(screen.getByRole("button", { name: /claude code/i }));
     expect(formProps).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("button", { name: /new archestra agent/i }),
+      screen.getByRole("button", { name: /^archestra built into/i }),
     ).toBeEnabled();
   });
 
@@ -196,7 +198,11 @@ describe("AgentCreatePage", () => {
     );
     renderAgentCreatePage({ canCreateAgent: false });
 
-    for (const name of [/new archestra agent/i, /codex/i, /connect via a2a/i]) {
+    for (const name of [
+      /^archestra built into/i,
+      /codex/i,
+      /connect via a2a/i,
+    ]) {
       const choice = screen.getByRole("button", { name });
       expect(choice).toBeDisabled();
       expect(choice).toHaveAccessibleDescription(
@@ -221,7 +227,7 @@ describe("AgentCreatePage", () => {
       screen.getByText("Configure runtime permission required"),
     ).toBeVisible();
     expect(
-      screen.getByRole("button", { name: /new archestra agent/i }),
+      screen.getByRole("button", { name: /^archestra built into/i }),
     ).toBeEnabled();
     for (const name of [/codex/i, /custom image/i]) {
       const choice = screen.getByRole("button", { name });
@@ -248,13 +254,13 @@ describe("AgentCreatePage", () => {
     renderAgentCreatePage();
 
     expect(
-      screen.getByRole("heading", { level: 2, name: "Agent Runtimes Beta" }),
+      screen.getByRole("heading", { level: 2, name: "Choose an agent" }),
     ).toBeInTheDocument();
     expect(
       screen
         .getAllByRole("heading", { level: 2 })
         .map((heading) => heading.textContent),
-    ).toEqual(["Agent Runtimes Beta", "External agents"]);
+    ).toEqual(["Choose an agent", "Connect an external agent"]);
     for (const name of [
       "Claude Code",
       "Codex",
@@ -269,15 +275,16 @@ describe("AgentCreatePage", () => {
         screen.getByRole("button", { name: new RegExp(name, "i") }),
       ).toBeInTheDocument();
     }
-    // The platform's own harness is offered on its own, not as a coding agent.
+    // The built-in agent and runtime templates share one catalog.
     const codingAgents = screen
-      .getByRole("heading", { level: 2, name: "Agent Runtimes Beta" })
+      .getByRole("heading", { level: 2, name: "Choose an agent" })
       .closest("section") as HTMLElement;
     expect(
       within(codingAgents)
         .getAllByRole("button")
         .map((button) => button.querySelector(".font-medium")?.textContent),
     ).toEqual([
+      "Archestra",
       "Claude Code",
       "Codex",
       "OpenCode",
@@ -459,7 +466,7 @@ describe("AgentCreatePage", () => {
     const user = userEvent.setup();
     const { rerender } = renderAgentCreatePage();
     await user.click(
-      screen.getByRole("button", { name: /new archestra agent/i }),
+      screen.getByRole("button", { name: /^archestra built into/i }),
     );
     expect(
       screen.getByTestId(E2eTestId.AgentSetupSubmitButton),
@@ -478,7 +485,7 @@ describe("AgentCreatePage", () => {
     const user = userEvent.setup();
     renderAgentCreatePage();
     await user.click(
-      screen.getByRole("button", { name: /new archestra agent/i }),
+      screen.getByRole("button", { name: /^archestra built into/i }),
     );
     await user.click(screen.getByRole("button", { name: "fire created" }));
     expect(push).toHaveBeenCalledWith("/chat?agentId=new-1");
@@ -494,7 +501,7 @@ describe("AgentCreatePage", () => {
     );
     renderAgentCreatePage();
     await user.click(
-      screen.getByRole("button", { name: /new archestra agent/i }),
+      screen.getByRole("button", { name: /^archestra built into/i }),
     );
     expect(screen.getByRole("button", { name: "Create Agent" })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "fire created" }));
@@ -531,7 +538,7 @@ describe("AgentCreatePage", () => {
     mockPermissions({ canRead: false });
     renderAgentCreatePage();
     await user.click(
-      screen.getByRole("button", { name: /new archestra agent/i }),
+      screen.getByRole("button", { name: /^archestra built into/i }),
     );
 
     await user.click(screen.getByRole("button", { name: "fire created" }));
@@ -555,7 +562,7 @@ describe("AgentCreatePage", () => {
     mockPermissions({ canRead: undefined, isPending: true });
     const { rerender } = renderAgentCreatePage();
     await user.click(
-      screen.getByRole("button", { name: /new archestra agent/i }),
+      screen.getByRole("button", { name: /^archestra built into/i }),
     );
     await user.click(screen.getByRole("button", { name: "fire created" }));
 
@@ -575,7 +582,7 @@ describe("AgentCreatePage", () => {
     mockPermissions({ canRead: undefined, isPending: true });
     const { rerender } = renderAgentCreatePage();
     await user.click(
-      screen.getByRole("button", { name: /new archestra agent/i }),
+      screen.getByRole("button", { name: /^archestra built into/i }),
     );
     await user.click(screen.getByRole("button", { name: "fire created" }));
 
@@ -592,7 +599,7 @@ describe("AgentCreatePage", () => {
     renderAgentCreatePage();
 
     await user.click(
-      screen.getByRole("button", { name: /new archestra agent/i }),
+      screen.getByRole("button", { name: /^archestra built into/i }),
     );
     await user.click(screen.getByRole("button", { name: "Catalog" }));
     expect(
@@ -606,7 +613,7 @@ describe("AgentCreatePage", () => {
     renderAgentCreatePage();
 
     await user.click(
-      screen.getByRole("button", { name: /new archestra agent/i }),
+      screen.getByRole("button", { name: /^archestra built into/i }),
     );
     await user.click(screen.getByRole("link", { name: "Agents" }));
 
@@ -621,7 +628,7 @@ describe("AgentCreatePage", () => {
     renderAgentCreatePage();
 
     await user.click(
-      screen.getByRole("button", { name: /new archestra agent/i }),
+      screen.getByRole("button", { name: /^archestra built into/i }),
     );
     await user.click(screen.getByRole("button", { name: "make dirty" }));
     await user.click(screen.getByRole("button", { name: "Catalog" }));
@@ -644,7 +651,7 @@ describe("AgentCreatePage", () => {
     renderAgentCreatePage();
 
     await user.click(
-      screen.getByRole("button", { name: /new archestra agent/i }),
+      screen.getByRole("button", { name: /^archestra built into/i }),
     );
     await user.click(screen.getByRole("button", { name: "make dirty" }));
     await user.click(screen.getByRole("link", { name: "Agents" }));

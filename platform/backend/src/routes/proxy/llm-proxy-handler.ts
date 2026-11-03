@@ -130,6 +130,7 @@ import {
   withFirstChunk,
 } from "./upstream-connection-retry";
 import * as utils from "./utils";
+import { isBedrockPromptOverBudget } from "./utils/bedrock-prompt-budget";
 import type { SessionSource } from "./utils/headers/session-id";
 import {
   type LockedChatAuditDisposition,
@@ -1267,6 +1268,29 @@ export async function handleLLMProxy<
       );
     }
     const finalRequest = repairedRequest as TRequest;
+
+    // Check the outbound Converse text before sending it to Bedrock.
+    if (provider.interactionType === "bedrock:converse") {
+      const contextModel = await ModelModel.findByProviderAndModelId(
+        "bedrock",
+        actualModel,
+      );
+      if (
+        isBedrockPromptOverBudget(
+          finalRequest,
+          actualModel,
+          contextModel
+            ? ModelModel.resolveArchitecturalContextLength(contextModel)
+            : null,
+        )
+      ) {
+        throw new ApiError(
+          400,
+          "The prompt is too long for this model's context window. Shorten the conversation or start a new session.",
+          ArchestraInternalErrorCode.ContextLengthExceeded,
+        );
+      }
+    }
 
     // Which called tool names count as available to evaluatePolicies, in the
     // canonical form tool-call names are compared in. Read from the request

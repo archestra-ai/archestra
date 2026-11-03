@@ -576,12 +576,22 @@ describe("OpenAPPA tool execution", () => {
     expect(read).not.toHaveBeenCalled();
   });
 
-  test("a malformed remedy call is shown the advertised arguments, not the proxy's", async () => {
-    const result = await executeArchestraTool(
-      toolFullName,
-      { plan: "Accept restriction" },
-      mockContext,
-    );
+  test.each([
+    {
+      name: "a wrong offer_id type",
+      args: { offer_id: 7, plan: "Accept restriction" },
+    },
+    {
+      name: "no offer_id and nothing to declare",
+      args: { plan: "Accept restriction" },
+    },
+  ])("a malformed remedy call is shown the advertised arguments, not the proxy's: $name", async ({
+    args,
+  }) => {
+    const executeSpy = vi.spyOn(openappaService, "executeRemedyByOffer");
+    const result = await executeArchestraTool(toolFullName, args, mockContext);
+
+    expect(executeSpy).not.toHaveBeenCalled();
 
     expect(result.isError).toBe(true);
     const text = result.content
@@ -656,6 +666,36 @@ describe("OpenAPPA tool execution", () => {
     );
     expect(stolen.isError).toBe(true);
     expect(executeSpy).not.toHaveBeenCalled();
+  });
+
+  test("declares a subagent's return ahead of its spawn with no offer and no review", async () => {
+    const reviewSpy = vi.spyOn(openappaService, "loadOfferReview");
+    const executeSpy = vi
+      .spyOn(openappaService, "executeRemedyByOffer")
+      .mockResolvedValue({
+        result: { content: [{ type: "text", text: "[appa] Declared." }] },
+        known: true,
+      });
+    const label = { trust: "suspicious", audience: ["self"] };
+
+    const result = await executeArchestraTool(
+      toolFullName,
+      { label, trajectory: trajectory() },
+      mockContext,
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(result.content).toEqual([
+      { type: "text", text: "[appa] Declared." },
+    ]);
+    expect(executeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        args: { label },
+        sessionId: "session-1",
+      }),
+    );
+    expect(executeSpy.mock.calls[0]?.[0]).not.toHaveProperty("ruling");
+    expect(reviewSpy).not.toHaveBeenCalled();
   });
 
   test("executes unreviewed remedy offer immediately without prompting", async () => {

@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-// Prebuilt native addons for the dev stack.
+// Prebuilt native addons for the dev stack and the backend tests.
 //
 // CI builds the five napi addons (`pnpm build:dev`, Debian bookworm, linux
 // x64 glibc) for every `main` tree of archestra-rs and publishes them as an
 // OCI artifact in the public registry, tagged with the key below. A dev stack
 // on a checkout whose archestra-rs tree matches a published one installs
-// those binaries instead of compiling them (about 3.5 minutes of 7 CPUs).
+// those binaries instead of compiling them (about 3.5 minutes of 7 CPUs); the
+// backend's vitest config installs them the same way when a checkout nobody
+// prepared, such as a code review's, has none (backend/src/test/native-addons.ts).
 //
 //   node scripts/napi-prebuilt.mjs <package>...   install, e.g. app-runtime-rs
 //   node scripts/napi-prebuilt.mjs --key          print the cache key

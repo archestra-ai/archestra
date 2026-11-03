@@ -1,6 +1,7 @@
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { enterOpenappaEncryptedChat } from "@/openappa/encrypted-chat";
 import { validateAzureModelOperation } from "@/services/azure-model-capabilities";
+import { resolvePricingQuote } from "@/services/billable-usage";
 import {
   fireworksModelAliases,
   isFireworksEndpoint,
@@ -1419,6 +1420,26 @@ async function handleObservedLLMProxy<
   // it is refused only where a spend budget applies to it.
   const mediaPricedForBudget =
     provider.mediaTariffCovers?.(requestAdapter.getOriginalRequest()) === true;
+  const unpricedVllmModel = async (
+    model: string,
+    targetProvider: SupportedProvider,
+    providerApiKeyId?: string,
+    endpoint?: "fireworks" | "other",
+  ): Promise<string | undefined> => {
+    // Fireworks has its own published pricing and conservative estimate policy.
+    if (targetProvider !== "vllm" || endpoint === "fireworks") return undefined;
+    const quote = await resolvePricingQuote({
+      model,
+      provider: targetProvider,
+      providerApiKeyId,
+      billingEndpoint: endpoint,
+      usage: { inputTokens: 0, outputTokens: 0 },
+    });
+    return quote.request.prices.input === null ||
+      quote.request.prices.output === null
+      ? model
+      : undefined;
+  };
   const limitContext = {
     modelAliases,
     unpricedMediaModel:
@@ -1483,6 +1504,14 @@ async function handleObservedLLMProxy<
     const limitViolation =
       await LimitValidationService.checkLimitsBeforeRequest({
         ...limitContext,
+        unpricedModel: deferModelScopedLimits
+          ? undefined
+          : await unpricedVllmModel(
+              actualModel,
+              providerName,
+              perKeyChatApiKeyId,
+              billingEndpoint,
+            ),
         model: deferModelScopedLimits ? undefined : actualModel,
         deferModelScopedLimits,
       });
@@ -1588,6 +1617,12 @@ async function handleObservedLLMProxy<
       const routedLimitViolation =
         await LimitValidationService.checkLimitsBeforeRequest({
           ...limitContext,
+          unpricedModel: await unpricedVllmModel(
+            actualModel,
+            providerName,
+            perKeyChatApiKeyId,
+            billingEndpoint,
+          ),
           model: actualModel,
         });
       if (routedLimitViolation) {
@@ -2140,6 +2175,12 @@ async function handleObservedLLMProxy<
       );
       const violation = await LimitValidationService.checkLimitsBeforeRequest({
         ...limitContext,
+        unpricedModel: await unpricedVllmModel(
+          autoRoutedMember.modelId,
+          autoRoutedMember.provider,
+          autoRoutedMember.providerApiKeyId,
+          upstreamAttempt.billingEndpoint,
+        ),
         model: autoRoutedMember.modelId,
         modelAliases: upstreamAttempt.modelAliases,
       });
@@ -2217,6 +2258,12 @@ async function handleObservedLLMProxy<
               const violation =
                 await LimitValidationService.checkLimitsBeforeRequest({
                   ...limitContext,
+                  unpricedModel: await unpricedVllmModel(
+                    model,
+                    member.provider,
+                    member.providerApiKeyId,
+                    upstreamAttempt.billingEndpoint,
+                  ),
                   model,
                   modelAliases: upstreamAttempt.modelAliases,
                 });

@@ -371,9 +371,9 @@ const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
 ]);
 
 /**
- * Providers that charge no per-token rate, so their real price is zero rather
- * than unknown: the operator runs the server (vLLM, self-hosted Ollama), or the
- * vendor bills a flat subscription metered on compute time (Ollama's cloud).
+ * Providers without a published per-token rate: the operator runs the server
+ * (vLLM, self-hosted Ollama), or the vendor bills a flat subscription metered on
+ * compute time (Ollama's cloud). vLLM rates remain unknown until configured.
  *
  * Listed explicitly rather than derived from the self-hosted-provider set it
  * currently matches, so that adding a keyless provider that does bill per token

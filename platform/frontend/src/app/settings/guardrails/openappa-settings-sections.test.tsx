@@ -255,11 +255,14 @@ test("an administrator changes the Yell tool, and the environment sets Human app
   };
   // Release 1.4: the environment sets these two; the page shows them only.
   expect(await screen.findByText("Waive in unattended sessions")).toBeVisible();
-  expect(
-    screen.getByText("ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE"),
-  ).toBeVisible();
+  const variable = (name: string) =>
+    screen.getByText(
+      (_, element) =>
+        element?.tagName === "CODE" && element.textContent === name,
+    );
+  expect(variable("ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE")).toBeVisible();
   expect(screen.getByText("Keep the block")).toBeVisible();
-  expect(screen.getByText("ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE")).toBeVisible();
+  expect(variable("ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE")).toBeVisible();
   expect(
     screen.queryByRole("combobox", { name: "Human approval" }),
   ).not.toBeInTheDocument();

@@ -736,6 +736,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       ...continuedReviewUpdates,
       ...replayedReviewUpdates,
     };
+    keepBreakTheGlassReceipts({ binding, toolResults, toolResultUpdates });
     if (
       binding.adapter &&
       !binding.chat &&
@@ -5975,6 +5976,46 @@ function isClaudeProgressLabelRequest(
     "Describe your most recent action in 3-5 words using present tense (-ing). Name the file or function, not the branch. Do not use tools.\n\n",
   );
 }
+
+/**
+ * The gateway appends a Break the glass receipt to a remedy plan's result
+ * when the platform approved its review in place of a person. Release 1.4's
+ * runtime admits a remedy result as its own rendering, which leaves that
+ * second block out, so the agent would not learn that no person ruled. Put
+ * it back on the remedy tool's admitted text. Only the gateway writes it.
+ */
+function keepBreakTheGlassReceipts(params: {
+  binding: AppaPluginBinding;
+  toolResults: LlmProxyToolResultsContext["toolResults"];
+  toolResultUpdates: Record<string, string>;
+}): void {
+  for (const result of params.toolResults) {
+    const admitted = params.toolResultUpdates[result.id];
+    if (admitted === undefined || result.isError) continue;
+    if (
+      !isSpecialToolMember(
+        params.binding,
+        {
+          name: result.name,
+          namespace:
+            result.namespace ??
+            params.binding.request.tools?.namespaces?.get(result.name),
+        },
+        "control",
+      )
+    )
+      continue;
+    const original =
+      typeof result.content === "string"
+        ? result.content
+        : JSON.stringify(result.content);
+    const receipt = BREAK_THE_GLASS_RECEIPT.exec(original)?.[0];
+    if (!receipt || admitted.includes(receipt)) continue;
+    params.toolResultUpdates[result.id] = `${admitted}\n\n${receipt}`;
+  }
+}
+
+const BREAK_THE_GLASS_RECEIPT = /\[appa\] Break the glass receipt: [^\n"]*/;
 
 async function pendingNativeHitlOfferIds(params: {
   binding: AppaPluginBinding;

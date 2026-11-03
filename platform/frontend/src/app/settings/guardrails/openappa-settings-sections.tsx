@@ -408,8 +408,18 @@ function BreakTheGlassRow<T extends string>(props: {
           </p>
           <p className="text-xs leading-4 text-muted-foreground">
             Set with{" "}
-            <code className="break-all font-mono">
-              {props.environmentVariable}
+            <code className="font-mono">
+              {/* Wrap a long name only after an underscore. */}
+              {props.environmentVariable.split("_").map((part, index) => (
+                <span key={`${index}-${part}`}>
+                  {index > 0 ? (
+                    <>
+                      _<wbr />
+                    </>
+                  ) : null}
+                  {part}
+                </span>
+              ))}
             </code>
           </p>
         </div>

@@ -81,8 +81,6 @@ export async function setGuardrailsDeployment(
     enabled?: boolean;
     unsupportedClientAction?: UnsupportedAppaClientAction;
     breakTheGlassEnabled?: boolean;
-    humanApprovalMode?: HumanApprovalMode;
-    unapprovableBlockMode?: UnapprovableBlockMode;
     annotatorModelId?: string | null;
     annotatorLlmApiKeyId?: string | null;
   },

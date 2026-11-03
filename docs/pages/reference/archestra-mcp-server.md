@@ -2493,6 +2493,7 @@ Required RBAC permission: [`knowledgeSource:update`](/docs/reference/permissions
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | Knowledge base ID. |
+| `uploadedFilesEnvironmentId` | `string \| null` | No | Environment for this knowledge base's indexed uploaded files. Requires uploaded files to have been indexed; omit to leave it unchanged. |
 | `name` | `string` | No | New knowledge base name. |
 | `description` | `string \| null` | No | New knowledge base description. |
 

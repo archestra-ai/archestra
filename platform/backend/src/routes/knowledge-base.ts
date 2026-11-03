@@ -185,6 +185,7 @@ const KnowledgeBaseResponseSchema = SelectKnowledgeBaseSchema.omit({
 }).extend({
   createdBy: CreatedByNullableSchema,
   labels: z.array(LabelWithDetailsSchema),
+  uploadedFilesEnvironmentId: z.string().uuid().nullable().optional(),
 });
 
 const KnowledgeBaseWithConnectorsSchema = KnowledgeBaseResponseSchema.extend({
@@ -476,6 +477,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           createdBy: details?.createdBy ?? null,
           labels: details?.labels ?? [],
           connectors: details?.connectors ?? [],
+          ...(details?.uploadedFiles && {
+            uploadedFilesEnvironmentId: details.uploadedFiles.environmentId,
+          }),
           totalDocsIndexed: details?.totalDocsIndexed ?? 0,
           assignedAgents: details?.assignedAgents ?? [],
           assignedAgentCount: details?.assignedAgentCount ?? 0,
@@ -581,6 +585,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       return reply.send({
         ...kg,
+        ...(await KnowledgeBaseModel.findUploadedFilesEnvironment(id)),
         labels: await KnowledgeBaseLabelModel.getLabelsFor(kg.id),
         createdBy: await CreatedByModel.resolveOne(
           CreatedByModel.id(kg, kg.createdBy),
@@ -600,6 +605,14 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           name: z.string().min(1).optional(),
           description: z.string().nullable().optional(),
+          uploadedFilesEnvironmentId: z
+            .string()
+            .uuid()
+            .nullable()
+            .optional()
+            .describe(
+              "Environment for this knowledge base's indexed uploaded files. Requires uploaded files to have been indexed; omit to leave it unchanged.",
+            ),
           labels: z.array(LabelWithDetailsSchema).optional(),
           visibility: RetiredSharingUpdateFieldSchema,
           teamIds: RetiredSharingUpdateFieldSchema,
@@ -614,6 +627,20 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
       const { labels, visibility: _v, teamIds: _t, ...columns } = body;
+      if (body.uploadedFilesEnvironmentId !== undefined) {
+        await ResourcePermissions.require({
+          organizationId,
+          userId: user.id,
+          resource: "knowledgeBase",
+          scope: id,
+          action: "update",
+        });
+        await assertEnvironmentAssignable({
+          organizationId,
+          userId: user.id,
+          environmentId: body.uploadedFilesEnvironmentId,
+        });
+      }
       const updated = Object.keys(columns).length
         ? await KnowledgeBaseModel.update(id, columns)
         : existing;
@@ -629,6 +656,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send({
         ...updated,
+        ...(await KnowledgeBaseModel.findUploadedFilesEnvironment(id)),
         labels: await KnowledgeBaseLabelModel.getLabelsFor(updated.id),
         createdBy: await CreatedByModel.resolveOne(
           CreatedByModel.id(updated, updated.createdBy),

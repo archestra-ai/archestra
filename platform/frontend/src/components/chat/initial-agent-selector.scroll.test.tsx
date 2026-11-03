@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
@@ -206,11 +207,20 @@ it("finds and selects the chat-capable built-in agent by search", async () => {
   await userEvent.click(
     await screen.findByRole("combobox", { name: "Choice 00" }),
   );
+  expect(
+    within(screen.getByRole("option", { name: /Choice 00/ })).queryByRole(
+      "img",
+      { name: "Built-in agent" },
+    ),
+  ).not.toBeInTheDocument();
   await userEvent.type(screen.getByPlaceholderText("Search agents"), "Policy");
   const option = await screen.findByRole("option", {
     name: /Policy Assistant/,
   });
   expect(searches).toContain("Policy");
+  expect(
+    within(option).getByRole("img", { name: "Built-in agent" }),
+  ).toBeInTheDocument();
   await userEvent.click(option);
   expect(onChange).toHaveBeenCalledWith(policyAssistant.id);
 });

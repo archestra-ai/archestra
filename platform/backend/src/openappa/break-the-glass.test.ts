@@ -225,7 +225,7 @@ test("a waived call turns Guardrails off for the session when the yell is a supe
   expect(yell).toMatchObject({ kind: "approval_waived", superyell: true });
 });
 
-test("a repeated evaluation of a waived call counts once; another call counts again", async ({
+test("a repeated evaluation of a waived call and another call of the same tool merge into one yell", async ({
   makeOrganization,
 }) => {
   const organizationId = (await makeOrganization()).id;

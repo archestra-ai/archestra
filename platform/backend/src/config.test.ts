@@ -3598,10 +3598,10 @@ describe("OpenAPPA feature configuration", () => {
       }),
     ).toMatchObject({ humanApprovalMode: "block", softBlockMode: "allow" });
     expect(parseOpenAppaConfig({ humanApprovalMode: "" })).toMatchObject({
-      humanApprovalMode: "unattended",
+      humanApprovalMode: "block",
     });
     expect(() => parseOpenAppaConfig({ humanApprovalMode: "always" })).toThrow(
-      "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE must be one of: unattended, block, everywhere",
+      "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE must be one of: block, unattended, everywhere",
     );
     expect(() => parseOpenAppaConfig({ softBlockMode: "waive" })).toThrow(
       "ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE must be one of: refuse, allow",
@@ -3611,7 +3611,7 @@ describe("OpenAPPA feature configuration", () => {
   test("enables database policies without a container path", () => {
     expect(parseOpenAppaConfig()).toEqual({
       enabled: true,
-      humanApprovalMode: "unattended",
+      humanApprovalMode: "block",
       softBlockMode: "refuse",
       yellEnabled: true,
       yellForwardingEnabled: false,

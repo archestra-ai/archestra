@@ -419,6 +419,36 @@ url = "http://127.0.0.1:${server.address().port}/annotate"
   assert.deepEqual(requests.map(request => request.artifact.args.name), ['host/archestra/unknown_before', 'host/archestra/unknown_after']);
 });
 
+// Break the glass never waives the reserved `blocked` mark. The deny decision
+// carries no structured gap list, so the backend reads this rendering
+// (HARD_BLOCK in backend/src/openappa/break-the-glass.ts); a change here must
+// change that check with it.
+test('a call marked blocked is denied with no offer and renders the mark', { skip: !databaseUrl }, async () => {
+  const policy = `[policy]
+version = 2
+[[policy.tool]]
+name = "wipe"
+delta = {}
+requires = { attention = ["blocked"] }
+[[policy.authority]]
+name = "human-approval"
+hint = "Ask the person running this session."
+permits = { attention = ["*"] }
+[externals.authorities.human-approval]
+builtin = "hitl"
+`;
+  assert.deepEqual(await native.validateOpenappaPolicy(policy), []);
+  await native.initializeOpenappa(databaseUrl, 2);
+  const scope = { organization_id: `blocked-mark-${randomUUID()}`, caller_id: 'user:test', session_id: randomUUID() };
+  const hook = async event => JSON.parse(await native.dispatchHook(JSON.stringify({ ...scope, ...event }), hosted(policy)));
+  assert.equal((await hook({ event: 'session_start' })).decision, 'ack');
+  const denied = await hook({ event: 'tool_call', operation_id: 'call:wipe', tool: 'wipe', arguments: {} });
+  assert.equal(denied.decision, 'deny_call');
+  // Even an authority that permits every attention mark cannot lift it.
+  assert.deepEqual(denied.offers ?? [], []);
+  assert.match(denied.feedback, /requires attention: [^\n]*\bblocked\b/);
+});
+
 test('an explicit policy result cap takes precedence over the host default', { skip: !databaseUrl }, async () => {
   const proxyLimit = 70 * 1024 * 1024;
   const priorLimit = process.env.APPA_ARCHESTRA_MAX_BODY_BYTES;

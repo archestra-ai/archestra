@@ -17,17 +17,17 @@ function identity(url, userId) {
   const id = createHash('sha256').update(origin(url) + '\n' + userId).digest('hex').slice(0, 32);
   return { id, label: 'ai.archestra.device.' + id, root: join(homedir(), '.local', 'share', 'archestra-device', id) };
 }
-function command(file, args, input) {
+function command(file, args, input, operation = file) {
   const result = spawnSync(file, args, { input, encoding: 'utf8', timeout: 30000, maxBuffer: 1024 * 1024, windowsHide: true, shell: false });
   if (result.error || result.status !== 0) {
-    const error = new Error('Could not complete ' + file + '. Check your user service manager and unlocked credential store.');
+    const error = new Error('Could not complete ' + operation + ' (exit ' + result.status + (result.error ? ', ' + result.error.code : '') + '). Check your user service manager and unlocked credential store.');
     error.status = result.status;
     throw error;
   }
   return result.stdout.trim();
 }
-function powershell(script, value) {
-  return command('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from('[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding; [Console]::InputEncoding = New-Object System.Text.UTF8Encoding; $ErrorActionPreference = "Stop"; $p = [Console]::In.ReadToEnd() | ConvertFrom-Json; ' + script, 'utf16le').toString('base64')], JSON.stringify(value));
+function powershell(script, value, operation) {
+  return command('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from('[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding; [Console]::InputEncoding = New-Object System.Text.UTF8Encoding; $ErrorActionPreference = "Stop"; $p = [Console]::In.ReadToEnd() | ConvertFrom-Json; ' + script, 'utf16le').toString('base64')], JSON.stringify(value), operation || 'Windows user service operation');
 }
 function keychainQuote(value) { return '"' + value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\r\n]/g, '') + '"'; }
 async function writePrivate(path, value) {
@@ -58,13 +58,13 @@ async function vault(action, spec, token) {
     const path = join(spec.root, 'credential.dpapi');
     if (action === 'clear') { await fs.rm(path, { force: true }); return; }
     if (action === 'save') {
-      const encrypted = powershell('$s = ConvertTo-SecureString $p.value -AsPlainText -Force; $s | ConvertFrom-SecureString', { value: token });
+      const encrypted = powershell('$s = ConvertTo-SecureString $p.value -AsPlainText -Force; $s | ConvertFrom-SecureString', { value: token }, 'Windows credential encryption');
       await writePrivate(path, encrypted);
       return;
     }
     let encrypted;
     try { encrypted = await readPrivate(path); } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
-    return powershell('$s = ConvertTo-SecureString $p.value; $b = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($s); try { [Runtime.InteropServices.Marshal]::PtrToStringBSTR($b) } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b) }', { value: encrypted });
+    return powershell('$s = ConvertTo-SecureString $p.value; $b = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($s); try { [Runtime.InteropServices.Marshal]::PtrToStringBSTR($b) } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b) }', { value: encrypted }, 'Windows credential decryption');
   }
   if (process.platform === 'linux') {
     const args = ['service', spec.label, 'account', spec.id];
@@ -87,18 +87,18 @@ function serviceDefinition(spec, node) {
   if (/[\r\n]/.test(spec.root + node)) throw new Error('Unsupported installation path.');
   const script = join(spec.root, 'agent.cjs');
   if (process.platform === 'darwin') return '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>Label</key><string>' + spec.label + '</string><key>ProgramArguments</key><array><string>' + xml(node) + '</string><string>' + xml(script) + '</string><string>run</string></array><key>EnvironmentVariables</key><dict><key>HOME</key><string>' + xml(homedir()) + '</string></dict><key>RunAtLoad</key><true/><key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict><key>ThrottleInterval</key><integer>15</integer></dict></plist>';
-  const escape = value => '"' + value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/%/g, '%%').replace(/\$/g, '$$') + '"';
+  const escape = value => '"' + value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/%/g, '%%').replace(/\$/g, () => '$$') + '"';
   return '[Unit]\nDescription=Personal local device agent\n[Service]\nExecStart=' + escape(node) + ' ' + escape(script) + ' run\nRestart=on-failure\nRestartSec=15\nUMask=0077\n[Install]\nWantedBy=default.target\n';
 }
 async function service(action, spec, node = process.execPath) {
   if (process.platform === 'win32') {
     const options = { label: spec.label, node, args: windowsArguments(join(spec.root, 'agent.cjs')), root: spec.root };
     const stop = 'if (Get-ScheduledTask -TaskName $p.label -ErrorAction SilentlyContinue) { Stop-ScheduledTask -TaskName $p.label; $until = [DateTime]::UtcNow.AddSeconds(20); while ((Get-ScheduledTask -TaskName $p.label).State -eq "Running") { if ([DateTime]::UtcNow -gt $until) { throw "Device agent did not stop" }; Start-Sleep -Milliseconds 200 } }';
-    if (action === 'stop') { powershell(stop, options); return; }
-    if (action === 'remove') { powershell(stop + ' if (Get-ScheduledTask -TaskName $p.label -ErrorAction SilentlyContinue) { Unregister-ScheduledTask -TaskName $p.label -Confirm:$false }', options); return; }
+    if (action === 'stop') { powershell(stop, options, 'Windows agent stop'); return; }
+    if (action === 'remove') { powershell(stop + ' if (Get-ScheduledTask -TaskName $p.label -ErrorAction SilentlyContinue) { Unregister-ScheduledTask -TaskName $p.label -Confirm:$false }', options, 'Windows agent removal'); return; }
     if (action === 'install') {
-      powershell('$u = [Security.Principal.WindowsIdentity]::GetCurrent().Name; $a = New-ScheduledTaskAction -Execute $p.node -Argument $p.args -WorkingDirectory $p.root; $t = New-ScheduledTaskTrigger -AtLogOn -User $u; $principal = New-ScheduledTaskPrincipal -UserId $u -LogonType Interactive -RunLevel Limited; $s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew; Register-ScheduledTask -TaskName $p.label -Action $a -Trigger $t -Principal $principal -Settings $s -Force | Out-Null; Start-ScheduledTask -TaskName $p.label', options);
-    } else powershell('Start-ScheduledTask -TaskName $p.label', options);
+      powershell('$u = [Security.Principal.WindowsIdentity]::GetCurrent().Name; $a = New-ScheduledTaskAction -Execute $p.node -Argument $p.args -WorkingDirectory $p.root; $t = New-ScheduledTaskTrigger -AtLogOn -User $u; $principal = New-ScheduledTaskPrincipal -UserId $u -LogonType Interactive -RunLevel Limited; $s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew; Register-ScheduledTask -TaskName $p.label -Action $a -Trigger $t -Principal $principal -Settings $s -Force | Out-Null; Start-ScheduledTask -TaskName $p.label', options, 'Windows agent registration/start');
+    } else powershell('Start-ScheduledTask -TaskName $p.label', options, 'Windows agent registration/start');
     return;
   }
   const path = servicePath(spec);
@@ -162,7 +162,7 @@ async function preflight(options) {
   if (stat.isSymbolicLink() || !stat.isDirectory() || (process.getuid && stat.uid !== process.getuid())) throw new Error('Unsafe device installation directory.');
   if (process.platform !== 'win32') await fs.chmod(spec.root, 0o700);
   if (process.platform === 'darwin') command('/bin/launchctl', ['print', 'gui/' + process.getuid()]);
-  else if (process.platform === 'win32') powershell('Get-Command Register-ScheduledTask, Start-ScheduledTask, ConvertFrom-SecureString | Out-Null', {});
+  else if (process.platform === 'win32') powershell('Get-Command Register-ScheduledTask, Start-ScheduledTask, ConvertFrom-SecureString | Out-Null', {}, 'Windows agent prerequisite check');
   else if (process.platform === 'linux') command('systemctl', ['--user', 'show-environment']);
   else throw new Error('Unsupported operating system.');
   const existing = await vault('load', spec);

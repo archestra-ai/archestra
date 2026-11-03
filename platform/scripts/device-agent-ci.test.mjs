@@ -31,7 +31,7 @@ test('service definitions preserve paths without interpreting shell syntax', () 
   const plist = mac.serviceDefinition(spec, '/tmp/Node & tools/node');
   assert.match(plist, /Space &amp; &quot;quoted&quot; path/);
   assert.match(plist, /<key>SuccessfulExit<\/key><false\/>/);
-  const linux = runtime({ process: processFor('linux') });
+  const linux = runtime({ process: processFor('linux'), require: name => name === 'node:path' ? require('node:path').posix : require(name) });
   assert.match(linux.serviceDefinition({ ...spec, root: '/tmp/%n/$HOME' }, '/bin/node'), /%%n\/\$\$HOME/);
   assert.throws(() => mac.windowsArguments('C:\\bad"path\\agent.cjs'));
 });

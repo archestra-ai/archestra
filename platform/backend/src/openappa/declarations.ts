@@ -28,7 +28,7 @@ import type {
 import { mapWithConcurrency } from "@/utils/concurrency";
 import { archestraAudience } from "./archestra-audience";
 import { type DeployedBattery, declaredCredentials } from "./battery-target";
-import { withReportingTool } from "./reporting-tool";
+import { withHostToolRules } from "./host-tool-rules";
 
 /** How each resolved entry deploys here, by its `include` spelling. */
 export type DeployedEntries = ReadonlyMap<string, DeployedBattery>;
@@ -459,7 +459,7 @@ class OpenAppaDeclarations {
       ? composed
       : {
           ...composed,
-          content: await withReportingTool({
+          content: await withHostToolRules({
             composed: content,
             validate: (text) => native.validateHostedOpenappaPolicy(text),
           }),

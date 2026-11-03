@@ -5889,6 +5889,13 @@ describe("Claude Code task output reads", () => {
             },
           },
           {
+            id: "transcript-behind-dot-dot",
+            name: "Bash",
+            arguments: {
+              command: `cat $(<${tasks}/aba0d3860dedb562b.output)/../..${tasks}/bbwoudo32.output`,
+            },
+          },
+          {
             id: "agent-transcript",
             name: "Read",
             arguments: { file_path: `${tasks}/aba0d3860dedb562b.output` },
@@ -5908,6 +5915,7 @@ describe("Claude Code task output reads", () => {
       expect(outcome).toMatchObject({
         blocked: [
           { id: "bash-output-then-transcript" },
+          { id: "transcript-behind-dot-dot" },
           { id: "agent-transcript" },
           { id: "glob-transcripts" },
         ],

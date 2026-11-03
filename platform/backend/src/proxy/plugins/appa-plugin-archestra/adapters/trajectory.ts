@@ -38,7 +38,8 @@ export function referencesChildTranscriptPath(params: {
       // Tokenizes once to prevent quadratic scanning.
       // Normalizes path separators and relative segments before inspection.
       return value.split(/\s+/u).some((token) => {
-        const path = posix.normalize(token.replaceAll("\\", "/"));
+        const raw = token.replaceAll("\\", "/");
+        const path = posix.normalize(raw);
         return params.pathPatterns.some(({ prefix, suffix, ownOutputId }) => {
           const start = path.indexOf(prefix);
           if (start < 0 || (start > 0 && path.charAt(start - 1) !== "/")) {
@@ -46,8 +47,11 @@ export function referencesChildTranscriptPath(params: {
           }
           const rest = path.slice(start + prefix.length);
           const file = rest.replace(/["'`;|&)]+$/u, "");
+          // Normalization can drop segments that name a child, so only an
+          // already-normal token is exempt.
           if (
             ownOutputId &&
+            path === raw &&
             file.endsWith(suffix) &&
             ownOutputId.test(file.slice(0, -suffix.length))
           ) {

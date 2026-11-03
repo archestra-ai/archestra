@@ -106,7 +106,10 @@ export function ChatgptGatewaySetup({
   return (
     <div>
       <SetupActionArea sizingCommand={sizingCommand}>
-        <OneOf shown={showTerminal ? 0 : 1} className="[&>div]:grid">
+        <OneOf
+          shown={showTerminal ? 0 : 1}
+          className="[&>div]:grid [&>div]:grid-cols-[minmax(0,1fr)]"
+        >
           {terminalAction}
           {webAction}
         </OneOf>

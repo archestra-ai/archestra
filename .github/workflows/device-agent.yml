@@ -80,6 +80,9 @@ jobs:
       - name: Check backend types
         if: ${{ !cancelled() }}
         run: pnpm --dir backend type-check
+      - name: Check backend unused exports
+        if: ${{ !cancelled() }}
+        run: pnpm --dir backend knip
       - name: Check frontend types
         if: ${{ !cancelled() }}
         run: pnpm --dir frontend type-check

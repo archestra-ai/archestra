@@ -12,6 +12,8 @@ const config: KnipConfig = {
     "src/standalone-scripts/**/*.ts!",
     // Foreground device connector launched from the registry's setup command.
     "src/device-mcp-client/cli.ts!",
+    // Bundled as a standalone IPC child by tsdown/esbuild.
+    "src/device-mcp-client/managed-worker.ts!",
     // Consumed by the separate desktop app bundle, outside this package graph.
     "src/device-mcp-client/connection-file.ts!",
     "src/device-mcp-client/local-device-client.ts!",

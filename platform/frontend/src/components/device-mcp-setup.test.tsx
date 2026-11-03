@@ -95,7 +95,7 @@ test("a recovery deep link opens setup and requires approval before installing o
   expect(
     await screen.findByRole("dialog", { name: "Install on your computer" }),
   ).toBeVisible();
-  const install = screen.getByRole("button", { name: "Install", exact: true });
+  const install = screen.getByRole("button", { name: "Install" });
   expect(install).toBeDisabled();
   await user.click(
     await screen.findByRole("checkbox", { name: /Allow this MCP/ }),
@@ -118,9 +118,7 @@ test("missing personal devices offer Connect without authorizing an MCP", async 
   expect(
     await screen.findByRole("link", { name: "Open Connect" }),
   ).toHaveAttribute("href", "/connection");
-  expect(
-    screen.getByRole("button", { name: "Install", exact: true }),
-  ).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Install" })).toBeDisabled();
   expect(installed).toEqual([]);
 });
 test("the feature is absent when the organization switch is off", () => {

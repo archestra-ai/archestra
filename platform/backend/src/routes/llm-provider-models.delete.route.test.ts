@@ -221,6 +221,7 @@ describe("DELETE /api/llm-models/:id", () => {
       u: 0.5,
       reason: "cold_start",
       planId: null,
+      features: null,
       featuresSchemaVersion: 1,
       coreVersion: "cleanup-test",
     });

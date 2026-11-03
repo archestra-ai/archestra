@@ -551,7 +551,7 @@ describe("custom runtime catalog permission integration", () => {
       expect(resolutions).toBe(0);
       expect(onSelect).not.toHaveBeenCalled();
       expect(
-        screen.getByRole("button", { name: /New Test Platform agent/ }),
+        screen.getByRole("button", { name: /^Test Platform Built into/ }),
       ).toBeEnabled();
     }
   });

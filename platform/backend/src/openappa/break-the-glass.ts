@@ -152,37 +152,41 @@ export async function isUnattendedSession(
   }
 }
 
+/** A call Break the glass lets through, as the proxy records it. */
+export type WaivedCall = { toolCallId: string; tool: string; kind: WaiverKind };
+
 /**
- * Records a call let through under the Break the glass settings: as a call
- * the runtime does not see, so its result reaches the model as it is, and as
- * a platform yell unless reports are off. The yell names only the tool: the
- * session's trace holds the rest. A platform yell does what an agent's yell
- * does: with `superyell` (the Yell tool setting that turns Guardrails off) it
- * also takes the session out of OpenAPPA from its next request.
+ * Records the calls of one batch that Break the glass let through: each as a
+ * call the runtime does not see, so its result reaches the model as it is,
+ * and as platform yells, one per tool and kind, unless reports are off. A
+ * yell names only the tool: the session's trace holds the rest. A platform
+ * yell does what an agent's yell does: with `superyell` (the Yell tool
+ * setting that turns Guardrails off) it also takes the session out of
+ * OpenAPPA from its next request. Without a yell there is no bypass either.
  *
- * The marker, the yell and the session bypass commit together, so a failed
- * write leaves no marker behind that would pass a refused call's result on.
- * A call recorded before counts once: a repeated evaluation of the same call
- * adds nothing to its yell. Returns false when the record fails; the call is
- * then refused as ruled, since a released call nothing recorded would have
- * its result answered with the ruling.
+ * The batch's markers, yells and session bypass commit together, so a failed
+ * write leaves no marker behind that would pass a refused call's result on,
+ * and no yell for a batch the client never got. A call recorded before counts
+ * once: a repeated evaluation of the same call adds nothing to its yell.
+ * Returns false when the record fails; the caller then keeps the batch from
+ * the client, since a released call nothing recorded would have its result
+ * answered with the ruling.
  */
-export async function recordWaivedCall(params: {
+export async function recordWaivedCalls(params: {
   session: OpenAppaSession;
-  toolCallId: string;
-  tool: string;
-  kind: WaiverKind;
+  calls: readonly WaivedCall[];
   superyell: boolean;
 }): Promise<boolean> {
   const { session } = params;
+  if (params.calls.length === 0) return true;
   const scope = {
     organizationId: session.organization_id,
     sessionId: session.session_id,
   };
-  const fresh = unrecordedCallIds({
-    ...scope,
-    toolCallIds: [params.toolCallId],
-  });
+  const byId = new Map(params.calls.map((call) => [call.toolCallId, call]));
+  const fresh = unrecordedCallIds({ ...scope, toolCallIds: [...byId.keys()] });
+  // Reports off: nothing to record a yell in, so nothing turns the session off.
+  const superyell = params.superyell && openappaYellEnabled();
   try {
     const recorded = await withDbTransaction(async (tx) => {
       const inserted = await OpenAppaUnenforcedModel.recordCalls(
@@ -190,56 +194,82 @@ export async function recordWaivedCall(params: {
         tx,
       );
       if (inserted.length === 0) return false;
-      await recordWaiver(
-        {
-          session,
-          kind: params.kind,
-          tool: params.tool,
-          superyell: params.superyell,
-          calls: inserted.length,
-        },
-        tx,
-      );
+      // One yell per tool and kind, counting the calls recorded now.
+      const groups = new Map<
+        string,
+        { tool: string; kind: WaiverKind; calls: number }
+      >();
+      for (const id of inserted) {
+        const call = byId.get(id);
+        if (!call) continue;
+        const key = `${call.kind}\u0000${call.tool}`;
+        const group = groups.get(key) ?? {
+          tool: call.tool,
+          kind: call.kind,
+          calls: 0,
+        };
+        group.calls += 1;
+        groups.set(key, group);
+      }
+      for (const group of groups.values())
+        await recordWaiver({ session, ...group, superyell }, tx);
       return true;
     });
     rememberRecordedCalls({ ...scope, toolCallIds: fresh });
     if (!recorded) return true;
   } catch (err) {
     logger.warn(
-      { err, sessionId: session.session_id, toolCallId: params.toolCallId },
-      "OpenAPPA could not record a waived call, so it stays refused",
+      { err, sessionId: session.session_id, toolCallIds: [...byId.keys()] },
+      "OpenAPPA could not record the calls it let through, so the batch is refused",
     );
     return false;
   }
-  logWaiver({ ...params, kind: params.kind });
+  for (const call of params.calls) logWaiver({ session, ...call, superyell });
   return true;
+}
+
+/** `recordWaivedCalls` for one call. */
+export async function recordWaivedCall(params: {
+  session: OpenAppaSession;
+  toolCallId: string;
+  tool: string;
+  kind: WaiverKind;
+  superyell: boolean;
+}): Promise<boolean> {
+  const { session, superyell, ...call } = params;
+  return recordWaivedCalls({ session, calls: [call], superyell });
 }
 
 /**
  * Records a review the platform waived at the gateway, when a remedy plan
  * needed a person's approval in an unattended session: the yell, and with
  * `superyell` the session bypass, as `recordWaivedCall` does. The runtime
- * authorizes the plan itself afterwards, so no call marker is needed. Returns
- * false when the record fails; the review then waits for a person as it would
- * without the setting.
+ * authorizes the plan itself, so no call marker is needed; the record follows
+ * that authorization. Returns false when the record fails, so the receipt can
+ * say so.
  */
 export async function recordWaivedReview(params: {
   session: OpenAppaSession;
   tool: string;
   superyell: boolean;
 }): Promise<boolean> {
+  // Reports off: nothing to record a yell in, so nothing turns the session off.
+  const superyell = params.superyell && openappaYellEnabled();
   try {
     await withDbTransaction((tx) =>
-      recordWaiver({ ...params, kind: "approval_waived", calls: 1 }, tx),
+      recordWaiver(
+        { ...params, superyell, kind: "approval_waived", calls: 1 },
+        tx,
+      ),
     );
   } catch (err) {
     logger.warn(
       { err, sessionId: params.session.session_id, tool: params.tool },
-      "OpenAPPA could not record a waived review, so it waits for a person",
+      "OpenAPPA could not record a waived review",
     );
     return false;
   }
-  logWaiver({ ...params, kind: "approval_waived", review: true });
+  logWaiver({ ...params, superyell, kind: "approval_waived", review: true });
   return true;
 }
 
@@ -304,9 +334,10 @@ function unattendedSessionKey(session: OpenAppaSession): AllowedCacheKey {
   return `${CacheKey.OpenAppaUnattendedSession}-${digest}`;
 }
 
-// The runtime renders a missing mark as `requires attention: <mark>`; newer
-// OpenAPPA names the reserved mark `hard-block`.
-const HARD_BLOCK = /requires attention: (?:blocked|hard-block)\b/;
+// The runtime renders the missing marks as `requires attention: <mark>, …`;
+// newer OpenAPPA names the reserved mark `hard-block`. The deny decision
+// carries no structured mark list, so the rendering is what there is to read.
+const HARD_BLOCK = /requires attention: [^\n]*\b(?:blocked|hard-block)\b/;
 
 const noted = registerProcessLocalCache(
   new LRUCacheManager<true>({

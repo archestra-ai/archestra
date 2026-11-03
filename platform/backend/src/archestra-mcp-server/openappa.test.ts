@@ -2043,6 +2043,34 @@ describe("OpenAPPA tool execution", () => {
       );
     });
 
+    test("a plan the runtime refuses records no waiver and gets no receipt", async () => {
+      config.openappa.yellEnabled = true;
+      await settings("unattended", true);
+      vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue(
+        offerReview,
+      );
+      const refused = {
+        isError: true,
+        content: [{ type: "text" as const, text: "[appa] Blocked: refused" }],
+      };
+      vi.spyOn(openappaService, "executeRemedyByOffer").mockResolvedValue({
+        result: refused,
+        known: true,
+      });
+      await rememberUnattendedSession({
+        organization_id: orgId,
+        session_id: "session-1",
+      });
+      expect(await remedy()).toEqual(refused);
+      expect(await yells()).toEqual([]);
+      expect(
+        await isUnenforcedSession({
+          organization_id: orgId,
+          session_id: "session-1",
+        }),
+      ).toBe(false);
+    });
+
     test("a human ruling given before the remedy call outranks the waiver", async () => {
       config.openappa.yellEnabled = true;
       await settings("unattended");

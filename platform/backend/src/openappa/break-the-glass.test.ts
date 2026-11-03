@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
+import config from "@/config";
 import db, { schema } from "@/database";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { describe, expect, test } from "@/test";
@@ -9,6 +10,7 @@ import {
   isUnattendedRequest,
   isUnattendedSession,
   recordWaivedCall,
+  recordWaivedCalls,
   recordWaivedReview,
   rememberUnattendedSession,
   waiverFor,
@@ -95,6 +97,7 @@ describe("waiverFor", () => {
     for (const decision of [
       { ...noRemedy, feedback: "requires attention: blocked" },
       { ...noRemedy, feedback: "requires attention: hard-block" },
+      { ...noRemedy, feedback: "requires attention: signoff, blocked" },
       { ...review, feedback: "requires attention: blocked" },
       { feedback: "annotator failed", unanswered: true, offers: [] },
       { feedback: "not loaded" },
@@ -360,3 +363,114 @@ async function yellsOf(organizationId: string, sessionId: string) {
       ),
     );
 }
+
+test("a batch's waived calls commit together as one yell per tool, and reports off record nothing", async ({
+  makeOrganization,
+}) => {
+  const organizationId = (await makeOrganization()).id;
+  const session = {
+    organization_id: organizationId,
+    caller_id: "user:u1",
+    session_id: "user:u1|s8",
+  };
+  expect(
+    await recordWaivedCalls({
+      session,
+      calls: [
+        {
+          toolCallId: "call-1",
+          tool: "mcp/slack/send",
+          kind: "approval_waived",
+        },
+        {
+          toolCallId: "call-2",
+          tool: "mcp/slack/send",
+          kind: "approval_waived",
+        },
+        { toolCallId: "call-3", tool: "mcp/mail/send", kind: "block_waived" },
+      ],
+      superyell: false,
+    }),
+  ).toBe(true);
+  expect(
+    Object.fromEntries(
+      (
+        await findUnenforcedCalls({
+          session,
+          toolCallIds: ["call-1", "call-2", "call-3"],
+        })
+      ).reasons,
+    ),
+  ).toEqual({ "call-1": "waived", "call-2": "waived", "call-3": "waived" });
+  const yells = await yellsOf(organizationId, session.session_id);
+  expect(
+    yells.map(({ kind, count, message }) => ({ kind, count, message })),
+  ).toEqual(
+    expect.arrayContaining([
+      {
+        kind: "approval_waived",
+        count: 2,
+        message: expect.stringContaining("mcp/slack/send"),
+      },
+      {
+        kind: "block_waived",
+        count: 1,
+        message: expect.stringContaining("mcp/mail/send"),
+      },
+    ]),
+  );
+
+  // Reports off: the call still runs, but nothing is recorded as a yell and
+  // the session is not turned off, whatever the Yell tool setting says.
+  const yellEnabled = config.openappa.yellEnabled;
+  config.openappa.yellEnabled = false;
+  try {
+    const quiet = { ...session, session_id: "user:u1|s9" };
+    expect(
+      await recordWaivedCall({
+        session: quiet,
+        toolCallId: "call-1",
+        tool: "mcp/slack/send",
+        kind: "approval_waived",
+        superyell: true,
+      }),
+    ).toBe(true);
+    expect(await yellsOf(organizationId, quiet.session_id)).toEqual([]);
+    expect(await isUnenforcedSession(quiet)).toBe(false);
+  } finally {
+    config.openappa.yellEnabled = yellEnabled;
+  }
+});
+
+test("a resolved yell raised again starts over as a new one", async ({
+  makeOrganization,
+}) => {
+  const organizationId = (await makeOrganization()).id;
+  const session = {
+    organization_id: organizationId,
+    caller_id: "user:u1",
+    session_id: "user:u1|s10",
+  };
+  const waive = (toolCallId: string) =>
+    recordWaivedCall({
+      session,
+      toolCallId,
+      tool: "mcp/slack/send",
+      kind: "block_waived",
+      superyell: false,
+    });
+  await waive("call-1");
+  await waive("call-2");
+  const [first] = await yellsOf(organizationId, session.session_id);
+  expect(first?.count).toBe(2);
+  const resolvedAt = new Date("2026-01-01T00:00:00Z");
+  await db
+    .update(schema.openappaYellsTable)
+    .set({ createdAt: resolvedAt, resolvedAt, resolvedBy: "user:u1" })
+    .where(eq(schema.openappaYellsTable.id, first.id));
+
+  await waive("call-3");
+  const [again] = await yellsOf(organizationId, session.session_id);
+  expect(again).toMatchObject({ id: first.id, count: 1, resolvedAt: null });
+  expect(again.createdAt.getTime()).toBeGreaterThan(resolvedAt.getTime());
+});

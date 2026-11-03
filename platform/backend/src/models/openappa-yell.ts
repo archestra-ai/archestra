@@ -62,8 +62,8 @@ export default class OpenAppaYellModel {
    * Records calls the platform let through under the Break the glass
    * settings. Repeats of the same tool and kind in a session add to one
    * unresolved yell, so a looping agent does not flood the Yells tab; once
-   * resolved, the next repeat raises it again. `calls` is how many distinct
-   * calls this record stands for; the caller counts a call once.
+   * resolved, the next repeat raises it again as a new yell. `calls` is how
+   * many distinct calls this record stands for; the caller counts a call once.
    */
   static async recordWaiver(
     input: {
@@ -100,8 +100,11 @@ export default class OpenAppaYellModel {
           table.sessionId,
           table.toolCallId,
         ],
+        // A resolved yell is raised again as a new one: its count and age
+        // start over, so the Yells tab lists it as new.
         set: {
-          count: sql`${table.count} + ${calls}`,
+          count: sql`case when ${table.resolvedAt} is null then ${table.count} + ${calls} else ${calls} end`,
+          createdAt: sql`case when ${table.resolvedAt} is null then ${table.createdAt} else now() end`,
           message: input.message,
           superyell: input.superyell,
           resolvedAt: null,

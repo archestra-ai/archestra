@@ -39,8 +39,9 @@ import { reportAgentRuntimeObservedReads } from "@/observability/metrics/agent-r
 import { childSessionId, clientSessionId } from "@/openappa/actor";
 import {
   isUnattendedRequest,
-  recordWaivedCall,
+  recordWaivedCalls,
   rememberUnattendedSession,
+  type WaivedCall,
   waiverFor,
 } from "@/openappa/break-the-glass";
 import {
@@ -1674,10 +1675,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const evaluatedIds = new Set(rest.map((call) => call.id));
     // Read once for the batch, by the first denial.
     let breakTheGlass: ReturnType<typeof getGuardrailsDeployment> | undefined;
-    // The denied calls Break the glass lets through, recorded once the batch
-    // is complete.
-    const waived: Omit<Parameters<typeof recordWaivedCall>[0], "session">[] =
-      [];
+    // The denied calls Break the glass lets through, recorded together once
+    // the batch is complete.
+    const waived: WaivedCall[] = [];
+    let waiverSuperyell = false;
     // Resolved once for the batch, by the first denial that has no notice tool.
     let pendingServersTool: Promise<string | undefined> | undefined;
     const blocked: { id: string; name: string; reason: string }[] = [];
@@ -1838,9 +1839,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             toolCallId: call.id,
             tool: this.policyIdentity(binding, call).name,
             kind: waiver,
-            // A platform yell does what the agent's own yell does.
-            superyell: breakTheGlassActiveIn(settings),
           });
+          // A platform yell does what the agent's own yell does.
+          waiverSuperyell = breakTheGlassActiveIn(settings);
           released.push(call);
           continue;
         }
@@ -2021,13 +2022,18 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       });
     }
 
-    // A waived call's marker, yell and session bypass are written only for a
-    // batch that reaches the client: a batch refused above leaves no record
-    // of a call that never ran. A record that fails keeps the batch from the
-    // client too, so no released call runs unrecorded; the resent batch is
-    // ruled again.
-    for (const waiver of waived) {
-      if (await recordWaivedCall({ session, ...waiver })) continue;
+    // The waived calls' markers, yells and session bypass are written in one
+    // transaction, only for a batch that reaches the client: a batch refused
+    // above leaves no record of a call that never ran. A record that fails
+    // keeps the batch from the client too, so no released call runs
+    // unrecorded; the resent batch is ruled again.
+    if (
+      !(await recordWaivedCalls({
+        session,
+        calls: waived,
+        superyell: waiverSuperyell,
+      }))
+    ) {
       await cancelCalls(
         session,
         rest.flatMap((each) =>
@@ -2037,7 +2043,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       );
       throw new ApiError(
         503,
-        "OpenAPPA could not record a call it let through; retry the request",
+        "OpenAPPA could not record the calls it let through; retry the request",
       );
     }
     // Keep turn open while tool calls are awaiting client execution.

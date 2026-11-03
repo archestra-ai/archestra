@@ -1,4 +1,6 @@
 import { Readable } from "node:stream";
+import { promisify } from "node:util";
+import * as zlib from "node:zlib";
 import {
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -303,7 +305,7 @@ export async function cleanForwardedBody(
     isNonInferenceOperation(request) ||
     /\/(?:tokenize|detokenize)$/.test(path) ||
     (nativeOllama &&
-      /\/api\/(?:show|pull|push|create|copy|delete)$/.test(path));
+      /\/api\/(?:show|pull|push|create|copy|delete|blobs\/[^/]+)$/.test(path));
   const validateBody =
     availability && !metadata
       ? async (body: unknown) => {
@@ -356,12 +358,53 @@ export async function cleanForwardedBody(
           });
         }
       : undefined;
+  const encoding = request.headers["content-encoding"]?.trim().toLowerCase();
+  // Ollama decompresses zstd on its compatible endpoints. Inspect a bounded
+  // copy, then forward the original bytes and headers unchanged.
+  const zstdBody =
+    nativeOllama &&
+    validateBody &&
+    encoding === "zstd" &&
+    /\/v1\/(?:chat\/completions|completions|embeddings|responses|images\/(?:generations|edits)|messages)$/.test(
+      path,
+    );
+  const multipartBody =
+    nativeOllama &&
+    validateBody &&
+    /\/v1\/audio\/transcriptions$/.test(path) &&
+    request.headers["content-type"]
+      ?.toLowerCase()
+      .startsWith("multipart/form-data");
+  const decodeZstd = async (bytes: Buffer): Promise<Buffer> => {
+    if (typeof zlib.zstdDecompress !== "function")
+      throw new ApiError(
+        400,
+        "This runtime cannot inspect zstd-compressed model requests.",
+      );
+    try {
+      return await promisify(zlib.zstdDecompress)(bytes, {
+        maxOutputLength: request.routeOptions.bodyLimit,
+      });
+    } catch (error) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === "ERR_BUFFER_TOO_LARGE"
+      )
+        throw new errorCodes.FST_ERR_CTP_BODY_TOO_LARGE();
+      throw new ApiError(400, "Invalid zstd-compressed model request.");
+    }
+  };
   const body = request.body;
   if (!(body instanceof Readable)) {
-    await validateBody?.(body);
+    await validateBody?.(
+      zstdBody && (typeof body === "string" || Buffer.isBuffer(body))
+        ? await decodeZstd(Buffer.from(body))
+        : body,
+    );
     return;
   }
-  const encoding = request.headers["content-encoding"]?.trim().toLowerCase();
   // Native endpoints can parse JSON regardless of Content-Type. Inspect those
   // bytes for availability too; otherwise a different header bypasses Hidden.
   if (
@@ -375,6 +418,24 @@ export async function cleanForwardedBody(
     limit: request.routeOptions.bodyLimit,
     contentLength: request.headers["content-length"],
   });
+  if (multipartBody) {
+    let form: FormData;
+    try {
+      form = await new Response(new Uint8Array(raw), {
+        headers: { "content-type": request.headers["content-type"] ?? "" },
+      }).formData();
+    } catch {
+      throw new ApiError(400, "Invalid multipart model request.");
+    }
+    await validateBody({ model: form.get("model") });
+    request.body = Readable.from([raw], { objectMode: false });
+    return;
+  }
+  if (zstdBody) {
+    await validateBody(await decodeZstd(raw));
+    request.body = Readable.from([raw], { objectMode: false });
+    return;
+  }
   // @fastify/reply-from pipes a stream upstream as it is, and serializes an
   // object for an application/json request with a fresh content-length.
   request.body =

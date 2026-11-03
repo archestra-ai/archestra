@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { zstdCompressSync, zstdDecompressSync } from "node:zlib";
 import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
 import ModelModel from "@/models/model";
@@ -48,13 +49,30 @@ test.for([
     outputModalities: ["text"],
   });
   await ModelModel.update(model.id, { ignored: true });
-  const hits: Array<{ url: string; body: unknown }> = [];
+  const hits: Array<{ url: string; body: unknown; raw: Buffer }> = [];
   const upstream = createServer(async (request, reply) => {
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    const raw = Buffer.concat(chunks);
+    const decoded =
+      request.headers["content-encoding"] === "zstd"
+        ? zstdDecompressSync(raw)
+        : raw;
+    const multipart = request.headers["content-type"]?.startsWith(
+      "multipart/form-data",
+    )
+      ? await new Response(new Uint8Array(raw), {
+          headers: { "content-type": request.headers["content-type"] },
+        }).formData()
+      : undefined;
     hits.push({
       url: request.url ?? "",
-      body: JSON.parse(Buffer.concat(chunks).toString()),
+      raw,
+      body: request.url?.includes("/api/blobs/")
+        ? raw
+        : multipart
+          ? { model: multipart.get("model") }
+          : JSON.parse(decoded.toString()),
     });
     reply.writeHead(200, { "content-type": "application/json" });
     reply.end(JSON.stringify({ ok: true }));
@@ -84,6 +102,44 @@ test.for([
         query: "Hello",
         documents: ["Hello"],
       },
+    });
+  const compressed = zstdCompressSync(
+    Buffer.from(
+      JSON.stringify({ model: model.modelId, input: "Hello", prompt: "Hello" }),
+    ),
+  );
+  const askCompressed = () =>
+    app.inject({
+      method: "POST",
+      url: `/v1/${provider}/${agent.id}${provider === "ollama" ? "/responses" : "/v1/responses"}`,
+      headers: {
+        "x-archestra-virtual-key": token,
+        "content-type": "application/json",
+        "content-encoding": "zstd",
+      },
+      payload: compressed,
+    });
+  const form = new FormData();
+  form.set("model", model.modelId);
+  form.set(
+    "file",
+    new Blob(["synthetic audio"], { type: "audio/wav" }),
+    "sample.wav",
+  );
+  const multipartRequest = new Request("http://synthetic.invalid", {
+    method: "POST",
+    body: form,
+  });
+  const multipartBytes = Buffer.from(await multipartRequest.arrayBuffer());
+  const askMultipart = () =>
+    app.inject({
+      method: "POST",
+      url: `/v1/${provider}/${agent.id}${provider === "ollama" ? "/audio/transcriptions" : "/v1/audio/transcriptions"}`,
+      headers: {
+        "x-archestra-virtual-key": token,
+        "content-type": multipartRequest.headers.get("content-type") ?? "",
+      },
+      payload: multipartBytes,
     });
   try {
     for (const path of paths) {
@@ -136,16 +192,42 @@ test.for([
         payload: JSON.stringify({ model: model.modelId }),
       });
       expect(encodedHeader.statusCode, encodedHeader.body).toBe(403);
+      const encoded = await askCompressed();
+      expect(encoded.statusCode, encoded.body).toBe(403);
+      const multipart = await askMultipart();
+      expect(multipart.statusCode, multipart.body).toBe(403);
     }
     expect(hits).toHaveLength(0);
+    const nativeOllama = provider === "ollama" || provider === "ollama-native";
+    if (nativeOllama) {
+      const bytes = Buffer.from([0, 255, 1, 2, 3]);
+      const upload = await app.inject({
+        method: "POST",
+        url: `/v1/${provider}/${agent.id}/api/blobs/sha256:${"a".repeat(64)}`,
+        headers: {
+          "x-archestra-virtual-key": token,
+          "content-type": "application/octet-stream",
+        },
+        payload: bytes,
+      });
+      expect(upload.statusCode, upload.body).toBe(200);
+      expect(hits.at(-1)?.body).toEqual(bytes);
+    }
     expect((await ask(metadata)).statusCode).toBe(200);
     expect((await ask(paths[0], "unknown-custom-model")).statusCode).toBe(200);
     await ModelModel.update(model.id, { ignored: false });
     expect((await ask(paths[0])).statusCode).toBe(200);
-    expect(hits).toHaveLength(3);
-    expect(hits[2].body).toMatchObject({
+    if (nativeOllama) {
+      const encoded = await askCompressed();
+      expect(encoded.statusCode, encoded.body).toBe(200);
+      expect(hits.at(-1)?.raw).toEqual(compressed);
+      const multipart = await askMultipart();
+      expect(multipart.statusCode, multipart.body).toBe(200);
+      expect(hits.at(-1)?.raw).toEqual(multipartBytes);
+    }
+    expect(hits).toHaveLength(nativeOllama ? 6 : 3);
+    expect(hits.at(-1)?.body).toMatchObject({
       model: model.modelId,
-      prompt: "Hello",
     });
   } finally {
     await app.close();

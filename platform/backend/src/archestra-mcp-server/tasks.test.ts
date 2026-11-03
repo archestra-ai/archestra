@@ -203,7 +203,68 @@ describe("run tools", () => {
       `Agent "${allowedTarget.name}" has no Agent Runtime`,
     );
 
-    // 4. Cross-environment target is refused with Agent not found
+    // 4. Non-allowlisted target's run, workspace, and credentials are also refused
+    const a2aContext = await A2AContextModel.create({
+      actorKind: "user",
+      actorId,
+    });
+    const otherTask = await A2ATaskModel.create({
+      contextId: a2aContext.id,
+      agentId: otherTarget.id,
+      state: "TASK_STATE_WORKING",
+    });
+    await AgentRunModel.create({
+      organizationId,
+      taskId: otherTask.id,
+      agentId: otherTarget.id,
+      actorKind: "user",
+      actorId,
+      actorUserId: actorId,
+      workloadName: `other-${otherTask.id.slice(0, 8)}`,
+      backend: "kubernetes",
+      runtimeScope: "test",
+    });
+    const getOtherRunResult = await executeArchestraTool(
+      TOOL_GET_AGENT_RUN_FULL_NAME,
+      { run_id: otherTask.id },
+      gatewayContext,
+    );
+    expect(getOtherRunResult.isError).toBe(true);
+    expect((getOtherRunResult.content[0] as { text: string }).text).toContain(
+      "Run not found",
+    );
+
+    const deleteOtherWorkspaceResult = await executeArchestraTool(
+      "archestra__delete_workspace",
+      { run_id: otherTask.id, confirm_delete: true },
+      gatewayContext,
+    );
+    expect(deleteOtherWorkspaceResult.isError).toBe(true);
+    expect(
+      (deleteOtherWorkspaceResult.content[0] as { text: string }).text,
+    ).toContain("Saved run not found");
+
+    const readOtherWorkspaceResult = await executeArchestraTool(
+      "archestra__read_workspace_file",
+      { run_id: otherTask.id, path: "notes.md" },
+      gatewayContext,
+    );
+    expect(readOtherWorkspaceResult.isError).toBe(true);
+    expect(
+      (readOtherWorkspaceResult.content[0] as { text: string }).text,
+    ).toContain("Saved run not found");
+
+    const listOtherRunsResult = await executeArchestraTool(
+      TOOL_LIST_AGENT_RUNS_FULL_NAME,
+      { agent_ids: [otherTarget.id], mine_only: true },
+      gatewayContext,
+    );
+    expect(listOtherRunsResult.isError).toBe(true);
+    expect((listOtherRunsResult.content[0] as { text: string }).text).toContain(
+      `Agent "${otherTarget.name}" is not an allowed subagent of "${githubGateway.name}".`,
+    );
+
+    // 5. Cross-environment target is refused with Agent not found
     const environment = await EnvironmentModel.create({
       organizationId,
       name: "Isolated Env",

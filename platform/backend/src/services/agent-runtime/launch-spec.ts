@@ -248,7 +248,8 @@ export async function buildAgentRunLaunchSpec(params: {
   });
   const isClaudeCodeBedrock = claudeCodeCloudProvider === "bedrock";
   const isClaudeCodeRuntime =
-    params.runtime.command?.[0] === "archestra-claude-code";
+    params.runtime.command?.[0] === "archestra-claude-code" ||
+    params.runtime.command?.[0] === "archestra-claude-code-runtime";
   const isCodexRuntime = params.runtime.command?.[0] === "archestra-codex";
   if (credentials.env.CLAUDE_CODE_OAUTH_TOKEN) {
     throw new ApiError(

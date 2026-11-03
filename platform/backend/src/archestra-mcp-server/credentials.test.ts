@@ -3,7 +3,7 @@ import {
   redactCatalogToolArguments,
   TOOL_TRANSFER_CREDENTIAL_FULL_NAME,
 } from "@archestra/shared";
-import { AgentModel } from "@/models";
+import { AgentExcludedSubagentModel, AgentModel } from "@/models";
 import { preflightAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import { beforeEach, expect, test } from "@/test";
@@ -354,6 +354,22 @@ test("reports an Agent with no runtime rather than storing a value", async ({
 
   expect(result.isError).toBe(true);
   expect(textOf(result)).toContain("no Agent Runtime configured");
+});
+
+test("refuses to transfer a credential to an excluded or non-allowlisted subagent", async ({
+  makeAgent,
+}) => {
+  const target = await makeRuntimeAgent(makeAgent, runtimeConfig());
+  await AgentExcludedSubagentModel.replaceForAgent(context.agent.id, [
+    target.id,
+  ]);
+
+  const result = await declare(target.id);
+
+  expect(result.isError).toBe(true);
+  expect(textOf(result)).toContain(
+    `Agent "${target.name}" is not an allowed subagent of "${context.agent.name}".`,
+  );
 });
 
 test("its argument shape is redacted before a tool call is logged", () => {

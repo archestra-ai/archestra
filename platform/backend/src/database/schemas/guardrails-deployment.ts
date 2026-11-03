@@ -18,11 +18,11 @@ const guardrailsDeploymentTable = pgTable("guardrails_deployment", {
   // Whether a yell also turns OpenAPPA off for the session that sends it.
   breakTheGlassEnabled: boolean("superyell_enabled").notNull().default(true),
   // Whether a call waiting for human approval runs anyway, with a yell. By
-  // default it does where no person is there to approve it.
+  // default it waits, as before Break the glass: waiving is an opt-in.
   humanApprovalMode: varchar("human_approval_mode", { length: 16 })
     .$type<HumanApprovalMode>()
     .notNull()
-    .default("unattended"),
+    .default("block"),
   // Whether a call no remedy can lift runs anyway, with a yell.
   unapprovableBlockMode: varchar("unapprovable_block_mode", { length: 16 })
     .$type<UnapprovableBlockMode>()

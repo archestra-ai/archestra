@@ -4341,6 +4341,13 @@
       "when": 1793711023788,
       "tag": "0619_pink_shatterstar",
       "breakpoints": true
+    },
+    {
+      "idx": 620,
+      "version": "7",
+      "when": 1793734438079,
+      "tag": "0620_lucky_toro",
+      "breakpoints": true
     }
   ]
 }

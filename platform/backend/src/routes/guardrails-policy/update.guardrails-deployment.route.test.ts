@@ -71,7 +71,7 @@ describe("Deployment-wide Guardrails v2 switch", () => {
           enabled,
           unsupportedClientAction: "bypass",
           breakTheGlassEnabled: true,
-          humanApprovalMode: "unattended",
+          humanApprovalMode: "block",
           unapprovableBlockMode: "refuse",
           annotatorModelId: null,
           annotatorLlmApiKeyId: null,
@@ -163,7 +163,7 @@ describe("Deployment-wide Guardrails v2 switch", () => {
         expect.objectContaining({
           action: "organization.updated",
           before: expect.objectContaining({
-            humanApprovalMode: "unattended",
+            humanApprovalMode: "block",
             unapprovableBlockMode: "refuse",
           }),
           after: expect.objectContaining({

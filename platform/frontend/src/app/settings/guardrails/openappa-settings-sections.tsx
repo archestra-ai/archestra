@@ -115,7 +115,7 @@ export function OpenAppaBreakTheGlassSettings() {
             value: "unattended",
             label: "Waive in unattended sessions",
             description:
-              "Agent Runtimes, Scheduled tasks, and clients sending X-Archestra-Unattended: 1.",
+              "Agent Runtimes, Scheduled tasks, and clients sending X-Archestra-Unattended: 1. A workload's remedy plans count too.",
           },
           { value: "everywhere", label: "Waive everywhere" },
         ]}

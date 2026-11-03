@@ -5,6 +5,7 @@ import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { MemberModel } from "@/models";
 import AuditLogModel from "@/models/audit-log";
+import LimitModel, { LimitValidationService } from "@/models/limit";
 import TeamModel from "@/models/team";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
@@ -49,6 +50,41 @@ describe("team routes", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     await app.close();
+  });
+
+  test("team creation cannot promote a creator into an existing team's budget authority", async ({
+    makeTeam,
+    makeCustomRole,
+    makeTeamMember,
+  }) => {
+    const target = await makeTeam(organizationId, adminUser.id);
+    await makeTeamMember(target.id, adminUser.id, { role: "member" });
+    const role = await makeCustomRole(organizationId, {
+      role: "team_creator",
+      permission: { team: ["create"] },
+    });
+    await MemberModel.updateRole(adminUser.id, organizationId, role.role);
+    const promotion = await app.inject({
+      method: "PUT",
+      url: `/api/teams/${target.id}/members/${adminUser.id}`,
+      payload: { role: "admin" },
+    });
+    expect(promotion.statusCode, promotion.body).toBe(403);
+    const child = await app.inject({
+      method: "POST",
+      url: "/api/teams",
+      payload: { name: "Unauthorized child", parentId: target.id },
+    });
+    expect(child.statusCode, child.body).toBe(403);
+    const promoted = await app.inject({
+      method: "POST",
+      url: "/api/teams",
+      payload: { name: "Unauthorized role", roles: ["admin"] },
+    });
+    expect(promoted.statusCode, promoted.body).toBe(403);
+    expect(
+      await TeamModel.getAdministeredTeamIds(adminUser.id, organizationId),
+    ).toEqual([]);
   });
 
   test("persists and audits team role replacement and rejects grants the caller lacks", async ({
@@ -208,6 +244,61 @@ describe("team routes", () => {
   });
 
   describe("PUT /api/teams/:id", () => {
+    test("a child lead cannot detach or reparent to escape an inherited budget", async ({
+      makeTeam,
+      makeTeamMember,
+      makeAgent,
+    }) => {
+      const parent = await makeTeam(organizationId, adminUser.id);
+      const child = await makeTeam(organizationId, adminUser.id, {
+        parentId: parent.id,
+      });
+      const other = await makeTeam(organizationId, adminUser.id);
+      const agent = await makeAgent({ organizationId });
+      await makeTeamMember(child.id, adminUser.id, { role: "admin" });
+      await MemberModel.updateRole(adminUser.id, organizationId, "member");
+      const limit = await LimitModel.create({
+        entityType: "team",
+        entityId: parent.id,
+        limitType: "token_cost",
+        limitValue: 1,
+      });
+      await LimitModel.updateTokenLimitUsage(
+        "team",
+        parent.id,
+        "gpt-4o",
+        1_000_000,
+        1_000_000,
+      );
+      await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+      for (const parentId of [null, other.id]) {
+        const response = await app.inject({
+          method: "PUT",
+          url: `/api/teams/${child.id}`,
+          payload: { parentId },
+        });
+        expect(response.statusCode, response.body).toBe(403);
+        expect(
+          await LimitValidationService.checkLimitsBeforeRequest({
+            agentId: agent.id,
+            billingTeamId: child.id,
+            model: "gpt-4o",
+          }),
+        ).not.toBeNull();
+      }
+      expect((await TeamModel.findById(child.id))?.parentId).toBe(parent.id);
+      await MemberModel.updateRole(adminUser.id, organizationId, "admin");
+      expect(
+        (
+          await app.inject({
+            method: "PUT",
+            url: `/api/teams/${child.id}`,
+            payload: { parentId: other.id },
+          })
+        ).statusCode,
+      ).toBe(200);
+    });
+
     test("team admins may edit their own team's metadata without organization-wide team update", async ({
       makeTeam,
       makeTeamMember,

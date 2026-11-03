@@ -39,6 +39,7 @@ import ResourcePermissionSubjectModel, {
   type PrincipalSource,
 } from "@/models/resource-permission-subject";
 import ResourcePermissionTargetModel from "@/models/resource-permission-target";
+import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { resyncAppBackingInstallScope } from "@/services/apps/app-mcp-backing";
 import { assertNoStaticPinsBrokenByTargetChange } from "@/services/mcp-server-assignability";
 import type { ListInternalMcpCatalog } from "@/types";
@@ -233,6 +234,28 @@ export class ResourcePermissions {
     }))
       ? DEFAULT_CREDENTIAL_GRANTS
       : [];
+  }
+
+  /** UI discovery includes current team management, without granting use or sharing. */
+  static async resolveUiCapabilities(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<ManagedScopedPermission[]> {
+    const [grants, managedIds] = await Promise.all([
+      ResourcePermissions.resolveAll(params),
+      VirtualApiKeyModel.getTeamManagedIds(params),
+    ]);
+    return [
+      ...grants,
+      ...managedIds.flatMap((scope) =>
+        (["read", "update", "delete"] as const).map((action) => ({
+          organizationId: params.organizationId,
+          resource: "llmVirtualKey" as const,
+          scope,
+          action,
+        })),
+      ),
+    ];
   }
 
   /** Load scoped capabilities once for a request that touches several targets. */
@@ -561,7 +584,14 @@ export class ResourcePermissions {
             grants: effective.grants,
             required: { ...params, action: "manage-permissions" },
           });
-    if (!canView)
+    const canViewTeamKey =
+      !canView &&
+      params.resource === "llmVirtualKey" &&
+      params.scope !== "*" &&
+      (await VirtualApiKeyModel.getTeamManagedIds(params)).includes(
+        params.scope,
+      );
+    if (!canView && !canViewTeamKey)
       throw new ApiError(
         403,
         "You do not have permission to view this resource's permissions",

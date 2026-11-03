@@ -22,6 +22,7 @@ import type { InitialPermissionGrant } from "@/components/initial-resource-permi
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import { ProviderAccessField } from "@/components/provider-access-field";
 import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
+import { RemoteUserSelect } from "@/components/remote-user-select";
 import { ResourceAccessSection } from "@/components/resource-access-section";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
@@ -34,6 +35,7 @@ import { VirtualKeyConnectionGuide } from "@/components/virtual-key-connection-g
 import { useScopedCapabilities, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useMyTeams } from "@/lib/teams/team.query";
 import { formatRelativeTime } from "@/lib/utils/date-time";
 import {
   useAllVirtualApiKeys,
@@ -184,8 +186,30 @@ export function CreateVirtualKeyDialog({
   const generatedNameRef = useRef("");
 
   const isPassthrough = keyType === "passthrough";
-  const effectiveOwnerId = currentUser?.id;
-  const effectiveOwnerName = currentUser?.name;
+  const [ownerId, setOwnerId] = useState<string | undefined>();
+  const { data: myTeams = [] } = useMyTeams({ includeDescendants: true });
+  const isKeyAdmin = capabilities?.some(
+    (grant) =>
+      grant.resource === "llmVirtualKey" &&
+      grant.scope === "*" &&
+      grant.action === "update",
+  );
+  const canChooseOwner =
+    isKeyAdmin ||
+    (!!billingTeamId &&
+      myTeams.some(
+        (team) =>
+          team.myRole === "admin" &&
+          (team.id === billingTeamId ||
+            team.descendantTeams?.some((child) => child.id === billingTeamId)),
+      ));
+  const effectiveOwnerId = canChooseOwner
+    ? (ownerId ?? currentUser?.id)
+    : currentUser?.id;
+  const ownerManagesAccess =
+    effectiveOwnerId !== currentUser?.id && !isKeyAdmin;
+  const effectiveOwnerName =
+    effectiveOwnerId === currentUser?.id ? currentUser?.name : undefined;
   const generatedName = useMemo(
     () =>
       isPassthrough
@@ -203,6 +227,7 @@ export function CreateVirtualKeyDialog({
     prevOpenRef.current = open;
     if (open && !wasOpen) {
       setCreatedKey(null);
+      setOwnerId(undefined);
       setIncludeFutureProviders(false);
       const initialExpiresAt = computeDefaultExpiresAt(
         defaultExpirationSeconds,
@@ -236,6 +261,7 @@ export function CreateVirtualKeyDialog({
         grants: [],
         modelPoolIds: [],
         labels: [],
+        ownerId: undefined,
       };
     }
   }, [open, defaultExpirationSeconds, keyType, generatedName, isPassthrough]);
@@ -297,6 +323,7 @@ export function CreateVirtualKeyDialog({
       grants,
       modelPoolIds,
       labels,
+      ownerId,
     });
 
   const handleCreate = useCallback(async () => {
@@ -308,6 +335,9 @@ export function CreateVirtualKeyDialog({
       labels: finalLabels,
       billingTeamId: billingTeamId ?? undefined,
       spendCap: spendCap ?? undefined,
+      ...(effectiveOwnerId !== currentUser?.id && {
+        ownerId: effectiveOwnerId,
+      }),
     };
     try {
       const result = await createMutation.mutateAsync({
@@ -318,15 +348,19 @@ export function CreateVirtualKeyDialog({
               keyType: "standard",
               includeFutureProviders,
               providerApiKeys: providerApiKeyIds,
-              initialGrants: grants.map(({ subject, actions }) => ({
-                subject,
-                actions,
-              })),
+              initialGrants: (ownerManagesAccess ? [] : grants).map(
+                ({ subject, actions }) => ({
+                  subject,
+                  actions,
+                }),
+              ),
               ...(canSetModelPools && { modelPoolIds }),
             },
       });
       setNewKeyName("");
-      if (result?.value) {
+      if (result && !result.value) {
+        onOpenChange(false);
+      } else if (result?.value) {
         if (onCreated) {
           onCreated(result);
           onOpenChange(false);
@@ -338,6 +372,9 @@ export function CreateVirtualKeyDialog({
       // handled by mutation
     }
   }, [
+    effectiveOwnerId,
+    ownerManagesAccess,
+    currentUser?.id,
     canSetModelPools,
     createMutation,
     expiresAt,
@@ -461,6 +498,28 @@ export function CreateVirtualKeyDialog({
                   onChange={setModelPoolIds}
                 />
               )}
+              {canChooseOwner && (
+                <div className="space-y-2">
+                  <Label>Key owner</Label>
+                  <RemoteUserSelect
+                    value={effectiveOwnerId ?? ""}
+                    onValueChange={setOwnerId}
+                    ariaLabel="Key owner"
+                    pinnedOption={
+                      currentUser
+                        ? {
+                            value: currentUser.id,
+                            label: currentUser.name ?? "You",
+                          }
+                        : undefined
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The owner must belong to the billing team or one of its
+                    child teams.
+                  </p>
+                </div>
+              )}
               <AdvancedSection keepMounted>
                 <BudgetFields
                   subject="key"
@@ -471,12 +530,18 @@ export function CreateVirtualKeyDialog({
                   spendCap={spendCap}
                   onSpendCapChange={setSpendCap}
                 />
-                {!isPassthrough && (
+                {!isPassthrough && !ownerManagesAccess && (
                   <ResourceAccessSection
                     resource="llmVirtualKey"
                     grants={grants}
                     onGrantsChange={setGrants}
                   />
+                )}
+                {!isPassthrough && ownerManagesAccess && (
+                  <p className="text-sm text-muted-foreground">
+                    The selected owner controls who can use this key and can
+                    copy it from Virtual Keys after creation.
+                  </p>
                 )}
                 <AdvancedLabelsSection
                   attributionSource="credential"

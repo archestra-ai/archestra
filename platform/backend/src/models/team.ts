@@ -37,9 +37,67 @@ import CreatedByModel from "./created-by";
 import TeamLabelModel from "./team-label";
 
 class TeamModel {
+  /** Billing budgets include each ancestor once, within the billing team's organization. */
+  static billingAncestorIdsQuery(teamId: SQLWrapper | string): SQL {
+    return sql`WITH RECURSIVE billing_teams(id, parent_id, organization_id) AS (
+      SELECT id, parent_team_id, organization_id FROM team WHERE id = ${teamId}
+      UNION
+      SELECT parent.id, parent.parent_team_id, parent.organization_id
+      FROM team parent JOIN billing_teams child ON parent.id = child.parent_id
+        AND parent.organization_id = child.organization_id
+    ) SELECT id FROM billing_teams`;
+  }
+
+  static async getBillingAncestorIds(teamId: string): Promise<string[]> {
+    const rows = await db
+      .select({ id: schema.teamsTable.id })
+      .from(schema.teamsTable)
+      .where(
+        sql`${schema.teamsTable.id} IN (${TeamModel.billingAncestorIdsQuery(teamId)})`,
+      );
+    return rows.map(({ id }) => id);
+  }
+
+  /** Fresh team authority, expanded downwards without granting an org-wide role. */
+  static async getAdministeredTeamIds(
+    userId: string,
+    organizationId: string,
+    descendantsOnly = false,
+  ): Promise<string[]> {
+    const [member] = await db
+      .select({ id: schema.membersTable.id })
+      .from(schema.membersTable)
+      .where(
+        and(
+          eq(schema.membersTable.userId, userId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    if (!member) return [];
+    const roots = await TeamModel.getUserAdminTeamIds(userId, organizationId);
+    if (!roots.length) return [];
+    const hierarchy = await db
+      .select({
+        id: schema.teamsTable.id,
+        name: schema.teamsTable.name,
+        parentId: schema.teamsTable.parentId,
+      })
+      .from(schema.teamsTable)
+      .where(eq(schema.teamsTable.organizationId, organizationId));
+    const result = new Set(descendantsOnly ? [] : roots);
+    for (const root of roots) {
+      for (const team of TeamModel.findDescendants(hierarchy, root))
+        result.add(team.id);
+    }
+    // A lead cannot raise the ceiling assigned to any team they directly administer.
+    if (descendantsOnly) for (const root of roots) result.delete(root);
+    return [...result];
+  }
+
   /** SQL predicate matching direct team membership plus every ancestor. */
   static effectiveMembershipCondition(params: {
-    userId: string;
+    userId: string | SQLWrapper;
     teamIdColumn: SQLWrapper;
   }): SQL<boolean> {
     return sql<boolean>`${params.teamIdColumn} IN (

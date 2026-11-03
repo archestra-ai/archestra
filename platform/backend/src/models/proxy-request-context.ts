@@ -13,6 +13,7 @@ import {
   limitEntityParameters,
 } from "./limit-entity-scope";
 import { throughputRuleCondition } from "./llm-throughput";
+import TeamModel from "./team";
 
 type TraceTeam = Pick<Team, "id" | "name"> & { labels: LabelWithDetails[] };
 
@@ -203,7 +204,7 @@ export default class ProxyRequestContextModel {
     const teamArray = sql`ARRAY(
       SELECT ${teamId} FROM ${teamIds} WHERE ${billingTeamId}::text IS NULL
         AND ${teamId} IN (${callerTeamIdsQuery(sql.placeholder("teamMemberUserId"))})
-      UNION ALL SELECT ${billingTeamId}::text WHERE ${billingTeamId}::text IS NOT NULL
+      UNION SELECT id FROM (${TeamModel.billingAncestorIdsQuery(sql`${billingTeamId}::text`)}) billing_ancestors
     )`;
     return buildContextQuery(database.with(teamIds), {
       runtimeCandidates: runtimeCandidatesSelection(),

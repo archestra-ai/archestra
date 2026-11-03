@@ -16,21 +16,33 @@ beforeEach(() => {
   } as ReturnType<typeof useHasPermissions>);
   vi.mocked(useMyTeams).mockReturnValue({
     data: [
-      { id: "a", myRole: "admin" },
+      {
+        id: "a",
+        name: "Parent",
+        myRole: "admin",
+        descendantTeams: [{ id: "child", name: "Child" }],
+      },
       { id: "b", myRole: "member" },
     ],
     isPending: false,
   } as ReturnType<typeof useMyTeams>);
 });
-it("opens Limits for a lead and grants writes only to directly administered teams", () => {
+it("opens Limits for a lead and grants writes to descendants while keeping the own ceiling read-only", () => {
   const { result } = renderHook(useTeamLimitAccess);
   expect(result.current.canRead).toBe(true);
   expect(result.current.globalRead).toBe(false);
-  expect(result.current.teams.map((team) => team.id)).toEqual(["a"]);
+  expect(result.current.teams.map((team) => team.id)).toEqual(["a", "child"]);
   for (const action of ["create", "update", "delete"] as const) {
     expect(
-      result.current.allows(action, { entityType: "team", entityId: "a" }),
+      result.current.allows(action, {
+        entityType: "team",
+        entityId: "child",
+        teamManaged: false,
+      }),
     ).toBe(true);
+    expect(
+      result.current.allows(action, { entityType: "team", entityId: "a" }),
+    ).toBe(false);
     expect(
       result.current.allows(action, { entityType: "team", entityId: "b" }),
     ).toBe(false);

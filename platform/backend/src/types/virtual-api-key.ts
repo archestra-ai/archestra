@@ -49,9 +49,9 @@ export const InsertVirtualApiKeySchema = createInsertSchema(
     scope: ResourceVisibilityScopeSchema.optional(),
   });
 
-/** Schema for virtual key response at creation time (includes full token value) */
+/** The token is withheld from team leads creating keys on behalf of a member. */
 export const VirtualApiKeyWithValueSchema = SelectVirtualApiKeySchema.extend({
-  value: z.string(),
+  value: z.string().optional(),
   teams: z.array(VirtualApiKeyTeamSchema),
   authorName: z.string().nullable(),
   createdBy: CreatedByNullableSchema,

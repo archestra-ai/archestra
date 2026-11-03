@@ -264,6 +264,12 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       if (body.parentId !== undefined) {
+        if (body.parentId !== existingTeam.parentId && !canUpdateTeams) {
+          throw new ApiError(
+            403,
+            "Changing a team's parent requires organization team management permission.",
+          );
+        }
         await assertValidTeamParent({
           teamId: id,
           parentId: body.parentId,

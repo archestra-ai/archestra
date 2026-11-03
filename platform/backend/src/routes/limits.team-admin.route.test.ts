@@ -29,214 +29,128 @@ describe("team admin Limits access", () => {
     await app.close();
   });
 
-  test("direct team admins reuse CRUD and labels, without reading or mutating sibling, ancestor or organization limits", async ({
-    makeTeam,
-    makeTeamMember,
-  }) => {
-    const parent = await makeTeam(organizationId, user.id);
-    const mine = await makeTeam(organizationId, user.id, {
-      parentId: parent.id,
-    });
-    const sibling = await makeTeam(organizationId, user.id);
-    await makeTeamMember(mine.id, user.id, { role: "admin" });
-    await makeTeamMember(sibling.id, user.id, { role: "member" });
-    const hidden = await LimitModel.create({
-      entityType: "team",
-      entityId: sibling.id,
-      limitType: "token_cost",
-      limitValue: 800,
-      labels: [{ key: "private-owner", value: "restricted" }],
-    });
-    const parentLimit = await LimitModel.create({
-      entityType: "team",
-      entityId: parent.id,
-      limitType: "token_cost",
-      limitValue: 900,
-    });
-    const created = await app.inject({
-      method: "POST",
-      url: "/api/limits",
-      payload: {
-        entityType: "team",
-        entityId: mine.id,
-        limitType: "token_cost",
-        limitValue: 100,
-        labels: [{ key: "owner", value: "platform" }],
-      },
-    });
-    expect(created.statusCode, created.body).toBe(200);
-    const id = created.json().id;
-    const listed = await app.inject({ method: "GET", url: "/api/limits" });
-    expect(listed.json().map((row: { id: string }) => row.id)).toEqual([id]);
-    const keys = await app.inject({
-      method: "GET",
-      url: "/api/limits/labels/keys",
-    });
-    expect(keys.json()).toEqual(["owner"]);
-    for (const other of [hidden, parentLimit]) {
-      for (const method of ["GET", "PATCH", "DELETE"] as const) {
-        const response = await app.inject({
-          method,
-          url: `/api/limits/${other.id}`,
-          ...(method === "PATCH" ? { payload: { limitValue: 9999 } } : {}),
-        });
-        expect(response.statusCode, response.body).toBe(404);
-      }
-    }
-    const organization = await app.inject({
-      method: "POST",
-      url: "/api/limits",
-      payload: {
-        entityType: "organization",
-        entityId: organizationId,
-        limitType: "token_cost",
-        limitValue: 100,
-      },
-    });
-    expect(organization.statusCode).toBe(404);
-    const edited = await app.inject({
-      method: "PATCH",
-      url: `/api/limits/${id}`,
-      payload: { limitValue: 150 },
-    });
-    expect(edited.statusCode, edited.body).toBe(200);
-    const bulk = await app.inject({
-      method: "DELETE",
-      url: "/api/limits/bulk",
-      payload: { ids: [id, hidden.id] },
-    });
-    expect(
-      bulk.json().succeeded.map((item: { id: string }) => item.id),
-    ).toEqual([id]);
-    expect(bulk.json().failed).toHaveLength(1);
-    expect(await LimitModel.findById(hidden.id)).not.toBeNull();
-  });
-
-  test("team admins see an organization-set limit on their team but cannot change or delete it", async ({
-    makeTeam,
-    makeTeamMember,
-  }) => {
-    const team = await makeTeam(organizationId, user.id);
-    await makeTeamMember(team.id, user.id, { role: "admin" });
-    const orgSet = await LimitModel.create({
-      entityType: "team",
-      entityId: team.id,
-      limitType: "token_cost",
-      limitValue: 100,
-    });
-    const created = await app.inject({
-      method: "POST",
-      url: "/api/limits",
-      payload: {
-        entityType: "team",
-        entityId: team.id,
-        limitType: "token_cost",
-        limitValue: 50,
-        teamManaged: false,
-      },
-    });
-    expect(created.statusCode, created.body).toBe(200);
-    expect(created.json().teamManaged).toBe(true);
-
-    const listed = await app.inject({ method: "GET", url: "/api/limits" });
-    expect(
-      Object.fromEntries(
-        listed
-          .json()
-          .map((row: { id: string; teamManaged: boolean }) => [
-            row.id,
-            row.teamManaged,
-          ]),
-      ),
-    ).toEqual({ [orgSet.id]: false, [created.json().id]: true });
-    for (const method of ["PATCH", "DELETE"] as const) {
-      const response = await app.inject({
-        method,
-        url: `/api/limits/${orgSet.id}`,
-        ...(method === "PATCH" ? { payload: { limitValue: 1_000_000 } } : {}),
-      });
-      expect(response.statusCode, response.body).toBe(403);
-    }
-    const bulk = await app.inject({
-      method: "DELETE",
-      url: "/api/limits/bulk",
-      payload: { ids: [orgSet.id] },
-    });
-    expect(bulk.json().succeeded).toEqual([]);
-    expect(await LimitModel.findById(orgSet.id)).toMatchObject({
-      limitValue: 100,
-    });
-  });
-
-  test("an ordinary member is denied; demotion removes access immediately; another org's admin membership grants nothing", async ({
+  test("leads manage descendant limits including org-set allocations, while own ceilings and unrelated teams are protected", async ({
     makeTeam,
     makeTeamMember,
     makeOrganization,
   }) => {
+    const parent = await makeTeam(organizationId, user.id);
+    await makeTeamMember(parent.id, user.id, { role: "admin" });
+    const child = await makeTeam(organizationId, user.id, {
+      parentId: parent.id,
+    });
+    const grandchild = await makeTeam(organizationId, user.id, {
+      parentId: child.id,
+    });
+    const unrelated = await makeTeam(organizationId, user.id);
+    const foreign = await makeTeam((await makeOrganization()).id, user.id);
+    const limits = await Promise.all(
+      [parent, child, grandchild, unrelated, foreign].map((team) =>
+        LimitModel.create({
+          entityType: "team",
+          entityId: team.id,
+          limitType: "token_cost",
+          limitValue: 100,
+        }),
+      ),
+    );
+    const listed = await app.inject({ method: "GET", url: "/api/limits" });
+    expect(listed.statusCode, listed.body).toBe(200);
     expect(
-      (await app.inject({ method: "GET", url: "/api/limits" })).statusCode,
-    ).toBe(403);
-    const team = await makeTeam(organizationId, user.id);
-    await makeTeamMember(team.id, user.id, { role: "admin" });
+      listed
+        .json()
+        .map((row: { id: string }) => row.id)
+        .sort(),
+    ).toEqual(
+      limits
+        .slice(0, 3)
+        .map((limit) => limit.id)
+        .sort(),
+    );
+    for (const limit of limits) {
+      const writable =
+        limit.entityId === child.id || limit.entityId === grandchild.id;
+      const edited = await app.inject({
+        method: "PATCH",
+        url: `/api/limits/${limit.id}`,
+        payload: { limitValue: 200 },
+      });
+      expect(edited.statusCode, edited.body).toBe(writable ? 200 : 404);
+      const reset = await app.inject({
+        method: "POST",
+        url: `/api/limits/${limit.id}/reset`,
+      });
+      expect(reset.statusCode, reset.body).toBe(writable ? 200 : 404);
+    }
+    for (const team of [parent, child, unrelated, foreign]) {
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/limits",
+        payload: {
+          entityType: "team",
+          entityId: team.id,
+          limitType: "token_cost",
+          limitValue: 50,
+        },
+      });
+      expect(created.statusCode, created.body).toBe(
+        team.id === child.id ? 200 : 404,
+      );
+    }
+    const bulk = await app.inject({
+      method: "DELETE",
+      url: "/api/limits/bulk",
+      payload: { ids: limits.map((limit) => limit.id) },
+    });
     expect(
-      (await app.inject({ method: "GET", url: "/api/limits" })).statusCode,
-    ).toBe(200);
+      bulk
+        .json()
+        .succeeded.map((row: { id: string }) => row.id)
+        .sort(),
+    ).toEqual(
+      limits
+        .slice(1, 3)
+        .map((limit) => limit.id)
+        .sort(),
+    );
+    expect(await LimitModel.findById(limits[0].id)).toMatchObject({
+      limitValue: 100,
+    });
+  });
+
+  test("ordinary members, revoked admins and foreign admins cannot manage allocations", async ({
+    makeTeam,
+    makeTeamMember,
+    makeOrganization,
+  }) => {
+    const parent = await makeTeam(organizationId, user.id);
+    const child = await makeTeam(organizationId, user.id, {
+      parentId: parent.id,
+    });
+    const limit = await LimitModel.create({
+      entityType: "team",
+      entityId: child.id,
+      limitType: "token_cost",
+      limitValue: 100,
+    });
+    const patch = () =>
+      app.inject({
+        method: "PATCH",
+        url: `/api/limits/${limit.id}`,
+        payload: { limitValue: 200 },
+      });
+    expect((await patch()).statusCode).toBe(403);
+    await makeTeamMember(parent.id, user.id, { role: "admin" });
+    expect((await patch()).statusCode).toBe(200);
     authMethod = "api_key";
-    expect(
-      (await app.inject({ method: "GET", url: "/api/limits" })).statusCode,
-    ).toBe(403);
+    expect((await patch()).statusCode).toBe(403);
     authMethod = "session";
     await db
       .update(schema.teamMembersTable)
       .set({ role: "member" })
-      .where(eq(schema.teamMembersTable.teamId, team.id));
+      .where(eq(schema.teamMembersTable.teamId, parent.id));
     const foreign = await makeTeam((await makeOrganization()).id, user.id);
     await makeTeamMember(foreign.id, user.id, { role: "admin" });
-    expect(
-      (await app.inject({ method: "GET", url: "/api/limits" })).statusCode,
-    ).toBe(403);
-  });
-
-  test("team admins reset only the spend limits they set on their own team", async ({
-    makeTeam,
-    makeTeamMember,
-  }) => {
-    const team = await makeTeam(organizationId, user.id);
-    const other = await makeTeam(organizationId, user.id);
-    await makeTeamMember(team.id, user.id, { role: "admin" });
-    const reset = (id: string) =>
-      app.inject({ method: "POST", url: `/api/limits/${id}/reset` });
-    const orgSet = await LimitModel.create({
-      entityType: "team",
-      entityId: team.id,
-      limitType: "token_cost",
-      limitValue: 100,
-    });
-    const otherTeam = await LimitModel.create({
-      entityType: "team",
-      entityId: other.id,
-      limitType: "token_cost",
-      limitValue: 100,
-    });
-    const created = await app.inject({
-      method: "POST",
-      url: "/api/limits",
-      payload: {
-        entityType: "team",
-        entityId: team.id,
-        limitType: "token_cost",
-        limitValue: 50,
-      },
-    });
-    expect(created.statusCode, created.body).toBe(200);
-
-    expect((await reset(created.json().id)).statusCode).toBe(200);
-    expect((await reset(orgSet.id)).statusCode).toBe(403);
-    expect((await reset(otherTeam.id)).statusCode).toBe(404);
-    await db
-      .update(schema.teamMembersTable)
-      .set({ role: "member" })
-      .where(eq(schema.teamMembersTable.teamId, team.id));
-    expect((await reset(created.json().id)).statusCode).toBe(403);
+    expect((await patch()).statusCode).toBe(403);
   });
 });

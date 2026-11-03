@@ -5,7 +5,7 @@ import {
 } from "@archestra/shared";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
-import { TeamLabelModel, TeamModel } from "@/models";
+import { MemberModel, TeamLabelModel, TeamModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -311,6 +311,25 @@ describe("team tool execution", () => {
   });
 
   // === edit_team ===
+
+  test("a child lead cannot remove inherited budget authority through edit_team", async ({
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const parent = await makeTeam(organizationId, adminUserId);
+    const child = await makeTeam(organizationId, adminUserId, {
+      parentId: parent.id,
+    });
+    await makeTeamMember(child.id, adminUserId, { role: "admin" });
+    await MemberModel.updateRole(adminUserId, organizationId, "member");
+    const result = await executeArchestraTool(
+      toolName("edit_team"),
+      { id: child.id, parent_id: null },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    expect((await TeamModel.findById(child.id))?.parentId).toBe(parent.id);
+  });
 
   test("edit_team returns error when no fields provided", async ({
     makeTeam,

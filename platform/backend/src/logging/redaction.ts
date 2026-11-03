@@ -77,17 +77,49 @@ export const REDACTED_LOG_PATHS = [
  * Pino's default err serializer copies every enumerable own property of the
  * error. Upstream HTTP client errors (provider SDKs, our fetch wrappers that
  * attach `responseBody`) can therefore drag credentials (`headers`, `config`)
- * or unbounded upstream payloads into the log. Strip the credential carriers
- * and bound the payload fields. Non-Error values pass through untouched so
+ * or the full conversation (`requestBodyValues`) into the log. Strip request
+ * bodies and credential carriers, and bound response payload fields. Apply
+ * the same policy to nested errors, including SDK retry histories.
+ * Non-Error values pass through untouched so
  * `{ error: "some message" }` call sites keep working.
  */
 export function serializeErrorBounded(value: unknown): unknown {
+  return serializeError(value, new WeakSet());
+}
+
+// === Internal ===
+
+function serializeError(value: unknown, ancestors: WeakSet<Error>): unknown {
   if (!(value instanceof Error)) return value;
+  if (ancestors.has(value)) return "[Circular]";
+  ancestors.add(value);
 
   const serialized = pino.stdSerializers.err(value) as Record<string, unknown>;
   delete serialized.headers;
   delete serialized.config;
   delete serialized.request;
+  delete serialized.requestBody;
+  delete serialized.requestBodyValues;
+
+  // Pino recursively serializes Error properties using its own serializer,
+  // bypassing ours. Reapply our policy to those children (e.g. lastError).
+  // Work on the serialized copy; callers still need the original payload
+  // for retries, error handling and interaction records.
+  for (const key of Object.keys(serialized)) {
+    const original = (value as unknown as Record<string, unknown>)[key];
+    if (original instanceof Error) {
+      serialized[key] = serializeError(original, ancestors);
+    }
+  }
+
+  // Pino emits aggregateErrors for both AggregateError and SDK RetryError;
+  // the latter also exposes the same history under its enumerable errors key.
+  const errors = (value as Error & { errors?: unknown }).errors;
+  if (Array.isArray(errors)) {
+    const sanitized = errors.map((error) => serializeError(error, ancestors));
+    serialized.aggregateErrors = sanitized;
+    if (Object.hasOwn(serialized, "errors")) serialized.errors = sanitized;
+  }
 
   for (const key of ["responseBody", "body", "responseText"]) {
     const field = serialized[key];
@@ -100,10 +132,9 @@ export function serializeErrorBounded(value: unknown): unknown {
     }
   }
 
+  ancestors.delete(value);
   return serialized;
 }
-
-// === Internal ===
 
 /**
  * Longest string kept for upstream error payload fields. Provider SDK errors

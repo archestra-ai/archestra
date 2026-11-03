@@ -39,7 +39,10 @@ import {
   type StartupGuardClient,
   type StartupGuardContext,
 } from "./startup-guard";
-import { renderStartupGuardPowerShell } from "./startup-guard.windows";
+import {
+  buildWindowsStartupGuardInstallSection,
+  renderStartupGuardPowerShell,
+} from "./startup-guard.windows";
 
 const execFileAsync = promisify(execFile);
 
@@ -473,17 +476,25 @@ describe("Codex-specific disconnect", () => {
 
 /**
  * Pull one shell function out of the rendered guard so it can be run on its
- * own. The generator emits every function at column 0 and closes it with a
- * bare `}`, so the slice is unambiguous.
+ * own. Shell syntax distinguishes its closing brace from embedded helper
+ * source that also contains bare `}` lines.
  */
 function extractShellFunction(script: string, name: string): string {
   const lines = script.split("\n");
   // The opening line may carry a trailing `# $1 kind` comment.
   const start = lines.findIndex((line) => line.startsWith(`${name}() {`));
   if (start === -1) throw new Error(`no ${name}() in the rendered guard`);
-  const end = lines.indexOf("}", start);
-  if (end === -1) throw new Error(`${name}() is never closed`);
-  return lines.slice(start, end + 1).join("\n");
+  if (lines[start].endsWith("}")) return lines[start];
+  for (let end = start + 1; end < lines.length; end++) {
+    if (lines[end] !== "}") continue;
+    const candidate = lines.slice(start, end + 1).join("\n");
+    // Embedded JavaScript also has bare closing braces. It does not close
+    // the surrounding shell function while its quoted source is incomplete.
+    if (spawnSync("bash", ["-n"], { input: candidate }).status === 0) {
+      return candidate;
+    }
+  }
+  throw new Error(`${name}() is never closed`);
 }
 
 /**
@@ -514,6 +525,7 @@ async function runGuardSnippet(params: {
 }): Promise<{
   code: number;
   stdout: string;
+  stderr: string;
   cliArgs: string[];
   files: Record<string, string | null>;
 }> {
@@ -583,10 +595,11 @@ async function runGuardSnippet(params: {
         },
       },
     ).then(
-      (r) => ({ code: 0, stdout: r.stdout }),
-      (e: { code?: number; stdout?: string }) => ({
+      (r) => ({ code: 0, stdout: r.stdout, stderr: r.stderr }),
+      (e: { code?: number; stdout?: string; stderr?: string }) => ({
         code: e.code ?? 1,
         stdout: e.stdout ?? "",
+        stderr: e.stderr ?? "",
       }),
     );
 
@@ -705,7 +718,7 @@ describe("Codex disconnect reverses the credential it installed", () => {
     true,
   ])("proxy removal restores direct-mode settings with MCP disconnected first: %s", async (mcpFirst) => {
     const helper = `${CODEX_GUARD_CLIENT.scriptRelpath}.handoff.cjs`;
-    const { code } = await runGuardSnippet({
+    const { code, stdout, stderr } = await runGuardSnippet({
       client: CODEX_GUARD_CLIENT,
       functions: [
         "menu_disconnect_row",
@@ -753,7 +766,7 @@ test ! -f "$HOME/archestra-direct-model-catalog.json"
 ${mcpFirst ? '! grep -Fq "[mcp_servers.prod_gateway]" "$HOME/config.toml"' : 'grep -Fq "[mcp_servers.prod_gateway]" "$HOME/config.toml"'}
 `,
     });
-    expect(code).toBe(0);
+    expect(code, stdout + stderr).toBe(0);
   });
 
   test.each([
@@ -2271,7 +2284,7 @@ describe("ChatGPT plugin disconnect verification", () => {
   test.for([
     "bash",
     "powershell",
-  ] as const)("%s retries the connection plugin as one resource after partial cleanup", async (platform, {
+  ] as const)("%s retries partial plugin cleanup and keeps it disconnected across refresh", async (platform, {
     skip,
   }) => {
     skip(platform === "powershell" && !powershellBin);
@@ -2302,6 +2315,15 @@ describe("ChatGPT plugin disconnect verification", () => {
 const fs = require('node:fs');
 const args = process.argv.slice(2);
 fs.appendFileSync(${JSON.stringify(logFile)}, JSON.stringify(args) + '\\n');
+const config = ${JSON.stringify(configFile)};
+const plugin = '[plugins."acme-skills@acme-skills"]';
+const marketplace = '[marketplaces."acme-skills"]';
+if (args[0] === 'plugin' && args[1] === 'add' && !fs.readFileSync(config, 'utf8').includes(plugin)) {
+  fs.appendFileSync(config, plugin + '\\nenabled = true\\n');
+}
+if (args[0] === 'plugin' && args[1] === 'marketplace' && args[2] === 'upgrade' && !fs.readFileSync(config, 'utf8').includes(marketplace)) {
+  fs.appendFileSync(config, marketplace + '\\nsource_type = "git"\\n');
+}
 let section;
 if (args[0] === 'plugin' && args[1] === 'marketplace' && args[2] === 'remove') {
   if (process.env.FAIL_MARKETPLACE === '1') process.exit(1);
@@ -2365,6 +2387,8 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
               HOME: home,
               USERPROFILE: home,
               CODEX_HOME: configDir,
+              XDG_STATE_HOME: path.join(home, "state"),
+              XDG_DATA_HOME: path.join(home, "data"),
               PATH: `${bin}:${process.env.PATH ?? ""}`,
               ARCHESTRA_GUARD_ACTION: "disconnect",
               FAIL_MARKETPLACE: fail ? "1" : "0",
@@ -2394,6 +2418,128 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         FOREIGN_TABLES.trim(),
       );
       expect(await readFile(guard, "utf8").catch(() => null)).toBeNull();
+
+      // Disconnect only the plugin, keeping the proxy and its launcher.
+      const withProxy = { ...ctx, proxy: CTX.proxy };
+      const proxyBlock =
+        '# >>> archestra:acme_proxy >>>\n[model_providers.acme_proxy]\nname = "acme_proxy"\n# <<< archestra:acme_proxy <<<\n';
+      const lifecycleGuard =
+        platform === "bash"
+          ? renderStartupGuardScript(withProxy, client)
+          : renderStartupGuardPowerShell(withProxy, client);
+      await writeFile(guard, lifecycleGuard);
+      await writeFile(configFile, `${FOREIGN_TABLES}\n${proxyBlock}${owned}`);
+      const skipFile = path.join(home, client.skipRelpath);
+      const refresh =
+        platform === "bash"
+          ? extractShellFunction(
+              buildStartupGuardInstallSection(withProxy, client),
+              "archestra_refresh_codex_marketplace",
+            )
+          : extractPowerShellFunction(
+              buildWindowsStartupGuardInstallSection(withProxy, client),
+              "Invoke-ArchestracodexMarketplaceRefresh",
+            );
+      const lifecycle = path.join(
+        dir,
+        platform === "bash" ? "lifecycle.sh" : "lifecycle.ps1",
+      );
+      await mkdir(path.join(home, "data"));
+      const prelude =
+        platform === "bash"
+          ? `SKIP_FILE=${JSON.stringify(skipFile)}
+MCP_SERVER_NAME=prod_gateway
+SKILLS_MARKETPLACE_NAME=acme-skills
+PLUGIN_NAMES=acme-skills
+C_ERR=''; C_RESET=''; C_ACCENT=''; C_DIM=''
+MIN_CHECK_FRAMES=0; FRAME_SLEEP=0
+line_reset() { :; }
+spin_start() { :; }
+spin_tick() { :; }
+GUARD_KINDS=(mcp)
+GUARD_LABELS=('Connection plugin')
+${["disconnect_actions", "disconnect_verify", "disconnect_resource", "remember_disconnected", "disconnect_and_forget"].map((name) => extractShellFunction(lifecycleGuard, name)).join("\n")}
+`
+          : `$SkipFile = ${psSingleQuote(skipFile)}
+if (-not ([Environment]::GetFolderPath('LocalApplicationData')).StartsWith($env:USERPROFILE + [IO.Path]::DirectorySeparatorChar)) { throw 'Fixture data directory was not selected' }
+$McpServerName = 'prod_gateway'
+$SkillsMarketplaceName = 'acme-skills'
+$PluginNames = @('acme-skills')
+$FrameSleepMs = 0
+function Show-ArchSpinStart { }
+function Show-ArchSpinTick { }
+function Clear-ArchLine { }
+function Write-Arch { }
+${["Get-ArchRealExe", "Invoke-ArchDisconnectActions", "Test-ArchDisconnected", "Disconnect-ArchRemote", "Add-ArchDisconnected", "Disconnect-ArchRemotes"].map((name) => extractPowerShellFunction(lifecycleGuard, name)).join("\n")}
+`;
+      const invokeLifecycle = async (body: string) => {
+        await writeFile(lifecycle, prelude + body);
+        const result = spawnSync(
+          platform === "bash" ? "bash" : (powershellBin ?? "pwsh"),
+          platform === "bash"
+            ? [lifecycle]
+            : ["-NoProfile", "-NonInteractive", "-File", lifecycle],
+          {
+            env: {
+              ...process.env,
+              HOME: home,
+              USERPROFILE: home,
+              CODEX_HOME: configDir,
+              XDG_STATE_HOME: path.join(home, "state"),
+              XDG_DATA_HOME: path.join(home, "data"),
+              PATH: `${bin}:${process.env.PATH ?? ""}`,
+            },
+            encoding: "utf8",
+            timeout: 30_000,
+          },
+        );
+        expect(result.error).toBeUndefined();
+        expect(result.status, result.stdout + result.stderr).toBe(0);
+      };
+      await invokeLifecycle(
+        platform === "bash"
+          ? "disconnect_and_forget 0"
+          : "Disconnect-ArchRemotes @(@{ Kind = 'mcp'; Label = 'Connection plugin' })",
+      );
+      expect(await readFile(skipFile, "utf8")).toMatch(/^mcp\r?$/m);
+      expect(await readFile(configFile, "utf8")).toContain(proxyBlock.trim());
+      expect(await readFile(configFile, "utf8")).not.toContain(
+        '[marketplaces."acme-skills"]',
+      );
+      const refreshCall =
+        refresh +
+        (platform === "bash"
+          ? "\narchestra_refresh_codex_marketplace"
+          : "\nInvoke-ArchestracodexMarketplaceRefresh -ClientArgs @() | Out-Null");
+      const callsAfterDisconnect = await readFile(logFile, "utf8");
+      await invokeLifecycle(refreshCall);
+      expect(await readFile(logFile, "utf8")).toBe(callsAfterDisconnect);
+
+      // An older loaded launcher may already have restored owned entries.
+      await writeFile(configFile, `${FOREIGN_TABLES}\n${proxyBlock}${owned}`);
+      const cleanedAgain = run(false);
+      expect(
+        cleanedAgain.status,
+        cleanedAgain.stdout + cleanedAgain.stderr,
+      ).toBe(0);
+      expect(cleanedAgain.stdout).toContain("Disconnected Connection plugin");
+      expect((await readFile(configFile, "utf8")).trim()).toBe(
+        FOREIGN_TABLES.trim(),
+      );
+      expect(await readFile(guard, "utf8").catch(() => null)).toBeNull();
+      const callsAfterCleanup = await readFile(logFile, "utf8");
+      await invokeLifecycle(refreshCall);
+      expect(await readFile(logFile, "utf8")).toBe(callsAfterCleanup);
+
+      // Refresh still runs for a connected plugin with its guard installed.
+      await writeFile(guard, lifecycleGuard);
+      await invokeLifecycle(refreshCall);
+      expect(
+        (await readFile(logFile, "utf8")).slice(callsAfterCleanup.length),
+      ).toContain('["plugin","marketplace","upgrade","acme-skills"]');
+      expect(await readFile(configFile, "utf8")).toContain(
+        '[plugins."acme-skills@acme-skills"]',
+      );
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

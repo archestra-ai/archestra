@@ -489,9 +489,69 @@ for arg in "$@"; do
   esac
 done
 
+${
+  ctx.mcp
+    ? `
+
+MCP_SERVER_NAME=${sh(ctx.mcp.serverName)}
+MCP_SERVER_URL=${sh(ctx.mcp.url)}`
+    : ""
+}${
+  ctx.skills
+    ? `
+SKILLS_MARKETPLACE_NAME=${sh(ctx.skills.marketplaceName)}
+PLUGIN_NAMES=${sh((ctx.skills.pluginNames ?? []).join("\n"))}`
+    : ""
+}
+
+# Proof that a removal landed. The vendor CLIs are delegated to with their
+# output silenced and their exit status is not a reliable signal, so the check
+# reads the client's config instead. Runs in the FOREGROUND (unlike
+# disconnect_actions) so a failing check can print why. Default: assume success,
+# which is every client that ships no verifier.
+disconnect_verify() { # $1 kind
+  case "$1" in${
+    ctx.proxy && client.proxyDisconnectVerify
+      ? `
+    proxy)
+${client.proxyDisconnectVerify}
+      ;;`
+      : ""
+  }${
+    ctx.mcp && client.mcpDisconnectVerify
+      ? `
+    mcp)
+${client.mcpDisconnectVerify}
+      ;;`
+      : ""
+  }${
+    ctx.skills && client.skillsDisconnectVerify
+      ? `
+    skills)
+${client.skillsDisconnectVerify}
+      ;;`
+      : ""
+  }
+  esac
+  return 0
+}
+
 GUARD_SKIP=" $(tr '\\n' ' ' 2>/dev/null < "$SKIP_FILE") "
 ${client.atomicDisconnect ? 'GUARD_SKIP=""' : ""}
-already_disconnected() { case "$GUARD_SKIP" in *" $1 "*) return 0 ;; esac; return 1; }
+already_disconnected() {
+  case "$GUARD_SKIP" in *" $1 "*) ;; *) return 1 ;; esac${
+    ctx.mcp && ctx.skills?.connectionPlugin
+      ? `
+  # Older launchers could restore a plugin after recording its removal.
+  # A saved skip is valid only while every owned entry remains absent.
+  if [ "$1" = mcp ]; then
+    disconnect_verify mcp >/dev/null 2>&1
+    return "$?"
+  fi`
+      : ""
+  }
+  return 0
+}
 remember_disconnected() { ${client.atomicDisconnect ? "return 0;" : ""} printf '%s\\n' "$1" >> "$SKIP_FILE" 2>/dev/null || true; }
 
 # Once nothing connected is left to check, the guard removes itself entirely
@@ -869,38 +929,6 @@ ${client.skillsDisconnectCommands}
   esac
 }
 
-# Proof that a removal landed. The vendor CLIs are delegated to with their
-# output silenced and their exit status is not a reliable signal, so the check
-# reads the client's config instead. Runs in the FOREGROUND (unlike
-# disconnect_actions) so a failing check can print why. Default: assume success,
-# which is every client that ships no verifier.
-disconnect_verify() { # $1 kind
-  case "$1" in${
-    ctx.proxy && client.proxyDisconnectVerify
-      ? `
-    proxy)
-${client.proxyDisconnectVerify}
-      ;;`
-      : ""
-  }${
-    ctx.mcp && client.mcpDisconnectVerify
-      ? `
-    mcp)
-${client.mcpDisconnectVerify}
-      ;;`
-      : ""
-  }${
-    ctx.skills && client.skillsDisconnectVerify
-      ? `
-    skills)
-${client.skillsDisconnectVerify}
-      ;;`
-      : ""
-  }
-  esac
-  return 0
-}
-
 # Reversing a connect step animates the same way the probes do: the commands
 # run in the background while the dots grow, then the row lands on a check.
 #
@@ -934,19 +962,6 @@ disconnect_resource() { # $1 kind, $2 label
   }
   return 0
 }${
-    ctx.mcp
-      ? `
-
-MCP_SERVER_NAME=${sh(ctx.mcp.serverName)}
-MCP_SERVER_URL=${sh(ctx.mcp.url)}`
-      : ""
-  }${
-    ctx.skills
-      ? `
-SKILLS_MARKETPLACE_NAME=${sh(ctx.skills.marketplaceName)}
-PLUGIN_NAMES=${sh((ctx.skills.pluginNames ?? []).join("\n"))}`
-      : ""
-  }${
     ctx.proxy
       ? `
 
@@ -1662,6 +1677,8 @@ function renderMarketplaceRefreshProfileBlock(params: {
   ];
   const nonInteractivePatterns = client.nonInteractiveArgPatterns.join("|");
   return `${functionName}() {
+  [ -f "$HOME/${client.scriptRelpath}" ] || return 0
+  if grep -qx ${ctx.mcp && ctx.skills.connectionPlugin ? "mcp" : "skills"} "$HOME/${client.skipRelpath}" 2>/dev/null; then return 0; fi
   for archestra_arg in "$@"; do
     case "$archestra_arg" in ${nonInteractivePatterns}) return 0 ;; esac
   done

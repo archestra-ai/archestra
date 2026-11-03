@@ -503,7 +503,9 @@ if (mode === "compile" && process.env.ARCHESTRA_TEST_NEXT_FAIL === "signal") pro
       false,
     );
     if (args.includes("--webpack")) {
-      expect(fs.existsSync(path.join(served, "public/obsolete.svg"))).toBe(false);
+      expect(fs.existsSync(path.join(served, "public/obsolete.svg"))).toBe(
+        false,
+      );
     }
   }
 });

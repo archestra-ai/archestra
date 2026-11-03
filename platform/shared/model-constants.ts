@@ -112,8 +112,8 @@ export type SupportedProvider = z.infer<typeof SupportedProvidersSchema>;
 /**
  * Providers whose shared keys can be model pool members. Per-user providers
  * (Copilot) and subscription-only ones are left out: their credential belongs
- * to one user. Gemini and Cohere have no translator to or from the wires
- * pooled clients speak.
+ * to one user. Cohere has no translator to or from the wires pooled clients
+ * speak.
  */
 export const MODEL_POOL_PROVIDERS = [
   "anthropic",
@@ -122,6 +122,7 @@ export const MODEL_POOL_PROVIDERS = [
   "azure",
   "cerebras",
   "deepseek",
+  "gemini",
   "groq",
   "minimax",
   "mistral",
@@ -370,9 +371,9 @@ const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
 ]);
 
 /**
- * Providers that charge no per-token rate, so their real price is zero rather
- * than unknown: the operator runs the server (vLLM, self-hosted Ollama), or the
- * vendor bills a flat subscription metered on compute time (Ollama's cloud).
+ * Providers without a published per-token rate: the operator runs the server
+ * (vLLM, self-hosted Ollama), or the vendor bills a flat subscription metered on
+ * compute time (Ollama's cloud). vLLM rates remain unknown until configured.
  *
  * Listed explicitly rather than derived from the self-hosted-provider set it
  * currently matches, so that adding a keyless provider that does bill per token

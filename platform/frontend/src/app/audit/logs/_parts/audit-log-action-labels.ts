@@ -43,6 +43,9 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "agentRun.reviewDecided": "OpenAPPA review decided",
   "agentRun.shared": "Agent run shared",
   "agentRun.unshared": "Agent run unshared",
+  "agentRun.terminal_attached": "Agent run terminal attached",
+  "agentRun.terminal_detached": "Agent run terminal detached",
+  "agentRun.terminal_interrupted": "Agent run interrupted from its terminal",
   "browserStorageState.deleted": "Browser saved login removed",
   // Runtime credential
   "credential.created": "Credential created",
@@ -139,6 +142,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "limit.bulk_deleted": "Limits deleted",
   // LLM model
   "llmModel.updated": "LLM model updated",
+  "llmModel.deleted": "LLM model deleted",
   "llmModel.synced": "LLM model catalog synced",
   "modelPool.created": "Model pool created",
   "modelPool.updated": "Model pool updated",

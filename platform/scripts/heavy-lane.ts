@@ -87,7 +87,9 @@ export function runHeavy(heavy: HeavyCommand): SpawnSyncReturns<Buffer> {
       stdio: "inherit",
       cwd: heavy.cwd,
       env,
-      shell: process.platform === "win32",
+      // .cmd tool shims need a Windows shell; Node's executable does not, and
+      // invoking it directly preserves paths/arguments containing spaces.
+      shell: process.platform === "win32" && heavy.command !== process.execPath,
     });
   }
   const lock = path.join(tmpdir(), "archestra-heavy.lock");
@@ -286,9 +288,7 @@ if (
   for (; index < argv.length && argv[index] !== "--"; index += 2) {
     const [name, value] = [argv[index], argv[index + 1]];
     if (
-      !["--label", "--peak-gib", "--dev-lite", "--paused-env"].includes(
-        name,
-      ) ||
+      !["--label", "--peak-gib", "--dev-lite", "--paused-env"].includes(name) ||
       value === undefined
     ) {
       usage();

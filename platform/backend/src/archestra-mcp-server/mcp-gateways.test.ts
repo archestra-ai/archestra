@@ -110,6 +110,41 @@ describe("mcp gateway tool execution", () => {
     expect(created?.connectorIds).toEqual([connector.id]);
   });
 
+  test.for([
+    false,
+    true,
+  ])("edit_mcp_gateway sets dynamic tool and delegation access to %s", async (enabled, {
+    makeAgent,
+  }) => {
+    const gateway = await makeAgent({
+      name: "Gateway Access Settings",
+      agentType: "mcp_gateway",
+      organizationId: mockContext.organizationId,
+      accessAllTools: !enabled,
+      accessAllSubagents: !enabled,
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_gateway`,
+      {
+        id: gateway.id,
+        accessAllTools: enabled,
+        accessAllSubagents: enabled,
+      },
+      mockContext,
+    );
+
+    expect(result.isError, JSON.stringify(result.content)).toBe(false);
+    const updated = await AgentModel.findById(
+      gateway.id,
+      mockContext.userId,
+      true,
+    );
+    expect(updated?.accessAllTools).toBe(enabled);
+    expect(updated?.accessAllSubagents).toBe(enabled);
+    expect(updated?.name).toBe("Gateway Access Settings");
+  });
+
   test("edit_mcp_gateway updates an mcp gateway successfully", async ({
     makeAgent,
   }) => {

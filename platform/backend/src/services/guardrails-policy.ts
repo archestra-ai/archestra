@@ -329,12 +329,11 @@ function hash(content: string) {
 }
 
 /**
- * The deployment's statement that its own host is first-party, as a TOML line. A
- * frontend URL that is not HTTP(S), names no host, or names a loopback or
- * unspecified address names no host the organization runs, so the policy then
- * states nothing.
+ * The deployment's statement that its own host is first-party. A frontend URL
+ * that is not HTTP(S), names no host, or names a loopback or unspecified address
+ * names no host the organization runs, so there is none.
  */
-function deploymentHintLine(): string {
+export function deploymentHint(): string | null {
   const url = URL.canParse(config.frontendBaseUrl)
     ? new URL(config.frontendBaseUrl)
     : null;
@@ -344,9 +343,13 @@ function deploymentHintLine(): string {
     url.hostname === "" ||
     isLocalHostname(url.hostname)
   )
-    return "";
-  const hint = `\`${url.host}\` is this organization's own platform deployment, the one these policies run on: a call to it, such as fetching a link one of its tools returned, reaches the organization's own platform.`;
-  return `hint = ${JSON.stringify(hint)}`;
+    return null;
+  return `\`${url.host}\` is this organization's own platform deployment, the one these policies run on: a call to it, such as fetching a link one of its tools returned, reaches the organization's own platform.`;
+}
+
+function deploymentHintLine(): string {
+  const hint = deploymentHint();
+  return hint === null ? "" : `hint = ${JSON.stringify(hint)}`;
 }
 
 function isLocalHostname(hostname: string): boolean {

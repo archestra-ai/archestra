@@ -8,6 +8,7 @@ import {
 } from "@archestra/shared";
 import {
   AlertTriangle,
+  Boxes,
   Check,
   Database,
   ExternalLink,
@@ -24,6 +25,7 @@ import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import { agentConfigureHref } from "@/components/agent-pages/agent-page-config";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { platformOwnedStyles } from "@/components/scope-vocabulary";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -122,7 +124,7 @@ export function AgentSettingsView({
 }) {
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
   const { switchAccess } = useSwitchAgentAccess();
-  const toolsSwitch = (
+  const toolsSwitch = !agent.builtIn && (
     <AccessSwitch
       label="Tool access"
       all={agent.accessAllTools ?? false}
@@ -236,21 +238,23 @@ export function AgentSettingsView({
           />
         )}
 
-        <SubagentsSection
-          agent={agent}
-          accessSwitch={
-            <AccessSwitch
-              label="Subagent access"
-              all={agent.accessAllSubagents ?? false}
-              onChange={(all) =>
-                switchAccess({ agent, target: "subagents", all })
-              }
-            />
-          }
-          onEdit={onEditSubagents}
-        />
+        {!agent.builtIn && (
+          <SubagentsSection
+            agent={agent}
+            accessSwitch={
+              <AccessSwitch
+                label="Subagent access"
+                all={agent.accessAllSubagents ?? false}
+                onChange={(all) =>
+                  switchAccess({ agent, target: "subagents", all })
+                }
+              />
+            }
+            onEdit={onEditSubagents}
+          />
+        )}
 
-        {!agent.accessAllTools && (
+        {!agent.builtIn && !agent.accessAllTools && (
           <KnowledgeSection
             agent={agent}
             allKnowledgeBases={allKnowledgeBases}
@@ -379,9 +383,10 @@ function SettingsHeader({ agent }: { agent: Agent }) {
           updateProfile.mutate({ id: agent.id, data: { icon } })
         }
         className="size-10"
+        disabled={agent.builtIn ?? false}
       />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        {isRenaming ? (
+        {isRenaming && !agent.builtIn ? (
           <Input
             ref={nameInputRef}
             aria-label="Agent name"
@@ -401,30 +406,46 @@ function SettingsHeader({ agent }: { agent: Agent }) {
         ) : (
           <div className="flex min-w-0 items-center gap-1">
             <h2 className="truncate text-sm font-semibold">{agent.name}</h2>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              aria-label="Rename"
-              onClick={() => setIsRenaming(true)}
-              className="text-muted-foreground"
-            >
-              <Pencil />
-            </Button>
+            {agent.builtIn ? (
+              <span
+                role="img"
+                aria-label="Built-in agent"
+                title="Built-in agent"
+                className={cn(
+                  "flex size-4 shrink-0 items-center justify-center rounded border",
+                  platformOwnedStyles,
+                )}
+              >
+                <Boxes className="size-2.5" aria-hidden="true" />
+              </span>
+            ) : (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Rename"
+                onClick={() => setIsRenaming(true)}
+                className="text-muted-foreground"
+              >
+                <Pencil />
+              </Button>
+            )}
           </div>
         )}
-        <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-          <Badge variant="secondary" className="shrink-0">
-            {scopeLabel(agent.scope)}
-          </Badge>
-          {agent.createdAt && (
-            <span className="truncate">
-              Created by {authorName} ·{" "}
-              {new Date(agent.createdAt).toLocaleDateString(undefined, {
-                dateStyle: "medium",
-              })}
-            </span>
-          )}
-        </div>
+        {!agent.builtIn && (
+          <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+            <Badge variant="secondary" className="shrink-0">
+              {scopeLabel(agent.scope)}
+            </Badge>
+            {agent.createdAt && (
+              <span className="truncate">
+                Created by {authorName} ·{" "}
+                {new Date(agent.createdAt).toLocaleDateString(undefined, {
+                  dateStyle: "medium",
+                })}
+              </span>
+            )}
+          </div>
+        )}
       </div>
       <DialogClose asChild>
         <Button variant="ghost" size="icon-sm" aria-label="Close">
@@ -720,7 +741,7 @@ function AllToolsSection({
               ),
             }))}
           />
-          {canReadKnowledgeBase && sources.length > 0 && (
+          {!agent.builtIn && canReadKnowledgeBase && sources.length > 0 && (
             <ReachLine
               label="Knowledge"
               items={sources.map((connector) => ({

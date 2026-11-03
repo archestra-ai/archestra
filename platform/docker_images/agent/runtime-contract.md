@@ -183,7 +183,9 @@ With Guardrails v2, the platform rejects a runtime credential that names a diffe
 
 Claude Code, Codex, and OpenCode children retain separate trajectories when the client supplies native child identity. Signed lineage binds nested children to the same workspace. A custom client without child identity cannot create isolated child-return boundaries by sharing the workspace header.
 
-Human-review remedies use `ask_user` with the exact signed offer IDs. Runtime reviews appear on the run page. Only the run's user owner can approve or deny them. Native permission settings and plain-text answers do not approve an OpenAPPA offer. A run without an eligible human reviewer stays blocked.
+Human-review remedies use `ask_user` with the exact signed offer IDs. Runtime reviews appear on the run page. Only the run's user owner can approve or deny them. Native permission settings and plain-text answers do not approve an OpenAPPA offer.
+
+The platform knows a run from its runtime credential, whatever image it runs, and treats it as unattended. With **Human approval** = **Waive in unattended sessions** (one of the Break the glass settings in Guardrails), the LLM Proxy lets a call that waits for human approval through, and the gateway approves a remedy plan's review itself. Each records a yell, and by default the yell also turns Guardrails off for the run's session. With the default, **Human approval** = **Block until approved**, a run without an eligible human reviewer stays blocked.
 
 Pending reviews and rulings expire after ten minutes. They use the platform's shared PostgreSQL-backed cache, whose state can be lost on restart. Expiry or missing state never approves an action; the runtime must request a fresh review for a live exact offer before proceeding.
 

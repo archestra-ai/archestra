@@ -26,6 +26,7 @@ import {
   extractCommonMessageText,
   extractCommonToolCallArguments,
 } from "@/types";
+import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { toOpenAiStreamUsage } from "./openai-sse-chunk";
 import { upstreamHttpError } from "./upstream-http-error";
 
@@ -989,7 +990,11 @@ export const zhipuaiAdapterFactory: LLMProvider<
       ? metrics.llm.getObservableFetch("zhipuai", options.agent, options.source)
       : undefined;
 
-    return new ZhipuaiClient(apiKey, options.baseUrl, customFetch);
+    return new ZhipuaiClient(
+      apiKey,
+      options.baseUrl,
+      fetchWithAbortSignal(customFetch, options.abortSignal),
+    );
   },
 
   async execute(

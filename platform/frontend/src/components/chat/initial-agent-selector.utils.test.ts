@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { type archestraApiTypes, BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
   filterAndSortInitialAgents,
@@ -10,6 +11,7 @@ const userId = "user-1";
 function makeAgent(
   overrides: Partial<{
     builtIn: boolean;
+    builtInAgentConfig: archestraApiTypes.GetChatAgentRosterResponses["200"][number]["builtInAgentConfig"];
     id: string;
     name: string;
     scope: "personal" | "team" | "org";
@@ -29,13 +31,39 @@ function makeAgent(
     systemPrompt: overrides.systemPrompt ?? null,
     runtime: null,
     builtIn: overrides.builtIn ?? false,
+    builtInAgentConfig: overrides.builtInAgentConfig ?? null,
   };
 }
 
 describe("filterAndSortInitialAgents", () => {
-  it("hides built-ins even when selected or matched by search", () => {
+  it("shows the built-in SRE agent when granted to the caller", () => {
+    const sre = makeAgent({
+      id: "sre",
+      builtIn: true,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.SRE },
+    });
+    expect(
+      filterAndSortInitialAgents({
+        allAgents: [sre],
+        currentAgentId: null,
+        search: "",
+        userId,
+      }),
+    ).toEqual([sre]);
+  });
+  it("offers the chat-capable built-in while hiding platform subagents", () => {
     const agents = [
-      makeAgent({ id: "builtin", name: "APPA Keeper", builtIn: true }),
+      makeAgent({
+        id: "policy-assistant",
+        name: "Policy Assistant",
+        builtIn: true,
+        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+      }),
+      makeAgent({
+        id: "platform-subagent",
+        name: "Platform Subagent",
+        builtIn: true,
+      }),
       makeAgent({
         id: "personal",
         name: "My Assistant",
@@ -46,19 +74,19 @@ describe("filterAndSortInitialAgents", () => {
     expect(
       filterAndSortInitialAgents({
         allAgents: agents,
-        currentAgentId: "builtin",
+        currentAgentId: "policy-assistant",
         search: "",
         userId,
       }).map((agent) => agent.id),
-    ).toEqual(["personal"]);
+    ).toEqual(["policy-assistant", "personal"]);
     expect(
       filterAndSortInitialAgents({
         allAgents: agents,
-        currentAgentId: "builtin",
-        search: "APPA Keeper",
+        currentAgentId: "policy-assistant",
+        search: "Policy Assistant",
         userId,
       }),
-    ).toEqual([]);
+    ).toEqual([agents[0]]);
   });
   it("shows only the current user's personal agents", () => {
     const agents = [
@@ -85,6 +113,43 @@ describe("filterAndSortInitialAgents", () => {
     });
 
     expect(result.map((agent) => agent.id)).toEqual(["mine", "shared"]);
+  });
+
+  it("keeps an authorized personal-scoped system assistant without an author", () => {
+    const policy = makeAgent({
+      id: "named-policy",
+      name: "Named Policy Assistant",
+      scope: "personal",
+      builtIn: true,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    });
+    expect(
+      filterAndSortInitialAgents({
+        allAgents: [policy],
+        currentAgentId: null,
+        search: "Policy",
+        userId,
+      }).map((agent) => agent.id),
+    ).toEqual([policy.id]);
+  });
+
+  it("keeps a personal-scoped SRE agent granted to another user", () => {
+    const sre = makeAgent({
+      id: "sre",
+      name: "SRE",
+      scope: "personal",
+      authorId: "admin",
+      builtIn: true,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.SRE },
+    });
+    expect(
+      filterAndSortInitialAgents({
+        allAgents: [sre],
+        currentAgentId: null,
+        search: "",
+        userId,
+      }),
+    ).toEqual([sre]);
   });
 
   it("puts the current agent first even if it is a shared agent", () => {

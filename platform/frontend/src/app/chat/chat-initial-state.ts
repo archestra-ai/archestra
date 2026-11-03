@@ -1,4 +1,7 @@
-import type { ThinkingEffortSetting } from "@archestra/shared";
+import {
+  BUILT_IN_AGENT_IDS,
+  type ThinkingEffortSetting,
+} from "@archestra/shared";
 import {
   resolveInitialModel,
   resolveModelForAgent,
@@ -9,6 +12,7 @@ import type { SupportedProvider } from "@/lib/llm-provider-api-keys.query";
 type AgentInfo = {
   id: string;
   builtIn?: boolean | null;
+  builtInAgentConfig?: { name: string } | null;
   scope?: string;
   modelId?: string | null;
   llmApiKeyId?: string | null;
@@ -69,7 +73,11 @@ export function resolveInitialAgentSelection<TAgent extends AgentInfo>(params: {
   memberDefaultAgentId?: string | null;
   canUseSavedAgent: boolean;
 }): InitialAgentSelection<TAgent> | null {
-  const agents = params.agents.filter((agent) => !agent.builtIn);
+  const agents = params.agents.filter(
+    (agent) =>
+      !agent.builtIn ||
+      agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.SRE,
+  );
   if (agents.length === 0) {
     return null;
   }

@@ -41,6 +41,11 @@ export const AuditEventNameSchema = z.enum([
   "agentRun.bulk_deleted",
   "agentRun.bulk_files_deleted",
   "agentRun.reviewDecided",
+  // Written by the live-terminal websocket handler, not by a route
+  // (services/agent-runtime/terminal-audit.ts).
+  "agentRun.terminal_attached",
+  "agentRun.terminal_detached",
+  "agentRun.terminal_interrupted",
   // No route emits these any more; kept so earlier records still parse.
   "agentRun.shared",
   "agentRun.unshared",
@@ -141,6 +146,7 @@ export const AuditEventNameSchema = z.enum([
   "limit.deleted",
   "limit.bulk_deleted",
   "llmModel.updated",
+  "llmModel.deleted",
   "llmModel.synced",
   "llmModel.bulk_updated",
   "llmModel.cost_backfill_started",

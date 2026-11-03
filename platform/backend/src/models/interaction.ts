@@ -693,6 +693,20 @@ class InteractionModel {
     await InteractionModel.write({ data, auditContext, returnRow: false });
   }
 
+  /** Update only the routing outcome; usage was settled when the failed row was written. */
+  static async markPoolAttemptFailedOver(id: string): Promise<void> {
+    await db
+      .update(schema.interactionsTable)
+      .set({ attemptOutcome: "failed_over" })
+      .where(
+        and(
+          eq(schema.interactionsTable.id, id),
+          isNotNull(schema.interactionsTable.modelPoolId),
+          eq(schema.interactionsTable.attemptOutcome, "failed"),
+        ),
+      );
+  }
+
   /**
    * Find all interactions with pagination, sorting, and filtering support
    */

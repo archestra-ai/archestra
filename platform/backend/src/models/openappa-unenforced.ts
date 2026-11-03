@@ -1,5 +1,5 @@
 import { and, eq, inArray, lt, ne, or, type SQL, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import type {
   UnenforcedCallReason,
   UnenforcedSessionReason,
@@ -14,13 +14,16 @@ const calls = schema.openappaUnenforcedCallsTable;
  * it turns on. A record never changes, so a second write of it does nothing.
  */
 class OpenAppaUnenforcedModel {
-  static async recordSession(params: {
-    organizationId: string;
-    sessionId: string;
-    parentId: string | undefined;
-    reason?: UnenforcedSessionReason;
-  }): Promise<void> {
-    const insert = db.insert(sessions).values({
+  static async recordSession(
+    params: {
+      organizationId: string;
+      sessionId: string;
+      parentId: string | undefined;
+      reason?: UnenforcedSessionReason;
+    },
+    executor: typeof db | Transaction = db,
+  ): Promise<void> {
+    const insert = executor.insert(sessions).values({
       organizationId: params.organizationId,
       sessionId: params.sessionId,
       parentId: params.parentId ?? null,
@@ -63,15 +66,19 @@ class OpenAppaUnenforcedModel {
       );
   }
 
-  static async recordCalls(params: {
-    organizationId: string;
-    sessionId: string;
-    toolCallIds: readonly string[];
-    reason: UnenforcedCallReason;
-    childNativeId?: string;
-  }): Promise<void> {
-    if (params.toolCallIds.length === 0) return;
-    await db
+  /** Returns the ids it recorded now; an id recorded before is left as it is. */
+  static async recordCalls(
+    params: {
+      organizationId: string;
+      sessionId: string;
+      toolCallIds: readonly string[];
+      reason: UnenforcedCallReason;
+      childNativeId?: string;
+    },
+    executor: typeof db | Transaction = db,
+  ): Promise<string[]> {
+    if (params.toolCallIds.length === 0) return [];
+    const inserted = await executor
       .insert(calls)
       .values(
         [...new Set(params.toolCallIds)].map((toolCallId) => ({
@@ -82,7 +89,9 @@ class OpenAppaUnenforcedModel {
           childNativeId: params.childNativeId ?? null,
         })),
       )
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning({ toolCallId: calls.toolCallId });
+    return inserted.map((row) => row.toolCallId);
   }
 
   /**

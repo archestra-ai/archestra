@@ -1,10 +1,16 @@
 import { defineConfig } from "vitest/config";
+import {
+  detectResourceEnvelope,
+  sharedVitestWorkers,
+} from "../vitest.resources";
 import { vitestLogPolicy } from "../vitest.shared";
 
-// Default discovery and environment are fine for this workspace; the config
-// exists to apply the shared log policy (see ../vitest.shared.ts).
+const maxWorkers = sharedVitestWorkers(detectResourceEnvelope());
+
+// Keep default discovery and environment, with the pod's actual worker budget.
 export default defineConfig({
   test: {
     ...vitestLogPolicy,
+    ...(maxWorkers === undefined ? {} : { maxWorkers }),
   },
 });

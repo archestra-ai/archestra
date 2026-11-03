@@ -72,6 +72,59 @@ describe("archestra tool audit records", () => {
     return data;
   }
 
+  test("skill policy changes audit revisions and counts, while unchanged patches do not add rows", async ({
+    makeInternalAgent,
+    makeSkill,
+  }) => {
+    const target = await makeInternalAgent({ organizationId });
+    const skill = await makeSkill(organizationId, { access: "org" });
+    const patch = {
+      mode: "manual",
+      operations: [
+        {
+          op: "add",
+          disposition: "allow",
+          reference: { source: "native", skillId: skill.id },
+        },
+      ],
+    };
+    const change = (expectedRevision: number) =>
+      executeArchestraTool(
+        toolName("patch_agent_skill_policy"),
+        { id: target.id, patch: { ...patch, expectedRevision } },
+        mockContext,
+      );
+    expect((await change(0)).isError).toBe(false);
+    const rows = await findRows("agent");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      action: "agent.updated",
+      outcome: "success",
+      actorId: adminUserId,
+      resourceId: target.id,
+      before: {
+        activationSkillMode: "all",
+        activationSkillPolicyRevision: 0,
+        activationSkillRuleCounts: { allowed: 0, excluded: 0 },
+      },
+      after: {
+        activationSkillMode: "manual",
+        activationSkillPolicyRevision: 1,
+        activationSkillRuleCounts: { allowed: 1, excluded: 0 },
+      },
+    });
+    expect(JSON.stringify(rows)).not.toContain(skill.id);
+    expect((await change(1)).isError).toBe(false);
+    expect(await findRows("agent")).toHaveLength(1);
+    expect((await change(0)).isError).toBe(true);
+    const withFailure = await findRows("agent");
+    expect(withFailure).toHaveLength(2);
+    expect(withFailure.find((row) => row.outcome === "failure")).toMatchObject({
+      resourceId: target.id,
+      action: "agent.updated",
+    });
+  });
+
   test("MCP workspace writes and deletion record changes without file contents", async () => {
     vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
     vi.spyOn(backend, "accessWorkspaceFile").mockResolvedValue({

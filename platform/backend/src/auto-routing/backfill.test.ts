@@ -994,6 +994,57 @@ describe("auto routing backfill", () => {
     ).toEqual([waiting?.id]);
   });
 
+  test("score cleanup retains current, organization and active-backfill scorers across batches", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    await sessions(1);
+    await scanAndScore({});
+    const keep = (await activeSourceVersion()).id;
+    const [own, foreign, unused, anotherUnused, active] = await Promise.all(
+      Array.from({ length: 5 }, () => makeScorerVersion()),
+    );
+    const ownAgent = await makeAgent({ organizationId });
+    const foreignAgent = await makeAgent({
+      organizationId: (await makeOrganization()).id,
+    });
+    for (const [agent, scorer] of [
+      [ownAgent, own],
+      [foreignAgent, foreign],
+    ]) {
+      await db
+        .update(schema.agentsTable)
+        .set({ autoRoutingScorerVersionId: scorer.id })
+        .where(eq(schema.agentsTable.id, agent.id));
+    }
+    const [session] = await db
+      .select()
+      .from(schema.routingHistorySessionsTable);
+    await db.insert(schema.routingHistoryScoresTable).values(
+      [own, foreign, unused, anotherUnused, active].map((scorer) => ({
+        historySessionId: session.id,
+        scorerVersionId: scorer.id,
+        status: "no_text" as const,
+      })),
+    );
+    await db
+      .update(schema.routingBackfillsTable)
+      .set({ status: "scanned", scorerVersionId: active.id })
+      .where(eq(schema.routingBackfillsTable.id, session.backfillId));
+
+    expect(
+      await RoutingHistoryModel.purgeExpired({
+        windowStart: new Date(Date.now() - 35 * DAY_MS),
+        keepScorerVersionId: keep,
+        batchSize: 1,
+      }),
+    ).toEqual({ sessions: 0, scores: 3, backfills: 0 });
+    const remaining = await db.select().from(schema.routingHistoryScoresTable);
+    expect(remaining.map((score) => score.scorerVersionId).sort()).toEqual(
+      [keep, own.id, active.id].sort(),
+    );
+  });
+
   test("a late settlement from a reclaimed lease counts its call once and leaves the successor's reservation", async () => {
     await sessions(2);
     await scan();

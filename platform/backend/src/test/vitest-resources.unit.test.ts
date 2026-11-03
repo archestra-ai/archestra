@@ -9,6 +9,7 @@ import {
   parseMemoryQuantity,
   readCgroupMemory,
   resourceEnvelope,
+  sharedVitestWorkers,
   typeScriptCheckers,
   typeScriptMemorySettings,
   wholeProgramGoMemoryLimits,
@@ -19,6 +20,40 @@ const GIB = 1024 ** 3;
 
 // An n2d-standard-8 node of the staging runtime pool, as the pod sees it.
 const NODE = { hostParallelism: 8, hostMemoryBytes: 32 * GIB };
+
+describe("sharedVitestWorkers", () => {
+  test("honors the one-CPU request even when the host exposes more cores", () => {
+    expect(
+      sharedVitestWorkers(
+        resourceEnvelope({
+          ...NODE,
+          constrainedMemoryBytes: 4 * GIB,
+          podCpuRequest: "1",
+        }),
+      ),
+    ).toBe(1);
+  });
+
+  test("bounds workers by memory when the pod has more CPUs", () => {
+    expect(
+      sharedVitestWorkers({
+        constrained: true,
+        availableParallelism: 8,
+        totalMemoryBytes: 4 * GIB,
+      }),
+    ).toBe(2);
+  });
+
+  test("leaves an unconstrained machine's default pool unchanged", () => {
+    expect(
+      sharedVitestWorkers({
+        constrained: false,
+        availableParallelism: 8,
+        totalMemoryBytes: 32 * GIB,
+      }),
+    ).toBeUndefined();
+  });
+});
 
 describe("resourceEnvelope", () => {
   test("is the machine when nothing constrains the process", () => {

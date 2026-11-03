@@ -1,6 +1,7 @@
 import {
   CLAUDE_CODE_HEADER_SESSION_SOURCE,
   CLAUDE_METADATA_SESSION_SOURCE,
+  isChatGptClientAgentId,
   isCodexClientAgentId,
   isCopilotCliClientAgentId,
   KIMI_CODE_CLIENT_ID,
@@ -51,6 +52,7 @@ export type SessionSource =
   | "meta_header"
   | "openwebui_chat"
   | "codex_session"
+  | "chatgpt_session"
   | "pi_session"
   | "copilot_session"
   | "kimi_code_session"
@@ -76,7 +78,9 @@ export interface SessionInfo {
  * 3. Open WebUI X-OpenWebUI-Chat-Id header (source: 'openwebui_chat')
  * 4. Codex session id — only when `externalAgentId` is a Codex client id:
  *    `client_metadata.thread_id` body field first, then `session_id`, then
- *    the `session-id` request header (source: 'codex_session')
+ *    the `session-id` request header (source: 'codex_session'). The ChatGPT
+ *    desktop app runs Codex's app server and sends the same fields (source:
+ *    'chatgpt_session').
  * 5. OpenCode session id — only when `externalAgentId` was configured by the
  *    caller or resolved from OpenCode's native User-Agent/originator:
  *    `x-session-id`, `x-session-affinity`, `x-opencode-session`, then the
@@ -141,13 +145,21 @@ export function extractSessionInfo({
 
   // Priority 4: Codex session id, gated on the resolved client attribution —
   // the `session-id` header name is generic, so it is never read as a Codex
-  // session on its own.
-  if (isCodexClientAgentId(externalAgentId)) {
+  // session on its own. ChatGPT's desktop app sends Codex's fields.
+  const codexSessionSource = isCodexClientAgentId(externalAgentId)
+    ? "codex_session"
+    : isChatGptClientAgentId(externalAgentId)
+      ? "chatgpt_session"
+      : undefined;
+  if (codexSessionSource) {
     const metadataSessionId =
       codexClientMetadataValue(body?.client_metadata, "thread_id") ??
       codexClientMetadataValue(body?.client_metadata, "session_id");
     if (metadataSessionId) {
-      return { sessionId: metadataSessionId, sessionSource: "codex_session" };
+      return {
+        sessionId: metadataSessionId,
+        sessionSource: codexSessionSource,
+      };
     }
     const codexHeaderSessionId = getHeaderValue(
       headers,
@@ -156,7 +168,7 @@ export function extractSessionInfo({
     if (codexHeaderSessionId?.trim()) {
       return {
         sessionId: codexHeaderSessionId.trim(),
-        sessionSource: "codex_session",
+        sessionSource: codexSessionSource,
       };
     }
   }

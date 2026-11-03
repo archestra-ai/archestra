@@ -2,7 +2,11 @@
   // Tests of the remaining policy, runtime and server modules, and of the
   // files directly in src/.
   "extends": "./tsconfig.base.json",
-  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-other.tsbuildinfo" },
+  "compilerOptions": {
+    "tsBuildInfoFile": "./.tsbuild/tests-other.tsbuildinfo",
+    // Runner tests import scripts executed directly by Node/tsx.
+    "allowImportingTsExtensions": true
+  },
   "include": [
     "src/ambient/*.d.ts",
     "src/*.test.ts",
@@ -36,7 +40,16 @@
     { "path": "./tsconfig.kb-core.json" },
     { "path": "./tsconfig.kb-connectors.json" },
     { "path": "./tsconfig.kb.json" },
+    { "path": "./tsconfig.llm-protocol.json" },
+    { "path": "./tsconfig.provider-adapters.json" },
+    { "path": "./tsconfig.connections.json" },
+    { "path": "./tsconfig.policy-config.json" },
+    { "path": "./tsconfig.services-support.json" },
     { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.routes-proxy.json" },
+    { "path": "./tsconfig.routes-chat.json" },
+    { "path": "./tsconfig.routes-rest.json" },
+    { "path": "./tsconfig.server.json" },
     { "path": "./tsconfig.test-support.json" }
   ]
 }

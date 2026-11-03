@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import { gunzipSync } from "node:zlib";
 import { TimeInMs } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import { type MockInstance, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
@@ -11,6 +12,7 @@ import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaActor } from "@/openappa/actor";
+import { isUnattendedSession } from "@/openappa/break-the-glass";
 import {
   mintChildTrajectoryReceipt,
   stripChildTrajectoryReceipts,
@@ -39,6 +41,7 @@ import {
   parseTrajectoryStamp,
   stampToolCallId,
 } from "@/openappa/trajectory-stamp";
+import { isUnenforcedSession } from "@/openappa/unenforced";
 import {
   LlmProxyPluginRegistry,
   type LlmProxyRequestContext,
@@ -2234,7 +2237,7 @@ describe("asking through the client's own question tool", () => {
       adapter: new AppaClaudeDesktopAdapter(),
       count: 12,
     },
-  ])("preserves the requested gateway and all $count choices across $client retries", async ({
+  ])("preserves all $count choices on $client's supported transport across retries", async ({
     adapter,
     count,
   }) => {
@@ -2268,6 +2271,7 @@ describe("asking through the client's own question tool", () => {
       options,
       allowMultiple: count === 12,
     };
+    const cachedQuestions = vi.spyOn(cacheManager, "set");
     try {
       await plugin.onSessionInit(context);
       const request = {
@@ -2275,19 +2279,30 @@ describe("asking through the client's own question tool", () => {
           {
             role: "user",
             content:
-              "Use only archestra__ask_user to ask which choices I prefer.",
+              adapter.id === "claude-desktop"
+                ? "Native Claude questions are allowed. Keep every choice."
+                : "Use only archestra__ask_user to ask which choices I prefer.",
           },
         ],
       };
       await plugin.onBeforeModel({ ...context, request });
       const guidance = JSON.stringify(request);
       expect(guidance).toContain("AskUserQuestion accepts at most 4 options");
-      expect(guidance).toContain(
-        "For more options, use archestra__ask_user and keep all choices.",
-      );
-      expect(guidance).toContain(
-        "Honor the user's explicit choice of question tool.",
-      );
+      if (adapter.id === "claude-desktop") {
+        expect(guidance).toContain("For more options (up to 12)");
+        expect(guidance).toContain("never put more than 4 options");
+        expect(guidance).toContain(
+          "Honor the user's explicit choice of question tool.",
+        );
+        expect(guidance).toContain("archestra_presentation");
+      } else {
+        expect(guidance).toContain(
+          "For more options, use archestra__ask_user and keep all choices.",
+        );
+        expect(guidance).toContain(
+          "Honor the user's explicit choice of question tool.",
+        );
+      }
       for (let attempt = 0; attempt < 2; attempt++) {
         const call = {
           id: `question-${attempt}`,
@@ -2303,11 +2318,102 @@ describe("asking through the client's own question tool", () => {
           outcome?.decision === "allow" ? outcome.toolCalls[0] : call;
         expect(released.id).toBe(`question-${attempt}`);
         const releasedArgs = JSON.parse(released.arguments as string);
-        expect(released.name).toBe("archestra__ask_user");
-        expect(releasedArgs).toMatchObject(args);
-        expect(releasedArgs.options).toHaveLength(count);
+        if (adapter.id === "claude-desktop") {
+          expect(released.name).toBe("AskUserQuestion");
+          expect(releasedArgs.questions.length).toBeLessThanOrEqual(4);
+          const groups = releasedArgs.questions as Array<{
+            question: string;
+            options: { label: string; description: string }[];
+          }>;
+          for (const group of groups)
+            expect(group.options.length).toBeLessThanOrEqual(4);
+          expect(
+            groups.flatMap((group) =>
+              group.options.filter((option) =>
+                options.some((original) => original.label === option.label),
+              ),
+            ),
+          ).toEqual(options);
+          {
+            if (count <= 4) {
+              const write = cachedQuestions.mock.calls.findLast(([key]) =>
+                key.startsWith(CacheKey.NativeUserQuestionPresentation),
+              );
+              if (!write)
+                throw new Error("expected single-card presentation data");
+              const legacyKey = write[0].replace(
+                CacheKey.NativeUserQuestionPresentation,
+                CacheKey.NativeUserQuestion,
+              ) as AllowedCacheKey;
+              // An older replica must forward the original native answer,
+              // rather than applying its grouped-only decoder to four choices.
+              expect(await cacheManager.get(legacyKey)).toBeUndefined();
+            }
+            // A request may resume on a replica that still has the previous
+            // cache format. Preserve its answer without inventing provenance.
+            const legacy = attempt === 1 && count > 4;
+            if (legacy) {
+              const write = cachedQuestions.mock.calls.findLast(([key]) =>
+                key.startsWith(CacheKey.NativeUserQuestion),
+              );
+              if (!write)
+                throw new Error("expected a cached ordinary question");
+              // The old question consumer can read new entries during rollout.
+              expect(
+                adapter.nativeQuestion.fromAskUser(write[1] as typeof args),
+              ).toEqual(releasedArgs);
+              await cacheManager.set(write[0], args);
+            }
+            const answer = {
+              id: released.id,
+              name: released.name,
+              isError: false,
+              content: JSON.stringify({
+                answers: Object.fromEntries(
+                  groups.map((group, index) => [
+                    group.question,
+                    index === groups.length - 1
+                      ? `Choice ${count}`
+                      : group.options.at(-1)?.label,
+                  ]),
+                ),
+              }),
+            };
+            const processResults = vi
+              .spyOn(appaService, "processProxyResults")
+              .mockResolvedValue({ toolResultUpdates: {} });
+            try {
+              const result = await plugin.onToolResults({
+                ...context,
+                toolResults: [answer],
+              });
+              expect(
+                JSON.parse(result?.toolResultUpdates?.[answer.id] ?? "{}"),
+              ).toEqual({
+                action: "accept",
+                selected: [`Choice ${count}`],
+                ...(!legacy
+                  ? {
+                      archestra_presentation: {
+                        requested_tool: { name: "archestra__ask_user" },
+                        rendered_with: "AskUserQuestion",
+                        translation: "gateway_question_to_native_form",
+                      },
+                    }
+                  : {}),
+              });
+            } finally {
+              processResults.mockRestore();
+            }
+          }
+        } else {
+          expect(released.name).toBe("archestra__ask_user");
+          expect(releasedArgs).toMatchObject(args);
+          expect(releasedArgs.options).toHaveLength(count);
+        }
       }
     } finally {
+      cachedQuestions.mockRestore();
       await plugin.onCleanup(context);
     }
   });
@@ -5747,6 +5853,83 @@ describe("AppaPluginArchestra", () => {
   });
 });
 
+describe("Claude Code task output reads", () => {
+  test("releases a background command's output and withholds a child agent's transcript", async () => {
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({ sessionId: "task-output-reads" });
+    context.headers = { "user-agent": "claude-cli/2.1.300 (external, cli)" };
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async (_session, calls) =>
+        calls.map(() => ({ kind: "allow" }) as const),
+      );
+    const tasks = "/private/tmp/claude-501/project/session/tasks";
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "bash-output",
+            name: "Read",
+            arguments: { file_path: `${tasks}/bwu1ccoiy.output` },
+          },
+          {
+            id: "bash-output-tail",
+            name: "Bash",
+            arguments: { command: `tail -n 50 "${tasks}/bm7fgsz33.output"` },
+          },
+          {
+            id: "bash-output-chained",
+            name: "Bash",
+            arguments: { command: `cat ${tasks}/bbwoudo32.output&& echo done` },
+          },
+          {
+            id: "bash-output-then-transcript",
+            name: "Bash",
+            arguments: {
+              command: `cat ${tasks}/bbwoudo32.output;cat ${tasks}/aba0d3860dedb562b.output`,
+            },
+          },
+          {
+            id: "transcript-behind-dot-dot",
+            name: "Bash",
+            arguments: {
+              command: `cat $(<${tasks}/aba0d3860dedb562b.output)/../..${tasks}/bbwoudo32.output`,
+            },
+          },
+          {
+            id: "agent-transcript",
+            name: "Read",
+            arguments: { file_path: `${tasks}/aba0d3860dedb562b.output` },
+          },
+          {
+            id: "glob-transcripts",
+            name: "Bash",
+            arguments: { command: `cat ${tasks}/*.output` },
+          },
+        ],
+      });
+      expect(
+        evaluateToolCalls.mock.calls.flatMap(([, calls]) =>
+          calls.map((call) => call.id),
+        ),
+      ).toEqual(["bash-output", "bash-output-tail", "bash-output-chained"]);
+      expect(outcome).toMatchObject({
+        blocked: [
+          { id: "bash-output-then-transcript" },
+          { id: "transcript-behind-dot-dot" },
+          { id: "agent-transcript" },
+          { id: "glob-transcripts" },
+        ],
+      });
+    } finally {
+      evaluateToolCalls.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+});
+
 describe("withoutRemedySections", () => {
   test("keeps the block and its reasons, and drops the plans and the delegation advice", () => {
     expect(withoutRemedySections(NARROWING_RULING)).toBe(
@@ -6033,6 +6216,289 @@ describe("rendering runtime text for this client", () => {
       cancelCalls.mockRestore();
       evaluateToolCalls.mockRestore();
     }
+  });
+
+  describe("Break the glass at the proxy", () => {
+    type Deployment = Awaited<
+      ReturnType<typeof guardrailsDeployment.getGuardrailsDeployment>
+    >;
+    /**
+     * A request with a call that needs a person, a call no remedy can lift and
+     * an allowed call, from a session a header, a runtime credential or
+     * nothing says is unattended.
+     */
+    const harness = async (
+      organizationId: string,
+      settings: Partial<Deployment>,
+    ) => {
+      config.openappa.enabled = true;
+      config.openappa.yellEnabled = true;
+      const deployment = vi
+        .spyOn(guardrailsDeployment, "getGuardrailsDeployment")
+        .mockResolvedValue({
+          ...(await guardrailsDeployment.getGuardrailsDeployment()),
+          active: true,
+          humanApprovalMode: "unattended",
+          unapprovableBlockMode: "allow",
+          ...settings,
+        });
+      const evaluateToolCalls = vi
+        .spyOn(appaService, "evaluateToolCalls")
+        .mockImplementation(async (_session, calls) =>
+          calls.map((call) =>
+            call.name === "post_message" ||
+            call.name === "archestra__start_agent_run"
+              ? {
+                  kind: "deny" as const,
+                  feedback:
+                    "[appa] Blocked: requires attention: human-approval",
+                  recorded: true as const,
+                  offers: ["offer"],
+                  review: [{ offer_id: "offer", text: "Approve?" }],
+                }
+              : call.name === "send_email"
+                ? {
+                    kind: "deny" as const,
+                    feedback: "[appa] Blocked: forbidden after a send effect",
+                    recorded: true as const,
+                    offers: [],
+                  }
+                : { kind: "allow" as const },
+          ),
+        );
+      const cancelCalls = vi
+        .spyOn(appaService, "cancelCalls")
+        .mockResolvedValue(undefined);
+      const run = async (
+        sessionId: string,
+        how: "header" | "runtime" | "attended",
+        toolCalls: LlmProxyToolCallsContext["toolCalls"] = [
+          { id: "post", name: "post_message", arguments: {} },
+          { id: "send", name: "send_email", arguments: {} },
+          { id: "read", name: "read_file", arguments: {} },
+        ],
+      ) => {
+        const plugin = new AppaPluginArchestra([]);
+        const context = requestContext({ sessionId, organizationId });
+        if (how === "header")
+          context.headers = { "x-archestra-unattended": "1" };
+        // An Agent Runtime run is known from its credential, whatever its
+        // image sends.
+        if (how === "runtime")
+          (
+            context.resources.get(APPA_PLUGIN_TRUSTED_CONTEXT) as Record<
+              string,
+              unknown
+            >
+          ).agentRuntimeRun = true;
+        (
+          context.resources.get(APPA_PLUGIN_TRUSTED_CONTEXT) as Record<
+            string,
+            unknown
+          >
+        ).enforcement = "active";
+        (
+          context.resources.get(APPA_PLUGIN_TRUSTED_CONTEXT) as Record<
+            string,
+            unknown
+          >
+        ).request = {
+          tools: {
+            control: { name: "archestra__execute_remedy_plan" },
+            notice: { name: "archestra__get_remedy_plans" },
+            platformToolNames: new Set(),
+            namespaces: new Map(),
+          },
+          customTools: new Set(),
+          declaredTools: [{ name: "archestra__get_remedy_plans" }],
+        };
+        await plugin.onSessionInit(context);
+        return plugin.onToolCalls({ ...context, toolCalls });
+      };
+      const restore = () => {
+        cancelCalls.mockRestore();
+        evaluateToolCalls.mockRestore();
+        deployment.mockRestore();
+      };
+      return { run, cancelCalls, restore };
+    };
+    const yellsOf = async (organizationId: string) =>
+      (
+        await db
+          .select()
+          .from(schema.openappaYellsTable)
+          .where(eq(schema.openappaYellsTable.organizationId, organizationId))
+      )
+        .map(({ sessionId, kind }) => ({ sessionId, kind }))
+        .sort((a, b) =>
+          `${a.sessionId}${a.kind}`.localeCompare(`${b.sessionId}${b.kind}`),
+        );
+    const session = (organizationId: string, sessionId: string) => ({
+      organization_id: organizationId,
+      session_id: sessionId,
+    });
+    // The approval waits behind its notice; the other calls go as written.
+    const waiting = {
+      decision: "allow",
+      toolCalls: [
+        { id: "post", name: "archestra__get_remedy_plans" },
+        { id: "send", name: "send_email" },
+        { id: "read", name: "read_file" },
+      ],
+    };
+
+    test("runs a denied call in an unattended session or Agent Runtime run and records a yell, while an attended session still waits", async ({
+      makeOrganization,
+    }) => {
+      const organizationId = (await makeOrganization()).id;
+      const { run, restore } = await harness(organizationId, {
+        breakTheGlassEnabled: false,
+      });
+      try {
+        // Nothing to rewrite: the calls go to the client as the model wrote
+        // them.
+        expect(await run("unattended-run", "header")).toBeUndefined();
+        expect(await run("runtime-run", "runtime")).toBeUndefined();
+        // In an attended session the approval waits behind its notice; only
+        // the call no remedy can lift runs.
+        expect(await run("attended-run", "attended")).toMatchObject(waiting);
+        expect(await yellsOf(organizationId)).toEqual([
+          { sessionId: "attended-run", kind: "block_waived" },
+          { sessionId: "runtime-run", kind: "approval_waived" },
+          { sessionId: "runtime-run", kind: "block_waived" },
+          { sessionId: "unattended-run", kind: "approval_waived" },
+          { sessionId: "unattended-run", kind: "block_waived" },
+        ]);
+        // The gateway learns from the proxy which sessions no person answers
+        // for.
+        const unattended = (sessionId: string) =>
+          isUnattendedSession(session(organizationId, sessionId));
+        expect(await unattended("unattended-run")).toBe(true);
+        expect(await unattended("runtime-run")).toBe(true);
+        expect(await unattended("attended-run")).toBe(false);
+        // With the Yell tool only recording, the session stays governed.
+        expect(
+          await isUnenforcedSession(session(organizationId, "runtime-run")),
+        ).toBe(false);
+      } finally {
+        restore();
+      }
+    });
+
+    test("a batch whose only denial is a runtime call still notes the session, and an attended batch withdraws the note", async ({
+      makeOrganization,
+    }) => {
+      const organizationId = (await makeOrganization()).id;
+      const { run, restore } = await harness(organizationId, {
+        breakTheGlassEnabled: false,
+      });
+      const runtimeOnly = [
+        {
+          id: "start",
+          name: "archestra__start_agent_run",
+          arguments: { agent_id: "agent", message: "go" },
+        },
+      ];
+      try {
+        // The runtime call itself is not waived at the proxy, but the gateway
+        // that decides its review learns the session is unattended.
+        await run("runtime-only", "header", runtimeOnly);
+        expect(
+          await isUnattendedSession(session(organizationId, "runtime-only")),
+        ).toBe(true);
+        expect(await yellsOf(organizationId)).toEqual([]);
+        // A person resumes the session: the same batch withdraws the note.
+        await run("runtime-only", "attended", runtimeOnly);
+        expect(
+          await isUnattendedSession(session(organizationId, "runtime-only")),
+        ).toBe(false);
+      } finally {
+        restore();
+      }
+    });
+
+    test("Human approval kept waits everywhere, waived everywhere reaches an attended session, and the Yell tool turns a waived session off", async ({
+      makeOrganization,
+    }) => {
+      const organizationId = (await makeOrganization()).id;
+      let h = await harness(organizationId, {
+        humanApprovalMode: "block",
+        breakTheGlassEnabled: false,
+      });
+      try {
+        expect(await h.run("kept-runtime", "runtime")).toMatchObject(waiting);
+        expect(await h.run("kept-attended", "attended")).toMatchObject(waiting);
+      } finally {
+        h.restore();
+      }
+      h = await harness(organizationId, {
+        humanApprovalMode: "everywhere",
+        breakTheGlassEnabled: false,
+      });
+      try {
+        expect(await h.run("everywhere-attended", "attended")).toBeUndefined();
+      } finally {
+        h.restore();
+      }
+      h = await harness(organizationId, { breakTheGlassEnabled: true });
+      try {
+        expect(await h.run("off-runtime", "runtime")).toBeUndefined();
+      } finally {
+        h.restore();
+      }
+      expect(await yellsOf(organizationId)).toEqual([
+        { sessionId: "everywhere-attended", kind: "approval_waived" },
+        { sessionId: "everywhere-attended", kind: "block_waived" },
+        { sessionId: "kept-attended", kind: "block_waived" },
+        { sessionId: "kept-runtime", kind: "block_waived" },
+        { sessionId: "off-runtime", kind: "approval_waived" },
+        { sessionId: "off-runtime", kind: "block_waived" },
+      ]);
+      // A platform yell does what the agent's yell does: with the Yell tool
+      // turning Guardrails off, the session leaves OpenAPPA; otherwise not.
+      const off = (sessionId: string) =>
+        isUnenforcedSession(session(organizationId, sessionId));
+      expect(await off("kept-runtime")).toBe(false);
+      expect(await off("everywhere-attended")).toBe(false);
+      expect(await off("off-runtime")).toBe(true);
+    });
+
+    test("a batch whose waivers cannot be recorded is refused, and its admitted call is cancelled", async ({
+      makeOrganization,
+    }) => {
+      const organizationId = (await makeOrganization()).id;
+      const { run, cancelCalls, restore } = await harness(organizationId, {});
+      const failing = vi
+        .spyOn(OpenAppaYellModel, "recordWaiver")
+        .mockRejectedValue(new Error("yell storage down"));
+      try {
+        await expect(run("unrecorded-run", "runtime")).rejects.toMatchObject({
+          statusCode: 503,
+        });
+        // The batch never reaches the client, so the allowed call never runs.
+        expect(cancelCalls).toHaveBeenCalledWith(
+          expect.anything(),
+          ["read"],
+          expect.anything(),
+        );
+        // No yell and no marker: the resent batch is ruled again.
+        expect(await yellsOf(organizationId)).toEqual([]);
+        expect(
+          await db
+            .select()
+            .from(schema.openappaUnenforcedCallsTable)
+            .where(
+              eq(
+                schema.openappaUnenforcedCallsTable.sessionId,
+                "unrecorded-run",
+              ),
+            ),
+        ).toEqual([]);
+      } finally {
+        failing.mockRestore();
+        restore();
+      }
+    });
   });
 
   test("passes an annotator failure on as its own notice: no remedy note, no client failure", async ({

@@ -71,6 +71,20 @@ export function detectResourceEnvelope(
   });
 }
 
+/** Bound the shared suite to its container, rather than Vitest's host defaults. */
+export function sharedVitestWorkers(
+  envelope: ResourceEnvelope,
+): number | undefined {
+  if (!envelope.constrained) return undefined;
+  return Math.max(
+    1,
+    Math.min(
+      envelope.availableParallelism,
+      Math.floor(envelope.totalMemoryBytes / (2 * 1024 ** 3)),
+    ),
+  );
+}
+
 /**
  * The frontend suite's forks. On a machine: half the CPUs and the 8 GiB heap
  * ceiling the JSDOM-heavy tests needed on Node 24, as before. In a container
@@ -226,10 +240,19 @@ export const TYPE_CHECK_PROJECT_PEAK_BYTES: Readonly<
     "tsconfig.models-upper.json": 1.5 * 1024 ** 3,
     "tsconfig.llm-clients.json": 0.9 * 1024 ** 3,
     "tsconfig.runtime.json": 1.0 * 1024 ** 3,
+    "tsconfig.llm-protocol.json": 1.4 * 1024 ** 3,
+    "tsconfig.provider-adapters.json": 1.0 * 1024 ** 3,
     "tsconfig.kb-core.json": 1.3 * 1024 ** 3,
     "tsconfig.kb-connectors.json": 1.3 * 1024 ** 3,
     "tsconfig.kb.json": 0.8 * 1024 ** 3,
-    "tsconfig.app.json": 3.7 * 1024 ** 3,
+    "tsconfig.connections.json": 0.8 * 1024 ** 3,
+    "tsconfig.policy-config.json": 1.0 * 1024 ** 3,
+    "tsconfig.services-support.json": 1.4 * 1024 ** 3,
+    "tsconfig.routes-proxy.json": 1.1 * 1024 ** 3,
+    "tsconfig.routes-chat.json": 1.0 * 1024 ** 3,
+    "tsconfig.routes-rest.json": 2.2 * 1024 ** 3,
+    "tsconfig.server.json": 1.5 * 1024 ** 3,
+    "tsconfig.app.json": 2.6 * 1024 ** 3,
     "tsconfig.test-support.json": 1.5 * 1024 ** 3,
     "tsconfig.tests-database.json": 1.1 * 1024 ** 3,
     "tsconfig.tests-core.json": 1.6 * 1024 ** 3,

@@ -3106,6 +3106,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         enabled: false,
         unsupportedClientAction: "bypass",
         breakTheGlassEnabled: true,
+        humanApprovalMode: "block",
+        unapprovableBlockMode: "refuse",
         annotatorModelId: null,
         annotatorLlmApiKeyId: null,
       });
@@ -3986,6 +3988,199 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
   });
 
+  test.each([
+    { count: 2, multiple: false, stream: false, direct: false, skip: false },
+    { count: 4, multiple: false, stream: false, direct: false, skip: false },
+    { count: 5, multiple: false, stream: false, direct: false, skip: false },
+    { count: 5, multiple: false, stream: true, direct: false, skip: false },
+    { count: 12, multiple: false, stream: false, direct: false, skip: false },
+    { count: 12, multiple: true, stream: false, direct: false, skip: false },
+    { count: 5, multiple: false, stream: false, direct: true, skip: false },
+    { count: 5, multiple: false, stream: true, direct: true, skip: false },
+    { count: 5, multiple: false, stream: false, direct: false, skip: true },
+  ])("Claude Desktop returns all-choice native answers to the provider (choices=$count, multiple=$multiple, stream=$stream, direct=$direct, skip=$skip)", async ({
+    count,
+    multiple,
+    stream,
+    direct,
+    skip,
+  }) => {
+    block = false;
+    const name = "mcp__archestra__archestra__ask_user";
+    const labels = Array.from(
+      { length: count },
+      (_, index) => `Color ${index + 1}`,
+    );
+    const question = {
+      question: "Which color do you prefer?",
+      options: labels.map((label) => ({ label })),
+      allowMultiple: multiple,
+    };
+    const tool = direct
+      ? {
+          name: "AskUserQuestion",
+          input: {
+            questions: [
+              {
+                question: question.question,
+                header: "Color",
+                options: question.options,
+                multiSelect: multiple,
+              },
+            ],
+          },
+        }
+      : { name, input: question };
+    options = stream
+      ? {
+          includeToolUse: true,
+          streamingToolUse: tool,
+          streamStopReason: "tool_use",
+        }
+      : { nonStreamingToolUse: tool };
+    const body = payload(false);
+    const tools = [
+      ...body.tools.map((definition) => ({
+        ...definition,
+        description: definition.name.startsWith("archestra__")
+          ? attestToolDescription({
+              organizationId: agent.organizationId,
+              gatewayId: agent.id,
+              advertisedName: definition.name,
+              kind: "b",
+              description: definition.description,
+            })
+          : definition.description,
+      })),
+      {
+        name,
+        description: attestToolDescription({
+          organizationId: agent.organizationId,
+          gatewayId: agent.id,
+          advertisedName: "archestra__ask_user",
+          kind: "b",
+          description: "Ask the user to choose.",
+        }),
+        input_schema: { type: "object", properties: {} },
+      },
+      {
+        name: "AskUserQuestion",
+        description: "Ask a native question.",
+        input_schema: { type: "object", properties: {} },
+      },
+    ];
+    const clientHeaders = {
+      ...internalCallHeader(),
+      ...externalClientHeaders(),
+      "x-archestra-agent-id": "anthropic_claude_desktop",
+      "x-claude-code-session-id": "desktop-native-choice-session",
+    };
+    const messages = [
+      {
+        role: "user",
+        content: "Use only Archestra's ask_user tool. Keep every color.",
+      },
+    ];
+    const asked = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: clientHeaders,
+      payload: { ...body, tools, stream, messages },
+    });
+    expect(asked.statusCode, asked.body).toBe(200);
+    const released = noticeFrom(asked.body, stream);
+    const initialGuidance = JSON.stringify(providerRequests.at(-1));
+    expect(released.name).toBe("AskUserQuestion");
+    const groups = released.input.questions as Array<{
+      question: string;
+      options: { label: string }[];
+    }>;
+    expect(groups.length).toBeLessThanOrEqual(4);
+    for (const group of groups)
+      expect(group.options.length).toBeLessThanOrEqual(4);
+    expect(
+      groups.flatMap((group) =>
+        group.options
+          .map((option) => option.label)
+          .filter((label) => labels.includes(label)),
+      ),
+    ).toEqual(labels);
+    const selected = skip
+      ? []
+      : multiple
+        ? [labels[0], labels.at(-1)]
+        : [labels.at(-1)];
+    const answers = Object.fromEntries(
+      groups.map((group) => {
+        const picked = group.options
+          .map((option) => option.label)
+          .filter((label) => selected.includes(label));
+        return [
+          group.question,
+          picked.length > 0 ? picked : [group.options.at(-1)?.label],
+        ];
+      }),
+    );
+    options = {};
+    const history = [
+      ...messages,
+      {
+        role: "assistant",
+        content: [{ type: "tool_use", ...released }],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: released.id,
+            content: JSON.stringify({ answers }),
+          },
+        ],
+      },
+    ];
+    // A replica may read the same answer again on a retry or resumed history.
+    for (let replay = 0; replay < 2; replay++) {
+      providerRequests.length = 0;
+      const answered = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: clientHeaders,
+        payload: { ...body, tools, messages: history },
+      });
+      expect(answered.statusCode, answered.body).toBe(200);
+      const sent = providerRequests.at(-1) as {
+        messages: { content: unknown }[];
+      };
+      const forwarded = sent.messages
+        .flatMap((message) =>
+          Array.isArray(message.content) ? message.content : [],
+        )
+        .find(
+          (part) =>
+            part.type === "tool_result" && part.tool_use_id === released.id,
+        );
+      const result = JSON.parse(forwarded.content);
+      expect(result).toMatchObject({
+        ...(skip ? { error: "unconfirmed_answer" } : { action: "accept" }),
+        selected,
+        archestra_presentation: {
+          requested_tool: { name: direct ? "AskUserQuestion" : name },
+          rendered_with: "AskUserQuestion",
+          translation: direct
+            ? "native_question_grouping"
+            : "gateway_question_to_native_form",
+        },
+      });
+      if (skip) expect(result).not.toHaveProperty("action", "accept");
+    }
+    expect(initialGuidance).toContain(
+      "Honor the user's explicit choice of question tool.",
+    );
+  });
+
   test("block mode governs Claude Desktop sessions, isolates headerless Chat conversations, and rejects headerless requests without a conversation identity", async () => {
     await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
     options = { includeToolUse: false, streamStopReason: "end_turn" };
@@ -4375,6 +4570,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             enabled: false,
             unsupportedClientAction: "bypass",
             breakTheGlassEnabled: true,
+            humanApprovalMode: "block",
+            unapprovableBlockMode: "refuse",
             annotatorModelId: null,
             annotatorLlmApiKeyId: null,
           };
@@ -17605,7 +17802,10 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
    * given declarations: what the client receives, and what the provider was
    * sent.
    */
-  const deniedCodexTurn = async (tools: unknown[]) => {
+  const deniedCodexTurn = async (
+    tools: unknown[],
+    clientHeaders: Record<string, string> = codexHeaders(),
+  ) => {
     native.dispatchHook.mockImplementation(async (raw: string) => {
       const event = JSON.parse(raw);
       events.push(event);
@@ -17648,7 +17848,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
-      headers: { ...internalCallHeader(), ...codexHeaders() },
+      headers: { ...internalCallHeader(), ...clientHeaders },
       payload: {
         ...codexPayload({ session_id: CODEX_SESSION, thread_id: CODEX_THREAD }),
         stream: false,
@@ -17668,6 +17868,48 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       sent: providerBodies.at(-1) as { tools: Record<string, unknown>[] },
     };
   };
+
+  // The ChatGPT desktop app's Work and Codex tabs run Codex's app server and
+  // read Codex's config.toml: the same wire, under the desktop's originators.
+  test.for([
+    ["a Work thread", "codex_work_desktop"],
+    ["the Codex tab", "Codex Desktop"],
+  ] as const)("governs %s of the ChatGPT desktop app as a native Codex session", async ([
+    ,
+    originator,
+  ], { makeAgent }) => {
+    await makeAgent({
+      name: "My Gateway",
+      agentType: "mcp_gateway",
+      organizationId: agent.organizationId,
+    });
+
+    const { output } = await deniedCodexTurn(
+      [codexNamespace("mcp__my_gateway")],
+      {
+        ...codexHeaders(),
+        "x-archestra-agent-id": "openai_codex",
+        "user-agent": "Codex Desktop/0.163.0 (Windows 10.0.26200; x86_64)",
+        originator,
+      },
+    );
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "tool_call",
+        tool: "exec_command",
+        session_id: expect.stringContaining(CODEX_THREAD),
+      }),
+    );
+    expect(output).toEqual([
+      expect.objectContaining({
+        type: "function_call",
+        call_id: "call_shell",
+        name: "archestra__get_remedy_plans",
+        namespace: "mcp__my_gateway",
+      }),
+    ]);
+  });
 
   test("delivers a Codex denial notice under the namespace Codex declared it in", async ({
     makeAgent,

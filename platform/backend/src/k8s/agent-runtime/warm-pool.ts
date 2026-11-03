@@ -183,6 +183,7 @@ class AgentWarmPoolManager {
           continue;
         const effectiveNetworkPolicy = await resolveEffectiveNetworkPolicy({
           organizationId: agent.organizationId,
+          agentNetworkPolicy: agent.agentPolicy,
           environmentId: agent.environmentId,
           environmentNetworkPolicy: agent.environmentPolicy,
           defaultNetworkPolicy: agent.defaultPolicy,

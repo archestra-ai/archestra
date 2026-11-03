@@ -147,6 +147,7 @@ import {
   type SelectUserToken,
   type ToolExposureMode,
 } from "@/types";
+import type { A2AOAuthExecution } from "@/types/a2a-actor";
 import { ApiError } from "@/types/api";
 import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
 import { deriveAuthMethod } from "@/utils/auth-method";
@@ -437,22 +438,30 @@ export async function buildAgentMcpToolList(params: {
   // no agent_tools rows at all, and exclusions/user access apply in both
   // modes. Drop the raw delegation rows and splice in the resolved surface so
   // the gateway advertises the same delegation set the dispatch path accepts.
-  const [delegationTools, skillDelegationTools] = await Promise.all([
-    getAgentTools({
-      agentId,
-      organizationId: agent.organizationId,
-      userId: tokenAuth?.userId,
-      lookups: params.lookups,
-    }),
-    // Agent-designated skills surface as skill__<slug> delegation tools,
-    // resolved per calling user with the same env/access symmetry.
-    getSkillDelegationTools({
-      agentId,
-      organizationId: agent.organizationId,
-      userId: tokenAuth?.userId,
-      lookups: params.lookups,
-    }),
-  ]);
+  // Compact external gateways expose delegation through search/run only.
+  // Do not expand a potentially large caller-scoped surface only to discard
+  // it below. Internal chat still uses it to decide which run controls to offer.
+  const resolveDelegations =
+    agent.toolExposureMode !== "search_and_run_only" ||
+    agent.agentType === "agent";
+  const [delegationTools, skillDelegationTools] = resolveDelegations
+    ? await Promise.all([
+        getAgentTools({
+          agentId,
+          organizationId: agent.organizationId,
+          userId: tokenAuth?.userId,
+          lookups: params.lookups,
+        }),
+        // Agent-designated skills surface as skill__<slug> delegation tools,
+        // resolved per calling user with the same env/access symmetry.
+        getSkillDelegationTools({
+          agentId,
+          organizationId: agent.organizationId,
+          userId: tokenAuth?.userId,
+          lookups: params.lookups,
+        }),
+      ])
+    : [[], []];
   const hasTaskStarter =
     delegationTools.length > 0 ||
     mcpTools.some(
@@ -1735,11 +1744,7 @@ async function validateResolvedUserToken(params: {
   };
 }
 
-export type A2AOAuthExecution = {
-  tokenId: string;
-  clientId: string;
-  serviceAccountId?: string;
-};
+export type { A2AOAuthExecution } from "@/types/a2a-actor";
 
 export async function authorizeA2AOAuthExecution(params: {
   agentId: string;

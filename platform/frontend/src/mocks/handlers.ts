@@ -395,6 +395,10 @@ export const handlers: HttpHandler[] = [
     enabled: false,
     featureEnabled: false,
     active: false,
+    unsupportedClientAction: "bypass",
+    breakTheGlassEnabled: true,
+    humanApprovalMode: "block",
+    unapprovableBlockMode: "refuse",
   }),
   ...getJson("/health", healthSeed),
   ...getJson("/ready", {

@@ -72,6 +72,7 @@ const RECIPE_FUNCTIONS = [
   "frontend_build_env",
   "frontend_build_node",
   "build_frontend",
+  "prepare_frontend_standalone",
 ];
 // Where the build environment reaches the output: Next inlines every
 // NEXT_PUBLIC_ variable, and next.config.ts and the shared modules it loads

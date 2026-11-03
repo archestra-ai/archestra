@@ -171,11 +171,9 @@ test("fills a price the registry omits from a model it does carry", async () => 
   expect(model?.contextLength).toBe(400000);
 });
 
-test("asserts no price for a provider that bills no per-token rate", async () => {
+test("keeps vLLM deployment prices unknown instead of borrowing vendor rates", async () => {
   // A client can name any model on any endpoint, so a vendor model reaches the
-  // self-hosted proxy. The operator runs that server: a registry price would
-  // be charged for tokens nobody bills, and a stored price outranks the
-  // zero-rate rule at read time.
+  // self-hosted proxy. Vendor rates cannot establish this deployment's costs.
   const created = await discover("gpt-4o", "vllm");
 
   await enrichDiscoveredModel({ model: created, modelsDevData: MODELS_DEV });
@@ -185,8 +183,8 @@ test("asserts no price for a provider that bills no per-token rate", async () =>
   expect(model?.completionPricePerToken).toBeNull();
   expect(ModelModel.getEffectivePricing(model ?? null, "gpt-4o")).toMatchObject(
     {
-      pricePerMillionInput: "0.00",
-      pricePerMillionOutput: "0.00",
+      pricePerMillionInput: null,
+      pricePerMillionOutput: null,
     },
   );
 });

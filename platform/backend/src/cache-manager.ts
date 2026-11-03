@@ -61,8 +61,14 @@ export const CacheKey = {
   ChatMcpElicitationPending: "chat-mcp-elicitation-pending",
   /** Native OpenAPPA questions issued by this proxy and not answered yet */
   OpenAppaNativeQuestion: "openappa-native-question",
+  /** Original choices behind an ordinary native question, retained for replay. */
+  NativeUserQuestion: "native-user-question",
+  /** Single-card choices and provenance, isolated from older grouped-only decoders. */
+  NativeUserQuestionPresentation: "native-question-presentation",
   /** The proxy session behind a yell call it allowed, for the gateway that runs it (consume-once) */
   OpenAppaYellSession: "openappa-yell-session",
+  /** Sessions the proxy admitted as unattended, for the gateway's Break the glass review waiver */
+  OpenAppaUnattendedSession: "openappa-unattended-session",
   OpenAppaYellResult: "openappa-yell-result",
   /** OpenAPPA reviews waiting for a native client question */
   OpenAppaHitlReview: "openappa-hitl-review",

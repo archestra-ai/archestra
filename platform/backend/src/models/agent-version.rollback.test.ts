@@ -80,6 +80,7 @@ describe("AgentVersionModel", () => {
     delete legacySnapshot.missingCredentialBehavior;
     delete legacySnapshot.activationSkillMode;
     delete legacySnapshot.activationSkillRules;
+    delete legacySnapshot.networkPolicy;
     await db
       .update(schema.agentVersionsTable)
       .set({ snapshot: legacySnapshot as AgentConfigSnapshot })
@@ -91,6 +92,7 @@ describe("AgentVersionModel", () => {
     expect(normalized.snapshot.missingCredentialBehavior).toBe("allow");
     expect(normalized.snapshot.activationSkillMode).toBe("all");
     expect(normalized.snapshot.activationSkillRules).toEqual([]);
+    expect(normalized.snapshot.networkPolicy).toBeNull();
   });
 
   test("scalar config change forks a new head", async ({ makeAgent }) => {

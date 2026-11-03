@@ -6,6 +6,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { InteractionModel } from "@/models";
 import { LimitValidationService } from "@/models/limit";
+import ModelModel from "@/models/model";
 import ProxyRequestContextModel from "@/models/proxy-request-context";
 import { getGuardrailsDeploymentFromSnapshot } from "@/services/guardrails-deployment";
 import {
@@ -38,12 +39,12 @@ import {
 import { LoggedAudioClip } from "../utils/logged-audio";
 
 /**
- * OpenAI Realtime sessions through the Model Router and the OpenAI route.
+ * OpenAI Realtime sessions through the Unified Model API and the OpenAI route.
  *
  * `client.realtime.connect(model=…)` in the OpenAI SDKs opens a WebSocket to
  * `<base_url>/realtime?model=…` with the same bearer key as every other call,
  * so a client pointed at Archestra lands here. The upgrade is admitted like a
- * Model Router request: the virtual key or LLM OAuth token names the provider
+ * Unified Model API request: the virtual key or LLM OAuth token names the provider
  * key, the model resolves through the router, and the caller's budgets are
  * checked before OpenAI sees anything, and again before each response the
  * client asks for. Frames then pass through unchanged in both directions; the
@@ -56,7 +57,7 @@ import { LoggedAudioClip } from "../utils/logged-audio";
  */
 
 const REALTIME_PATH =
-  /^\/v1\/(model-router|openai)(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))?\/realtime$/i;
+  /^\/v1\/(unified-model|model-router|openai)(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))?\/realtime$/i;
 const MAX_FRAME_BYTES = 16 * 1024 * 1024;
 const HANDSHAKE_TIMEOUT_MS = 15_000;
 /** Realtime sessions can run long; this only bounds a session nobody uses. */
@@ -142,7 +143,7 @@ async function admit(request: IncomingMessage, socket: Duplex, head: Buffer) {
   if (resolution.provider !== "openai")
     throw new ApiError(
       400,
-      `Provider "${resolution.provider}" does not support the Model Router realtime endpoint.`,
+      `Provider "${resolution.provider}" does not support the Unified Model API realtime endpoint.`,
     );
   const credential = await selectModelRouterCredential({ auth, resolution });
   if (credential.kind === "denied") throw credential.error;
@@ -279,6 +280,11 @@ async function admit(request: IncomingMessage, socket: Duplex, head: Buffer) {
     upstreamUrl.searchParams.set(name, value);
   upstreamUrl.searchParams.set("model", resolution.modelId);
   const beta = request.headers["openai-beta"];
+  // Credential and budget reads can wait while an operator hides the model.
+  await ModelModel.assertAvailable({
+    provider: "openai",
+    modelId: resolution.modelId,
+  });
   if (clientGone) return;
   const upstream = new WebSocket(upstreamUrl, {
     headers: {

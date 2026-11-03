@@ -194,7 +194,7 @@ const modelsTable = pgTable(
       { precision: 16, scale: 8 },
     ),
 
-    /** Whether this model should be excluded from chat model selection. */
+    /** Whether this model is unavailable for selection and execution. */
     ignored: boolean("ignored").notNull().default(false),
 
     /**

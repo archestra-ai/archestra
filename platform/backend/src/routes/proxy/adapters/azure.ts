@@ -122,8 +122,8 @@ class AzureRequestAdapter
   convertToolResultContent(messages: AzureMessages) {
     return this.delegate.convertToolResultContent(messages);
   }
-  toProviderRequest() {
-    return this.delegate.toProviderRequest();
+  toProviderRequest(options?: { preserveToolCallIds?: boolean }) {
+    return this.delegate.toProviderRequest(options);
   }
 }
 

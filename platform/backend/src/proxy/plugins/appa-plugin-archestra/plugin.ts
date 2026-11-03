@@ -38,6 +38,14 @@ import OpenAppaSpawnCorrelationModel, {
 import { reportAgentRuntimeObservedReads } from "@/observability/metrics/agent-runtime";
 import { childSessionId, clientSessionId } from "@/openappa/actor";
 import {
+  isUnattendedRequest,
+  recordWaivedCalls,
+  rememberUnattendedSession,
+  unattendedNoteMatters,
+  type WaivedCall,
+  waiverFor,
+} from "@/openappa/break-the-glass";
+import {
   type AppaChildReturnCompletion,
   collectAndStripChildReturns,
   mintChildReturnMarker,
@@ -169,7 +177,11 @@ import {
   agentRunUrl,
   submittedRunNextStep,
 } from "@/services/agent-runtime/run-handle";
-import { readGuardrailsV2Activation } from "@/services/guardrails-deployment";
+import {
+  breakTheGlassActiveIn,
+  getGuardrailsDeployment,
+  readGuardrailsV2Activation,
+} from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
 import type {
   RuntimeLaunchFailureReason,
@@ -233,6 +245,8 @@ type AppaPluginBinding = {
   chat: boolean;
   compaction: boolean;
   requestHeaders: IncomingHttpHeaders;
+  /** No person is there to answer this request's approvals. */
+  unattended: boolean;
   /** A verified user-question result needs trusted workflow continuation. */
   requiresQuestionContinuation: boolean;
   /** A remedy notice requires an immediate control-tool call. */
@@ -283,6 +297,17 @@ type NativeQuestionClaim = {
   reviewText?: boolean;
   /** The exact staged payload the card was issued from. */
   digest?: string;
+};
+
+type OrdinaryQuestionSource = {
+  kind: "gateway" | "native";
+  name: string;
+  namespace?: string;
+};
+
+type StoredOrdinaryQuestion = AskUserArguments & {
+  /** Additive so older replicas can still decode the cached question. */
+  archestraQuestionSource?: OrdinaryQuestionSource;
 };
 
 type IssuedNativeQuestion = {
@@ -351,6 +376,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       compaction: trustedContext.compaction === true,
       threadContinue: trustedContext.thread === "continue",
       requestHeaders: context.headers,
+      unattended: isUnattendedRequest({
+        headers: context.headers,
+        agentRuntimeRun: trustedContext.agentRuntimeRun === true,
+      }),
       requiresQuestionContinuation: false,
       requiresRemedyContinuation: false,
       pendingHitlReviewOfferIds: [],
@@ -402,18 +431,68 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       ],
     });
     // The runtime never saw a call the model made while enforcement was off,
-    // so OpenAPPA ignores its result: the result reaches the model as it is.
-    const toolResults = context.toolResults.filter(
-      (result) =>
-        binding.unenforcedCalls.reasons.get(
-          withoutTrajectoryStamp(result.id),
-        ) !== "made",
-    );
+    // nor the run of a denied call Break the glass let through, so OpenAPPA
+    // ignores its result: the result reaches the model as it is.
+    const toolResults = context.toolResults.filter((result) => {
+      const reason = binding.unenforcedCalls.reasons.get(
+        withoutTrajectoryStamp(result.id),
+      );
+      return reason !== "made" && reason !== "waived";
+    });
     const childResultUpdates: Record<string, string> = Object.create(null);
+    const ordinaryResultUpdates: Record<string, string> = Object.create(null);
+    const ordinary = binding.adapter?.nativeQuestion?.ordinaryResultFromAskUser;
+    if (ordinary) {
+      const questions = await cacheManager.getMany<StoredOrdinaryQuestion>(
+        toolResults
+          .filter(
+            (answer) =>
+              releasesUserQuestion(binding, answer) &&
+              nativeQuestionName(binding, answer.name),
+          )
+          .flatMap((answer) => {
+            const scope = { session: binding.session, id: answer.id };
+            return [
+              ordinaryQuestionPresentationCacheKey(scope),
+              ordinaryQuestionCacheKey(scope),
+            ];
+          }),
+      );
+      for (const answer of toolResults) {
+        if (
+          !releasesUserQuestion(binding, answer) ||
+          !nativeQuestionName(binding, answer.name)
+        )
+          continue;
+        const scope = { session: binding.session, id: answer.id };
+        const stored =
+          questions.get(ordinaryQuestionPresentationCacheKey(scope)) ??
+          questions.get(ordinaryQuestionCacheKey(scope));
+        if (stored) {
+          const texts = outputTexts(answer.content);
+          const content = ordinary(
+            {
+              content:
+                texts.length > 0
+                  ? texts.join("\n")
+                  : JSON.stringify(answer.content ?? null),
+              isError: answer.isError,
+            },
+            stored,
+          );
+          ordinaryResultUpdates[answer.id] = ordinaryQuestionPresentation(
+            content,
+            stored.archestraQuestionSource,
+            binding.adapter?.nativeQuestion?.toolName,
+          );
+        }
+      }
+    }
     const results = toolResults.map((result) => {
-      const content = binding.adapter?.normalizeChildLaunchResult?.(result);
+      const launch = binding.adapter?.normalizeChildLaunchResult?.(result);
+      if (launch !== undefined) childResultUpdates[result.id] = launch;
+      const content = launch ?? ordinaryResultUpdates[result.id];
       if (content === undefined) return result;
-      childResultUpdates[result.id] = content;
       return { ...result, content };
     });
     // A launch acknowledgment answers a spawn whose child runs on after it.
@@ -778,6 +857,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       ),
     );
     const toolResultUpdates = {
+      ...ordinaryResultUpdates,
       ...childResultUpdates,
       ...Object.fromEntries(
         Object.entries(result.toolResultUpdates).map(([id, result]) => {
@@ -862,7 +942,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         insertRequestGuidance({
           request: context.request,
           interactionType: context.interactionType,
-          guidance: EXTERNAL_REMEDY_WORKFLOW_GUIDANCE,
+          guidance: externalRemedyWorkflowGuidance(binding.request.tools),
           onContinue: binding.threadContinue ? "skip" : undefined,
         });
       }
@@ -889,6 +969,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             nativeQuestionToolName: nativeQuestion,
             nativeQuestionMaxOptions:
               binding.adapter?.nativeQuestion?.maxOptions,
+            gatewayQuestionMaxOptions:
+              binding.adapter?.nativeQuestion?.maxConvertedOptions,
             nativeQuestionSupportsMultiple:
               binding.adapter?.nativeQuestion?.supportsMultiple,
             gatewayQuestionUsesNativeForm:
@@ -1207,7 +1289,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // the client will run.
       const nativeQuestion = askedInForm
         ? prepared
-        : this.asNativeQuestion(binding, prepared, offerIds.length > 0);
+        : await this.asNativeQuestion(binding, prepared, offerIds.length > 0);
       changed ||= nativeQuestion !== prepared;
       prepared = nativeQuestion;
       const issued =
@@ -1586,6 +1668,21 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
 
     const notice = binding.request.tools?.notice;
+    // Only the ordinary calls the runtime ruled on here can be waived.
+    const evaluatedIds = new Set(rest.map((call) => call.id));
+    // The calls the runtime admitted; a batch that never reaches the client
+    // cancels them, so no call stays open that will never run.
+    const admittedCalls = () =>
+      rest.flatMap((each) =>
+        decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
+      );
+    // Read once for the batch, by the first denial.
+    let breakTheGlass: ReturnType<typeof getGuardrailsDeployment> | undefined;
+    let unattendedNoted = false;
+    // The denied calls Break the glass lets through, recorded together once
+    // the batch is complete.
+    const waived: WaivedCall[] = [];
+    let waiverSuperyell = false;
     // Resolved once for the batch, by the first denial that has no notice tool.
     let pendingServersTool: Promise<string | undefined> | undefined;
     const blocked: { id: string; name: string; reason: string }[] = [];
@@ -1722,6 +1819,54 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           resolution: this.resolution(binding),
         });
         continue;
+      }
+      // Break the glass: a denied ordinary call can run anyway, with a yell.
+      // Runtime, spawn and relay calls need the runtime's own release or
+      // rewrite, so they stay denied. The record is written after the loop,
+      // once the batch is known to reach the client.
+      if (decision.kind === "deny" && evaluatedIds.has(call.id)) {
+        breakTheGlass ??= getGuardrailsDeployment();
+        let settings: Awaited<typeof breakTheGlass>;
+        try {
+          settings = await breakTheGlass;
+        } catch (error) {
+          await cancelCalls(session, admittedCalls(), policy);
+          throw error;
+        }
+        // The gateway decides a remedy plan's review without the runtime
+        // credential or the client's headers, so it learns from the proxy
+        // whether a person answers for this session: noted once per denied
+        // batch, whatever the denied call (a runtime call's review is decided
+        // there too), and only in the mode that reads the note.
+        if (!unattendedNoted && unattendedNoteMatters(settings)) {
+          unattendedNoted = true;
+          await rememberUnattendedSession(binding.session, binding.unattended);
+        }
+        if (
+          runtimeCalls.has(call.id) ||
+          withheldRelayDecisions.has(call.id) ||
+          (binding.adapter && isChildSpawnCall(binding.adapter, call))
+        ) {
+          // A runtime call, a withheld relay or a spawn is never waived here:
+          // the runtime releases those itself.
+        } else {
+          const waiver = waiverFor({
+            decision,
+            settings,
+            unattended: binding.unattended,
+          });
+          if (waiver) {
+            waived.push({
+              toolCallId: call.id,
+              tool: this.policyIdentity(binding, call).name,
+              kind: waiver,
+            });
+            // A platform yell does what the agent's own yell does.
+            waiverSuperyell = breakTheGlassActiveIn(settings);
+            released.push(call);
+            continue;
+          }
+        }
       }
       // The registry pins `blocked` to the wire batch: the entry names the
       // call as given. The identity the runtime ruled on — the dispatch's
@@ -1899,6 +2044,24 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       });
     }
 
+    // The waived calls' markers, yells and session bypass are written in one
+    // transaction, only for a batch that reaches the client: a batch refused
+    // above leaves no record of a call that never ran. A record that fails
+    // keeps the batch from the client too, so no released call runs
+    // unrecorded; the resent batch is ruled again.
+    if (
+      !(await recordWaivedCalls({
+        session,
+        calls: waived,
+        superyell: waiverSuperyell,
+      }))
+    ) {
+      await cancelCalls(session, admittedCalls(), policy);
+      throw new ApiError(
+        503,
+        "OpenAPPA could not record the calls it let through; retry the request",
+      );
+    }
     // Keep turn open while tool calls are awaiting client execution.
     binding.turnOpen = true;
     const stamp = trajectoryStamper(binding, context);
@@ -2183,34 +2346,71 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
    * Preserves the original tool call ID. With no native declaration, the
    * gateway can use MCP elicitation or fail closed without a deadlock.
    */
-  private asNativeQuestion(
+  private async asNativeQuestion(
     binding: AppaPluginBinding,
     call: LlmProxyToolCallsContext["toolCalls"][number],
     /** The call carries a server-held review, not arguments the model wrote. */
     review: boolean,
-  ): LlmProxyToolCallsContext["toolCalls"][number] {
+  ): Promise<LlmProxyToolCallsContext["toolCalls"][number]> {
     const native = binding.adapter?.nativeQuestion;
+    const direct =
+      !review &&
+      native?.fromNativeQuestion &&
+      nativeQuestionName(binding, call.name) &&
+      releasesUserQuestion(binding, call)
+        ? native.fromNativeQuestion(argumentRecordOf(call.arguments))
+        : undefined;
     if (
       (!review && native?.requiresNativeForm !== true) ||
       !native?.fromAskUser ||
-      !isSpecialToolMember(binding, call, "askUser") ||
+      (!direct && !isSpecialToolMember(binding, call, "askUser")) ||
       native.isAvailable?.(binding.requestHeaders, binding.requestBody) ===
         false ||
       !declaresNativeQuestion(binding, native.toolName) ||
-      archestraMcpBranding.getToolShortName(
-        this.canonicalize(binding, call),
-      ) !== TOOL_ASK_USER_SHORT_NAME
+      (!direct &&
+        archestraMcpBranding.getToolShortName(
+          this.canonicalize(binding, call),
+        ) !== TOOL_ASK_USER_SHORT_NAME)
     ) {
       return call;
     }
-    const parsed = parseAskUserArguments(call.arguments);
+    const parsed = direct ?? parseAskUserArguments(call.arguments);
     if (!parsed) return call;
     if (parsed.allowMultiple && native.supportsMultiple === false) return call;
-    if (
-      native.maxOptions !== undefined &&
-      parsed.options.length > native.maxOptions
-    )
-      return call;
+    const limit = review
+      ? native.maxOptions
+      : (native.maxConvertedOptions ?? native.maxOptions);
+    if (limit !== undefined && parsed.options.length > limit) return call;
+    const ordinaryArgs = {
+      question: parsed.question,
+      header: parsed.header,
+      allowMultiple: parsed.allowMultiple,
+      options: parsed.options.map(({ label, description }) => ({
+        label,
+        description,
+      })),
+    };
+    if (!review && native.ordinaryResultFromAskUser) {
+      // Keep the legacy grouped format readable across replicas. Older code
+      // must not see single-card entries: its decoder drops the fourth choice.
+      const key =
+        native.maxOptions !== undefined &&
+        parsed.options.length > native.maxOptions
+          ? ordinaryQuestionCacheKey
+          : ordinaryQuestionPresentationCacheKey;
+      await cacheManager.set(
+        key({ session: binding.session, id: call.id }),
+        {
+          ...ordinaryArgs,
+          archestraQuestionSource: {
+            kind: direct ? "native" : "gateway",
+            name: call.name,
+            ...(call.namespace ? { namespace: call.namespace } : {}),
+          },
+        } satisfies StoredOrdinaryQuestion,
+        TimeInMs.Day,
+      );
+    }
     return {
       id: call.id,
       name: native.toolName,
@@ -2218,19 +2418,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // the gateway namespace from the ask_user call this local tool replaces.
       namespace: "",
       arguments: JSON.stringify(
-        native.fromAskUser(
-          review
-            ? parsed
-            : {
-                question: parsed.question,
-                header: parsed.header,
-                allowMultiple: parsed.allowMultiple,
-                options: parsed.options.map(({ label, description }) => ({
-                  label,
-                  description,
-                })),
-              },
-        ),
+        native.fromAskUser(review ? parsed : ordinaryArgs),
       ),
     };
   }
@@ -5597,8 +5785,30 @@ const EXTERNAL_REMEDY_WORKFLOW_GUIDANCE = [
   "Put the offer ID in remedy_offer_ids, and use the header Approval and the options Approve and Deny.",
   "The platform shows the user the exact review.",
   "Retry the blocked call only after execute_remedy_plan reports that the plan is authorized.",
+  "If the latest ruling offers no remedy plan, stop that blocked action and explain the refusal. Do not reuse an earlier offer or repeat a refused remedy call.",
   "If a plan makes no sense, you keep getting blocked, the user keeps being asked to approve similar calls, or the user is frustrated, call yell.",
 ].join(" ");
+
+function externalRemedyWorkflowGuidance(
+  tools: NonNullable<AppaPluginBinding["request"]["tools"]>,
+): string {
+  // A client can connect several gateways with identical leaf names. Bind
+  // instructions to the same verified declaration that receives our stamps.
+  const member = (tool: { name: string; namespace?: string }) =>
+    JSON.stringify({
+      name: tool.name,
+      ...(tool.namespace ? { namespace: tool.namespace } : {}),
+    });
+  return [
+    EXTERNAL_REMEDY_WORKFLOW_GUIDANCE,
+    `For offers from this proxy, execute_remedy_plan is the declared tool ${member(tools.control)}. Use this exact name and namespace. A same-named tool on another MCP server cannot execute these offers.`,
+    ...(tools.askUser
+      ? [
+          `The offer-bound ask_user review tool is ${member(tools.askUser)}. Use this exact name and namespace for remedy reviews.`,
+        ]
+      : []),
+  ].join(" ");
+}
 
 const LEGACY_NATIVE_QUESTION_ID_PATTERN =
   /^(toolu|call|aq)_aq1_([A-Za-z0-9_-]{16})_([A-Za-z0-9_-]{22})$/;
@@ -6281,10 +6491,13 @@ function issueNativeQuestionId(params: { currentId: string }): string {
   return `${prefix}_aq2_${nonce}`;
 }
 
-function nativeQuestionCacheKey(params: {
-  session: OpenAppaSession;
-  id: string;
-}): AllowedCacheKey {
+function nativeQuestionCacheKey(
+  params: {
+    session: OpenAppaSession;
+    id: string;
+  },
+  prefix: CacheKeyPrefix = CacheKey.OpenAppaNativeQuestion,
+): AllowedCacheKey {
   const scope = createHash("sha256")
     .update(
       JSON.stringify([
@@ -6296,7 +6509,50 @@ function nativeQuestionCacheKey(params: {
       ]),
     )
     .digest("base64url");
-  return `${CacheKey.OpenAppaNativeQuestion}-${scope}`;
+  return `${prefix}-${scope}`;
+}
+
+function ordinaryQuestionCacheKey(
+  params: Parameters<typeof nativeQuestionCacheKey>[0],
+): AllowedCacheKey {
+  return nativeQuestionCacheKey(params, CacheKey.NativeUserQuestion);
+}
+
+function ordinaryQuestionPresentationCacheKey(
+  params: Parameters<typeof nativeQuestionCacheKey>[0],
+): AllowedCacheKey {
+  return nativeQuestionCacheKey(
+    params,
+    CacheKey.NativeUserQuestionPresentation,
+  );
+}
+
+function ordinaryQuestionPresentation(
+  content: string,
+  source: OrdinaryQuestionSource | undefined,
+  renderer: string | undefined,
+): string {
+  if (!source || !renderer) return content;
+  try {
+    const result: unknown = JSON.parse(content);
+    if (!isRecord(result)) return content;
+    return JSON.stringify({
+      ...result,
+      archestra_presentation: {
+        requested_tool: {
+          name: source.name,
+          ...(source.namespace ? { namespace: source.namespace } : {}),
+        },
+        rendered_with: renderer,
+        translation:
+          source.kind === "gateway"
+            ? "gateway_question_to_native_form"
+            : "native_question_grouping",
+      },
+    });
+  } catch {
+    return content;
+  }
 }
 
 /**

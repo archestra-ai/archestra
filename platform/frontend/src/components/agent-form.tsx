@@ -65,6 +65,7 @@ import {
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
+import { AgentNetworkPolicyField } from "@/components/agent-network-policy-field";
 import {
   AgentChannelHowItWorks,
   AgentOtherTaskSources,
@@ -72,6 +73,8 @@ import {
 import {
   type AgentRuntimeConfig,
   AgentRuntimeFields,
+  isClaudeCodeRuntimeConfig,
+  supportsClaudeCodeSubscription as runtimeSupportsClaudeCodeSubscription,
 } from "@/components/agent-runtime-fields";
 import { AgentRuntimeHowItWorks } from "@/components/agent-runtime-how-it-works";
 import { AgentRuntimePicker } from "@/components/agent-runtime-picker";
@@ -239,6 +242,7 @@ type AgentOption =
   archestraApiTypes.GetAgentOptionsResponses["200"]["data"][number];
 type ToolExposureMode = Agent["toolExposureMode"];
 type MissingCredentialBehavior = Agent["missingCredentialBehavior"];
+type AgentNetworkPolicy = NonNullable<Agent["networkPolicy"]>;
 type A2aRemoteAgent =
   archestraApiTypes.ListA2aRemoteAgentsResponses["200"][number];
 type A2aDelegation =
@@ -1319,6 +1323,10 @@ export function AgentForm({
   const [environmentId, setEnvironmentId] = useState<string | null | undefined>(
     undefined,
   );
+  // The agent's own egress policy; null inherits its environment's.
+  const [networkPolicy, setNetworkPolicy] = useState<AgentNetworkPolicy | null>(
+    null,
+  );
 
   // One definition of "in this record's environment", used by the Custom
   // picker's disabled state below and by the set of sources Auto mode offers
@@ -1507,7 +1515,9 @@ export function AgentForm({
   const agentHooksEnabled = useFeature("agentHooksEnabled");
   const anthropicVertexAiEnabled =
     useFeature("anthropicVertexAiEnabled") === true;
-  const isClaudeCodeRuntime = runtime?.command?.[0] === "archestra-claude-code";
+  const supportsClaudeCodeSubscription =
+    runtimeSupportsClaudeCodeSubscription(runtime);
+  const isClaudeCodeRuntime = isClaudeCodeRuntimeConfig(runtime);
   const agentRuntimeEnabled = useFeature("agentRuntime") === true;
   // A runtime saved before the deployment turned Agent Runtime off stays
   // editable, so it can be switched off.
@@ -1703,6 +1713,7 @@ export function AgentForm({
             modelPoolId: agentData.modelPoolId ?? null,
             identityProviderId: agentData.identityProviderId ?? undefined,
             environmentId: agentData.environmentId ?? undefined,
+            networkPolicy: agentData.networkPolicy ?? null,
             knowledgeBaseIds: agentData.knowledgeBaseIds,
             connectorIds: agentData.connectorIds,
             scope: agentData.scope,
@@ -1735,6 +1746,7 @@ export function AgentForm({
             modelPoolId: null,
             identityProviderId: undefined,
             environmentId: undefined,
+            networkPolicy: null,
             knowledgeBaseIds: [],
             connectorIds: [],
             scope: "personal",
@@ -1764,6 +1776,7 @@ export function AgentForm({
       setLabels(nextValues.labels);
       setIdentityProviderId(nextValues.identityProviderId);
       setEnvironmentId(nextValues.environmentId);
+      setNetworkPolicy(nextValues.networkPolicy);
       setKnowledgeBaseIds(nextValues.knowledgeBaseIds);
       setConnectorIds(nextValues.connectorIds);
       setScope(nextValues.scope);
@@ -1984,7 +1997,7 @@ export function AgentForm({
   const effectiveLlmModelRow =
     selectedLlmModelRow ?? organizationDefaultModel.model;
   const usesClaudeSubscription =
-    isClaudeCodeRuntime &&
+    supportsClaudeCodeSubscription &&
     (runtime?.claudeCode?.authentication === "subscription" ||
       (!runtime?.claudeCode &&
         (selectedApiKey?.provider ?? effectiveLlmModelRow?.provider) !==
@@ -2159,6 +2172,11 @@ export function AgentForm({
   const savedEnvironmentId = persistedAgent?.environmentId ?? null;
   const environmentChanged =
     !!persistedAgent && (environmentId ?? null) !== savedEnvironmentId;
+  // Writing it takes permission to update environments, so it is sent only
+  // when it changed.
+  const networkPolicyChanged =
+    !!persistedAgent &&
+    hasUnsavedChanges(persistedAgent.networkPolicy ?? null, networkPolicy);
   // Saving it asks whether the editor may use its GitHub App, so it is sent
   // only when it changed.
   const githubActionsAccessChanged =
@@ -2228,6 +2246,18 @@ export function AgentForm({
       !agent && showActivationSkills
         ? agentActivationSkillsEditorRef.current?.getCreatePolicy()
         : undefined;
+    const runtimeToSave =
+      runtime &&
+      !supportsClaudeCodeSubscription &&
+      runtime.claudeCode?.authentication === "subscription"
+        ? {
+            ...runtime,
+            claudeCode: {
+              ...runtime.claudeCode,
+              authentication: "provider" as const,
+            },
+          }
+        : runtime;
 
     setIsSaving(true);
 
@@ -2321,7 +2351,11 @@ export function AgentForm({
               ...(isInternalAgent && {
                 systemPrompt: trimmedSystemPrompt || null,
                 ...(isClaudeCodeRuntime &&
-                  runtimeHasLocalChanges && { runtime }),
+                  (runtimeHasLocalChanges ||
+                    (canConfigureRuntime === true &&
+                      runtimeToSave !== runtime)) && {
+                    runtime: runtimeToSave,
+                  }),
                 ...(llmSelectionChanged && {
                   llmApiKeyId: llmApiKeyId || null,
                   modelId: llmModel || null,
@@ -2343,6 +2377,7 @@ export function AgentForm({
                 environmentChanged && {
                   environmentId: environmentId ?? null,
                 }),
+              ...(isInternalAgent && networkPolicyChanged && { networkPolicy }),
               ...(supportsIdentityProvider && {
                 identityProviderId: identityProviderId || null,
               }),
@@ -2355,7 +2390,7 @@ export function AgentForm({
             }),
             ...(showRuntimeSection &&
               runtimeEditable &&
-              canConfigureRuntime === true && { runtime }),
+              canConfigureRuntime === true && { runtime: runtimeToSave }),
             // The tools group: what the agent may reach, and how.
             ...(showToolsSections && {
               knowledgeBaseIds: knowledgeBaseIds,
@@ -2405,6 +2440,7 @@ export function AgentForm({
           // resolve the org's configured landing environment for its type.
           ...(supportsEnvironment &&
             environmentId !== undefined && { environmentId }),
+          ...(isInternalAgent && networkPolicy && { networkPolicy }),
           ...(supportsIdentityProvider && {
             identityProviderId: identityProviderId || null,
           }),
@@ -2420,7 +2456,7 @@ export function AgentForm({
               passthroughHeaders.length > 0 ? passthroughHeaders : null,
           }),
           ...(agentRuntimeEnabled && {
-            runtime,
+            runtime: runtimeToSave,
           }),
         });
         if (!created) return false;
@@ -2688,6 +2724,8 @@ export function AgentForm({
     showGitHubActionsAccess,
     githubActionsAccess,
     githubActionsAccessChanged,
+    networkPolicy,
+    networkPolicyChanged,
     toolExposureMode,
     missingCredentialBehavior,
     accessAllTools,
@@ -2700,6 +2738,7 @@ export function AgentForm({
     runtime,
     channelAssignmentsDirty,
     isClaudeCodeRuntime,
+    supportsClaudeCodeSubscription,
     runtimeHasLocalChanges,
   ]);
 
@@ -2793,6 +2832,7 @@ export function AgentForm({
     modelPoolId,
     identityProviderId,
     environmentId,
+    networkPolicy,
     knowledgeBaseIds,
     connectorIds,
     scope,
@@ -2974,7 +3014,11 @@ export function AgentForm({
           handleLlmApiKeyChange(keyId);
         }}
         onAddApiKey={onAddApiKey}
-        onUseSubscription={() => setClaudeAuthentication("subscription")}
+        onUseSubscription={
+          supportsClaudeCodeSubscription
+            ? () => setClaudeAuthentication("subscription")
+            : undefined
+        }
         disabled={readOnly}
       />
       {createApiKeyDialog}
@@ -3122,6 +3166,7 @@ export function AgentForm({
                   usesClaudeSubscription ? "subscription" : "provider"
                 }
                 onAuthenticationChange={setClaudeAuthentication}
+                runtimeCommand={runtime?.command?.[0] ?? null}
                 model={runtime?.claudeCode?.model}
                 onModelChange={(model) => {
                   if (!runtime || canConfigureRuntime !== true) return;
@@ -3443,11 +3488,15 @@ export function AgentForm({
                   <AgentRuntimeToolSources />
                 </SettingsSection>
               )}
-              {/* Section 3: Tools & Knowledge Sources */}
+              {/* Section 3: Tools and optional knowledge sources */}
               {showTools && (
                 <SettingsSection
-                  title="Tools &amp; Knowledge"
-                  description="What this agent can call while it works, and what it can search before answering."
+                  title={isBuiltIn ? "Tools" : "Tools & Knowledge"}
+                  description={
+                    isBuiltIn
+                      ? "Tools this agent can call while it works."
+                      : "What this agent can call while it works, and what it can search before answering."
+                  }
                   data-testid={E2eTestId.AgentToolsSection}
                 >
                   <div className="space-y-3">
@@ -3982,6 +4031,19 @@ export function AgentForm({
                 </SettingsSection>
               )}
 
+              {isInternalAgent && !isBuiltIn && (
+                <SettingsSection
+                  title="Network egress"
+                  description="Outbound network access for this agent's runtime and sandbox. Inherits its environment's policy unless the agent sets its own."
+                >
+                  <AgentNetworkPolicyField
+                    value={networkPolicy}
+                    onChange={setNetworkPolicy}
+                    disabled={!!readOnly}
+                  />
+                </SettingsSection>
+              )}
+
               {/* Suggested Prompts (Agent only, not built-in, collapsible) */}
               {isInternalAgent && !isBuiltIn && (
                 <SettingsSection
@@ -4398,6 +4460,7 @@ type AgentFormFields = {
   modelPoolId: string | null;
   identityProviderId: string | null | undefined;
   environmentId: string | null | undefined;
+  networkPolicy: AgentNetworkPolicy | null;
   knowledgeBaseIds: string[];
   connectorIds: string[];
   scope: AgentScope;

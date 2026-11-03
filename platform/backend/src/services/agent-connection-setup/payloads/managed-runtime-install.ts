@@ -78,6 +78,13 @@ if (params.managedKeyFile) {
   delete params.managedKeyFile;
 }
 const bootstrap = ${JSON.stringify(MANAGED_RUNTIME_BOOTSTRAP)};
+const configDir = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), ${JSON.stringify(params.client.dir)});
+const configPaths = [
+  configDir,
+  path.join(configDir, ${JSON.stringify(params.client.configFile)}),
+  path.join(configDir, ${JSON.stringify(params.client.commentedConfigFile)}),
+  path.join(configDir, "tui.json"),
+];
 fs.mkdirSync(root, { recursive: true, mode: 0o700 });
 const check = file => {
   const stat = fs.lstatSync(file);
@@ -85,12 +92,14 @@ const check = file => {
 };
 check(root);
 check(path.dirname(root));
+for (const item of configPaths) if (fs.existsSync(item)) check(item);
 if (process.platform === "win32") {
-  // The launcher refuses to start unless the user owns ~/.archestra and no one
-  // but the user, SYSTEM and Administrators can write to it. Other tools leave
-  // it otherwise (Codex's Windows sandbox grants CodexSandboxUsers Modify, and
-  // an elevated process makes Administrators the owner), so take ownership and
-  // drop those write grants, generic write rights included. An inherited grant
+  // The launcher refuses to start unless the user, SYSTEM, or Administrators
+  // owns ~/.archestra and the client config files, and no one outside that
+  // trusted set can write to them. Other tools leave them otherwise (Codex's
+  // Windows sandbox grants CodexSandboxUsers Modify, and an elevated process
+  // makes Administrators the owner), so take ownership when possible and drop
+  // foreign write grants, generic write rights included. An inherited grant
   // can only go with inheritance: Windows first turns the inherited rules into
   // explicit ones (rebuilding them by hand fails on generic rights), then the
   // foreign ones are removed. The runtime directory is then owned by the user
@@ -98,12 +107,12 @@ if (process.platform === "win32") {
   // Not Set-Acl: once an earlier install has locked an item, Set-Acl needs
   // SeSecurityPrivilege, which a non-admin user does not have. SetAccessControl
   // on the item works because powershell.exe is Windows PowerShell 5.1.
-  // One process for both, with room for a slow start and for Windows to apply
-  // the new rules to everything under ~/.archestra.
+  // One process for all paths, with room for a slow start and for Windows to
+  // apply the new rules.
   try {
   require("node:child_process").execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
-    '$ErrorActionPreference="Stop"; $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $trusted=@($sid.Value,"S-1-5-18","S-1-5-32-544"); $genericWrite=0x40000000; $genericAll=0x10000000; $writes=([int64][Security.AccessControl.FileSystemRights]"Write,Delete,ChangePermissions,TakeOwnership") -bor $genericWrite -bor $genericAll; $foreign={param($rule) $rule.AccessControlType -eq "Allow" -and $rule.IdentityReference.Value -notin $trusted -and (([int64]$rule.FileSystemRights -band $writes) -ne 0)}; $parent=$env:ARCHESTRA_RUNTIME_ACL_PARENT; $acl=Get-Acl -LiteralPath $parent; if(@($acl.GetAccessRules($false,$true,[Security.Principal.SecurityIdentifier]) | Where-Object {& $foreign $_}).Count -gt 0){$acl.SetAccessRuleProtection($true,$true); (Get-Item -LiteralPath $parent).SetAccessControl($acl); $acl=Get-Acl -LiteralPath $parent}; $changed=$false; if($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value){$acl.SetOwner($sid); $changed=$true}; foreach($rule in @($acl.GetAccessRules($true,$false,[Security.Principal.SecurityIdentifier]) | Where-Object {& $foreign $_})){[void]$acl.RemoveAccessRuleSpecific($rule); $changed=$true}; if($changed){(Get-Item -LiteralPath $parent).SetAccessControl($acl)}; $acl=Get-Acl -LiteralPath $env:ARCHESTRA_RUNTIME_ACL_PATH; if($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value){$acl.SetOwner($sid)}; $acl.SetAccessRuleProtection($true,$false); foreach($rule in @($acl.Access)){[void]$acl.RemoveAccessRuleSpecific($rule)}; $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($sid,"FullControl","ContainerInherit,ObjectInherit","None","Allow"))); (Get-Item -LiteralPath $env:ARCHESTRA_RUNTIME_ACL_PATH).SetAccessControl($acl)'
-  ], { env: { ...process.env, ARCHESTRA_RUNTIME_ACL_PARENT: path.dirname(root), ARCHESTRA_RUNTIME_ACL_PATH: root }, timeout: 15000, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    '$ErrorActionPreference="Stop"; $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $trusted=@($sid.Value,"S-1-5-18","S-1-5-32-544"); $genericWrite=0x40000000; $genericAll=0x10000000; $writes=([int64][Security.AccessControl.FileSystemRights]"Write,Delete,ChangePermissions,TakeOwnership") -bor $genericWrite -bor $genericAll; $foreign={param($rule) $rule.AccessControlType -eq "Allow" -and $rule.IdentityReference.Value -notin $trusted -and (([int64]$rule.FileSystemRights -band $writes) -ne 0)}; $clean={param($target) if(-not $target -or -not (Test-Path -LiteralPath $target)){return}; $acl=Get-Acl -LiteralPath $target; if(@($acl.GetAccessRules($false,$true,[Security.Principal.SecurityIdentifier]) | Where-Object {& $foreign $_}).Count -gt 0){$acl.SetAccessRuleProtection($true,$true); (Get-Item -LiteralPath $target).SetAccessControl($acl); $acl=Get-Acl -LiteralPath $target}; $changed=$false; $owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value; if($owner -notin $trusted){$acl.SetOwner($sid); $changed=$true}; foreach($rule in @($acl.GetAccessRules($true,$false,[Security.Principal.SecurityIdentifier]) | Where-Object {& $foreign $_})){[void]$acl.RemoveAccessRuleSpecific($rule); $changed=$true}; if($changed){(Get-Item -LiteralPath $target).SetAccessControl($acl)}; if($owner -ne $sid.Value -and $owner -in $trusted){try{$acl=Get-Acl -LiteralPath $target; $acl.SetOwner($sid); (Get-Item -LiteralPath $target).SetAccessControl($acl)}catch{}}}; & $clean $env:ARCHESTRA_RUNTIME_ACL_PARENT; foreach($item in ($env:ARCHESTRA_RUNTIME_ACL_CONFIG -split ";")){& $clean $item}; $acl=Get-Acl -LiteralPath $env:ARCHESTRA_RUNTIME_ACL_PATH; if($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value){$acl.SetOwner($sid)}; $acl.SetAccessRuleProtection($true,$false); foreach($rule in @($acl.Access)){[void]$acl.RemoveAccessRuleSpecific($rule)}; $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($sid,"FullControl","ContainerInherit,ObjectInherit","None","Allow"))); (Get-Item -LiteralPath $env:ARCHESTRA_RUNTIME_ACL_PATH).SetAccessControl($acl)'
+  ], { env: { ...process.env, ARCHESTRA_RUNTIME_ACL_PARENT: path.dirname(root), ARCHESTRA_RUNTIME_ACL_PATH: root, ARCHESTRA_RUNTIME_ACL_CONFIG: configPaths.filter(item => fs.existsSync(item)).join(";") }, timeout: 15000, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   } catch (error) {
     const detail = error.code === "ETIMEDOUT" ? "PowerShell timed out after 15000 ms" :
       (error.stderr && String(error.stderr).trim()) || error.code || "PowerShell exited with status " + error.status;
@@ -180,7 +189,6 @@ verifier.exports.verify(root);
 // Register the TUI entry of this connection plugin separately: older server
 // plugin loaders treat every export as a server hook. Never load UI there.
 if (params.questionCards) {
-  const configDir = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), ${JSON.stringify(params.client.dir)});
   const tuiConfig = path.join(configDir, "tui.json");
   const tuiCommented = path.join(configDir, "tui.jsonc");
   const tuiEntry = path.join(root, "tui.mjs");

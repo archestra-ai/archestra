@@ -68,6 +68,8 @@ const EditMcpGatewayToolArgsSchema = z
     toolExposureMode: ToolExposureModeSchema.optional().describe(
       "How tools should be loaded for MCP clients and models.",
     ),
+    accessAllTools: CreateBaseToolArgsSchema.shape.accessAllTools,
+    accessAllSubagents: CreateBaseToolArgsSchema.shape.accessAllSubagents,
     knowledgeBaseIds: UpdateAgentSchemaBase.shape.knowledgeBaseIds
       .describe(
         "Replace the MCP gateway's assigned knowledge bases with this set.",
@@ -78,12 +80,6 @@ const EditMcpGatewayToolArgsSchema = z
         "Replace the MCP gateway's directly assigned knowledge connectors with this set.",
       )
       .optional(),
-    accessAllSubagents: z
-      .boolean()
-      .optional()
-      .describe(
-        "Allow dynamic subagent delegation: the MCP gateway may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions).",
-      ),
     subAgentIds: z
       .array(UuidIdSchema)
       .optional()

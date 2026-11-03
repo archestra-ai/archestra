@@ -85,12 +85,18 @@ export function useUpdateUnsupportedClientAction() {
   });
 }
 
-export function useUpdateBreakTheGlassEnabled() {
+/** The Break the glass settings: any of them, saved together. */
+export function useUpdateBreakTheGlass() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: async (breakTheGlassEnabled: boolean) => {
+    mutationFn: async (
+      body: Pick<
+        NonNullable<archestraApiTypes.UpdateGuardrailsDeploymentData["body"]>,
+        "breakTheGlassEnabled" | "humanApprovalMode" | "unapprovableBlockMode"
+      >,
+    ) => {
       const { data, error } = await archestraApiSdk.updateGuardrailsDeployment({
-        body: { breakTheGlassEnabled },
+        body,
       });
       if (error) {
         handleApiError(error);

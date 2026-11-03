@@ -31,6 +31,9 @@ export const TOOL_GET_AGENT_SHORT_NAME = "get_agent";
 export const TOOL_LIST_AGENTS_SHORT_NAME = "list_agents";
 export const TOOL_LIST_LLM_MODELS_SHORT_NAME = "list_llm_models";
 export const TOOL_EDIT_AGENT_SHORT_NAME = "edit_agent";
+export const TOOL_GET_AGENT_SKILL_POLICY_SHORT_NAME = "get_agent_skill_policy";
+export const TOOL_PATCH_AGENT_SKILL_POLICY_SHORT_NAME =
+  "patch_agent_skill_policy";
 export const TOOL_LIST_HOOKS_SHORT_NAME = "list_hooks";
 export const TOOL_CREATE_HOOK_SHORT_NAME = "create_hook";
 export const TOOL_UPDATE_HOOK_SHORT_NAME = "update_hook";
@@ -279,6 +282,8 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LIST_AGENTS_SHORT_NAME,
   TOOL_LIST_LLM_MODELS_SHORT_NAME,
   TOOL_EDIT_AGENT_SHORT_NAME,
+  TOOL_GET_AGENT_SKILL_POLICY_SHORT_NAME,
+  TOOL_PATCH_AGENT_SKILL_POLICY_SHORT_NAME,
   TOOL_LIST_HOOKS_SHORT_NAME,
   TOOL_CREATE_HOOK_SHORT_NAME,
   TOOL_UPDATE_HOOK_SHORT_NAME,
@@ -501,6 +506,8 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   list_agents: "agents",
   list_llm_models: "agents",
   edit_agent: "agents",
+  get_agent_skill_policy: "agents",
+  patch_agent_skill_policy: "agents",
   list_hooks: "agents",
   create_hook: "agents",
   update_hook: "agents",
@@ -1236,10 +1243,13 @@ export function buildElicitationMandateInstruction(params?: {
   askUserToolName?: string;
   nativeQuestionToolName?: string;
   nativeQuestionMaxOptions?: number;
+  gatewayQuestionMaxOptions?: number;
   nativeQuestionSupportsMultiple?: boolean;
   gatewayQuestionUsesNativeForm?: boolean;
 }): string {
   const nativeOnly = params?.gatewayQuestionUsesNativeForm === true;
+  const convertedGateway =
+    nativeOnly && params?.gatewayQuestionMaxOptions !== undefined;
   const reviews =
     nativeOnly && params?.askUserToolName
       ? ` For guardrail reviews, use ${params.askUserToolName} with the offer IDs. Keep the call blocked if no review form is available.`
@@ -1250,7 +1260,7 @@ export function buildElicitationMandateInstruction(params?: {
   const tools: string[] = [];
   if (params?.nativeQuestionToolName) tools.push(params.nativeQuestionToolName);
   if (
-    !nativeOnly &&
+    (!nativeOnly || convertedGateway) &&
     params?.askUserToolName &&
     !tools.includes(params.askUserToolName)
   ) {
@@ -1264,7 +1274,13 @@ export function buildElicitationMandateInstruction(params?: {
     params?.askUserToolName &&
     params.nativeQuestionToolName &&
     params.nativeQuestionMaxOptions !== undefined
-      ? ` ${params.nativeQuestionToolName} accepts at most ${params.nativeQuestionMaxOptions} options.${nativeOnly ? " Do not discard choices to fit." : ` For more options, use ${params.askUserToolName} and keep all choices.`}`
+      ? ` ${params.nativeQuestionToolName} accepts at most ${params.nativeQuestionMaxOptions} options${params.gatewayQuestionMaxOptions !== undefined ? " per question" : ""}.${
+          nativeOnly && params.gatewayQuestionMaxOptions !== undefined
+            ? ` For more options (up to ${params.gatewayQuestionMaxOptions}), call ${params.askUserToolName} with every choice. The platform groups them into native questions; never put more than ${params.nativeQuestionMaxOptions} options in one native question.`
+            : nativeOnly
+              ? " Do not discard choices to fit."
+              : ` For more options, use ${params.askUserToolName} and keep all choices.`
+        }`
       : "";
   const singleSelection =
     nativeOnly && params?.nativeQuestionSupportsMultiple === false
@@ -1274,7 +1290,10 @@ export function buildElicitationMandateInstruction(params?: {
     tools.length > 1
       ? " Honor the user's explicit choice of question tool."
       : "";
-  return `When you need a decision, a clarification, a preference, or an approval from the user, ask with ${toolName}. The user then answers in the client's question interface. Ask multiple-choice questions with ${toolName} too, not in plain text.${toolChoice}${nativeLimit}${singleSelection}${reviews} A link or command the user must open or run goes in your reply text, not in the question.`;
+  const presentation = convertedGateway
+    ? " Archestra renders gateway questions through the client's native question UI. The native tool name in history identifies the renderer; it does not establish which tool the model originally requested. Use archestra_presentation in the result, when present, to describe the original call."
+    : "";
+  return `When you need a decision, a clarification, a preference, or an approval from the user, ask with ${toolName}. The user then answers in the client's question interface. Ask multiple-choice questions with ${toolName} too, not in plain text.${toolChoice}${nativeLimit}${singleSelection}${reviews}${presentation} A link or command the user must open or run goes in your reply text, not in the question.`;
 }
 
 /**

@@ -81,15 +81,19 @@ const groupLabel = new Map<ArchestraToolGroupId, string>(
  * with no entry has no requirement beyond its RBAC permission.
  */
 const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
+  get_agent_skill_policy:
+    "Also requires [`skill:read`](/docs/reference/permissions#skill:read). Returns an internal agent's skill activation policy.",
+  patch_agent_skill_policy:
+    "Also requires [`skill:read`](/docs/reference/permissions#skill:read). Requires the current revision and an update grant on the agent. Only skills the caller can access may be added.",
   // Membership mutations gate on `team:read`, then require the caller to be an
-  // organization-level team manager (holds `team:create`) OR an admin
+  // organization-level team manager (holds `team:update`) OR an admin
   // (team-member role) of the target team.
   add_team_member:
-    "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:create`) or an **admin** of the target team.",
+    "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:update`) or an **admin** of the target team.",
   update_team_member_role:
-    "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:create`) or an **admin** of the target team.",
+    "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:update`) or an **admin** of the target team.",
   remove_team_member:
-    "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:create`) or an **admin** of the target team.",
+    "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:update`) or an **admin** of the target team.",
   create_schedule_trigger:
     "Requires an acting user. Omitting `project_id` creates a private project with the task prompt as its instructions. Repeating the same new-project task returns the existing schedule. An existing project must be accessible to the caller.",
   get_schedule_trigger:
@@ -112,11 +116,11 @@ const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
     "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can use** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
   // Reads are scoped: non-managers only see teams they belong to.
   get_team:
-    "Callers without organization-level team management (`team:create`) can only read teams they are a member of.",
+    "Callers without organization-level team management (`team:update`) can only read teams they are a member of.",
   list_team_members:
-    "Callers without organization-level team management (`team:create`) can only read members of teams they are a member of.",
+    "Callers without organization-level team management (`team:update`) can only read members of teams they are a member of.",
   list_teams:
-    "Callers without organization-level team management (`team:create`) only see teams they are a member of.",
+    "Callers without organization-level team management (`team:update`) only see teams they are a member of.",
   // The read tools stay on the caller's own reach: `project:admin` oversight of
   // a foreign project is a REST/UI capability and does not extend to them.
   list_projects:

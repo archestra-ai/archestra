@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { A2AOAuthExecution } from "@/routes/mcp-gateway/utils";
+import type { A2AOAuthExecution } from "@/types/a2a-actor";
 import { internalCallProvenance } from "./internal-call";
 
 const HEADER = "x-archestra-a2a-oauth-execution";

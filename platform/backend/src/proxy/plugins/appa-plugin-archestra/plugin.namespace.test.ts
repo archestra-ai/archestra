@@ -17,6 +17,39 @@ describe("AppaPluginArchestra namespace controls", () => {
     await GuardrailsDeploymentModel.setEnabled(true);
   });
 
+  test("directs remedy and review calls to this gateway's exact namespace", async () => {
+    const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+    const context = namespaceContext();
+    context.headers = { originator: "codex_cli_rs" };
+    const request = { input: [], instructions: "Client instructions." };
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onBeforeModel({ ...context, request });
+      const guidance = JSON.stringify(request.input);
+      expect(guidance).toContain(
+        JSON.stringify({
+          name: "archestra__execute_remedy_plan",
+          namespace: "mcp__gateway",
+        }).replaceAll('"', '\\"'),
+      );
+      expect(guidance).toContain(
+        JSON.stringify({
+          name: "archestra__ask_user",
+          namespace: "mcp__gateway",
+        }).replaceAll('"', '\\"'),
+      );
+      expect(guidance).toContain(
+        "A same-named tool on another MCP server cannot execute these offers",
+      );
+      expect(guidance).toContain(
+        "If the latest ruling offers no remedy plan, stop that blocked action",
+      );
+      expect(guidance).not.toContain("mcp__foreign");
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
   test("stamps every accepted alias and matches results by exact namespace, never canonical equality", async () => {
     const plugin = new AppaPluginArchestra([]);
     const context = namespaceContext();

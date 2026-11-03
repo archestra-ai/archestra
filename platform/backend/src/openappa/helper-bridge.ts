@@ -12,6 +12,7 @@ import { skillRootPath } from "@/skills-sandbox/runtime-image";
 import { shellQuote } from "@/utils/shell-quote";
 import { archestraAudience } from "./archestra-audience";
 import { deployedFromRow } from "./battery-target";
+import { boundGithubApiUrl } from "./bound-github-api-url";
 import { servedHelperSource } from "./composition-view";
 import { openappaDeclarations } from "./declarations";
 import { draftHelperSource } from "./draft-helper-sources";
@@ -155,6 +156,12 @@ class OpenAppaHelperBridge {
       secretEnv.push({ name: entry.credential, value: entry.value });
     }
 
+    const githubApiUrl = await boundGithubApiUrl({
+      organizationId: install.organizationId,
+      credentialKeys: deployed.credentials.flatMap(
+        (credential) => install.credentialBindings[credential] ?? [],
+      ),
+    });
     const environment = await this.organizationEngine(install.organizationId);
     const cwd = skillRootPath(battery.name);
     // Only sandbox execution consumes this share. In-process audience reads,
@@ -172,8 +179,9 @@ class OpenAppaHelperBridge {
         await sandboxRuntimeService.attach(CONSUMER_ID);
         executed = await sandboxRuntimeService.runCommand({
           // Helpers are short-lived; lazy imports (Python 3.15+, ignored before)
-          // skip loading modules a consult never touches.
-          command: `PYTHON_LAZY_IMPORTS=all ${external.command.map(shellQuote).join(" ")}`,
+          // skip loading modules a consult never touches. The helper reads its
+          // budget as an OpenAPPA command external reads it from the runtime.
+          command: `${CONSULT_TIMEOUT_VARIABLE}=${HELPER_EXEC_TIMEOUT_SECONDS * 1000} PYTHON_LAZY_IMPORTS=all ${githubApiUrl ? `GITHUB_API_URL=${shellQuote(githubApiUrl)} ` : ""}${external.command.map(shellQuote).join(" ")}`,
           cwd,
           timeoutSeconds: HELPER_EXEC_TIMEOUT_SECONDS,
           replayEntries: [
@@ -329,6 +337,8 @@ const CREDENTIAL_FAILURES: Record<CredentialFailure, string> = {
 const CONSUMER_ID = "openappa-helper-bridge";
 /** The helper's own execution budget inside the container. */
 const HELPER_EXEC_TIMEOUT_SECONDS = 4;
+/** Where an OpenAPPA command external reads the milliseconds it has to answer. */
+const CONSULT_TIMEOUT_VARIABLE = "APPA_CONSULT_TIMEOUT_MS";
 /**
  * Wall-clock budget for one helper consult, container materialization
  * included: the execution budget plus a margin, kept under the runtime's own

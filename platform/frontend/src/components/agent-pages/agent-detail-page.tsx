@@ -177,7 +177,7 @@ export function AgentDetailPage({
       title={config.singular}
       description=""
       backLink={backLink}
-      maxWidth={pageWidth(kind)}
+      maxWidth="wizard"
       minWidth="phone"
     >
       {children}
@@ -256,7 +256,10 @@ function AgentDetails({
     isBuiltIn,
     isPending: isAccessPending,
   } = useAgentAccess(agent, kind);
-  const runtimeEnabled = useFeature("agentRuntime") === true;
+  const runtimeFeature = useFeature("agentRuntime");
+  const runtimeEnabled = runtimeFeature === true;
+  const isRuntimeFeaturePending =
+    kind === "agent" && agent.runtime != null && runtimeFeature === undefined;
   const permissionResource =
     agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent";
   // The same query as the access block, so the header chip reflects what
@@ -394,7 +397,11 @@ function AgentDetails({
         return;
       }
     }
-    if (sectionParam === "runs" && hasAgentRuntime && runsQuery.isPending)
+    // Wait for configuration before treating the requested tab as invalid.
+    if (
+      sectionParam === "runs" &&
+      (isRuntimeFeaturePending || (hasAgentRuntime && runsQuery.isPending))
+    )
       return;
     router.replace(agentDetailHref(kind, agent.id, section), { scroll: false });
   }, [
@@ -405,6 +412,7 @@ function AgentDetails({
     agent.id,
     router,
     hasAgentRuntime,
+    isRuntimeFeaturePending,
     runsQuery.isPending,
     overviewOnly,
     showConnect,
@@ -558,7 +566,7 @@ function AgentDetails({
 
   return (
     <PageLayout
-      maxWidth={pageWidth(kind)}
+      maxWidth="wizard"
       minWidth="phone"
       // A scrolling box would trap the sticky save footer, so it could not
       // pin to the bottom of the window. Only the wide sections, such as
@@ -802,12 +810,15 @@ function AgentDetails({
                 canEdit={canEdit}
               />
             )}
-            {overviewOnly && section === "general" && kind === "agent" && (
-              <AgentSchedulesSection
-                agentId={agent.id}
-                agentName={agent.name}
-              />
-            )}
+            {overviewOnly &&
+              section === "general" &&
+              kind === "agent" &&
+              !isBuiltIn && (
+                <AgentSchedulesSection
+                  agentId={agent.id}
+                  agentName={agent.name}
+                />
+              )}
             {activeFormGroups.length > 0 && (
               <AgentForm
                 afterDescription={
@@ -987,15 +998,6 @@ function AgentDetails({
  * reason out of reach of exactly the users it is written for. The refusal is
  * enforced by preventing the select and the click instead.
  */
-
-/**
- * An Agent's page holds its Runs table, so it takes the list pages' width,
- * like the Agents, Skills and MCP Registry pages. An MCP Gateway's page is a
- * settings form, which keeps the column it was created in.
- */
-function pageWidth(kind: AgentPageKind) {
-  return kind === "agent" ? "wide" : "wizard";
-}
 
 /**
  * What a section is called on this record's page. Connect is the exception:

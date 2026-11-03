@@ -27,6 +27,7 @@ import {
 } from "./agent-activation-skill-policy";
 import { AgentRuntimeSchema } from "./agent-runtime";
 import { SuggestedPromptInputSchema } from "./agent-suggested-prompt";
+import { NetworkPolicyInputSchema, NetworkPolicySchema } from "./environment";
 import { LabelWithDetailsSchema } from "./label";
 import { SelectToolSchema } from "./tool";
 import {
@@ -141,6 +142,9 @@ const ChatTitleGenerationAgentConfigSchema = z.object({
 const AppRuntimeAgentConfigSchema = z.object({
   name: z.literal(BUILT_IN_AGENT_IDS.APP_RUNTIME),
 });
+const SreAgentConfigSchema = z.object({
+  name: z.literal(BUILT_IN_AGENT_IDS.SRE),
+});
 
 // Discriminated union — add future built-in agents here
 export const BuiltInAgentConfigSchema = z.discriminatedUnion("name", [
@@ -148,6 +152,7 @@ export const BuiltInAgentConfigSchema = z.discriminatedUnion("name", [
   ContextCompactionAgentConfigSchema,
   ChatTitleGenerationAgentConfigSchema,
   AppRuntimeAgentConfigSchema,
+  SreAgentConfigSchema,
 ]);
 
 export type BuiltInAgentConfig = z.infer<typeof BuiltInAgentConfigSchema>;
@@ -198,6 +203,12 @@ const selectExtendedFields = {
    */
   githubActionsAccess: StoredGitHubActionsAccessSchema.nullable().optional(),
   runtime: AgentRuntimeSchema.nullable(),
+  /**
+   * Per-agent egress override for its Agent Runtime and Code Sandbox. Null
+   * inherits the environment's policy. Optional so agent objects built in code
+   * without it still fit.
+   */
+  networkPolicy: NetworkPolicySchema.nullable().optional(),
   activationSkillMode: AgentActivationSkillModeSchema,
   /**
    * When anything last ran through this agent: the later of its newest MCP
@@ -218,6 +229,7 @@ const insertExtendedFields = {
   passthroughHeaders: PassthroughHeadersSchema,
   githubActionsAccess: GitHubActionsAccessSchema.nullable().optional(),
   runtime: AgentRuntimeSchema.nullable().optional(),
+  networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
   activationSkillMode: AgentActivationSkillModeSchema.optional(),
 };
 

@@ -1,5 +1,4 @@
 import { Readable } from "node:stream";
-import { promisify } from "node:util";
 import * as zlib from "node:zlib";
 import {
   type SupportedProvider,
@@ -368,6 +367,9 @@ export async function cleanForwardedBody(
     /\/v1\/(?:chat\/completions|completions|embeddings|responses|images\/(?:generations|edits)|messages)$/.test(
       path,
     );
+  const encodedBody =
+    zstdBody ||
+    (validateBody && !nativeOllama && encoding && encoding !== "identity");
   const multipartBody =
     nativeOllama &&
     validateBody &&
@@ -375,42 +377,61 @@ export async function cleanForwardedBody(
     request.headers["content-type"]
       ?.toLowerCase()
       .startsWith("multipart/form-data");
-  const decodeZstd = async (bytes: Buffer): Promise<Buffer> => {
-    if (typeof zlib.zstdDecompress !== "function")
-      throw new ApiError(
-        400,
-        "This runtime cannot inspect zstd-compressed model requests.",
-      );
-    try {
-      return await promisify(zlib.zstdDecompress)(bytes, {
-        maxOutputLength: request.routeOptions.bodyLimit,
-      });
-    } catch (error) {
-      if (
-        error &&
-        typeof error === "object" &&
-        "code" in error &&
-        error.code === "ERR_BUFFER_TOO_LARGE"
-      )
-        throw new errorCodes.FST_ERR_CTP_BODY_TOO_LARGE();
-      throw new ApiError(400, "Invalid zstd-compressed model request.");
+  const decodeBody = async (bytes: Buffer): Promise<Buffer> => {
+    // Decode a bounded inspection copy. HTTP applies stacked encodings in order,
+    // so undo them in reverse; the original request bytes still go upstream.
+    for (const name of (encoding ?? "").split(",").reverse()) {
+      const decoders: Record<
+        string,
+        (
+          input: Buffer,
+          options: { maxOutputLength: number },
+          callback: (error: Error | null, decoded: Buffer) => void,
+        ) => void
+      > = {
+        gzip: zlib.gunzip,
+        deflate: zlib.inflate,
+        br: zlib.brotliDecompress,
+        zstd: zlib.zstdDecompress,
+      };
+      const key = name.trim();
+      const decoder = Object.hasOwn(decoders, key) ? decoders[key] : undefined;
+      if (key === "identity") continue;
+      if (typeof decoder !== "function")
+        throw new ApiError(415, "Unsupported model request content encoding.");
+      try {
+        bytes = await new Promise<Buffer>((resolve, reject) => {
+          decoder(
+            bytes,
+            { maxOutputLength: request.routeOptions.bodyLimit },
+            (error, decoded) => (error ? reject(error) : resolve(decoded)),
+          );
+        });
+      } catch (error) {
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          error.code === "ERR_BUFFER_TOO_LARGE"
+        )
+          throw new errorCodes.FST_ERR_CTP_BODY_TOO_LARGE();
+        throw new ApiError(400, "Invalid compressed model request.");
+      }
     }
+    return bytes;
   };
   const body = request.body;
   if (!(body instanceof Readable)) {
     await validateBody?.(
-      zstdBody && (typeof body === "string" || Buffer.isBuffer(body))
-        ? await decodeZstd(Buffer.from(body))
+      encodedBody && (typeof body === "string" || Buffer.isBuffer(body))
+        ? await decodeBody(Buffer.from(body))
         : body,
     );
     return;
   }
   // Native endpoints can parse JSON regardless of Content-Type. Inspect those
   // bytes for availability too; otherwise a different header bypasses Hidden.
-  if (
-    (encoding && encoding !== "identity" && !nativeOllama) ||
-    (!isUncompressedJson(request.headers) && !validateBody)
-  ) {
+  if (!isUncompressedJson(request.headers) && !validateBody) {
     return;
   }
   const raw = await readBody({
@@ -444,8 +465,8 @@ export async function cleanForwardedBody(
     request.body = Readable.from([raw], { objectMode: false });
     return;
   }
-  if (zstdBody) {
-    await validateBody(await decodeZstd(raw));
+  if (encodedBody) {
+    await validateBody(await decodeBody(raw));
     request.body = Readable.from([raw], { objectMode: false });
     return;
   }

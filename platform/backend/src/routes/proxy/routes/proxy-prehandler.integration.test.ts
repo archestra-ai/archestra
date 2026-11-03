@@ -1,5 +1,10 @@
 import { createServer } from "node:http";
-import { zstdCompressSync, zstdDecompressSync } from "node:zlib";
+import {
+  gunzipSync,
+  gzipSync,
+  zstdCompressSync,
+  zstdDecompressSync,
+} from "node:zlib";
 import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
 import ModelModel from "@/models/model";
@@ -43,7 +48,8 @@ test.for([
   });
   const model = await ModelModel.create({
     provider,
-    modelId: "synthetic-model",
+    modelId:
+      provider === "cohere" ? "synthetic-model" : "synthetic-model:latest",
     externalId: `${provider}/synthetic-model`,
     inputModalities: ["text"],
     outputModalities: ["text"],
@@ -57,7 +63,9 @@ test.for([
     const decoded =
       request.headers["content-encoding"] === "zstd"
         ? zstdDecompressSync(raw)
-        : raw;
+        : request.headers["content-encoding"] === "gzip"
+          ? gunzipSync(raw)
+          : raw;
     const multipart = request.headers["content-type"]?.startsWith(
       "multipart/form-data",
     )
@@ -125,6 +133,26 @@ test.for([
       },
       payload: compressed,
     });
+  const gzipBytes = gzipSync(
+    Buffer.from(
+      JSON.stringify({
+        model: model.modelId,
+        query: "Hello",
+        documents: ["Hello"],
+      }),
+    ),
+  );
+  const askGzip = () =>
+    app.inject({
+      method: "POST",
+      url: `/v1/${provider}/${agent.id}${paths[0]}`,
+      headers: {
+        "x-archestra-virtual-key": token,
+        "content-type": "application/json",
+        "content-encoding": "gzip",
+      },
+      payload: gzipBytes,
+    });
   const form = new FormData();
   form.set("model", model.modelId);
   form.set(
@@ -154,6 +182,14 @@ test.for([
       expect(response.body).toContain("hidden");
     }
     if (provider === "ollama" || provider === "ollama-native") {
+      for (const alias of [
+        "synthetic-model",
+        "LIBRARY/synthetic-model:latest",
+        "registry.ollama.ai/library/synthetic-model",
+      ]) {
+        const hiddenAlias = await ask(paths[0], alias);
+        expect(hiddenAlias.statusCode, hiddenAlias.body).toBe(403);
+      }
       for (const contentType of ["text/plain", undefined]) {
         const response = await app.inject({
           method: "POST",
@@ -219,6 +255,21 @@ test.for([
       );
       expect(queryOnly.statusCode, queryOnly.body).toBe(403);
     }
+    if (provider === "cohere") {
+      const compressedHidden = await askGzip();
+      expect(compressedHidden.statusCode, compressedHidden.body).toBe(403);
+      const unsupported = await app.inject({
+        method: "POST",
+        url: `/v1/${provider}/${agent.id}${paths[0]}`,
+        headers: {
+          "x-archestra-virtual-key": token,
+          "content-type": "application/json",
+          "content-encoding": "constructor",
+        },
+        payload: { model: model.modelId },
+      });
+      expect(unsupported.statusCode, unsupported.body).toBe(415);
+    }
     expect(hits).toHaveLength(0);
     const nativeOllama = provider === "ollama" || provider === "ollama-native";
     if (nativeOllama) {
@@ -257,6 +308,11 @@ test.for([
       const hiddenOverride = await askMultipart("?model=hidden-query-model");
       expect(hiddenOverride.statusCode, hiddenOverride.body).toBe(403);
       expect(hits).toHaveLength(6);
+    }
+    if (provider === "cohere") {
+      const compressedVisible = await askGzip();
+      expect(compressedVisible.statusCode, compressedVisible.body).toBe(200);
+      expect(hits.pop()?.raw).toEqual(gzipBytes);
     }
     expect(hits).toHaveLength(nativeOllama ? 6 : 3);
     expect(hits.at(-1)?.body).toMatchObject({

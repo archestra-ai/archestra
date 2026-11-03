@@ -195,6 +195,30 @@ function readOllamaDefaultNumCtx(
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/** Ollama's local model name: default host/library/latest and case-insensitive parts.
+ * This is availability matching only; never rewrite the provider-bound model ID.
+ */
+function ollamaAvailabilityName(id: string): string | undefined {
+  const scheme = /^[a-z][a-z0-9+.-]*:\/\//i.exec(id);
+  const parts = id.slice(scheme?.[0].length ?? 0).split("/");
+  if (parts.length > 3 || (scheme && parts.length !== 3)) return undefined;
+  const leaf = parts.at(-1) ?? "";
+  const separator = leaf.lastIndexOf(":");
+  const model = separator < 0 ? leaf : leaf.slice(0, separator);
+  const tag = separator < 0 ? "latest" : leaf.slice(separator + 1);
+  const namespace = parts.length > 1 ? parts.at(-2) : "library";
+  const host = parts.length === 3 ? parts[0] : "registry.ollama.ai";
+  if (
+    !/^[a-z0-9_][a-z0-9_.-]{0,79}$/i.test(model) ||
+    !/^[a-z0-9_][a-z0-9_.-]{0,79}$/i.test(tag) ||
+    !namespace ||
+    !/^[a-z0-9_][a-z0-9_-]{0,79}$/i.test(namespace) ||
+    !/^[a-z0-9_][a-z0-9_.:-]{0,349}$/i.test(host)
+  )
+    return undefined;
+  return `${host}/${namespace}/${model}:${tag}`.toLowerCase();
+}
+
 class ModelModel {
   /** Check the resolved provider/model immediately before starting an execution. */
   static async assertAvailable(params: {
@@ -214,15 +238,41 @@ class ModelModel {
             `models/${modelId.replace(/^models\//, "")}`,
           ]
         : [];
-    const models = await ModelModel.findByProviderModelIds(
-      [
-        ...new Set([modelId, ...providerAliases, ...(params.aliases ?? [])]),
-      ].map((id) => ({
-        provider: params.provider,
-        modelId: id,
-      })),
-    );
-    const hidden = [...models.values()].find((model) => model.ignored);
+    let hidden: Pick<Model, "modelId"> | undefined;
+    if (params.provider === "ollama" || params.provider === "ollama-native") {
+      const ids = new Set([modelId, ...(params.aliases ?? [])]);
+      const canonicalNames = new Set(
+        [...ids]
+          .map(ollamaAvailabilityName)
+          .filter((name) => name !== undefined),
+      );
+      // Only hidden IDs are needed. Compare both names using Ollama's defaults;
+      // exact-only lookup lets omitted tags/default registries bypass Hidden.
+      const hiddenModels = await db
+        .select({ modelId: schema.modelsTable.modelId })
+        .from(schema.modelsTable)
+        .where(
+          and(
+            eq(schema.modelsTable.provider, params.provider),
+            eq(schema.modelsTable.ignored, true),
+          ),
+        );
+      hidden = hiddenModels.find(
+        (model) =>
+          ids.has(model.modelId) ||
+          canonicalNames.has(ollamaAvailabilityName(model.modelId) ?? ""),
+      );
+    } else {
+      const models = await ModelModel.findByProviderModelIds(
+        [
+          ...new Set([modelId, ...providerAliases, ...(params.aliases ?? [])]),
+        ].map((id) => ({
+          provider: params.provider,
+          modelId: id,
+        })),
+      );
+      hidden = [...models.values()].find((model) => model.ignored);
+    }
     if (hidden) {
       throw new ApiError(
         403,

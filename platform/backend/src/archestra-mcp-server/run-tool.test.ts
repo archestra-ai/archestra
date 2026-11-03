@@ -2093,7 +2093,7 @@ describe("run_tool", () => {
       expect(result.content).toEqual([{ type: "text", text: "ok" }]);
     });
 
-    test("does not repair when the declared type is absent or non-literal", async ({
+    test("does not repair when the declared type is absent", async ({
       makeAgentTool,
       makeInternalMcpCatalog,
       makeTool,
@@ -2108,7 +2108,6 @@ describe("run_tool", () => {
           type: "object",
           properties: {
             payload: {},
-            flexible: { type: ["string", "null"] },
           },
         },
       });
@@ -2118,7 +2117,7 @@ describe("run_tool", () => {
         isError: false,
       } as any);
 
-      const sentArgs = { payload: { value: "x" }, flexible: { value: "y" } };
+      const sentArgs = { payload: { value: "x" } };
       const result = await executeArchestraTool(
         TOOL_RUN_TOOL_FULL_NAME,
         { tool_name: "loose__ingest", tool_args: sentArgs },
@@ -2316,8 +2315,8 @@ describe("run_tool", () => {
       const wrapped = { type: "text", text: "x" };
       const composed: unknown[] = [
         { $ref: "#/$defs/P" },
-        { anyOf: [{ type: "string" }] },
-        { oneOf: [{ type: "string" }] },
+        { anyOf: [{ type: "string" }, { type: "object" }] },
+        { oneOf: [{ type: "string" }, { type: "object" }] },
         { allOf: [{ type: "string" }] },
       ];
       for (const p of composed) {
@@ -2328,6 +2327,134 @@ describe("run_tool", () => {
         expect(repairedParams).toEqual([]);
         expect(toolArgs).toEqual({ p: wrapped });
       }
+    });
+
+    test.each([
+      {
+        label: "typed enum or null",
+        p: {
+          anyOf: [{ type: "string", enum: ["knowledge"] }, { type: "null" }],
+        },
+        sent: { value: "knowledge" },
+        inner: "knowledge",
+      },
+      {
+        label: "untyped enum or null",
+        p: { anyOf: [{ enum: ["knowledge"] }, { type: "null" }] },
+        sent: { kind: "knowledge" },
+        inner: "knowledge",
+      },
+      {
+        label: "const or null",
+        p: { oneOf: [{ const: "knowledge" }, { type: "null" }] },
+        sent: { value: "knowledge" },
+        inner: "knowledge",
+      },
+      {
+        label: "integer or null",
+        p: { anyOf: [{ type: "integer" }, { type: "null" }] },
+        sent: { value: 5 },
+        inner: 5,
+      },
+      {
+        label: "array or null",
+        p: {
+          anyOf: [
+            { type: "array", items: { type: "string" } },
+            { type: "null" },
+          ],
+        },
+        sent: { items: ["a"] },
+        inner: ["a"],
+      },
+      {
+        label: "type array",
+        p: { type: ["string", "null"] },
+        sent: { value: "x" },
+        inner: "x",
+      },
+      {
+        label: "type array with enum",
+        p: { type: ["string", "null"], enum: ["x", null] },
+        sent: { type: "text", text: "x" },
+        inner: "x",
+      },
+    ])("unwraps a wrapper around a nullable param: $label", ({
+      inner,
+      p,
+      sent,
+    }) => {
+      const { repairedParams, toolArgs } = repairEnvelopedToolArgs({
+        toolArgs: { p: sent },
+        schema: { type: "object", properties: { p } },
+      });
+      expect(repairedParams).toEqual(["p"]);
+      expect(toolArgs).toEqual({ p: inner });
+    });
+
+    test.each([
+      {
+        label: "enum miss",
+        p: { anyOf: [{ type: "string", enum: ["a"] }, { type: "null" }] },
+        sent: { value: "b" },
+      },
+      {
+        label: "inner null",
+        p: { anyOf: [{ type: "string" }, { type: "null" }] },
+        sent: { value: null },
+      },
+      {
+        label: "inner null with null in enum",
+        p: { type: ["string", "null"], enum: ["x", null] },
+        sent: { value: null },
+      },
+      {
+        label: "inner type mismatch",
+        p: { type: ["string", "null"] },
+        sent: { value: 5 },
+      },
+      {
+        label: "object in a type array",
+        p: { type: ["string", "object"] },
+        sent: { value: "x" },
+      },
+      {
+        label: "unconstrained branch",
+        p: { anyOf: [{ type: "string" }, { description: "anything" }] },
+        sent: { value: "x" },
+      },
+      {
+        label: "referenced branch",
+        p: { anyOf: [{ $ref: "#/$defs/Kind" }, { type: "null" }] },
+        sent: { value: "x" },
+      },
+      {
+        label: "nested union",
+        p: { anyOf: [{ anyOf: [{ type: "string" }] }, { type: "null" }] },
+        sent: { value: "x" },
+      },
+      {
+        label: "object enum member",
+        p: { anyOf: [{ enum: ["x", { value: "x" }] }, { type: "null" }] },
+        sent: { value: "x" },
+      },
+      {
+        label: "ambiguous oneOf",
+        p: { oneOf: [{ type: "number" }, { type: "integer" }] },
+        sent: { value: 1 },
+      },
+      {
+        label: "anyOf alongside oneOf",
+        p: { anyOf: [{ type: "string" }], oneOf: [{ type: "string" }] },
+        sent: { value: "x" },
+      },
+    ])("leaves a wrapper around a union untouched: $label", ({ p, sent }) => {
+      const { repairedParams, toolArgs } = repairEnvelopedToolArgs({
+        toolArgs: { p: sent },
+        schema: { type: "object", properties: { p } },
+      });
+      expect(repairedParams).toEqual([]);
+      expect(toolArgs).toEqual({ p: sent });
     });
 
     test("unwraps a single-key wrapper keyed by an arbitrary string", () => {

@@ -14,6 +14,80 @@ beforeEach(() => {
 });
 afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
+test("frontend builds refresh cached artifacts after their shared launcher changes", () => {
+  const platform = path.resolve(__dirname, "../../..");
+  const rootConfig = JSON.parse(
+    fs.readFileSync(path.join(platform, "turbo.json"), "utf8"),
+  );
+  fs.mkdirSync(path.join(dir, "frontend"));
+  fs.mkdirSync(path.join(dir, "scripts"));
+  fs.writeFileSync(
+    path.join(dir, "package.json"),
+    JSON.stringify({
+      name: "build-cache-fixture",
+      private: true,
+      packageManager: "pnpm@10.11.0",
+    }),
+  );
+  fs.writeFileSync(
+    path.join(dir, "pnpm-workspace.yaml"),
+    "packages:\n  - frontend\n",
+  );
+  fs.writeFileSync(
+    path.join(dir, "turbo.json"),
+    JSON.stringify({ ...rootConfig, tasks: { build: rootConfig.tasks.build } }),
+  );
+  const frontendConfig = path.join(platform, "frontend/turbo.json");
+  if (fs.existsSync(frontendConfig)) {
+    fs.copyFileSync(frontendConfig, path.join(dir, "frontend/turbo.json"));
+  }
+  fs.writeFileSync(
+    path.join(dir, "frontend/package.json"),
+    JSON.stringify({ name: "@frontend", scripts: { build: "node build.cjs" } }),
+  );
+  fs.writeFileSync(
+    path.join(dir, "frontend/build.cjs"),
+    'const fs = require("node:fs"); fs.mkdirSync(".next", { recursive: true }); fs.writeFileSync(".next/artifact", fs.readFileSync("../scripts/dev-lite.sh"));',
+  );
+  const launcher = path.join(dir, "scripts/dev-lite.sh");
+  fs.writeFileSync(launcher, "first build");
+  fs.writeFileSync(path.join(dir, ".gitignore"), ".turbo/\nfrontend/.next/\n");
+  const env: NodeJS.ProcessEnv = { ...process.env, DO_NOT_TRACK: "1" };
+  for (const key of Object.keys(env)) {
+    if (key.startsWith("GIT_")) delete env[key];
+  }
+  for (const args of [
+    ["init", "--quiet"],
+    ["add", "."],
+  ]) {
+    const result = spawnSync("git", args, { cwd: dir, encoding: "utf8", env });
+    expect(result.status, result.stderr).toBe(0);
+  }
+  const build = () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        path.join(platform, "node_modules/turbo/bin/turbo"),
+        "run",
+        "build",
+        "--filter=@frontend",
+        "--cache=local:rw",
+        "--no-daemon",
+      ],
+      {
+        cwd: dir,
+        encoding: "utf8",
+        env,
+      },
+    );
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+    return fs.readFileSync(path.join(dir, "frontend/.next/artifact"), "utf8");
+  };
+  expect(build()).toBe("first build");
+  fs.writeFileSync(launcher, "edited build");
+  expect(build()).toBe("edited build");
+}, 30_000);
+
 test("a later tool starts only after the earlier process releases its resources", () => {
   const completed = path.join(dir, "completed");
   const observed = path.join(dir, "observed");

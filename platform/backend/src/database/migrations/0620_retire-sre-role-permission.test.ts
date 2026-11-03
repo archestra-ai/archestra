@@ -53,13 +53,20 @@ describe("retiring SRE RBAC and narrowing built-in defaults", () => {
     const broad = JSON.stringify([
       { subject: { type: "organization", id: "*" }, actions: ["read", "use"] },
     ]);
+    const mainSreDefault = JSON.stringify([
+      { subject: { type: "role", id: "admin" }, actions: ["read", "use"] },
+      {
+        subject: { type: "user", id: "original-admin" },
+        actions: ["read", "use", "update", "delete", "manage-permissions"],
+      },
+    ]);
     for (const [resource, scope] of [
       ["agent", SRE_AGENT_ID],
       ["mcpRegistry", SRE_CATALOG_ID],
       ["agent", appa.id],
     ] as const) {
       await db.execute(sql`UPDATE resource_permission_policies
-        SET grants = ${broad}::jsonb, revision = 1,
+        SET grants = ${scope === appa.id ? broad : mainSreDefault}::jsonb, revision = 1,
           legacy_organization_audience = ${scope === appa.id}
         WHERE organization_id = ${organizationId}
           AND resource = ${resource} AND scope = ${scope}`);

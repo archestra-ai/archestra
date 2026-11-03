@@ -11,7 +11,7 @@ const migration = new URL(
 const catalogId = "00000000-0000-4000-8000-000000000510";
 const agentId = "00000000-0000-4000-8000-000000000512";
 
-test("retiring sre:read preserves custom-role catalog access and upgrades the agent", async (t) => {
+test("retiring sre:read preserves edited custom-role access and upgrades the agent", async (t) => {
   const pg = new PGlite();
   t.after(() => pg.close());
   await pg.exec(`
@@ -38,9 +38,9 @@ test("retiring sre:read preserves custom-role catalog access and upgrades the ag
       ('sre-new', 'org-one', '{"sre":["read"]}'),
       ('other-role', 'org-one', '{"agent":["read"]}'),
       ('future-reader', 'org-two', '{"sre":["read"]}');
-    INSERT INTO resource_permission_policies (organization_id, resource, scope, grants)
+    INSERT INTO resource_permission_policies (organization_id, resource, scope, grants, revision)
       VALUES ('org-one', 'agent', '${agentId}',
-        '[{"subject":{"type":"role","id":"sre-reader"},"actions":["manage-permissions"]}]');
+        '[{"subject":{"type":"role","id":"sre-reader"},"actions":["manage-permissions"]}]', 2);
     INSERT INTO agents (id, organization_id) VALUES ('${agentId}', 'org-one');
     INSERT INTO internal_mcp_catalog (id, organization_id) VALUES ('${catalogId}', 'org-one');
   `);

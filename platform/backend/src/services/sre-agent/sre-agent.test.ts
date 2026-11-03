@@ -375,6 +375,28 @@ describe("sreAgentService", () => {
     }
 
     expect(
+      (await AgentModel.findAllInternalAgents()).map((agent) => agent.id),
+    ).toContain(SRE_AGENT_ID);
+    expect(
+      (await AgentModel.findAllInternalAgentsIncludingPersonal(member.id)).map(
+        (agent) => agent.id,
+      ),
+    ).toContain(SRE_AGENT_ID);
+    for (const scope of [undefined, "org" as const]) {
+      expect(
+        (
+          await AgentModel.findAllPaginated(
+            { limit: 50, offset: 0 },
+            undefined,
+            { organizationId, agentType: "agent", scope },
+            member.id,
+            false,
+          )
+        ).data.map((agent) => agent.id),
+      ).toContain(SRE_AGENT_ID);
+    }
+
+    expect(
       (
         await AgentModel.findUsableChatopsAgents({
           organizationId,

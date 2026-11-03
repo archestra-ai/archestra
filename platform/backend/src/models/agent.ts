@@ -1814,7 +1814,7 @@ class AgentModel {
       .where(
         and(
           eq(schema.agentsTable.agentType, "agent"),
-          eq(schema.agentsTable.builtIn, false),
+          AgentModel.isRegularOrSreAgent(),
           not(agentAudienceIs("personal")),
           notDeleted(schema.agentsTable),
         ),
@@ -1843,7 +1843,7 @@ class AgentModel {
       .where(
         and(
           eq(schema.agentsTable.agentType, "agent"),
-          eq(schema.agentsTable.builtIn, false),
+          AgentModel.isRegularOrSreAgent(),
           or(
             not(agentAudienceIs("personal")),
             eq(schema.agentsTable.authorId, userId),
@@ -2519,22 +2519,16 @@ class AgentModel {
     ) {
       whereConditions.push(
         agentAudienceIs(filters.scope),
-        eq(schema.agentsTable.builtIn, false),
+        AgentModel.isRegularOrSreAgent(),
       );
     }
-    // Chat selection keeps the system assistant visible to every member; the
-    // platform's other built-in agents stay hidden. Non-admins get the same
-    // limit whatever scope they ask for.
+    // SRE stays in the user-facing catalog wherever its grants permit it.
+    // Chat selection also includes the system assistant when enabled; the
+    // platform's other built-in agents stay hidden.
     if (!isAgentAdmin || (!includeBuiltIn && !filters?.scope)) {
       whereConditions.push(
         or(
-          eq(schema.agentsTable.builtIn, false),
-          filters?.view === "chat"
-            ? eq(
-                sql<string>`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`,
-                BUILT_IN_AGENT_IDS.SRE,
-              )
-            : undefined,
+          AgentModel.isRegularOrSreAgent(),
           chatAssistant
             ? eq(
                 sql<string>`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`,

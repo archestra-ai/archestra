@@ -1,7 +1,8 @@
 -- SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 -- Narrow only pristine built-in object policies. Revision 1 means nobody has
--- edited their grants. SRE had an organization grant; APPA Keeper was seeded
--- with the legacy organization audience. Preserve every edited policy.
+-- edited their grants. SRE may have an organization grant or the original
+-- Admin-plus-author grants; APPA Keeper had the legacy organization audience.
+-- Preserve every edited policy.
 UPDATE resource_permission_policies AS policy
 SET grants = jsonb_build_array(
     jsonb_build_object('subject', jsonb_build_object('type', 'role', 'id', 'admin'), 'actions', jsonb_build_array('read', 'use', 'update', 'delete', 'manage-permissions')),
@@ -19,7 +20,17 @@ WHERE policy.resource = 'agent'
       AND agent.deleted_at IS NULL
       AND (
         (agent.id = '00000000-0000-4000-8000-000000000512'
-          AND policy.grants @> '[{"subject":{"type":"organization","id":"*"}}]'::jsonb)
+          AND (
+            policy.grants @> '[{"subject":{"type":"organization","id":"*"}}]'::jsonb
+            OR (
+              policy.grants @> '[{"subject":{"type":"role","id":"admin"},"actions":["read","use"]}]'::jsonb
+              AND NOT EXISTS (
+                SELECT 1 FROM jsonb_array_elements(policy.grants) AS entry
+                WHERE entry->'subject'->>'type' = 'role'
+                  AND entry->'subject'->>'id' <> 'admin'
+              )
+            )
+          ))
         OR (agent.built_in_agent_config->>'name' = 'openappa-configuration-agent'
           AND policy.legacy_organization_audience)
       )
@@ -35,7 +46,17 @@ SET grants = jsonb_build_array(
 WHERE policy.resource = 'mcpRegistry'
   AND policy.scope = '00000000-0000-4000-8000-000000000510'
   AND policy.revision = 1
-  AND policy.grants @> '[{"subject":{"type":"organization","id":"*"}}]'::jsonb;
+  AND (
+    policy.grants @> '[{"subject":{"type":"organization","id":"*"}}]'::jsonb
+    OR (
+      policy.grants @> '[{"subject":{"type":"role","id":"admin"},"actions":["read","use"]}]'::jsonb
+      AND NOT EXISTS (
+        SELECT 1 FROM jsonb_array_elements(policy.grants) AS entry
+        WHERE entry->'subject'->>'type' = 'role'
+          AND entry->'subject'->>'id' <> 'admin'
+      )
+    )
+  );
 --> statement-breakpoint
 -- Preserve access held by frozen custom roles with sre:read before removing
 -- that retired RBAC resource. Both the agent and Kubernetes catalog now use

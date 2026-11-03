@@ -135,8 +135,10 @@ export async function rememberUnattendedSession(
 ): Promise<void> {
   const key = unattendedSessionKey(session);
   // A session sends many requests; one write per process every few minutes
-  // keeps the day-long note fresh, and a changed answer is written at once.
-  if (noted.get(key) === unattended) return;
+  // keeps the day-long note fresh. An attended request always withdraws the
+  // note: another replica may have written it since this process last did,
+  // and a stale note would let the platform answer reviews with a person present.
+  if (unattended && noted.get(key) === true) return;
   try {
     if (unattended) await cacheManager.set<true>(key, true, TimeInMs.Day);
     else await cacheManager.delete(key);

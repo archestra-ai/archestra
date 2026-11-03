@@ -403,6 +403,14 @@ test("the proxy's unattended note is read for that session only, and withdrawn o
   // A session resumed with a person present stops being answered for.
   await rememberUnattendedSession(session, false);
   expect(await isUnattendedSession(session)).toBe(false);
+  // Another replica noted the session unattended since this process withdrew
+  // the note: the next attended request withdraws it again, memo or not.
+  await rememberUnattendedSession(session, true);
+  await rememberUnattendedSession(session, false);
+  await rememberUnattendedSession(session, true);
+  expect(await isUnattendedSession(session)).toBe(true);
+  await rememberUnattendedSession(session, false);
+  expect(await isUnattendedSession(session)).toBe(false);
 });
 
 test("humanApprovalWaived reaches an unattended session, everywhere, or nowhere", () => {

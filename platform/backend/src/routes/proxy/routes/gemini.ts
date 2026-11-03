@@ -346,21 +346,23 @@ function createGeminiProxyPreHandler() {
     }
 
     if (request.method === "POST") {
-      // Native embedding APIs select the model in the path; batch entries
-      // must use that same model. Metadata and token-count routes stay available.
+      // Native inference methods select the model in the path, including
+      // image/video prediction and batch generation. Token counts and reads
+      // of already-started operations do not start model execution.
       let decodedPath = urlPath;
       try {
         decodedPath = decodeURIComponent(urlPath);
       } catch {
         // Leave malformed paths for the provider's existing validation.
       }
-      const embeddingModel = decodedPath.match(
-        /\/models\/([^/]+):(?:embedContent|batchEmbedContents|asyncBatchEmbedContent)$/,
-      )?.[1];
-      if (embeddingModel) {
+      const modelMethod = decodedPath.match(/\/models\/([^/:]+):([^/:]+)\/?$/);
+      if (
+        modelMethod &&
+        !["countTokens", "fetchPredictOperation"].includes(modelMethod[2])
+      ) {
         await ModelModel.assertAvailable({
           provider: "gemini",
-          modelId: embeddingModel,
+          modelId: modelMethod[1],
         });
       }
     }

@@ -11,6 +11,7 @@ import ModelModel from "@/models/model";
 import { expect, test } from "@/test";
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import cohereRoutes from "./cohere";
+import groqRoutes from "./groq";
 import ollamaRoutes from "./ollama";
 import ollamaNativeRoutes from "./ollama-native";
 
@@ -322,6 +323,94 @@ test.for([
     expect(hits.at(-1)?.body).toMatchObject({
       model: model.modelId,
     });
+  } finally {
+    await app.close();
+    upstream.closeAllConnections();
+    await new Promise<void>((resolve) => upstream.close(() => resolve()));
+  }
+});
+
+test("multipart catch-all checks the form model and preserves visible request bytes", async ({
+  makeAgent,
+  makeUser,
+  makeMember,
+}) => {
+  const agent = await makeAgent({ agentType: "llm_proxy" });
+  const user = await makeUser();
+  await makeMember(user.id, agent.organizationId, { role: "admin" });
+  const token = await makePassthroughCredential({
+    organizationId: agent.organizationId,
+    ownerId: user.id,
+  });
+  const row = await ModelModel.create({
+    provider: "groq",
+    modelId: "whisper-large-v3",
+    externalId: "groq/whisper-large-v3",
+    inputModalities: ["audio"],
+    outputModalities: ["text"],
+    ignored: true,
+  });
+  const received: Buffer[] = [];
+  const upstream = createServer(async (request, reply) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    received.push(Buffer.concat(chunks));
+    reply.writeHead(200, { "content-type": "application/json" });
+    reply.end(JSON.stringify({ text: "synthetic transcription" }));
+  });
+  await new Promise<void>((resolve) =>
+    upstream.listen(0, "127.0.0.1", resolve),
+  );
+  const address = upstream.address();
+  if (!address || typeof address === "string")
+    throw new Error("Missing upstream");
+  config.llm.groq.baseUrl = `http://127.0.0.1:${address.port}`;
+  const app = createFastifyInstance();
+  await app.register(groqRoutes);
+  const ask = async (models: string[], compressed = false) => {
+    const form = new FormData();
+    for (const model of models) form.append("model", model);
+    form.set(
+      "file",
+      new Blob([new Uint8Array([0, 255, 1, 2])], { type: "audio/wav" }),
+      "sample.wav",
+    );
+    const request = new Request("http://synthetic.invalid", {
+      method: "POST",
+      body: form,
+    });
+    const raw = Buffer.from(await request.arrayBuffer());
+    const bytes = compressed ? gzipSync(raw) : raw;
+    const response = await app.inject({
+      method: "POST",
+      // A query parameter must not override the provider's multipart model.
+      url: `/v1/groq/${agent.id}/audio/transcriptions?model=unknown-query-model`,
+      headers: {
+        "x-archestra-virtual-key": token,
+        "content-type": request.headers.get("content-type") ?? "",
+        ...(compressed ? { "content-encoding": "gzip" } : {}),
+      },
+      payload: bytes,
+    });
+    return { response, bytes };
+  };
+  try {
+    for (const compressed of [false, true]) {
+      const { response } = await ask([row.modelId], compressed);
+      expect(response.statusCode, response.body).toBe(403);
+    }
+    const ambiguous = await ask(["unknown-custom-model", row.modelId]);
+    expect(ambiguous.response.statusCode, ambiguous.response.body).toBe(400);
+    expect(received).toHaveLength(0);
+    const custom = await ask(["unknown-custom-model"]);
+    expect(custom.response.statusCode, custom.response.body).toBe(200);
+    expect(received.pop()).toEqual(custom.bytes);
+    await ModelModel.update(row.id, { ignored: false });
+    for (const compressed of [false, true]) {
+      const { response, bytes } = await ask([row.modelId], compressed);
+      expect(response.statusCode, response.body).toBe(200);
+      expect(received.pop()).toEqual(bytes);
+    }
   } finally {
     await app.close();
     upstream.closeAllConnections();

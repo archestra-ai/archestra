@@ -371,9 +371,8 @@ export async function cleanForwardedBody(
     zstdBody ||
     (validateBody && !nativeOllama && encoding && encoding !== "identity");
   const multipartBody =
-    nativeOllama &&
     validateBody &&
-    /\/v1\/audio\/transcriptions$/.test(path) &&
+    (!nativeOllama || /\/v1\/audio\/transcriptions$/.test(path)) &&
     request.headers["content-type"]
       ?.toLowerCase()
       .startsWith("multipart/form-data");
@@ -440,28 +439,42 @@ export async function cleanForwardedBody(
     contentLength: request.headers["content-length"],
   });
   if (multipartBody) {
+    const decoded = encodedBody ? await decodeBody(raw) : raw;
     let form: FormData;
     try {
-      form = await new Response(new Uint8Array(raw), {
+      form = await new Response(new Uint8Array(decoded), {
         headers: { "content-type": request.headers["content-type"] ?? "" },
       }).formData();
     } catch {
       throw new ApiError(400, "Invalid multipart model request.");
     }
-    // Ollama uses Go's FormValue: query parameters precede multipart fields.
-    const query = request.url.includes("?")
-      ? request.url.slice(request.url.indexOf("?") + 1)
-      : "";
-    // Go discards malformed query pairs; do not authorize a different fallback
-    // model because URLSearchParams tolerates malformed escapes or semicolons.
-    try {
-      if (query.includes(";")) throw new Error("Ambiguous query");
-      decodeURIComponent(query.replace(/\+/g, " "));
-    } catch {
-      throw new ApiError(400, "Invalid multipart model query.");
+    let model = form.get("model");
+    if (nativeOllama) {
+      // Ollama uses Go's FormValue: query parameters precede multipart fields.
+      const query = request.url.includes("?")
+        ? request.url.slice(request.url.indexOf("?") + 1)
+        : "";
+      // Go discards malformed query pairs; do not authorize a different fallback
+      // model because URLSearchParams tolerates malformed escapes or semicolons.
+      try {
+        if (query.includes(";")) throw new Error("Ambiguous query");
+        decodeURIComponent(query.replace(/\+/g, " "));
+      } catch {
+        throw new ApiError(400, "Invalid multipart model query.");
+      }
+      model = new URLSearchParams(query).get("model") ?? model;
+    } else if (
+      form.getAll("model").length > 1 ||
+      (model !== null && typeof model !== "string")
+    ) {
+      // Providers disagree on first/last duplicate fields. Require an
+      // unambiguous model without altering the file or forwarded form bytes.
+      throw new ApiError(
+        400,
+        "Multipart requests must name a single string model.",
+      );
     }
-    const queryModel = new URLSearchParams(query).get("model");
-    await validateBody({ model: queryModel ?? form.get("model") });
+    await validateBody({ model });
     request.body = Readable.from([raw], { objectMode: false });
     return;
   }

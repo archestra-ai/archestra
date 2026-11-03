@@ -1535,11 +1535,14 @@ function findStreamedFunctionCallPart(body: string): StreamedFunctionCallPart {
   return part;
 }
 
-describe("native Gemini embedding availability", () => {
+describe("native Gemini model execution availability", () => {
   test.for([
     "embedContent",
     "batchEmbedContents",
     "asyncBatchEmbedContent",
+    "predict",
+    "predictLongRunning",
+    "batchGenerateContent",
   ] as const)("checks the selected model before forwarding %s", async (method, {
     makeAgent,
     makeUser,
@@ -1568,10 +1571,18 @@ describe("native Gemini embedding availability", () => {
       organizationId: agent.organizationId,
       ownerId: owner.id,
     });
+    const modelId =
+      method === "predict"
+        ? "imagen-4.0-generate-001"
+        : method === "predictLongRunning"
+          ? "veo-3.1-generate-preview"
+          : method === "batchGenerateContent"
+            ? "gemini-2.5-flash"
+            : "gemini-embedding-001";
     const row = await ModelModel.create({
       provider: "gemini",
-      modelId: "gemini-embedding-001",
-      externalId: "gemini/gemini-embedding-001",
+      modelId,
+      externalId: `gemini/${modelId}`,
       inputModalities: ["text"],
       outputModalities: ["text"],
       ignored: true,
@@ -1597,14 +1608,33 @@ describe("native Gemini embedding availability", () => {
             ? { content: embedRequest.content }
             : method === "batchEmbedContents"
               ? { requests: [embedRequest] }
-              : {
-                  batch: {
-                    displayName: "synthetic",
-                    inputConfig: {
-                      requests: { requests: [{ request: embedRequest }] },
+              : method === "predict" || method === "predictLongRunning"
+                ? { instances: [{ prompt: "synthetic image" }] }
+                : method === "batchGenerateContent"
+                  ? {
+                      batch: {
+                        displayName: "synthetic",
+                        inputConfig: {
+                          requests: {
+                            requests: [
+                              {
+                                request: {
+                                  contents: [{ parts: [{ text: "fixture" }] }],
+                                },
+                              },
+                            ],
+                          },
+                        },
+                      },
+                    }
+                  : {
+                      batch: {
+                        displayName: "synthetic",
+                        inputConfig: {
+                          requests: { requests: [{ request: embedRequest }] },
+                        },
+                      },
                     },
-                  },
-                },
       });
     };
     try {
@@ -1629,10 +1659,20 @@ describe("native Gemini embedding availability", () => {
         expect(count.statusCode, count.body).toBe(200);
         forwarded.length = 0;
       }
+      if (method === "predictLongRunning") {
+        const poll = await app.inject({
+          method: "POST",
+          url: `/v1/gemini/${agent.id}/v1beta/models/${row.modelId}:fetchPredictOperation`,
+          headers,
+          payload: { operationName: "operations/synthetic" },
+        });
+        expect(poll.statusCode, poll.body).toBe(200);
+        forwarded.length = 0;
+      }
       await ModelModel.update(row.id, { ignored: false });
       const visible = await ask();
       expect(visible.statusCode, visible.body).toBe(200);
-      const custom = await ask("uncatalogued-embedding");
+      const custom = await ask("uncatalogued-custom-model");
       expect(custom.statusCode, custom.body).toBe(200);
       expect(forwarded).toHaveLength(2);
     } finally {

@@ -377,6 +377,10 @@ export async function openThroughModelPool<T>(params: {
       throw error;
     }
     attempted++;
+    // Last means last in this request's plan. Availability is checked just
+    // before each member is attempted, so hidden trailing members do not
+    // extend an earlier member's timeout or enable its connection retries.
+    // Keep that bounded timing even if every remaining member is later hidden.
     const isLast = index === plan.members.length - 1;
     const abort = new AbortController();
     let retryFailure: unknown;

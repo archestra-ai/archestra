@@ -383,7 +383,7 @@ function SettingsHeader({ agent }: { agent: Agent }) {
           updateProfile.mutate({ id: agent.id, data: { icon } })
         }
         className="size-10"
-        disabled={agent.builtIn}
+        disabled={agent.builtIn ?? false}
       />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         {isRenaming && !agent.builtIn ? (

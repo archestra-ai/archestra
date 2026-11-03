@@ -119,7 +119,7 @@ An empty list and an omitted field have different meanings. For example, `marks 
 
 The optional `hint` tells the annotator what the deployment knows about the calls of its tools: which paths hold whose data, which commands are safe. It can give examples. Every annotator builtin (`claude-code`, `llm`, `jev`) already applies OpenAPPA's label guide: the rule and the criteria for each trust and audience leaf, with worked examples. A hint does not restate the guide. For `claude-code` and `llm`, the hint overrides the guide where the two disagree. `jev` adds the hint to each of its four questions, after the guide's rule for that question. It cannot allow values excluded by the permits and cannot exceed 512 characters. An annotator name must be non-empty and can contain dots.
 
-The optional `[policy.deployment] hint` states what holds for every call: the deployment's environment and trust boundaries, such as which hosts, forges and services are the organization's own. Every annotator receives it as `declaration.deployment_hint`. It cannot exceed 2048 characters, and only the root file can set it. Like every hint, it does not change the policy identity.
+The optional `[policy.deployment] hint` states what holds for every call: the deployment's environment and trust boundaries, such as which hosts, forges and services are the organization's own and which sources it treats as `trusted` or `suspicious`. Every annotator receives it as `declaration.deployment_hint`. It cannot exceed 2048 characters, and only the root file can set it. Like every hint, it does not change the policy identity.
 
 ```toml
 [policy.deployment]

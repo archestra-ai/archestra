@@ -34,6 +34,7 @@ const CRATES = [
   "sandbox-rs",
 ];
 const LINUX: AddonTarget = { platform: "linux", arch: "x64", musl: false };
+const RETRY_AFTER_MS = 10 * 60_000;
 
 describe("ensureNativeAddons", () => {
   let repo: Checkout | undefined;
@@ -99,6 +100,33 @@ describe("ensureNativeAddons", () => {
     expect(run.result).toEqual({ outcome: "installed", missing: [] });
     expect(repo.calls()).toEqual([CRATES]);
     expect(staleAddons(repo.rustDir, CRATES, repo.key)).toEqual([]);
+  });
+
+  test("a failed refresh keeps the stamped addons, says so once, and waits ten minutes", () => {
+    repo = checkout();
+    repo.install(CRATES, "stale-key");
+    let clock = 5_000_000;
+    const first = repo.run("fails", { now: () => clock });
+    expect(first.result).toEqual({ outcome: "present", missing: [] });
+    expect(repo.calls()).toHaveLength(1);
+    expect(first.lines).toHaveLength(1);
+    expect(first.lines[0]).toContain(
+      "the addons of app-runtime-rs, image-rs, openappa-rs, router-rs, sandbox-rs were installed for another archestra-rs tree and could not be refreshed",
+    );
+    expect(first.lines[0]).toContain(
+      "pnpm --dir archestra-rs/openappa-rs build:dev",
+    );
+    expect(staleAddons(repo.rustDir, CRATES, repo.key)).toEqual(CRATES);
+    clock += 60_000;
+    const again = repo.run("installs", { now: () => clock });
+    expect(again.result).toEqual({ outcome: "present", missing: [] });
+    expect(again.lines[0]).toContain("could not be refreshed");
+    expect(again.lines[0]).toContain("failed 1 min ago");
+    expect(repo.calls()).toHaveLength(1);
+    clock += RETRY_AFTER_MS;
+    const later = repo.run("installs", { now: () => clock });
+    expect(later.result).toEqual({ outcome: "installed", missing: [] });
+    expect(repo.calls()).toHaveLength(2);
   });
 
   test("addons stamped for another tree stay while archestra-rs has local changes", () => {

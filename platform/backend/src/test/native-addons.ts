@@ -115,7 +115,7 @@ function ensureNativeAddonsOnce(
     missing.length > 0 || hasStamps(rustDir, crates)
       ? prebuiltKey(rustDir)
       : undefined;
-  const stale = key ? staleAddons(rustDir, crates, key) : [];
+  let stale = key ? staleAddons(rustDir, crates, key) : [];
   if (missing.length === 0 && stale.length === 0) {
     return { outcome: "present", missing };
   }
@@ -137,9 +137,9 @@ function ensureNativeAddonsOnce(
   if (failedAt !== undefined) {
     const minutes = Math.max(1, Math.round((now() - failedAt) / 60_000));
     log(
-      `native addons: ${hint(missing)} (the prebuilt install failed ${minutes} min ago; it is retried after ${RETRY_AFTER_MS / 60_000} min, or sooner when the archestra-rs tree changes)`,
+      `native addons: ${hint(missing, stale)} (the prebuilt install failed ${minutes} min ago; it is retried after ${RETRY_AFTER_MS / 60_000} min, or sooner when the archestra-rs tree changes)`,
     );
-    return { outcome: "unavailable", missing };
+    return { outcome: missing.length > 0 ? "unavailable" : "present", missing };
   }
   // The installer installs every crate from one download, whichever subset is
   // asked for, refuses a modified tree, and says what it did on stderr. Its
@@ -150,7 +150,10 @@ function ensureNativeAddonsOnce(
     timeout: timeoutMs,
   });
   missing = missingAddons(rustDir, crates, target);
-  if (missing.length === 0) return { outcome: "installed", missing };
+  stale = key ? staleAddons(rustDir, crates, key) : [];
+  if (missing.length === 0 && stale.length === 0) {
+    return { outcome: "installed", missing };
+  }
   if (result.error) {
     const reason =
       (result.error as NodeJS.ErrnoException).code === "ETIMEDOUT"
@@ -159,8 +162,10 @@ function ensureNativeAddonsOnce(
     log(`native addons: the prebuilt installer ${reason}`);
   }
   if (key) rememberFailure(rustDir, key, now());
-  log(`native addons: ${hint(missing)}`);
-  return { outcome: "unavailable", missing };
+  log(`native addons: ${hint(missing, stale)}`);
+  // Addons stamped for another tree that could not be refreshed stay in use:
+  // the tests run, and the message says so.
+  return { outcome: missing.length > 0 ? "unavailable" : "present", missing };
 }
 
 /** The crates whose addons the backend loads: its `@archestra/*-rs` dependencies. */
@@ -338,9 +343,17 @@ function processCache(): Map<string, NativeAddonsResult> {
   return host[CACHE_KEY];
 }
 
-function hint(missing: readonly string[]): string {
-  const builds = missing
+function hint(
+  missing: readonly string[],
+  stale: readonly string[] = [],
+): string {
+  const crates = missing.length > 0 ? missing : stale;
+  const builds = crates
     .map((crate) => `pnpm --dir archestra-rs/${crate} build:dev`)
     .join(" && ");
-  return `no addon for ${missing.join(", ")}; tests that load one fail with "Unable to load @archestra/<crate>". Build them from platform/ with: ${builds}`;
+  const state =
+    missing.length > 0
+      ? `no addon for ${missing.join(", ")}; tests that load one fail with "Unable to load @archestra/<crate>"`
+      : `the addons of ${stale.join(", ")} were installed for another archestra-rs tree and could not be refreshed; the tests use them as they are`;
+  return `${state}. Build them from platform/ with: ${builds}`;
 }

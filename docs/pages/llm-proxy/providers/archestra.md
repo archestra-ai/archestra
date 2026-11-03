@@ -14,6 +14,7 @@ Send this deployment's model calls through another Archestra deployment's Unifie
 1. On the upstream instance, create a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) under **Virtual Keys** and map the provider keys you need.
 2. On this instance, go to **Model Providers → Add API Key** and select **Archestra**.
 3. Set **Base URL** to `https://<upstream-host>/v1/unified-model`.
+   For an upstream running 1.4, use `https://<upstream-host>/v1/model-router` instead. That URL also works on newer releases.
 4. Paste the upstream virtual key into **API Key** and click **Test & Create**.
 
 The models exposed by the upstream key appear under **Models**, with provider-qualified IDs such as `openai:gpt-5.4`. If testing fails, check the upstream URL and key mappings. The Base URL is required because this provider has no default upstream.

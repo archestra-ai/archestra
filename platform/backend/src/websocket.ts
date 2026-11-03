@@ -52,7 +52,7 @@ import {
 import { ResourcePermissions } from "@/services/resource-permissions";
 import type { AgentRunRecord } from "@/types";
 
-/** `/v1/model-router/realtime` and `/v1/openai/realtime`, with or without an agent id. */
+/** `/v1/unified-model/realtime`, the legacy `/v1/model-router/realtime`, and `/v1/openai/realtime`, with or without an agent id. */
 const REALTIME_UPGRADE_PATH =
   /^\/v1\/(?:unified-model|model-router|openai)(?:\/[0-9a-f-]{36})?\/realtime$/i;
 

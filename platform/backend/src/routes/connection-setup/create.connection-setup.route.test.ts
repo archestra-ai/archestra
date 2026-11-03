@@ -311,7 +311,7 @@ describe("POST /api/connection-setups", () => {
       url: `/api/connection-setups/script/${token}`,
     });
     expect(script.statusCode, script.body).toBe(200);
-    expect(script.body).toContain("/model-router");
+    expect(script.body).toContain("/unified-model");
     expect(script.body).toContain("anthropic-test-model");
     expect(script.body).toContain("openai-test-model");
     expect(script.body).toContain("arcpi");
@@ -1656,7 +1656,7 @@ describe("POST /api/connection-setups", () => {
       },
     });
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toContain("Model Router");
+    expect(response.json().error.message).toContain("Unified Model API");
   });
 
   test("403s a proxy setup when the org has disabled connecting the LLM Proxy", async () => {

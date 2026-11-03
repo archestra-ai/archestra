@@ -115,7 +115,6 @@ import {
   AgentSubagentExclusionsSchema,
   AgentToolExclusionsSchema,
   ApiError,
-  BuiltInAgentConfigSchema,
   ChatAgentRosterSchema,
   CloneAgentBodySchema,
   CreateAgentBodySchema,
@@ -2277,21 +2276,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Built-in agent guard: restrict which fields can be modified
       let updateData: typeof body;
       if (existingAgent.builtInAgentConfig) {
-        // Validate builtInAgentConfig if provided
-        if (body.builtInAgentConfig) {
-          const parsed = BuiltInAgentConfigSchema.safeParse(
-            body.builtInAgentConfig,
-          );
-          if (!parsed.success) {
-            throw new ApiError(400, "Invalid built-in agent configuration");
-          }
-        }
-
         // Only allow specific fields for built-in agents.
         updateData = {
-          ...(body.builtInAgentConfig !== undefined && {
-            builtInAgentConfig: body.builtInAgentConfig,
-          }),
           ...(body.systemPrompt !== undefined && {
             systemPrompt: body.systemPrompt,
           }),
@@ -3297,7 +3283,7 @@ type AgentRosterRequest = {
   ids?: string[];
 };
 
-/** The chat roster's filter: internal, non-built-in agents, no tools. */
+/** The chat roster includes internal agents and user-facing built-ins, without tools. */
 const CHAT_ROSTER_QUERY = {
   agentType: "agent",
   excludeBuiltIn: true,

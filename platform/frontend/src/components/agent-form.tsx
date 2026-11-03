@@ -3462,11 +3462,15 @@ export function AgentForm({
                   <AgentRuntimeToolSources />
                 </SettingsSection>
               )}
-              {/* Section 3: Tools & Knowledge Sources */}
+              {/* Section 3: Tools and optional knowledge sources */}
               {showTools && (
                 <SettingsSection
-                  title="Tools &amp; Knowledge"
-                  description="What this agent can call while it works, and what it can search before answering."
+                  title={isBuiltIn ? "Tools" : "Tools & Knowledge"}
+                  description={
+                    isBuiltIn
+                      ? "Tools this agent can call while it works."
+                      : "What this agent can call while it works, and what it can search before answering."
+                  }
                   data-testid={E2eTestId.AgentToolsSection}
                 >
                   <div className="space-y-3">

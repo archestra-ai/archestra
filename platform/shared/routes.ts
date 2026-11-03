@@ -680,6 +680,7 @@ export const RouteId = {
   GetLlmModelIdsByKey: "getLlmModelIdsByKey",
   GetLlmModelOptions: "getLlmModelOptions",
   UpdateModel: "updateModel",
+  DeleteModel: "deleteModel",
   PreviewModelCostBackfill: "previewModelCostBackfill",
   StartModelCostBackfill: "startModelCostBackfill",
   GetModelCostBackfill: "getModelCostBackfill",

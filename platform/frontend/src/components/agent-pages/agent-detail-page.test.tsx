@@ -1,3 +1,4 @@
+import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -471,6 +472,32 @@ describe("AgentDetailPage", () => {
       screen.queryByRole("link", { name: "Tools, Skills & Knowledge" }),
     ).toBeNull();
     expect(screen.queryByText("connect content")).toBeNull();
+  });
+
+  it("keeps SRE permissions and schedules off the built-in detail page", () => {
+    access = { ...access, isBuiltIn: true };
+    mockAgent({
+      ...baseAgent,
+      builtIn: true,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.SRE },
+    });
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    expect(screen.queryByTestId("resource-permissions")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Scheduled runs" })).toBeNull();
+  });
+
+  it("keeps APPA Keeper permissions and schedules off the built-in detail page", () => {
+    access = { ...access, isBuiltIn: true };
+    mockAgent({
+      ...baseAgent,
+      builtIn: true,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    });
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    expect(screen.queryByTestId("resource-permissions")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Scheduled runs" })).toBeNull();
   });
 
   it("reveals audience and owner on keyboard focus without crowding the header", async () => {

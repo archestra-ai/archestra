@@ -10,12 +10,15 @@ import {
   CONTEXT_COMPACTION_SYSTEM_PROMPT,
   isSubscriptionCredential,
   OPENAPPA_CONFIG_SUGGESTED_PROMPTS,
+  PLATFORM_ADMIN_ROLE_NAME,
   PLAYWRIGHT_MCP_CATALOG_ID,
   PLAYWRIGHT_MCP_ICON,
   PLAYWRIGHT_MCP_SERVER_NAME,
   PROVIDERS_REQUIRING_BASE_URL,
   type PredefinedRoleName,
   providerRequiresPerUserCredential,
+  type ResourcePermissionGrant,
+  resourcePermissionPresets,
   type SupportedProvider,
   SupportedProviders,
   testMcpServerCommand,
@@ -502,7 +505,7 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
           resource: "agent",
           scope: agent.id,
           authorId: null,
-          publishToOrganization: true,
+          grants: APPA_KEEPER_DEFAULT_GRANTS,
         });
       }
       if (!enabled) return agent.id;
@@ -574,6 +577,17 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
     await AgentVersionModel.forkIfChangedBestEffort(agentId);
   }
 }
+
+const APPA_KEEPER_DEFAULT_GRANTS: ResourcePermissionGrant[] = [
+  {
+    subject: { type: "role", id: ADMIN_ROLE_NAME },
+    actions: resourcePermissionPresets.manage.actions,
+  },
+  {
+    subject: { type: "role", id: PLATFORM_ADMIN_ROLE_NAME },
+    actions: resourcePermissionPresets.manage.actions,
+  },
+];
 
 /**
  * Seeds Playwright browser preview MCP catalog.

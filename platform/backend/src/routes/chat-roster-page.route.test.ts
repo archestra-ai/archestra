@@ -138,6 +138,7 @@ describe("bounded chat roster", () => {
         own.id,
         teamAgent.id,
         organization.id,
+        system.id,
       ]);
       expect(rows.map((row) => row.id)).not.toContain(compaction.id);
       expect(
@@ -436,9 +437,16 @@ describe("bounded chat roster", () => {
     });
     const legacy = await get("/api/agents/chat-roster");
     const expected = legacy.filter(
-      (agent: { builtIn: boolean; scope: string; authorId: string | null }) =>
-        !agent.builtIn &&
-        (agent.scope !== "personal" || agent.authorId === ctx.user.id),
+      (agent: {
+        id: string;
+        builtIn: boolean;
+        scope: string;
+        authorId: string | null;
+      }) =>
+        (!agent.builtIn || agent.id === builtin.id) &&
+        (agent.scope !== "personal" ||
+          agent.authorId === ctx.user.id ||
+          agent.id === builtin.id),
     );
     expected.sort(
       (
@@ -455,7 +463,7 @@ describe("bounded chat roster", () => {
       },
     );
     expect(new Set(expected.map((agent: { id: string }) => agent.id))).toEqual(
-      new Set([own.id, ...expectedShared]),
+      new Set([own.id, builtin.id, ...expectedShared]),
     );
     const actual = [];
     let cursor: string | null = null;
@@ -467,7 +475,7 @@ describe("bounded chat roster", () => {
       cursor = page.pagination.nextCursor;
     } while (cursor);
     expect(actual).toEqual(expected);
-    for (const agent of [foreign, deleted, builtin])
+    for (const agent of [foreign, deleted])
       expect(actual.map((row) => row.id)).not.toContain(agent.id);
     expect(
       (await get("/api/agents/chat-roster/page?search=read&limit=100")).data,

@@ -12,6 +12,7 @@ import {
   recordWaivedCalls,
   recordWaivedReview,
   rememberUnattendedSession,
+  unattendedNoteMatters,
   waiverFor,
 } from "./break-the-glass";
 import { findUnenforcedCalls, isUnenforcedSession } from "./unenforced";
@@ -562,4 +563,15 @@ test("a resolved yell raised again starts over as a new one", async ({
   const [again] = await yellsOf(organizationId, session.session_id);
   expect(again).toMatchObject({ id: first.id, count: 1, resolvedAt: null });
   expect(again.createdAt.getTime()).toBeGreaterThan(resolvedAt.getTime());
+});
+
+test("the unattended note is kept only in the mode that reads it", () => {
+  const settings = (
+    humanApprovalMode: "block" | "unattended" | "everywhere",
+    active = true,
+  ) => ({ active, humanApprovalMode });
+  expect(unattendedNoteMatters(settings("unattended"))).toBe(true);
+  expect(unattendedNoteMatters(settings("block"))).toBe(false);
+  expect(unattendedNoteMatters(settings("everywhere"))).toBe(false);
+  expect(unattendedNoteMatters(settings("unattended", false))).toBe(false);
 });

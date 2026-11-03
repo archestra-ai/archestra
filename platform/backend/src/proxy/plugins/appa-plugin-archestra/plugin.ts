@@ -41,6 +41,7 @@ import {
   isUnattendedRequest,
   recordWaivedCalls,
   rememberUnattendedSession,
+  unattendedNoteMatters,
   type WaivedCall,
   waiverFor,
 } from "@/openappa/break-the-glass";
@@ -402,10 +403,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       issueChildTrajectoryReceipt(context, binding.session, trajectory.child);
     }
     this.bindings.set(context.resources, binding);
-    // The gateway decides a remedy plan's review without the runtime
-    // credential or the client's headers, so it learns from the proxy whether
-    // a person answers for this session.
-    await rememberUnattendedSession(binding.session, binding.unattended);
   }
 
   async onToolResults(
@@ -1681,6 +1678,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       );
     // Read once for the batch, by the first denial.
     let breakTheGlass: ReturnType<typeof getGuardrailsDeployment> | undefined;
+    let unattendedNoted = false;
     // The denied calls Break the glass lets through, recorded together once
     // the batch is complete.
     const waived: WaivedCall[] = [];
@@ -1830,8 +1828,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         decision.kind === "deny" &&
         evaluatedIds.has(call.id) &&
         !runtimeCalls.has(call.id) &&
-        !withheldRelayDecisions.has(call.id) &&
-        !(binding.adapter && isChildSpawnCall(binding.adapter, call))
+        !withheldRelayDecisions.has(call.id)
       ) {
         breakTheGlass ??= getGuardrailsDeployment();
         let settings: Awaited<typeof breakTheGlass>;
@@ -1841,21 +1838,33 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           await cancelCalls(session, admittedCalls(), policy);
           throw error;
         }
-        const waiver = waiverFor({
-          decision,
-          settings,
-          unattended: binding.unattended,
-        });
-        if (waiver) {
-          waived.push({
-            toolCallId: call.id,
-            tool: this.policyIdentity(binding, call).name,
-            kind: waiver,
+        // The gateway decides a remedy plan's review without the runtime
+        // credential or the client's headers, so it learns from the proxy
+        // whether a person answers for this session: noted once per denied
+        // batch, and only in the mode that reads the note.
+        if (!unattendedNoted && unattendedNoteMatters(settings)) {
+          unattendedNoted = true;
+          await rememberUnattendedSession(binding.session, binding.unattended);
+        }
+        if (binding.adapter && isChildSpawnCall(binding.adapter, call)) {
+          // A spawn is never waived here: its child needs the runtime's release.
+        } else {
+          const waiver = waiverFor({
+            decision,
+            settings,
+            unattended: binding.unattended,
           });
-          // A platform yell does what the agent's own yell does.
-          waiverSuperyell = breakTheGlassActiveIn(settings);
-          released.push(call);
-          continue;
+          if (waiver) {
+            waived.push({
+              toolCallId: call.id,
+              tool: this.policyIdentity(binding, call).name,
+              kind: waiver,
+            });
+            // A platform yell does what the agent's own yell does.
+            waiverSuperyell = breakTheGlassActiveIn(settings);
+            released.push(call);
+            continue;
+          }
         }
       }
       // The registry pins `blocked` to the wire batch: the entry names the

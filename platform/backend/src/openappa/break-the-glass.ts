@@ -151,6 +151,14 @@ export async function rememberUnattendedSession(
   }
 }
 
+/** Whether the gateway reads the unattended note under these settings. */
+export function unattendedNoteMatters(settings: {
+  active: boolean;
+  humanApprovalMode: "block" | "unattended" | "everywhere";
+}): boolean {
+  return settings.active && settings.humanApprovalMode === "unattended";
+}
+
 /** Whether the proxy admitted this session's requests as unattended. */
 export async function isUnattendedSession(
   session: OpenAppaSession,

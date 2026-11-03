@@ -60,6 +60,7 @@ describe("TwoFactorSetupView", () => {
     } as unknown as ReturnType<typeof useOrganization>);
     vi.mocked(authClient.twoFactor.enable).mockResolvedValue({
       data: {
+        method: "totp",
         totpURI: "otpauth://totp/Test?secret=ABC",
         backupCodes: ["code-one", "code-two"],
       },
@@ -85,6 +86,7 @@ describe("TwoFactorSetupView", () => {
       expect(authClient.twoFactor.enable).toHaveBeenCalledWith({
         password: "hunter22",
         issuer: "Acme AI",
+        method: "totp",
       });
     });
 

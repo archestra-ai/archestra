@@ -1,8 +1,8 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { HttpResponse, http } from "msw";
+import { delay, HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -64,8 +64,10 @@ const providerConfig: ProviderConfig = {
 };
 
 const server = setupServer();
+const queryClients = new Set<QueryClient>();
 /** Bodies of every PATCH the table sent, in order. */
 let patched: Array<Record<string, unknown>>;
+let bindingsDelayMs = 0;
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 
@@ -85,6 +87,7 @@ beforeEach(() => {
     data: true,
   } as ReturnType<typeof useHasPermissions>);
   patched = [];
+  bindingsDelayMs = 0;
   archestraApiClient.setConfig({ baseUrl: API_ORIGIN });
   const bindings = [
     binding({ channelInstructions: INSTRUCTIONS }),
@@ -96,16 +99,17 @@ beforeEach(() => {
     }),
   ];
   server.use(
-    http.get(`${API_ORIGIN}/api/chatops/bindings`, () =>
-      HttpResponse.json({
+    http.get(`${API_ORIGIN}/api/chatops/bindings`, async () => {
+      if (bindingsDelayMs > 0) await delay(bindingsDelayMs);
+      return HttpResponse.json({
         data: bindings,
         pagination: { total: bindings.length, limit: 20, offset: 0 },
         counts: { configured: bindings.length, unassigned: 0 },
         workspaces: [{ id: "T1", name: "Workspace" }],
         hasDmBinding: true,
         workspacesWithUnmentionedTraffic: [],
-      }),
-    ),
+      });
+    }),
     http.get(`${API_ORIGIN}/api/chatops/status`, () =>
       HttpResponse.json({
         providers: [{ id: "slack", displayName: "Slack", configured: true }],
@@ -127,30 +131,46 @@ beforeEach(() => {
   );
 });
 
-afterEach(() => server.resetHandlers());
+afterEach(async () => {
+  cleanup();
+  await Promise.all([...queryClients].map((client) => client.cancelQueries()));
+  for (const client of queryClients) client.clear();
+  queryClients.clear();
+  server.resetHandlers();
+  // Finish the dialog's deferred focus restoration before JSDOM teardown.
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+});
 
 afterAll(() => {
   server.close();
   archestraApiClient.setConfig({ baseUrl: "" });
 });
 
-function renderTable() {
+async function renderTable() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return {
-    queryClient,
-    ...render(
-      <QueryClientProvider client={queryClient}>
-        <ChannelsSection providerConfig={providerConfig} />
-      </QueryClientProvider>,
-    ),
-  };
+  queryClients.add(queryClient);
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <ChannelsSection providerConfig={providerConfig} />
+    </QueryClientProvider>,
+  );
+  // Wait for the initial channel request to render its rows under CI load.
+  await screen.findByRole(
+    "row",
+    { name: /incident-response/ },
+    { timeout: 5000 },
+  );
+  return { queryClient, ...view };
 }
 
 describe("channels table — per-channel instructions", () => {
   it("distinguishes a channel that has instructions from one that does not", async () => {
-    renderTable();
+    bindingsDelayMs = 1200;
+    const ready = renderTable();
+    expect(screen.queryByRole("row", { name: /incident-response/ })).toBeNull();
+    await ready;
 
     const configured = await screen.findByRole("row", {
       name: /incident-response/,
@@ -171,7 +191,7 @@ describe("channels table — per-channel instructions", () => {
     // edit with no confirmation while Esc, the backdrop and the X all asked
     // first — the one exit that loses work being the one that never warned.
     const user = userEvent.setup();
-    renderTable();
+    await renderTable();
 
     await screen.findByRole("row", { name: /incident-response/ });
     await user.click(await screen.findByRole("button", { name: "Edit" }));
@@ -192,7 +212,7 @@ describe("channels table — per-channel instructions", () => {
     // The guard must not turn every Cancel into a prompt: with a clean form
     // there is nothing to lose, and a confirmation there is just friction.
     const user = userEvent.setup();
-    renderTable();
+    await renderTable();
 
     await screen.findByRole("row", { name: /incident-response/ });
     await user.click(await screen.findByRole("button", { name: "Edit" }));
@@ -209,7 +229,7 @@ describe("channels table — per-channel instructions", () => {
 
   it("saves an edit as the channel's instructions", async () => {
     const user = userEvent.setup();
-    renderTable();
+    await renderTable();
 
     const row = await screen.findByRole("row", { name: /incident-response/ });
     await user.click(await screen.findByRole("button", { name: "Edit" }));
@@ -237,7 +257,7 @@ describe("channels table — per-channel instructions", () => {
 
   it("clears the instructions when the editor is emptied", async () => {
     const user = userEvent.setup();
-    renderTable();
+    await renderTable();
 
     await user.click(await screen.findByRole("button", { name: "Edit" }));
     await user.clear(await screen.findByLabelText("Channel instructions"));
@@ -258,7 +278,7 @@ describe("channels table — per-channel instructions", () => {
   // the unsaved-changes guard none the wiser.
   it("keeps an in-progress edit when the stored instructions change underneath it", async () => {
     const user = userEvent.setup();
-    const { queryClient } = renderTable();
+    const { queryClient } = await renderTable();
 
     await user.click(await screen.findByRole("button", { name: "Edit" }));
     const textarea = await screen.findByLabelText("Channel instructions");
@@ -290,7 +310,7 @@ describe("channels table — per-channel instructions", () => {
 
   it("refuses to save instructions past the length limit", async () => {
     const user = userEvent.setup();
-    renderTable();
+    await renderTable();
 
     await user.click(await screen.findByRole("button", { name: "Add" }));
     const textarea = await screen.findByLabelText("Channel instructions");

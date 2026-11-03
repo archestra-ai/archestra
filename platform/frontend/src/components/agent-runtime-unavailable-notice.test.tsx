@@ -60,7 +60,7 @@ function renderNotice() {
 }
 
 describe("Agent Runtime unavailable notice", () => {
-  it("keeps diagnostics available on mobile and toggles them on larger screens", async () => {
+  it("toggles the diagnostic disclosure state", async () => {
     renderNotice();
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Some agent options are unavailable. The Agent Sandbox controller is not installed.",

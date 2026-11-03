@@ -168,16 +168,25 @@ describe("DisconnectLine", () => {
     return found;
   };
 
-  it("disconnects ChatGPT through plugin removal without a local cleanup prompt", () => {
+  it("shows the symmetric local cleanup command for ChatGPT", () => {
     render(
       <DisconnectLine data={data} picked={client("chatgpt")} agents={[]} />,
     );
     fireEvent.click(screen.getByRole("button", { name: "How it works" }));
+    expect(screen.getByText("Clean up this computer")).toBeVisible();
     expect(
-      screen.getByText("Remove the plugin connection in ChatGPT"),
+      screen.getByText(
+        /if \[ -f "\$HOME\/\.archestra\/codex-startup-guard\.sh" \]/,
+      ),
     ).toBeVisible();
-    expect(screen.queryByText("Clean up this computer")).toBeNull();
-    expect(screen.queryByText(/disconnect\.md/)).toBeNull();
+    expect(screen.getByText(/disconnect\.md\?client=chatgpt/)).toBeVisible();
+    expect(
+      screen.getByText(/ChatGPT desktop and Codex share local settings/),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/Other MCP connections are left in place/),
+    ).toBeVisible();
+    expect(screen.queryByText(/added no local provider/)).toBeNull();
   });
 
   it("explains disconnecting before anything is connected", () => {

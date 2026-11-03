@@ -144,11 +144,9 @@ A new worktree has no dependencies or native bindings. Before tests or type-chec
 
 ```bash
 pnpm install --frozen-lockfile                  # from platform/
-node scripts/napi-prebuilt.mjs <crate>...       # prebuilt addons for main's archestra-rs tree
-pnpm --dir archestra-rs/<crate> build:dev       # otherwise, each NAPI crate the tests load
 ```
 
-A missing binding fails as `Unable to load @archestra/<crate> for <platform>`; the crates are the `archestra-rs/*` packages with a `build:dev` script.
+The backend tests install the NAPI addons CI published for the checkout's `archestra-rs` tree when any is missing or was installed for another tree (`scripts/napi-prebuilt.mjs`: a download of about 20 MB, a few seconds; `ARCHESTRA_DEV_NAPI_PREBUILT=false` skips it). They never compile. A changed `archestra-rs` tree has no published addons: build each crate the tests load with `pnpm --dir archestra-rs/<crate> build:dev`. A missing binding fails as `Unable to load @archestra/<crate> for <platform>`; the crates are the `archestra-rs/*` packages with a `build:dev` script.
 
 ## Environment Variables
 

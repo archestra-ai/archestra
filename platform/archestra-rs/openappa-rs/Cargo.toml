@@ -33,11 +33,13 @@ crate-type = ["cdylib"]
 # the consult budget in `APPA_CONSULT_TIMEOUT_MS` (#772), and context-provider
 # and deployment hints (#773), and the GitHub context provider answering the
 # GH_TOKEN, git config, assignment, and heredoc shapes it used to decline (#775);
-# then the annotator label-guide fixes and the claude-code verdict cache (#782).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4be942a1688e90795e9b74f4e5f3dcaeb35d2321", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4be942a1688e90795e9b74f4e5f3dcaeb35d2321" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4be942a1688e90795e9b74f4e5f3dcaeb35d2321", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4be942a1688e90795e9b74f4e5f3dcaeb35d2321" }
+# then the annotator label-guide fixes and the claude-code verdict cache (#782);
+# then result trust judged by open-write surfaces (#783), and a narrowing's impact
+# naming the per-call labeled tools it leaves unjudged (#784).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "8a4762b78cb39bf9f2e5edf20e2d798887f9e38f", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "8a4762b78cb39bf9f2e5edf20e2d798887f9e38f" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "8a4762b78cb39bf9f2e5edf20e2d798887f9e38f", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "8a4762b78cb39bf9f2e5edf20e2d798887f9e38f" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

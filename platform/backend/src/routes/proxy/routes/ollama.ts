@@ -131,7 +131,10 @@ const ollamaProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             : "Ollama proxy preHandler: proxying request",
         );
 
-        await cleanForwardedBody(request);
+        await cleanForwardedBody(request, undefined, {
+          provider: "ollama",
+          baseUrl: config.llm.ollama.baseUrl,
+        });
         stripArchestraRequestHeaders(request);
       },
     });

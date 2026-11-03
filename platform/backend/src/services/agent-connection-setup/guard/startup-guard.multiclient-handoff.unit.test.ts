@@ -188,6 +188,10 @@ fs.writeFileSync(${JSON.stringify(seen)}, JSON.stringify({home: env.CODEX_HOME, 
 process.exit(2);`,
     );
     await writeFile(helper, CODEX_HANDOFF_HELPER);
+    // A new file can be slightly ahead of Date.now() on a high-resolution
+    // filesystem. It remains recent; a substantial future timestamp does not.
+    const slightlyAhead = new Date(Date.now() + 500);
+    await utimes(catalogPath, slightlyAhead, slightlyAhead);
     for (const args of [
       ["exec", "--help"],
       ["exec", "verify the gateway"],
@@ -206,6 +210,13 @@ process.exit(2);`,
     expect(await readFile(path.join(codexHome, "config.toml"), "utf8")).toBe(
       config,
     );
+    const farAhead = new Date(Date.now() + 60_000);
+    await utimes(catalogPath, farAhead, farAhead);
+    await expect(
+      exec(process.execPath, [helper, "--direct", shim, "exec", "--help"], {
+        env: nested,
+      }),
+    ).rejects.toMatchObject({ code: 1 });
     await writeFile(
       catalogPath,
       JSON.stringify({
@@ -454,10 +465,7 @@ process.stdout.write(JSON.stringify({models:[{slug:'fixture-model',tool_mode:'co
       expect(parseToml(await readFile(configFile, "utf8"))).toEqual({
         ...before,
         web_search: "disabled",
-        model_catalog_json: path.join(
-          home,
-          "archestra-direct-model-catalog.json",
-        ),
+        model_catalog_json: "archestra-direct-model-catalog.json",
         features: { ...(before.features as object), code_mode_host: false },
       });
     }
@@ -739,8 +747,12 @@ process.stdout.write(JSON.stringify({models:process.argv.includes('--bundled') ?
       tools: { apply_patch_tool_type: "freeform", other_tool: "keep" },
     });
     expect(
-      JSON.parse(await readFile(config.model_catalog_json as string, "utf8"))
-        .models,
+      JSON.parse(
+        await readFile(
+          path.join(codexHome, config.model_catalog_json as string),
+          "utf8",
+        ),
+      ).models,
     ).toEqual([
       { slug: "old", tool_mode: "direct", supports_search_tool: false },
       { slug: "gpt-6-luna", tool_mode: "direct", supports_search_tool: false },
@@ -761,8 +773,12 @@ process.stdout.write(JSON.stringify({models:process.argv.includes('--bundled') ?
       exec(process.execPath, [helper, "--direct", entry], { env }),
     ).rejects.toMatchObject({ code: 1 });
     expect(
-      JSON.parse(await readFile(config.model_catalog_json as string, "utf8"))
-        .models,
+      JSON.parse(
+        await readFile(
+          path.join(codexHome, config.model_catalog_json as string),
+          "utf8",
+        ),
+      ).models,
     ).toHaveLength(2);
     await writeFile(
       cli,
@@ -797,8 +813,12 @@ process.stdout.write(JSON.stringify({models:[{slug:'gpt-6-luna',tool_mode:'code_
       { env },
     );
     expect(
-      JSON.parse(await readFile(config.model_catalog_json as string, "utf8"))
-        .models,
+      JSON.parse(
+        await readFile(
+          path.join(codexHome, config.model_catalog_json as string),
+          "utf8",
+        ),
+      ).models,
     ).toContainEqual({
       slug: "newly-released",
       tool_mode: "direct",
@@ -851,7 +871,7 @@ process.stdout.write(JSON.stringify({models:[{slug:'gpt-6-luna',tool_mode:'code_
       parseToml(original),
     );
     await expect(
-      readFile(config.model_catalog_json as string),
+      readFile(path.join(codexHome, config.model_catalog_json as string)),
     ).rejects.toMatchObject({
       code: "ENOENT",
     });

@@ -392,6 +392,24 @@ test("keeps a live lock that is still within the installer lifetime", async () =
   }
 });
 
+test("ChatGPT cannot edit the same configuration while a Codex installer is running", async () => {
+  const lockPath = connectionLockPath(origin, "codex");
+  await writeFile(
+    lockPath,
+    JSON.stringify({ pid: process.pid, createdAt: Date.now() }),
+  );
+  try {
+    const result = await run(origin, "chatgpt");
+    expect(result.code).toBe(1);
+    expect(result.output).toContain(
+      "Another connection installer is already running",
+    );
+    expect(starts).toBe(0);
+  } finally {
+    await rm(lockPath, { force: true });
+  }
+});
+
 test("Desktop downloads and executes its approved setup through the same protocol", async () => {
   const result = await run(origin, "claude-desktop");
   expect(result.code).toBe(0);

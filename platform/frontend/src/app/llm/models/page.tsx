@@ -592,6 +592,9 @@ export default function ModelsPage() {
                   <EyeOff className="h-4 w-4" />
                 ),
                 label: row.original.ignored ? "Show model" : "Hide model",
+                tooltip: row.original.ignored
+                  ? "Enable model selection and requests, subject to its permissions"
+                  : "Hide from selection and block new requests, including direct API calls",
                 onClick: () =>
                   updateModel.mutate({
                     id: row.original.id,

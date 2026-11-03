@@ -17,6 +17,7 @@ import appConfig from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
+  OpenAppaBreakTheGlassSettings,
   OpenAppaClientCoverageSetting,
   OpenAppaEnforcementSetting,
 } from "./openappa-settings-sections";
@@ -30,6 +31,11 @@ const server = setupServer();
 let enabled: boolean;
 let featureEnabled: boolean;
 let clientAction: "bypass" | "block";
+let breakTheGlass: {
+  humanApprovalMode: "block" | "unattended" | "everywhere";
+  unapprovableBlockMode: "refuse" | "allow";
+  breakTheGlassEnabled: boolean;
+};
 let revision: number;
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
@@ -49,6 +55,11 @@ beforeEach(() => {
   enabled = false;
   featureEnabled = true;
   clientAction = "bypass";
+  breakTheGlass = {
+    humanApprovalMode: "unattended",
+    unapprovableBlockMode: "refuse",
+    breakTheGlassEnabled: true,
+  };
   revision = 1;
   server.use(
     http.get(`${api}/guardrails-deployment`, () =>
@@ -57,6 +68,7 @@ beforeEach(() => {
         featureEnabled,
         active: enabled,
         unsupportedClientAction: clientAction,
+        ...breakTheGlass,
       }),
     ),
     http.get(`${api}/guardrails-policy`, () =>
@@ -210,6 +222,76 @@ test.each([
       name: "Requests from other clients",
     }),
   ).toBeDisabled();
+});
+
+test("an administrator changes the Break the glass settings one at a time", async () => {
+  const updates: unknown[] = [];
+  server.use(
+    http.put(`${api}/guardrails-deployment`, async ({ request }) => {
+      const body = (await request.json()) as Partial<typeof breakTheGlass>;
+      updates.push(body);
+      breakTheGlass = { ...breakTheGlass, ...body };
+      return HttpResponse.json({
+        enabled,
+        featureEnabled,
+        active: enabled,
+        unsupportedClientAction: clientAction,
+        ...breakTheGlass,
+      });
+    }),
+  );
+  show(<OpenAppaBreakTheGlassSettings />);
+  const change = async (
+    name: string,
+    from: string,
+    option: RegExp,
+    to: string,
+  ) => {
+    const selector = await screen.findByRole("combobox", { name });
+    expect(selector).toHaveTextContent(from);
+    fireEvent.click(selector);
+    fireEvent.click(screen.getByRole("option", { name: option }));
+    await waitFor(() => expect(selector).toHaveTextContent(to));
+  };
+  await change(
+    "Human approval",
+    "Waive in unattended sessions",
+    /Waive everywhere/,
+    "Waive everywhere",
+  );
+  await change(
+    "Soft block",
+    "Keep the block",
+    /Waive the block/,
+    "Waive the block",
+  );
+  // The Yell tool row maps its two choices onto the stored boolean.
+  await change(
+    "Yell tool",
+    "Record and turn Guardrails off",
+    /Record only/,
+    "Record only",
+  );
+  expect(updates).toEqual([
+    { humanApprovalMode: "everywhere" },
+    { unapprovableBlockMode: "allow" },
+    { breakTheGlassEnabled: false },
+  ]);
+});
+
+test.each([
+  ["members who cannot manage them", readOnly],
+  [
+    "without the feature flag",
+    () => {
+      featureEnabled = false;
+    },
+  ],
+])("the Break the glass settings are disabled for %s", async (_name, arrange) => {
+  arrange();
+  show(<OpenAppaBreakTheGlassSettings />);
+  for (const name of ["Human approval", "Soft block", "Yell tool"])
+    expect(await screen.findByRole("combobox", { name })).toBeDisabled();
 });
 
 test("links 'more' to the clients page and 'OpenAPPA session headers' to session-headers", async () => {

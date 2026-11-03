@@ -188,6 +188,253 @@ describe("ExecTerminal", () => {
     expect(terminal.contains(toggle)).toBe(false);
   });
 
+  it("asks before sending Ctrl+C to a session whose input loop belongs to an agent", async () => {
+    let sessionHandlers: ExecSessionHandlers | null = null;
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        sessionHandlers = handlers;
+        handlers.onStarted(null);
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+    render(
+      <ExecTerminal
+        sessionKey="interrupt-prompt"
+        transport={transport}
+        isActive
+        interruptPrompt={{
+          title: "Send Ctrl+C to the agent?",
+          description: "It stops the running turn.",
+          confirmLabel: "Send Ctrl+C",
+        }}
+      />,
+    );
+    await screen.findByText("Connected");
+    const keyHandler = terminalHarness.keyHandler;
+    const textarea = terminalHarness.textarea;
+    if (!keyHandler || !textarea)
+      throw new Error("Terminal did not initialize");
+    // The key is typed in the terminal, so that is where focus returns.
+    textarea.focus();
+    const ctrlC = (init: KeyboardEventInit = {}) =>
+      new KeyboardEvent("keydown", {
+        key: "c",
+        ctrlKey: true,
+        cancelable: true,
+        ...init,
+      });
+
+    // Held back and asked about, not sent.
+    const press = ctrlC();
+    expect(keyHandler(press)).toBe(false);
+    expect(press.defaultPrevented).toBe(true);
+    expect(transport.sendInput).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("dialog", {
+      name: "Send Ctrl+C to the agent?",
+    });
+    expect(dialog).toHaveTextContent("It stops the running turn.");
+
+    // Enter means keep running: the prompt opens on Cancel.
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    await waitFor(() => expect(cancel).toHaveFocus());
+    fireEvent.click(cancel);
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(transport.sendInput).not.toHaveBeenCalled();
+    await waitFor(() => expect(textarea).toHaveFocus());
+
+    // Confirming sends the interrupt once.
+    expect(keyHandler(ctrlC())).toBe(false);
+    fireEvent.click(await screen.findByRole("button", { name: "Send Ctrl+C" }));
+    await waitFor(() =>
+      expect(transport.sendInput).toHaveBeenCalledWith("\x03"),
+    );
+    expect(transport.sendInput).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    await waitFor(() => expect(textarea).toHaveFocus());
+
+    // An xterm selection still copies without a question.
+    terminalHarness.selectedText = "selected";
+    expect(keyHandler(ctrlC())).toBe(false);
+    expect(terminalHarness.copyToClipboard).toHaveBeenCalledWith("selected");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    terminalHarness.selectedText = "";
+
+    // A Cyrillic layout gives the physical C key a different character;
+    // xterm still sends Ctrl+C for it, so the prompt still catches it.
+    expect(keyHandler(ctrlC({ key: "\u0441", code: "KeyC" }))).toBe(false);
+    await screen.findByRole("dialog", { name: "Send Ctrl+C to the agent?" });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+
+    // Other chords and key phases are the emulator's as before.
+    expect(keyHandler(ctrlC({ shiftKey: true }))).toBe(true);
+    expect(keyHandler(ctrlC({ ctrlKey: false, metaKey: true }))).toBe(true);
+    expect(
+      keyHandler(new KeyboardEvent("keyup", { key: "c", ctrlKey: true })),
+    ).toBe(true);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(transport.sendInput).toHaveBeenCalledOnce();
+
+    // A prompt left open when the session ends has nothing to send to.
+    expect(keyHandler(ctrlC())).toBe(false);
+    await screen.findByRole("dialog", { name: "Send Ctrl+C to the agent?" });
+    act(() => sessionHandlers?.onClosed(null));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(transport.sendInput).toHaveBeenCalledOnce();
+  });
+
+  it("drops a pending Ctrl+C confirmation when the session it was typed in is replaced", async () => {
+    const makeTransport = (): ExecSessionTransport => ({
+      open: (handlers) => {
+        handlers.onStarted(null);
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    });
+    const prompt = {
+      title: "Send Ctrl+C to the agent?",
+      description: "It stops the running turn.",
+      confirmLabel: "Send Ctrl+C",
+    };
+    const first = makeTransport();
+    const view = render(
+      <ExecTerminal
+        sessionKey="session-a"
+        transport={first}
+        isActive
+        interruptPrompt={prompt}
+      />,
+    );
+    await screen.findByText("Connected");
+    const askInCurrentSession = () => {
+      const keyHandler = terminalHarness.keyHandler;
+      if (!keyHandler) throw new Error("Terminal did not initialize");
+      expect(
+        keyHandler(
+          new KeyboardEvent("keydown", {
+            key: "c",
+            ctrlKey: true,
+            cancelable: true,
+          }),
+        ),
+      ).toBe(false);
+    };
+    askInCurrentSession();
+    await screen.findByRole("dialog", { name: "Send Ctrl+C to the agent?" });
+
+    // Another session takes the terminal while the question is open: the
+    // question goes away and neither session is interrupted.
+    const second = makeTransport();
+    view.rerender(
+      <ExecTerminal
+        sessionKey="session-b"
+        transport={second}
+        isActive
+        interruptPrompt={prompt}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    await screen.findByText("Connected");
+    expect(first.sendInput).not.toHaveBeenCalled();
+    expect(second.sendInput).not.toHaveBeenCalled();
+
+    // Hiding the terminal dismisses it as well.
+    askInCurrentSession();
+    await screen.findByRole("dialog", { name: "Send Ctrl+C to the agent?" });
+    view.rerender(
+      <ExecTerminal
+        sessionKey="session-b"
+        transport={second}
+        isActive={false}
+        interruptPrompt={prompt}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(second.sendInput).not.toHaveBeenCalled();
+  });
+
+  it("drops a pending Ctrl+C confirmation when the attachment is replaced or its connection drops", async () => {
+    let sessionHandlers: ExecSessionHandlers | null = null;
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        sessionHandlers = handlers;
+        handlers.onStarted(null);
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+    render(
+      <ExecTerminal
+        sessionKey="reattach"
+        transport={transport}
+        isActive
+        interruptPrompt={{
+          title: "Send Ctrl+C to the agent?",
+          description: "It stops the running turn.",
+          confirmLabel: "Send Ctrl+C",
+        }}
+      />,
+    );
+    await screen.findByText("Connected");
+    const ask = () => {
+      const keyHandler = terminalHarness.keyHandler;
+      if (!keyHandler) throw new Error("Terminal did not initialize");
+      expect(
+        keyHandler(
+          new KeyboardEvent("keydown", {
+            key: "c",
+            ctrlKey: true,
+            cancelable: true,
+          }),
+        ),
+      ).toBe(false);
+    };
+    const dialogGone = () =>
+      waitFor(() =>
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+      );
+
+    // The socket drops with the question open: the question is void.
+    ask();
+    await screen.findByRole("dialog", { name: "Send Ctrl+C to the agent?" });
+    act(() => sessionHandlers?.onConnectionLost?.());
+    await dialogGone();
+    expect(transport.sendInput).not.toHaveBeenCalled();
+
+    // The transport attaches again, possibly to a newer turn, while the
+    // question is open: the question is about the old attachment.
+    act(() => sessionHandlers?.onStarted(null));
+    ask();
+    await screen.findByRole("dialog", { name: "Send Ctrl+C to the agent?" });
+    act(() => sessionHandlers?.onStarted(null));
+    await dialogGone();
+    expect(transport.sendInput).not.toHaveBeenCalled();
+
+    // The live attachment still gets its interrupt when confirmed.
+    ask();
+    fireEvent.click(await screen.findByRole("button", { name: "Send Ctrl+C" }));
+    await waitFor(() =>
+      expect(transport.sendInput).toHaveBeenCalledWith("\x03"),
+    );
+    expect(transport.sendInput).toHaveBeenCalledOnce();
+  });
+
   it("restores browser defaults and blocks mouse, keyboard, paste and pending input when off", async () => {
     const transport: ExecSessionTransport = {
       open: (handlers) => {

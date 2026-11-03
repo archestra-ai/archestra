@@ -5,6 +5,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
+import ModelModel from "@/models/model";
 import {
   constructResponseSchema,
   ErrorResponsesSchema,
@@ -342,6 +343,28 @@ function createGeminiProxyPreHandler() {
           status: "INVALID_ARGUMENT",
         },
       });
+    }
+
+    if (request.method === "POST") {
+      // Native inference methods select the model in the path, including
+      // image/video prediction and batch generation. Token counts and reads
+      // of already-started operations do not start model execution.
+      let decodedPath = urlPath;
+      try {
+        decodedPath = decodeURIComponent(urlPath);
+      } catch {
+        // Leave malformed paths for the provider's existing validation.
+      }
+      const modelMethod = decodedPath.match(/\/models\/([^/:]+):([^/:]+)\/?$/);
+      if (
+        modelMethod &&
+        !["countTokens", "fetchPredictOperation"].includes(modelMethod[2])
+      ) {
+        await ModelModel.assertAvailable({
+          provider: "gemini",
+          modelId: modelMethod[1],
+        });
+      }
     }
 
     await cleanForwardedBody(request);

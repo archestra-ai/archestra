@@ -731,7 +731,8 @@ jobs:
           • sandbox base image: \`${SANDBOX_RESULT}\`
           • Helm chart: \`${HELM_RESULT}\`
           • publish GitHub release: \`${PUBLISH_RESULT}\`
-          <${RUN_URL}|View failed CI run>"
+          Check whether \`platform-v${VERSION}\` is already published. If it is still a draft, start a *new* Release Please workflow run on this branch to recover the complete artifact set. 'Rerun failed jobs' cannot regenerate artifacts from successful jobs.
+          <${RUN_URL}|View failed CI run> · <https://github.com/${GITHUB_REPOSITORY}/actions/workflows/release-please.yml|Start a new release run>"
           jq -n --arg text "$TEXT" '{text: $text}' \
             | curl -sSf -X POST -H 'Content-type: application/json' --data @- "${SLACK_WEBHOOK_URL}"
 

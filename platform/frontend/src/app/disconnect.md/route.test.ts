@@ -51,10 +51,10 @@ describe("Disconnect agent instructions", () => {
   it("lets a client's startup check undo its own setup", async () => {
     const instructions = await read("?client=claude-code");
     expect(instructions).toContain(
-      "ARCHESTRA_GUARD_ACTION=disconnect bash ~/.archestra/claude-startup-guard.sh",
+      'ARCHESTRA_GUARD_ACTION=disconnect bash "$HOME/.archestra/claude-startup-guard.sh"',
     );
     expect(instructions).toContain(
-      `$env:ARCHESTRA_GUARD_ACTION='disconnect'; try { & "$HOME\\.archestra\\claude-startup-guard.ps1" }`,
+      `Test-Path -LiteralPath "$HOME\\.archestra\\claude-startup-guard.ps1" -PathType Leaf`,
     );
     expect(instructions).toContain(
       "claude mcp remove --scope user SERVER_NAME",
@@ -106,7 +106,7 @@ describe("Disconnect agent instructions", () => {
     const instructions = await read("?client=kilo");
     expect(instructions).toContain("# Disconnect Kilo Code");
     expect(instructions).toContain(
-      "ARCHESTRA_GUARD_ACTION=disconnect bash ~/.archestra/kilo-startup-guard.sh",
+      'ARCHESTRA_GUARD_ACTION=disconnect bash "$HOME/.archestra/kilo-startup-guard.sh"',
     );
     expect(instructions).toContain("~/.config}/kilo/kilo.json");
     expect(instructions).toContain("kilo mcp logout SERVER_NAME");

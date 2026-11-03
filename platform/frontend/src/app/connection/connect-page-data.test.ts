@@ -395,3 +395,24 @@ describe("Connect page welcome prompt", () => {
     );
   });
 });
+
+it("uses installed ChatGPT onboarding without a localhost shell fetch", () => {
+  const prompt = welcomePrompt({
+    clientId: "chatgpt",
+    origin: "http://localhost:3000",
+    appName: "Acme",
+    serverName: "team_gateway",
+  });
+  expect(prompt).toContain("installed Acme plugin's onboarding skill");
+  expect(prompt).toContain("MCP server exactly named team_gateway");
+  expect(prompt).toContain("local skill catalog");
+  expect(prompt).toContain("stop immediately without making any MCP calls");
+  expect(prompt).toContain(
+    "This Acme plugin is not available in this conversation",
+  );
+  expect(prompt).toContain(
+    "Do not search for onboarding through a gateway, guess skill names, or substitute another skill",
+  );
+  expect(prompt).not.toContain("welcome.md");
+  expect(prompt).toContain("Guardrails refuses without a remedy");
+});

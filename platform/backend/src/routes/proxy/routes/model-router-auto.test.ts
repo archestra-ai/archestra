@@ -1127,7 +1127,7 @@ describe("Model Router auto model", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain(
-      "only available through the Model Router",
+      "only available through the Unified Model API",
     );
     expect(upstreamModels).toEqual([]);
   });

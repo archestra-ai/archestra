@@ -182,7 +182,7 @@ export const AgentRuntimeToolInputSchema = z
       .required({ image: true })
       .strict()
       .describe(
-        "A custom container image. Set inferenceProtocol to the wire protocol the image speaks to the model router.",
+        "A custom container image. Set inferenceProtocol to the wire protocol the image speaks to the unified model API.",
       ),
   ])
   .describe(

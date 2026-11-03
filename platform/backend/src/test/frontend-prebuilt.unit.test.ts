@@ -132,6 +132,9 @@ describe.skipIf(!supported)("frontend prebuilt", () => {
         "build_frontend() {",
         "  :",
         "}",
+        "prepare_frontend_standalone() {",
+        "  :",
+        "}",
         "",
       ].join("\n"),
     );

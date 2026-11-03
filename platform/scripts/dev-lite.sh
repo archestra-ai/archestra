@@ -400,6 +400,14 @@ install_native_addons() {
   (cd "$PLATFORM_DIR" && node scripts/napi-prebuilt.mjs "${CRATES[@]}") >&2 || true
 }
 
+# Restore before the agent edits source; later checks reuse the compiler's
+# incremental state. A missing publication never makes bootstrap compile.
+install_backend_declarations() {
+  (cd "$PLATFORM_DIR" && node --import tsx scripts/heavy-lane.ts \
+    --label "backend declaration cache" --peak-gib 0.8 \
+    -- node scripts/backend-types-prebuilt.mjs install) >&2 || true
+}
+
 # The crates whose addon is not built, one per line.
 missing_native_addons() {
   local crate
@@ -646,33 +654,122 @@ build_frontend() {
   fi
   frontend_prebuilt install-cache || true
   cpus="$(available_cpus)"
-  launcher='const { status } = require("node:child_process").spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build", "--turbopack"], { stdio: "inherit" }); process.exit(status ?? 1);'
+  # Release Turbopack's native heap before starting page-generation workers,
+  # including when reload rebuilds an edited frontend from CI's warm cache.
+  launcher='for (const mode of ["compile", "generate"]) { const { status, signal } = require("node:child_process").spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build", "--turbopack", "--experimental-build-mode=" + mode], { stdio: "inherit" }); const code = status ?? (signal ? 128 + require("node:os").constants.signals[signal] : 1); if (code) process.exit(code); }'
   log "building the frontend (production build, as CI serves it); log in $LOG_DIR/frontend-build.log"
   CIRCLE_NODE_TOTAL=$((cpus + 1)) frontend_build_node -e "$launcher" > "$LOG_DIR/frontend-build.log" 2>&1 \
     || { tail -n 30 "$LOG_DIR/frontend-build.log" >&2; die "frontend build failed"; }
+  prepare_frontend_standalone
+  log "frontend built in $((SECONDS - started)) s"
+}
+
+# Next's standalone output omits these assets. Refresh them after generation
+# so `resume` can serve the current build without rebuilding it.
+prepare_frontend_standalone() {
   # Checked one by one: a caller's `if` switches errexit off in here.
   rm -rf "$STANDALONE_DIR/.next/static" "$STANDALONE_DIR/public" \
     && cp -R "$PLATFORM_DIR/frontend/.next/static" "$STANDALONE_DIR/.next/static" \
     && cp -R "$PLATFORM_DIR/frontend/public" "$STANDALONE_DIR/public" \
     || die "could not copy the frontend's static and public files next to its server"
-  log "frontend built in $((SECONDS - started)) s"
 }
+
+# A subshell keeps these lifetime traps out of callers that source dev-lite.
+# Cancellation may terminate the whole build group, including this shell.
+run_frontend_artifact_build() (
+  local launcher="$1" split="$2" package_assets="$3"
+  shift 3
+  local standalone_root="$PLATFORM_DIR/frontend/.next/standalone" previous="" complete=0 build_started=0 mode
+  cleanup_frontend_artifact() {
+    local status=$?
+    trap - EXIT
+    trap '' HUP INT TERM
+    if [ "$complete" = 0 ]; then
+      if [ -n "$previous" ] && [ -d "$previous/tree" ]; then
+        rm -rf "$standalone_root" && mv "$previous/tree" "$standalone_root" \
+          || die "could not restore the frontend's previous standalone build"
+      elif [ "$build_started" = 1 ]; then
+        rm -rf "$standalone_root" || die "could not remove the incomplete standalone build"
+      fi
+    fi
+    if [ -n "$previous" ]; then
+      rm -rf "$previous" || die "could not remove the previous standalone build's backup"
+    fi
+    exit "$status"
+  }
+  trap cleanup_frontend_artifact EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  # Next can clear .next and replace server.js before failing. Keep the whole
+  # serving tree outside .next until generation and asset packaging succeed.
+  if [ -d "$standalone_root" ]; then
+    previous="$(mktemp -d "$PLATFORM_DIR/frontend/.standalone-previous.XXXXXX")" \
+      && mv "$standalone_root" "$previous/tree" \
+      || die "could not preserve the frontend's previous standalone build"
+  fi
+  build_started=1
+  if [ "$split" = 1 ]; then
+    # Release Turbopack's compiler heap before starting generation workers.
+    for mode in compile generate; do
+      frontend_build_node -e "$launcher" -- "$@" "--experimental-build-mode=$mode" || exit $?
+    done
+  else
+    frontend_build_node -e "$launcher" -- "$@" || exit $?
+  fi
+  if [ "$package_assets" = 1 ]; then
+    prepare_frontend_standalone
+    complete=1
+  fi
+  exit 0
+)
 
 # CI (.github/workflows/frontend-dev-cache.yml): `key` prints the key of this
 # checkout's frontend as an Agent Runtime's stack builds it, `pack <dir>`
-# builds it that way and collects the artifacts to publish.
+# builds it that way and collects the artifacts to publish. `build` uses the
+# same environment/cache for a root workspace build, always compiling so all
+# of Next's build output is present, including after source edits.
 cmd_frontend_artifact() {
   require_platform_dir
   mkdir -p "$STATE_DIR" "$LOG_DIR"
   ensure_env 0 0
   case "${1:-}" in
     key) frontend_prebuilt --key --explain ;;
+    build)
+      shift
+      local arg mode explicit_mode=0 selected_mode="" mode_value_next=0 webpack=0
+      for arg in "$@"; do
+        if [ "$mode_value_next" = 1 ]; then
+          selected_mode="$arg"
+          mode_value_next=0
+          continue
+        fi
+        case "$arg" in
+          --experimental-build-mode) explicit_mode=1; mode_value_next=1 ;;
+          --experimental-build-mode=*) explicit_mode=1; selected_mode="${arg#*=}" ;;
+          --webpack) webpack=1 ;;
+        esac
+      done
+      # CI's cache and phase split are for Turbopack. An explicit Webpack
+      # build keeps its usual single phase, but still packages assets before
+      # the heavy lane resumes the standalone server.
+      local launcher='const { status, signal } = require("node:child_process").spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build", ...process.argv.slice(1)], { stdio: "inherit" }); process.exit(status ?? (signal ? 128 + require("node:os").constants.signals[signal] : 1));'
+      local split=0 package_assets=0
+      if [ "$webpack" = 0 ]; then
+        frontend_prebuilt install-cache || true
+        if [ "$explicit_mode" = 0 ]; then split=1; fi
+      fi
+      if [ "$explicit_mode" = 0 ] || [ "$selected_mode" = generate ]; then
+        package_assets=1
+      fi
+      run_frontend_artifact_build "$launcher" "$split" "$package_assets" "$@"
+      ;;
     pack)
       [ -n "${2:-}" ] || die "frontend-artifact pack: expected an output directory"
       ARCHESTRA_DEV_FRONTEND_PREBUILT=false build_frontend
       frontend_prebuilt --pack "$(cd "$2" && pwd)"
       ;;
-    *) die "frontend-artifact: expected key or pack <dir>" ;;
+    *) die "frontend-artifact: expected key, build, or pack <dir>" ;;
   esac
 }
 
@@ -920,6 +1017,7 @@ cmd_start() {
   ensure_env "$e2e" "$keycloak"
   install_dependencies
   install_native_addons
+  install_backend_declarations
   start_postgres
   wait_for_db
   migrate

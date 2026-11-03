@@ -4331,8 +4331,15 @@
     {
       "idx": 618,
       "version": "7",
-      "when": 1793663723419,
-      "tag": "0618_lethal_lady_deathstrike",
+      "when": 1793666483680,
+      "tag": "0618_bind-interaction-append-payload",
+      "breakpoints": true
+    },
+    {
+      "idx": 619,
+      "version": "7",
+      "when": 1793711023788,
+      "tag": "0619_pink_shatterstar",
       "breakpoints": true
     }
   ]

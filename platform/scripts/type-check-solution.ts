@@ -21,6 +21,7 @@
 import fs from "node:fs";
 import { constants } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   describeToolMemoryKill,
   readCgroupMemory,
@@ -174,6 +175,21 @@ export function typeCheckSolution(params: {
       : process.env;
   const name = (config: string) =>
     path.relative(solutionDir, config).split(path.sep).join("/");
+
+  if (packageName === "backend") {
+    // The installer leaves existing state alone and falls back to compilation
+    // on an unpublished key, edited source, or unavailable registry.
+    runHeavy({
+      command: process.execPath,
+      args: [
+        fileURLToPath(new URL("./backend-types-prebuilt.mjs", import.meta.url)),
+        "install",
+      ],
+      label: "backend declaration cache",
+      peakBytes: 0.8 * 1024 ** 3,
+      lane,
+    });
+  }
 
   let killedProject: string | null = null;
   let memoryBefore = readCgroupMemory();

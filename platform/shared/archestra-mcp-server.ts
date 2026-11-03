@@ -31,6 +31,9 @@ export const TOOL_GET_AGENT_SHORT_NAME = "get_agent";
 export const TOOL_LIST_AGENTS_SHORT_NAME = "list_agents";
 export const TOOL_LIST_LLM_MODELS_SHORT_NAME = "list_llm_models";
 export const TOOL_EDIT_AGENT_SHORT_NAME = "edit_agent";
+export const TOOL_GET_AGENT_SKILL_POLICY_SHORT_NAME = "get_agent_skill_policy";
+export const TOOL_PATCH_AGENT_SKILL_POLICY_SHORT_NAME =
+  "patch_agent_skill_policy";
 export const TOOL_LIST_HOOKS_SHORT_NAME = "list_hooks";
 export const TOOL_CREATE_HOOK_SHORT_NAME = "create_hook";
 export const TOOL_UPDATE_HOOK_SHORT_NAME = "update_hook";
@@ -279,6 +282,8 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LIST_AGENTS_SHORT_NAME,
   TOOL_LIST_LLM_MODELS_SHORT_NAME,
   TOOL_EDIT_AGENT_SHORT_NAME,
+  TOOL_GET_AGENT_SKILL_POLICY_SHORT_NAME,
+  TOOL_PATCH_AGENT_SKILL_POLICY_SHORT_NAME,
   TOOL_LIST_HOOKS_SHORT_NAME,
   TOOL_CREATE_HOOK_SHORT_NAME,
   TOOL_UPDATE_HOOK_SHORT_NAME,
@@ -501,6 +506,8 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   list_agents: "agents",
   list_llm_models: "agents",
   edit_agent: "agents",
+  get_agent_skill_policy: "agents",
+  patch_agent_skill_policy: "agents",
   list_hooks: "agents",
   create_hook: "agents",
   update_hook: "agents",

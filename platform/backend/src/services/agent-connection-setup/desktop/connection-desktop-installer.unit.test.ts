@@ -461,8 +461,15 @@ test.each([
 });
 
 test.each([
-  3000, 3001,
-])("Desktop validates %i instruction characters before writing settings", async (length) => {
+  { character: "x", length: 3000 },
+  { character: "x", length: 3001 },
+  { character: "🎨", length: 3000 },
+  { character: "🎨", length: 3001 },
+])("Desktop validates $length $character instruction characters before writing settings", async ({
+  character,
+  length,
+}) => {
+  const instructions = character.repeat(length);
   const module = { exports: null };
   runInNewContext(DESKTOP_CONNECTION_INSTALLER, {
     module,
@@ -477,7 +484,7 @@ test.each([
   const state = {
     setup: {
       mcp: { serverName: "test_gateway", toolPrefix: "archestra__" },
-      runtimeHandoffInstructions: "x".repeat(length),
+      runtimeHandoffInstructions: instructions,
     },
     profile: {} as Record<string, unknown>,
     managed: new Map(),
@@ -490,7 +497,7 @@ test.each([
     expect(state.profile).toEqual({});
   } else {
     await Installer.prototype.ready.call(state);
-    expect(state.profile.organizationInstructions).toBe("x".repeat(length));
+    expect(state.profile.organizationInstructions).toBe(instructions);
   }
 });
 

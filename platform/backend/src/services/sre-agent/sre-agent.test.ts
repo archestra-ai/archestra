@@ -28,6 +28,7 @@ import {
   SreRuntimeModel,
   ToolModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { openappaDeclarations } from "@/openappa/declarations";
 import { assignToolToAgent } from "@/services/agent-tool-assignment";
@@ -223,7 +224,7 @@ describe("sreAgentService", () => {
     expect(agent).toMatchObject({
       organizationId,
       agentType: "agent",
-      builtIn: false,
+      builtIn: true,
       environmentId: SRE_ENVIRONMENT_ID,
     });
     const required = new Set<string>(SRE_AGENT_TOOL_NAMES);
@@ -351,9 +352,9 @@ describe("sreAgentService", () => {
   test.for([
     { caller: "platform admin", canUseSre: false },
     { caller: "service account", canUseSre: false },
-    { caller: "custom role with sre:read", canUseSre: true },
+    { caller: "custom role with catalog grant", canUseSre: true },
     { caller: "admin", canUseSre: true },
-  ] as const)("the Kubernetes tools take sre:read: $caller", async ({
+  ] as const)("the Kubernetes tools follow catalog grants: $caller", async ({
     caller,
     canUseSre,
   }, {
@@ -403,17 +404,34 @@ describe("sreAgentService", () => {
           };
         }
         case "platform admin":
-        case "custom role with sre:read": {
+        case "custom role with catalog grant": {
           const user = await makeUser();
-          const role =
+          const custom =
             caller === "platform admin"
-              ? PLATFORM_ADMIN_ROLE_NAME
-              : (
-                  await makeCustomRole(organizationId, {
-                    permission: { sre: ["read"] },
-                  })
-                ).role;
+              ? null
+              : await makeCustomRole(organizationId, { permission: {} });
+          const role = custom?.role ?? PLATFORM_ADMIN_ROLE_NAME;
           await makeMember(user.id, organizationId, { role });
+          if (custom) {
+            const key = {
+              organizationId,
+              resource: "mcpRegistry" as const,
+              scope: SRE_CATALOG_ID,
+            };
+            const policy = await ResourcePermissionPolicyModel.find(key);
+            if (!policy) throw new Error("SRE catalog policy missing");
+            await ResourcePermissionPolicyModel.replace({
+              ...key,
+              revision: policy.revision,
+              grants: [
+                ...policy.grants,
+                {
+                  subject: { type: "role", id: custom.id },
+                  actions: ["read", "use"],
+                },
+              ],
+            });
+          }
           return { userId: user.id, tokenAuth: { ...base, userId: user.id } };
         }
       }
@@ -430,7 +448,7 @@ describe("sreAgentService", () => {
       agentOwner(agent.id),
       tokenAuth,
     );
-    // With sre:read the call is dispatched and fails only because the test
+    // With the catalog grant the call is dispatched and fails only because the test
     // runs no server; without it the catalog gate refuses it after validation
     // resolved the tool, which logs the call under the server's name.
     expect(result._meta?.archestraError).toMatchObject(
@@ -665,6 +683,48 @@ describe("sreAgentService", () => {
     );
   });
 
+  test("moves legacy SRE role access to a catalog grant once", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const { organizationId } = await seedSreInstall({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
+    const role = await makeCustomRole(organizationId, {
+      permission: { agent: ["read"] },
+    });
+    await db
+      .update(schema.organizationRolesTable)
+      .set({ permission: JSON.stringify({ agent: ["read"], sre: ["read"] }) })
+      .where(eq(schema.organizationRolesTable.id, role.id));
+
+    await sreAgentService.seed();
+    await sreAgentService.seed();
+
+    const catalogPolicy = await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "mcpRegistry",
+      scope: SRE_CATALOG_ID,
+    });
+    expect(
+      catalogPolicy?.grants.filter(
+        (grant) =>
+          grant.subject.type === "role" && grant.subject.id === role.id,
+      ),
+    ).toEqual([
+      { subject: { type: "role", id: role.id }, actions: ["read", "use"] },
+    ]);
+    const [storedRole] = await db
+      .select({ permission: schema.organizationRolesTable.permission })
+      .from(schema.organizationRolesTable)
+      .where(eq(schema.organizationRolesTable.id, role.id));
+    expect(JSON.parse(storedRole.permission)).toEqual({ agent: ["read"] });
+  });
+
   test("upgrading the source clone of an agent an interrupted run left without tools still lets it get them", async ({
     makeOrganization,
     makeUser,
@@ -691,10 +751,26 @@ describe("sreAgentService", () => {
       admin.id,
       { skipCreationDefaultTools: true, deferInitialVersionFork: true },
     );
+    const policyBefore = await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "agent",
+      scope: SRE_AGENT_ID,
+    });
 
     await sreAgentService.seed();
     await ensure();
 
+    expect(await AgentModel.findById(SRE_AGENT_ID)).toMatchObject({
+      id: SRE_AGENT_ID,
+      builtIn: true,
+    });
+    expect(
+      await ResourcePermissionPolicyModel.find({
+        organizationId,
+        resource: "agent",
+        scope: SRE_AGENT_ID,
+      }),
+    ).toEqual(policyBefore);
     expect((await SreRuntimeModel.findAgent(SRE_AGENT_ID))?.systemPrompt).toBe(
       SRE_SOURCE_CLONE,
     );

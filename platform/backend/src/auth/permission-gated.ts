@@ -1,4 +1,3 @@
-import type { Action, Resource } from "@archestra/shared";
 import {
   and,
   inArray,
@@ -13,18 +12,14 @@ import { schema } from "@/database";
 import { SRE_AGENT_ID, SRE_CATALOG_ID } from "@/services/sre-agent/definition";
 import { ApiError } from "@/types";
 
-type RequiredPermission = readonly [Resource, Action];
-
-const SRE_PERMISSION: RequiredPermission = ["sre", "read"];
-
 /**
- * Agents and MCP catalog items only a holder of a role permission may see or
- * use, whatever their grants — admins included.
+ * The SRE catalog contains Kubernetes tools that may expose pod specifications
+ * and logs. Check its object policy even on paths that bypass catalog lists.
  */
-const PERMISSION_GATED_AGENTS: ReadonlyMap<string, RequiredPermission> =
-  new Map([[SRE_AGENT_ID, SRE_PERMISSION]]);
-const PERMISSION_GATED_CATALOGS: ReadonlyMap<string, RequiredPermission> =
-  new Map([[SRE_CATALOG_ID, SRE_PERMISSION]]);
+const PERMISSION_GATED_AGENTS: ReadonlySet<string> = new Set([SRE_AGENT_ID]);
+const PERMISSION_GATED_CATALOGS: ReadonlySet<string> = new Set([
+  SRE_CATALOG_ID,
+]);
 
 interface Caller {
   userId?: string | null;
@@ -71,8 +66,12 @@ export function isPermissionGatedAgent(agentId: string): boolean {
 }
 
 /** Whether a caller, of a token or none, may use a gated agent. */
-export function canUseAgent(agentId: string, caller: Caller): Promise<boolean> {
-  return callerHolds(PERMISSION_GATED_AGENTS.get(agentId), caller);
+export async function canUseAgent(
+  agentId: string,
+  caller: Caller,
+): Promise<boolean> {
+  if (!PERMISSION_GATED_AGENTS.has(agentId)) return true;
+  return explicitGrantAllows("agent", agentId, "read", caller);
 }
 
 export function mayUseCatalog(
@@ -108,7 +107,7 @@ export async function hiddenAgentsAmong(
 
 /** Whether a caller may reach a gated catalog item's tools. */
 function canUseCatalog(catalogId: string, caller: Caller): Promise<boolean> {
-  return callerHolds(PERMISSION_GATED_CATALOGS.get(catalogId), caller);
+  return catalogGrantAllows(catalogId, caller);
 }
 
 /**
@@ -245,16 +244,42 @@ export async function gatedCatalogToolsFence(
 // === Internal ===
 
 /**
- * The `system` sentinel, and callers without a user or organization (team and
- * organization tokens), hold no role permission.
+ * The `system` sentinel and callers without an identity cannot use the SRE
+ * catalog. A grant on its MCP Registry entry is the source of truth.
  */
-async function callerHolds(
-  required: RequiredPermission | undefined,
+async function catalogGrantAllows(
+  catalogId: string,
+  caller: Caller,
+): Promise<boolean> {
+  if (!PERMISSION_GATED_CATALOGS.has(catalogId)) return true;
+  return explicitGrantAllows("mcpRegistry", catalogId, "use", caller);
+}
+
+/** SRE access must come from its own policy, never a broad wildcard grant. */
+async function explicitGrantAllows(
+  resource: "agent" | "mcpRegistry",
+  scope: string,
+  action: "read" | "use",
   { userId, organizationId }: Caller,
 ): Promise<boolean> {
-  if (!required) return true;
   if (!userId || !organizationId || userId === "system") return false;
-  // Dynamic: @/auth/utils reaches the agent model through better-auth.
-  const { userHasPermission } = await import("@/auth/utils");
-  return userHasPermission(userId, organizationId, ...required);
+  const [{ default: Policy }, { default: Subject }] = await Promise.all([
+    import("@/models/resource-permission-policy"),
+    import("@/models/resource-permission-subject"),
+  ]);
+  const [policy, principal] = await Promise.all([
+    Policy.find({ organizationId, resource, scope }),
+    Subject.resolvePrincipal({ organizationId, userId }),
+  ]);
+  return (
+    policy?.grants.some(
+      (grant) =>
+        grant.actions.includes(action) &&
+        principal.subjects.some(
+          (subject) =>
+            subject.type === grant.subject.type &&
+            subject.id === grant.subject.id,
+        ),
+    ) ?? false
+  );
 }

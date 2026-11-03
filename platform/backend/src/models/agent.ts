@@ -1125,7 +1125,6 @@ class AgentModel {
     const where = and(
       base,
       or(eq(table.authorId, params.userId), nonPersonalAudience),
-      eq(table.builtIn, false),
       pattern
         ? or(ilike(table.name, pattern), ilike(table.description, pattern))
         : undefined,
@@ -1136,7 +1135,6 @@ class AgentModel {
       return AgentModel.findChatOrderedRosterPage({
         where: and(
           base,
-          eq(table.builtIn, false),
           pattern
             ? or(ilike(table.name, pattern), ilike(table.description, pattern))
             : undefined,
@@ -2518,15 +2516,21 @@ class AgentModel {
     // limit whatever scope they ask for.
     if (!isAgentAdmin || (!includeBuiltIn && !filters?.scope)) {
       whereConditions.push(
-        chatAssistant
-          ? (or(
-              eq(schema.agentsTable.builtIn, false),
-              eq(
+        or(
+          eq(schema.agentsTable.builtIn, false),
+          filters?.view === "chat"
+            ? eq(
+                sql<string>`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`,
+                BUILT_IN_AGENT_IDS.SRE,
+              )
+            : undefined,
+          chatAssistant
+            ? eq(
                 sql<string>`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`,
                 BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
-              ),
-            ) as SQL)
-          : eq(schema.agentsTable.builtIn, false),
+              )
+            : undefined,
+        ) as SQL,
       );
     }
     if (filters?.teamIds?.length) {
@@ -5815,6 +5819,9 @@ class AgentModel {
     // platform subagents remain excluded from ordinary chat selection.
     if (options?.excludeBuiltIn || !isAgentAdmin || isChatView) {
       const visibleAgents = [eq(schema.agentsTable.builtIn, false)];
+      if (isChatView) {
+        visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.SRE));
+      }
       if (isChatView && enterpriseTier.isOpenappaActive()) {
         visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG));
       }
@@ -5899,6 +5906,9 @@ class AgentModel {
     if (options.excludeBuiltIn || !isAgentAdmin || isChatView) {
       const builtInName = sql<string>`coalesce(${table.builtInAgentConfig}->>'name', '')`;
       const visibleAgents = [eq(table.builtIn, false)];
+      if (isChatView) {
+        visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.SRE));
+      }
       if (isChatView && enterpriseTier.isOpenappaActive()) {
         visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG));
       }

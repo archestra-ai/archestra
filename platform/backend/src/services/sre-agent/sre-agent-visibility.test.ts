@@ -34,9 +34,9 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import { describe, expect, mustExist, test } from "@/test";
 import { enableSre, seedSreAgent } from "@/test/sre-agent";
 import type { User } from "@/types";
-import { SRE_AGENT_ID, SRE_ENVIRONMENT_ID } from "./definition";
+import { SRE_AGENT_ID, SRE_CATALOG_ID, SRE_ENVIRONMENT_ID } from "./definition";
 
-describe("the SRE agent and its tools are hidden without sre:read", () => {
+describe("the SRE agent and its tools follow object grants", () => {
   beforeEach(() => {
     enableSre([]);
     config.openappa.enabled = false;
@@ -46,7 +46,7 @@ describe("the SRE agent and its tools are hidden without sre:read", () => {
     { caller: "platform admin", canSee: false },
     { caller: "member", canSee: false },
     { caller: "admin", canSee: true },
-    { caller: "custom role with sre:read", canSee: true },
+    { caller: "custom role with grants", canSee: true },
   ] as const)("$caller", async ({ caller, canSee }, {
     makeOrganization,
     makeUser,
@@ -84,10 +84,8 @@ describe("the SRE agent and its tools are hidden without sre:read", () => {
 
     try {
       for (const url of [
-        "/api/agents?limit=100",
         "/api/agents/chat-roster/page?limit=100",
         `/api/agents/chat-roster?ids=${SRE_AGENT_ID}`,
-        "/api/agents/options?limit=100",
       ]) {
         expect((await body(url)).includes(SRE_AGENT_ID), url).toBe(canSee);
       }
@@ -375,31 +373,28 @@ describe("the SRE agent and its tools are hidden without sre:read", () => {
   });
 });
 
-/** An admin sharing the SRE agent with a role. */
+/** An admin sharing the SRE agent and Kubernetes catalog with a role. */
 async function shareWithRole(organizationId: string, roleId: string) {
-  const key = {
-    organizationId,
-    resource: "agent" as const,
-    scope: SRE_AGENT_ID,
-  };
-  const policy = await ResourcePermissionPolicyModel.find(key);
-  if (!policy) throw new Error("the SRE agent has no permission policy");
-  const replaced = await ResourcePermissionPolicyModel.replace({
-    ...key,
-    revision: policy.revision,
-    grants: [
-      ...policy.grants,
-      { subject: { type: "role", id: roleId }, actions: ["read", "use"] },
-    ],
-  });
-  if (!replaced) throw new Error("the SRE agent policy changed meanwhile");
+  for (const target of [
+    { resource: "agent" as const, scope: SRE_AGENT_ID },
+    { resource: "mcpRegistry" as const, scope: SRE_CATALOG_ID },
+  ]) {
+    const key = { organizationId, ...target };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    if (!policy) throw new Error("the SRE resource has no permission policy");
+    const replaced = await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy.revision,
+      grants: [
+        ...policy.grants,
+        { subject: { type: "role", id: roleId }, actions: ["read", "use"] },
+      ],
+    });
+    if (!replaced) throw new Error("the SRE policy changed meanwhile");
+  }
 }
 
-type Caller =
-  | "admin"
-  | "platform admin"
-  | "member"
-  | "custom role with sre:read";
+type Caller = "admin" | "platform admin" | "member" | "custom role with grants";
 
 /** The admin who seeded the SRE agent, or a new member with the caller's role. */
 async function userAs(
@@ -432,10 +427,9 @@ async function userAs(
       return withRole(PLATFORM_ADMIN_ROLE_NAME);
     case "member":
       return withRole(MEMBER_ROLE_NAME);
-    case "custom role with sre:read": {
+    case "custom role with grants": {
       const { id, role } = await makeCustomRole(organizationId, {
         permission: {
-          sre: ["read"],
           agent: ["read"],
           chat: ["read", "create"],
         },

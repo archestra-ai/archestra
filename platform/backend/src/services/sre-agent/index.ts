@@ -1,5 +1,6 @@
 import {
   ADMIN_ROLE_NAME,
+  BUILT_IN_AGENT_IDS,
   type ResourcePermissionGrant,
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
 } from "@archestra/shared";
@@ -69,6 +70,14 @@ class SreAgentService {
         return;
       }
       await this.seedResources(serviceAccount);
+      const catalog = await SreRuntimeModel.findCatalog(SRE_CATALOG_ID);
+      if (catalog && !catalog.deletedAt && catalog.organizationId) {
+        await SreRuntimeModel.migrateLegacyRoleAccess(
+          catalog.organizationId,
+          catalog.id,
+        );
+      }
+      await SreRuntimeModel.markAgentBuiltIn(SRE_AGENT_ID);
       await this.upgradeSourceClone();
     } catch (error) {
       logger.error({ err: error }, "Failed to seed the SRE agent");
@@ -188,6 +197,7 @@ class SreAgentService {
             sandbox,
           }),
           environmentId: SRE_ENVIRONMENT_ID,
+          builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.SRE },
         },
         params.authorId ?? undefined,
         {
@@ -401,8 +411,8 @@ export const sreAgentService = new SreAgentService();
 /**
  * The SRE tools can read other installs' pod specs, whose arguments may carry
  * resolved credentials, so the agent, its catalog item, and its environment
- * are shared with Admins only. Seeing the agent and calling the tools also
- * take `sre:read`.
+ * are shared with Admins only. Access can be delegated through grants on the
+ * agent and catalog item.
  */
 const SRE_ADMIN_GRANTS: ResourcePermissionGrant[] = [
   { subject: { type: "role", id: ADMIN_ROLE_NAME }, actions: ["read", "use"] },

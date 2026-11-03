@@ -90,6 +90,14 @@ class EnqueueTests(unittest.TestCase):
         scripts = self.platform / 'scripts'
         scripts.mkdir(parents=True)
         shutil.copy(ROOT / 'platform/scripts/enqueue.mjs', scripts)
+        # Exercise enqueue's revision guards while stubbing the preflight
+        # subprocess; test_preflight.py covers the real preflight separately.
+        (scripts / 'preflight.mjs').write_text(
+            "import { spawnSync } from 'node:child_process';\n"
+            "const result = spawnSync('pnpm', ['preflight', ...process.argv.slice(2)], "
+            "{ stdio: 'inherit' });\n"
+            "process.exit(result.status ?? 1);\n"
+        )
         self.git('init', '-q')
         self.git('config', 'user.name', 'CI')
         self.git('config', 'user.email', 'ci@example.test')

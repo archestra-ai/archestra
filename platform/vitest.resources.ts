@@ -71,6 +71,20 @@ export function detectResourceEnvelope(
   });
 }
 
+/** Bound the shared suite to its container, rather than Vitest's host defaults. */
+export function sharedVitestWorkers(
+  envelope: ResourceEnvelope,
+): number | undefined {
+  if (!envelope.constrained) return undefined;
+  return Math.max(
+    1,
+    Math.min(
+      envelope.availableParallelism,
+      Math.floor(envelope.totalMemoryBytes / (2 * 1024 ** 3)),
+    ),
+  );
+}
+
 /**
  * The frontend suite's forks. On a machine: half the CPUs and the 8 GiB heap
  * ceiling the JSDOM-heavy tests needed on Node 24, as before. In a container

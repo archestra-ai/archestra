@@ -2,7 +2,11 @@
   // Tests of the remaining policy, runtime and server modules, and of the
   // files directly in src/.
   "extends": "./tsconfig.base.json",
-  "compilerOptions": { "tsBuildInfoFile": "./.tsbuild/tests-other.tsbuildinfo" },
+  "compilerOptions": {
+    "tsBuildInfoFile": "./.tsbuild/tests-other.tsbuildinfo",
+    // Runner tests import scripts executed directly by Node/tsx.
+    "allowImportingTsExtensions": true
+  },
   "include": [
     "src/ambient/*.d.ts",
     "src/*.test.ts",

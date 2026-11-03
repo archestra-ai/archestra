@@ -1427,38 +1427,54 @@ const registry = defineArchestraTools([
         }
       }
 
-      const byOffer = await executeRemedyByOffer({
-        organizationId: context.organizationId,
-        ...(spender ? { callerId: spender } : {}),
-        sessionId: stamp.session_id,
-        ...(stamp.parent_id ? { parentId: stamp.parent_id } : {}),
-        toolCallId: callId,
-        controlToolName: execution?.tool_name,
-        originalArguments:
-          originalArguments ?? JSON.stringify(submittedSemantic),
-        args: remedy,
-        ruling,
-        ...(precheckRefusal ? { precheckRefusal } : {}),
-      });
-      if (!ruling || !byOffer.known) return byOffer.result;
-      if (
-        retiredOffer(byOffer.result) &&
-        (await policyPublishedSince(context.organizationId, headBeforeReview))
-      )
-        return supersededReview(byOffer.result);
+      // Narrowed above; a closure would not keep the narrowing.
+      const organizationId = context.organizationId;
+      const executePlan = () =>
+        executeRemedyByOffer({
+          organizationId,
+          ...(spender ? { callerId: spender } : {}),
+          sessionId: stamp.session_id,
+          ...(stamp.parent_id ? { parentId: stamp.parent_id } : {}),
+          toolCallId: callId,
+          controlToolName: execution?.tool_name,
+          originalArguments:
+            originalArguments ?? JSON.stringify(submittedSemantic),
+          args: remedy,
+          ruling,
+          ...(precheckRefusal ? { precheckRefusal } : {}),
+        });
+      const supersededByPublish = async (result: CallToolResult) =>
+        retiredOffer(result) &&
+        (await policyPublishedSince(organizationId, headBeforeReview));
       if (waivedReview) {
-        // A plan the runtime refused or retired ran nothing: its result
-        // stands as it is, with no record of a waiver. For an authorized plan
-        // the yell, and with the Yell tool setting the session bypass, are
-        // recorded now; no person ruled, the receipt says so, and no human
-        // ruling is attached for the chat card to show.
-        if (byOffer.result.isError || retiredOffer(byOffer.result))
-          return byOffer.result;
+        // The platform answers the review in place of a person. Its record,
+        // the yell and with the Yell tool setting the session bypass, is
+        // written first and the plan authorized inside the same transaction:
+        // an authorized plan always has its record, and a plan the runtime
+        // refuses or retires leaves none. No human ruling is attached for the
+        // chat card to show; the receipt says no person ruled.
+        let byOffer: Awaited<ReturnType<typeof executePlan>> | undefined;
         const record = await recordWaivedReview({
           session: reviewSession,
           tool: review?.tool ?? "a reviewed call",
           superyell: breakTheGlassActiveIn(waivedReview),
+          authorize: async () => {
+            // Once per review: a retried transaction reuses the outcome.
+            byOffer ??= await executePlan();
+            return (
+              byOffer.known &&
+              !byOffer.result.isError &&
+              !retiredOffer(byOffer.result)
+            );
+          },
         });
+        // The record failed before the plan was authorized: nothing is
+        // spent, and the review is still open for another call.
+        if (!byOffer) return waiverUnrecordedResult(remedy.offer_id);
+        if (!byOffer.known) return byOffer.result;
+        if (await supersededByPublish(byOffer.result))
+          return supersededReview(byOffer.result);
+        if (record === "refused") return byOffer.result;
         return {
           ...byOffer.result,
           content: Array.isArray(byOffer.result.content)
@@ -1469,6 +1485,11 @@ const registry = defineArchestraTools([
             : byOffer.result.content,
         };
       }
+
+      const byOffer = await executePlan();
+      if (!ruling || !byOffer.known) return byOffer.result;
+      if (await supersededByPublish(byOffer.result))
+        return supersededReview(byOffer.result);
       // Display-only: the chat card displays the human ruling.
       // `_meta` does not reach the model; the model reads the ruling from result text.
       const content =
@@ -1795,7 +1816,10 @@ function unknownOfferResult() {
 }
 
 /** What the agent reads after a review the platform approved in place of a person. */
-const WAIVED_REVIEW_RECEIPT: Record<WaivedReviewRecord, string> = {
+const WAIVED_REVIEW_RECEIPT: Record<
+  Exclude<WaivedReviewRecord, "refused">,
+  string
+> = {
   recorded:
     "[appa] Break the glass receipt: this plan needed a person's approval, and Human approval is waived for this session, so the platform approved the review itself and recorded a yell in Guardrails → Yells. No human ruled. Follow the runtime outcome above. If a retry is authorized and still requested, copy its exact arguments without reconstructing or changing them.",
   reports_off:
@@ -1822,6 +1846,20 @@ async function breakTheGlassAnswersReview(params: {
     parseWorkloadPrincipal(params.spender) !== null ||
     (await isUnattendedSession(params.session));
   return humanApprovalWaived(settings, unattended) ? settings : null;
+}
+
+/**
+ * The record a review the platform answers needs could not be written, so the
+ * plan was not authorized: nothing is spent, and the review is still open.
+ */
+function waiverUnrecordedResult(offerId: string): CallToolResult {
+  return result({
+    ok: false,
+    outcome: "waiver_unrecorded",
+    offer_id: offerId,
+    instruction:
+      "Human approval is waived for this session, but Guardrails could not record the yell for this plan, so the plan was not authorized and the review is still open. Call execute_remedy_plan again with the same offer and plan; if that fails again, tell the user.",
+  });
 }
 
 function nativeReviewRequiredResult(offerId: string): CallToolResult {

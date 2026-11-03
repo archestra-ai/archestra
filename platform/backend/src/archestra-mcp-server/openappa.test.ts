@@ -12,6 +12,7 @@ import { sql } from "drizzle-orm";
 import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
+import OpenAppaYellModel from "@/models/openappa-yell";
 import { scopedSessionId } from "@/openappa/actor";
 import { rememberUnattendedSession } from "@/openappa/break-the-glass";
 import { currentTrajectory } from "@/openappa/current-trajectory";
@@ -1956,6 +1957,45 @@ describe("OpenAPPA tool execution", () => {
       } finally {
         config.openappa.yellEnabled = yellEnabled;
       }
+    });
+
+    test("a record that cannot be written leaves the plan unauthorized and the review open", async () => {
+      config.openappa.yellEnabled = true;
+      await settings("unattended", true);
+      vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue(
+        offerReview,
+      );
+      const executeSpy = vi
+        .spyOn(openappaService, "executeRemedyByOffer")
+        .mockResolvedValue({
+          result: { content: [{ type: "text", text: "Authorized" }] },
+          known: true,
+        });
+      const failing = vi
+        .spyOn(OpenAppaYellModel, "recordWaiver")
+        .mockRejectedValue(new Error("yell storage down"));
+      await rememberUnattendedSession(
+        { organization_id: orgId, session_id: "session-1" },
+        true,
+      );
+
+      const result = await remedy();
+
+      // Nothing was spent at the runtime, and the agent is told to call again.
+      expect(executeSpy).not.toHaveBeenCalled();
+      expect(result.structuredContent).toMatchObject({
+        ok: false,
+        outcome: "waiver_unrecorded",
+        offer_id: "offer-hitl",
+      });
+      expect(await yells()).toEqual([]);
+      expect(
+        await isUnenforcedSession({
+          organization_id: orgId,
+          session_id: "session-1",
+        }),
+      ).toBe(false);
+      failing.mockRestore();
     });
 
     test("with the Yell tool turning Guardrails off, the session leaves OpenAPPA as after an agent's yell", async () => {

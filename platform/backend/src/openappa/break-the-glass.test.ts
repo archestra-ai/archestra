@@ -315,11 +315,13 @@ test("a waived review records a yell for the reviewed tool and follows the Yell 
     caller_id: "user:u1",
     session_id: "user:u1|s5",
   };
+  const authorized = async () => true;
   expect(
     await recordWaivedReview({
       session,
       tool: "host/archestra/Agent",
       superyell: false,
+      authorize: authorized,
     }),
   ).toBe("recorded");
   expect(await isUnenforcedSession(session)).toBe(false);
@@ -328,6 +330,7 @@ test("a waived review records a yell for the reviewed tool and follows the Yell 
       session,
       tool: "host/archestra/Agent",
       superyell: true,
+      authorize: authorized,
     }),
   ).toBe("recorded");
   expect(await isUnenforcedSession(session)).toBe(true);
@@ -339,7 +342,8 @@ test("a waived review records a yell for the reviewed tool and follows the Yell 
       message: expect.stringContaining("host/archestra/Agent"),
     }),
   ]);
-  // A failed write says so; the receipt then tells the user.
+  // A failed write says so before the plan is authorized: nothing is spent.
+  const authorize = vi.fn(async () => true);
   const failing = vi
     .spyOn(OpenAppaYellModel, "recordWaiver")
     .mockRejectedValueOnce(new Error("yell storage down"));
@@ -349,11 +353,37 @@ test("a waived review records a yell for the reviewed tool and follows the Yell 
         session,
         tool: "host/archestra/Agent",
         superyell: true,
+        authorize,
       }),
     ).toBe("failed");
   } finally {
     failing.mockRestore();
   }
+  expect(authorize).not.toHaveBeenCalled();
+  // A plan the runtime refuses rolls its record back.
+  const quiet = { ...session, session_id: "user:u1|s5-refused" };
+  expect(
+    await recordWaivedReview({
+      session: quiet,
+      tool: "host/archestra/Agent",
+      superyell: true,
+      authorize: async () => false,
+    }),
+  ).toBe("refused");
+  expect(await yellsOf(organizationId, quiet.session_id)).toEqual([]);
+  expect(await isUnenforcedSession(quiet)).toBe(false);
+  // The runtime's own failure is the caller's, and leaves no record either.
+  await expect(
+    recordWaivedReview({
+      session: quiet,
+      tool: "host/archestra/Agent",
+      superyell: true,
+      authorize: async () => {
+        throw new Error("runtime down");
+      },
+    }),
+  ).rejects.toThrow("runtime down");
+  expect(await yellsOf(organizationId, quiet.session_id)).toEqual([]);
 });
 
 test("the proxy's unattended note is read for that session only, and withdrawn once a person is back", async ({
@@ -483,6 +513,7 @@ test("a batch's waived calls commit together as one yell per tool, and reports o
         session: quiet,
         tool: "host/archestra/Agent",
         superyell: true,
+        authorize: async () => true,
       }),
     ).toBe("reports_off");
     expect(await yellsOf(organizationId, quiet.session_id)).toEqual([]);

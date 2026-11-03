@@ -26,8 +26,12 @@ import {
 
 export type WaiverKind = Exclude<OpenAppaYellKind, "agent">;
 
-/** Whether a waived review's yell exists for the agent to point the user to. */
-export type WaivedReviewRecord = "recorded" | "reports_off" | "failed";
+/** How a review the platform answered went; see `recordWaivedReview`. */
+export type WaivedReviewRecord =
+  | "recorded"
+  | "reports_off"
+  | "refused"
+  | "failed";
 
 type BreakTheGlassSettings = {
   active: boolean;
@@ -197,8 +201,9 @@ export async function recordWaivedCalls(params: {
   const fresh = unrecordedCallIds({ ...scope, toolCallIds: [...byId.keys()] });
   // Reports off: nothing to record a yell in, so nothing turns the session off.
   const superyell = params.superyell && openappaYellEnabled();
+  let recorded: boolean;
   try {
-    const recorded = await withDbTransaction(async (tx) => {
+    recorded = await withDbTransaction(async (tx) => {
       const inserted = await OpenAppaUnenforcedModel.recordCalls(
         { ...scope, toolCallIds: fresh, reason: "waived" },
         tx,
@@ -225,8 +230,6 @@ export async function recordWaivedCalls(params: {
         await recordWaiver({ session, ...group, superyell }, tx);
       return true;
     });
-    rememberRecordedCalls({ ...scope, toolCallIds: fresh });
-    if (!recorded) return true;
   } catch (err) {
     logger.warn(
       { err, sessionId: session.session_id, toolCallIds: [...byId.keys()] },
@@ -234,43 +237,66 @@ export async function recordWaivedCalls(params: {
     );
     return false;
   }
+  // Only a committed record is remembered; a thrown transaction leaves the
+  // ids for the resent batch to record.
+  rememberRecordedCalls({ ...scope, toolCallIds: fresh });
+  if (!recorded) return true;
   for (const call of params.calls) logWaiver({ session, ...call, superyell });
   return true;
 }
 
 /**
- * Records a review the platform waived at the gateway, when a remedy plan
- * needed a person's approval in an unattended session: the yell, and with
- * `superyell` the session bypass, as `recordWaivedCalls` does. The runtime
- * authorizes the plan itself, so no call marker is needed; the record follows
- * that authorization. Says when there is no yell to point the user to: the
- * record failed, or reports are off.
+ * Records a review the platform answers at the gateway in place of a person,
+ * when a remedy plan needs one in an unattended session: the yell, and with
+ * `superyell` the session bypass, as `recordWaivedCalls` does. The record is
+ * written first and the plan authorized through `authorize` inside the same
+ * transaction, so an authorized plan always has its record (as a waived
+ * batch reaches the client only once recorded) and a plan the runtime
+ * refuses or retires leaves none. No call marker is needed: the runtime rules
+ * on the retried call itself. `failed` before `authorize` ran means nothing
+ * was spent and the review is still open; after it ran (a commit lost for
+ * good) the plan is authorized and the receipt says the yell is missing.
  */
 export async function recordWaivedReview(params: {
   session: OpenAppaSession;
   tool: string;
   superyell: boolean;
+  /** Authorizes the plan; false when the runtime refuses or retires it. */
+  authorize: () => Promise<boolean>;
 }): Promise<WaivedReviewRecord> {
-  const waiver = { ...params, kind: "approval_waived" as const, review: true };
+  const { authorize, ...waiver } = params;
+  const yell = { ...waiver, kind: "approval_waived" as const, review: true };
   // Reports off: nothing to record a yell in, so nothing turns the session off.
   if (!openappaYellEnabled()) {
-    logWaiver({ ...waiver, superyell: false });
+    if (!(await authorize())) return "refused";
+    logWaiver({ ...yell, superyell: false });
     return "reports_off";
   }
+  let authorizing = false;
   try {
-    await withDbTransaction((tx) =>
-      recordWaiver({ ...params, kind: "approval_waived", calls: 1 }, tx),
-    );
+    await withDbTransaction(async (tx) => {
+      await recordWaiver({ ...waiver, kind: "approval_waived", calls: 1 }, tx);
+      authorizing = true;
+      const through = await authorize();
+      authorizing = false;
+      // A refused plan rolls its record back.
+      if (!through) throw REFUSED_PLAN;
+    });
   } catch (err) {
+    if (err === REFUSED_PLAN) return "refused";
+    // The runtime's own failure is the caller's to answer, as before.
+    if (authorizing) throw err;
     logger.warn(
-      { err, sessionId: params.session.session_id, tool: params.tool },
+      { err, sessionId: waiver.session.session_id, tool: waiver.tool },
       "OpenAPPA could not record a waived review",
     );
     return "failed";
   }
-  logWaiver(waiver);
+  logWaiver(yell);
   return "recorded";
 }
+
+const REFUSED_PLAN = Symbol("the runtime refused the plan");
 
 // ===
 

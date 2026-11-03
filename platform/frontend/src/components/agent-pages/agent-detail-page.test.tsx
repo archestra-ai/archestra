@@ -486,6 +486,18 @@ describe("AgentDetailPage", () => {
     expect(screen.getByTestId("resource-permissions")).toBeVisible();
   });
 
+  it("shows object permissions on the built-in APPA Keeper detail page", () => {
+    access = { ...access, isBuiltIn: true };
+    mockAgent({
+      ...baseAgent,
+      builtIn: true,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    });
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    expect(screen.getByTestId("resource-permissions")).toBeVisible();
+  });
+
   it("reveals audience and owner on keyboard focus without crowding the header", async () => {
     mockAgent({
       ...baseAgent,

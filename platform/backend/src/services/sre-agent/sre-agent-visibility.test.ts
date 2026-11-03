@@ -1,5 +1,6 @@
 import {
   A2A_OAUTH_SCOPE,
+  ADMIN_ROLE_NAME,
   ARCHESTRA_MCP_CATALOG_ID,
   MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
   MEMBER_ROLE_NAME,
@@ -11,6 +12,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { beforeEach } from "vitest";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { executeArchestraTool } from "@/archestra-mcp-server";
+import { canUseAgent, mayUseCatalog } from "@/auth/permission-gated";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -40,6 +42,61 @@ describe("the SRE agent and its tools follow object grants", () => {
   beforeEach(() => {
     enableSre([]);
     config.openappa.enabled = false;
+  });
+
+  test("restricting Who can use it on SRE also closes its catalog tools", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const { organizationId } = await seedSreAgent({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
+    const caller = {
+      kind: "caller" as const,
+      userId: member.id,
+      organizationId,
+    };
+    expect(await canUseAgent(SRE_AGENT_ID, caller)).toBe(true);
+    expect(await mayUseCatalog(SRE_CATALOG_ID, caller)).toBe(true);
+
+    const key = {
+      organizationId,
+      resource: "agent" as const,
+      scope: SRE_AGENT_ID,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    if (!policy) throw new Error("SRE agent policy missing");
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy.revision,
+      grants: [
+        {
+          subject: { type: "role", id: ADMIN_ROLE_NAME },
+          actions: ["read", "use"],
+        },
+      ],
+    });
+
+    expect(await canUseAgent(SRE_AGENT_ID, caller)).toBe(false);
+    expect(await mayUseCatalog(SRE_CATALOG_ID, caller)).toBe(false);
+
+    const restricted = await ResourcePermissionPolicyModel.find(key);
+    if (!restricted) throw new Error("SRE agent policy missing");
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: restricted.revision,
+      grants: [
+        ...restricted.grants,
+        { subject: { type: "user", id: member.id }, actions: ["read"] },
+      ],
+    });
+    expect(await canUseAgent(SRE_AGENT_ID, caller)).toBe(true);
+    expect(await mayUseCatalog(SRE_CATALOG_ID, caller)).toBe(false);
   });
 
   test.for([
@@ -475,6 +532,24 @@ async function seedSre(fixtures: {
 }) {
   const { makeAgent, seedAndAssignArchestraTools } = fixtures;
   const { organizationId, admin, server, tools } = await seedSreAgent(fixtures);
+  for (const target of [
+    { resource: "agent" as const, scope: SRE_AGENT_ID },
+    { resource: "mcpRegistry" as const, scope: SRE_CATALOG_ID },
+  ]) {
+    const key = { organizationId, ...target };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    if (!policy) throw new Error("SRE object policy missing");
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy.revision,
+      grants: [
+        {
+          subject: { type: "role", id: ADMIN_ROLE_NAME },
+          actions: ["read", "use"],
+        },
+      ],
+    });
+  }
   // An org-wide agent in the SRE environment an admin gave a Kubernetes tool.
   const envAgent = await makeAgent({
     organizationId,

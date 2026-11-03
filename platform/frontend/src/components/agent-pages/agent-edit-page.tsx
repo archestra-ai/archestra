@@ -140,7 +140,9 @@ function AgentEditor({ agent }: { agent: Agent }) {
       : [id];
   const mountedGroups = steps.flatMap((entry) => groupsForStep(entry.id));
   const showPermissions =
-    !isBuiltIn || agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.SRE;
+    !isBuiltIn ||
+    agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.SRE ||
+    agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG;
   const permissionResource =
     agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent";
   const overviewHref = agentDetailHref("agent", agent.id);

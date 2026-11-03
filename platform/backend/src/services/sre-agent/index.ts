@@ -194,7 +194,7 @@ class SreAgentService {
         },
         params.authorId ?? undefined,
         {
-          initialPermissionGrants: SRE_ADMIN_GRANTS,
+          initialPermissionGrants: SRE_ORGANIZATION_GRANTS,
           skipCreationDefaultTools: true,
           deferInitialVersionFork: true,
         },
@@ -366,7 +366,7 @@ class SreAgentService {
       {
         organizationId: organization.id,
         authorId: adminUserId,
-        initialPermissionGrants: SRE_ADMIN_GRANTS,
+        initialPermissionGrants: SRE_ORGANIZATION_GRANTS,
       },
     );
     await this.createInstall(adminUserId);
@@ -402,13 +402,17 @@ class SreAgentService {
 export const sreAgentService = new SreAgentService();
 
 /**
- * The SRE tools can read other installs' pod specs, whose arguments may carry
- * resolved credentials, so the agent, its catalog item, and its environment
- * are shared with Admins only. Access can be delegated through grants on the
- * agent and catalog item.
+ * The environment remains admin-managed. The agent and its catalog start
+ * organization-wide, and their own policies can narrow access later.
  */
 const SRE_ADMIN_GRANTS: ResourcePermissionGrant[] = [
   { subject: { type: "role", id: ADMIN_ROLE_NAME }, actions: ["read", "use"] },
+];
+const SRE_ORGANIZATION_GRANTS: ResourcePermissionGrant[] = [
+  {
+    subject: { type: "organization", id: "*" },
+    actions: ["read", "use"],
+  },
 ];
 
 /**

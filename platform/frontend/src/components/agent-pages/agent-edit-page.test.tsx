@@ -180,6 +180,21 @@ describe("AgentEditPage", () => {
     expect(screen.getByTestId("resource-permissions")).toBeVisible();
   });
 
+  it("keeps permissions editable for the built-in APPA Keeper agent", () => {
+    access = { ...access, isBuiltIn: true };
+    vi.mocked(useProfile).mockReturnValue({
+      data: {
+        ...agent,
+        builtIn: true,
+        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+      },
+      isPending: false,
+    } as unknown as ReturnType<typeof useProfile>);
+    render(<AgentEditPage id="a1" />);
+
+    expect(screen.getByTestId("resource-permissions")).toBeVisible();
+  });
+
   it("jumps to any step from the header, on the same mount", async () => {
     const user = userEvent.setup();
     const { rerender } = render(<AgentEditPage id="a1" />);

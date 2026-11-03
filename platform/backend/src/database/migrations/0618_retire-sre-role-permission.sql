@@ -76,6 +76,15 @@ CROSS JOIN (VALUES
   ('mcpRegistry', '00000000-0000-4000-8000-000000000510'),
   ('agent', '00000000-0000-4000-8000-000000000512')
 ) AS target(resource, scope)
+-- Policies may precede their resource only if it already exists. Otherwise
+-- startup's normal createInitial would collide with the pre-created policy.
+WHERE (target.resource = 'agent' AND EXISTS (
+    SELECT 1 FROM agents
+    WHERE id = target.scope::uuid AND organization_id = grants_by_org.organization_id
+  )) OR (target.resource = 'mcpRegistry' AND EXISTS (
+    SELECT 1 FROM internal_mcp_catalog
+    WHERE id = target.scope::uuid AND organization_id = grants_by_org.organization_id
+  ))
 ON CONFLICT (organization_id, resource, scope) DO UPDATE
 SET grants = resource_permission_policies.grants || COALESCE((
     SELECT jsonb_agg(grant_entry)

@@ -245,14 +245,20 @@ export async function gatedCatalogToolsFence(
 
 /**
  * The `system` sentinel and callers without an identity cannot use the SRE
- * catalog. A grant on its MCP Registry entry is the source of truth.
+ * catalog. Its tools also require SRE agent access, so narrowing the agent's
+ * "Who can use it" policy closes every direct tool and connection path.
  */
 async function catalogGrantAllows(
   catalogId: string,
   caller: Caller,
 ): Promise<boolean> {
   if (!PERMISSION_GATED_CATALOGS.has(catalogId)) return true;
-  return explicitGrantAllows("mcpRegistry", catalogId, "use", caller);
+  const [agentReadable, agentUsable, catalogAccess] = await Promise.all([
+    explicitGrantAllows("agent", SRE_AGENT_ID, "read", caller),
+    explicitGrantAllows("agent", SRE_AGENT_ID, "use", caller),
+    explicitGrantAllows("mcpRegistry", catalogId, "use", caller),
+  ]);
+  return agentReadable && agentUsable && catalogAccess;
 }
 
 /** SRE access must come from its own policy, never a broad wildcard grant. */

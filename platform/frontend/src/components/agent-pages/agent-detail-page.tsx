@@ -811,7 +811,9 @@ function AgentDetails({
             )}
             {overviewOnly &&
               section === "general" &&
-              agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.SRE && (
+              (agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.SRE ||
+                agent.builtInAgentConfig?.name ===
+                  BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG) && (
                 <ResourcePermissions
                   resource="agent"
                   scope={agent.id}

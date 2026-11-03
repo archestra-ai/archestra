@@ -26,7 +26,11 @@ test("retiring sre:read preserves custom-role catalog access and upgrades the ag
       PRIMARY KEY (organization_id, resource, scope)
     );
     CREATE TABLE agents (
-      id uuid PRIMARY KEY, built_in_agent_config jsonb, deleted_at timestamp
+      id uuid PRIMARY KEY, organization_id text NOT NULL,
+      built_in_agent_config jsonb, deleted_at timestamp
+    );
+    CREATE TABLE internal_mcp_catalog (
+      id uuid PRIMARY KEY, organization_id text NOT NULL
     );
     INSERT INTO organization_role (id, organization_id, permission) VALUES
       ('sre-reader', 'org-one', '{"agent":["read"],"sre":["read"]}'),
@@ -34,12 +38,10 @@ test("retiring sre:read preserves custom-role catalog access and upgrades the ag
       ('other-role', 'org-one', '{"agent":["read"]}'),
       ('future-reader', 'org-two', '{"sre":["read"]}');
     INSERT INTO resource_permission_policies (organization_id, resource, scope, grants)
-      VALUES ('org-one', 'mcpRegistry', '${catalogId}',
-        '[{"subject":{"type":"role","id":"admin"},"actions":["read","use"]},
-          {"subject":{"type":"role","id":"sre-reader"},"actions":["read"]}]'),
-        ('org-one', 'agent', '${agentId}',
+      VALUES ('org-one', 'agent', '${agentId}',
         '[{"subject":{"type":"role","id":"sre-reader"},"actions":["manage-permissions"]}]');
-    INSERT INTO agents (id) VALUES ('${agentId}');
+    INSERT INTO agents (id, organization_id) VALUES ('${agentId}', 'org-one');
+    INSERT INTO internal_mcp_catalog (id, organization_id) VALUES ('${catalogId}', 'org-one');
   `);
 
   const sql = await readFile(migration, "utf8");
@@ -61,24 +63,16 @@ test("retiring sre:read preserves custom-role catalog access and upgrades the ag
   const policies = (await pg.query("SELECT organization_id, resource, grants FROM resource_permission_policies ORDER BY organization_id, resource")).rows;
   assert.deepEqual(policies.map(({ organization_id, resource, grants }) => ({
     organization_id, resource,
-    roles: grants.map((grant) => ({ id: grant.subject.id, actions: grant.actions })),
+    roles: grants.map((grant) => ({ id: grant.subject.id, actions: grant.actions })).sort((a, b) => a.id.localeCompare(b.id)),
   })), [
     { organization_id: "org-one", resource: "agent", roles: [
-      { id: "sre-reader", actions: ["manage-permissions", "read", "use"] },
       { id: "sre-new", actions: ["read", "use"] },
+      { id: "sre-reader", actions: ["manage-permissions", "read", "use"] },
     ] },
     { organization_id: "org-one", resource: "mcpRegistry", roles: [
       { id: "admin", actions: ["read", "use"] },
-      { id: "sre-reader", actions: ["read", "use"] },
       { id: "sre-new", actions: ["read", "use"] },
-    ] },
-    { organization_id: "org-two", resource: "agent", roles: [
-      { id: "admin", actions: ["read", "use"] },
-      { id: "future-reader", actions: ["read", "use"] },
-    ] },
-    { organization_id: "org-two", resource: "mcpRegistry", roles: [
-      { id: "admin", actions: ["read", "use"] },
-      { id: "future-reader", actions: ["read", "use"] },
+      { id: "sre-reader", actions: ["read", "use"] },
     ] },
   ]);
   const [agent] = (await pg.query("SELECT built_in_agent_config FROM agents WHERE id = $1", [agentId])).rows;

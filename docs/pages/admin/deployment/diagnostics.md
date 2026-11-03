@@ -11,7 +11,7 @@ lastUpdated: 2026-11-03
 
 Ask the SRE agent why an Archestra pod keeps restarting, and it reads that pod's events and logs, then answers with ranked hypotheses and the evidence for each. It sees only Archestra's own namespace, through a read-only Kubernetes MCP server that the chart runs under a dedicated `-sre` ServiceAccount. That account cannot read Secrets or ConfigMaps or change anything.
 
-To use the agent, you need **Read** and **Use** grants on both the SRE agent and its Kubernetes MCP Registry entry. Admin holds these grants by default. Pod specs can carry other MCP servers' credentials; share both objects only with people who should see them. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
+The SRE agent and its Kubernetes MCP Registry entry start with **Can use** access for everyone in the organization. People who can manage the SRE agent's permissions can narrow **Who can use it** on its detail page; this also blocks direct access to its Kubernetes tools. The catalog entry has its own policy and can be narrowed separately. Pod specs can carry other MCP servers' credentials, so review these grants for your deployment. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
 
 1. Find the Kubernetes API server endpoint IPs with `kubectl get endpoints kubernetes -n default`. Use these IPs (with `/32`), not the `kubernetes` Service IP.
 2. Turn the agent on in your Helm values, then run `helm upgrade`:
@@ -24,7 +24,7 @@ To use the agent, you need **Read** and **Use** grants on both the SRE agent and
          - 172.16.0.2/32
    ```
 
-3. After the rollout, open **Chat**, pick the **SRE** agent, and ask "Why did a pod restart in the last hour?" If the agent is missing, check its **Permissions** tab. If it has no Kubernetes tools, check the Kubernetes entry in **MCP Registry** for an installation error and confirm your access to that entry.
+3. After the rollout, open **Chat**, pick the **SRE** agent, and ask "Why did a pod restart in the last hour?" If the agent is missing, check **Who can use it** on its detail page. If it has no Kubernetes tools, check the Kubernetes entry in **MCP Registry** for an installation error and confirm your access to that entry.
 
 The MCP server's egress is your organization's [default network policy](/docs/admin/environments) plus `apiServerCidrs`. A change applies when the **Kubernetes** MCP server's pod restarts.
 

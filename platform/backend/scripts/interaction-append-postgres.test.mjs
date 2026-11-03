@@ -29,7 +29,11 @@ test("append upgrade preserves encoded values, defaults, replay and accounting",
   const db = new Client({ connectionString });
   await db.connect();
   t.after(async () => {
-    try { await db.query("ROLLBACK"); } finally { await db.end(); }
+    try {
+      await db.query("ROLLBACK");
+    } finally {
+      await db.end();
+    }
   });
   await db.query("BEGIN");
   // Only the columns used by the production function are needed. The activity
@@ -55,7 +59,10 @@ test("append upgrade preserves encoded values, defaults, replay and accounting",
     );
   `);
   await db.query(
-    await readFile(new URL("0566_interaction_user_activity.sql", migrations), "utf8"),
+    await readFile(
+      new URL("0566_interaction_user_activity.sql", migrations),
+      "utf8",
+    ),
   );
   await db.query(previous);
   await db.query("INSERT INTO organization VALUES ('example-org')");
@@ -73,31 +80,57 @@ test("append upgrade preserves encoded values, defaults, replay and accounting",
     session_preview: null,
   };
   async function append(payload) {
-    return (await db.query(
-      "SELECT * FROM interaction_user_activity_append($1::jsonb)",
-      [JSON.stringify(payload)],
-    )).rows[0];
+    return (
+      await db.query(
+        "SELECT * FROM interaction_user_activity_append($1::jsonb)",
+        [JSON.stringify(payload)],
+      )
+    ).rows[0];
   }
   const before = await append(values);
   await db.query(current);
-  assert.deepEqual(await append(values), before, "upgrade preserves existing retries");
+  assert.deepEqual(
+    await append(values),
+    before,
+    "upgrade preserves existing retries",
+  );
   for (const ready of [false, true]) {
-    await db.query("UPDATE interaction_user_activity_state SET enabled=true, ready=$1", [ready]);
+    await db.query(
+      "UPDATE interaction_user_activity_state SET enabled=true, ready=$1",
+      [ready],
+    );
     await db.query(`INSERT INTO interaction_user_activity_users VALUES ('example-user', 1)
       ON CONFLICT (user_id) DO UPDATE SET generation=1`);
     const payload = { ...values, id: randomUUID() };
     const inserted = await append(payload);
     assert.deepEqual(inserted, { ...before, id: payload.id });
     assert.equal(inserted.cost, "123.1234567890");
-    const nulls = (await db.query(`SELECT processed_request = 'null'::jsonb AS json_null,
-      session_preview IS NULL AS sql_null FROM interactions WHERE id=$1`, [payload.id])).rows[0];
+    const nulls = (
+      await db.query(
+        `SELECT processed_request = 'null'::jsonb AS json_null,
+      session_preview IS NULL AS sql_null FROM interactions WHERE id=$1`,
+        [payload.id],
+      )
+    ).rows[0];
     assert.deepEqual(nulls, { json_null: true, sql_null: true });
     assert.deepEqual(await append(payload), inserted);
   }
-  assert.deepEqual((await db.query("SELECT activity_count::text FROM interaction_user_activity")).rows,
-    [{ activity_count: "2" }]);
-  assert.deepEqual((await db.query("SELECT balance::text FROM interaction_user_activity_deltas")).rows,
-    [{ balance: "2" }]);
+  assert.deepEqual(
+    (
+      await db.query(
+        "SELECT activity_count::text FROM interaction_user_activity",
+      )
+    ).rows,
+    [{ activity_count: "2" }],
+  );
+  assert.deepEqual(
+    (
+      await db.query(
+        "SELECT balance::text FROM interaction_user_activity_deltas",
+      )
+    ).rows,
+    [{ balance: "2" }],
+  );
   // A failed call is isolated so its aborted transaction cannot hide later assertions.
   for (const payload of [
     { ...values, user_id: null },
@@ -114,23 +147,39 @@ test("append upgrade preserves encoded values, defaults, replay and accounting",
   // use the same connection, table and encoded payload shapes. Explicit created_at
   // ensures this exercises the generic path even if cached shapes evolve.
   for (const bytes of [64 * 1024, 1024 * 1024]) {
-    const encoded = Array.from({ length: 12 }, () => JSON.stringify({
-      ...values, id: randomUUID(), created_at: "2025-01-01T00:00:00Z",
-      request: JSON.stringify({ content: "quoted ' \\ λ ".repeat(Math.ceil(bytes / 16)) }),
-    }));
+    const encoded = Array.from({ length: 12 }, () =>
+      JSON.stringify({
+        ...values,
+        id: randomUUID(),
+        created_at: "2025-01-01T00:00:00Z",
+        request: JSON.stringify({
+          content: "quoted ' \\ λ ".repeat(Math.ceil(bytes / 16)),
+        }),
+      }),
+    );
     const results = {};
-    for (const [name, definition] of [["before", previous], ["after", current]]) {
+    for (const [name, definition] of [
+      ["before", previous],
+      ["after", current],
+    ]) {
       await db.query(definition);
       const elapsed = [];
       for (const payload of encoded) {
         const start = performance.now();
-        const row = (await db.query("SELECT id FROM interaction_user_activity_append($1::jsonb)", [payload])).rows[0];
+        const row = (
+          await db.query(
+            "SELECT id FROM interaction_user_activity_append($1::jsonb)",
+            [payload],
+          )
+        ).rows[0];
         elapsed.push(performance.now() - start);
         await db.query("DELETE FROM interactions WHERE id=$1", [row.id]);
       }
       elapsed.sort((a, b) => a - b);
       results[name] = elapsed[Math.floor(elapsed.length / 2)].toFixed(2);
     }
-    t.diagnostic(`generic append ~${bytes} bytes median ms: ${JSON.stringify(results)}`);
+    t.diagnostic(
+      `generic append ~${bytes} bytes median ms: ${JSON.stringify(results)}`,
+    );
   }
 });

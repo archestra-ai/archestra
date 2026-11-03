@@ -67,7 +67,6 @@
       "component": "platform",
       "release-type": "node",
       "versioning": "always-bump-patch",
-      "release-as": "1.3.79",
       "prerelease": false,
       "initial-version": "0.0.1",
       "draft": true,

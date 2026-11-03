@@ -555,6 +555,7 @@ describe("KnowledgeBaseModel", () => {
       expect(byId.get(kb.id)).toEqual({
         createdBy: { id: author.id, name: author.name, email: author.email },
         connectors: [],
+        uploadedFiles: null,
         totalDocsIndexed: 0,
         assignedAgents: [],
         assignedAgentCount: 0,

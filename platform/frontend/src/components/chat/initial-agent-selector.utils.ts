@@ -1,4 +1,4 @@
-import { BUILT_IN_AGENT_IDS, type archestraApiTypes } from "@archestra/shared";
+import { type archestraApiTypes, BUILT_IN_AGENT_IDS } from "@archestra/shared";
 
 type InternalAgent =
   archestraApiTypes.GetChatAgentRosterResponses["200"][number];
@@ -13,7 +13,8 @@ type InitialAgentListItem = Pick<
   | "icon"
   | "runtime"
   | "builtIn"
-> & { builtInAgentConfig?: InternalAgent["builtInAgentConfig"] };
+  | "builtInAgentConfig"
+>;
 
 export function filterAndSortInitialAgents<
   T extends InitialAgentListItem,
@@ -28,11 +29,16 @@ export function filterAndSortInitialAgents<
   let result = allAgents.filter((agent) => {
     if (
       agent.builtIn &&
-      agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.SRE
+      agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.SRE &&
+      agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG
     )
       return false;
     if (agent.scope === "personal") {
-      return agent.authorId === userId;
+      return (
+        agent.authorId === userId ||
+        (agent.builtIn &&
+          agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG)
+      );
     }
     return true;
   });

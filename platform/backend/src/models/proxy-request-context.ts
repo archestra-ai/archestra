@@ -344,6 +344,8 @@ function buildContextQuery<T extends SelectedFields>(
         id: model.id,
         provider: model.provider,
         modelId: model.modelId,
+        contextLength: model.contextLength,
+        customContextLength: model.customContextLength,
       },
       guardrails: getTableColumns(schema.guardrailsDeploymentTable),
       // SPDX-SnippetBegin

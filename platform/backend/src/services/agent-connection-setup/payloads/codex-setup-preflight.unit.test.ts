@@ -5,6 +5,7 @@ import {
   mkdtemp,
   readdir,
   readFile,
+  rename,
   rm,
   stat,
   writeFile,
@@ -12,9 +13,11 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { runInNewContext } from "node:vm";
 import { expect, test } from "vitest";
 import { renderSetupScript, type SetupScriptContext } from "../index";
 import { SETUP_STOPPED_EXIT_CODE } from "../types";
+import { CODEX_HANDOFF_HELPER, CODEX_WSL_SETUP_HINT } from "./codex-handoff";
 
 const exec = promisify(execFile);
 const ctx: SetupScriptContext = {
@@ -65,6 +68,17 @@ const fs = require('node:fs'); const path = require('node:path');
 const args = process.argv.slice(2); const home = process.env.CODEX_HOME;
 fs.appendFileSync(path.join(process.env.HOME, 'calls'), args.join(' ') + '\\n');
 if (args[0] === '--version') { console.log('codex-cli test-version'); process.exit(0); }
+if (args[0] === 'sandbox' && process.env.BROKEN_SANDBOX) {
+  console.error('bubblewrap is unavailable: no system bwrap or bundled helper was found');
+  process.exit(101);
+}
+// Like Codex: a model_catalog_json file it cannot open stops every command.
+// A relative path is relative to the Codex folder.
+const catalog = /^model_catalog_json = "(.*)"$/m.exec(fs.existsSync(path.join(home, 'config.toml')) ? fs.readFileSync(path.join(home, 'config.toml'), 'utf8') : '')?.[1];
+if (catalog && !fs.existsSync(path.resolve(home, catalog))) {
+  console.error('Error: failed to load configuration\\n\\nCaused by:\\n    No such file or directory (os error 2)');
+  process.exit(1);
+}
 if (args[0] === 'debug' && process.env.BROKEN_CONFIG) {
   console.error('Error: ' + path.join(home, 'config.toml') + ':1:14: invalid transport\\n\\nCaused by:\\n    in \`mcp_servers.test_gateway\`');
   process.exit(1);
@@ -99,6 +113,7 @@ if (args.includes('app-server')) {
 }
 if (args[0] === 'mcp' && args[1] === 'add') fs.appendFileSync(path.join(home, 'config.toml'), '\\n[mcp_servers.test_gateway]\\nurl = "https://example.com/v1/mcp/test"\\n');
 // Like the real CLI, report the clone URL as given, credential included.
+if (args[0] === 'plugin' && args[1] === 'add' && !args.includes('--help') && process.env.FAIL_PLUGIN) { console.error('Plugin download failed'); process.exit(23); }
 if (args[0] === 'plugin' && process.env.FAIL_MARKETPLACE) { console.error('Error: git clone ' + args[3] + ' failed with status exit status: 128'); process.exit(22); }
 // Codex 0.162 keeps one source per marketplace name and refuses another one.
 const marketplace = path.join(process.env.HOME, 'marketplace-source');
@@ -146,7 +161,7 @@ test("model mismatch stops setup before client mutations", async () => {
     );
     expect(await readdir(f.codexHome)).toEqual(["config.toml"]);
     expect(await readFile(path.join(f.home, "calls"), "utf8")).not.toMatch(
-      /mcp|plugin/,
+      /mcp (add|remove)|plugin/,
     );
   } finally {
     await rm(f.home, { recursive: true, force: true });
@@ -240,9 +255,24 @@ test("a rerun replaces the marketplace an earlier setup registered from another 
   }
 });
 
-test("installer output hides the marketplace credential that Codex echoes from the clone URL", async () => {
-  const cloneUrl =
-    "https://token:archestra_mkt_secret@example.com/skills/marketplace.git";
+test.each([
+  {
+    cloneUrl:
+      "https://token:archestra_mkt_secret@example.com/skills/marketplace.git",
+    maskedUrl: "https://***@example.com/skills/marketplace.git",
+    secret: "archestra_mkt_secret",
+  },
+  {
+    cloneUrl:
+      "https://example.com/skills/m/archestra_skl_fixture_secret/repo.git",
+    maskedUrl: "https://example.com/skills/m/archestra_skl_***/repo.git",
+    secret: "archestra_skl_fixture_secret",
+  },
+])("installer output hides the credential that Codex echoes from $cloneUrl", async ({
+  cloneUrl,
+  maskedUrl,
+  secret,
+}) => {
   for (const failMarketplace of [false, true]) {
     const f = await fixture();
     try {
@@ -258,11 +288,9 @@ test("installer output hides the marketplace credential that Codex echoes from t
       }).catch((error) => error);
       const output = `${result.stdout}${result.stderr}`;
       expect(output).toContain(
-        failMarketplace
-          ? "git clone https://***@example.com/skills/marketplace.git failed"
-          : "from https://***@example.com/skills/marketplace.git",
+        failMarketplace ? `git clone ${maskedUrl} failed` : `from ${maskedUrl}`,
       );
-      expect(output).not.toContain("archestra_mkt_secret");
+      expect(output).not.toContain(secret);
       expect(output).not.toContain("HTTP 502");
       // Codex itself still receives the credential-bearing URL.
       expect(await readFile(path.join(f.home, "calls"), "utf8")).toContain(
@@ -291,6 +319,163 @@ test("preflight shows the Codex error for a config Codex cannot load", async () 
   } finally {
     await rm(f.home, { recursive: true, force: true });
   }
+});
+
+test.each([
+  { name: "with the LLM proxy", proxy: ctx.proxy },
+  { name: "gateway-only", proxy: null },
+])("preflight stops $name setup when Codex cannot load a config value that model discovery leaves out", async ({
+  proxy,
+}) => {
+  const f = await fixture();
+  try {
+    const config = `model_catalog_json = "${path.join(f.codexHome, "missing.json")}"\n${original}`;
+    await writeFile(f.config, config);
+    await writeFile(f.script, renderSetupScript({ ...ctx, proxy }));
+    const result = await exec("bash", [f.script], { env: f.env }).catch(
+      (error) => error,
+    );
+    expect(result.code).toBe(SETUP_STOPPED_EXIT_CODE);
+    expect(result.stderr).toContain(
+      `Codex setup preflight failed: Codex could not load ${f.config}. Codex reported:\n  Error: failed to load configuration`,
+    );
+    expect(result.stderr).toContain("No such file or directory (os error 2)");
+    expect(result.stderr).toContain("No client configuration was changed.");
+    expect(result.stderr).not.toContain("Setup is incomplete");
+    expect(result.stderr).not.toContain("WSL");
+    expect(await readFile(f.config, "utf8")).toBe(config);
+    expect(await readFile(path.join(f.home, ".zshrc"), "utf8")).toBe(
+      "# existing shell profile\n",
+    );
+    expect(await readdir(f.codexHome)).toEqual(["config.toml"]);
+    expect(await readFile(path.join(f.home, "calls"), "utf8")).not.toMatch(
+      /mcp (add|remove)|plugin/,
+    );
+  } finally {
+    await rm(f.home, { recursive: true, force: true });
+  }
+});
+
+const WSL_MODE = "[desktop]\nrunCodexInWindowsSubsystemForLinux = true\n";
+
+test.each([
+  { name: "with the LLM proxy", proxy: ctx.proxy },
+  { name: "gateway-only", proxy: null },
+])("a missing sandbox stops $name setup before changing configuration or registering tools", async ({
+  proxy,
+}) => {
+  const f = await fixture();
+  try {
+    await writeFile(f.script, renderSetupScript({ ...ctx, proxy }));
+    const result = await exec("bash", [f.script], {
+      env: { ...f.env, BROKEN_SANDBOX: "1" },
+    }).catch((error) => error);
+    expect(result.code).toBe(SETUP_STOPPED_EXIT_CODE);
+    expect(result.stderr).toContain("sudo apt install bubblewrap");
+    expect(result.stderr).toContain("No client configuration was changed");
+    expect(await readFile(f.config, "utf8")).toBe(original);
+    expect(await readFile(path.join(f.home, ".zshrc"), "utf8")).toBe(
+      "# existing shell profile\n",
+    );
+    expect(await readdir(f.codexHome)).toEqual(["config.toml"]);
+    expect(await readFile(path.join(f.home, "calls"), "utf8")).not.toMatch(
+      /mcp (add|remove)|plugin|debug models/,
+    );
+  } finally {
+    await rm(f.home, { recursive: true, force: true });
+  }
+});
+
+test.each([
+  {
+    // The desktop app writes WSL paths itself while it runs Codex in WSL.
+    name: "a desktop app that runs Codex in WSL",
+    home: "C:\\Users\\me\\.codex",
+    config: `[mcp_servers.repl]\ncommand = "/mnt/c/tools/repl.exe"\n${WSL_MODE}`,
+    hint: null,
+  },
+  {
+    // The paths stay behind after the desktop app stops running Codex in WSL.
+    name: "WSL paths with WSL turned off",
+    home: "C:\\Users\\me\\.codex\\",
+    config:
+      'model_catalog_json = "/mnt/c/Users/me/.codex/catalog.json"\n[desktop]\nrunCodexInWindowsSubsystemForLinux = false\n',
+    hint: "Change them to Windows paths, for example /mnt/c/Users/me/.codex to C:\\Users\\me\\.codex.",
+  },
+  {
+    name: "a WSL path in an array, with WSL off",
+    home: "C:\\Users\\me\\.codex",
+    config:
+      '[mcp_servers.repl]\ncommand = "node"\nargs = ["/mnt/c/tools/repl.js"]\n',
+    hint: "Change them to Windows paths, for example /mnt/c/Users/me/.codex to C:\\Users\\me\\.codex.",
+  },
+  {
+    name: "the WSL switch outside the [desktop] table",
+    home: "D:\\codex\\",
+    config:
+      '[features]\nrunCodexInWindowsSubsystemForLinux = true\n[mcp_servers.repl]\ncommand = "/mnt/d/tools/repl.exe"\n',
+    hint: "Change them to Windows paths, for example /mnt/d/codex to D:\\codex.",
+  },
+  {
+    name: "Windows paths only",
+    home: "C:\\Users\\me\\.codex",
+    config: 'model_catalog_json = "C:\\\\Users\\\\me\\\\catalog.json"\n',
+    hint: null,
+  },
+  {
+    name: "a WSL path in a comment",
+    home: "C:\\Users\\me\\.codex",
+    config: '# model_catalog_json = "/mnt/c/Users/me/.codex/catalog.json"\n',
+    hint: null,
+  },
+  {
+    name: "a Linux Codex home",
+    home: "/home/me/.codex",
+    config: 'model_catalog_json = "/mnt/c/Users/me/.codex/catalog.json"\n',
+    hint: null,
+  },
+])("the WSL setup hint for $name", ({ home, config, hint }) => {
+  const message = runInNewContext(
+    `${CODEX_WSL_SETUP_HINT}\nwslSetupHint(home, config)`,
+    { home, config },
+  );
+  if (hint === null) expect(message).toBe("");
+  else expect(message.endsWith(hint)).toBe(true);
+});
+
+test.each([
+  {
+    name: "Windows, while the desktop app runs Codex in WSL",
+    platform: "win32",
+    config: WSL_MODE,
+    args: ["-c", "mcp_oauth_credentials_store=file", "mcp", "login", "gw"],
+  },
+  {
+    name: "Windows",
+    platform: "win32",
+    config: "[desktop]\nrunCodexInWindowsSubsystemForLinux = false\n",
+    args: ["mcp", "login", "gw"],
+  },
+  {
+    name: "Windows, with the WSL switch outside the [desktop] table",
+    platform: "win32",
+    config: "[features]\nrunCodexInWindowsSubsystemForLinux = true\n",
+    args: ["mcp", "login", "gw"],
+  },
+  // Codex in WSL has no Windows keyring to miss.
+  {
+    name: "WSL",
+    platform: "linux",
+    config: WSL_MODE,
+    args: ["mcp", "login", "gw"],
+  },
+])("the gateway sign-in on $name", ({ platform, config, args }) => {
+  expect(
+    runInNewContext(
+      `${CODEX_WSL_SETUP_HINT}\nsignInArgs(platform, config, "gw")`,
+      { platform, config },
+    ),
+  ).toEqual(args);
 });
 
 test.each<{
@@ -374,7 +559,7 @@ test.each<{
     // With plugins on, app-server leaves a git sync running that keeps the
     // temporary Codex home in use on Windows, so its removal fails.
     expect(calls).toContain("-c features.plugins=false app-server");
-    expect(calls).not.toMatch(/mcp |plugin /);
+    expect(calls).not.toMatch(/mcp (add|remove)|plugin /);
     if (downloads) {
       expect(calls.match(/^debug models/gm)).toHaveLength(downloads);
     }
@@ -407,6 +592,50 @@ test("a sign-in that Codex renews during preflight lets setup continue", async (
   }
 });
 
+// Codex for Windows and the ChatGPT desktop app's Codex in WSL reach one folder
+// by two paths, C:\\Users\\me\\.codex and /mnt/c/Users/me/.codex.
+test("setup writes the model catalog path relative to the Codex folder, so Codex loads it from another path to that folder", async () => {
+  const f = await fixture();
+  try {
+    await exec("bash", [f.script], { env: f.env });
+    expect(await readFile(f.config, "utf8")).toContain(
+      'model_catalog_json = "archestra-direct-model-catalog.json"',
+    );
+    const moved = path.join(f.home, "same codex home");
+    await rename(f.codexHome, moved);
+    const result = await exec(path.join(f.home, "codex"), ["mcp", "list"], {
+      env: { ...f.env, CODEX_HOME: moved },
+      cwd: tmpdir(),
+    }).catch((error) => error);
+    expect(result.stderr).not.toContain("failed to load configuration");
+    expect(result.code ?? 0).toBe(0);
+  } finally {
+    await rm(f.home, { recursive: true, force: true });
+  }
+});
+
+test("the sign-in helper runs codex mcp login and refuses a server name that is not plain", async () => {
+  const f = await fixture();
+  try {
+    const helper = path.join(f.home, "handoff.cjs");
+    await writeFile(helper, CODEX_HANDOFF_HELPER);
+    await exec(process.execPath, [helper, "--sign-in", "test_gateway"], {
+      env: f.env,
+    });
+    const refused = await exec(
+      process.execPath,
+      [helper, "--sign-in", "gw & calc"],
+      { env: f.env },
+    ).catch((error) => error);
+    expect(refused.code).toBe(1);
+    expect(await readFile(path.join(f.home, "calls"), "utf8")).toBe(
+      "mcp login test_gateway\n",
+    );
+  } finally {
+    await rm(f.home, { recursive: true, force: true });
+  }
+});
+
 test("a preflight that fails without naming a cause keeps the installer's generic ending", async () => {
   const f = await fixture();
   try {
@@ -423,6 +652,57 @@ test("a preflight that fails without naming a cause keeps the installer's generi
     // Not the stop status, so the installer adds its own next step.
     expect(result.code).toBe(1);
     expect(await readFile(f.config, "utf8")).toBe(original);
+  } finally {
+    await rm(f.home, { recursive: true, force: true });
+  }
+});
+
+test.each([
+  false,
+  true,
+])("ChatGPT installs the connection plugin in the routing setup (plugin fails: %s)", async (failPlugin) => {
+  const f = await fixture();
+  try {
+    await writeFile(
+      f.script,
+      renderSetupScript({
+        ...ctx,
+        clientId: "chatgpt",
+        skills: {
+          cloneUrl: ctx.skills?.cloneUrl ?? "",
+          marketplaceName: ctx.skills?.marketplaceName ?? "",
+          pluginNames: ["test-skills"],
+          connectionPlugin: true,
+        },
+      }),
+    );
+    const result = await exec("bash", [f.script], {
+      env: { ...f.env, ...(failPlugin ? { FAIL_PLUGIN: "1" } : {}) },
+    }).catch((error) => error);
+    const calls = await readFile(path.join(f.home, "calls"), "utf8");
+    expect(calls).not.toContain("mcp add test_gateway");
+    if (!failPlugin) expect(calls).toContain("mcp get test_gateway --json");
+    expect(calls).toContain(`plugin marketplace add ${ctx.skills?.cloneUrl}`);
+    expect(calls).toContain("plugin add test-skills@test-skills\n");
+    const config = await readFile(f.config, "utf8");
+    expect(config).toContain('model_provider = "test_proxy"');
+    expect(config).not.toContain("[mcp_servers.test_gateway]");
+    if (!failPlugin)
+      expect(config).toContain(
+        '[plugins."test-skills@test-skills".mcp_servers."test_gateway"',
+      );
+    expect(config).toContain('sandbox_mode = "workspace-write"');
+    if (failPlugin) {
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain("Plugin installation failed");
+      expect(result.stderr).toContain("Setup is incomplete");
+      expect(result.stdout).not.toContain("ChatGPT is connected");
+    } else {
+      expect(result.code).toBeUndefined();
+      expect(result.stdout).toContain("ChatGPT is connected");
+      expect(result.stdout).toContain("Restart ChatGPT");
+      expect(result.stdout).not.toContain("run /plugins");
+    }
   } finally {
     await rm(f.home, { recursive: true, force: true });
   }

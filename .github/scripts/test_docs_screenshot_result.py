@@ -10,13 +10,13 @@ SCRIPT = pathlib.Path(__file__).with_name("check-docs-screenshot-result.py")
 
 
 class ScreenshotResultTests(unittest.TestCase):
-    def gate(self, event, result, validation_only="false", require_labeled_capture="false"):
+    def gate(self, event, result, validation_only="false", require_labeled_capture="false", e2e_required="true"):
         with tempfile.TemporaryDirectory() as directory:
             summary = pathlib.Path(directory) / "summary"
             process = subprocess.run(
                 ["python3", str(SCRIPT)],
                 env={**os.environ, "EVENT_NAME": event, "CAPTURE_RESULT": result,
-                     "VALIDATION_ONLY": validation_only,
+                     "VALIDATION_ONLY": validation_only, "E2E_REQUIRED": e2e_required,
                      "REQUIRE_LABELED_CAPTURE": require_labeled_capture,
                      "GITHUB_STEP_SUMMARY": str(summary)},
                 capture_output=True, text=True,
@@ -39,6 +39,14 @@ class ScreenshotResultTests(unittest.TestCase):
         process, summary = self.gate("pull_request", "skipped")
         self.assertEqual(process.returncode, 0, process.stderr)
         self.assertIn("does not validate screenshots", summary)
+
+    def test_intentional_queue_skip_still_rejects_failed_capture(self):
+        process, summary = self.gate("merge_group", "skipped", e2e_required="false")
+        self.assertEqual(process.returncode, 0, process.stderr)
+        self.assertIn("intentionally skipped", summary)
+        for result in ("failure", "cancelled", "success", ""):
+            process, _ = self.gate("merge_group", result, e2e_required="false")
+            self.assertNotEqual(process.returncode, 0)
 
     def test_labeled_pr_capture_fails_closed(self):
         for result in ("skipped", "failure", "cancelled"):

@@ -447,26 +447,6 @@ export const SHOTS: Shot[] = [
     },
   },
   {
-    // Creates a key on each run: the dialog shows connection details only after Create.
-    asset: "automated_screenshots/llm-proxy_model-router-key",
-    // The LLM Proxy page closes the dialog once the key exists; this page
-    // keeps it open on the connection details.
-    route: () => "/llm/proxy/virtual-keys",
-    viewport: { width: 1440, height: 1000 },
-    prepare: async (page) => {
-      await page.getByRole("button", { name: "Create Virtual Key" }).click();
-      await page
-        .getByRole("menuitem", { name: /Standard virtual key/ })
-        .click();
-      const dialog = page.getByRole("dialog");
-      await dialog.getByLabel("Name").fill("Support bot");
-      // The single-page form starts with each provider's primary key selected.
-      await dialog.getByRole("button", { name: "Create key" }).click();
-      await page.getByText("Copy your key").waitFor();
-    },
-    target: (page) => page.getByRole("dialog"),
-  },
-  {
     asset: "automated_screenshots/llm-proxy_my-usage",
     fixedTime: true,
     route: () => `/llm/usage?timeframe=${encodeURIComponent(USAGE_TIMEFRAME)}`,

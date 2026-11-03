@@ -230,7 +230,7 @@ describe("managed catalog plugin", () => {
         "archestra-vendor": {
           name: "Vendor (Archestra)",
           options: {
-            baseURL: "https://deployment.example/v1/model-router/agent",
+            baseURL: "https://deployment.example/v1/unified-model/agent",
             apiKey: "{file:~/.archestra/opencode-primary.key}",
           },
           models: { "fixture/model": { id: "vendor:fixture/model" } },

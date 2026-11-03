@@ -70,13 +70,18 @@ import { tools as runtimeMcpTools } from "./tasks";
 // that checks input against it would refuse the call before it arrives.
 const MAX_SEARCH_LIMIT = 20;
 
+// Room for a regex alternation that names a few dozen tools. The bound only
+// stops runaway input; paging with offset, not a longer query, is how a model
+// sees matches past one page.
+const MAX_QUERY_LENGTH = 1000;
+
 const SearchToolsArgsSchema = z
   .object({
     query: z
       .string()
       .trim()
       .min(1)
-      .max(200)
+      .max(MAX_QUERY_LENGTH)
       .describe(
         "Keywords for the capability you need — combine the action (verb + object) with the server/product name when you know it, e.g. 'github search repositories' or 'slack send message'. Avoid querying with a bare product/server name on its own. Results are keyword-ranked across tool names, descriptions, and argument names/descriptions. If nothing fits, reformulate with different keywords and search again rather than settling for a poor match.",
       ),
@@ -89,6 +94,15 @@ const SearchToolsArgsSchema = z
       .default(8)
       .describe(
         `Maximum number of matching tools to return, at most ${MAX_SEARCH_LIMIT}. A larger value returns ${MAX_SEARCH_LIMIT}.`,
+      ),
+    offset: z
+      .number()
+      .int()
+      .nonnegative()
+      .optional()
+      .default(0)
+      .describe(
+        "Number of ranked matches to skip. To see the matches after a truncated result, repeat the same query with offset set to the result's nextOffset.",
       ),
     mode: z
       .enum(["keyword", "regex"])
@@ -139,18 +153,26 @@ const SearchToolsOutputSchema = z.object({
     .int()
     .nonnegative()
     .describe(
-      "Total tools matching the query before the limit was applied (>= total).",
+      "Total tools matching the query before offset and limit were applied (>= total).",
     ),
   truncated: z
     .boolean()
     .describe(
-      "True when matchCount exceeds the returned tools (results cut by limit).",
+      "True when more matches follow this page (results cut by limit).",
+    ),
+  nextOffset: z
+    .number()
+    .int()
+    .nonnegative()
+    .nullable()
+    .describe(
+      "The offset that returns the next page of matches, or null when no matches follow this page.",
     ),
   hint: z
     .string()
     .nullable()
     .describe(
-      "Actionable guidance when results were truncated or empty (an empty result also names which query terms matched no tool text).",
+      "Actionable guidance when results were truncated or empty (a truncated result names the offset of the next page; an empty result also names which query terms matched no tool text).",
     ),
   tools: z.array(
     z.object({
@@ -269,8 +291,16 @@ const registry = defineArchestraTools([
         ...matches.filter((candidate) => candidate.available),
         ...matches.filter((candidate) => !candidate.available),
       ];
-      const tools = ranked.slice(0, args.limit).map(toSearchResult);
-      const truncated = matchCount > tools.length;
+      // Both rankings break ties by tool name, so the same query pages
+      // through one stable order.
+      const tools = ranked
+        .slice(args.offset, args.offset + args.limit)
+        .map(toSearchResult);
+      const nextOffset =
+        args.offset + tools.length < matchCount
+          ? args.offset + tools.length
+          : null;
+      const truncated = nextOffset !== null;
       // Only relevant to the zero-match hint, so resolve it lazily to avoid an
       // extra permission/assignment lookup on every successful search.
       const sandboxAvailable =
@@ -283,7 +313,9 @@ const registry = defineArchestraTools([
           : false;
       const hint = buildSearchHint({
         matchCount,
-        truncated,
+        offset: args.offset,
+        returned: tools.length,
+        nextOffset,
         limit: args.limit,
         searchableTools,
         unmatchedTerms,
@@ -294,6 +326,7 @@ const registry = defineArchestraTools([
         total: tools.length,
         matchCount,
         truncated,
+        nextOffset,
         hint,
         tools,
       };
@@ -303,6 +336,7 @@ const registry = defineArchestraTools([
           agentId: context.agentId,
           mode: args.mode,
           queryLength: args.query.length,
+          offset: args.offset,
           matchCount,
           returned: tools.length,
           zeroResult: matchCount === 0,
@@ -1058,13 +1092,15 @@ function regexMatchRank(candidate: SearchCandidate, regex: RegExp): number {
 }
 
 // Actionable next-step guidance (Anthropic recovery-error practice). Null when
-// results came back and were not truncated. On a zero-result search the
+// results came back and no matches follow this page. On a zero-result search the
 // vocabulary-mismatch note rides alongside the empty-result note so the model
 // learns both what happened and which terms matched nothing; a successful search
 // never carries it, since flagging extra terms on a hit only invites a re-search.
 function buildSearchHint(params: {
   matchCount: number;
-  truncated: boolean;
+  offset: number;
+  returned: number;
+  nextOffset: number | null;
   limit: number;
   searchableTools: SearchCandidate[];
   unmatchedTerms: string[];
@@ -1073,9 +1109,11 @@ function buildSearchHint(params: {
   const {
     limit,
     matchCount,
+    nextOffset,
+    offset,
+    returned,
     sandboxAvailable,
     searchableTools,
-    truncated,
     unmatchedTerms,
   } = params;
   const parts: string[] = [];
@@ -1093,13 +1131,26 @@ function buildSearchHint(params: {
     parts.push(
       `No tools matched. Try broader or different keywords, or switch mode.${serverHint}${sandboxHint}`,
     );
-  } else if (truncated) {
+  } else if (returned === 0) {
+    parts.push(
+      `This query has ${matchCount} matches, so offset ${offset} returns none. Use an offset below ${matchCount}.`,
+    );
+  } else if (nextOffset !== null) {
+    // Name the offset of the next page. Without it, a model that wants every
+    // match builds a query that excludes the names it already has, which
+    // grows with each page.
+    const shown =
+      offset === 0
+        ? `the top ${returned} of ${matchCount} matches`
+        : `matches ${offset + 1} to ${offset + returned} of ${matchCount}`;
     // At the cap, "raise limit" would send the model back for a larger limit
     // that returns the same page.
-    parts.push(
+    const raiseLimit =
       limit < MAX_SEARCH_LIMIT
-        ? `Showing the top ${limit} of ${matchCount} matches. Narrow the query or raise limit (max ${MAX_SEARCH_LIMIT}).`
-        : `Showing the top ${limit} of ${matchCount} matches. One search returns at most ${MAX_SEARCH_LIMIT}, so narrow the query to see the others.`,
+        ? `raise limit (max ${MAX_SEARCH_LIMIT}) or `
+        : "";
+    parts.push(
+      `Showing ${shown}. For the remaining ${matchCount - nextOffset}, ${raiseLimit}repeat the query with offset ${nextOffset}.`,
     );
   }
 

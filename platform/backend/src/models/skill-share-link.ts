@@ -28,6 +28,8 @@ interface CreateSkillShareLinkParams {
   createdByUserId: string;
   skillIds: string[];
   pluginIds?: string[];
+  /** Allows a credential-free built-in plugin only for this approved ChatGPT setup. */
+  connectionSetupId?: string;
   pluginClientType?: ClientType | null;
   pluginPlatform?: PluginPlatform | null;
   marketplaceName: string;
@@ -57,7 +59,11 @@ class SkillShareLinkModel {
   static async create(
     params: CreateSkillShareLinkParams,
   ): Promise<CreateSkillShareLinkResult> {
-    if (params.skillIds.length === 0 && (params.pluginIds?.length ?? 0) === 0) {
+    if (
+      params.skillIds.length === 0 &&
+      (params.pluginIds?.length ?? 0) === 0 &&
+      !params.connectionSetupId
+    ) {
       throw new Error(
         "skillIds must be non-empty unless pluginIds is non-empty",
       );
@@ -68,6 +74,26 @@ class SkillShareLinkModel {
     const tokenStart = rawToken.slice(0, TOKEN_START_LENGTH);
 
     const insertLink = async (tx: Transaction) => {
+      if (params.connectionSetupId) {
+        const [setup] = await tx
+          .select()
+          .from(schema.connectionSetupsTable)
+          .where(
+            and(
+              eq(schema.connectionSetupsTable.id, params.connectionSetupId),
+              eq(
+                schema.connectionSetupsTable.organizationId,
+                params.organizationId,
+              ),
+              eq(schema.connectionSetupsTable.userId, params.createdByUserId),
+            ),
+          )
+          .limit(1);
+        if (setup?.clientId !== "chatgpt" || !setup.consumedAt)
+          throw new Error(
+            "A built-in connection plugin requires a claimed ChatGPT setup.",
+          );
+      }
       const [created] = await tx
         .insert(schema.skillShareLinksTable)
         .values({

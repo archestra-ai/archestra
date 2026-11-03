@@ -7,6 +7,7 @@ import {
 } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  Boxes,
   Check,
   Copy,
   ExternalLink,
@@ -38,6 +39,7 @@ import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { McpInstallDialogs } from "@/components/chat/mcp-install-dialogs";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { platformOwnedStyles } from "@/components/scope-vocabulary";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -1092,6 +1094,19 @@ function AgentPickerRow({
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-1.5">
               <span className="truncate text-sm font-medium">{agent.name}</span>
+              {agent.builtIn && (
+                <span
+                  role="img"
+                  aria-label="Built-in agent"
+                  title="Built-in agent"
+                  className={cn(
+                    "flex size-4 shrink-0 items-center justify-center rounded border",
+                    platformOwnedStyles,
+                  )}
+                >
+                  <Boxes className="size-2.5" aria-hidden="true" />
+                </span>
+              )}
               {runtimeEnabled && agent.runtime && (
                 <RuntimeCapableIndicator runtime={agent.runtime} />
               )}

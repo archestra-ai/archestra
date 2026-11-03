@@ -510,7 +510,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetChatAgentRosterPage,
         description:
-          "Fetch bounded authorized nonbuilt-in chat choices with literal name or description search.",
+          "Fetch bounded authorized chat choices with literal name or description search.",
         tags: ["Agents"],
         querystring: CursorQuerySchema.extend({
           search: z.string().max(512).optional(),

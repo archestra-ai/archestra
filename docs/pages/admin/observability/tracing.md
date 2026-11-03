@@ -2,7 +2,7 @@
 title: Tracing
 description: Send OpenTelemetry traces and logs for every LLM call, tool call, and agent run to your collector
 order: 2
-lastUpdated: 2026-10-30
+lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -145,15 +145,15 @@ The LLM Proxy has no labels or teams. Filter its traffic by the `archestra.user.
 
 ## Proxy Request Log Events
 
-Attribute logical [LLM Proxy](/docs/llm-proxy) and model router outcomes—including throttled, denied, cancelled, and midstream-failed requests—to a model, agent, user, app, or virtual key with the `archestra.llm_proxy.request` OpenTelemetry log event.
+Attribute logical [LLM Proxy](/docs/llm-proxy) and unified model API outcomes—including throttled, denied, cancelled, and midstream-failed requests—to a model, agent, user, app, or virtual key with the `archestra.llm_proxy.request` OpenTelemetry log event.
 
-When an inference request handled by the shared proxy or model router finishes, logger `archestra-llm-proxy` emits one structured log record with body `"LLM proxy request completed"` (`INFO` on success or an incomplete terminal, `WARN` on failure) attached to the active trace context (`trace_id` and `span_id`). Like [`llm_proxy_request_duration_seconds`](/docs/admin/observability/metrics/llm#llm_proxy_request_duration_seconds), it records one event per logical request across internal retries and failovers, and excludes pre-handler authentication or validation rejections, model listing, unsupported passthrough endpoints, and provider file routes.
+When an inference request handled by the shared proxy or unified model API finishes, logger `archestra-llm-proxy` emits one structured log record with body `"LLM proxy request completed"` (`INFO` on success or an incomplete terminal, `WARN` on failure) attached to the active trace context (`trace_id` and `span_id`). Like [`llm_proxy_request_duration_seconds`](/docs/admin/observability/metrics/llm#llm_proxy_request_duration_seconds), it records one event per logical request across internal retries and failovers, and excludes pre-handler authentication or validation rejections, model listing, unsupported passthrough endpoints, and provider file routes.
 
 Emission is best-effort and unsampled, so every completed proxy inference request emits the event regardless of [`ARCHESTRA_OTEL_TRACES_SAMPLE_RATE`](/docs/admin/deployment/configuration#ARCHESTRA_OTEL_TRACES_SAMPLE_RATE). The record uses a metadata-only allowlist—never prompts, completions, request or response bodies, headers, or error messages—and is not durable log replication. Use [LLM spans](#llm-spans) for token and cost attribution, [limit metrics](/docs/admin/observability/metrics/limits) for rule evaluations, and [audit logs](/docs/admin/observability/audit-logs) for administrative actions.
 
 | Attribute | Value |
 | --- | --- |
-| `gen_ai.provider.name` | Provider name (for example `openai` or `anthropic`), or `router` if a model-router request fails before provider selection |
+| `gen_ai.provider.name` | Provider name (for example `openai` or `anthropic`), or `router` if a unified-model request fails before provider selection |
 | `gen_ai.operation.name` | Inference operation, such as `chat`, `generate_content`, or `embedding` |
 | `gen_ai.request.streaming` | `true` or `false` |
 | `http.response.status_code` | Committed HTTP status code (`200` when a stream fails after headers are sent, `499` on client disconnect before headers) |

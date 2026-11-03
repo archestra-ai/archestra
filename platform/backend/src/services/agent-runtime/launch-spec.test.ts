@@ -438,8 +438,8 @@ describe("buildAgentRunLaunchSpec", () => {
       ARCHESTRA_AGENT_RUNTIME_RUN_ID: taskId,
       ARCHESTRA_AGENT_RUNTIME_RUN_URL: agentRunUrl(taskId),
       ARCHESTRA_LLM_PROXY_PROTOCOL: "openai_responses",
-      ARCHESTRA_LLM_PROXY_URL: `https://platform.example.test/v1/model-router/${setup.agent.id}`,
-      OPENAI_BASE_URL: `https://platform.example.test/v1/model-router/${setup.agent.id}`,
+      ARCHESTRA_LLM_PROXY_URL: `https://platform.example.test/v1/unified-model/${setup.agent.id}`,
+      OPENAI_BASE_URL: `https://platform.example.test/v1/unified-model/${setup.agent.id}`,
       ARCHESTRA_MCP_GATEWAY_URL: `https://platform.example.test/v1/mcp/${setup.agent.id}`,
       ARCHESTRA_AGENT_RUNTIME_BANNER:
         "Example AI\nSecure access to your AI tools",

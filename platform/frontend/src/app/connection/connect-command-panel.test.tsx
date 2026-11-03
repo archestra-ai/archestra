@@ -2172,7 +2172,7 @@ describe("ConnectCommandPanel", () => {
     expect(screen.getByTestId("add-provider-key-dialog")).toBeInTheDocument();
   });
 
-  it("routes Cursor's models through the Model Router with one virtual key", async () => {
+  it("routes Cursor's models through the Unified Model API with one virtual key", async () => {
     availableKeysMock.mockReturnValue({
       data: [
         { provider: "anthropic", isPrimary: true },
@@ -2192,7 +2192,7 @@ describe("ConnectCommandPanel", () => {
     expect(
       screen.getByTestId("connect-change-proxy").closest("li"),
     ).toHaveTextContent(
-      "Route Cursor's models (2 providers) through the Model Router using a virtual key",
+      "Route Cursor's models (2 providers) through the Unified Model API using a virtual key",
     );
   });
 

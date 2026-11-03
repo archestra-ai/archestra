@@ -585,6 +585,26 @@ describe("AgentDetailPage", () => {
     ).toBe(true);
   });
 
+  it.each([
+    true,
+    false,
+  ])("keeps a Runs deep link while runtime configuration loads (enabled: %s)", (enabled) => {
+    vi.mocked(useFeature).mockReturnValue(undefined);
+    mockAgent({ ...baseAgent, runtime: {} });
+    mockSection("runs");
+    const { rerender } = render(<AgentDetailPage kind="agent" id="a1" />);
+    expect(replace).not.toHaveBeenCalled();
+
+    vi.mocked(useFeature).mockReturnValue(enabled);
+    rerender(<AgentDetailPage kind="agent" id="a1" />);
+    if (enabled) {
+      expect(screen.getByText("run history")).toBeVisible();
+      expect(replace).not.toHaveBeenCalled();
+    } else {
+      expect(replace).toHaveBeenCalledWith("/agents/a1", { scroll: false });
+    }
+  });
+
   it("keeps run UI invisible when its feature flag is disabled", () => {
     mockAgent({ ...baseAgent, runtime: {} });
     render(<AgentDetailPage kind="agent" id="a1" />);

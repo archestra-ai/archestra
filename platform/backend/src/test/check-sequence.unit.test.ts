@@ -359,6 +359,20 @@ test.each([
   },
   {
     command: "build",
+    fail: "signal",
+    expected: 143,
+    modes: ["default"],
+    args: ["--webpack"],
+  },
+  {
+    command: "build",
+    fail: "assets",
+    expected: 1,
+    modes: ["default"],
+    args: ["--webpack"],
+  },
+  {
+    command: "build",
     fail: "",
     expected: 0,
     modes: ["compile"],
@@ -410,6 +424,14 @@ test.each([
     path.join(frontend, ".next/standalone/frontend/public/obsolete.svg"),
     "obsolete",
   );
+  const served = path.join(frontend, ".next/standalone/frontend");
+  fs.mkdirSync(path.join(served, ".next/static"));
+  fs.writeFileSync(
+    path.join(served, ".next/static/previous.js"),
+    "previous js",
+  );
+  fs.writeFileSync(path.join(served, "public/icon.svg"), "previous icon");
+  fs.writeFileSync(path.join(served, "server.js"), "previous server");
   fs.writeFileSync(path.join(platform, "Tiltfile"), "");
   fs.writeFileSync(path.join(platform, ".env.example"), "");
   fs.copyFileSync(
@@ -439,8 +461,14 @@ if (mode === "generate" && compiler) {
   catch (error) { if (error.code !== "ESRCH") throw error; }
 }
 fs.appendFileSync(log, JSON.stringify({ mode, args, pid: process.pid }) + "\n");
+if (args.includes("--webpack")) fs.rmSync(".next", { recursive: true, force: true });
+fs.mkdirSync(".next/static", { recursive: true });
+fs.writeFileSync(".next/static/current.js", "current js");
+fs.mkdirSync(".next/standalone/frontend/.next", { recursive: true });
+fs.writeFileSync(".next/standalone/frontend/server.js", "current server");
 if (mode === process.env.ARCHESTRA_TEST_NEXT_FAIL) process.exit(mode === "compile" ? 17 : 23);
-if (mode === "compile" && process.env.ARCHESTRA_TEST_NEXT_FAIL === "signal") process.kill(process.pid, "SIGTERM");
+if ((mode === "compile" || mode === "default") && process.env.ARCHESTRA_TEST_NEXT_FAIL === "signal") process.kill(process.pid, "SIGTERM");
+if (process.env.ARCHESTRA_TEST_NEXT_FAIL === "assets") fs.rmSync(".next/static", { recursive: true });
 `,
   );
   const result = spawnSync(
@@ -486,7 +514,6 @@ if (mode === "compile" && process.env.ARCHESTRA_TEST_NEXT_FAIL === "signal") pro
       expect(event.args).toContain("app/page with $literal");
     }
   }
-  const served = path.join(frontend, ".next/standalone/frontend");
   if (
     expected === 0 &&
     (modes.includes("generate") || modes.includes("default"))
@@ -498,14 +525,28 @@ if (mode === "compile" && process.env.ARCHESTRA_TEST_NEXT_FAIL === "signal") pro
       "current icon",
     );
     expect(fs.existsSync(path.join(served, "public/obsolete.svg"))).toBe(false);
+    expect(fs.readFileSync(path.join(served, "server.js"), "utf8")).toBe(
+      "current server",
+    );
   } else {
     expect(fs.existsSync(path.join(served, ".next/static/current.js"))).toBe(
       false,
     );
     if (args.includes("--webpack")) {
-      expect(fs.existsSync(path.join(served, "public/obsolete.svg"))).toBe(
-        false,
+      expect(fs.readFileSync(path.join(served, "server.js"), "utf8")).toBe(
+        "previous server",
       );
+      expect(
+        fs.readFileSync(path.join(served, "public/icon.svg"), "utf8"),
+      ).toBe("previous icon");
+      expect(
+        fs.readFileSync(path.join(served, ".next/static/previous.js"), "utf8"),
+      ).toBe("previous js");
     }
   }
+  expect(
+    fs
+      .readdirSync(frontend)
+      .filter((name) => name.startsWith(".standalone-previous.")),
+  ).toEqual([]);
 });

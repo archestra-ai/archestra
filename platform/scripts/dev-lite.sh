@@ -703,13 +703,30 @@ cmd_frontend_artifact() {
       # CI's cache and phase split are for Turbopack. An explicit Webpack
       # build keeps its usual single phase, but still packages assets before
       # the heavy lane resumes the standalone server.
-      if [ "$webpack" = 1 ]; then
-        rm -rf "$STANDALONE_DIR/.next/static" "$STANDALONE_DIR/public" \
-          || die "could not clear the frontend's previous standalone assets"
-      fi
-      if [ "$webpack" = 0 ]; then frontend_prebuilt install-cache || true; fi
       local launcher='const { status, signal } = require("node:child_process").spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build", ...process.argv.slice(1)], { stdio: "inherit" }); process.exit(status ?? (signal ? 128 + require("node:os").constants.signals[signal] : 1));'
-      if [ "$explicit_mode" = 1 ] || [ "$webpack" = 1 ]; then
+      if [ "$webpack" = 1 ]; then
+        local standalone_root="$PLATFORM_DIR/frontend/.next/standalone" previous="" status=0
+        # Next can replace server.js before failing. Keep the complete last
+        # serving tree, including traced dependencies, until packaging succeeds.
+        if [ -d "$standalone_root" ]; then
+          previous="$(mktemp -d "$PLATFORM_DIR/frontend/.standalone-previous.XXXXXX")" \
+            && mv "$standalone_root" "$previous/tree" \
+            || die "could not preserve the frontend's previous standalone build"
+        fi
+        frontend_build_node -e "$launcher" -- "$@" || status=$?
+        if [ "$status" = 0 ] && { [ "$explicit_mode" = 0 ] || [ "$selected_mode" = generate ]; }; then
+          (prepare_frontend_standalone) || status=$?
+        fi
+        if [ "$status" != 0 ] || { [ "$explicit_mode" = 1 ] && [ "$selected_mode" != generate ]; }; then
+          rm -rf "$standalone_root" \
+            && { [ -z "$previous" ] || mv "$previous/tree" "$standalone_root"; } \
+            || die "could not restore the frontend's previous standalone build"
+        fi
+        if [ -n "$previous" ]; then rm -rf "$previous"; fi
+        return "$status"
+      fi
+      frontend_prebuilt install-cache || true
+      if [ "$explicit_mode" = 1 ]; then
         frontend_build_node -e "$launcher" -- "$@" || return $?
       else
         # Turbopack retains its native compiler heap after compilation.

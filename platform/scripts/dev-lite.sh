@@ -703,6 +703,10 @@ cmd_frontend_artifact() {
       # CI's cache and phase split are for Turbopack. An explicit Webpack
       # build keeps its usual single phase, but still packages assets before
       # the heavy lane resumes the standalone server.
+      if [ "$webpack" = 1 ]; then
+        rm -rf "$STANDALONE_DIR/.next/static" "$STANDALONE_DIR/public" \
+          || die "could not clear the frontend's previous standalone assets"
+      fi
       if [ "$webpack" = 0 ]; then frontend_prebuilt install-cache || true; fi
       local launcher='const { status, signal } = require("node:child_process").spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build", ...process.argv.slice(1)], { stdio: "inherit" }); process.exit(status ?? (signal ? 128 + require("node:os").constants.signals[signal] : 1));'
       if [ "$explicit_mode" = 1 ] || [ "$webpack" = 1 ]; then

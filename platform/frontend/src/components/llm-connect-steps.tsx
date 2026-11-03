@@ -175,31 +175,46 @@ export function LlmConnectSteps({
 
   // A standard key or OAuth client is usable here only if it maps a provider
   // key behind this endpoint; a passthrough key carries none and always fits.
-  // For a pool, the credential must map any member's key, whatever the
-  // endpoint, or the pool must list the virtual key (or grant the client).
-  const poolMappings = pool ? poolKeyMappings(pool) : undefined;
+  // For a pool, the credential must map a member's key, or the pool must list
+  // the virtual key (or grant the client). A virtual key with a key of this
+  // endpoint's provider reaches the pool through that key alone; otherwise
+  // any member's key will do.
+  const poolMappings = pool
+    ? poolKeyMappings(pool, new Set(providerApiKeys.map((key) => key.id)))
+    : undefined;
   const memberKeyIds = new Set(
     (pool?.members ?? []).map((member) => member.providerApiKeyId),
   );
   const reaches = (
     credential: { providerApiKeys: ProviderApiKeyMappings },
     listedByPool: boolean,
-  ) =>
-    pool
-      ? listedByPool ||
-        credential.providerApiKeys.some((mapping) =>
-          memberKeyIds.has(mapping.providerApiKeyId),
-        )
-      : credential.providerApiKeys.some((mapping) =>
+    viaEndpointKey: boolean,
+  ) => {
+    if (!pool) {
+      return credential.providerApiKeys.some((mapping) =>
+        servesTarget(mapping.provider),
+      );
+    }
+    const endpointKeys = viaEndpointKey
+      ? credential.providerApiKeys.filter((mapping) =>
           servesTarget(mapping.provider),
-        );
+        )
+      : [];
+    return (
+      listedByPool ||
+      (endpointKeys.length > 0
+        ? endpointKeys
+        : credential.providerApiKeys
+      ).some((mapping) => memberKeyIds.has(mapping.providerApiKeyId))
+    );
+  };
   const keyOptions = (virtualKeys?.data ?? []).filter(
     (key) =>
       auth === "passthrough" ||
-      reaches(key, pool?.virtualApiKeyIds.includes(key.id) ?? false),
+      reaches(key, pool?.virtualApiKeyIds.includes(key.id) ?? false, !isRouter),
   );
   const clientOptions = oauthClients.filter((client) =>
-    reaches(client, !!pool && !!client.modelPoolIds?.includes(pool.id)),
+    reaches(client, !!pool && !!client.modelPoolIds?.includes(pool.id), false),
   );
   const allOptions =
     auth === "oauth"
@@ -992,11 +1007,16 @@ function OauthClientCreateFlow({
 /**
  * The members' provider keys, one per provider, as a new credential's
  * starting mapping: a credential mapping any of them can call the pool by
- * name, on any endpoint.
+ * name, on any endpoint. Only keys the reader may use, since creating a
+ * credential with anyone else's fails.
  */
-function poolKeyMappings(pool: ConnectablePoolDetails): ProviderApiKeyMappings {
+function poolKeyMappings(
+  pool: ConnectablePoolDetails,
+  usableKeyIds: Set<string>,
+): ProviderApiKeyMappings {
   const mappings: ProviderApiKeyMappings = [];
   for (const member of pool.members) {
+    if (!usableKeyIds.has(member.providerApiKeyId)) continue;
     if (mappings.some((mapping) => mapping.provider === member.provider)) {
       continue;
     }

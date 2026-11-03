@@ -25,6 +25,12 @@ const anthropicKey = makeLlmProviderApiKey({
   provider: "anthropic",
   isPrimary: false,
 });
+const otherAnthropicKey = makeLlmProviderApiKey({
+  id: "key-anthropic-other",
+  name: "Anthropic personal key",
+  provider: "anthropic",
+  isPrimary: false,
+});
 const geminiKey = makeLlmProviderApiKey({
   id: "key-gemini",
   name: "Gemini key",
@@ -95,6 +101,14 @@ const virtualKeys = [
     name: "Listed by the pool",
     tokenStart: "archestra_lst",
     providerApiKeys: [mapping(geminiKey)],
+  }),
+  // On the Anthropic endpoint this key calls through its non-member
+  // Anthropic key, so only the Model Router reaches the pool with it.
+  makeVirtualKey({
+    id: "vk-mixed",
+    name: "Other Anthropic key",
+    tokenStart: "archestra_mix",
+    providerApiKeys: [mapping(otherAnthropicKey), mapping(openaiKey)],
   }),
   makeVirtualKey({
     id: "vk-unrelated",
@@ -233,6 +247,9 @@ test.describe("Model pool Connect dialog", () => {
     await expect(
       options.filter({ hasText: "Listed by the pool" }),
     ).toBeVisible();
+    await expect(
+      options.filter({ hasText: "Other Anthropic key" }),
+    ).toBeVisible();
     await expect(options.filter({ hasText: "Gemini only" })).toHaveCount(0);
     await page.keyboard.press("Escape");
 
@@ -271,7 +288,7 @@ test.describe("Model pool Connect dialog", () => {
     await expect(dialog.getByText('"model": "fast-chat"')).toBeVisible();
   });
 
-  test("on the Anthropic endpoint, offers keys mapping any member and asks for no Anthropic key", async ({
+  test("on the Anthropic endpoint, offers keys that reach a member and asks for no Anthropic key", async ({
     page,
     mswControl,
     request,
@@ -293,6 +310,9 @@ test.describe("Model pool Connect dialog", () => {
     await expect(
       page.getByRole("option").filter({ hasText: "Maps a member key" }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("option").filter({ hasText: "Other Anthropic key" }),
+    ).toHaveCount(0);
     await page.keyboard.press("Escape");
     await expect(dialog.getByText('"model": "fast-chat"')).toBeVisible();
   });

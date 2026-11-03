@@ -103644,6 +103644,13 @@ export type McpGatewayGetErrors = {
     /**
      * Default Response
      */
+    403: {
+        error: string;
+        message: string;
+    };
+    /**
+     * Default Response
+     */
     405: {
         jsonrpc: '2.0';
         error: {
@@ -103692,6 +103699,13 @@ export type McpGatewaySseMessageErrors = {
      * Default Response
      */
     401: {
+        error: string;
+        message: string;
+    };
+    /**
+     * Default Response
+     */
+    403: {
         error: string;
         message: string;
     };

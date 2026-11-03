@@ -687,6 +687,10 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
             error: z.string(),
             message: z.string(),
           }),
+          403: z.object({
+            error: z.string(),
+            message: z.string(),
+          }),
         },
       },
     },
@@ -709,10 +713,11 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         token,
       );
       if (!tokenAuth) {
-        setWWWAuthenticateHeader(request, reply);
-        reply.status(401);
+        const forbidden = reason === "no_gateway_access";
+        if (!forbidden) setWWWAuthenticateHeader(request, reply);
+        reply.status(forbidden ? 403 : 401);
         return {
-          error: "Unauthorized",
+          error: forbidden ? "Forbidden" : "Unauthorized",
           message: describeGatewayAuthFailure(reason),
         };
       }
@@ -775,8 +780,12 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         token,
       );
       if (!tokenAuth) {
-        setWWWAuthenticateHeader(request, reply);
-        throw new ApiError(401, describeGatewayAuthFailure(reason));
+        const forbidden = reason === "no_gateway_access";
+        if (!forbidden) setWWWAuthenticateHeader(request, reply);
+        throw new ApiError(
+          forbidden ? 403 : 401,
+          describeGatewayAuthFailure(reason),
+        );
       }
 
       const sessionId = readHeader(request, MCP_SESSION_ID_HEADER);
@@ -820,6 +829,10 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
             error: z.string(),
             message: z.string(),
           }),
+          403: z.object({
+            error: z.string(),
+            message: z.string(),
+          }),
           404: z.object({
             error: z.string(),
             message: z.string(),
@@ -848,10 +861,11 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         token,
       );
       if (!tokenAuth) {
-        setWWWAuthenticateHeader(request, reply);
-        reply.status(401);
+        const forbidden = reason === "no_gateway_access";
+        if (!forbidden) setWWWAuthenticateHeader(request, reply);
+        reply.status(forbidden ? 403 : 401);
         return {
-          error: "Unauthorized",
+          error: forbidden ? "Forbidden" : "Unauthorized",
           message: describeGatewayAuthFailure(reason),
         };
       }
@@ -989,13 +1003,16 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         lookups,
       );
       if (!tokenAuth) {
-        setWWWAuthenticateHeader(request, reply);
-        reply.status(401);
+        const forbidden = reason === "no_gateway_access";
+        // A gateway grant cannot be obtained by signing in again or requesting
+        // broader OAuth scopes. Do not invite either retry on an access denial.
+        if (!forbidden) setWWWAuthenticateHeader(request, reply);
+        reply.status(forbidden ? 403 : 401);
         return {
           jsonrpc: "2.0",
           error: {
             code: -32000,
-            message: `Unauthorized: ${describeGatewayAuthFailure(reason)}`,
+            message: `${forbidden ? "Forbidden" : "Unauthorized"}: ${describeGatewayAuthFailure(reason)}`,
           },
           id: null,
         };

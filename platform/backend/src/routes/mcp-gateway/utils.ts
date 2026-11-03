@@ -210,9 +210,11 @@ export interface TokenAuthResult {
  * Why gateway authentication failed, so a caller can act on the answer instead
  * of guessing at a blanket "invalid token".
  *
- * What is safe to disclose turns on whether the JWT's signature was verified
- * first. `no_email_claim`, `unknown_user`, `not_org_member` and
- * `no_gateway_access` are only ever reached by a caller holding a token this
+ * OAuth reports `no_gateway_access` only after token validity, expiry,
+ * revocation, audience and scope checks succeed.
+ * For external JWTs, disclosure depends on signature verification first:
+ * `no_email_claim`, `unknown_user`, `not_org_member` and
+ * `no_gateway_access` are reached only by a caller holding a token this
  * organization's own IdP signed — already inside the trust boundary — so naming
  * the configuration problem tells them nothing they could not already learn.
  * `idp_not_linked` / `idp_misconfigured` are decided before any signature check
@@ -255,7 +257,7 @@ export function describeGatewayAuthFailure(
     case "not_org_member":
       return "Token validated, but its user is not a member of this gateway's organization.";
     case "no_gateway_access":
-      return "Token validated, but its user does not have access to this gateway. Grant access via a shared team.";
+      return "Token validated, but the caller does not have access to this gateway. Ask an administrator to grant gateway access.";
     case "invalid_token":
       return "Invalid token for this profile";
   }
@@ -1818,19 +1820,29 @@ export async function validateOAuthToken(
   return validateOAuthTokenByHash({ profileId, oauthTokenHash });
 }
 
-async function validateOAuthTokenByHash(params: {
+type OAuthTokenValidationParams = {
   profileId: string;
   oauthTokenHash: string;
   agentAccessContext?: AgentAccessContext | null;
   lookups?: RequestLookups;
   requiredOAuthScope?: "mcp" | "a2a";
-}): Promise<TokenAuthResult | null> {
+};
+
+async function validateOAuthTokenByHash(
+  params: OAuthTokenValidationParams,
+): Promise<TokenAuthResult | null> {
+  return (await authenticateOAuthTokenByHash(params)).result;
+}
+
+async function authenticateOAuthTokenByHash(
+  params: OAuthTokenValidationParams,
+): Promise<GatewayAuthOutcome> {
   try {
     const agent =
       params.agentAccessContext ??
       (await findAgentAccessContextById(params.profileId));
     if (!agent) {
-      return null;
+      return { result: null, reason: "invalid_token" };
     }
 
     // Look up the hashed token via the model
@@ -1839,7 +1851,7 @@ async function validateOAuthTokenByHash(params: {
     );
 
     if (!accessToken) {
-      return null;
+      return { result: null, reason: "invalid_token" };
     }
 
     // Check if associated refresh token has been revoked
@@ -1848,7 +1860,7 @@ async function validateOAuthTokenByHash(params: {
         { profileId: params.profileId },
         "validateOAuthToken: associated refresh token is revoked",
       );
-      return null;
+      return { result: null, reason: "invalid_token" };
     }
 
     // Check token expiry
@@ -1857,7 +1869,7 @@ async function validateOAuthTokenByHash(params: {
         { profileId: params.profileId },
         "validateOAuthToken: token expired",
       );
-      return null;
+      return { result: null, reason: "invalid_token" };
     }
 
     if (
@@ -1872,7 +1884,7 @@ async function validateOAuthTokenByHash(params: {
         },
         "validateOAuthToken: token is bound to a different MCP resource",
       );
-      return null;
+      return { result: null, reason: "invalid_token" };
     }
 
     // A token audience-bound to a shareable-App connector is valid only at that
@@ -1883,7 +1895,7 @@ async function validateOAuthTokenByHash(params: {
         { profileId: params.profileId },
         "validateOAuthToken: rejecting an app-connector-bound token at the MCP gateway",
       );
-      return null;
+      return { result: null, reason: "invalid_token" };
     }
 
     // Application (client_credentials) tokens minted for an MCP OAuth client
@@ -1893,12 +1905,15 @@ async function validateOAuthTokenByHash(params: {
       accessToken.referenceId?.startsWith(MCP_OAUTH_CLIENT_REFERENCE_PREFIX) ||
       accessToken.referenceId?.startsWith(OAUTH_CLIENT_REFERENCE_PREFIX)
     ) {
-      return await validateMcpClientAccessToken({
+      const result = await validateMcpClientAccessToken({
         accessToken,
         profileId: params.profileId,
         organizationId: agent.organizationId,
         requiredScope: params.requiredOAuthScope ?? MCP_GATEWAY_OAUTH_SCOPE,
       });
+      return result
+        ? { result, reason: null }
+        : { result: null, reason: "invalid_token" };
     }
 
     const managedClient = await ManagedOauthClientModel.findByClientId(
@@ -1911,12 +1926,12 @@ async function validateOAuthTokenByHash(params: {
         !managedClient.scopes.includes(requiredScope) ||
         !accessToken.scopes?.includes(requiredScope))
     )
-      return null;
+      return { result: null, reason: "invalid_token" };
     if (!managedClient && !accessToken.scopes?.includes(requiredScope))
-      return null;
+      return { result: null, reason: "invalid_token" };
     const userId = accessToken.userId;
     if (!userId) {
-      return null;
+      return { result: null, reason: "invalid_token" };
     }
     const organizationId = agent.organizationId;
 
@@ -1958,23 +1973,26 @@ async function validateOAuthTokenByHash(params: {
         { profileId: params.profileId, userId },
         "validateOAuthToken: profile not accessible via OAuth token (no RBAC access and no client grant)",
       );
-      return null;
+      return { result: null, reason: "no_gateway_access" };
     }
 
     const isAgentRuntimeRunToken =
       accessToken.clientId === AGENT_RUNTIME_OAUTH_CLIENT_ID;
     return {
-      tokenId: isAgentRuntimeRunToken
-        ? accessToken.id
-        : `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
-      teamId: null,
-      isOrganizationToken: false,
-      organizationId,
-      isUserToken: true,
-      userId,
-      ...(isAgentRuntimeRunToken
-        ? {}
-        : { oauthClientId: accessToken.clientId }),
+      reason: null,
+      result: {
+        tokenId: isAgentRuntimeRunToken
+          ? accessToken.id
+          : `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId,
+        isUserToken: true,
+        userId,
+        ...(isAgentRuntimeRunToken
+          ? {}
+          : { oauthClientId: accessToken.clientId }),
+      },
     };
   } catch (error) {
     logger.debug(
@@ -1984,7 +2002,7 @@ async function validateOAuthTokenByHash(params: {
       },
       "validateOAuthToken: token validation failed",
     );
-    return null;
+    return { result: null, reason: "invalid_token" };
   }
 }
 
@@ -2193,7 +2211,7 @@ export async function resolveTokenOrganizationId(
 
 /**
  * Same as {@link validateMCPGatewayToken}, but also reports why authentication
- * failed so the gateway route can return an actionable 401 instead of a
+ * failed so the gateway route can distinguish 401 from 403 instead of a
  * catch-all. Failures are never cached (see `cacheTokenAuthResult`), so the
  * reason is always computed against fresh state.
  */
@@ -2213,7 +2231,7 @@ export async function authenticateMCPGatewayRequest(
   // account holds the permission: no grant or OAuth client stands in for it.
   return outcome.result &&
     !(await canUseAgent(profileId, callerOf(outcome.result)))
-    ? { result: null, reason: "invalid_token" }
+    ? { result: null, reason: "no_gateway_access" }
     : outcome;
 }
 
@@ -2292,17 +2310,17 @@ async function authenticateUngated(
   }
 
   // Try OAuth token validation (for MCP clients like Open WebUI)
-  const accessTokenResult = await validateOAuthTokenByHash({
+  const oauthOutcome = await authenticateOAuthTokenByHash({
     profileId,
     oauthTokenHash: tokenHashes.oauthTokenHash,
     agentAccessContext: await getAgentAccessContext(),
     lookups,
     requiredOAuthScope,
   });
-  if (accessTokenResult) {
+  if (oauthOutcome.result || oauthOutcome.reason === "no_gateway_access") {
     // OAuth scopes and target grants are live configuration. Recheck them on
     // every call so a capability removal cannot leave a cached authorization.
-    return { result: accessTokenResult, reason: null };
+    return oauthOutcome;
   }
 
   logger.warn(

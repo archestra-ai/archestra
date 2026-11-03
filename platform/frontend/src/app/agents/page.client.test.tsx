@@ -205,6 +205,7 @@ it("includes matching built-in agents when searching by name", async () => {
   expect(listRequests[0].get("name")).toBe("Policy Assistant");
   expect(listRequests[0].get("includeBuiltIn")).toBe("true");
 });
+
 it("renders the catalog the server streamed without requesting it from the browser", async () => {
   let releaseList!: () => void;
   const listHeld = new Promise<void>((resolve) => {

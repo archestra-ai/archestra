@@ -30,7 +30,7 @@ import websocketService from "@/lib/websocket/websocket";
 const AGENT_RUN_INTERRUPT_PROMPT: InterruptPrompt = {
   title: "Send Ctrl+C to the agent?",
   description:
-    "Ctrl+C stops the turn that is running, and a second Ctrl+C can close the agent. To copy text instead, switch to Select text.",
+    "Ctrl+C stops the running turn. A second Ctrl+C can close the agent. To copy text, switch to Select text.",
   confirmLabel: "Send Ctrl+C",
 };
 

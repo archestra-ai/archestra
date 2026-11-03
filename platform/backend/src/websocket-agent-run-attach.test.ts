@@ -164,10 +164,21 @@ describe("websocket Agent run attach ownership", () => {
     });
     runId = task.id;
     context.userId = serviceAccountUserId(account.id);
+    const create = vi.spyOn(AuditLogModel, "create");
     const attachment = await startAttach();
     attachment.resolve();
     await attachment.done;
     expect(messages().at(-1)?.type).toBe("agent_run_attach_started");
+    // The audit row names the account, not a missing person.
+    await vi.waitFor(() => expect(create).toHaveBeenCalledOnce());
+    expect(create.mock.calls[0][0]).toMatchObject({
+      action: "agentRun.terminal_attached",
+      actorType: "service_account",
+      actorId: null,
+      actorName: account.name,
+      after: { serviceAccountId: account.id },
+    });
+    await create.mock.results[0].value;
   });
 
   test("only a manager of the owning service account with Agent use access may attach", async ({
@@ -461,7 +472,7 @@ describe("websocket Agent run attach ownership", () => {
       action: "agentRun.terminal_detached",
       actorId: context.userId,
       resourceId: runId,
-      after: { durationSeconds: expect.any(Number) },
+      after: { durationSeconds: expect.any(Number), interruptCount: 3 },
     });
     // The rows were written, not only attempted.
     for (const call of create.mock.results) await call.value;

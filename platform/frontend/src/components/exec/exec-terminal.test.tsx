@@ -189,8 +189,10 @@ describe("ExecTerminal", () => {
   });
 
   it("asks before sending Ctrl+C to a session whose input loop belongs to an agent", async () => {
+    let sessionHandlers: ExecSessionHandlers | null = null;
     const transport: ExecSessionTransport = {
       open: (handlers) => {
+        sessionHandlers = handlers;
         handlers.onStarted(null);
         return vi.fn();
       },
@@ -263,6 +265,15 @@ describe("ExecTerminal", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     terminalHarness.selectedText = "";
 
+    // A Cyrillic layout gives the physical C key a different character;
+    // xterm still sends Ctrl+C for it, so the prompt still catches it.
+    expect(keyHandler(ctrlC({ key: "\u0441", code: "KeyC" }))).toBe(false);
+    await screen.findByRole("dialog", { name: "Send Ctrl+C to the agent?" });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+
     // Other chords and key phases are the emulator's as before.
     expect(keyHandler(ctrlC({ shiftKey: true }))).toBe(true);
     expect(keyHandler(ctrlC({ ctrlKey: false, metaKey: true }))).toBe(true);
@@ -270,6 +281,15 @@ describe("ExecTerminal", () => {
       keyHandler(new KeyboardEvent("keyup", { key: "c", ctrlKey: true })),
     ).toBe(true);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(transport.sendInput).toHaveBeenCalledOnce();
+
+    // A prompt left open when the session ends has nothing to send to.
+    expect(keyHandler(ctrlC())).toBe(false);
+    await screen.findByRole("dialog", { name: "Send Ctrl+C to the agent?" });
+    act(() => sessionHandlers?.onClosed(null));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
     expect(transport.sendInput).toHaveBeenCalledOnce();
   });
 

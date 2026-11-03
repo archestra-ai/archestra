@@ -275,11 +275,14 @@ export function ExecTerminal({
       };
       terminal.attachCustomKeyEventHandler((event) => {
         if (!focusTerminalRef.current) return false;
+        // xterm derives Ctrl+C from the physical key, so a Cyrillic or Greek
+        // layout sends it while `key` is not "c". Match both.
+        const isKeyC = event.code === "KeyC" || event.key.toLowerCase() === "c";
         if (
           event.type === "keydown" &&
           (event.metaKey || event.ctrlKey) &&
           !event.altKey &&
-          event.key.toLowerCase() === "c" &&
+          isKeyC &&
           terminal.hasSelection()
         ) {
           event.preventDefault();
@@ -292,7 +295,7 @@ export function ExecTerminal({
           !event.metaKey &&
           !event.altKey &&
           !event.shiftKey &&
-          event.key.toLowerCase() === "c" &&
+          isKeyC &&
           interruptPromptRef.current
         ) {
           // With no xterm selection, this Ctrl+C would reach the agent as an
@@ -391,6 +394,7 @@ export function ExecTerminal({
           onError: (message) => {
             if (disposed) return;
             setStatus("error");
+            setInterruptPending(false);
             setErrorMessage(message);
             onErrorRef.current?.();
           },
@@ -398,6 +402,7 @@ export function ExecTerminal({
             if (disposed) return;
             setClosedReason(reason);
             setStatus("disconnected");
+            setInterruptPending(false);
             onClosedRef.current?.();
           },
         });
@@ -678,7 +683,7 @@ export function ExecTerminal({
           size="small"
           initialFocusRef={cancelInterruptRef}
         >
-          <DialogStickyFooter className="mt-0">
+          <DialogStickyFooter className="mt-0 border-t-0 shadow-none">
             <Button
               type="button"
               variant="outline"

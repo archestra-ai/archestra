@@ -266,7 +266,9 @@ export class WebSocketService {
       const { attachment } = subscription;
       if (attachment && containsInterrupt(message.payload.data)) {
         // Ctrl+C reaches the agent's own input loop, where it stops the
-        // running turn. Record it once per burst so a held key is one event.
+        // running turn. Record it once per burst so a held key is one event;
+        // the detach row carries the full count.
+        attachment.interruptCount += 1;
         const now = Date.now();
         if (
           attachment.lastInterruptAt === null ||
@@ -744,6 +746,7 @@ export class WebSocketService {
         podName: resourceName,
         attachedAt: Date.now(),
         lastInterruptAt: null,
+        interruptCount: 0,
       };
       auditTerminal("agentRun.terminal_attached", subscription.attachment);
 
@@ -792,6 +795,7 @@ export class WebSocketService {
         durationSeconds: Math.round(
           (Date.now() - subscription.attachment.attachedAt) / 1000,
         ),
+        interruptCount: subscription.attachment.interruptCount,
       });
       subscription.attachment = null;
     }
@@ -1908,6 +1912,12 @@ export class WebSocketService {
     }
     for (const [ws] of this.mcpDeploymentStatusSubscriptions) {
       this.unsubscribeMcpDeploymentStatuses(ws);
+    }
+    // End live terminals here, not from each socket's later close event, so
+    // their detach audit rows are tracked before shutdown drains and closes
+    // the database.
+    for (const [ws] of this.agentRunAttachSubscriptions) {
+      this.unsubscribeAgentRunAttach(ws);
     }
     this.clientContexts.clear();
 

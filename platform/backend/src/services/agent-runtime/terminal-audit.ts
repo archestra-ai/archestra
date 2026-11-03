@@ -1,8 +1,10 @@
 import { actorFromUserId } from "@/auth/service-account-user-id";
 import logger from "@/logging";
 import AuditLogModel from "@/models/audit-log";
+import ServiceAccountModel from "@/models/service-account";
 import UserModel from "@/models/user";
 import type { AgentRunRecord } from "@/types";
+import { trackBackgroundWork } from "@/utils/background-work";
 
 /**
  * Audit trail for a browser attached to a run's live terminal.
@@ -35,21 +37,28 @@ export interface TerminalAttachment {
   podName: string;
   attachedAt: number;
   lastInterruptAt: number | null;
+  /** Every Ctrl+C sent, counting the ones a burst folded into one row. */
+  interruptCount: number;
 }
 
 async function recordTerminalAudit(
   action: TerminalAuditAction,
   attachment: TerminalAttachment,
-  details: Record<string, unknown> = {},
+  occurredAt: Date,
+  details: Record<string, unknown>,
 ): Promise<void> {
   const { session, requestedRunId, actorUserId, podName } = attachment;
   const actor = actorFromUserId(actorUserId);
   const user = actor.kind === "user" ? await UserModel.getById(actor.id) : null;
+  const account =
+    actor.kind === "serviceAccount"
+      ? await ServiceAccountModel.findById(actor.id, session.organizationId)
+      : null;
   await AuditLogModel.create({
     organizationId: session.organizationId,
     actorId: actor.kind === "user" ? actor.id : null,
     actorType: actor.kind === "user" ? "user" : "service_account",
-    actorName: user?.name ?? null,
+    actorName: user?.name ?? account?.name ?? null,
     actorEmail: user?.email ?? null,
     action,
     outcome: "success",
@@ -75,16 +84,21 @@ async function recordTerminalAudit(
     requestId: null,
     sourceIp: null,
     userAgent: null,
-    occurredAt: new Date(),
+    occurredAt,
   });
 }
 
-/** Fire-and-forget: a failed audit write must not break the live terminal. */
+/**
+ * Fire-and-forget: a failed audit write must not break the live terminal.
+ * The write is tracked background work, so shutdown and test teardown wait
+ * for it rather than closing the database under it.
+ */
 export function auditTerminal(
   action: TerminalAuditAction,
   attachment: TerminalAttachment,
   details: Record<string, unknown> = {},
 ): void {
+  const occurredAt = new Date();
   const context = {
     action,
     runId: attachment.requestedRunId,
@@ -94,7 +108,12 @@ export function auditTerminal(
     ...details,
   };
   logger.info(context, "Agent run terminal event");
-  recordTerminalAudit(action, attachment, details).catch((err) =>
-    logger.error({ err, ...context }, "audit: failed to record terminal event"),
+  trackBackgroundWork(
+    recordTerminalAudit(action, attachment, occurredAt, details).catch((err) =>
+      logger.error(
+        { err, ...context },
+        "audit: failed to record terminal event",
+      ),
+    ),
   );
 }

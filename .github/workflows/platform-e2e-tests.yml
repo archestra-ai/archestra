@@ -411,7 +411,7 @@ jobs:
     timeout-minutes: 25
     permissions:
       contents: read
-      actions: read # Required for the same-run platform image artifact.
+      actions: read # Required for private mirrors' same-run platform image artifact.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -843,7 +843,7 @@ jobs:
       # The -slim variant: this environment runs with the code runtime
       # disabled (see e2e-lite-platform.env), so the Dagger engine tar
       # is dead weight here. Untrusted PRs use their existing full-image
-      # artifact; trusted jobs share the slim artifact published once per run.
+      # artifact; trusted jobs pull the slim image by this run's SHA.
       # The build dependency guarantees publication before allocating this
       # runner; retry only transient errors.
       - name: Load platform image
@@ -1026,7 +1026,8 @@ jobs:
 
       # The -slim image, as in the lite job (the code runtime is off in that
       # stack). Untrusted PRs load the one image that travels as an artifact —
-      # the full one — which the quickstart half below then reuses.
+      # the full one — which the quickstart half below then reuses. Trusted
+      # runs pull the exact SHA-tagged slim image directly from the registry.
       - name: Load OpenAPPA platform image
         id: load-openappa-image
         uses: $/.github/actions/load-platform-image

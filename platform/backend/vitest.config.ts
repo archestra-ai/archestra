@@ -7,6 +7,7 @@ import {
   reportMemoryKillsAtExit,
 } from "../vitest.resources";
 import { vitestLogPolicy } from "../vitest.shared";
+import { ensureNativeAddons } from "./src/test/native-addons";
 import { calculateVitestResourceLimits } from "./src/test/vitest-resource-limits";
 
 const isCI = process.env.CI === "true";
@@ -112,6 +113,17 @@ function partitionTestFiles(): {
 }
 
 const testFiles = partitionTestFiles();
+
+// The backend loads the NAPI addons (@archestra/*-rs), which a fresh checkout
+// lacks: they are gitignored and pnpm install never builds them. Install the
+// ones CI published for this archestra-rs tree when any is missing or was
+// installed for another tree; never a cargo build. A checkout Tilt, the lite
+// stack or CI prepared already has them, so this reads a few files and stops.
+ensureNativeAddons({
+  backendDir: __dirname,
+  rustDir: path.resolve(__dirname, "../archestra-rs"),
+  installer: path.resolve(__dirname, "../scripts/napi-prebuilt.mjs"),
+});
 
 export default defineConfig({
   plugins: [rawPythonPlugin()],

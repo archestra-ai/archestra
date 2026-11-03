@@ -15,6 +15,7 @@ import {
   claudeCodeNativeChildIds,
 } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
+import { AppaKimiCodeAdapter } from "./adapters/kimi-code";
 import { AppaOpenCodeAdapter } from "./adapters/opencode";
 import { referencesChildTranscriptPath } from "./adapters/trajectory";
 import { appaTrajectory } from "./session-identity";
@@ -3027,3 +3028,66 @@ function delegated(params: {
     },
   };
 }
+
+describe("runtime nest with spawn-minted children", () => {
+  // Kimi Code names no native child id: a child shares the parent's session id
+  // and is told apart by the signed marker on its opening prompt.
+  const kimi = new AppaKimiCodeAdapter();
+  const callerId = "user:user";
+  const workspace = "workspace";
+  const runtimeSessionId = `${callerId}|${workspace}`;
+  const spawnCallId = "tool_spawn_date";
+  const prompt = "run date";
+  const kimiChild = (parentId: string): AppaMatchContext => {
+    const marker = mintDelegationMarker({
+      organizationId: "org",
+      callerId,
+      parentId,
+      spawnerNativeId: "session_parent",
+      prompt,
+      spawnCallId,
+      runtimeSessionId,
+    });
+    const context = runtimeRoot({
+      headers: {
+        "user-agent": "kimi-code-cli/2.3.3",
+        "x-appa-session-id": workspace,
+      },
+      interactionType: "kimi-code:chatCompletions",
+      body: {
+        prompt_cache_key: "session_parent",
+        messages: [{ role: "user", content: `${prompt}\n\n${marker}` }],
+      },
+    });
+    const trusted = context.trustedContext;
+    if (!trusted) throw new Error("expected trusted context");
+    trusted.runtimeSessionId = runtimeSessionId;
+    return context;
+  };
+
+  test("binds a direct child of the workspace by its signed spawn call", () => {
+    config.openappa.offerSigningSecret = SECRET;
+    expect(kimi.bindChildTrajectory(kimiChild(workspace))).toMatchObject({
+      parentId: workspace,
+      sessionId: childSessionId(workspace, spawnCallId),
+    });
+  });
+
+  test("binds a nested child under an intermediate parent by its signed spawn call", () => {
+    config.openappa.offerSigningSecret = SECRET;
+    const parentId = childSessionId(workspace, "a1");
+    expect(kimi.bindChildTrajectory(kimiChild(parentId))).toMatchObject({
+      parentId,
+      sessionId: childSessionId(parentId, spawnCallId),
+    });
+  });
+
+  test("refuses a spawn-minted child signed for another workspace", () => {
+    config.openappa.offerSigningSecret = SECRET;
+    const context = kimiChild(childSessionId(workspace, "a1"));
+    const trusted = context.trustedContext;
+    if (!trusted) throw new Error("expected trusted context");
+    trusted.runtimeSessionId = `${callerId}|other-workspace`;
+    expect(() => kimi.bindChildTrajectory(context)).toThrow(ApiError);
+  });
+});

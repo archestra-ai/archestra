@@ -130,7 +130,11 @@ for (const width of [320, 375]) {
       );
       expect(Math.round(lines)).toBe(1);
 
-      const settings = page.getByRole("link", { name: "Settings" });
+      // The page's own Settings link; the Yells card links to one block of it.
+      const settings = page.getByRole("link", {
+        name: "Settings",
+        exact: true,
+      });
       const title = await heading.boundingBox();
       const button = await settings.boundingBox();
       if (!title || !button) throw new Error("Missing header parts");

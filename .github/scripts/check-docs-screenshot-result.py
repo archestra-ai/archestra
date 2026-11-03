@@ -9,6 +9,8 @@ def main():
     result = os.environ["CAPTURE_RESULT"]
     required = event == "merge_group" or (
         event == "workflow_dispatch" and os.environ.get("VALIDATION_ONLY") == "true"
+    ) or (
+        event == "pull_request" and os.environ.get("REQUIRE_LABELED_CAPTURE") == "true"
     )
     if event == "merge_group" and os.environ.get("E2E_REQUIRED") == "false":
         if result != "skipped":

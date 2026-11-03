@@ -93,7 +93,8 @@ type CatalogTool = Pick<
  */
 const isCredentialLessCatalogType = (
   serverType: InternalMcpCatalogItem["serverType"],
-) => serverType === "builtin" || serverType === "app";
+) =>
+  serverType === "builtin" || serverType === "app" || serverType === "device";
 type ResourceTool = archestraApiTypes.GetAgentToolsResponses["200"][number];
 type AssignedTool = {
   tool: ResourceTool;

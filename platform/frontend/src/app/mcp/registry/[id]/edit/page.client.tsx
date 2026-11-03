@@ -123,7 +123,8 @@ function SetupWizard({
   // Without a connection the test step's own Install button is the step's
   // single CTA — hide the Next button so the two don't compete.
   const { target: testTarget } = useTestConnectionTarget(item);
-  const hideNext = step === "test" && !testTarget;
+  const hideNext =
+    step === "test" && !testTarget && item.serverType !== "device";
 
   const detailHref = `/mcp/registry/${item.id}`;
   const openappaEnabled = useFeature("openappaEnabled") === true;

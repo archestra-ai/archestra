@@ -6,12 +6,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useCredentialsPage } from "@/app/_parts/use-credentials-page";
 import { ClaudeCodeSubscription } from "@/app/account/_parts/claude-code-subscription";
 import AccountLayout from "@/app/account/layout";
+import { LocalDevicesLink } from "@/app/connection/local-devices-link";
 import { useAgentOptionsPage } from "@/lib/agent-options.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { useOrganization } from "@/lib/organization.query";
 import AccountCredentialsPage from "./page";
 
 vi.mock("next/navigation");
+vi.mock("@/lib/organization.query");
 vi.mock("@/app/_parts/use-credentials-page", () => ({
   useCredentialsPage: vi.fn(),
 }));
@@ -59,6 +62,9 @@ function setUp(params: {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(useOrganization).mockReturnValue({
+    data: { deviceMcpEnabled: false },
+  } as ReturnType<typeof useOrganization>);
   vi.mocked(useRouter).mockReturnValue({ replace } as unknown as ReturnType<
     typeof useRouter
   >);
@@ -166,5 +172,67 @@ describe("Personal Settings → Credentials", () => {
     ).toBeGreaterThan(0);
     expect(screen.getByText("Credentials table")).toBeVisible();
     expect(replace).not.toHaveBeenCalled();
+  });
+});
+
+describe("Local devices feature visibility", () => {
+  function renderAccount() {
+    setUp({ canReadCredentials: true });
+    return render(
+      <QueryClientProvider client={new QueryClient()}>
+        <AccountLayout>
+          <div>Device content</div>
+        </AccountLayout>
+        <LocalDevicesLink />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("hides account navigation and the Connect link until enabled, then shows both", () => {
+    vi.mocked(usePathname).mockReturnValue("/account");
+    const view = renderAccount();
+    expect(screen.queryAllByRole("link", { name: /Devices Beta/ })).toEqual([]);
+    expect(
+      screen.queryByRole("link", { name: "Local devices" }),
+    ).not.toBeInTheDocument();
+    vi.mocked(useOrganization).mockReturnValue({
+      data: { deviceMcpEnabled: true },
+    } as ReturnType<typeof useOrganization>);
+    view.rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <AccountLayout>
+          <div>Device content</div>
+        </AccountLayout>
+        <LocalDevicesLink />
+      </QueryClientProvider>,
+    );
+    expect(
+      screen.getAllByRole("link", { name: /Devices Beta/ }).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: "Local devices" })).toHaveAttribute(
+      "href",
+      "/account/devices",
+    );
+  });
+
+  it("redirects a disabled Devices deep link without mounting device content", () => {
+    vi.mocked(usePathname).mockReturnValue("/account/devices");
+    renderAccount();
+    expect(replace).toHaveBeenCalledWith("/account");
+    expect(screen.queryByText("Device content")).not.toBeInTheDocument();
+  });
+
+  it("waits for the setting before exposing Devices or redirecting", () => {
+    vi.mocked(usePathname).mockReturnValue("/account/devices");
+    vi.mocked(useOrganization).mockReturnValue({
+      data: undefined,
+      isPending: true,
+    } as ReturnType<typeof useOrganization>);
+    renderAccount();
+    expect(replace).not.toHaveBeenCalled();
+    expect(screen.queryByText("Device content")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Local devices" }),
+    ).not.toBeInTheDocument();
   });
 });

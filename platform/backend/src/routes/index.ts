@@ -25,6 +25,7 @@ export { default as connectedClientRoutes } from "./connected-client/connected-c
 export { default as connectionSetupRoutes } from "./connection-setup/connection-setup.routes";
 export { default as defaultUserLimitRoutes } from "./default-user-limit";
 export { default as devFeedbackRoutes } from "./dev-feedback/dev-feedback.routes";
+export { default as deviceMcpRoutes } from "./device-mcp/device-mcp.routes";
 export { default as environmentRoutes } from "./environment";
 export { default as gitCredentialRoutes } from "./git-credential/git-credential.routes";
 export { default as githubActionsRoutes } from "./github-actions/github-actions.routes";
@@ -48,6 +49,7 @@ export { default as llmOauthClientsRoutes } from "./llm-oauth-clients";
 export { default as llmProviderApiKeyRoutes } from "./llm-provider-api-keys";
 export { default as llmModelsRoutes } from "./llm-provider-models";
 export { default as llmProxyRoutes } from "./llm-proxy/llm-proxy.routes";
+export { default as localDeviceRoutes } from "./local-device/local-device.routes";
 export { default as mcpAppProxyRoutes } from "./mcp-app-proxy";
 export { default as mcpGatewayRoutes } from "./mcp-gateway";
 export { default as mcpOauthClientsRoutes } from "./mcp-oauth-clients";

@@ -22,6 +22,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildSync } from "esbuild";
 import { buildExtAppsInlineBundle } from "../standalone-scripts/build-ext-apps-inline";
 import { SNAPSHOT_PATH_ENV } from "./migrations-helper.js";
 import {
@@ -32,6 +33,17 @@ import {
 } from "./pglite-snapshot-cache.js";
 
 export default async function setup() {
+  if (!fs.existsSync(path.resolve("src/static/device-mcp-worker.cjs"))) {
+    buildSync({
+      entryPoints: ["src/device-mcp-client/managed-worker.ts"],
+      outfile: "src/static/device-mcp-worker.cjs",
+      bundle: true,
+      packages: "bundle",
+      platform: "node",
+      target: "node22",
+      format: "cjs",
+    });
+  }
   // Database-backed projects call this setup. Vitest initializes their global
   // setups sequentially in one process, so the first project publishes the
   // path and the others reuse it. A path inherited from elsewhere, for other

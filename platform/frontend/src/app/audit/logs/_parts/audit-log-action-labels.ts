@@ -45,6 +45,11 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "agentRun.unshared": "Agent run unshared",
   "browserStorageState.deleted": "Browser saved login removed",
   // Runtime credential
+  "deviceMcp.created": "Device paired",
+  "deviceMcp.revoked": "Device revoked",
+  "localDevice.created": "Local device added",
+  "localDevice.updated": "Local device renamed",
+  "localDevice.revoked": "Local device access revoked",
   "credential.created": "Credential created",
   "credential.updated": "Credential updated",
   "credential.deleted": "Credential deleted",

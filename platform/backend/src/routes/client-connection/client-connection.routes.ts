@@ -130,6 +130,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           z.object({
             decision: z.literal("approve"),
             setupId: z.string().uuid(),
+            localDeviceAgent: z.boolean().optional(),
           }),
           z.object({ decision: z.literal("deny") }),
         ]),
@@ -150,6 +151,9 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           request.body.decision === "approve"
             ? request.body.setupId
             : undefined,
+        localDeviceAgent:
+          request.body.decision === "approve" &&
+          request.body.localDeviceAgent === true,
         userId: request.user.id,
         organizationId: request.organizationId,
       });

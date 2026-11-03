@@ -6,10 +6,15 @@
  * It holds everything about you — what you can do and how you sign in.
  * Credentials holds what your agents may use as you.
  */
-export const accountSections = [
+export const accountSections: {
+  label: string;
+  href: string;
+  beta?: boolean;
+}[] = [
   // Labelled Account, not Profile: it holds access and sign-in too.
   { label: "Account", href: "/account" },
   { label: "Credentials", href: "/account/credentials" },
   { label: "API Keys", href: "/account/api-keys" },
+  { label: "Devices", href: "/account/devices", beta: true },
   { label: "Sessions", href: "/account/sessions" },
 ];

@@ -251,6 +251,8 @@ class InternalMcpCatalogModel {
         await InternalMcpCatalogModel.cloneSecretsFromSource(createdItem);
     }
 
+    await InternalMcpCatalogModel.syncDeviceTools(createdItem);
+
     const result: InternalMcpCatalog = {
       ...createdItem,
       labels: itemLabels,
@@ -1406,6 +1408,7 @@ class InternalMcpCatalogModel {
 
     const itemLabels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
     const itemTeams = await McpCatalogTeamModel.getTeamDetailsForCatalog(id);
+    await InternalMcpCatalogModel.syncDeviceTools(dbItem);
     const result: InternalMcpCatalog = {
       ...dbItem,
       labels: itemLabels,
@@ -2650,6 +2653,23 @@ class InternalMcpCatalogModel {
       await InternalMcpCatalogModel.attachListMetadata(dbItems);
     await InternalMcpCatalogModel.populateAuthorNames(catalogItems);
     return catalogItems;
+  }
+  private static async syncDeviceTools(
+    catalog: Pick<
+      InternalMcpCatalog,
+      "id" | "name" | "serverType" | "deviceConfig"
+    >,
+  ): Promise<void> {
+    if (catalog.serverType !== "device" || !catalog.deviceConfig) return;
+    await ToolModel.syncToolsForCatalog(
+      catalog.deviceConfig.tools.map((tool) => ({
+        catalogId: catalog.id,
+        name: ToolModel.slugifyName(catalog.name, tool.name),
+        rawToolName: tool.name,
+        description: tool.description ?? null,
+        parameters: tool.inputSchema,
+      })),
+    );
   }
 }
 

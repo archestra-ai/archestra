@@ -10,7 +10,10 @@ import {
 } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import ConnectionSetupModel from "@/models/connection-setup";
+import OrganizationModel from "@/models/organization";
 import PluginModel from "@/models/plugin";
+import localDeviceRoutes from "@/routes/local-device/local-device.routes";
+import { localDeviceInstallService } from "@/services/local-device-install";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import routes from "./client-connection.routes";
@@ -33,6 +36,7 @@ describe("browser-approved client connection", () => {
     });
     registerAuditLogHook(app);
     await app.register(routes);
+    await app.register(localDeviceRoutes);
   });
   afterEach(async () => {
     await app.close();
@@ -511,6 +515,146 @@ describe("browser-approved client connection", () => {
       ),
     ).toBeNull();
   });
+  test("browser approval installs one device and repeat Connect reuses its saved credential", async () => {
+    await OrganizationModel.patch(organizationId, { deviceMcpEnabled: true });
+    const approve = async () => {
+      const started = await start(undefined, "Work computer");
+      const ticket = await setup();
+      const decision = await app.inject({
+        method: "POST",
+        url: `/api/client-connections/${started.id}/decision`,
+        payload: {
+          decision: "approve",
+          setupId: ticket.setup.id,
+          localDeviceAgent: true,
+        },
+      });
+      expect(decision.statusCode, decision.body).toBe(200);
+      const grant = await localDeviceInstallService.claim(
+        `archestra_con_${started.deviceCode}`,
+        organizationId,
+        user.id,
+      );
+      expect(grant).not.toBeNull();
+      return grant?.code;
+    };
+    const body = {
+      code: await approve(),
+      platform: "linux",
+      arch: "x64",
+      appVersion: "background-1",
+    };
+    const first = await app.inject({
+      method: "POST",
+      url: "/api/local-devices/install",
+      payload: body,
+    });
+    expect(first.statusCode, first.body).toBe(200);
+    const credential = first.json();
+    expect(credential.created).toBe(true);
+    const replay = await app.inject({
+      method: "POST",
+      url: "/api/local-devices/install",
+      payload: body,
+    });
+    expect(replay.statusCode).toBe(410);
+    const again = await app.inject({
+      method: "POST",
+      url: "/api/local-devices/install",
+      payload: { ...body, code: await approve() },
+      headers: { authorization: `Bearer ${credential.token}` },
+    });
+    expect(again.statusCode, again.body).toBe(200);
+    expect(again.json()).toMatchObject({
+      deviceId: credential.deviceId,
+      created: false,
+    });
+    const devices = await app.inject({
+      method: "GET",
+      url: "/api/local-devices",
+    });
+    expect(devices.json()).toHaveLength(1);
+  });
+
+  test("does not issue a device grant without explicit browser consent, and rejects consent when disabled", async () => {
+    const first = await start();
+    const ticket = await setup();
+    const normal = await app.inject({
+      method: "POST",
+      url: `/api/client-connections/${first.id}/decision`,
+      payload: { decision: "approve", setupId: ticket.setup.id },
+    });
+    expect(normal.statusCode).toBe(200);
+    expect(
+      await localDeviceInstallService.claim(
+        `archestra_con_${first.deviceCode}`,
+        organizationId,
+        user.id,
+      ),
+    ).toBeNull();
+    const second = await start();
+    const secondTicket = await setup();
+    const disabled = await app.inject({
+      method: "POST",
+      url: `/api/client-connections/${second.id}/decision`,
+      payload: {
+        decision: "approve",
+        setupId: secondTicket.setup.id,
+        localDeviceAgent: true,
+      },
+    });
+    expect(disabled.statusCode).toBe(403);
+    expect(
+      await localDeviceInstallService.claim(
+        `archestra_con_${second.deviceCode}`,
+        organizationId,
+        user.id,
+      ),
+    ).toBeNull();
+  });
+
+  test("rechecks the organization switch at install and consumes the one-time grant atomically", async () => {
+    await OrganizationModel.patch(organizationId, { deviceMcpEnabled: true });
+    const raw = "approved-local-device-ticket";
+    await localDeviceInstallService.approve(
+      createHash("sha256").update(raw).digest("hex"),
+      {
+        organizationId,
+        userId: user.id,
+        name: "Work computer",
+        platform: "linux",
+        expiresAt: Date.now() + 60000,
+      },
+    );
+    const grant = await localDeviceInstallService.claim(
+      raw,
+      organizationId,
+      user.id,
+    );
+    await OrganizationModel.patch(organizationId, { deviceMcpEnabled: false });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/local-devices/install",
+      payload: {
+        code: grant?.code,
+        platform: "linux",
+        arch: "x64",
+        appVersion: "background-1",
+      },
+    });
+    expect(response.statusCode).toBe(403);
+    const replay = await app.inject({
+      method: "POST",
+      url: "/api/local-devices/install",
+      payload: {
+        code: grant?.code,
+        platform: "linux",
+        arch: "x64",
+        appVersion: "background-1",
+      },
+    });
+    expect(replay.statusCode).toBe(410);
+  });
 });
 
 describe("client connection authentication boundary", () => {
@@ -518,6 +662,7 @@ describe("client connection authentication boundary", () => {
     const app = createFastifyInstance();
     app.addHook("preHandler", new Authnz().handle);
     await app.register(routes);
+    await app.register(localDeviceRoutes);
     try {
       expect(
         (await app.inject({ url: "/api/client-connections/installer" }))

@@ -333,3 +333,40 @@ function renderForm(
   );
   return { user, onSubmit, submitRef };
 }
+
+it("offers user device hosting only after opt-in and submits the reviewed configuration", async () => {
+  server.use(
+    http.get("http://localhost:9000/api/organization", () =>
+      HttpResponse.json({ id: "test-org", deviceMcpEnabled: true }),
+    ),
+  );
+  const { user, onSubmit } = renderForm();
+  await user.click(await screen.findByRole("radio", { name: /^User device/ }));
+  await user.type(screen.getByLabelText(/^Name/), "Device tools");
+  const config = {
+    protocolVersion: 1,
+    version: "1.0.0",
+    platforms: {
+      darwin: { command: "node", args: ["/server.mjs"] },
+      win32: { command: "node.exe", args: ["C:/server.mjs"] },
+    },
+    tools: [{ name: "echo", inputSchema: { type: "object" } }],
+  };
+  await user.click(screen.getByLabelText("Reviewed device configuration"));
+  await user.paste(JSON.stringify(config));
+  expect(
+    screen.queryByText("Authentication", { exact: true }),
+  ).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
+  expect(
+    transformFormToApiData(onSubmit.mock.calls[0][0]).deviceConfig,
+  ).toEqual(config);
+});
+
+it("keeps user device hosting unavailable when the organization has not opted in", () => {
+  renderForm();
+  expect(
+    screen.queryByRole("radio", { name: /^User device/ }),
+  ).not.toBeInTheDocument();
+});

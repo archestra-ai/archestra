@@ -1,0 +1,8 @@
+{
+  "name": "@archestra/device-mcp-desktop",
+  "version": "1.5.0-rc.19",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "node build.mjs" },
+  "devDependencies": { "@electron/packager": "20.3.0" }
+}

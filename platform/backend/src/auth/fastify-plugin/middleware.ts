@@ -27,11 +27,13 @@ import {
   CONNECTION_RUNTIME_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
   CONNECTION_STARTUP_GUARD_PATH,
+  DEVICE_MCP_PROOF_PATHS,
   GITHUB_ACTIONS_TOKEN_PATH,
   GUARDRAILS_NOOP_ANNOTATOR_PATH,
   HEALTH_PATH,
   INCOMING_EMAIL_WEBHOOK_PREFIX,
   isLlmProxyPath,
+  LOCAL_DEVICE_PROOF_PATHS,
   METRICS_PATH,
   MFILES_VAF_ADD_ON_PACKAGE_PATH,
   MFILES_VAF_ADD_ON_SCRIPT_PATH,
@@ -168,6 +170,12 @@ export class Authnz {
       );
       return true;
     }
+    if (
+      method === "POST" &&
+      (DEVICE_MCP_PROOF_PATHS.has(url.split("?")[0]) ||
+        LOCAL_DEVICE_PROOF_PATHS.has(url.split("?")[0]))
+    )
+      return true;
     const isGetOrHead = method === "GET" || method === "HEAD";
     if (
       url.startsWith("/api/auth") ||

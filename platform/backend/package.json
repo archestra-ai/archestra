@@ -19,6 +19,7 @@
     "start": "NODE_ENV=production ./scripts/start-production.sh",
     "dev": "tsdown --watch",
     "dev:debug": "DEBUG=1 tsdown --watch",
+    "device-mcp:build": "node src/device-mcp-client/build.mjs",
     "test": "vitest",
     "test:shutdown": "node scripts/request-shutdown.test.mjs",
     "test:shutdown:startup": "node --test scripts/shutdown-startup.test.mjs",

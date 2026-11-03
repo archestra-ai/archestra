@@ -124,6 +124,10 @@ export {
   conversationShareUsersTable,
   default as conversationSharesTable,
 } from "./conversation-share";
+export {
+  deviceMcpCommandsTable,
+  deviceMcpConnectionsTable,
+} from "./device-mcp";
 export { default as encryptionKeyCanariesTable } from "./encryption-key-canary";
 export { default as environmentsTable } from "./environment";
 export { default as environmentDefaultUserLimitsTable } from "./environment-default-user-limits";
@@ -191,6 +195,7 @@ export { default as limitModelUsageTable } from "./limit-model-usage";
 export { default as llmProviderApiKeysTable } from "./llm-provider-api-key";
 export { default as llmProviderApiKeyLabelsTable } from "./llm-provider-api-key-label";
 export { default as llmProviderApiKeyModelsTable } from "./llm-provider-api-key-model";
+export { localDevicesTable } from "./local-device";
 export { default as mcpCatalogLabelsTable } from "./mcp-catalog-label";
 export { default as mcpCatalogSkillsTable } from "./mcp-catalog-skill";
 export { default as mcpCatalogTeamsTable } from "./mcp-catalog-team";

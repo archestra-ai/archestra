@@ -20,9 +20,14 @@ import {
   vi,
 } from "vitest";
 import { postConnected } from "@/lib/connect-signal";
+import {
+  useAppearanceSettings,
+  useOrganization,
+} from "@/lib/organization.query";
 import { ClientConnectionApproval } from "./client-connection-approval";
 
 vi.mock("sonner");
+vi.mock("@/lib/organization.query");
 vi.mock("@/lib/connect-signal");
 const origin = "http://localhost:9000";
 const server = setupServer();
@@ -38,6 +43,13 @@ afterEach(() => {
 });
 beforeEach(() => {
   requests.length = 0;
+  vi.mocked(useAppearanceSettings).mockReturnValue({
+    data: undefined,
+  } as ReturnType<typeof useAppearanceSettings>);
+  vi.mocked(useOrganization).mockReturnValue({
+    data: { deviceMcpEnabled: false },
+    isPending: false,
+  } as ReturnType<typeof useOrganization>);
   vi.mocked(postConnected).mockClear();
   archestraApiClient.setConfig({ baseUrl: origin });
   server.use(
@@ -350,3 +362,25 @@ async function approveTooltip() {
   await userEvent.setup().hover(approve.parentElement as HTMLElement);
   return screen.findByRole("tooltip");
 }
+
+test("approves background installation explicitly when Local devices is enabled", async () => {
+  vi.mocked(useOrganization).mockReturnValue({
+    data: { deviceMcpEnabled: true },
+    isPending: false,
+  } as ReturnType<typeof useOrganization>);
+  show();
+  expect(
+    await screen.findByText(/Also installs a background agent/),
+  ).toBeVisible();
+  await userEvent.click(
+    screen.getByRole("checkbox", { name: /This code matches/ }),
+  );
+  await userEvent.click(screen.getByRole("button", { name: /Approve/ }));
+  await waitFor(() =>
+    expect(requests).toContainEqual({
+      decision: "approve",
+      setupId: "setup",
+      localDeviceAgent: true,
+    }),
+  );
+});

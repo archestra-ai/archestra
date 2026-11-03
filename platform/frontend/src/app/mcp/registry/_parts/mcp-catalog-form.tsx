@@ -16,6 +16,7 @@ import {
   Globe,
   IdCard,
   KeyRound,
+  Laptop,
   Server,
   Sparkles,
   Trash2,
@@ -101,7 +102,10 @@ import { useDefaultEnvironmentSeed } from "@/lib/hooks/use-default-environment-s
 import { useK8sImagePullSecrets } from "@/lib/mcp/internal-mcp-catalog.query";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 import { useMcpDeploymentPermission } from "@/lib/mcp/use-mcp-deployment-permission";
-import { useDefaultEnvironment } from "@/lib/organization.query";
+import {
+  useDefaultEnvironment,
+  useOrganization,
+} from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
 import {
   type CascadeSnapshot,
@@ -240,6 +244,8 @@ export function McpCatalogForm({
   const mcpServerBaseImage = useFeature("mcpServerBaseImage") ?? "";
 
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
+  const { data: deviceOrganization } = useOrganization();
+  const isDeviceMcpEnabled = deviceOrganization?.deviceMcpEnabled === true;
   const isEnterpriseCoreEnabled = useEnterpriseFeature("core");
   const appName = useAppName();
   const mcpAuthDocsUrl = getFrontendDocsUrl(
@@ -1065,6 +1071,7 @@ export function McpCatalogForm({
                   <HostingChoice
                     value={currentServerType}
                     localEnabled={isLocalMcpEnabled === true}
+                    deviceEnabled={isDeviceMcpEnabled}
                     onChange={(value) => form.setValue("serverType", value)}
                   />
                 )}
@@ -1084,6 +1091,35 @@ export function McpCatalogForm({
                             className="font-mono"
                             autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                             {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+                {currentServerType === "device" && (
+                  <FormField
+                    control={form.control}
+                    name="deviceConfigJson"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Reviewed device configuration</FormLabel>
+                        <FormDescription>
+                          Define the version, macOS and Windows executable and
+                          arguments, and tool schemas. Each user reviews this
+                          configuration and pairs their own computer. Changes
+                          require their approval again.
+                        </FormDescription>
+                        <FormControl>
+                          <Textarea
+                            {...field}
+                            value={field.value ?? ""}
+                            rows={18}
+                            className="font-mono"
+                            placeholder={
+                              '{ "protocolVersion": 1, "version": "1.0.0", "platforms": { "darwin": { "command": "node", "args": ["/path/to/server.mjs"] }, "win32": { "command": "node.exe", "args": ["C:/path/to/server.mjs"] } }, "tools": [{ "name": "echo", "inputSchema": { "type": "object", "properties": { "text": { "type": "string" } } } }] }'
+                            }
                           />
                         </FormControl>
                         <FormMessage />
@@ -2889,11 +2925,13 @@ function withCreationAccess(
 function HostingChoice({
   value,
   localEnabled,
+  deviceEnabled,
   onChange,
 }: {
-  value: "local" | "remote";
+  value: "local" | "remote" | "device";
   localEnabled: boolean;
-  onChange: (value: "local" | "remote") => void;
+  deviceEnabled: boolean;
+  onChange: (value: "local" | "remote" | "device") => void;
 }) {
   const options = [
     {
@@ -2912,6 +2950,17 @@ function HostingChoice({
       icon: Server,
       disabled: !localEnabled,
     },
+    ...(deviceEnabled
+      ? [
+          {
+            value: "device" as const,
+            title: "User device",
+            description: "Each caller connects a server on their own computer.",
+            icon: Laptop,
+            disabled: false,
+          },
+        ]
+      : []),
   ];
   return (
     <div className="space-y-2">
@@ -2919,8 +2968,10 @@ function HostingChoice({
       <RadioGroup
         aria-labelledby="server-hosting-label"
         value={value}
-        onValueChange={(next) => onChange(next as "local" | "remote")}
-        className="grid gap-3 sm:grid-cols-2"
+        onValueChange={(next) =>
+          onChange(next as "local" | "remote" | "device")
+        }
+        className="grid gap-3 sm:grid-cols-3"
       >
         {options.map((option) => {
           const Icon = option.icon;

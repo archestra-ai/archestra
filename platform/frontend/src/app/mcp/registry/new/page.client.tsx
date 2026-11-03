@@ -85,7 +85,11 @@ export default function NewMcpCatalogItemPage() {
         if (!createdItem) return;
         // Continue the setup wizard on the created item: test the connection,
         // review tools, configure guardrails.
-        router.push(`/mcp/registry/${createdItem.id}/edit?step=test`);
+        router.push(
+          createdItem.serverType === "device"
+            ? `/mcp/registry/${createdItem.id}`
+            : `/mcp/registry/${createdItem.id}/edit?step=test`,
+        );
       },
       onError: (error) => {
         // Network-policy rejections point at the Server URL — show them

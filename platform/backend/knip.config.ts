@@ -10,6 +10,16 @@ const config: KnipConfig = {
     "src/routes/**/*.ts!",
     // Standalone scripts run via `tsx` from package.json scripts (not picked up by tsdown plugin)
     "src/standalone-scripts/**/*.ts!",
+    // Foreground device connector launched from the registry's setup command.
+    "src/device-mcp-client/cli.ts!",
+    // Bundled as a standalone IPC child by tsdown/esbuild.
+    "src/device-mcp-client/managed-worker.ts!",
+    // Consumed by the separate desktop app bundle, outside this package graph.
+    "src/device-mcp-client/connection-file.ts!",
+    "src/device-mcp-client/local-device-client.ts!",
+    "src/device-mcp-client/local-device-store.ts!",
+    // Optional source build command; not a production server entry point.
+    "src/device-mcp-client/build.mjs",
     // The `!` script entries below are package.json scripts too, so the dev
     // pass calls them redundant; the production pass needs them.
     // Container/Helm entrypoint; referenced outside the TypeScript module graph.
@@ -26,6 +36,8 @@ const config: KnipConfig = {
     "scripts/update-openappa-template.mjs!",
     // Test infrastructure used by *.test.ts files (dev-only entries)
     "src/test/**/*.ts",
+    // Spawned as a real subprocess by companion tests; excluded in production.
+    "src/test/fixtures/device-mcp.mjs",
     // Loaded by `vitest run --config` for the opt-in session storage benchmark.
     "vitest.benchmark.config.ts",
     // `pnpm check:layers` and the layer table it checks (also its

@@ -9,6 +9,9 @@ import { enterpriseTier } from "@/enterprise-tier";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import * as embeddingClients from "@/knowledge-base/embedding-clients";
+import A2AContextModel from "@/models/a2a/context";
+import A2ATaskModel from "@/models/a2a/task";
+import AgentRunModel from "@/models/agent-run";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import KbConnectorDocumentCountModel from "@/models/kb-connector-document-count";
 import KbDocumentModel from "@/models/kb-document";
@@ -610,6 +613,89 @@ describe("organization routes", () => {
       expect(
         await OrganizationModel.getDefaultMemberRole(organizationId),
       ).not.toBe("admin");
+    });
+  });
+
+  describe("PATCH /api/organization/mcp-settings - device connections", () => {
+    test("requires old personal runtimes to stop before activating scoped device access", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ organizationId });
+      const context = await A2AContextModel.create({
+        actorKind: "user",
+        actorId: user.id,
+      });
+      const task = await A2ATaskModel.create({
+        contextId: context.id,
+        agentId: agent.id,
+        state: "TASK_STATE_WORKING",
+      });
+      const run = await AgentRunModel.create({
+        organizationId,
+        taskId: task.id,
+        agentId: agent.id,
+        actorKind: "user",
+        actorId: user.id,
+        actorUserId: user.id,
+        workloadName: `device-test-${task.id}`,
+        backend: "kubernetes",
+        runtimeScope: "test",
+      });
+      const denied = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/mcp-settings",
+        payload: { deviceMcpEnabled: true },
+      });
+      expect(denied.statusCode, denied.body).toBe(409);
+      expect(
+        (await OrganizationModel.getById(organizationId))?.deviceMcpEnabled,
+      ).toBe(false);
+      await AgentRunModel.close({ id: run.id });
+      const enabled = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/mcp-settings",
+        payload: { deviceMcpEnabled: true },
+      });
+      expect(enabled.statusCode, enabled.body).toBe(200);
+    });
+
+    test("requires opt-in, persists changes, and records the audit diff", async () => {
+      const before = await app.inject({
+        method: "GET",
+        url: "/api/organization",
+      });
+      expect(before.statusCode, before.body).toBe(200);
+      expect(before.json().deviceMcpEnabled).toBe(false);
+
+      const enable = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/mcp-settings",
+        payload: { deviceMcpEnabled: true },
+      });
+      expect(enable.statusCode, enable.body).toBe(200);
+      expect(enable.json().deviceMcpEnabled).toBe(true);
+      expect(
+        (await OrganizationModel.getById(organizationId))?.deviceMcpEnabled,
+      ).toBe(true);
+
+      const [audit] = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.action, "organization.updated"));
+      expect(audit?.before).toMatchObject({ deviceMcpEnabled: false });
+      expect(audit?.after).toMatchObject({ deviceMcpEnabled: true });
+
+      const disable = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/mcp-settings",
+        payload: { deviceMcpEnabled: false },
+      });
+      expect(disable.statusCode, disable.body).toBe(200);
+      const after = await app.inject({
+        method: "GET",
+        url: "/api/organization",
+      });
+      expect(after.json().deviceMcpEnabled).toBe(false);
     });
   });
 

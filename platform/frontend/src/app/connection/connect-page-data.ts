@@ -138,6 +138,7 @@ export interface ConnectPageData {
     byServer: Record<string, number>;
     count?: archestraApiTypes.GetAgentMcpToolPreviewResponses[200]["tokenCount"];
   } | null;
+  localDevicesEnabled?: boolean;
   llmProxyEnabled: boolean;
   /** The org's LLM Proxy, when the user can route through it. */
   llmProxyId: string | null;
@@ -520,6 +521,7 @@ export function useConnectPageData({
     progressive,
     startingTools,
     toolTokens,
+    localDevicesEnabled: org?.deviceMcpEnabled === true,
     llmProxyEnabled: proxyAvailable,
     llmProxyId: proxyAvailable ? (llmProxy?.id ?? null) : null,
     shownProviders: getConnectableProviders(org),

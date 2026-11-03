@@ -83,6 +83,7 @@ import {
   ensureConnectionVirtualKey,
   readVirtualKeyValue,
 } from "@/services/connection-setup";
+import { localDeviceInstallService } from "@/services/local-device-install";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-providers";
 import {
@@ -1267,6 +1268,29 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ? JSON.stringify({ ...context, skills })
             : renderSetupScript({ ...context, skills });
         });
+        const deviceAgent = await localDeviceInstallService.claim(
+          token,
+          setup.organizationId,
+          setup.userId,
+        );
+        if (deviceAgent) {
+          if (
+            request.headers.accept ===
+            "application/vnd.archestra.desktop-setup+json"
+          )
+            throw new ApiError(
+              400,
+              "Use the Connect terminal command to install the approved background agent.",
+            );
+          const metadata = Buffer.from(
+            JSON.stringify({
+              ...deviceAgent,
+              url: proxyBaseUrlToOrigin(setup.baseUrl),
+              appName: context.appName,
+            }),
+          ).toString("base64");
+          script = `# archestra-device-agent: ${metadata}\n${script}`;
+        }
       } catch (error) {
         await ConnectionSetupModel.unclaim(setup.id);
         throw error;

@@ -109,6 +109,7 @@ import {
 } from "./connected-agents";
 import { GatewayLink } from "./gateway-link";
 import { type IncludeChange, IncludeDialog } from "./include-dialog";
+import { LocalDevicesLink } from "./local-devices-link";
 import {
   readsPrompts,
   type SetupMode,
@@ -887,8 +888,15 @@ function ConnectArea({
                 <>
                   Run it in a terminal on the computer where you use{" "}
                   {nameOf(client)}. It needs Node.js{" "}
-                  <span>{client.id === "pi" ? "22.19" : "18"}</span> or newer,
-                  opens a browser page, and changes nothing until you approve.
+                  <span>
+                    {client.id === "pi"
+                      ? "22.19"
+                      : data.localDevicesEnabled
+                        ? "22"
+                        : "18"}
+                  </span>{" "}
+                  or newer, opens a browser page, and changes nothing until you
+                  approve.
                   {client.id === "kimi-code" && (
                     <span>
                       {" "}
@@ -1686,17 +1694,12 @@ function ProfileCard({
           The items meet on the card's center, under the line down to the
           connect card. */}
       {status.length > 0 && (
-        <div className="grid grid-cols-2 items-center gap-x-8 rounded-b-3xl border-t bg-muted/30 px-5 py-2 text-xs">
-          {status.map((c, i) => (
+        <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2 rounded-b-3xl border-t bg-muted/30 px-5 py-2 text-xs">
+          {status.map((c) => (
             <div
               key={c.id}
               data-status-chip
-              className={cn(
-                "flex min-w-0 items-center gap-1.5 [&>svg]:size-3.5 [&>svg]:shrink-0",
-                i === 0 ? "justify-self-end" : "justify-self-start",
-                // A lone item sits on the center.
-                status.length === 1 && "col-span-2 justify-self-center",
-              )}
+              className="flex min-w-0 items-center gap-1.5 [&>svg]:size-3.5 [&>svg]:shrink-0"
             >
               {c.icon}
               <span className="font-semibold">{c.label}</span>
@@ -1709,6 +1712,7 @@ function ProfileCard({
               {c.tip}
             </div>
           ))}
+          <LocalDevicesLink />
         </div>
       )}
     </aside>

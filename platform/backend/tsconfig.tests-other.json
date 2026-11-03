@@ -14,6 +14,7 @@
     "src/test/**/*.test.ts",
     "src/middleware/**/*.test.ts",
     "src/features/**/*.test.ts",
+    "src/device-mcp-client/**/*.test.ts",
     "src/auto-routing/**/*.test.ts",
     "src/data-retention/**/*.test.ts",
     "src/plugins/**/*.test.ts",

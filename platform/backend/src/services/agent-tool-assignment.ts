@@ -445,6 +445,20 @@ async function validateCatalogRequirements(params: {
         expandSecrets: false,
       });
 
+  if (
+    catalogItem?.serverType === "device" &&
+    credentialResolutionMode !== "dynamic"
+  ) {
+    return {
+      code: "validation_error",
+      error: {
+        type: "validation_error",
+        message:
+          "Device tools require personal, call-time credential resolution.",
+      },
+    };
+  }
+
   if (catalogItem?.serverType === "local") {
     if (!mcpServerId && !usesLateBoundResolution) {
       return {

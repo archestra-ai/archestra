@@ -23,6 +23,22 @@ function createCapturingLogger() {
 }
 
 describe("log redaction", () => {
+  test("censors local device pairing proofs and bearer credentials without hiding diagnostic codes", () => {
+    const { logger, records } = createCapturingLogger();
+    logger.info({
+      code: "ECONNRESET",
+      request: {
+        body: { code: "private-pairing-proof" },
+        headers: { authorization: "Bearer private-device-proof" },
+      },
+      response: { body: { token: "private-device-proof" } },
+      body: { code: "private-pairing-proof" },
+    });
+    expect(JSON.stringify(records)).not.toContain("private-pairing-proof");
+    expect(JSON.stringify(records)).not.toContain("private-device-proof");
+    expect(records[0].code).toBe("ECONNRESET");
+  });
+
   test("compiled paths preserve mutable function-censor arguments across records", () => {
     const require = createRequire(import.meta.url);
     const redact = createRequire(require.resolve("pino"))("@pinojs/redact");

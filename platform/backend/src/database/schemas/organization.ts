@@ -61,6 +61,8 @@ const organizationsTable = pgTable("organization", {
   onlineMcpCatalogEnabled: boolean("online_mcp_catalog_enabled")
     .notNull()
     .default(true),
+  /** Organization opt-in for personal MCP servers running on end-user devices. */
+  deviceMcpEnabled: boolean("device_mcp_enabled").notNull().default(false),
   /** Initial tool mode for automatically provisioned personal agents and gateways. */
   defaultPersonalAgentAccessAllTools: boolean(
     "default_personal_agent_access_all_tools",

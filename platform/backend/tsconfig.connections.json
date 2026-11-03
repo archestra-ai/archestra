@@ -5,6 +5,7 @@
     "tsBuildInfoFile": "./.tsbuild/connections.tsbuildinfo"
   },
   "files": [
+    "src/services/agent-connection-setup/bootstrap/device-agent-runtime.ts",
     "src/services/agent-connection-setup/agents/claude-code.ts",
     "src/services/agent-connection-setup/agents/claude-desktop.ts",
     "src/services/agent-connection-setup/agents/codex.ts",

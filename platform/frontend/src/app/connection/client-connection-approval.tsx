@@ -17,11 +17,11 @@ import {
 } from "@/lib/client-connection.query";
 import { postConnected } from "@/lib/connect-signal";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useOrganization } from "@/lib/organization.query";
 import { ApprovedHandoff } from "./approved-handoff";
 import { ClaudeDesktopGatewaySteps } from "./claude-desktop-gateway-steps";
 import { ClientIcon } from "./client-icon";
 import { CONNECT_CLIENTS, type ConnectClient } from "./clients";
-import { GatewayLink } from "./gateway-link";
 import { platformLabels, toPlatformOption } from "./platform.utils";
 
 export function ClientConnectionApproval({
@@ -61,6 +61,8 @@ export function ClientConnectionApproval({
   const [confirmed, setConfirmed] = useState(false);
   const gatewaySelected = gateway !== null;
   const appName = useAppName();
+  const organization = useOrganization(true, { fresh: true });
+  const localDeviceAgent = organization.data?.deviceMcpEnabled === true;
   const clientSteps =
     clientId === "cursor" ||
     (clientId === "claude-desktop" && gatewaySelected) ? (
@@ -157,18 +159,23 @@ export function ClientConnectionApproval({
     "another app";
   // Approve stays off until every check passes; the tooltip names the first
   // one that does not, and what to do about it.
-  const approveBlockedReason = !matches
-    ? `Your terminal asked to connect ${requestedClientLabel} on ${platformLabels[toPlatformOption(request.data.platform)]}. Select the same app and operating system on this page, then approve.`
-    : setupProblem
-      ? setupProblem
-      : !confirmed
-        ? "Check that the code above matches the code in your terminal, then select the checkbox to confirm it."
-        : !setupId
-          ? "Preparing the setup for your terminal. Approve turns on as soon as it is ready."
-          : null;
+  const approveBlockedReason = organization.isPending
+    ? "Checking device settings…"
+    : organization.isError
+      ? "Device settings could not be checked. Reload this page before approving."
+      : !matches
+        ? `Your terminal asked to connect ${requestedClientLabel} on ${platformLabels[toPlatformOption(request.data.platform)]}. Select the same app and operating system on this page, then approve.`
+        : setupProblem
+          ? setupProblem
+          : !confirmed
+            ? "Check that the code above matches the code in your terminal, then select the checkbox to confirm it."
+            : !setupId
+              ? "Preparing the setup for your terminal. Approve turns on as soon as it is ready."
+              : null;
   // Something is still on its way (the setup, or the decision being sent):
   // show it moving, so a disabled button does not read as stuck.
-  const working = (!setupId && !setupProblem) || decision.isPending;
+  const working =
+    (!setupId && !setupProblem) || decision.isPending || organization.isPending;
   const approveDisabledReason =
     approveBlockedReason ??
     (decision.isPending ? "Sending your decision…" : null);
@@ -192,6 +199,18 @@ export function ClientConnectionApproval({
             </p>
           )}
         </div>
+        {localDeviceAgent && (
+          <p className="text-sm text-muted-foreground">
+            <span>
+              Also installs a background agent on this computer (requires
+              Node.js 22 or newer). It starts when you log in, reconnects
+              automatically, and appears in your Devices. Its 90-day device
+              credential is saved in your OS credential store. This step
+              connects the computer; it does not grant access to files or run
+              MCP servers.
+            </span>
+          </p>
+        )}
         <label
           htmlFor="confirm-connection-code"
           className="flex items-center gap-2.5 text-sm"
@@ -227,7 +246,11 @@ export function ClientConnectionApproval({
                 disabled={approveDisabledReason !== null}
                 onClick={() =>
                   decision.mutate(
-                    { decision: "approve", setupId: setupId as string },
+                    {
+                      decision: "approve",
+                      setupId: setupId as string,
+                      ...(localDeviceAgent ? { localDeviceAgent: true } : {}),
+                    },
                     {
                       // Tell the Connect page in another tab to show what's next.
                       onSuccess: (result) => {

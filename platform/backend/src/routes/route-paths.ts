@@ -161,3 +161,26 @@ export const OPENAPPA_ARCHESTRA_ANNOTATOR_PATH =
 
 /** Authenticated read-only instruction refresh for installed connection wrappers. */
 export const CONNECTION_INSTRUCTIONS_PATH = "/v1/connection-instructions";
+
+/** Exact proof-authenticated POST endpoints; all others require normal API auth. */
+export const DEVICE_MCP_PROOF_PATHS = new Set([
+  "/api/device-mcp/inspect",
+  "/api/device-mcp/redeem",
+  "/api/device-mcp/session",
+  "/api/device-mcp/poll",
+  "/api/device-mcp/result",
+]);
+
+/** Device bearer proofs are independent of browser cookies. MCP access additionally requires a user-approved installation bound to that computer. */
+export const LOCAL_DEVICE_PROOF_PATHS = new Set([
+  "/api/local-devices/mcp-sync",
+  "/api/local-devices/mcp-open",
+  "/api/local-devices/mcp-worker",
+  "/api/local-devices/install",
+  "/api/local-devices/remove-agent",
+  "/api/local-devices/inspect",
+  "/api/local-devices/redeem",
+  "/api/local-devices/session",
+  "/api/local-devices/heartbeat",
+  "/api/local-devices/disconnect",
+]);

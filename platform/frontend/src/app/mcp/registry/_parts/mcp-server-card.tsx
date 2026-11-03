@@ -11,6 +11,7 @@ import {
   Copy,
   FileSearch,
   Globe,
+  Laptop,
   MessageSquare,
   Pencil,
   Plus,
@@ -966,12 +967,24 @@ export function McpServerCard({
     </Button>
   ) : null;
   const cardActions =
-    approvalAction ??
-    (isBuiltinVariant || isPlaywrightVariant
-      ? builtinCardContent
-      : isRemoteVariant
-        ? remoteCardContent
-        : localCardContent);
+    item.serverType === "device" ? (
+      <Button
+        size="sm"
+        variant="outline"
+        className="w-full"
+        onClick={() => goToItemPage()}
+      >
+        <Laptop />
+        <span>Connect your device</span>
+      </Button>
+    ) : (
+      (approvalAction ??
+      (isBuiltinVariant || isPlaywrightVariant
+        ? builtinCardContent
+        : isRemoteVariant
+          ? remoteCardContent
+          : localCardContent))
+    );
   const hasCardBody = Boolean(
     compactInfoRow || (variant === "local" && isInstalling),
   );

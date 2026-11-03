@@ -49,6 +49,7 @@ import config, {
   parseContentMaxLength,
   parseDatabasePoolMax,
   parseDatabaseStatementTimeoutMillis,
+  parseDevelopmentConnectorDirectory,
   parseEngineDeniedCidrs,
   parseFileStorageFilesystemRoot,
   parseFileStorageProvider,
@@ -3870,5 +3871,28 @@ describe("resolved pod shutdown budgets", () => {
     expect(() =>
       validateShutdownPodGrace(172840, 86400, 86400, 86400),
     ).not.toThrow();
+  });
+});
+
+describe("development desktop directory", () => {
+  test("ignores a configured preview directory outside exact development mode", () => {
+    for (const environment of [
+      "production",
+      "prod",
+      "test",
+      "DEVELOPMENT",
+      "",
+      undefined,
+    ]) {
+      expect(
+        parseDevelopmentConnectorDirectory("/operator/preview", environment),
+      ).toBeUndefined();
+    }
+    expect(
+      parseDevelopmentConnectorDirectory(" /operator/preview ", "development"),
+    ).toBe("/operator/preview");
+    expect(
+      parseDevelopmentConnectorDirectory(" ", "development"),
+    ).toBeUndefined();
   });
 });

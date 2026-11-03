@@ -873,3 +873,30 @@ describe("summarizeBulkFailure", () => {
     ).toBe("Tool not found (and 2 more)");
   });
 });
+
+it("keeps device tools personal when pending changes contain a retained static pick", () => {
+  const result = buildBulkToolUpdate({
+    targetAgentId: "agent-1",
+    pendingChanges: [
+      [
+        "device-1",
+        {
+          selectedToolIds: new Set(["echo-tool"]),
+          credentialSourceId: "shared-old",
+          catalogItem: { id: "device-1", serverType: "device" },
+        },
+      ],
+    ],
+    assignedToolsByCatalog: new Map(),
+    isNewAgent: false,
+  });
+  expect(result.assignments).toEqual([
+    {
+      agentId: "agent-1",
+      toolId: "echo-tool",
+      mcpServerId: null,
+      resolveAtCallTime: true,
+      credentialResolutionMode: "dynamic",
+    },
+  ]);
+});

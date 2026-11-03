@@ -5,6 +5,8 @@
     "tsBuildInfoFile": "./.tsbuild/services-support.tsbuildinfo"
   },
   "files": [
+    "src/services/local-device-install.ts",
+    "src/services/local-device.ts",
     "src/plugins/delivery-budget.ts",
     "src/routes/mcp-gateway/protocol.ts",
     "src/routes/mcp-gateway/tasks.ts",

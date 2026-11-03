@@ -2555,10 +2555,16 @@ function authCardProps(params: {
     case "auth-required": {
       const isIdentityProviderConnect =
         authState.action === "connect_identity_provider";
+      const isDeviceConnect = authState.action === "connect_device";
       const providerName = authState.providerId ?? "identity provider";
       return {
-        title: "Authentication Required",
-        description: isIdentityProviderConnect ? (
+        title: isDeviceConnect
+          ? "Device connection needed"
+          : "Authentication Required",
+        description: isDeviceConnect ? (
+          (authState.message ??
+          "Connect your own device from this server’s registry entry.")
+        ) : isIdentityProviderConnect ? (
           `Connect ${providerName}. This deployment can then request the downstream credential for "${authState.catalogName}".`
         ) : (
           <>
@@ -2566,11 +2572,14 @@ function authCardProps(params: {
             up your credentials to use this tool.
           </>
         ),
-        buttonText: isIdentityProviderConnect
-          ? `Connect ${providerName}`
-          : "Set up credentials",
+        buttonText: isDeviceConnect
+          ? "Open device setup"
+          : isIdentityProviderConnect
+            ? `Connect ${providerName}`
+            : "Set up credentials",
         buttonUrl: authState.actionUrl,
-        onAction: isIdentityProviderConnect ? undefined : onInstall,
+        onAction:
+          isIdentityProviderConnect || isDeviceConnect ? undefined : onInstall,
         openInNewTab: !isIdentityProviderConnect,
       };
     }

@@ -22,6 +22,23 @@ import type {
 import TaskModel from "./task";
 
 class ScheduleTriggerRunModel {
+  static async isRuntimeTaskScheduled(
+    taskId: string,
+    organizationId: string,
+  ): Promise<boolean> {
+    const [run] = await db
+      .select({ id: schema.scheduleTriggerRunsTable.id })
+      .from(schema.scheduleTriggerRunsTable)
+      .where(
+        and(
+          eq(schema.scheduleTriggerRunsTable.runtimeTaskId, taskId),
+          eq(schema.scheduleTriggerRunsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    return !!run;
+  }
+
   /** Claim one due tick, persist its result and queue its work atomically. */
   static async recordDueRun(params: {
     trigger: ScheduleTrigger;

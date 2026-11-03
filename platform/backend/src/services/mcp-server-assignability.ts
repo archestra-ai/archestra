@@ -21,7 +21,7 @@ export type PrefetchedMcpServer = {
   catalogId: string | null;
   teamId?: string | null;
   scope: ResourceVisibilityScope;
-  serverType?: "app" | "builtin" | "local" | "remote";
+  serverType?: "app" | "builtin" | "local" | "remote" | "device";
 };
 
 /** Whether one MCP server connection may be assigned to this agent or app. */

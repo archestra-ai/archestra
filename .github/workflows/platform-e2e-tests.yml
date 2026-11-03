@@ -446,7 +446,7 @@ jobs:
         id: platform-image
         uses: $/.github/actions/load-platform-image
         with:
-          source: artifact
+          source: ${{ env.UNTRUSTED_PR == 'true' && 'artifact' || 'registry' }}
           artifact-name: ${{ env.UNTRUSTED_PR == 'true' && 'platform-docker-image' || 'platform-slim-docker-image' }}
           image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
           wait-timeout-seconds: "60"

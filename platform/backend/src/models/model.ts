@@ -762,11 +762,13 @@ class ModelModel {
   /** Remove an unconfigured proxy-discovered entry, retaining request history. */
   static async deleteUnused(id: string) {
     return withDbTransaction(async (tx) => {
-      // Name references and policy scopes have no model FK. Keep their writers
-      // out until eligibility checks and deletion commit together.
-      await tx.execute(sql`LOCK TABLE ${schema.organizationsTable},
-        ${schema.modelPoolMembersTable}, ${schema.resourcePermissionPoliciesTable}
-        IN SHARE ROW EXCLUSIVE MODE`);
+      // Serialize catalog writes first: refreshes write models before their
+      // policies, so taking the policy lock first can deadlock with a refresh.
+      // Name references and policy scopes have no model FK; keep their writers
+      // out until eligibility checks and this rare cleanup commit together.
+      await tx.execute(sql`LOCK TABLE ${schema.modelsTable},
+        ${schema.organizationsTable}, ${schema.modelPoolMembersTable},
+        ${schema.resourcePermissionPoliciesTable} IN SHARE ROW EXCLUSIVE MODE`);
       const [model] = await tx
         .select()
         .from(schema.modelsTable)

@@ -545,6 +545,7 @@ const layerTable = [
       "src/services/agent-connection-setup/index.ts",
       "src/services/agent-connection-setup/opencode-family.ts",
       "src/services/agent-connection-setup/payloads/codex-handoff.ts",
+      "src/services/agent-connection-setup/payloads/codex-sandbox-preflight.ts",
       "src/services/agent-connection-setup/payloads/codex-setup-preflight.ts",
       "src/services/agent-connection-setup/payloads/copilot-provider-config.ts",
       "src/services/agent-connection-setup/payloads/kimi-code-connection.ts",

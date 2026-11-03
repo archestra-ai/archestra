@@ -193685,6 +193685,7 @@
                       "claude-code",
                       "cursor",
                       "codex",
+                      "chatgpt",
                       "claude-desktop",
                       "copilot-cli",
                       "opencode",
@@ -194344,6 +194345,7 @@
                         "claude-code",
                         "cursor",
                         "codex",
+                        "chatgpt",
                         "claude-desktop",
                         "copilot-cli",
                         "opencode",
@@ -194733,6 +194735,7 @@
                         "claude-code",
                         "cursor",
                         "codex",
+                        "chatgpt",
                         "claude-desktop",
                         "copilot-cli",
                         "opencode",
@@ -198141,6 +198144,9 @@
                           "hasSkills": {
                             "type": "boolean"
                           },
+                          "connectionPlugin": {
+                            "type": "boolean"
+                          },
                           "pluginNames": {
                             "maxItems": 555,
                             "type": "array",
@@ -199371,6 +199377,7 @@
                       "claude-code",
                       "cursor",
                       "codex",
+                      "chatgpt",
                       "claude-desktop",
                       "copilot-cli",
                       "opencode",
@@ -199569,6 +199576,7 @@
                               "claude-code",
                               "cursor",
                               "codex",
+                              "chatgpt",
                               "claude-desktop",
                               "copilot-cli",
                               "opencode",
@@ -286464,6 +286472,7 @@
                 "claude-code",
                 "claude-desktop",
                 "codex",
+                "chatgpt",
                 "copilot-cli",
                 "cursor",
                 "opencode",
@@ -563484,6 +563493,7 @@
                 "claude-code",
                 "claude-desktop",
                 "codex",
+                "chatgpt",
                 "copilot-cli",
                 "cursor",
                 "opencode",

@@ -55,6 +55,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const [command, action, name, , url] = process.argv.slice(2);
 const file = path.join(process.env.${homeEnv}, ".codex", "config.toml");
+if (command === "mcp" && action === "add" && process.env.ARCHESTRA_TEST_FORBID_AUTO_LOGIN) {
+  console.error("mcp add would start an extra OAuth flow");
+  process.exit(1);
+}
 function header(server) {
   if (/^[A-Za-z0-9_-]+$/.test(server)) return "[mcp_servers." + server + "]";
   return '[mcp_servers."' + server + '"]';
@@ -97,6 +101,62 @@ if (
 ) {
   throw new Error("CI requires a working PowerShell runtime for these tests");
 }
+
+describe.skipIf(!powershellAvailable)(
+  "PowerShell marketplace credential redaction",
+  () => {
+    test.each([
+      {
+        url: "https://token:archestra_mkt_fixture@example.test/skills/marketplace.git",
+        masked: "https://***@example.test/skills/marketplace.git",
+        secret: "archestra_mkt_fixture",
+      },
+      {
+        url: "https://example.test/skills/m/archestra_skl_fixture_secret/repo.git",
+        masked: "https://example.test/skills/m/archestra_skl_***/repo.git",
+        secret: "archestra_skl_fixture_secret",
+      },
+    ])("masks native CLI errors and preserves their exit status for $url", async ({
+      url,
+      masked,
+      secret,
+    }) => {
+      const home = await mkdtemp(path.join(tmpdir(), "marketplace-redaction-"));
+      try {
+        const setup = renderSetupScript({
+          clientId: "chatgpt",
+          platform: "windows",
+          appName: "Archestra",
+          mcp: null,
+          proxy: null,
+          skills: null,
+        });
+        const start = setup.indexOf("function Hide-ArchUrlCredentials");
+        const end = setup.indexOf("\n}", start) + 2;
+        const script = path.join(home, "redact.ps1");
+        await writeFile(
+          script,
+          `$ErrorActionPreference = 'Stop'
+${setup.slice(start, end)}
+Invoke-ArchRedacted { & node -e 'process.stderr.write(process.env.ARCHESTRA_TEST_CLONE_URL);process.exit(19)' }
+Write-Output ('status=' + $LASTEXITCODE)
+`,
+        );
+        const result = await execFileAsync(
+          "pwsh",
+          ["-NoProfile", "-NonInteractive", "-File", script],
+          { env: { ...process.env, ARCHESTRA_TEST_CLONE_URL: url } },
+        );
+        const output = result.stdout + result.stderr;
+        expect(output).toContain(masked);
+        expect(output).not.toContain(secret);
+        expect(output).toContain("status=19");
+      } finally {
+        await rm(home, { recursive: true, force: true });
+      }
+    });
+  },
+);
 
 describe.skipIf(!powershellAvailable)(
   "PowerShell Claude proxy transitions",
@@ -252,7 +312,7 @@ describe.skipIf(!powershellAvailable)(
         await writeFile(helper, CODEX_HANDOFF_HELPER);
         await writeFile(
           cli,
-          `#!/usr/bin/env node\nif (process.env.CODEX_SANDBOX_NETWORK_DISABLED) process.exit(2); require('node:fs').writeFileSync(require('node:path').join(process.env.CODEX_HOME,'models_cache.json'),JSON.stringify({fetched_at:new Date().toISOString()})); console.log(JSON.stringify({models:[{slug:'model-a',tool_mode:'code_mode_only'}]}));`,
+          `#!/usr/bin/env node\nif (process.env.CODEX_SANDBOX_NETWORK_DISABLED && process.env.CODEX_THREAD_ID) process.exit(2); require('node:fs').writeFileSync(require('node:path').join(process.env.CODEX_HOME,'models_cache.json'),JSON.stringify({fetched_at:new Date().toISOString()})); console.log(JSON.stringify({models:[{slug:'model-a',tool_mode:'code_mode_only'}]}));`,
         );
         await chmod(cli, 0o755);
         const env = { ...process.env, USERPROFILE: home, CODEX_HOME: home };
@@ -353,6 +413,7 @@ Disconnect-ArchProxy
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 fs.appendFileSync(process.env.ARCHESTRA_TEST_COMMAND_LOG, JSON.stringify(args) + "\\n");
+if (args[0] === "sandbox" || (args[0] === "help" && args[1] === "sandbox")) process.exit(0);
 if (args[0] === "debug") {
   process.stdout.write(JSON.stringify({models:[{slug:'selected',tool_mode:'code_mode_only',supports_search_tool:true},{slug:'other',tool_mode:null}]}));
   process.exit(0);
@@ -625,7 +686,10 @@ exit 0
 describe.skipIf(!powershellAvailable)(
   "PowerShell Codex gateway registration",
   () => {
-    test("approves the guardrail helpers once, under the gateway's own entry", async () => {
+    test.each([
+      "codex",
+      "chatgpt",
+    ] as const)("%s approves helpers once and leaves only the explicit installer sign-in for ChatGPT", async (clientId) => {
       const root = await mkdtemp(
         path.join(tmpdir(), "archestra-codex-approvals-powershell-"),
       );
@@ -662,7 +726,7 @@ describe.skipIf(!powershellAvailable)(
         await writeFile(
           setupPath,
           renderSetupScript({
-            clientId: "codex",
+            clientId,
             platform: "windows",
             appName: "Archestra",
             mcp,
@@ -691,6 +755,9 @@ exit 0
               PATH: `${bin}:${process.env.PATH}`,
               NO_COLOR: "1",
               ARCHESTRA_TEST_SETUP_PATH: setupPath,
+              ...(clientId === "chatgpt"
+                ? { ARCHESTRA_TEST_FORBID_AUTO_LOGIN: "1" }
+                : {}),
             },
             timeout: 30_000,
           },
@@ -728,9 +795,11 @@ exit 0
         expect(raw.indexOf("required = true")).toBeGreaterThan(
           raw.indexOf(`[mcp_servers.${mcp.serverName}]`),
         );
-        expect(raw.indexOf("required = true")).toBeLessThan(
-          raw.indexOf("[model_providers.custom_proxy]"),
-        );
+        if (clientId === "codex") {
+          expect(raw.indexOf("required = true")).toBeLessThan(
+            raw.indexOf("[model_providers.custom_proxy]"),
+          );
+        }
         expect(config.mcp_servers[mcp.serverName]).toEqual({
           url: mcp.url,
           required: true,
@@ -1380,6 +1449,7 @@ function windowsSetupVariants(): Array<{
   for (const clientId of [
     "claude-code",
     "codex",
+    "chatgpt",
     "copilot-cli",
     "cursor",
     "opencode",
@@ -1418,12 +1488,20 @@ function windowsSetupVariants(): Array<{
                     }
                   : null,
                 proxy: proxySection,
-                skills: skills
-                  ? {
-                      cloneUrl: "https://proxy.example.com/skills/repo.git",
-                      marketplaceName: "acme-skills",
-                    }
-                  : null,
+                skills:
+                  skills || clientId === "chatgpt"
+                    ? {
+                        cloneUrl: "https://proxy.example.com/skills/repo.git",
+                        marketplaceName: "acme-skills",
+                        ...(clientId === "chatgpt"
+                          ? {
+                              connectionPlugin: true,
+                              pluginNames: ["acme-skills"],
+                              hasSkills: skills,
+                            }
+                          : {}),
+                      }
+                    : null,
                 runtimeHandoffInstructions: handoff
                   ? defaultRuntimeHandoffInstructions("Archestra")
                   : null,

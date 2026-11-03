@@ -21,6 +21,7 @@ These clients work without extra configuration:
 - **Claude Code**
 - **Claude Desktop** (Code and Cowork tabs)
 - **Codex CLI**
+- **ChatGPT** desktop app (Work and Codex tabs, see [ChatGPT](#chatgpt))
 - **Copilot CLI** (see [Copilot CLI](#copilot-cli) for the providers it works with)
 - **Pi**
 - **OpenCode**
@@ -52,6 +53,15 @@ Reconnect through the connection page and restart the client to install the ques
 - **Inspect** requires a separate answer afterward. Reading or paging through the review never selects **Allow**.
 - Multi-question and multi-select forms, small terminals, and forms with many or long option labels use the native UI.
 - An existing `tui.jsonc` is preserved without automatic registration. The native question remains available.
+
+<a id="chatgpt"></a>
+
+### ChatGPT
+
+Guardrails follow the desktop app's Work and Codex tabs. Both run on your computer and read the Codex settings there. On **Connect**, select **ChatGPT** and run its terminal setup command to route model requests through the LLM Proxy. See [Use Guardrails in the Desktop App](/docs/integrations/ai-clients/chatgpt#use-guardrails-in-the-desktop-app).
+
+- **Not covered:** chats and dots run on OpenAI's servers, so their tool calls never reach the proxy.
+- **Approvals:** a review shows as a form from the MCP gateway in the task, as in Codex CLI.
 
 <a id="copilot-cli"></a>
 

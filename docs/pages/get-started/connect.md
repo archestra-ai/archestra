@@ -17,12 +17,13 @@ Open **Connect** in the Archestra sidebar and choose how to connect:
 
 - **Coding agents:** for [Claude Code](/docs/integrations/ai-clients/claude-code), Codex, Cursor, Copilot CLI, OpenCode, Kilo Code, and Kimi Code, you run one command in a terminal and approve the connection in your browser.
 - **[Claude Desktop](/docs/integrations/ai-clients/claude-desktop#setup):** a downloadable installer sets up Desktop.
+- **[ChatGPT](/docs/integrations/ai-clients/chatgpt):** one terminal command installs the connection plugin and routes the desktop app's local Work and Codex conversations through the proxy. For web chats and dots, download the plugin instead.
 - **[n8n](/docs/integrations/web-ui-and-automation#n8n):** you enter the gateway URL and model settings in your workflow.
 - **Any Client:** any tool that supports MCP or an OpenAI-compatible API. Copy the gateway URL, the proxy base URL, a key, and a Git URL for the shared skills.
 
 To leave out the proxy, skills, or plugins, open **Setup options** on the approval page before you approve. Your admin decides which provider keys the proxy uses for each client.
 
-Guardrails recognize Archestra Chat, Claude Code, Codex CLI, Copilot CLI, OpenCode, Kilo Code, and Kimi Code automatically. Custom clients and workflows need a [session header](/docs/agents/guardrails/clients#session-headers) so Guardrails can track their conversations.
+Guardrails recognize Archestra Chat, Claude Code, Codex CLI, the ChatGPT desktop app, Copilot CLI, OpenCode, Kilo Code, and Kimi Code automatically. Custom clients and workflows need a [session header](/docs/agents/guardrails/clients#session-headers) so Guardrails can track their conversations.
 
 ![Connect with Codex selected and its setup command](/docs/automated_screenshots/platform-connection_connect-with-ai.webp)
 

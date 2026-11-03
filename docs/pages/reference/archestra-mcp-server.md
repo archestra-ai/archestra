@@ -117,6 +117,7 @@ Required RBAC permission: None
 |-----------|------|----------|-------------|
 | `query` | `string` | Yes | Keywords for the capability you need — combine the action (verb + object) with the server/product name when you know it, e.g. 'github search repositories' or 'slack send message'. Avoid querying with a bare product/server name on its own. Results are keyword-ranked across tool names, descriptions, and argument names/descriptions. If nothing fits, reformulate with different keywords and search again rather than settling for a poor match. |
 | `limit` | `integer` | No | Maximum number of matching tools to return, at most 20. A larger value returns 20. |
+| `offset` | `integer` | No | Number of ranked matches to skip. To see the matches after a truncated result, repeat the same query with offset set to the result's nextOffset. |
 | `mode` | `"keyword" \| "regex"` | No | Search mode. 'keyword' (default) keyword-ranks the query across tool fields. 'regex' treats query as a case-insensitive regular expression matched against tool names, titles, and descriptions — use it when you know a naming pattern, e.g. '^github__' or 'search\|find'. |
 
 ##### Output
@@ -124,9 +125,10 @@ Required RBAC permission: None
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `total` | `integer` | Yes | Number of returned tools. |
-| `matchCount` | `integer` | Yes | Total tools matching the query before the limit was applied (>= total). |
-| `truncated` | `boolean` | Yes | True when matchCount exceeds the returned tools (results cut by limit). |
-| `hint` | `string \| null` | Yes | Actionable guidance when results were truncated or empty (an empty result also names which query terms matched no tool text). |
+| `matchCount` | `integer` | Yes | Total tools matching the query before offset and limit were applied (>= total). |
+| `truncated` | `boolean` | Yes | True when more matches follow this page (results cut by limit). |
+| `nextOffset` | `integer \| null` | Yes | The offset that returns the next page of matches, or null when no matches follow this page. |
+| `hint` | `string \| null` | Yes | Actionable guidance when results were truncated or empty (a truncated result names the offset of the next page; an empty result also names which query terms matched no tool text). |
 | `tools` | `object[]` | Yes |  |
 | `tools[].toolName` | `string` | Yes | Exact tool name to pass to run_tool. |
 | `tools[].description` | `string \| null` | Yes | Short tool description, if available. |

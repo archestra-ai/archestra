@@ -492,7 +492,7 @@ jobs:
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
     # Setup dominates this environment; keep the existing 8-vCPU runner.
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubicloud-standard-8-ubuntu-2404
     timeout-minutes: 60
     permissions:
       contents: read # Required to checkout the repository and read test assets.
@@ -793,11 +793,8 @@ jobs:
     name: Platform E2E Tests (Lite ${{ matrix.name }})
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    # 8-vcpu Blacksmith, as before the runner migration. Each leg boots the
-    # full lite stack and then runs Playwright next to it: the pre-migration
-    # single lite job ran 6.9 min on 8 vcpu where the 4-vcpu legs ran 8-9
-    # min each.
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    # Keep 8 CPUs: each leg boots a full lite stack alongside Playwright.
+    runs-on: ubicloud-standard-8-ubuntu-2404
     # Leave room for cold image pulls and platform startup.
     timeout-minutes: 45
     strategy:
@@ -1029,7 +1026,7 @@ jobs:
     # The test steps are short; image loads and platform startup dominate
     # this job. Match the other E2E legs' 8-vCPU runner so image extraction
     # and first-run initialization are not CPU-bound.
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubicloud-standard-8-ubuntu-2404
     # Covers cold image pulls and both environments.
     timeout-minutes: 50
     permissions:

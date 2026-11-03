@@ -42,7 +42,7 @@ import {
 import { mayAttachAgentRun } from "@/services/agent-runtime/run-access";
 import {
   auditTerminal,
-  containsInterrupt,
+  countInterrupts,
   INTERRUPT_AUDIT_WINDOW_MS,
   type TerminalAttachment,
 } from "@/services/agent-runtime/terminal-audit";
@@ -264,11 +264,12 @@ export class WebSocketService {
       if (subscription?.runId !== message.payload.runId || !subscription.socket)
         return;
       const { attachment } = subscription;
-      if (attachment && containsInterrupt(message.payload.data)) {
+      const interrupts = attachment ? countInterrupts(message.payload.data) : 0;
+      if (attachment && interrupts > 0) {
         // Ctrl+C reaches the agent's own input loop, where it stops the
         // running turn. Record it once per burst so a held key is one event;
         // the detach row carries the full count.
-        attachment.interruptCount += 1;
+        attachment.interruptCount += interrupts;
         const now = Date.now();
         if (
           attachment.lastInterruptAt === null ||

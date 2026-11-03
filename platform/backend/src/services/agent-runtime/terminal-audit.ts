@@ -22,8 +22,9 @@ type TerminalAuditAction =
 /** ETX, what a terminal sends for Ctrl+C. */
 const INTERRUPT = "\x03";
 
-export function containsInterrupt(data: string): boolean {
-  return data.includes(INTERRUPT);
+/** How many Ctrl+C one input message carries; a paste or a fast key can send several. */
+export function countInterrupts(data: string): number {
+  return data.split(INTERRUPT).length - 1;
 }
 
 /** Interrupts repeated within this window are one event, not a row each. */

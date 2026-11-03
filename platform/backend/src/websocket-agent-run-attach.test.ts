@@ -448,7 +448,8 @@ describe("websocket Agent run attach ownership", () => {
     expect(create).toHaveBeenCalledOnce();
 
     // Ctrl+C is: it stops the agent's turn. A burst is one row.
-    for (const data of ["\x03", "\x03", "y\x03"]) {
+    // The last message carries two, as a fast double press can.
+    for (const data of ["\x03", "\x03", "y\x03\x03"]) {
       await service.handleMessage(
         { type: "agent_run_attach_input", payload: { runId, data } },
         ws,
@@ -461,7 +462,7 @@ describe("websocket Agent run attach ownership", () => {
       resourceId: runId,
     });
     await vi.waitFor(() =>
-      expect(attempt.input).toEqual(["ls\r", "\x03", "\x03", "y\x03"]),
+      expect(attempt.input).toEqual(["ls\r", "\x03", "\x03", "y\x03\x03"]),
     );
 
     // Once the window has passed, the next Ctrl+C is a new event.
@@ -487,7 +488,7 @@ describe("websocket Agent run attach ownership", () => {
       action: "agentRun.terminal_detached",
       actorId: context.userId,
       resourceId: runId,
-      after: { durationSeconds: expect.any(Number), interruptCount: 4 },
+      after: { durationSeconds: expect.any(Number), interruptCount: 5 },
     });
     // The rows were written, not only attempted.
     for (const call of create.mock.results) await call.value;

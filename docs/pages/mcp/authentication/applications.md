@@ -71,7 +71,7 @@ Ask for only the enabled capabilities each token needs:
 | --- | --- |
 | `mcp` | MCP Gateway |
 | `a2a` | Agent A2A endpoints |
-| `llm:proxy` | LLM Proxy and Unified API |
+| `llm:proxy` | LLM Proxy and Unified Model API |
 
 For example, `scope=mcp llm:proxy` gets one token for tools and inference. Each requested scope must be enabled on the client. Omitting `scope` in a client credentials request grants all its configured capabilities. A token cannot gain a capability added after it was issued; request a new token. Removing a capability or disabling the client blocks its use immediately.
 

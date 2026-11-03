@@ -291,7 +291,7 @@ function EndpointPicker({
   const options = [
     {
       value: "model-router" as const,
-      label: "Unified API",
+      label: "Unified Model API",
       description: "One OpenAI-compatible endpoint for all providers",
       icon: Waypoints,
       disabled: !routerAvailable,

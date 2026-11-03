@@ -3591,7 +3591,7 @@ const config = {
   environment,
   llmProxy: {
     // BETA gate for model pools: hides the page and its API, and keeps the
-    // proxy and the Unified API from resolving a model name to a pool. Off
+    // proxy and the Unified Model API from resolving a model name to a pool. Off
     // by default; a blank value falls back to the ARCHESTRA_BETA master switch
     // (see betaFeatureEnabled).
     modelPoolsEnabled: betaFeatureEnabled(
@@ -3617,7 +3617,7 @@ const config = {
     ),
   },
   autoRouting: {
-    /** ALPHA gate for the Unified API's "auto" model; off by default, follows ARCHESTRA_BETA when blank. */
+    /** ALPHA gate for the Unified Model API's "auto" model; off by default, follows ARCHESTRA_BETA when blank. */
     enabled: betaFeatureEnabled(process.env.ARCHESTRA_AUTO_ROUTING_ENABLED),
     /** Budget (ms) for one session-scoring call before the router falls back. */
     scorerTimeoutMs: parsePositiveInt(

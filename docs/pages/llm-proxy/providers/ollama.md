@@ -22,9 +22,9 @@ The server's pulled models appear under **Models**. Add one key entry per server
 | Transport | Proxy URL | Use |
 | --- | --- | --- |
 | Native | `https://<archestra-host>/v1/ollama-native` | Ollama `/api/chat` and generation parameters |
-| OpenAI-compatible | `https://<archestra-host>/v1/ollama` | Chat Completions, Embeddings, and Unified API |
+| OpenAI-compatible | `https://<archestra-host>/v1/ollama` | Chat Completions, Embeddings, and Unified Model API |
 
-Native model IDs cannot be used through the Unified API. For that endpoint, connect the OpenAI-compatible transport and use `ollama:<model-id>`.
+Native model IDs cannot be used through the Unified Model API. For that endpoint, connect the OpenAI-compatible transport and use `ollama:<model-id>`.
 
 ## Generation Parameters
 

@@ -26,7 +26,7 @@ Each tier can come from a different provider.
 Routing is the admin's call: whatever runs on the organization default is routed, and everything with a model of its own is not.
 
 - **Agents and chats:** an agent with no model or [model pool](/docs/llm-proxy/model-pools) of its own, and its chats on the default model. In the agent form and the chat model list, **Organization default** names the three tiers while routing is on.
-- **Apps:** send `auto` as the model to the [Unified API](/docs/llm-proxy/unified-api) with a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys). `auto` appears in a key's model list only when the key can reach all three tiers. Native provider routes answer `auto` from an app with a 400 error.
+- **Apps:** send `auto` as the model to the [Unified Model API](/docs/llm-proxy/unified-model) with a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys). `auto` appears in a key's model list only when the key can reach all three tiers. Native provider routes answer `auto` from an app with a 400 error.
 
 What to know:
 

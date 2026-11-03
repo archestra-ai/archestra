@@ -73,7 +73,7 @@ export const INTERACTION_SOURCE_DISPLAY: Record<
   { label: string }
 > = {
   api: { label: "API" },
-  model_router: { label: "Unified API" },
+  model_router: { label: "Unified Model API" },
   "opencode:main": { label: "OpenCode Main" },
   "opencode:subagent": { label: "OpenCode Sub-agent" },
   "opencode:title": { label: "OpenCode Title" },

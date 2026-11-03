@@ -13,7 +13,7 @@ import type { SetupScriptProxySection } from "../types";
 
 /**
  * What the connection serves in an OpenCode-family client. Native routes use
- * the client's stock ids; managed Unified API providers use separate ids to
+ * the client's stock ids; managed Unified Model API providers use separate ids to
  * avoid the native SDK and sign-in transport.
  */
 export interface ManagedRuntimeCatalog {
@@ -111,7 +111,7 @@ export function openCodePrimaryConfig(
     primaryProviders: proxy.primaryProviders,
     passthroughProviders: proxy.passthroughProviders,
     routeUrl: (route) => openCodePassthroughBaseUrl(proxy.baseUrl, route),
-    modelRouterUrl: `${proxy.baseUrl.replace(/\/$/, "")}/unified-api`,
+    modelRouterUrl: `${proxy.baseUrl.replace(/\/$/, "")}/unified-model`,
   });
   // The passthrough key attributes the user's own sign-ins to the user. It
   // never goes on a request the connection's own key authenticates.
@@ -150,7 +150,7 @@ export function publicManagedCatalog(params: {
         ...route,
         pathSuffix: `/${params.routingAgentId}${route.pathSuffix}`,
       }),
-    modelRouterUrl: `${base}/unified-api/${params.routingAgentId}`,
+    modelRouterUrl: `${base}/unified-model/${params.routingAgentId}`,
   }).catalog;
 }
 

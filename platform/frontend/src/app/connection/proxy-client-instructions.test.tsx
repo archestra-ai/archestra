@@ -98,7 +98,7 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
     availableKeysMock.mockReturnValue({ data: [{ provider: "anthropic" }] });
   });
 
-  it("switches from a provider endpoint to Unified API through the provider dropdown", async () => {
+  it("switches from a provider endpoint to Unified Model API through the provider dropdown", async () => {
     const user = userEvent.setup();
     renderInstructions();
 
@@ -110,13 +110,13 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
     fireEvent.keyDown(screen.getByRole("combobox", { name: "Provider" }), {
       key: "ArrowDown",
     });
-    await user.click(screen.getByRole("option", { name: "Unified API" }));
+    await user.click(screen.getByRole("option", { name: "Unified Model API" }));
     expect(
       Object.fromEntries(new URLSearchParams(window.location.search)),
     ).toEqual({ clientId: "generic", providerId: "model-router" });
   });
 
-  it("selecting the Unified API tab shows the canonical endpoint", async () => {
+  it("selecting the Unified Model API tab shows the canonical endpoint", async () => {
     const user = userEvent.setup();
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("providerId=model-router") as unknown as ReturnType<
@@ -128,7 +128,7 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
 
     // The unified endpoint replaces the per-provider URL.
     expect(
-      screen.getByText("http://localhost:9000/v1/unified-api"),
+      screen.getByText("http://localhost:9000/v1/unified-model"),
     ).toBeInTheDocument();
     expect(
       screen.queryByText("http://localhost:9000/v1/anthropic"),

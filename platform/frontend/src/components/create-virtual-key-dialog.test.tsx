@@ -381,7 +381,7 @@ describe("CreateVirtualKeyDialog", () => {
     ).not.toBeInTheDocument();
     // The default model is linked to this key and gets a Responses example.
     expect(dialog).toHaveTextContent(
-      "https://proxy.example.com/unified-api/responses",
+      "https://proxy.example.com/unified-model/responses",
     );
     expect(dialog).toHaveTextContent('"model": "openai:gpt-5.6-sol"');
     expect(dialog).not.toHaveTextContent("gpt-5.4-unmapped");
@@ -441,7 +441,7 @@ describe("CreateVirtualKeyDialog", () => {
     renderDialog("standard");
     await createFromAnyStep(user);
     const dialog = await screen.findByTestId("virtual-key-create-dialog");
-    expect(dialog).not.toHaveTextContent("/unified-api/images");
+    expect(dialog).not.toHaveTextContent("/unified-model/images");
     expect(dialog).toHaveTextContent(
       "Choose the native provider API for image generation examples.",
     );
@@ -505,7 +505,7 @@ describe("CreateVirtualKeyDialog", () => {
 
     const dialog = await screen.findByTestId("virtual-key-create-dialog");
     expect(
-      within(dialog).getByRole("radio", { name: /Unified API/ }),
+      within(dialog).getByRole("radio", { name: /Unified Model API/ }),
     ).toBeDisabled();
     expect(dialog).toHaveTextContent("Authorization: Bearer $OPENAI_API_KEY");
     expect(dialog).toHaveTextContent("X-Archestra-Virtual-Key: arch_created");

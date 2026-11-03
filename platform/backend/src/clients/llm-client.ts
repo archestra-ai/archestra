@@ -907,7 +907,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       name: "archestra",
       // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
       missingBaseUrlMessage: "Archestra base URL is required.",
-      // The upstream is another Archestra unified API, which forwards
+      // The upstream is another Archestra unified model API, which forwards
       // `response_format: json_schema` the same way the strict openai client
       // sent it before. Without this the compatible client downgrades
       // generateObject flows (KB reranker and other subagents) to a schema-less
@@ -1101,7 +1101,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
         : baseURL;
 
       // Azure Chat Completions can reject function tools with reasoning on OpenAI
-      // deployments. Use native Responses, as the unified API does, and resend
+      // deployments. Use native Responses, as the unified model API does, and resend
       // conversation contents instead of server-stored item references.
       // Foundry-hosted open models
       // (DeepSeek-R1, gpt-oss, ...) stream thinking in a `reasoning_content`

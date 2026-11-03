@@ -182,7 +182,7 @@ describe("GET /api/connection-setups/script/:token", () => {
     const response = await fetchScript(rawToken);
     expect(response.statusCode, response.body).toBe(200);
     expect(response.body).toContain(
-      "ARCHESTRA_CURSOR_BASE_URL='http://localhost:9000/v1/unified-api'",
+      "ARCHESTRA_CURSOR_BASE_URL='http://localhost:9000/v1/unified-model'",
     );
     expect(response.body).toContain(`ARCHESTRA_CURSOR_API_KEY='${virtualKey}'`);
     expect(response.body).not.toContain("/connection-setup/");

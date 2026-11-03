@@ -147,14 +147,14 @@ export function prepareAppaRequest(params: {
   releasedSpawnCalls?: string[];
   childTrajectoryReceipts?: AppaChildTrajectoryReceipt[];
   /**
-   * The client's own wire, when a Unified API route translated it to this
+   * The client's own wire, when a Unified Model API route translated it to this
    * one. Turns are counted on it.
    */
   clientWire?: { family: AppaWireFamily; body: unknown };
 }): AppaPreparedRequest {
   // A wire outside the APPA families — Gemini, Bedrock, Cohere, native
   // Ollama — is governed in part rather than refused: calls and results are
-  // still ruled on, but no turn accounting runs unless a Unified API route
+  // still ruled on, but no turn accounting runs unless a Unified Model API route
   // kept the client's own wire to count turns on. Bedrock Converse still
   // restores notices; on the others a notice stays in the history as the
   // notice call the client ran.
@@ -274,7 +274,7 @@ export function prepareAppaRequest(params: {
       }),
     ];
   } else if (params.delegationMarkers) {
-    // A Unified API route collected these from the client's own wire, and
+    // A Unified Model API route collected these from the client's own wire, and
     // stripped them there, before translating it to this one.
     delegation = { markers: params.delegationMarkers };
     childTrajectoryReceipts = params.childTrajectoryReceipts;

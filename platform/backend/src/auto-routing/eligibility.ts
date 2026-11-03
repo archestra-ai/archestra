@@ -31,12 +31,12 @@ export type IneligibleTier = {
 export type TierEligibility = EligibleTier | IneligibleTier;
 
 /**
- * Whether a Unified API request for `model` on `endpoint` would pass every
+ * Whether a Unified Model API request for `model` on `endpoint` would pass every
  * gate the router and the proxy apply before forwarding it: model resolution
  * through the credential's linked keys, the `use` grant, endpoint support and
  * credential ownership. Reads only, so listing and inference can share it. A
  * null `endpoint` is a platform call on a native provider route, which no
- * Unified API endpoint constrains.
+ * Unified Model API endpoint constrains.
  */
 export async function checkAutoTierEligibility(params: {
   auth: ModelRouterAuth;
@@ -86,7 +86,7 @@ export async function checkAutoTierEligibility(params: {
 }
 
 /**
- * `userId` as an OAuth user of the Unified API, with every key they may use.
+ * `userId` as an OAuth user of the Unified Model API, with every key they may use.
  * `preferredApiKeyId`, when the user may use it, is tried first for any model
  * it serves.
  */
@@ -112,7 +112,7 @@ export async function userModelRouterAuth(params: {
 
 /**
  * The provider key `userId` would use for `model` on a native provider route,
- * picked as the Unified API picks one for an OAuth user. A per-user
+ * picked as the Unified Model API picks one for an OAuth user. A per-user
  * provider's credential is resolved at request time, so it has no key here;
  * it is found only when the user may use the model and has connected their
  * own account.

@@ -194,8 +194,8 @@ test("managed Azure deployments and Copilot models use the model router without 
   expect(payload.unsupported).toEqual([]);
   expect(payload.catalog).toMatchObject({
     routes: {
-      "archestra-azure": "https://proxy.example/v1/unified-api",
-      "archestra-github-copilot": "https://proxy.example/v1/unified-api",
+      "archestra-azure": "https://proxy.example/v1/unified-model",
+      "archestra-github-copilot": "https://proxy.example/v1/unified-model",
     },
     managed: {
       "archestra-azure": ["custom/deployment"],
@@ -225,9 +225,9 @@ test("managed Azure deployments and Copilot models use the model router without 
   ).toMatchObject({
     ...payload.catalog,
     routes: {
-      "archestra-azure": "https://deployment.example/v1/unified-api/agent-1",
+      "archestra-azure": "https://deployment.example/v1/unified-model/agent-1",
       "archestra-github-copilot":
-        "https://deployment.example/v1/unified-api/agent-1",
+        "https://deployment.example/v1/unified-model/agent-1",
     },
   });
 });
@@ -341,7 +341,7 @@ test("reconnecting restores what an older installer changed and migrates the sin
             name: "Anthropic Personal",
             npm: "@ai-sdk/openai",
             options: {
-              baseURL: "https://proxy.example/v1/unified-api",
+              baseURL: "https://proxy.example/v1/unified-model",
               apiKey: "{file:~/.archestra/opencode-primary.key}",
             },
             models: { "claude-test": { id: "anthropic:claude-test" } },

@@ -380,9 +380,9 @@ export type LLMProxyAuthOverride = {
   authenticated: boolean;
   source?: InteractionSource;
   authMethod?: InteractionAuthMethod;
-  /** Unified API virtual key ID, preserved for usage limits and interaction attribution. */
+  /** Unified Model API virtual key ID, preserved for usage limits and interaction attribution. */
   virtualKeyId?: string;
-  /** A model pool the Unified API already let this caller use. */
+  /** A model pool the Unified Model API already let this caller use. */
   modelPoolId?: string;
   authenticatedApp?: {
     id: string;
@@ -2146,7 +2146,7 @@ async function handleObservedLLMProxy<
         : undefined;
 
     // A pooled or routed request never uses the caller's own key, which a
-    // Unified API pool request doesn't even carry.
+    // Unified Model API pool request doesn't even carry.
     const client =
       modelPoolPlan || autoRoutedTier
         ? undefined

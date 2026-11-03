@@ -32,7 +32,7 @@ Use the Claude deployments in your Microsoft Foundry resource, billed through Az
 3. Paste the Foundry resource key. Under **Advanced**, set **Base URL** to `https://<resource>.services.ai.azure.com/anthropic`.
 4. Click **Test & Create**. The key's models are your Claude deployments, listed by deployment name.
 
-- Requests name the deployment, not the Claude model ID. On the [Unified API](/docs/llm-proxy/unified-api), call `anthropic:<deployment-name>`, and map this key on your [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys).
+- Requests name the deployment, not the Claude model ID. On the [Unified Model API](/docs/llm-proxy/unified-model), call `anthropic:<deployment-name>`, and map this key on your [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys).
 - Do not add Claude under the [Azure AI Foundry](/docs/llm-proxy/providers/azure) provider. That provider uses the OpenAI API, and Foundry answers Claude requests there with `404 Requested API is currently not supported`.
 - For keyless Microsoft Entra ID authentication, set [`ARCHESTRA_ANTHROPIC_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_ANTHROPIC_BASE_URL) to the `/anthropic` URL and [`ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED). Keyless works with this server-wide URL only, not with a key's **Base URL**.
 
@@ -60,9 +60,9 @@ The native Anthropic proxy forwards caller-supplied `cache_control` on requests,
 
 Archestra does not add cache markers to native proxy requests; use [Anthropic’s caching controls](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) for a supported model. Cache eligibility and hits are decided by Anthropic.
 
-### Through the Unified API
+### Through the Unified Model API
 
-The [Unified API](/docs/llm-proxy/unified-api) translates caller-supplied `cache_control` on content blocks, messages, and function tool definitions when targeting Anthropic. Message-level controls apply to the final content block; controls on earlier blocks keep their original boundary. Top-level `cache_control` is forwarded for Anthropic's automatic caching mode.
+The [Unified Model API](/docs/llm-proxy/unified-model) translates caller-supplied `cache_control` on content blocks, messages, and function tool definitions when targeting Anthropic. Message-level controls apply to the final content block; controls on earlier blocks keep their original boundary. Top-level `cache_control` is forwarded for Anthropic's automatic caching mode.
 
 For example, this Chat Completions body marks the stable system prefix while leaving the question outside that breakpoint:
 

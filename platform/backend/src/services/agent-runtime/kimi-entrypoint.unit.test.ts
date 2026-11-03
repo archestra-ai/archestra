@@ -71,7 +71,7 @@ describe("Kimi Code image entrypoint", () => {
         providers: {
           archestra: {
             type: "kimi",
-            base_url: "http://platform:9000/v1/unified-api/agent",
+            base_url: "http://platform:9000/v1/unified-model/agent",
             api_key_env: "OPENAI_API_KEY",
             custom_headers: {
               "X-Archestra-Run-Id": "task-1",
@@ -1283,7 +1283,7 @@ function runtimeEnv(
     ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID: "workspace-1",
     ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "k3.1-pro",
     ARCHESTRA_MCP_GATEWAY_URL: "http://platform:9000/v1/mcp/agent",
-    OPENAI_BASE_URL: "http://platform:9000/v1/unified-api/agent",
+    OPENAI_BASE_URL: "http://platform:9000/v1/unified-model/agent",
     ...overrides,
   };
 }

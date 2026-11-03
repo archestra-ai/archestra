@@ -45,7 +45,7 @@ export async function resolveModelRoute(params: {
     ) {
       throw new ApiError(
         400,
-        `Model "${requestedModel}" is scoped to provider "${explicit.provider}", but the Unified API virtual key is not mapped to that provider.`,
+        `Model "${requestedModel}" is scoped to provider "${explicit.provider}", but the Unified Model API virtual key is not mapped to that provider.`,
       );
     }
 
@@ -61,7 +61,7 @@ export async function resolveModelRoute(params: {
   // Native clients such as Codex and Hermes expect the provider's own model
   // slug. A virtual key mapped to exactly one provider makes that slug just as
   // unambiguous as a qualified id while preserving strict routing for general
-  // multi-provider Unified API keys.
+  // multi-provider Unified Model API keys.
   if (params.allowedProviders?.size === 1) {
     const [provider] = params.allowedProviders;
     return resolveProviderModel({
@@ -112,7 +112,7 @@ export function sortRoutableModels(models: Model[]): Model[] {
 }
 
 /**
- * The models a Unified API caller may invoke through these provider keys, in
+ * The models a Unified Model API caller may invoke through these provider keys, in
  * the order GET /models lists them. Callers without a user identity (virtual
  * keys) see only organization-wide `use` grants, as at proxy time.
  */

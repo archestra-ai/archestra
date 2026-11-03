@@ -38,7 +38,7 @@ type Credential = "standard" | "token";
 const ENDPOINTS: Choice<Endpoint>[] = [
   {
     value: "model-router",
-    label: "Unified API",
+    label: "Unified Model API",
     description: "OpenAI-compatible, any client",
     icon: Waypoints,
   },

@@ -38,7 +38,7 @@ To connect a plan, your Archestra account needs permission to create provider ke
 
 On **Model Providers**, connect **GitHub Copilot** under **Enterprise plans**. Create a new GitHub App or connect using existing App credentials. The App requires the **Copilot Requests (Read-only)** permission on your GitHub organization (see [App access to Copilot](https://docs.github.com/en/copilot/how-tos/administer-copilot/manage-for-organization/manage-app-copilot-access)). Install it on the organization, including one in an Enterprise Managed Users enterprise. An installation on the enterprise cannot make Copilot requests.
 
-Once connected, Copilot models are available in Chat, agents, and the LLM proxy with a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) (and on the [Unified API](/docs/llm-proxy/unified-api) as `github-copilot:<model-id>`):
+Once connected, Copilot models are available in Chat, agents, and the LLM proxy with a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) (and on the [Unified Model API](/docs/llm-proxy/unified-model) as `github-copilot:<model-id>`):
 
 ```bash
 curl "https://<archestra-host>/v1/github-copilot/chat/completions" \

@@ -63,7 +63,7 @@ export function CreateVirtualKeyDialogWithData({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   keyType: VirtualKeyType;
-  /** What the key is for, named in the title (e.g. "Unified API"). */
+  /** What the key is for, named in the title (e.g. "Unified Model API"). */
   targetLabel?: string;
   /**
    * Provider keys the new key starts mapped to (standard keys only). Omitted,

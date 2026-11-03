@@ -8,7 +8,7 @@ import {
 } from "@archestra/shared";
 
 /**
- * Unified API providers the router translates into from another wire format.
+ * Unified Model API providers the router translates into from another wire format.
  * Every other router provider speaks OpenAI chat completions natively.
  */
 const TRANSLATED_ROUTER_PROVIDERS: readonly SupportedProvider[] = [
@@ -40,7 +40,7 @@ export function getProxyBaseUrl(
   target: RequestTarget,
 ): string {
   return target.kind === "model-router"
-    ? `${connectionBaseUrl}/unified-api`
+    ? `${connectionBaseUrl}/unified-model`
     : `${connectionBaseUrl}/${target.provider}`;
 }
 

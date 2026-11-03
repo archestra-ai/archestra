@@ -29,13 +29,13 @@ export const WELL_KNOWN_ACME_PREFIX = "/.well-known/acme-challenge/";
 export const MCP_GATEWAY_PREFIX = "/v1/mcp";
 export const PROXY_API_PREFIX = "/v1";
 export const MODEL_ROUTER_PREFIX = `${PROXY_API_PREFIX}/model-router`;
-export const UNIFIED_API_PREFIX = `${PROXY_API_PREFIX}/unified-api`;
+export const UNIFIED_MODEL_PREFIX = `${PROXY_API_PREFIX}/unified-model`;
 
-/** An LLM proxy route: `/v1/<provider>/...` or the unified API. */
+/** An LLM proxy route: `/v1/<provider>/...` or the unified model API. */
 export function isLlmProxyPath(url: string): boolean {
   return (
     url.startsWith(MODEL_ROUTER_PREFIX) ||
-    url.startsWith(UNIFIED_API_PREFIX) ||
+    url.startsWith(UNIFIED_MODEL_PREFIX) ||
     SupportedProviders.some((provider) =>
       url.startsWith(`${PROXY_API_PREFIX}/${provider}`),
     )

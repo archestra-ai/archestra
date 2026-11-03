@@ -450,7 +450,7 @@ export const ${OPENCODE_V1_OAUTH_EXPORT} = async (input) => ({
  * - providers without a route are disabled, matching V1's enabled_providers
  *   list; a provider the organization's credential serves keeps its stock
  *   name and ids, lists only the models that credential serves, and carries
- *   the managed key. Azure and Copilot use managed Unified API providers
+ *   the managed key. Azure and Copilot use managed Unified Model API providers
  *   with their complete deployment catalogs;
  * - the `model.request` hook swaps the base URL and adds the attribution
  *   headers, and fails closed for a provider the proxy cannot route;

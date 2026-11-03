@@ -78,7 +78,7 @@ export const PROVIDER_ORIGINAL_URLS: Record<ChatProvider, string> = {
   zhipuai: "https://open.bigmodel.cn/api/",
   "github-copilot": "https://api.githubcopilot.com/",
   "microsoft-365-copilot": "https://graph.microsoft.com/beta/",
-  archestra: "https://<archestra-host>/v1/unified-api/",
+  archestra: "https://<archestra-host>/v1/unified-model/",
 };
 
 interface ProxyClientInstructionsProps {
@@ -101,7 +101,7 @@ const ALL_PROVIDERS = (
 ).filter(providerSupportsChat);
 
 /**
- * providerId URL value for the Unified API tile. Not a real provider —
+ * providerId URL value for the Unified Model API tile. Not a real provider —
  * isSupportedProvider() rejects it, so every other providerId consumer
  * (script/config clients, deep links) safely treats it as "none selected".
  */
@@ -174,13 +174,13 @@ export function ProxyClientInstructions({
       ? urlProvider
       : null;
 
-  // Generic clients get the Unified API as the first tile of the grid;
+  // Generic clients get the Unified Model API as the first tile of the grid;
   // custom clients build per-provider instructions and don't offer it.
   const routerAvailable = client.proxy.kind === "generic";
   const routerSelected = routerAvailable && urlProvider === MODEL_ROUTER_TILE;
 
   // Auto-select the first tile when nothing is chosen yet, so the card opens
-  // with instructions expanded instead of a blank grid: the Unified API for
+  // with instructions expanded instead of a blank grid: the Unified Model API for
   // generic clients, the first provider otherwise.
   useEffect(() => {
     if (selectedProvider || routerSelected) return;
@@ -339,7 +339,7 @@ type GenericAuthMethod = "provider-key" | "virtual-key";
  * The "Any client" step 4 body for a single provider: the user decides how to
  * authenticate — bring their own provider key (passthrough) or have us
  * auto-provision a personal virtual key (the same provisioning the one-command
- * setup performs, gated by llmVirtualKey:create). The Unified API lives in
+ * setup performs, gated by llmVirtualKey:create). The Unified Model API lives in
  * its own first tile of the grid ({@link ModelRouterInstructions}).
  */
 function GenericProxyInstructions({
@@ -508,10 +508,10 @@ function GenericProxyInstructions({
 }
 
 /**
- * The Unified API auth panel behind the first tab of the endpoint card
+ * The Unified Model API auth panel behind the first tab of the endpoint card
  * (generic clients). One OpenAI-compatible endpoint that reaches every
  * configured provider via provider-qualified model IDs (`openai:gpt-5.4`) —
- * /v1/openai is just the OpenAI passthrough proxy; only /v1/unified-api fans
+ * /v1/openai is just the OpenAI passthrough proxy; only /v1/unified-model fans
  * out across providers. A virtual key wraps exactly one stored provider key,
  * so router setups pick which provider the minted key maps to.
  */
@@ -712,7 +712,7 @@ function GenericEndpointCard({
       ? PROVIDER_ORIGINAL_URLS[selectedProvider]
       : "";
   const url = routerSelected
-    ? `${baseUrl}/unified-api`
+    ? `${baseUrl}/unified-model`
     : `${baseUrl}/${selectedProvider}`;
 
   // Bedrock exposes two endpoints; both live in the same card as labeled rows.
@@ -756,7 +756,7 @@ function GenericEndpointCard({
           <span className="font-medium">Updated endpoint</span>
           <InlineNoticeText>
             The previous /v1/model-router endpoint is still supported. Use
-            /v1/unified-api for new connections.
+            /v1/unified-model for new connections.
           </InlineNoticeText>
         </InlineNotice>
       )}
@@ -1131,7 +1131,7 @@ function ProviderPicker({
       </SelectTrigger>
       <SelectContent>
         {modelRouter && (
-          <SelectItem value={MODEL_ROUTER_TILE}>Unified API</SelectItem>
+          <SelectItem value={MODEL_ROUTER_TILE}>Unified Model API</SelectItem>
         )}
         <LlmProviderSelectItems
           options={providers.map((provider) => ({

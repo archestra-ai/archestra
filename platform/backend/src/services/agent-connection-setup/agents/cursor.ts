@@ -13,7 +13,7 @@ import type {
 const CURSOR_APPLICATION_USER_KEY =
   "src.vs.platform.reactivestorage.browser.reactiveStorageServiceImpl.persistentStorage.applicationUser";
 
-/** Row recording the Unified API ids the last setup added to Cursor's picker. */
+/** Row recording the Unified Model API ids the last setup added to Cursor's picker. */
 const CURSOR_ROUTER_MODELS_KEY = "archestra/cursorModelRouterModels";
 
 // Cursor setup. Cursor has no CLI to drive: the script merges ~/.cursor/mcp.json,
@@ -43,7 +43,7 @@ print(f"Updated {path}")`;
 // The Settings > Models > API Keys toggles live in the applicationUser blob and
 // the key in its own row. Values arrive through the child process env.
 //
-// The picker then lists only the Unified API's models: they become user-added
+// The picker then lists only the Unified Model API's models: they become user-added
 // models, and every built-in model Cursor knows of is switched off (a user can
 // switch one back on). The ids written are remembered in their own row, so a
 // re-run replaces them instead of keeping models the router no longer lists.
@@ -380,7 +380,7 @@ function cursorEnding(ctx: SetupScriptContext): AgentEnding {
     );
   }
   return {
-    proxyDetail: `Cursor's models use the ${ctx.appName} Unified API (Settings > Models > API Keys)`,
+    proxyDetail: `Cursor's models use the ${ctx.appName} Unified Model API (Settings > Models > API Keys)`,
     signIn: ctx.mcp
       ? {
           command: null,

@@ -74,11 +74,11 @@ describe("LlmProxyPage provider dropdown", () => {
     } as unknown as ReturnType<typeof useSession>);
   });
 
-  it("defaults to the Unified API endpoint", async () => {
+  it("defaults to the Unified Model API endpoint", async () => {
     renderPage();
 
     expect(
-      await screen.findByText("http://localhost:3000/v1/unified-api"),
+      await screen.findByText("http://localhost:3000/v1/unified-model"),
     ).toBeInTheDocument();
   });
 
@@ -606,7 +606,7 @@ describe("LlmProxyPage connect steps", () => {
     );
   });
 
-  it("keeps passthrough off the Unified API, which has no route for it", async () => {
+  it("keeps passthrough off the Unified Model API, which has no route for it", async () => {
     server.use(
       http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
         HttpResponse.json([JEV_PROVIDER_KEY]),
@@ -623,7 +623,7 @@ describe("LlmProxyPage connect steps", () => {
     // and comes back with the provider.
     await selectJev(user);
     await user.click(screen.getByRole("radio", { name: /Passthrough/ }));
-    await user.click(screen.getByRole("button", { name: "Unified API" }));
+    await user.click(screen.getByRole("button", { name: "Unified Model API" }));
     expect(screen.getByRole("radio", { name: /Standard/ })).toBeChecked();
     expect(screen.getByRole("radio", { name: /Passthrough/ })).toBeDisabled();
 

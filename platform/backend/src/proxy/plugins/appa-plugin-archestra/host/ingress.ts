@@ -66,7 +66,7 @@ export function scrubOpenappaIngress(params: {
   });
 
   const requestWireFamily = appaWireFamily(interactionType);
-  // A Unified API route that translated the client's wire to one OpenAPPA
+  // A Unified Model API route that translated the client's wire to one OpenAPPA
   // does not read already scrubbed the client's own wire.
   const clientWire = requestWireFamily
     ? undefined
@@ -106,7 +106,7 @@ export function scrubOpenappaIngress(params: {
 }
 
 /**
- * Scrubs the request a client sent to a Unified API route, on the client's
+ * Scrubs the request a client sent to a Unified Model API route, on the client's
  * own wire, before the route translates it to a provider wire that OpenAPPA
  * does not read (Gemini, Bedrock Converse, Cohere). Removes the same
  * receipts, markers and child returns that ingress removes from an OpenAPPA
@@ -295,7 +295,7 @@ export type OpenappaIngress = {
   childReturns?: CollectedChildReturns;
   childTrajectoryReceipts?: AppaChildTrajectoryReceipt[];
   /**
-   * The client's own wire, when a Unified API route translated it to a
+   * The client's own wire, when a Unified Model API route translated it to a
    * provider wire OpenAPPA does not read. The client's session is read here.
    */
   clientWire?: { family: AppaWireFamily; body: unknown };

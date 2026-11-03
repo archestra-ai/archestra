@@ -52,7 +52,7 @@ A provider with its own wire format, such as Anthropic, Gemini, Bedrock, or Cohe
 
 - **Model sync:** map the provider's models.dev ID in `MODELS_DEV_PROVIDER_MAP` in `shared/model-constants.ts`, so model metadata and prices sync.
 - **Logos:** add `frontend/public/icons/<provider>.png` for the API key form, and a monochrome `frontend/public/model-logos/<provider>.svg` mapped in `providerToLogoProvider` in `frontend/src/lib/provider-logos.ts`.
-- **Unified API:** to make the provider routable, add it to `MODEL_ROUTER_SUPPORTED_PROVIDERS` and to the router's maps in `backend/src/routes/proxy/routes/unified-api.ts`. A native provider also needs a case in `getTranslatedModelRouterProvider`.
+- **Unified Model API:** to make the provider routable, add it to `MODEL_ROUTER_SUPPORTED_PROVIDERS` and to the router's maps in `backend/src/routes/proxy/routes/unified-model.ts`. A native provider also needs a case in `getTranslatedModelRouterProvider`.
 - **OpenCode:** to offer it in OpenCode, add it to `OPENCODE_PASSTHROUGH_PROVIDER_ROUTES` in `shared/opencode-provider-routes.ts`.
 - **Docs:** add a row to the provider table in `../docs/pages/llm-proxy/providers/index.md`.
 
@@ -62,7 +62,7 @@ To check it works, run the provider matrix, then walk `PROVIDER_SMOKE_TEST.md` i
 pnpm --dir backend exec vitest run src/routes/proxy/routes/provider-matrix.rollback.test.ts
 ```
 
-- The server refuses to start when the Unified API lists in `shared/` and `unified-api.ts` disagree. `type-check` does not catch this.
+- The server refuses to start when the Unified Model API lists in `shared/` and `unified-model.ts` disagree. `type-check` does not catch this.
 
 <span id="adding-knowledge-connectors"></span>
 

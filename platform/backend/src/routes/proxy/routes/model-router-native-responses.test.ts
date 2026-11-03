@@ -129,7 +129,7 @@ test("preserves native Responses reasoning, replay state and tool calls through 
   app.setSerializerCompiler(serializerCompiler);
   await app.register(modelRouterProxyRoutes);
   try {
-    for (const path of ["unified-api", "model-router"]) {
+    for (const path of ["unified-model", "model-router"]) {
       const response = await app.inject({
         method: "POST",
         url: `/v1/${path}/${agent.id}/responses`,

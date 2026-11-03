@@ -67,7 +67,7 @@ class AnthropicOpenaiResponseAdapter
   }
 
   getOriginalResponse(): AnthropicResponse {
-    // The unified API's external wire format is OpenAI, so the handler should
+    // The unified model API's external wire format is OpenAI, so the handler should
     // send the translated response even though this adapter wraps Anthropic.
     return anthropicResponseToOpenai(
       this.inner.getOriginalResponse(),

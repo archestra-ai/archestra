@@ -167,7 +167,7 @@ describe("Authnz", () => {
       }
     });
 
-    test("should skip session auth for both unified API paths", async () => {
+    test("should skip session auth for both unified model API paths", async () => {
       const modelRouterPaths = [
         "/v1/model-router/models",
         "/v1/model-router/chat/completions",
@@ -182,7 +182,7 @@ describe("Authnz", () => {
       for (const url of [
         ...modelRouterPaths,
         ...modelRouterPaths.map((path) =>
-          path.replace("model-router", "unified-api"),
+          path.replace("model-router", "unified-model"),
         ),
       ]) {
         const mockRequest = {

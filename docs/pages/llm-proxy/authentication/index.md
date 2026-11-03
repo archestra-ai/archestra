@@ -12,7 +12,7 @@ Every call to the proxy carries an Archestra credential, so each request in the 
 
 First, add your provider keys on [Model Providers](/docs/llm-proxy/providers). They stay in Archestra. Then pick how each app or person signs in to the proxy, by what your client supports:
 
-| Your client | Use | Unified API |
+| Your client | Use | Unified Model API |
 | --- | --- | --- |
 | An app | [Standard virtual key](#standard-virtual-keys) | Yes |
 | A tool with its own key or subscription, like Claude Code | [Passthrough virtual key](#passthrough-virtual-keys) | No |
@@ -20,7 +20,7 @@ First, add your provider keys on [Model Providers](/docs/llm-proxy/providers). T
 | An app where people sign in | [OAuth, for each person](#call-for-a-person) | Yes |
 | A token from your identity provider | [Identity provider JWT](#jwks-external-identity-provider) | No |
 
-<span id="creating-standard-virtual-keys"></span><span id="standard-virtual-keys-on-the-unified-api"></span>
+<span id="creating-standard-virtual-keys"></span><span id="standard-virtual-keys-on-the-unified-model"></span>
 
 ## Standard Virtual Keys
 
@@ -43,7 +43,7 @@ The request shows under **Logs → LLM Proxy**, with the key's name.
 
 <span id="provider-matching"></span>
 
-- With **Selected providers**, the key needs a mapping for the route's provider. An OpenAI route needs an OpenAI key. On the [Unified API](/docs/llm-proxy/unified-api), the model's prefix picks the mapping.
+- With **Selected providers**, the key needs a mapping for the route's provider. An OpenAI route needs an OpenAI key. On the [Unified Model API](/docs/llm-proxy/unified-model), the model's prefix picks the mapping.
 - The key also works on provider endpoints Archestra forwards unchanged, such as `/v1/openai/moderations`. Archestra adds the provider key the virtual key maps to, so the app never holds one. A provider key that has its own **Base URL** is not forwarded. Each forwarded call appears under **Logs → LLM Proxy** with its endpoint path. Moderation and token-count calls record $0; other forwarded calls record no cost, because the provider reports none. Under a hard spend limit, only listings, uploads, cancellations, token counts, and OpenAI moderations are forwarded. Other forwarded calls, such as creating a batch, return 422.
 - Self-hosted providers can map several endpoints. Archestra sends each request to the endpoint that serves the model. You can edit a virtual key to add providers or endpoints without changing its token.
 - Choose **Current and future providers** to automatically use each provider's shared **Primary** API key, including providers added later. Personal and subscription keys are excluded. You can optionally select a different key for an existing provider. Connect settings apply this option to newly issued keys.
@@ -102,7 +102,7 @@ For a bot or a nightly job with no person behind it. Select **Service account (o
      --data-urlencode 'scope=llm:proxy'
    ```
 
-5. Send `Authorization: Bearer <access_token>` on a provider route or the Unified API.
+5. Send `Authorization: Bearer <access_token>` on a provider route or the Unified Model API.
 
 - When editing a client, use **Access** to change capabilities and provider keys, and **Budget** to change its payer or spend cap.
 - The billing team's [costs](/docs/llm-proxy/costs-and-limits/costs) and [limits](/docs/llm-proxy/costs-and-limits/limits) count the client's spend. A spend cap limits the client itself.
@@ -110,7 +110,7 @@ For a bot or a nightly job with no person behind it. Select **Service account (o
 - Existing OAuth clients keep **Selected providers** until you change their mode.
 - To let the client use a [model pool](/docs/llm-proxy/model-pools) without mapping one of its members, add the pool under **Model pools** on **Access**.
 - Map a metered API key. A personal subscription cannot serve an app.
-- See the [complete example app](https://github.com/archestra-ai/examples/tree/main/unified-api-client-credentials).
+- See the [complete example app](https://github.com/archestra-ai/examples/tree/main/unified-model-client-credentials).
 
 For a combined client, request a space-separated subset such as `scope=llm:proxy mcp`. See [token scopes](/docs/mcp/authentication/applications#choose-token-scopes) for scope selection and changes to an existing client.
 
@@ -122,11 +122,11 @@ For an app where people sign in. Each call uses that person's provider keys, cos
 
 1. Pick **For its users**. On **Access**, add your app's redirect URIs. Each person pays for their own use. An optional spend cap limits the whole client.
 2. In your app, run the authorization code flow with PKCE. Ask for `scope=llm:proxy`. Add `offline_access` to get a refresh token.
-3. Send the person's access token on a provider route or the Unified API.
+3. Send the person's access token on a provider route or the Unified Model API.
 
 - A public app can register itself, with no secret. To allow only clients you register, set [`ARCHESTRA_AUTH_DCR_ENABLED=false`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_DCR_ENABLED).
 - Set how long tokens last under **Settings → Auth → OAuth token lifetime**.
-- See the [complete example app](https://github.com/archestra-ai/examples/tree/main/unified-api-user-oauth).
+- See the [complete example app](https://github.com/archestra-ai/examples/tree/main/unified-model-user-oauth).
 
 <span id="jwks-external-identity-provider"></span>
 
@@ -136,7 +136,7 @@ Already signed in to Okta or Entra ID? Send that token. Each call uses that pers
 
 1. Add your OIDC provider under **Settings → Identity Providers**.
 2. On **LLM Proxy**, under **Identity provider**, pick it. You need [`llmProxy:update`](/docs/reference/permissions#llmProxy:update).
-3. Send the JWT as `Authorization: Bearer` on a provider route. The Unified API does not take it.
+3. Send the JWT as `Authorization: Bearer` on a provider route. The Unified Model API does not take it.
 
 Archestra checks the signature and issuer, then matches the email claim to an Archestra user. If either fails, the request is rejected.
 

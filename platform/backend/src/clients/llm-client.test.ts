@@ -5,6 +5,7 @@ import {
   PROVIDER_BASE_URL_HEADER,
   SESSION_ID_HEADER,
   type SupportedProviderEndpoint,
+  UNATTENDED_HEADER,
 } from "@archestra/shared";
 import { generateObject, generateText, streamText } from "ai";
 import { vi } from "vitest";
@@ -1249,6 +1250,25 @@ describe("createLLMModel", () => {
     expect(headers?.[SESSION_ID_HEADER]).toBe("session");
     for (const name of ["X-Appa-Session-ID", "X-Appa-Parent-ID"]) {
       expect(new Headers(headers).has(name)).toBe(enabled);
+    }
+  });
+
+  test("says when no person answers for the session, as a Scheduled task run does", () => {
+    for (const unattended of [true, false]) {
+      createLLMModel({
+        provider: "openai",
+        apiKey: "test",
+        agentId: "agent",
+        modelName: "gpt-4",
+        baseUrl: null,
+        source: "chat",
+        userId: "user",
+        sessionId: "session",
+        unattended,
+      });
+      expect(
+        new Headers(capturedCreateOpenAIOptions.headers).get(UNATTENDED_HEADER),
+      ).toBe(unattended ? "1" : null);
     }
   });
 

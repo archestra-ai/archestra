@@ -180,15 +180,23 @@ class GeminiOpenaiStreamAdapter
         this.seenToolCalls += 1;
       }
     }
+    // Prompt refusals have no candidate, but are complete responses, just as
+    // the non-streaming translator's promptFeedback branch treats them.
+    const blockReason = decodedChunk.promptFeedback?.blockReason;
+    const promptBlocked =
+      !decodedChunk.candidates?.[0] &&
+      blockReason !== undefined &&
+      blockReason !== "BLOCKED_REASON_UNSPECIFIED";
     const innerResult = this.inner.processChunk(decodedChunk);
-    const sseData = this.toOpenaiSse(decodedChunk);
+    if (promptBlocked) {
+      this.state.stopReason = "SAFETY";
+      innerResult.isFinal = true;
+    }
+    const sseData = this.toOpenaiSse(decodedChunk, "text");
 
-    if (innerResult.isToolCallChunk && sseData) {
-      this.pendingToolCallEvents.push(sseData);
-      return {
-        ...innerResult,
-        sseData: null,
-      };
+    if (innerResult.isToolCallChunk) {
+      const tools = this.toOpenaiSse(decodedChunk, "tools");
+      if (tools) this.pendingToolCallEvents.push(tools);
     }
 
     return {
@@ -282,42 +290,53 @@ class GeminiOpenaiStreamAdapter
     return this.inner.toProviderResponse();
   }
 
-  private toOpenaiSse(chunk: GeminiStreamChunk): string | null {
-    const candidate = chunk.candidates?.[0];
-    if (!candidate?.content?.parts) return null;
-
-    for (const part of candidate.content.parts) {
-      if ("text" in part && part.text) {
-        return this.formatChunk({
-          delta: { content: part.text },
-          finishReason: null,
-        });
+  private toOpenaiSse(
+    chunk: GeminiStreamChunk,
+    kind: "text" | "tools",
+  ): string | null {
+    const parts = chunk.candidates?.[0]?.content?.parts ?? [];
+    // The inner processChunk appends one call per functionCall part. Subtract
+    // this chunk's count to recover its first index in the accumulated calls.
+    let toolIndex =
+      this.state.toolCalls.length -
+      parts.filter((part) => part.functionCall).length;
+    const events: string[] = [];
+    for (const part of parts) {
+      if (kind === "text" && part.text && !part.thought) {
+        events.push(
+          this.formatChunk({
+            delta: { content: part.text },
+            finishReason: null,
+          }),
+        );
       }
-      if ("functionCall" in part && part.functionCall) {
-        return this.formatChunk({
-          delta: {
-            tool_calls: [
-              {
-                index: Math.max(this.state.toolCalls.length - 1, 0),
-                id: encodeSignedToolCallId({
-                  id: part.functionCall.id,
-                  name: part.functionCall.name,
-                  thoughtSignature: part.thoughtSignature,
-                }),
-                type: "function",
-                function: {
-                  name: part.functionCall.name,
-                  arguments: JSON.stringify(part.functionCall.args ?? {}),
-                },
+      if (part.functionCall) {
+        if (kind === "tools") {
+          const call = this.state.toolCalls[toolIndex];
+          events.push(
+            this.formatChunk({
+              delta: {
+                tool_calls: [
+                  {
+                    index: toolIndex,
+                    id: encodeSignedToolCallId({
+                      id: call.id,
+                      name: call.name,
+                      thoughtSignature: part.thoughtSignature,
+                    }),
+                    type: "function",
+                    function: { name: call.name, arguments: call.arguments },
+                  },
+                ],
               },
-            ],
-          },
-          finishReason: null,
-        });
+              finishReason: null,
+            }),
+          );
+        }
+        toolIndex++;
       }
     }
-
-    return null;
+    return events.join("") || null;
   }
 
   private formatChunk(params: {

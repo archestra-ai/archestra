@@ -57,6 +57,52 @@ describe("GeminiOpenaiResponseAdapter", () => {
 });
 
 describe("GeminiOpenaiStreamAdapter", () => {
+  test("keeps every text and signed tool part while withholding thought text", () => {
+    const adapter = makeGeminiOpenaiAdapterFactory({
+      chatcmplId: "chatcmpl-test",
+      createdUnix: 123,
+      requestedModel: "pool",
+    }).createStreamAdapter();
+    const result = adapter.processChunk({
+      candidates: [
+        {
+          index: 0,
+          content: {
+            role: "model",
+            parts: [
+              { thought: true, text: "private reasoning" },
+              { text: "first" },
+              {
+                functionCall: { id: "one", name: "read_one", args: {} },
+                thoughtSignature: "sig-one",
+              },
+              { text: "second" },
+              {
+                functionCall: { id: "two", name: "read_two", args: {} },
+                thoughtSignature: "sig-two",
+              },
+            ],
+          },
+        },
+      ],
+    } as Parameters<typeof adapter.processChunk>[0]);
+    expect(result.sseData).toContain('"content":"first"');
+    expect(result.sseData).toContain('"content":"second"');
+    expect(result.sseData).not.toContain("private reasoning");
+    expect(result.sseData).not.toContain("tool_calls");
+    const events = adapter.getRawToolCallEvents().join("");
+    expect(events).toContain('"index":0');
+    expect(events).toContain('"index":1');
+    expect(events).toContain('"name":"read_one"');
+    expect(events).toContain('"name":"read_two"');
+    const released = adapter
+      .formatToolCallsSSE?.(adapter.state.toolCalls)
+      ?.join("");
+    for (const call of adapter.state.toolCalls)
+      expect(released).toContain(call.name);
+    expect(released).toContain("gemsig-");
+  });
+
   test("buffers OpenAI-shaped tool call events for policy evaluation", () => {
     const adapter = makeGeminiOpenaiAdapterFactory({
       chatcmplId: "chatcmpl-test",

@@ -1365,10 +1365,7 @@ export const geminiAdapterFactory: LLMProvider<
 
   spanName: "generate_content",
 
-  createClient(
-    apiKey: string | undefined,
-    options: CreateClientOptions,
-  ): GoogleGenAI {
+  createClient(apiKey: string | undefined, options: CreateClientOptions) {
     const client = createGoogleGenAIClient(
       apiKey,
       "[GeminiProxyV2]",
@@ -1378,15 +1375,32 @@ export const geminiAdapterFactory: LLMProvider<
       options.defaultHeaders,
     );
 
-    // Wrap with observability for request duration metrics
-    if (options.agent) {
-      return metrics.llm.getObservableGenAI(
-        client,
-        options.agent,
-        options.source,
-      );
-    }
-    return client;
+    const observed = options.agent
+      ? metrics.llm.getObservableGenAI(client, options.agent, options.source)
+      : client;
+    const withSignal = (
+      params: GenerateContentParameters,
+    ): GenerateContentParameters => ({
+      ...params,
+      config: {
+        ...params.config,
+        abortSignal:
+          options.abortSignal && params.config?.abortSignal
+            ? AbortSignal.any([options.abortSignal, params.config.abortSignal])
+            : (options.abortSignal ?? params.config?.abortSignal),
+      },
+    });
+    const generateContent = observed.models.generateContent.bind(
+      observed.models,
+    );
+    const generateContentStream = observed.models.generateContentStream.bind(
+      observed.models,
+    );
+    observed.models.generateContent = (params) =>
+      generateContent(withSignal(params));
+    observed.models.generateContentStream = (params) =>
+      generateContentStream(withSignal(params));
+    return observed;
   },
 
   async execute(

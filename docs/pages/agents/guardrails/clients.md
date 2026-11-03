@@ -81,6 +81,7 @@ Any other client, such as [n8n](/docs/integrations/web-ui-and-automation#configu
 
 - **`X-Appa-Session-ID`**: your app's conversation ID or workflow run ID. If you do not have one, generate a UUID when the conversation starts and reuse it.
 - **`X-Appa-Parent-ID`**: the parent's session ID, when a subagent or child workflow makes the call. Leave it out otherwise.
+- **`X-Archestra-Unattended`**: `1` when no person can answer approvals in the session, so the [Break the glass](/docs/agents/guardrails/policies#yells) settings can let a call that waits for human approval through. Leave it out otherwise.
 
 ```bash
 export SESSION_ID="$(uuidgen)"

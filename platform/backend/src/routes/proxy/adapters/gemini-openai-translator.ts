@@ -372,7 +372,7 @@ export function geminiResponseToOpenai(
 
   // Blocked candidates carry a `finishReason` but no `content`.
   for (const part of candidate?.content?.parts ?? []) {
-    if ("text" in part && part.text) {
+    if ("text" in part && part.text && !part.thought) {
       text += part.text;
       continue;
     }

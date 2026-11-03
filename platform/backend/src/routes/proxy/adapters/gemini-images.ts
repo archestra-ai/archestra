@@ -1,4 +1,3 @@
-import type { GenerateContentParameters, GoogleGenAI } from "@google/genai";
 import type { z } from "zod";
 import { mediaTariffCovers, priceGeminiImage } from "@/services/media-pricing";
 import {
@@ -110,24 +109,13 @@ export const geminiImagesAdapterFactory = {
   ...geminiAdapterFactory,
   unavailableUsageAccounting: true,
   recordRequestDurationInHandler: true,
-  cancelOnDisconnect: true,
   createClient(apiKey: string | undefined, options: CreateClientOptions) {
-    const native = geminiAdapterFactory.createClient(apiKey, {
+    return geminiAdapterFactory.createClient(apiKey, {
       ...options,
       agent: undefined,
-    }) as GoogleGenAI;
-    // Keep the native adapter's request preparation and observability, adding
-    // only the request-scoped cancellation signal supported by the Google SDK.
-    return {
-      models: {
-        generateContent: (params: GenerateContentParameters) =>
-          native.models.generateContent({
-            ...params,
-            config: { ...params.config, abortSignal: options.abortSignal },
-          }),
-      },
-    };
+    });
   },
+
   async executeStream(): Promise<never> {
     throw new ApiError(
       400,

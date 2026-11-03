@@ -595,6 +595,7 @@ const layerTable = [
       "src/openappa/archestra-audience.ts",
       "src/openappa/batteries.ts",
       "src/openappa/battery-target.ts",
+      "src/openappa/bound-github-api-url.ts",
       "src/openappa/composition-view.ts",
       "src/openappa/coverage.ts",
       "src/openappa/declarations.ts",

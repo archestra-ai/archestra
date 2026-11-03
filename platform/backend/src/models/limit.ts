@@ -1672,6 +1672,8 @@ export class LimitValidationService {
     deferModelScopedLimits?: boolean;
     /** Refuse applicable budgets when this media model cannot be priced. */
     unpricedMediaModel?: string;
+    /** Refuse applicable hard budgets when token prices are unknown. */
+    unpricedModel?: string;
     /**
      * The operation names no model and reports no cost to settle, so every
      * hard budget applies to it, whatever models the budget lists.
@@ -1880,13 +1882,23 @@ export class LimitValidationService {
       prefetch.modelAliases = params.modelAliases;
       prefetch.deferModelScopedLimits = params.deferModelScopedLimits;
 
-      if (params.unpricedMediaModel || params.unmeteredOperation) {
+      if (
+        params.unpricedMediaModel ||
+        params.unpricedModel ||
+        params.unmeteredOperation
+      ) {
         const applies = (models?: string[] | null) =>
           params.unmeteredOperation ||
           !models?.length ||
-          models.includes(params.unpricedMediaModel ?? "");
-        const limits = [...prefetch.limitsByEntity.values()].flat();
-        let budgeted = limits.some(
+          models.includes(
+            params.unpricedMediaModel ?? params.unpricedModel ?? "",
+          );
+        // Minute budgets are enforced by throughput, but still require a known
+        // token price. The spend evaluator's prefetch excludes those budgets.
+        const budgetLimits = params.unpricedModel
+          ? limits
+          : [...prefetch.limitsByEntity.values()].flat();
+        let budgeted = budgetLimits.some(
           (limit) => limit.behavior !== "soft" && applies(limit.model),
         );
         const customUserLimits = userId
@@ -1905,7 +1917,9 @@ export class LimitValidationService {
             422,
             params.unmeteredOperation
               ? "This pass-through operation reports no cost the gateway can count, so it cannot run while a budget applies."
-              : "This media operation cannot satisfy the configured budget because authoritative cost is unavailable",
+              : params.unpricedModel
+                ? "This vLLM model has unknown token prices and cannot run while a spend budget applies. Configure input and output token prices (including explicit zero for a free model) in Costs & Limits."
+                : "This media operation cannot satisfy the configured budget because authoritative cost is unavailable",
           );
       }
 

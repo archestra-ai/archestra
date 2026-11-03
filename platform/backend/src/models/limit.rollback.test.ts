@@ -318,6 +318,57 @@ describe("Selected model budget applicability", () => {
     }
   });
 
+  test.for([
+    "organization",
+    "agent",
+    "user",
+    "team",
+    "virtual_key",
+  ] as const)("unpriced token models respect %s budget scope", async (entityType, {
+    makeAgent,
+    makeUser,
+    makeTeam,
+    makeVirtualApiKey,
+  }) => {
+    const agent = await makeAgent();
+    const user = await makeUser();
+    const team = await makeTeam(agent.organizationId, user.id);
+    const key = await makeVirtualApiKey(agent.organizationId);
+    const ids = {
+      organization: agent.organizationId,
+      agent: agent.id,
+      user: user.id,
+      team: team.id,
+      virtual_key: key.id,
+    };
+    await LimitModel.create({
+      entityType,
+      entityId: ids[entityType],
+      limitType: "token_cost",
+      limitValue: 100,
+      model: ["unpriced-vllm"],
+      lastCleanup: new Date(),
+    });
+    const context = {
+      agentId: agent.id,
+      userId: user.id,
+      virtualKeyId: key.id,
+      ...(entityType === "team" ? { billingTeamId: team.id } : {}),
+    };
+    await expect(
+      LimitValidationService.checkLimitsBeforeRequest({
+        ...context,
+        unpricedModel: "unpriced-vllm",
+      }),
+    ).rejects.toMatchObject({ statusCode: 422 });
+    expect(
+      await LimitValidationService.checkLimitsBeforeRequest({
+        ...context,
+        unpricedModel: "other-model",
+      }),
+    ).toBeNull();
+  });
+
   test("unpriced media remains fail-closed for an applicable budget during routing", async ({
     makeAgent,
   }) => {

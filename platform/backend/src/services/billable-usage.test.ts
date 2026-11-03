@@ -167,7 +167,9 @@ fixtureTest(
       mode: "enforce",
     });
     expect(Number(selfHosted.cost)).toBe(0);
-    expect(selfHosted.status).toBe("complete");
+    expect(selfHosted.status).toBe("incomplete");
+    expect(selfHosted.issues).toContain("estimated_model_price");
+    expect(selfHosted.components[0].prices.input).toBeNull();
   },
 );
 

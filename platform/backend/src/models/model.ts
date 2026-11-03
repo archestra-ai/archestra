@@ -1114,8 +1114,8 @@ class ModelModel {
     provider?: SupportedProvider,
     published?: ProviderModelPricing,
   ): {
-    pricePerMillionInput: string;
-    pricePerMillionOutput: string;
+    pricePerMillionInput: string | null;
+    pricePerMillionOutput: string | null;
     source: PriceSource;
   } {
     // Tier 1: Custom admin-set price
@@ -1186,18 +1186,18 @@ class ModelModel {
       };
     }
 
-    // Tier 3: Default fallback. The generic estimate below assumes an unknown
-    // price exists to be approximated; for these providers none does, so it
-    // fabricates one — inflating recorded spend and burning cost limits against
-    // tokens nobody is billed for. vLLM is an inference server the operator
-    // runs. Ollama bills no per-token rate on either transport: a self-hosted
-    // server charges nothing, and its cloud offering is a flat monthly
-    // subscription metered on GPU time rather than tokens.
-    //
-    // Listed explicitly rather than derived from the self-hosted-provider set
-    // it currently matches, so that adding a keyless provider that does bill
-    // per token cannot silently make its traffic free.
+    // vLLM deployment costs are operator-defined. Missing rates are unknown,
+    // while explicit custom or instance zeroes have already resolved above.
     const resolvedProvider = model?.provider ?? provider;
+    if (resolvedProvider === "vllm") {
+      return {
+        pricePerMillionInput: null,
+        pricePerMillionOutput: null,
+        source: "default",
+      };
+    }
+
+    // Ollama retains its zero fallback; other providers keep the estimate.
     if (
       resolvedProvider &&
       PROVIDERS_BILLING_NO_TOKEN_RATE.has(resolvedProvider)

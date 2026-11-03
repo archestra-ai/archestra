@@ -657,14 +657,14 @@ jobs:
             [ "$a_pre" != "$b_pre" ] \
               && [ "$(printf '%s\n' "$a_pre" "$b_pre" | sort -V | tail -1)" = "$a_pre" ]
           }
-          # Drafts are excluded: they have not moved the tag. This release is
-          # still a draft here, so a retry is allowed to move it again.
-          RELEASE_TAGS=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" --jq '.[] | select(.draft | not) | .tag_name') \
+          # A newer draft may have moved latest before publication failed.
+          # Include it to prevent rollback; this version's own draft permits retry.
+          RELEASE_TAGS=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" --jq '.[] | .tag_name') \
             || { echo "::error::Cannot list releases to order the platform latest tag"; exit 1; }
           while IFS= read -r RELEASE_TAG; do
             [[ "$RELEASE_TAG" =~ ^platform-v[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+\.[0-9]+)?$ ]] || continue
             if version_is_newer "${RELEASE_TAG#platform-v}" "$VERSION"; then
-              echo "Newer release ${RELEASE_TAG} already holds the platform latest tag"
+              echo "Newer release ${RELEASE_TAG} may already hold the platform latest tag"
               exit 0
             fi
           done <<< "$RELEASE_TAGS"

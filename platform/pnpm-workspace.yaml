@@ -12,10 +12,9 @@ packages:
 
 catalog:
   ai: ^6.0.193
-  # GHSA-qq9h-g4jm-xgf3 (HIGH, improper authentication) affects >=1.1.3 and is
-  # fixed in 1.6.22. The @better-auth/* packages release in lockstep with it.
-  better-auth: 1.6.22
-  "@better-auth/core": 1.6.22
+  # Patched bearer verification without changing the existing OAuth/JWKS schema.
+  better-auth: 1.7.7
+  "@better-auth/core": 1.7.7
   "@better-auth/oauth-provider": 1.6.22
   "@better-auth/sso": 1.6.22
   # TypeScript 7 ships a `tsc` binary but no programmatic API until 7.1. knip,
@@ -26,6 +25,9 @@ catalog:
   typescript-7: "npm:typescript@7.0.1-rc"
   zod: ^4.6.6
 overrides:
+  # Keep legacy SSO/OAuth plugins on the patched core endpoint context.
+  '@better-auth/sso@1.6.22>better-call': 1.4.0
+  '@better-auth/oauth-provider@1.6.22>better-call': 1.4.0
   # GHSA-mrhx-c7xc-m3w5: preserve these SDK versions on patched Zod 4.
   # Their package patches retain the existing record and error contracts.
   'botbuilder@4.23.3>zod': '>=4.6.6 <5'
@@ -34,7 +36,8 @@ overrides:
   'botframework-schema@4.23.3>zod': '>=4.6.6 <5'
   'confluence.js@2.1.0>zod': '>=4.6.6 <5'
   # Patched transitive HTTP dependencies; versions have cleared the age rule.
-  follow-redirects: ">=1.16.1"
+  # CVE-2026-116689: strip sensitive headers on cross-realm redirects.
+  follow-redirects: 1.16.2
   http-cache-semantics: ">=4.3.0 <5"
   # CVE-2026-49356 (GHSA-4x5r-pxfx-6jf8, LOW, arbitrary source-map read via
   # sourceMappingURL handling) fixed in 7.29.6. Transitive-only (build tooling),
@@ -189,6 +192,7 @@ packageExtensions:
       zod: ^4.6.6
 
 patchedDependencies:
+  better-auth@1.7.7: patches/better-auth@1.7.7.patch
   # Preserve the stable SDK APIs when resolving their patched validator.
   'botbuilder@4.23.3': patches/botbuilder@4.23.3.patch
   'botbuilder-core@4.23.3': patches/botbuilder-core@4.23.3.patch

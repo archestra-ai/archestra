@@ -2,7 +2,7 @@
 title: Audit log export
 description: Send administrative audit events to your SIEM through an OpenTelemetry Collector
 order: 3
-lastUpdated: 2026-10-28
+lastUpdated: 2026-11-03
 ---
 
 Send key changes, permission updates, and other recorded administrative actions to your security monitoring stack. Archestra exports metadata from the same persisted events available through its audit API as OpenTelemetry logs.

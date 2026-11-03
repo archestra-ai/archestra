@@ -8,11 +8,13 @@ import ModelCostBackfillModel from "@/models/model-cost-backfill";
 import ModelPoolModel from "@/models/model-pool";
 import OrganizationModel from "@/models/organization";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import RoutingDecisionModel from "@/models/routing-decision";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   authenticatedRouteApp,
   USER_HEADER,
 } from "@/test/authenticated-route-app";
+import { RoutingSessionKeySchema } from "@/types/auto-routing";
 import routes from "./llm-provider-models";
 
 describe("DELETE /api/llm-models/:id", () => {
@@ -202,6 +204,66 @@ describe("DELETE /api/llm-models/:id", () => {
       expect(await ModelModel.findById(model.id)).not.toBeNull();
     });
   }
+
+  test("preserves session pins and routing history after a default tier changes", async ({
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const model = await createModel();
+    await OrganizationModel.patch(organizationId, { defaultModelId: model.id });
+    const sessionKey = RoutingSessionKeySchema.parse("cleanup-pinned-session");
+    const { decision } = await RoutingDecisionModel.insertOrGet({
+      organizationId,
+      sessionKey,
+      modelId: model.id,
+      tierIndex: 1,
+      propensity: 1,
+      u: 0.5,
+      reason: "cold_start",
+      planId: null,
+      featuresSchemaVersion: 1,
+      coreVersion: "cleanup-test",
+    });
+    const replacement = await createModel("replacement-default");
+    await OrganizationModel.patch(organizationId, {
+      defaultModelId: replacement.id,
+    });
+    const agent = await makeAgent();
+    const interaction = await makeInteraction(agent.id, {
+      model: model.modelId,
+      cost: "1.2500000000",
+    });
+    await db.insert(schema.routingUsageTable).values({
+      interactionId: interaction.id,
+      decisionId: decision.id,
+      input: 10,
+      cacheRead: 0,
+      cacheWrite: 0,
+      cacheWrite1h: 0,
+      output: 5,
+      estimated: false,
+    });
+    const historyKey = { organizationId, interactionId: interaction.id };
+    const before = await RoutingDecisionModel.findForInteraction(historyKey);
+    expect(before?.model.id).toBe(model.id);
+
+    const response = await remove(model.id);
+    expect(response.statusCode, response.body).toBe(409);
+    expect(response.json().error.message).toContain("a routing decision");
+    expect(await ModelModel.findById(model.id)).not.toBeNull();
+    expect(
+      await RoutingDecisionModel.find({ organizationId, sessionKey }),
+    ).toEqual(decision);
+    expect(await RoutingDecisionModel.findForInteraction(historyKey)).toEqual(
+      before,
+    );
+    expect(
+      await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.id, interaction.id)),
+    ).toEqual([interaction]);
+  });
 
   test("protects pool members including disabled members without blocking another provider", async ({
     makeLlmProviderApiKey,

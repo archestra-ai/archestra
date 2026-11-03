@@ -800,6 +800,9 @@ class ModelModel {
           SELECT 1 FROM ${schema.conversationsTable}
           WHERE model_id = ${id}
         )
+        UNION ALL SELECT 'a routing decision' WHERE EXISTS (
+          SELECT 1 FROM ${schema.routingDecisionsTable} WHERE model_id = ${id}
+        )
         UNION ALL SELECT 'guardrails' WHERE EXISTS (
           SELECT 1 FROM ${schema.guardrailsDeploymentTable} WHERE annotator_model_id = ${id}
         )

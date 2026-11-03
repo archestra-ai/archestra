@@ -79,7 +79,10 @@ describe("uploaded files connector environment", () => {
     const connector = connectors[0];
     const search = (
       environmentId: string | null,
-      userAcl: AclEntry[] = [`principal:${user.id}`, `user_email:${user.email}`],
+      userAcl: AclEntry[] = [
+        `principal:${user.id}`,
+        `user_email:${user.email}`,
+      ],
     ) =>
       KbChunkModel.fullTextSearch({
         connectorIds: [connector.id],

@@ -176,11 +176,6 @@ export function LlmConnectSteps({
   // A virtual key calls a pool only once the pool was added to it.
   const callsPool = (key: { id: string }, target: ModelPool) =>
     target.virtualApiKeyIds.includes(key.id);
-  const keyOptions = (virtualKeys?.data ?? []).filter((key) =>
-    pool ? callsPool(key, pool) : auth === "passthrough" || reaches(key),
-  );
-  const clientOptions = oauthClients.filter(reaches);
-
   // Pools are asked for by name on the Unified Model API.
   const poolsEnabled = useFeature("llmModelPoolsEnabled") === true;
   const { data: canReadPools } = useHasPermissions({ llmModel: ["read"] });
@@ -193,7 +188,7 @@ export function LlmConnectSteps({
     enabled: offersPools,
     toastOnError: false,
   });
-  const poolsOf = (key: (typeof keyOptions)[number]) =>
+  const poolsOf = (key: { id: string }) =>
     offersPools ? pools.filter((candidate) => callsPool(key, candidate)) : [];
   // Only a client calling as the app takes pools, and only those added to it.
   const takesPools = (client: LlmOauthClient) =>
@@ -202,6 +197,16 @@ export function LlmConnectSteps({
     offersPools && takesPools(client)
       ? pools.filter((candidate) => client.modelPoolIds.includes(candidate.id))
       : [];
+  // A credential with a pool added still fits the Unified Model API when it
+  // maps no provider key here, such as one on current and future providers.
+  const keyOptions = (virtualKeys?.data ?? []).filter((key) =>
+    pool
+      ? callsPool(key, pool)
+      : auth === "passthrough" || reaches(key) || poolsOf(key).length > 0,
+  );
+  const clientOptions = oauthClients.filter(
+    (client) => reaches(client) || clientPoolsOf(client).length > 0,
+  );
   const credentialSummary = (
     credential: { providerApiKeys: ProviderApiKeyMappings },
     poolCount: number,

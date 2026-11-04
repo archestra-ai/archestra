@@ -567585,7 +567585,7 @@
         "tags": [
           "Virtual API Keys"
         ],
-        "description": "Create a new virtual API key. Returns the full token value once.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmVirtualKey:create`: Create LLM virtual keys",
+        "description": "Create a new virtual API key. Team admins creating a key for another member receive metadata only; the owner can retrieve its value.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmVirtualKey:create`: Create LLM virtual keys",
         "requestBody": {
           "required": true,
           "content": {
@@ -568166,7 +568166,6 @@
                     "billingTeamId",
                     "createdAt",
                     "lastUsedAt",
-                    "value",
                     "teams",
                     "authorName",
                     "createdBy",

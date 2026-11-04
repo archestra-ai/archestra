@@ -273,7 +273,7 @@ export function LlmConnectSteps({
       ? {
           resolve: async () =>
             createdHere
-              ? createdHere.value
+              ? (createdHere.value ?? null)
               : await fetchKeyValue.mutateAsync(picked.id),
           revealed,
           onRevealedChange: setRevealed,

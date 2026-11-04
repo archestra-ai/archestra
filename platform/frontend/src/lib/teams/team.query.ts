@@ -132,10 +132,14 @@ export function useTeamLabelValues(params?: { key?: string }) {
  * The teams the current user is a member of, with `myRole` and `memberCount`
  * but without members, labels or descendants.
  */
-export function useMyTeams(params?: { enabled?: boolean }) {
+export function useMyTeams(params?: {
+  enabled?: boolean;
+  includeDescendants?: boolean;
+}) {
   return useTeams({
     mine: true,
-    includeRelations: false,
+    includeRelations: params?.includeDescendants ?? false,
+    includeMembers: false,
     enabled: params?.enabled,
   });
 }

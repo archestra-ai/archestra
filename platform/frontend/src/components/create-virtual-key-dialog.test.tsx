@@ -116,6 +116,22 @@ beforeEach(() => {
 });
 
 describe("CreateVirtualKeyDialog", () => {
+  it("finishes management-only creation without displaying a member's bearer value", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    mutateAsync.mockResolvedValueOnce({
+      id: "member-key",
+      name: "Member key",
+      keyType: "passthrough",
+    });
+    renderDialog("passthrough", { onOpenChange });
+    await user.type(screen.getByLabelText("Name"), "Member key");
+    await user.click(screen.getByRole("button", { name: "Create key" }));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(
+      screen.queryByRole("button", { name: "Copy key" }),
+    ).not.toBeInTheDocument();
+  });
   it("creates the passthrough type supplied by its resource tab without a type selector", async () => {
     const user = userEvent.setup();
     renderDialog("passthrough");
@@ -584,6 +600,7 @@ function createdKey(
 function renderDialog(
   keyType: "standard" | "passthrough",
   options: {
+    onOpenChange?: (open: boolean) => void;
     existingKeys?: Array<{
       authorId: string;
       keyType: "standard" | "passthrough";
@@ -601,7 +618,7 @@ function renderDialog(
     <QueryClientProvider client={new QueryClient()}>
       <CreateVirtualKeyDialog
         open
-        onOpenChange={vi.fn()}
+        onOpenChange={options.onOpenChange ?? vi.fn()}
         keyType={keyType}
         parentableKeys={
           options.parentableKeys ?? [

@@ -145940,7 +145940,7 @@ export type CreateVirtualApiKeyResponses = {
         billingTeamId: string | null;
         createdAt: string;
         lastUsedAt: string | null;
-        value: string;
+        value?: string;
         teams: Array<{
             id: string;
             name: string;

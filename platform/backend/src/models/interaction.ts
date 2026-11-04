@@ -105,6 +105,7 @@ import LlmProviderApiKeyModel from "./llm-provider-api-key";
 import { interactionBelongsToOrganization } from "./log-organization";
 import OrganizationModel from "./organization";
 import RoutingUsageModel from "./routing-usage";
+import TeamModel from "./team";
 import VirtualApiKeyModel from "./virtual-api-key";
 
 /**
@@ -1566,7 +1567,7 @@ class InteractionModel {
       // A credential's billing team takes the place of the agent's teams the
       // caller belongs to.
       const teamIds = interaction.billingTeamId
-        ? [interaction.billingTeamId]
+        ? await TeamModel.getBillingAncestorIds(interaction.billingTeamId)
         : await AgentTeamModel.getCallerTeamsForAgent({
             agentId: interaction.profileId,
             userId: interaction.userId,

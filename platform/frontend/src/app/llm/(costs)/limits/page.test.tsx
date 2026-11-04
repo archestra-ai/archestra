@@ -394,7 +394,7 @@ describe("LimitsPage", () => {
     vi.useRealTimers();
   });
 
-  it("reuses the create form with only administered team scopes for a team admin", () => {
+  it("reuses the create form with only descendant team scopes for a team admin", () => {
     vi.mocked(useHasPermissions).mockImplementation(
       (permissions) =>
         ({
@@ -404,7 +404,12 @@ describe("LimitsPage", () => {
     );
     vi.mocked(useMyTeams).mockReturnValue({
       data: [
-        { id: "team-a", name: "Platform", myRole: "admin" },
+        {
+          id: "team-parent",
+          name: "Department",
+          myRole: "admin",
+          descendantTeams: [{ id: "team-a", name: "Platform" }],
+        },
         { id: "team-b", name: "Product", myRole: "member" },
       ],
       isPending: false,
@@ -444,7 +449,7 @@ describe("LimitsPage", () => {
     );
   });
 
-  it("lets a team admin change their own team limits but not one the organization set", () => {
+  it("lets a team admin change descendant limits but not their own ceiling", () => {
     vi.mocked(useHasPermissions).mockImplementation(
       (permissions) =>
         ({
@@ -453,7 +458,14 @@ describe("LimitsPage", () => {
         }) as ReturnType<typeof useHasPermissions>,
     );
     vi.mocked(useMyTeams).mockReturnValue({
-      data: [{ id: "team-a", name: "Platform", myRole: "admin" }],
+      data: [
+        {
+          id: "team-a",
+          name: "Platform",
+          myRole: "admin",
+          descendantTeams: [{ id: "team-child", name: "Child" }],
+        },
+      ],
       isPending: false,
     } as unknown as ReturnType<typeof useMyTeams>);
     mockUseLimits.mockReturnValue({
@@ -467,7 +479,7 @@ describe("LimitsPage", () => {
         {
           ...limitRow({ id: "team-set", limitValue: 100 }),
           entityType: "team",
-          entityId: "team-a",
+          entityId: "team-child",
           limitType: "requests",
           teamManaged: true,
         },
@@ -480,7 +492,7 @@ describe("LimitsPage", () => {
     const orgRow = screen.getByTestId("data-table-row-org-set");
     const teamRow = screen.getByTestId("data-table-row-team-set");
     expect(
-      within(orgRow).getByRole("img", { name: "Set by your organization" }),
+      within(orgRow).getByRole("img", { name: "Managed ceiling" }),
     ).toBeInTheDocument();
     for (const name of [/Edit limit/, /Delete limit/]) {
       expect(within(orgRow).getByRole("button", { name })).toHaveAttribute(
@@ -493,7 +505,7 @@ describe("LimitsPage", () => {
     }
     expect(
       within(teamRow).queryByRole("img", {
-        name: "Set by your organization",
+        name: "Managed ceiling",
       }),
     ).not.toBeInTheDocument();
   });

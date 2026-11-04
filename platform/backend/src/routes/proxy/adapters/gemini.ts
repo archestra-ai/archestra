@@ -780,10 +780,13 @@ class GeminiStreamAdapter
         if (part.thoughtSignature) {
           this.toolCallSignatures.set(toolCallIndex, part.thoughtSignature);
         }
-        this.state.rawToolCallEvents.push(chunk);
         isToolCallChunk = true;
       }
     }
+
+    // One chunk can contain several parallel calls. Buffer the whole chunk
+    // once so releasing it does not execute every call multiple times.
+    if (isToolCallChunk) this.state.rawToolCallEvents.push(chunk);
 
     // Check finish reason
     if (

@@ -18,8 +18,9 @@ const MAX_PER_CREDENTIAL = 10;
 const MAX_TRACKED_CREDENTIALS_PER_IP = 100;
 const MAX_AUTHENTICATION_OPERATIONS_PER_POOL = 16;
 const MAX_VERIFIED_OPERATIONS_PER_CREDENTIAL = 4;
-// A verified credential's burst queues for its reserved slots. The wait stays
-// well under MCP clients' request timeouts; the bounds cap queued requests.
+// A verified credential's burst waits for capacity instead of failing. A
+// request authenticates in two steps, so it can wait twice: up to 10 s, well
+// under the MCP SDK's 60 s request timeout. The bounds cap queued requests.
 const AUTHENTICATION_WAIT_MS = 5_000;
 const MAX_WAITING_OPERATIONS_PER_CREDENTIAL = 128;
 const MAX_WAITING_OPERATIONS = 512;
@@ -46,7 +47,7 @@ class McpGatewayAuthenticationCapacity {
   // The total pool bounds this map to 16 entries; release removes idle entries.
   private readonly verifiedActive = new Map<string, number>();
 
-  // Verified operations waiting for a reserved slot, oldest first.
+  // Verified operations waiting for capacity, oldest first.
   private readonly waiting: Waiter[] = [];
 
   async run<T>(
@@ -62,8 +63,8 @@ class McpGatewayAuthenticationCapacity {
     let permit = credentialKey ? this.reserve(credentialKey) : null;
     permit ??= this.takeUnverified();
     if (!permit) {
-      // Unknown callers fail at once. A verified credential waits for its
-      // reserved slots, so parallel calls with one token are not refused.
+      // Unknown callers fail at once. A verified credential waits, so
+      // parallel calls with one token are not refused.
       if (!credentialKey) throw busy();
       permit = await this.wait(credentialKey);
     }
@@ -122,15 +123,16 @@ class McpGatewayAuthenticationCapacity {
   private release(permit: Permit): void {
     this.active[permit.pool] -= 1;
     const { credentialKey } = permit;
-    if (!credentialKey) return;
-    const remaining = (this.verifiedActive.get(credentialKey) ?? 1) - 1;
-    if (remaining === 0) this.verifiedActive.delete(credentialKey);
-    else this.verifiedActive.set(credentialKey, remaining);
-    // The freed reserved slot goes to the oldest waiter that may use it.
-    // Waiters take only reserved slots: freed shared slots stay available
-    // to unknown callers.
+    if (credentialKey) {
+      const remaining = (this.verifiedActive.get(credentialKey) ?? 1) - 1;
+      if (remaining === 0) this.verifiedActive.delete(credentialKey);
+      else this.verifiedActive.set(credentialKey, remaining);
+    }
+    // The freed slot goes to the oldest waiter that may use it, on the same
+    // terms as a new request. A slot is therefore free only when no waiter
+    // can take it, so a newer request never overtakes a waiting one.
     for (const [index, waiter] of this.waiting.entries()) {
-      const next = this.reserve(waiter.credentialKey);
+      const next = this.reserve(waiter.credentialKey) ?? this.takeUnverified();
       if (!next) continue;
       this.waiting.splice(index, 1);
       clearTimeout(waiter.timer);
@@ -138,12 +140,6 @@ class McpGatewayAuthenticationCapacity {
       return;
     }
   }
-}
-
-function busy(): McpGatewayAuthenticationBusyError {
-  return new McpGatewayAuthenticationBusyError(
-    "Gateway authentication capacity is exhausted",
-  );
 }
 
 const authenticationCapacity = new McpGatewayAuthenticationCapacity();
@@ -328,4 +324,10 @@ function fingerprint(value: string): string {
     .update("mcp-gateway-rate-limit\0")
     .update(value)
     .digest("base64url");
+}
+
+function busy(): McpGatewayAuthenticationBusyError {
+  return new McpGatewayAuthenticationBusyError(
+    "Gateway authentication capacity is exhausted",
+  );
 }

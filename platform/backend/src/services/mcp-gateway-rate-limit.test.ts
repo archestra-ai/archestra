@@ -253,15 +253,20 @@ describe("gateway attempt budgets", () => {
       });
     try {
       const credentials = Array.from({ length: 4 }, () => randomUUID());
-      const waiting = Promise.allSettled(
-        credentials.flatMap((credential) =>
-          Array.from({ length: 128 }, () => queue(credential)),
-        ),
-      );
-      // 128 waiting calls per credential, 512 in total.
+      const first = Array.from({ length: 128 }, () => queue(credentials[0]));
+      // One credential may have 128 waiting calls; others can still queue.
       await expect(queue(credentials[0])).rejects.toBeInstanceOf(
         McpGatewayAuthenticationBusyError,
       );
+      const waiting = Promise.allSettled([
+        ...first,
+        ...credentials
+          .slice(1)
+          .flatMap((credential) =>
+            Array.from({ length: 128 }, () => queue(credential)),
+          ),
+      ]);
+      // The process holds at most 512 waiting calls in total.
       await expect(queue(randomUUID())).rejects.toBeInstanceOf(
         McpGatewayAuthenticationBusyError,
       );

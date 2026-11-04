@@ -4762,6 +4762,24 @@ describe("AgentForm save payload and failure handling", () => {
 
   it("omits runtime from the configuration save when the caller lacks configure-runtime permission even if claudeCode.authentication is subscription on a custom command", async () => {
     vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
+    useAvailableLlmProviderApiKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "key-1",
+          name: "Anthropic key",
+          provider: "anthropic",
+          scope: "org",
+          bestModelId: "claude-model",
+        },
+        {
+          id: "key-2",
+          name: "Second Anthropic key",
+          provider: "anthropic",
+          scope: "org",
+          bestModelId: "claude-model",
+        },
+      ],
+    });
     vi.mocked(useHasPermissions).mockImplementation((permissions) => {
       const requested = permissions as { agent?: string[] };
       const hasConfigureRuntime =
@@ -4800,6 +4818,14 @@ describe("AgentForm save payload and failure handling", () => {
         sections={["configuration"]}
       />,
     );
+
+    expect(
+      screen.getByRole("radio", { name: /Each person's Claude subscription/ }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("radio", { name: /A company API key/ }),
+    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Pick API key" })).toBeEnabled();
 
     await user.click(await screen.findByRole("button", { name: /update/i }));
     await waitFor(() => expect(updateAgent).toHaveBeenCalled());

@@ -2141,7 +2141,7 @@ export function AgentForm({
   const hasCompleteLlmSelection = Boolean(llmApiKeyId) === Boolean(llmModel);
   const needsClaudeProviderKey =
     !agent &&
-    isClaudeCodeRuntime &&
+    supportsClaudeCodeSubscription &&
     !usesClaudeSubscription &&
     (!selectedApiKey || !runtimeProviderFilter(selectedApiKey.provider));
   // Nothing provides a default command any more, so a new runtime or a new
@@ -2880,7 +2880,7 @@ export function AgentForm({
         popoverClassName="w-96"
         searchPlaceholder="Search API keys..."
         allowOrganizationDefault={
-          !!agent || !isClaudeCodeRuntime || usesClaudeSubscription
+          !!agent || !supportsClaudeCodeSubscription || usesClaudeSubscription
         }
         organizationDefaultSelected={!llmApiKeyId}
         onSelectOrganizationDefault={() => {
@@ -2951,7 +2951,7 @@ export function AgentForm({
                   variant="outline"
                   enabled={false}
                   placeholder={
-                    isClaudeCodeRuntime && !agent
+                    supportsClaudeCodeSubscription && !agent
                       ? "Select a Claude model"
                       : (organizationDefaultModel.label ?? undefined)
                   }
@@ -3016,7 +3016,7 @@ export function AgentForm({
           {isClaudeCodeRuntime ? "Whose Claude account runs it" : "Model"}
         </Label>
       )}
-      {cannotReadLlmConfiguration && !isClaudeCodeRuntime ? (
+      {cannotReadLlmConfiguration && !supportsClaudeCodeSubscription ? (
         <Alert>
           <AlertDescription className="text-sm text-muted-foreground">
             You do not have permission to view LLM API keys or models. This
@@ -3067,9 +3067,14 @@ export function AgentForm({
               </p>
             ))}
           {isClaudeCodeRuntime ? (
-            <fieldset disabled={canConfigureRuntime !== true}>
+            <fieldset
+              disabled={
+                supportsClaudeCodeSubscription && canConfigureRuntime !== true
+              }
+            >
               <ClaudeCodeInferenceSettings
                 agentId={agent?.id ?? ""}
+                disabled={canConfigureRuntime !== true}
                 authentication={
                   usesClaudeSubscription ? "subscription" : "provider"
                 }

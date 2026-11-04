@@ -345,6 +345,11 @@ describe("Claude Code authentication", () => {
         name: /Each person's Claude subscription/,
       }),
     ).toBeDisabled();
+    expect(
+      screen.getByText(
+        "To use personal Claude subscriptions, change Dedicated runtime → Container → Command to archestra-claude-code. Any custom logic in the current entrypoint will be lost.",
+      ),
+    ).toBeVisible();
   });
 });
 

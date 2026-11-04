@@ -25,6 +25,7 @@ export function ClaudeCodeInferenceSettings({
   modelSelector,
   showModelSelector = true,
   runtimeCommand = "archestra-claude-code",
+  disabled = false,
 }: {
   agentId: string;
   authentication: "provider" | "subscription";
@@ -43,11 +44,17 @@ export function ClaudeCodeInferenceSettings({
    * subscription option and explains how to re-enable it.
    */
   runtimeCommand?: string | null;
+  /** Disables the runtime-owned authentication radio cards without disabling `apiKeySelector`/`modelSelector`. */
+  disabled?: boolean;
 }) {
   const id = useId();
   const appName = useAppName();
   const subscriptionSupported = runtimeCommand === "archestra-claude-code";
   const trimmedCommand = runtimeCommand?.trim() || null;
+  const customCommand =
+    trimmedCommand && trimmedCommand !== "archestra-claude-code"
+      ? trimmedCommand
+      : null;
   const effectiveAuthentication = subscriptionSupported
     ? authentication
     : "provider";
@@ -55,6 +62,7 @@ export function ClaudeCodeInferenceSettings({
     <div className="space-y-2">
       <RadioGroup
         aria-label="Authentication"
+        disabled={disabled}
         value={effectiveAuthentication}
         onValueChange={(value) =>
           onAuthenticationChange(value as "provider" | "subscription")
@@ -75,7 +83,8 @@ export function ClaudeCodeInferenceSettings({
             ],
           ] as const
         ).map(([value, title, description]) => {
-          const disabled = value === "subscription" && !subscriptionSupported;
+          const cardDisabled =
+            disabled || (value === "subscription" && !subscriptionSupported);
           return (
             <Label
               key={value}
@@ -84,7 +93,7 @@ export function ClaudeCodeInferenceSettings({
                 "flex cursor-pointer items-start gap-2.5 rounded-[10px] p-3.5 font-normal",
                 radioCardClass({
                   checked: effectiveAuthentication === value,
-                  disabled,
+                  disabled: cardDisabled,
                 }),
                 effectiveAuthentication === value && "bg-primary/5",
               )}
@@ -92,7 +101,7 @@ export function ClaudeCodeInferenceSettings({
               <RadioGroupItem
                 id={`${id}-${value}`}
                 value={value}
-                disabled={disabled}
+                disabled={cardDisabled}
                 className="mt-0.5"
               />
               <span className="space-y-0.5">
@@ -107,8 +116,8 @@ export function ClaudeCodeInferenceSettings({
       </RadioGroup>
       {!subscriptionSupported ? (
         <p key="unsupported" className="text-xs text-muted-foreground">
-          {trimmedCommand
-            ? `To use personal Claude subscriptions, change Dedicated runtime → Container → Command to archestra-claude-code. Any custom logic in the current ${trimmedCommand} entrypoint will be lost.`
+          {customCommand
+            ? `To use personal Claude subscriptions, change Dedicated runtime → Container → Command to archestra-claude-code. Any custom logic in the current ${customCommand} entrypoint will be lost.`
             : "To use personal Claude subscriptions, change Dedicated runtime → Container → Command to archestra-claude-code. Any custom logic in the current entrypoint will be lost."}
         </p>
       ) : effectiveAuthentication === "subscription" ? (

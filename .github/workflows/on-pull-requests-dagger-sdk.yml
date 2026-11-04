@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0
+          fetch-depth: 1
 
       # Always emit the check on PRs and merge groups; skip only expensive work
       # for unrelated changes rather than leaving a required check missing.
@@ -34,9 +34,21 @@ jobs:
         id: changes
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          # Compare the exact event base to the tested HEAD. Fetch just that
+          # commit when absent from the shallow checkout, not every branch/tag.
+          # Keep authentication scoped to this command for private mirrors;
+          # checkout deliberately does not persist credentials.
+          if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            # The credential helper expands GH_TOKEN when Git invokes it.
+            # shellcheck disable=SC2016
+            git -c credential.helper= \
+                -c 'credential.helper=!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f' \
+                fetch --no-tags --depth=1 origin "$BASE_SHA"
+          fi
           changed=$(git diff --name-only "$BASE_SHA" HEAD -- \
             archestra-rs/sandbox-core archestra-rs/sandbox-rs archestra-rs/vendor \
             archestra-rs/Cargo.toml archestra-rs/Cargo.lock rust-toolchain.toml Dockerfile \

@@ -61,7 +61,7 @@ interface RemoteServerInstallDialogProps {
   onConfirm: (
     catalogItem: CatalogItem,
     result: RemoteServerInstallResult,
-  ) => Promise<void>;
+  ) => Promise<string | undefined> | Promise<void>;
   catalogItem: CatalogItem | null;
   isInstalling: boolean;
   /** When true, shows re-authentication mode (info banner, different title) */
@@ -101,6 +101,8 @@ export function RemoteServerInstallDialog({
   presentation = "dialog",
 }: RemoteServerInstallDialogProps) {
   const [configValues, setConfigValues] = useState<Record<string, string>>({});
+  const [installError, setInstallError] = useState<string | null>(null);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   // Team selection state
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
@@ -144,20 +146,30 @@ export function RemoteServerInstallDialog({
         }
       }
 
-      await onConfirm(catalogItem, {
+      setInstallError(null);
+      setShowDiagnostics(false);
+      const errorMessage = await onConfirm(catalogItem, {
         catalogId: catalogItem.id,
         metadata,
         scope,
         teamId: selectedTeamId,
       });
+      if (errorMessage) {
+        setInstallError(errorMessage);
+        return;
+      }
       resetForm();
       onClose();
-    } catch (_error) {
-      // Error handling is done in the parent component
+    } catch (error) {
+      setInstallError(
+        error instanceof Error ? error.message : "Connection failed",
+      );
     }
   };
 
   const resetForm = () => {
+    setInstallError(null);
+    setShowDiagnostics(false);
     setConfigValues({});
     setSelectedTeamId(null);
     setScope(orgOnly ? "org" : "personal");
@@ -294,6 +306,42 @@ export function RemoteServerInstallDialog({
         ) : null
       }
     >
+      {installError && (
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-3"
+        >
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle
+              aria-hidden
+              className="mt-0.5 size-4 shrink-0 text-destructive"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">Connection failed</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Check the server credentials and provider configuration, then
+                try again.
+              </p>
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                aria-expanded={showDiagnostics}
+                onClick={() => setShowDiagnostics((visible) => !visible)}
+                className="mt-2 h-auto p-0 text-xs text-muted-foreground hover:text-foreground"
+              >
+                {showDiagnostics ? "Hide diagnostics" : "Show diagnostics"}
+              </Button>
+              {showDiagnostics && (
+                <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border bg-background/70 p-2 font-mono text-xs text-muted-foreground">
+                  {installError}
+                </pre>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {isReauth && (
         <InlineNotice variant="neutral">
           <KeyRound />
@@ -442,26 +490,25 @@ export function RemoteServerInstallDialog({
       )}
 
       {canInstall && catalogItem.serverUrl && (
-        <div className="rounded-md bg-muted p-4">
-          <h4 className="text-sm font-medium mb-2">Server Details:</h4>
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">
-              <span className="font-medium">URL:</span> {catalogItem.serverUrl}
+        <div className="space-y-1 border-t pt-4 text-xs text-muted-foreground">
+          <p className="flex min-w-0 gap-2">
+            <span className="shrink-0">Server</span>
+            <span className="truncate font-mono" title={catalogItem.serverUrl}>
+              {catalogItem.serverUrl}
+            </span>
+          </p>
+          {catalogItem.docsUrl && (
+            <p>
+              <a
+                href={catalogItem.docsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2 hover:text-foreground"
+              >
+                Documentation
+              </a>
             </p>
-            {catalogItem.docsUrl && (
-              <p className="text-sm text-muted-foreground">
-                <span className="font-medium">Documentation:</span>{" "}
-                <a
-                  href={catalogItem.docsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  {catalogItem.docsUrl}
-                </a>
-              </p>
-            )}
-          </div>
+          )}
         </div>
       )}
     </FormShell>

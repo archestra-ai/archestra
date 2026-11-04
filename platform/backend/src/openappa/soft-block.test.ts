@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { afterEach, vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
+import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { expect, test } from "@/test";
 import { waiveSoftBlock } from "./soft-block";
@@ -86,4 +87,24 @@ test("refuse mode and explicit hard blocks do not create a bypass", async ({
     await waiveSoftBlock(session, "tool_call", "requires attention: blocked"),
   ).toBe(false);
   expect(await isUnenforcedSession(session)).toBe(false);
+});
+
+test("a fork recognizes a durable waiver from another process", async ({
+  makeOrganization,
+}) => {
+  const organizationId = (await makeOrganization()).id;
+  config.openappa.softBlockMode = "allow";
+  await OpenAppaUnenforcedModel.recordSession({
+    organizationId,
+    sessionId: "source",
+    parentId: undefined,
+    reason: "superyell",
+  });
+  expect(
+    await isUnenforcedSession({
+      organization_id: organizationId,
+      session_id: "fork",
+      fork_of: "source",
+    }),
+  ).toBe(true);
 });

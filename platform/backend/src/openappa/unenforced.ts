@@ -13,7 +13,7 @@ import type {
   UnenforcedCallReason,
   UnenforcedSessionReason,
 } from "@/types/openappa-unenforced";
-import { softBlockWaivedLocally } from "./soft-block";
+import { softBlocksAllowed, softBlockWaivedLocally } from "./soft-block";
 
 /**
  * What OpenAPPA did not see while Guardrails enforcement was off.
@@ -252,8 +252,18 @@ async function decideUnenforced(session: OpenAppaSession): Promise<{
     sessionIds: [
       session.session_id,
       ...(session.parent_id ? [session.parent_id] : []),
+      ...(softBlocksAllowed() && session.fork_of ? [session.fork_of] : []),
     ],
   });
+  if (
+    softBlocksAllowed() &&
+    session.fork_of &&
+    recorded.some(
+      (row) => row.sessionId === session.fork_of && row.reason === "superyell",
+    )
+  ) {
+    return { unenforced: true, record: "superyell" };
+  }
   const ownRow = recorded.find(
     (row) =>
       row.sessionId === session.session_id &&

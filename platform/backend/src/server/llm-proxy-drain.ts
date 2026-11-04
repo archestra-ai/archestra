@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { ServerResponse } from "node:http";
+import { performance } from "node:perf_hooks";
 import { setImmediate } from "node:timers/promises";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { ServerDrainingError } from "@/types/server-draining-error";
@@ -72,7 +73,7 @@ class RequestDrain {
         this.deadline !== undefined &&
         (path === "/ready" ||
           (!isProbe(path) &&
-            (!continuation || Date.now() >= this.deadline) &&
+            (!continuation || performance.now() >= this.deadline) &&
             !isMcpRoute(path)))
       ) {
         reply.header("Connection", "close").header("Retry-After", "1");
@@ -132,7 +133,7 @@ class RequestDrain {
             body.method === "notifications/cancelled");
         const admittedScope =
           this.requests.get(request)?.continuation &&
-          Date.now() < this.deadline;
+          performance.now() < this.deadline;
         if (
           !admittedScope &&
           !admittedReplay &&
@@ -204,7 +205,8 @@ class RequestDrain {
   }
 
   beginShutdown(): void {
-    this.deadline ??= Date.now() + this.graceMs;
+    // Clock synchronization must not shorten or extend the shutdown grace.
+    this.deadline ??= performance.now() + this.graceMs;
   }
 
   drain(): Promise<void> {
@@ -237,7 +239,10 @@ class RequestDrain {
         new Promise<false>((resolve) => {
           timeout = setTimeout(
             () => resolve(false),
-            Math.max(0, (this.deadline ?? Date.now()) - Date.now()),
+            Math.max(
+              0,
+              (this.deadline ?? performance.now()) - performance.now(),
+            ),
           );
         }),
       ]);

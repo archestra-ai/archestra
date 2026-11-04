@@ -37,6 +37,9 @@ export function commitScope(params: {
       .sort((a, b) => b.dir.length - a.dir.length)[0];
     if (owner) {
       names.add(owner.name);
+      for (const consumer of UNDECLARED_CONSUMERS[owner.name] ?? []) {
+        names.add(consumer);
+      }
       continue;
     }
     if (isUnchecked(relative)) continue;
@@ -48,6 +51,15 @@ export function commitScope(params: {
 }
 
 // ===== Internal helpers =====
+
+/**
+ * Consumers Turbo cannot see because no package.json declares them: the
+ * backend imports the migration linter through a tsconfig path and runs it
+ * in its migration lint, so a linter change must check the backend too.
+ */
+const UNDECLARED_CONSUMERS: Readonly<Record<string, readonly string[]>> = {
+  "@archestra/drizzle-migration-linter": ["@backend"],
+};
 
 /**
  * Areas under platform/ that no `check:commit` task reads: Tilt and

@@ -6,6 +6,10 @@ const packages = [
   { dir: "frontend", name: "@frontend" },
   { dir: "shared", name: "@archestra/shared" },
   { dir: "archestra-rs/router-rs", name: "@archestra/router-rs" },
+  {
+    dir: "tools/drizzle-migration-linter",
+    name: "@archestra/drizzle-migration-linter",
+  },
 ];
 
 function scope(...stagedPaths: string[]) {
@@ -61,4 +65,13 @@ test("a nested Markdown file stays with its package", () => {
     names: ["@backend"],
   });
   expect(scope("platform/scripts/README.md")).toEqual({ kind: "all" });
+});
+
+test("a migration linter change also checks the backend that runs it", () => {
+  expect(scope("platform/tools/drizzle-migration-linter/src/index.ts")).toEqual(
+    {
+      kind: "packages",
+      names: ["@archestra/drizzle-migration-linter", "@backend"],
+    },
+  );
 });

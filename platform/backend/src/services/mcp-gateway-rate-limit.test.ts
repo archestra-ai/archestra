@@ -229,6 +229,60 @@ describe("gateway attempt budgets", () => {
     expect(peak).toBe(20);
   });
 
+  test("hands a freed shared slot to the oldest waiting verified call", async () => {
+    const admission = { pool: "verified" as const, credential: randomUUID() };
+    let releaseReserved = () => {};
+    const reservedHeld = new Promise<void>((resolve) => {
+      releaseReserved = resolve;
+    });
+    const releaseShared: Array<() => void> = [];
+    // The token holds its four reserved slots; unknown callers fill the shared pool.
+    const holding = [
+      ...Array.from({ length: 4 }, () =>
+        withMcpGatewayAuthenticationCapacity(() => reservedHeld, admission),
+      ),
+      ...Array.from({ length: 16 }, () =>
+        withMcpGatewayAuthenticationCapacity(
+          () =>
+            new Promise<void>((resolve) => {
+              releaseShared.push(resolve);
+            }),
+        ),
+      ),
+    ];
+    let releaseFirst = () => {};
+    const firstHeld = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const started: string[] = [];
+    const first = withMcpGatewayAuthenticationCapacity(async () => {
+      started.push("first");
+      await firstHeld;
+      return true;
+    }, admission);
+    const second = withMcpGatewayAuthenticationCapacity(async () => {
+      started.push("second");
+      return true;
+    }, admission);
+    try {
+      expect(await isPending(first)).toBe(true);
+      expect(started).toEqual([]);
+      // Only a shared slot frees; the token's reserved slots stay held.
+      releaseShared[0]();
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(started).toEqual(["first"]);
+      expect(await isPending(second)).toBe(true);
+      releaseFirst();
+      await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
+      expect(started).toEqual(["first", "second"]);
+    } finally {
+      releaseFirst();
+      releaseReserved();
+      for (const release of releaseShared) release();
+      await Promise.all(holding);
+    }
+  });
+
   test("refuses verified callers when the wait ends or the queue is full", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     let release = () => {};

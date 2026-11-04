@@ -5,6 +5,83 @@ import { decodeSignedToolCallId } from "./gemini-openai-translator";
 import { GeminiToolNameCodec } from "./gemini-tool-names";
 
 describe("GeminiOpenaiResponseAdapter", () => {
+  test.for([
+    { indexed: true, firstCalls: true },
+    { indexed: true, firstCalls: false },
+    { indexed: false, firstCalls: true },
+    { indexed: false, firstCalls: false },
+  ])("uses the same candidate-zero view for policy, wire and audit ($indexed/$firstCalls)", ({
+    indexed,
+    firstCalls,
+  }) => {
+    const adapter = makeGeminiOpenaiAdapterFactory({
+      chatcmplId: "chatcmpl-test",
+      createdUnix: 123,
+      requestedModel: "pool",
+    }).createResponseAdapter({
+      candidates: [0, 1].map((index) => ({
+        ...(indexed ? { index } : {}),
+        content: {
+          role: "model",
+          parts:
+            index === 0 && !firstCalls
+              ? [{ text: "answer" }]
+              : [
+                  {
+                    functionCall: {
+                      id: `call-${index}`,
+                      name: `lookup_${index}`,
+                      args: {},
+                    },
+                    thoughtSignature: `signature-${index}`,
+                  },
+                ],
+        },
+        finishReason: "STOP",
+      })),
+      usageMetadata: { promptTokenCount: 12, candidatesTokenCount: 40 },
+    } as Gemini.Types.GenerateContentResponse);
+    expect(adapter.getToolCalls().map((call) => call.id)).toEqual(
+      firstCalls ? ["call-0"] : [],
+    );
+    expect(adapter.hasToolCalls()).toBe(firstCalls);
+    for (const response of [
+      adapter.getOriginalResponse(),
+      adapter.getLoggedResponse?.(),
+    ]) {
+      expect(JSON.stringify(response)).not.toContain("lookup_1");
+      if (firstCalls) expect(JSON.stringify(response)).toContain("lookup_0");
+    }
+    expect(adapter.getUsage()).toMatchObject({
+      inputTokens: 12,
+      outputTokens: 40,
+    });
+    const approved = adapter
+      .getToolCalls()
+      .map((call) => ({ ...call, name: "policy_notice", arguments: "{}" }));
+    const rewritten = adapter.withRewrittenToolCalls?.(approved);
+    expect(JSON.stringify(rewritten)).not.toContain("lookup_1");
+    expect(JSON.stringify(adapter.getLoggedResponse?.())).not.toContain(
+      "lookup_1",
+    );
+    if (firstCalls) {
+      expect(JSON.stringify(rewritten)).toContain("policy_notice");
+      expect(JSON.stringify(adapter.getLoggedResponse?.())).toContain(
+        "signature-0",
+      );
+    }
+    // A plugin cannot introduce an alternative candidate that policy never saw.
+    expect(() =>
+      adapter.withRewrittenToolCalls?.([
+        { id: "call-1", name: "lookup_1", arguments: "{}" },
+      ]),
+    ).toThrow();
+    adapter.withRewrittenToolCalls?.([]);
+    expect(JSON.stringify(adapter.getLoggedResponse?.())).not.toContain(
+      "functionCall",
+    );
+  });
+
   test("toRefusalResponse keeps the wire OpenAI-shaped but logs the native Gemini refusal", () => {
     const adapter = makeGeminiOpenaiAdapterFactory({
       chatcmplId: "chatcmpl-test",

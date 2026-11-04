@@ -33,6 +33,19 @@ type GeminiStreamChunk = Parameters<
   ReturnType<typeof geminiAdapterFactory.createStreamAdapter>["processChunk"]
 >[0];
 
+// The OpenAI translator exposes one choice. Policy, wire output and audit
+// must all use that same candidate, for streamed and complete responses.
+function selectCandidateZero<T extends { candidates?: { index?: number }[] }>(
+  response: T,
+): T {
+  return {
+    ...response,
+    candidates: response.candidates?.filter(
+      (candidate, position) => (candidate.index ?? position) === 0,
+    ),
+  };
+}
+
 class GeminiOpenaiResponseAdapter
   implements LLMResponseAdapter<GeminiResponse>
 {
@@ -44,7 +57,9 @@ class GeminiOpenaiResponseAdapter
   private ctx: GeminiOpenaiContext;
 
   constructor(response: GeminiResponse, ctx: GeminiOpenaiContext) {
-    this.inner = geminiAdapterFactory.createResponseAdapter(response);
+    this.inner = geminiAdapterFactory.createResponseAdapter(
+      selectCandidateZero(response),
+    );
     this.ctx = ctx;
   }
 
@@ -168,14 +183,9 @@ class GeminiOpenaiStreamAdapter
   }
 
   processChunk(chunk: GeminiStreamChunk) {
-    // This surface translates a single OpenAI choice. Keep policy accumulation
-    // on the same candidate as the wire translator, including usage-only frames.
-    const decodedChunk = this.toolNameCodec.decodeResponse({
-      ...chunk,
-      candidates: chunk.candidates?.filter(
-        (candidate, position) => (candidate.index ?? position) === 0,
-      ),
-    } as GeminiStreamChunk);
+    const decodedChunk = this.toolNameCodec.decodeResponse(
+      selectCandidateZero(chunk),
+    );
     // Prompt refusals have no candidate, but are complete responses, just as
     // the non-streaming translator's promptFeedback branch treats them.
     const blockReason = decodedChunk.promptFeedback?.blockReason;

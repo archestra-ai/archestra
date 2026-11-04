@@ -303,7 +303,14 @@ describe("OrganizationCostsPage", () => {
     fireEvent.keyDown(screen.getByRole("button", { name: "by Model" }), {
       key: "Enter",
     });
-    for (const name of ["Team", "Agent", "Model", "Person", "App", "Virtual key"])
+    for (const name of [
+      "Team",
+      "Agent",
+      "Model",
+      "Person",
+      "App",
+      "Virtual key",
+    ])
       expect(await screen.findByRole("menuitem", { name })).toBeVisible();
     expect(screen.queryByTestId("my-usage-summary")).not.toBeInTheDocument();
   });

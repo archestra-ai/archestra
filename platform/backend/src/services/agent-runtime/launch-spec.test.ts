@@ -796,6 +796,68 @@ describe("buildAgentRunLaunchSpec", () => {
     expect(spec.secretEnv.GH_TOKEN).toBe("github-token");
   });
 
+  test("does not allow a declared ARCHESTRA_MCP_GATEWAY_TOKEN credential to replace the per-run gateway token", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "openai",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    const configuredRuntime = runtime(setup.agent, "openai_responses");
+    configuredRuntime.credentials = [
+      {
+        key: "ARCHESTRA_MCP_GATEWAY_TOKEN",
+        scope: "per_user",
+        label: "Gateway token override attempt",
+        required: true,
+      },
+    ];
+    await UserCredentialModel.upsert({
+      organizationId: setup.agent.organizationId,
+      userId: setup.user.id,
+      agentId: setup.agent.id,
+      key: "ARCHESTRA_MCP_GATEWAY_TOKEN",
+      value: "arch_permanent_token_attempt",
+    });
+
+    const runId = crypto.randomUUID();
+    const { spec } = await buildAgentRunLaunchSpec({
+      runtime: configuredRuntime,
+      taskId: crypto.randomUUID(),
+      runId,
+      agentId: setup.agent.id,
+      actor: {
+        id: setup.user.id,
+        kind: "user",
+        organizationId: setup.agent.organizationId,
+      },
+      organizationId: setup.agent.organizationId,
+      runtimeScope: "agent-tests",
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      appName: "Archestra",
+      runMode: "one_shot",
+    });
+
+    expect(spec.secretEnv.ARCHESTRA_MCP_GATEWAY_TOKEN).not.toBe(
+      "arch_permanent_token_attempt",
+    );
+    const tokenHash = OAuthAccessTokenModel.hashTokenForLookup(
+      spec.secretEnv.ARCHESTRA_MCP_GATEWAY_TOKEN,
+    );
+    const verified = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
+    expect(verified?.id).toBe(agentRunGatewayTokenId(runId));
+  });
+
   test.for([
     { vertexEnabled: false, model: undefined, expectedModel: "opus" },
     { vertexEnabled: true, model: "opus[1m]", expectedModel: "opus[1m]" },

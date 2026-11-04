@@ -96,6 +96,80 @@ import {
 } from "./helpers";
 import type { ArchestraContext } from "./types";
 
+interface CallerSubagentPolicy {
+  id: string;
+  name: string;
+  environmentId: string | null;
+  accessAllSubagents: boolean;
+  excludedSubagentIds: ReadonlySet<string>;
+  delegatedAgentIds: ReadonlySet<string>;
+}
+
+async function loadCallerSubagentPolicy(
+  callerAgentId: string,
+): Promise<CallerSubagentPolicy | null> {
+  const callerAgent = await AgentModel.findById(callerAgentId);
+  if (!callerAgent) {
+    return null;
+  }
+  const excludedSubagentIds =
+    await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(callerAgent.id);
+  const delegatedAgentIds = callerAgent.tools
+    .map((tool) => tool.delegateToAgentId)
+    .filter((id): id is string => Boolean(id));
+  return {
+    id: callerAgent.id,
+    name: callerAgent.name,
+    environmentId: callerAgent.environmentId,
+    accessAllSubagents: callerAgent.accessAllSubagents,
+    excludedSubagentIds: new Set(excludedSubagentIds),
+    delegatedAgentIds: new Set(delegatedAgentIds),
+  };
+}
+
+function evaluateCallerSubagentPolicy(
+  callerPolicy: CallerSubagentPolicy | null,
+  targetAgent: Pick<Agent, "id" | "name" | "environmentId">,
+):
+  | { allowed: true }
+  | { allowed: false; reason: "agent_not_found" | "refused"; message: string } {
+  if (!callerPolicy) {
+    return {
+      allowed: false,
+      reason: "agent_not_found",
+      message: "Agent not found",
+    };
+  }
+  if (callerPolicy.id === targetAgent.id) {
+    return { allowed: true };
+  }
+  if (callerPolicy.environmentId !== targetAgent.environmentId) {
+    return {
+      allowed: false,
+      reason: "agent_not_found",
+      message: "Agent not found",
+    };
+  }
+  if (callerPolicy.excludedSubagentIds.has(targetAgent.id)) {
+    return {
+      allowed: false,
+      reason: "refused",
+      message: `Agent "${targetAgent.name}" is not an allowed subagent of "${callerPolicy.name}".`,
+    };
+  }
+  if (
+    !callerPolicy.accessAllSubagents &&
+    !callerPolicy.delegatedAgentIds.has(targetAgent.id)
+  ) {
+    return {
+      allowed: false,
+      reason: "refused",
+      message: `Agent "${targetAgent.name}" is not an allowed subagent of "${callerPolicy.name}".`,
+    };
+  }
+  return { allowed: true };
+}
+
 /**
  * Verify that `callerAgentId` is permitted to target `targetAgent` as a
  * subagent when `callerAgentId !== targetAgent.id`.
@@ -113,39 +187,8 @@ export async function checkCallerSubagentAccess(
   if (callerAgentId === targetAgent.id) {
     return { allowed: true };
   }
-  const callerAgent = await AgentModel.findById(callerAgentId);
-  if (!callerAgent) {
-    return { allowed: true };
-  }
-  if (callerAgent.environmentId !== targetAgent.environmentId) {
-    return {
-      allowed: false,
-      reason: "agent_not_found",
-      message: "Agent not found",
-    };
-  }
-  const excludedSubagentIds =
-    await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(callerAgent.id);
-  if (excludedSubagentIds.includes(targetAgent.id)) {
-    return {
-      allowed: false,
-      reason: "refused",
-      message: `Agent "${targetAgent.name}" is not an allowed subagent of "${callerAgent.name}".`,
-    };
-  }
-  if (!callerAgent.accessAllSubagents) {
-    const delegatedAgentIds = callerAgent.tools
-      .map((tool) => tool.delegateToAgentId)
-      .filter((id): id is string => Boolean(id));
-    if (!delegatedAgentIds.includes(targetAgent.id)) {
-      return {
-        allowed: false,
-        reason: "refused",
-        message: `Agent "${targetAgent.name}" is not an allowed subagent of "${callerAgent.name}".`,
-      };
-    }
-  }
-  return { allowed: true };
+  const callerPolicy = await loadCallerSubagentPolicy(callerAgentId);
+  return evaluateCallerSubagentPolicy(callerPolicy, targetAgent);
 }
 
 /**
@@ -977,6 +1020,24 @@ const registry = defineArchestraTools([
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
+        const targetAgent = await AgentModel.findById(args.agent_id);
+        if (
+          !targetAgent ||
+          targetAgent.organizationId !== actor.organizationId
+        ) {
+          return errorResult("Agent not found");
+        }
+        const subagentAccess = await checkCallerSubagentAccess(
+          context.agent.id,
+          targetAgent,
+        );
+        if (!subagentAccess.allowed) {
+          return errorResult(
+            subagentAccess.reason === "agent_not_found"
+              ? "Agent not found"
+              : subagentAccess.message,
+          );
+        }
         const { tasks, totalSize } = await A2ATaskModel.listForActor({
           actorKind: actor.kind,
           actorId: actor.id,
@@ -1049,17 +1110,23 @@ const registry = defineArchestraTools([
         ) {
           return errorResult("Agent not found");
         }
-        for (const agent of agents) {
-          const subagentAccess = await checkCallerSubagentAccess(
-            context.agent.id,
-            agent,
-          );
-          if (!subagentAccess.allowed) {
-            return errorResult(
-              subagentAccess.reason === "agent_not_found"
-                ? "Agent not found"
-                : subagentAccess.message,
+        const nonSelfTargets = agents.filter(
+          (agent) => agent.id !== context.agent.id,
+        );
+        if (nonSelfTargets.length > 0) {
+          const callerPolicy = await loadCallerSubagentPolicy(context.agent.id);
+          for (const agent of nonSelfTargets) {
+            const subagentAccess = evaluateCallerSubagentPolicy(
+              callerPolicy,
+              agent,
             );
+            if (!subagentAccess.allowed) {
+              return errorResult(
+                subagentAccess.reason === "agent_not_found"
+                  ? "Agent not found"
+                  : subagentAccess.message,
+              );
+            }
           }
         }
 

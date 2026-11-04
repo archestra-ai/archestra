@@ -14,6 +14,7 @@ import {
   TOOL_CANCEL_RUN_FULL_NAME,
   TOOL_GET_RUN_FULL_NAME,
   TOOL_LIST_AGENT_RUNS_FULL_NAME,
+  TOOL_LIST_RUNS_FULL_NAME,
   TOOL_POST_RUN_FILE_FULL_NAME,
   TOOL_POST_RUN_MESSAGE_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
@@ -336,6 +337,70 @@ describe("run tools", () => {
       `Agent "${otherTarget.name}" is not an allowed subagent of "${githubGateway.name}".`,
     );
 
+    const listSingleOtherRunsResult = await executeArchestraTool(
+      TOOL_LIST_RUNS_FULL_NAME,
+      { agent_id: otherTarget.id },
+      gatewayContext,
+    );
+    expect(listSingleOtherRunsResult.isError).toBe(true);
+    expect(
+      (listSingleOtherRunsResult.content[0] as { text: string }).text,
+    ).toContain(
+      `Agent "${otherTarget.name}" is not an allowed subagent of "${githubGateway.name}".`,
+    );
+
+    await AgentExcludedSubagentModel.replaceForAgent(githubGateway.id, [
+      allowedTarget.id,
+    ]);
+    const listExcludedSingleRunsResult = await executeArchestraTool(
+      TOOL_LIST_RUNS_FULL_NAME,
+      { agent_id: allowedTarget.id },
+      gatewayContext,
+    );
+    expect(listExcludedSingleRunsResult.isError).toBe(true);
+    expect(
+      (listExcludedSingleRunsResult.content[0] as { text: string }).text,
+    ).toContain(
+      `Agent "${allowedTarget.name}" is not an allowed subagent of "${githubGateway.name}".`,
+    );
+    await AgentExcludedSubagentModel.replaceForAgent(githubGateway.id, []);
+
+    // Multi-target list_agent_runs hydrates the caller policy only once
+    const secondAllowedTarget = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      name: "Second Allowed Target",
+      agentType: "agent",
+    });
+    const findByIdSpy = vi.spyOn(AgentModel, "findById");
+    const multiListResult = await executeArchestraTool(
+      TOOL_LIST_AGENT_RUNS_FULL_NAME,
+      { agent_ids: [allowedTarget.id, secondAllowedTarget.id] },
+      context,
+    );
+    expect(multiListResult.isError).toBeFalsy();
+    expect(
+      findByIdSpy.mock.calls.filter(([id]) => id === callingAgent.id),
+    ).toHaveLength(1);
+    findByIdSpy.mockRestore();
+
+    // Missing/deleted caller fails closed with Agent not found
+    const missingCallerId = crypto.randomUUID();
+    const missingCallerContext: ArchestraContext = {
+      ...context,
+      agent: { id: missingCallerId, name: "Deleted Caller" },
+      agentId: missingCallerId,
+    };
+    const missingCallerListResult = await executeArchestraTool(
+      TOOL_LIST_RUNS_FULL_NAME,
+      { agent_id: allowedTarget.id },
+      missingCallerContext,
+    );
+    expect(missingCallerListResult.isError).toBe(true);
+    expect(
+      (missingCallerListResult.content[0] as { text: string }).text,
+    ).toContain("Agent not found");
+
     // 6. Cross-environment target is refused with Agent not found on both start_run and list_runs (even with accessAllSubagents=true)
     const environment = await EnvironmentModel.create({
       organizationId,
@@ -364,6 +429,16 @@ describe("run tools", () => {
     expect((crossEnvListResult.content[0] as { text: string }).text).toContain(
       "Agent not found",
     );
+
+    const crossEnvSingleListResult = await executeArchestraTool(
+      TOOL_LIST_RUNS_FULL_NAME,
+      { agent_id: allowedTarget.id },
+      context,
+    );
+    expect(crossEnvSingleListResult.isError).toBe(true);
+    expect(
+      (crossEnvSingleListResult.content[0] as { text: string }).text,
+    ).toContain("Agent not found");
   });
 
   test("returns a setup link and every missing credential before starting a run", async ({

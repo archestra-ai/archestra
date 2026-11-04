@@ -405,7 +405,6 @@ export async function buildAgentRunLaunchSpec(params: {
     throw error;
   }
   const secretEnv: Record<string, string> = {
-    ARCHESTRA_MCP_GATEWAY_TOKEN: gatewayToken,
     ...(claudeCodeToken ? { CLAUDE_CODE_OAUTH_TOKEN: claudeCodeToken } : {}),
     ...(virtualKey ? { ARCHESTRA_VIRTUAL_KEY: virtualKeyValue } : {}),
     ...(!isClaudeCodeBedrock && !usesClaudeCodeSubscription
@@ -442,6 +441,7 @@ export async function buildAgentRunLaunchSpec(params: {
       .join("\n\n"),
     ...(task ? { ARCHESTRA_AGENT_RUNTIME_TASK: task } : {}),
     ...withNativeClientCredentialAliases(credentials.env),
+    ARCHESTRA_MCP_GATEWAY_TOKEN: gatewayToken,
     ...(isClaudeCodeBedrock
       ? { AWS_BEARER_TOKEN_BEDROCK: virtualKeyValue }
       : {}),

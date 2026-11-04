@@ -13799,6 +13799,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         passes: false,
       },
       {
+        state: "the requester's id only ends a recorded subagent's own id",
+        requester: "1",
+        setup: "superyell subagents whose ids end with the requester's",
+        passes: false,
+      },
+      {
         state: "a thread that is not a review shares the superyelled root",
         requester: undefined,
         setup: "superyell root",
@@ -13943,6 +13949,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           break;
         case "superyell a subagent of another root":
           await superyell("other-root:worker-thread", "other-root");
+          break;
+        case "superyell subagents whose ids end with the requester's":
+          // `worker-1`, and `a:1`: an id can hold a colon, so its parent
+          // decides where it starts.
+          await superyell("root-thread:worker-1", "root-thread");
+          await superyell("root-thread:a:1", "root-thread");
           break;
       }
       providerRequests.length = 0;

@@ -467,9 +467,8 @@ class OpenAppaSessionModel {
   }
 
   /**
-   * The sessions of a root's family whose own client-native id, the last
-   * segment of a child's id, is `nativeId`. A child at any depth counts; the
-   * root does not.
+   * The sessions of a root's family whose own client-native id is
+   * `nativeId`. A child at any depth counts; the root does not.
    */
   static async familyMembersByNativeId(params: {
     organizationId: string;
@@ -488,7 +487,8 @@ class OpenAppaSessionModel {
       )
       .limit(1);
     if (!root) return [];
-    const suffix = `:${params.nativeId}`;
+    // A child's own id is all of its id after its parent's and a colon; an
+    // id can itself hold a colon, so the parent decides where it starts.
     return db
       .select({ sessionId: table.sessionId, parentId: table.parentId })
       .from(table)
@@ -497,7 +497,7 @@ class OpenAppaSessionModel {
           eq(table.organizationId, params.organizationId),
           eq(table.root, root.root),
           sql`starts_with(${table.sessionId}, ${`${params.rootSessionId}:`})`,
-          sql`right(${table.sessionId}, ${suffix.length}) = ${suffix}`,
+          sql`${table.sessionId} = ${table.parentId} || ${`:${params.nativeId}`}`,
         ),
       )
       .limit(2);

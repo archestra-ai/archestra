@@ -87,6 +87,39 @@ describe("Codex messages between agents", () => {
     });
   });
 
+  test("takes any task path a Codex launch result accepts", () => {
+    const named = "/root/task.name:v1@host";
+    expect(codexRelayMessage(send("/root"), body(named))?.to).toEqual({
+      kind: "lead",
+    });
+    expect(
+      codexRelayMessage(send("task.name:v1@host"), body("/root"))?.to,
+    ).toEqual({
+      kind: "teammate",
+      name: "task.name:v1@host",
+      among: "children",
+    });
+    expect(
+      codexRelayArrivals(body("/root", [mail(named, "/root")]))[0],
+    ).toMatchObject({
+      kind: "agent",
+      from: "task.name:v1@host",
+    });
+    const long = `/${"a".repeat(511)}`;
+    expect(
+      codexRelayArrivals(body(long, [mail(`${long}/x`, long)]))[0]?.kind,
+    ).toBe("session");
+    expect(codexRelayMessage(send("x"), body(long))?.to).toEqual({
+      kind: "teammate",
+      name: "x",
+    });
+    expect(
+      codexRelayArrivals(
+        body("/root", [mail(`/root/${"a".repeat(506)}`, "/root")]),
+      )[0],
+    ).toMatchObject({ kind: "agent", from: "a".repeat(506) });
+  });
+
   test("a message crosses byte for byte, and a malformed one carries nothing", () => {
     expect(codexRelayMessage(send("/root"), body("/root/w"))).toMatchObject({
       value: "gAAAA_cipher",
@@ -264,6 +297,17 @@ describe("Codex messages between agents", () => {
       content: "returned",
       withheld: false,
     });
+    // The record covers text alone: any other part is withheld with it.
+    for (const extra of [
+      { type: "input_image", image_url: "data:image/png;base64,AA" },
+      { type: "input_text", text: "", encrypted_content: "unchecked" },
+    ])
+      expect(
+        admitCodexRelayReport(
+          [{ type: "input_text", text: "returned" }, extra],
+          ["returned"],
+        ).withheld,
+      ).toBe(true);
   });
 
   test("the agent path comes from the turn metadata, and only a path counts", () => {

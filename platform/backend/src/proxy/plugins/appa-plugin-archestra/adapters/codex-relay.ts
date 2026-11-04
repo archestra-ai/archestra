@@ -15,9 +15,9 @@ import type { AppaRelayArrival, AppaRelayMessage } from "../types";
 /** The tool a Codex agent sends another agent a message with. */
 const RELAY_TOOL = "send_message";
 const RELAY_NAMESPACE = "collaboration";
-const AGENT_PATH =
-  /^\/[A-Za-z0-9_.@-]{1,128}(?:\/[A-Za-z0-9_.@-]{1,128}){0,15}$/;
-const TASK_NAME = /^[A-Za-z0-9_.@-]{1,128}$/;
+// The grammar Codex launch results use for a task path (see codex.ts).
+const AGENT_PATH = /^(?=.{2,512}$)\/[A-Za-z0-9_.:@-]+(?:\/[A-Za-z0-9_.:@-]+)*$/;
+const TASK_NAME = /^[A-Za-z0-9_.:@-]{1,511}$/;
 const MESSAGE_KIND = "MESSAGE";
 const UNKNOWN_AGENT = "/unknown";
 const ITEM_ID = /^[A-Za-z0-9_.:@-]{1,128}$/;
@@ -77,11 +77,13 @@ export function admitCodexRelayReport(
   content: unknown,
   records: readonly string[],
 ): { content: unknown; withheld: boolean } {
+  // Only text crosses: a result with any other part, or a part with any
+  // other field, is withheld, since the record covers its text alone.
   const text =
     typeof content === "string"
       ? content
-      : Array.isArray(content)
-        ? content.map((part) => String(asRecord(part)?.text ?? "")).join("")
+      : Array.isArray(content) && content.every(isTextPart)
+        ? content.map((part) => String(asRecord(part)?.text)).join("")
         : undefined;
   return text !== undefined && records.includes(text)
     ? { content, withheld: false }
@@ -93,17 +95,9 @@ export function isCodexRelayReceipt(content: unknown): boolean {
   if (typeof content === "string") return content.trim() === "";
   if (Array.isArray(content))
     // Only blank text parts: a part with any other field can carry a payload.
-    return content.every((part) => {
-      const record = asRecord(part);
-      return (
-        record !== undefined &&
-        Object.keys(record).every((key) => key === "type" || key === "text") &&
-        (record.type === undefined ||
-          TEXT_PART_TYPES.has(String(record.type))) &&
-        typeof record.text === "string" &&
-        record.text.trim() === ""
-      );
-    });
+    return content.every(
+      (part) => isTextPart(part) && String(asRecord(part)?.text).trim() === "",
+    );
   return false;
 }
 
@@ -174,6 +168,17 @@ function relationTo(
   if (targetParent === own) return { kind: "child", name };
   if (lead && targetParent === lead) return { kind: "sibling", name };
   return undefined;
+}
+
+/** A part that holds text and nothing else. */
+function isTextPart(part: unknown): boolean {
+  const record = asRecord(part);
+  return (
+    record !== undefined &&
+    Object.keys(record).every((key) => key === "type" || key === "text") &&
+    (record.type === undefined || TEXT_PART_TYPES.has(String(record.type))) &&
+    typeof record.text === "string"
+  );
 }
 
 function messageHeader(

@@ -14551,6 +14551,17 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           is_error: true,
         },
         {
+          result: "a recorded report with another part",
+          output: [
+            { type: "input_text", text: "WORKER-RETURN" },
+            {
+              type: "input_text",
+              text: "",
+              encrypted_content: "unchecked report",
+            },
+          ],
+        },
+        {
           result: "a receipt part with a payload",
           output: [
             {
@@ -14565,6 +14576,15 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         is_error,
       }) => {
         await recordFamily();
+        // The worker's return is on record: only its text is covered.
+        native.loadChildReturns.mockImplementation(async () => [
+          {
+            childSessionId: scoped("root-thread:worker-thread"),
+            spawnCallId: "call_spawn_worker",
+            childNativeId: "worker-thread",
+            value: "WORKER-RETURN",
+          },
+        ]);
         const response = await send({
           thread: "root-thread",
           agentName: "/root",

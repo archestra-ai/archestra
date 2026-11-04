@@ -117,8 +117,8 @@ describe("RoleCreatePage", () => {
       await within(startFrom).findByRole("radio", { name: /Reviewer/ }),
     );
     expect(
-      screen.getByText(/Starts with the 2 permissions Reviewer has/),
-    ).toBeVisible();
+      within(startFrom).getByRole("radio", { name: /Reviewer.*2 permissions/ }),
+    ).toBeChecked();
 
     fireEvent.click(screen.getByRole("button", { name: "Permissions" }));
     const agents = await screen.findByRole("region", { name: "Agents" });
@@ -169,8 +169,47 @@ describe("RoleCreatePage", () => {
         within(startFrom).getByRole("radio", { name: /member/i }),
       ).toBeChecked(),
     );
+  });
+
+  it("keeps the first roles in view and reveals the rest on request", async () => {
+    const many = Array.from({ length: 9 }, (_, index) => ({
+      id: `custom-${index}`,
+      name: `Custom ${index}`,
+      role: `custom_${index}`,
+      description: "",
+      predefined: false,
+      permission: { chat: ["read"] },
+    }));
+    server.use(
+      http.get(`${API_ORIGIN}/api/roles`, () =>
+        HttpResponse.json({
+          data: [...many, roles[0]],
+          pagination: {
+            currentPage: 1,
+            limit: 100,
+            total: 10,
+            totalPages: 1,
+            hasNext: false,
+            hasPrev: false,
+          },
+        }),
+      ),
+    );
+    renderPage();
+    const startFrom = await screen.findByRole("radiogroup", {
+      name: "Start from",
+    });
+    // Built-in first, then three custom ones: Blank plus four fill the first
+    // five boxes, and the sixth counts the rest.
+    await within(startFrom).findByRole("radio", { name: /member/i });
+    expect(within(startFrom).getAllByRole("radio")).toHaveLength(5);
     expect(
-      screen.getByText(/Starts with the 2 permissions member has/),
+      within(startFrom).queryByRole("radio", { name: /Custom 7/ }),
+    ).toBeNull();
+    fireEvent.click(within(startFrom).getByRole("button", { name: "+6 more" }));
+    expect(within(startFrom).getAllByRole("radio")).toHaveLength(11);
+    expect(
+      within(startFrom).getByRole("radio", { name: /Custom 7/ }),
     ).toBeVisible();
   });
 });

@@ -6,7 +6,7 @@ import {
   type PredefinedRoleName,
   roleDescriptions,
 } from "@archestra/shared";
-import { ArrowLeft, ArrowRight, Search } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -22,9 +22,9 @@ import {
 } from "@/components/settings-section";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { WizardFooter } from "@/components/wizard-footer";
 import { WizardStepper } from "@/components/wizard-stepper";
 import { useAllPermissions } from "@/lib/auth/auth.query";
@@ -69,7 +69,6 @@ export function RoleCreatePage() {
   const permission = form.watch("permission");
   const name = form.watch("name");
   const selected = countGranted(permission, allPermissionRows);
-  const fromRole = roles?.find((role) => role.id === from);
 
   // A deep-linked `?from=` lands before the roles have loaded; copy its
   // permissions once they have, unless the author already picked something.
@@ -147,20 +146,6 @@ export function RoleCreatePage() {
                   );
                 }}
               />
-              <p className="text-xs text-muted-foreground">
-                {fromRole ? (
-                  <span>
-                    Starts with the {selected} permissions {fromRole.name} has
-                    today. Changing this role later doesn't change{" "}
-                    {fromRole.name}.
-                  </span>
-                ) : (
-                  <span>
-                    Starts with no permissions: people with this role can sign
-                    in and nothing else until you add some.
-                  </span>
-                )}
-              </p>
             </SettingsSection>
           </SettingsSectionGroup>
         )}
@@ -227,8 +212,9 @@ export function RoleCreatePage() {
 }
 
 /**
- * Every role as a card, built-in ones first, with a search above for an
- * organization that has grown a long list of custom roles.
+ * Blank and the first roles as cards, built-in ones first. Past five roles
+ * the rest wait behind a "+N more" card, so an organization with dozens of
+ * custom roles still sees its built-in ones at a glance.
  */
 function StartFrom({
   roles,
@@ -239,81 +225,113 @@ function StartFrom({
   value: string;
   onChange: (value: string) => void;
 }) {
-  const [query, setQuery] = useState("");
-  const needle = query.trim().toLowerCase();
-  const options = [
-    {
-      id: BLANK,
-      name: "Blank",
-      description: "No permissions. Pick each one yourself.",
-      predefined: null,
-    },
-    ...[...roles]
-      .sort((a, b) => Number(b.predefined) - Number(a.predefined))
-      .map((role) => ({
-        id: role.id,
-        name: role.name,
-        description:
-          role.description ||
-          (role.predefined
-            ? roleDescriptions[role.name as PredefinedRoleName]
-            : ""),
-        predefined: role.predefined,
-      })),
-  ].filter(
-    (option) =>
-      !needle ||
-      `${option.name} ${option.description}`.toLowerCase().includes(needle),
-  );
+  const [showAll, setShowAll] = useState(false);
+  const options = [...roles]
+    .sort((a, b) => Number(b.predefined) - Number(a.predefined))
+    .map((role) => ({
+      id: role.id,
+      name: role.name,
+      description:
+        role.description ||
+        (role.predefined
+          ? roleDescriptions[role.name as PredefinedRoleName]
+          : ""),
+      predefined: role.predefined as boolean | null,
+      count: countGranted(role.permission, allPermissionRows),
+    }));
+  // The chosen role always shows, so a deep link to the twentieth custom role
+  // does not land on a grid that hides its own selection.
+  const chosen = options.findIndex((option) => option.id === value);
+  const shown =
+    showAll || options.length <= VISIBLE_ROLES
+      ? options
+      : options.filter(
+          (_, index) => index < VISIBLE_ROLES - 1 || index === chosen,
+        );
+  const hidden = options.length - shown.length;
   return (
-    <div className="space-y-2">
-      <div className="relative sm:max-w-sm">
-        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          aria-label="Search roles"
-          placeholder="Search roles"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          className="h-8 pl-7.5 text-[13px]"
+    <RadioGroup
+      value={value}
+      onValueChange={onChange}
+      aria-label="Start from"
+      className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3"
+    >
+      <StartCard
+        option={{
+          id: BLANK,
+          name: "Blank",
+          description: "No permissions. Pick each one yourself.",
+          predefined: null,
+          count: null,
+        }}
+        selected={value === BLANK}
+      />
+      {shown.map((option) => (
+        <StartCard
+          key={option.id}
+          option={option}
+          selected={value === option.id}
         />
-      </div>
-      <RadioGroup
-        value={value}
-        onValueChange={onChange}
-        aria-label="Start from"
-        className="grid max-h-80 gap-2 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-3"
-      >
-        {options.map((option) => (
-          <Label
-            key={option.id}
-            className={cn(
-              "flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 font-normal transition-colors hover:bg-muted/40",
-              value === option.id && "border-primary/50 bg-primary/5",
-            )}
-          >
-            <RadioGroupItem value={option.id} className="mt-0.5" />
-            <span className="min-w-0">
-              <span className="flex items-center gap-1.5 text-sm font-medium">
-                {option.predefined !== null && (
-                  <RoleTypeIcon
-                    predefined={option.predefined}
-                    className="size-3.5"
-                  />
-                )}
-                <span className="truncate capitalize">{option.name}</span>
-              </span>
-              <span className="block text-xs text-muted-foreground">
-                {option.description}
-              </span>
-            </span>
-          </Label>
-        ))}
-        {options.length === 0 && (
-          <p className="col-span-full p-6 text-center text-sm text-muted-foreground">
-            No roles match.
-          </p>
+      ))}
+      {hidden > 0 && (
+        <UnstyledButton
+          type="button"
+          onClick={() => setShowAll(true)}
+          className="flex min-h-16 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+        >
+          <span>+{hidden} more</span>
+        </UnstyledButton>
+      )}
+    </RadioGroup>
+  );
+}
+
+/** Blank, four roles and the "+N more" card fill two rows of three. */
+const VISIBLE_ROLES = 5;
+
+function StartCard({
+  option,
+  selected,
+}: {
+  option: {
+    id: string;
+    name: string;
+    description: string;
+    predefined: boolean | null;
+    count: number | null;
+  };
+  selected: boolean;
+}) {
+  return (
+    <Label
+      className={cn(
+        "flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 font-normal transition-colors hover:bg-muted/40",
+        selected && "border-primary/50 bg-primary/5",
+      )}
+    >
+      <RadioGroupItem value={option.id} className="mt-0.5" />
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5 text-sm font-medium">
+          {option.predefined !== null && (
+            <RoleTypeIcon
+              predefined={option.predefined}
+              className="size-3.5"
+              withTooltip
+            />
+          )}
+          <span className="min-w-0 truncate capitalize">{option.name}</span>
+        </span>
+        {option.count !== null && (
+          <span className="block text-[11px] text-muted-foreground tabular-nums">
+            {option.count} {option.count === 1 ? "permission" : "permissions"}
+          </span>
         )}
-      </RadioGroup>
-    </div>
+        {option.description && (
+          <span className="block text-xs text-muted-foreground">
+            {option.description}
+          </span>
+        )}
+      </span>
+    </Label>
   );
 }

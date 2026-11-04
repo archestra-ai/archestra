@@ -709,7 +709,7 @@ function argumentsFullText(review: HitlInspectableReview): string {
   const args = parseReviewedArguments(review.arguments);
   if (review.arguments && !args) {
     return [
-      "These arguments were not valid JSON; they are shown verbatim.",
+      "These arguments were not valid JSON; they are shown as written, with credential values hidden.",
       fence(review.arguments, "text"),
     ].join("\n\n");
   }

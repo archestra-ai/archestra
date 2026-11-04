@@ -1,5 +1,6 @@
 import { once } from "node:events";
 import { createConnection } from "node:net";
+import { performance } from "node:perf_hooks";
 import { setImmediate } from "node:timers/promises";
 import fastifyHttpProxy from "@fastify/http-proxy";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -210,12 +211,17 @@ test("forged scopes and live scopes past the drain deadline cannot admit new cal
 });
 
 test.each([
-  { clockShiftMs: 3_600_000, graceMs: 60_000, waitMs: 0, expectedStatus: 200 },
-  { clockShiftMs: -3_600_000, graceMs: 5, waitMs: 20, expectedStatus: 503 },
+  {
+    clockShiftMs: 3_600_000,
+    graceMs: 60_000,
+    elapsedMs: 1,
+    expectedStatus: 200,
+  },
+  { clockShiftMs: -3_600_000, graceMs: 5, elapsedMs: 6, expectedStatus: 503 },
 ])("drain admission uses elapsed time after a $clockShiftMs ms wall-clock correction", async ({
   clockShiftMs,
   graceMs,
-  waitMs,
+  elapsedMs,
   expectedStatus,
 }) => {
   const app = createApp();
@@ -223,12 +229,14 @@ test.each([
   const paths = ["/v1/mcp/agent", "/v1/openai/chat/completions"];
   for (const path of paths) app.post(path, async () => ({ completed: true }));
   await app.ready();
-  drain.beginShutdown();
-  // Change civil time only; the elapsed-time deadline must stay unchanged.
-  const now = vi.spyOn(Date, "now").mockReturnValue(Date.now() + clockShiftMs);
+  const wallTime = Date.now();
+  const elapsedClock = vi.spyOn(performance, "now").mockReturnValue(1000);
+  const wallClock = vi.spyOn(Date, "now").mockReturnValue(wallTime);
   try {
+    drain.beginShutdown();
+    wallClock.mockReturnValue(wallTime + clockShiftMs);
+    elapsedClock.mockReturnValue(1000 + elapsedMs);
     await withDrainScope(async () => {
-      if (waitMs) await new Promise((resolve) => setTimeout(resolve, waitMs));
       for (const path of paths) {
         const response = await app.inject({
           method: "POST",
@@ -242,7 +250,8 @@ test.each([
       }
     });
   } finally {
-    now.mockRestore();
+    wallClock.mockRestore();
+    elapsedClock.mockRestore();
   }
 });
 
@@ -259,24 +268,32 @@ test("a backward wall-clock correction cannot extend the drain wait", async () =
   await app.ready();
   const request = app.inject("/v1/openai/pending");
   await started.promise;
-  drain.beginShutdown();
-  // Roll back wall time before drain() calculates its remaining timeout.
-  const now = vi.spyOn(Date, "now").mockReturnValue(Date.now() - 3_600_000);
-  let watchdog: NodeJS.Timeout | undefined;
+  const wallTime = Date.now();
+  const elapsedClock = vi.spyOn(performance, "now").mockReturnValue(1000);
+  const wallClock = vi.spyOn(Date, "now").mockReturnValue(wallTime);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
-    const completed = await Promise.race([
-      drainLlmProxyRequests(app).then(() => true),
-      new Promise<false>((resolve) => {
-        watchdog = setTimeout(() => resolve(false), 200);
-      }),
-    ]);
+    drain.beginShutdown();
+    wallClock.mockReturnValue(wallTime - 3_600_000);
+    elapsedClock.mockReturnValue(1007);
+    let completed = false;
+    const draining = drainLlmProxyRequests(app).then(() => {
+      completed = true;
+    });
+    elapsedClock.mockReturnValue(1019);
+    await vi.advanceTimersByTimeAsync(12);
+    expect(completed).toBe(false);
+    elapsedClock.mockReturnValue(1020);
+    await vi.advanceTimersByTimeAsync(1);
     expect(
       completed,
       "A wall-clock rollback must not extend the elapsed drain budget",
     ).toBe(true);
+    await draining;
   } finally {
-    clearTimeout(watchdog);
-    now.mockRestore();
+    vi.useRealTimers();
+    wallClock.mockRestore();
+    elapsedClock.mockRestore();
     finish.resolve();
     await request;
   }

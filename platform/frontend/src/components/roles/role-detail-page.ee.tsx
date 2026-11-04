@@ -4,7 +4,7 @@
 import { type PredefinedRoleName, roleDescriptions } from "@archestra/shared";
 import { Copy, Download, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   useSetSettingsAction,
@@ -14,6 +14,10 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { PageBackLink } from "@/components/page-back-link";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RoleTypeIcon } from "@/components/role-type-icon";
+import {
+  SettingsSection,
+  SettingsSectionGroup,
+} from "@/components/settings-section";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -43,7 +47,6 @@ import { RoleUsage } from "./role-usage.ee";
  */
 export function RoleDetailPage({ roleId }: { roleId: string }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const setPageHeader = useSetSettingsPageHeader();
   const setActionButton = useSetSettingsAction();
   const { data: role, isPending, isLoadingError, refetch } = useRole(roleId);
@@ -51,7 +54,6 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const { data: canCreate } = useHasPermissions({ ac: ["create"] });
   const { data: canDelete } = useHasPermissions({ ac: ["delete"] });
-  const tab = searchParams.get("tab") === "usage" ? "usage" : "permissions";
   const href = `/settings/roles/${roleId}`;
 
   useEffect(() => {
@@ -71,19 +73,9 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
       backLink: (
         <PageBackLink href="/settings/roles">Back to roles</PageBackLink>
       ),
-      tabs: role
-        ? [
-            { label: "Permissions", href, selected: tab === "permissions" },
-            {
-              label: "Usage",
-              href: `${href}?tab=usage`,
-              selected: tab === "usage",
-            },
-          ]
-        : undefined,
     });
     return () => setPageHeader(null);
-  }, [setPageHeader, role, href, tab]);
+  }, [setPageHeader, role]);
 
   useEffect(() => {
     if (!role) {
@@ -176,16 +168,21 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
   }
   return (
     <>
-      {tab === "usage" ? (
-        <RoleUsage role={role} />
-      ) : (
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            {ROLE_PERMISSIONS_INTRO}
-          </p>
+      <SettingsSectionGroup>
+        <SettingsSection
+          title="Usage"
+          description="Who holds this role. Assign it from a user's row in Users, a team's inherited roles, or a service account."
+        >
+          <RoleUsage role={role} />
+        </SettingsSection>
+        <SettingsSection
+          title="Permissions"
+          description={ROLE_PERMISSIONS_INTRO}
+          stickyLabel
+        >
           <PermissionList permissions={role.permission} />
-        </div>
-      )}
+        </SettingsSection>
+      </SettingsSectionGroup>
       <DeleteConfirmDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}

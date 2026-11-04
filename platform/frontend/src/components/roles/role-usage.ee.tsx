@@ -42,10 +42,6 @@ export function RoleUsage({ role }: { role: Role }) {
 
   return (
     <div className="space-y-6">
-      <p className="text-sm text-muted-foreground">
-        Assign the role from a user's row in Users, a team's inherited roles, or
-        a service account.
-      </p>
       <UsageGroup
         icon={Users}
         title="Teams"

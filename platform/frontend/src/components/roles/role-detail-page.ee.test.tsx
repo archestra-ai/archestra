@@ -149,10 +149,7 @@ describe("RoleDetailPage", () => {
     expect(lastHeader().description).toMatch(/Full access/);
   });
 
-  it("the usage tab lists the users holding the role directly", async () => {
-    vi.mocked(useSearchParams).mockReturnValue(
-      new URLSearchParams("tab=usage") as never,
-    );
+  it("lists the users holding the role directly, under the permissions", async () => {
     let roleFilter: string | null = null;
     server.use(
       http.get(`${API_ORIGIN}/api/members`, ({ request }) => {
@@ -190,9 +187,13 @@ describe("RoleDetailPage", () => {
     );
     // The API filters by the role's identifier, not its display name.
     expect(roleFilter).toBe("reviewer");
-    expect(screen.queryByRole("region", { name: "Agents" })).toBeNull();
+    // Both sections share the page: usage first, then the permissions.
+    const usage = screen.getByRole("heading", { name: "Usage" });
+    const permissions = screen.getByRole("heading", { name: "Permissions" });
     expect(
-      lastHeader().tabs?.find((tab) => tab.label === "Usage")?.selected,
-    ).toBe(true);
+      usage.compareDocumentPosition(permissions) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Agents" })).toBeVisible();
   });
 });

@@ -1,4 +1,4 @@
-import type { OpenAppaSession } from "@/openappa/service";
+import { isWellFormedAppaId, type OpenAppaSession } from "@/openappa/service";
 import {
   type AppaSessionIdentity,
   type AppaWireFamily,
@@ -133,4 +133,22 @@ export function appaTrajectory(params: {
     child,
     matchContext,
   };
+}
+
+/**
+ * The session a side review assesses: the root of its tree, scoped like the
+ * review's own session, and the native id of the agent that asked for the
+ * review. Undefined for a request that is not a side review.
+ */
+export function appaReviewedSession(params: {
+  adapter: AppaClientAdapter | undefined;
+  matchContext: AppaMatchContext;
+  session: OpenAppaSession;
+}): { rootSessionId: string; requesterId: string } | undefined {
+  const reviewed = params.adapter?.reviewedSession?.(params.matchContext);
+  if (!reviewed) return undefined;
+  const rootSessionId = withCallerScope(params.session, reviewed.rootId);
+  return isWellFormedAppaId(rootSessionId)
+    ? { rootSessionId, requesterId: reviewed.requesterId }
+    : undefined;
 }

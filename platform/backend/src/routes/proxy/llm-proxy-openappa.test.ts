@@ -70,6 +70,7 @@ import {
   parseTrajectoryStamp,
   stampToolCallId,
 } from "@/openappa/trajectory-stamp";
+import { superyellSession } from "@/openappa/unenforced";
 import { createAppaLlmProxyPlugin } from "@/proxy/plugins/appa-plugin-archestra";
 import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { issueRuntimeBinding } from "@/services/agent-runtime/runtime-identity";
@@ -5591,6 +5592,112 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       });
     }
   }
+
+  // A request the platform bound to a runtime workspace cannot leave it by
+  // claiming to review another session: a Codex auto-review in the workspace
+  // is bound to the workspace session, and follows that session alone.
+  test("a runtime-bound request that claims to be a Codex auto-review stays in its workspace session", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    config.openappa.offerSigningSecret = "runtime-binding-test-secret";
+    const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+    const providerKey = await makeLlmProviderApiKey(
+      agent.organizationId,
+      secret.id,
+      { provider: "anthropic" },
+    );
+    const { value: key, virtualKey } = await VirtualApiKeyModel.create({
+      organizationId: agent.organizationId,
+      name: "runtime-review",
+      scope: "org",
+      authorId: null,
+      providerApiKeys: [
+        { provider: providerKey.provider, providerApiKeyId: providerKey.id },
+      ],
+    });
+    const context = await A2AContextModel.create({
+      actorKind: "organization",
+      actorId: agent.organizationId,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    const workloadName = `runtime-review-${task.id.slice(0, 8)}`;
+    const workspace = await AgentWorkspaceModel.create({
+      organizationId: agent.organizationId,
+      agentId: agent.id,
+      actorKind: "organization",
+      actorId: agent.organizationId,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      workloadName,
+      state: "active",
+      activeTaskId: task.id,
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    await AgentRunModel.create({
+      organizationId: agent.organizationId,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "organization",
+      actorId: agent.organizationId,
+      actorUserId: null,
+      workloadName,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      virtualApiKeyId: virtualKey.id,
+    });
+    const binding = issueRuntimeBinding({
+      secret: config.openappa.offerSigningSecret,
+      organizationId: agent.organizationId,
+      workspaceId: workspace.id,
+      workloadName,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "organization",
+      actorId: agent.organizationId,
+      expiresAt: Date.now() + 600_000,
+    });
+    if (!binding) throw new Error("The fixture has no signed binding");
+    // Another session in the workspace's scope, out of OpenAPPA.
+    await superyellSession({
+      organization_id: agent.organizationId,
+      session_id: `agent-workspace:${workspace.id}|elsewhere`,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "203.0.113.20",
+      headers: {
+        authorization: `Bearer ${key}`,
+        "anthropic-version": "2023-06-01",
+        "x-appa-session-id": workloadName,
+        "x-archestra-runtime-binding": binding,
+        "user-agent": "codex_cli_rs/0.164.0",
+        "x-openai-subagent": "guardian",
+        "x-codex-turn-metadata": JSON.stringify({
+          session_id: "elsewhere",
+          thread_id: "review-thread",
+          parent_thread_id: "elsewhere",
+          turn_trigger: "guardian_review",
+        }),
+      },
+      payload: payload(false) as Record<string, unknown>,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    // Governed: OpenAPPA saw the workspace session's turn.
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        session_id: `agent-workspace:${workspace.id}|${workloadName}`,
+      }),
+    );
+  });
 
   test("refuses a Chat request that names no user, instead of binding it unchecked", async () => {
     await allowUnauthenticatedCallers();
@@ -11310,6 +11417,309 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(providerRequests).toHaveLength(1);
       expect(providerRequests[0]).toMatchObject({
         input: expect.arrayContaining(mailbox),
+      });
+    });
+
+    // Codex runs an auto-review (approvals_reviewer = "auto_review") in a
+    // thread of its own. Each review copies the requester's history, which
+    // includes a message from a subagent, a MESSAGE item the mailbox reader
+    // does not support. The review was its own root, so a requester out of
+    // OpenAPPA left the review governed: refused with 409, with no tools to
+    // recover, it blocked every command that needed an approval.
+    test.for([
+      {
+        state: "the requester was superyelled",
+        requester: "root-thread",
+        setup: "superyell root",
+        passes: true,
+      },
+      {
+        state: "the requester started while enforcement was off",
+        requester: "root-thread",
+        setup: "root starts while enforcement is off",
+        passes: true,
+      },
+      {
+        state: "the root of the subagent requester was superyelled",
+        requester: "worker-thread",
+        setup: "superyell root, then the subagent runs",
+        passes: true,
+      },
+      {
+        state: "the subagent requester was superyelled",
+        requester: "worker-thread",
+        setup: "superyell subagent",
+        passes: true,
+      },
+      {
+        state: "the root of a governed subagent requester was superyelled",
+        requester: "worker-thread",
+        setup: "governed subagent, then superyell root",
+        passes: true,
+      },
+      {
+        state: "a nested subagent requester was superyelled",
+        requester: "helper-thread",
+        setup: "superyell nested subagent",
+        passes: true,
+      },
+      {
+        state: "OpenAPPA governs the requester",
+        requester: "root-thread",
+        setup: "governed root",
+        passes: false,
+      },
+      {
+        state: "another user superyelled a session with the requester's id",
+        requester: "root-thread",
+        setup: "superyell another user's root",
+        passes: false,
+      },
+      {
+        state: "two sessions under the root end with the requester's id",
+        requester: "helper-thread",
+        setup: "superyell two sessions with the requester's id",
+        passes: false,
+      },
+      {
+        state: "the requester is recorded under another root",
+        requester: "worker-thread",
+        setup: "superyell a subagent of another root",
+        passes: false,
+      },
+      {
+        state: "the requester's id only ends a recorded subagent's own id",
+        requester: "1",
+        setup: "superyell subagents whose ids end with the requester's",
+        passes: false,
+      },
+      {
+        state: "a thread that is not a review shares the superyelled root",
+        requester: undefined,
+        setup: "superyell root",
+        passes: false,
+      },
+    ] as const)("a Codex auto-review is out of OpenAPPA only while the session it reviews is: $state", async ({
+      requester,
+      setup,
+      passes,
+    }) => {
+      await ModelModel.upsert({
+        externalId: "openai/gpt-5.5",
+        provider: "openai",
+        modelId: "gpt-5.5",
+        inputModalities: null,
+        outputModalities: null,
+        lastSyncedAt: new Date(),
+      });
+      await app.register(openAiProxyRoutes);
+      const verdict = {
+        id: "msg_review",
+        type: "message",
+        role: "assistant",
+        status: "completed",
+        content: [
+          { type: "output_text", text: '{"outcome":"allow"}', annotations: [] },
+        ],
+      };
+      vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockReturnValue({
+        responses: {
+          create: async (params: unknown) => {
+            providerRequests.push(structuredClone(params));
+            return codexResponseStream("resp_review", [verdict]);
+          },
+        },
+      } as never);
+      const send = (
+        turn: Record<string, string>,
+        input: unknown[],
+        review: boolean,
+      ) =>
+        app.inject({
+          method: "POST",
+          url: `/v1/openai/${agent.id}/responses`,
+          remoteAddress: "127.0.0.1",
+          headers: {
+            ...internalCallHeader(),
+            authorization: "Bearer test-key",
+            "x-archestra-virtual-key": platformKey,
+            "content-type": "application/json",
+            "user-agent": "codex_cli_rs/0.164.0",
+            "x-archestra-user-id": userId,
+            "x-codex-turn-metadata": JSON.stringify(turn),
+            ...(review ? { "x-openai-subagent": "guardian" } : {}),
+          },
+          payload: {
+            model: "gpt-5.5",
+            stream: true,
+            input,
+            // An auto-review declares no tools and asks for a verdict.
+            ...(review
+              ? {
+                  tools: [],
+                  text: {
+                    format: {
+                      type: "json_schema",
+                      name: "codex_output_schema",
+                      strict: true,
+                      schema: {
+                        type: "object",
+                        properties: {},
+                        additionalProperties: false,
+                      },
+                    },
+                  },
+                }
+              : {}),
+          },
+        });
+      const scoped = (id: string) => `user:${userId}|${id}`;
+      const root = { session_id: "root-thread", thread_id: "root-thread" };
+
+      const superyell = (id: string, parent?: string) =>
+        superyellSession({
+          organization_id: agent.organizationId,
+          session_id: scoped(id),
+          ...(parent ? { parent_id: scoped(parent) } : {}),
+        });
+      const opened = [{ role: "user", content: "Go" }];
+      switch (setup) {
+        case "superyell root":
+          await superyell("root-thread");
+          break;
+        case "root starts while enforcement is off": {
+          await GuardrailsDeploymentModel.setEnabled(false);
+          const first = await send(root, opened, false);
+          expect(first.statusCode, first.body).toBe(200);
+          await GuardrailsDeploymentModel.setEnabled(true);
+          break;
+        }
+        case "superyell root, then the subagent runs": {
+          // The subagent's own request records it under the root it follows.
+          await superyell("root-thread");
+          const worker = await send(
+            {
+              session_id: "root-thread",
+              thread_id: "worker-thread",
+              parent_thread_id: "root-thread",
+            },
+            opened,
+            false,
+          );
+          expect(worker.statusCode, worker.body).toBe(200);
+          break;
+        }
+        case "superyell subagent":
+          await superyell("root-thread:worker-thread", "root-thread");
+          break;
+        case "governed subagent, then superyell root": {
+          // The runtime's own rows: the root, and the subagent it governs.
+          const rootId = scoped("root-thread");
+          for (const [id, parent] of [
+            [rootId, undefined],
+            [scoped("root-thread:worker-thread"), rootId],
+          ] as const)
+            await db.insert(database.schema.openappaSessionsTable).values({
+              actor: openappaActor(id),
+              root: openappaActor(rootId),
+              organizationId: agent.organizationId,
+              callerId: `user:${userId}`,
+              sessionId: id,
+              ...(parent ? { parentId: parent } : {}),
+              startDecision: { decision: "ack" },
+            });
+          await superyell("root-thread");
+          break;
+        }
+        case "superyell nested subagent":
+          await superyell(
+            "root-thread:worker-thread:helper-thread",
+            "root-thread:worker-thread",
+          );
+          break;
+        case "governed root": {
+          const first = await send(root, opened, false);
+          expect(first.statusCode, first.body).toBe(200);
+          break;
+        }
+        case "superyell another user's root":
+          await superyellSession({
+            organization_id: agent.organizationId,
+            session_id: `user:${crypto.randomUUID()}|root-thread`,
+          });
+          break;
+        case "superyell two sessions with the requester's id":
+          await superyell("root-thread:helper-thread", "root-thread");
+          await superyell(
+            "root-thread:worker-thread:helper-thread",
+            "root-thread:worker-thread",
+          );
+          break;
+        case "superyell a subagent of another root":
+          await superyell("other-root:worker-thread", "other-root");
+          break;
+        case "superyell subagents whose ids end with the requester's":
+          // `worker-1`, and `a:1`: an id can hold a colon, so its parent
+          // decides where it starts.
+          await superyell("root-thread:worker-1", "root-thread");
+          await superyell("root-thread:a:1", "root-thread");
+          break;
+      }
+      providerRequests.length = 0;
+
+      // The item shape of the reported Codex 0.164 session.
+      const mail = {
+        type: "agent_message",
+        author: "/root/final_review",
+        recipient: "/root",
+        content: [
+          {
+            type: "input_text",
+            text: "Message Type: MESSAGE\nTask name: /root\nSender: /root/final_review\nPayload:\n",
+          },
+          {
+            type: "encrypted_content",
+            encrypted_content: "gAAAA_opaque_message",
+          },
+        ],
+      };
+      const history = [
+        {
+          role: "user",
+          content:
+            "The following is the Codex agent history added since your last approval assessment.",
+        },
+        mail,
+        { role: "user", content: "[412] tool exec_command call: {}" },
+      ];
+      const turn = await send(
+        requester
+          ? {
+              session_id: "root-thread",
+              thread_id: "review-thread",
+              parent_thread_id: requester,
+              request_kind: "turn",
+              turn_trigger: "guardian_review",
+              thread_source: "guardian_review",
+              subagent_kind: "guardian",
+            }
+          : { session_id: "root-thread", thread_id: "other-thread" },
+        history,
+        requester !== undefined,
+      );
+
+      if (!passes) {
+        expect(turn.statusCode, turn.body).toBe(409);
+        expect(turn.json().error.message).toBe(
+          "OpenAPPA withheld an unsupported Codex mailbox message",
+        );
+        expect(providerRequests).toHaveLength(0);
+        return;
+      }
+      expect(turn.statusCode, turn.body).toBe(200);
+      expect(providerRequests).toHaveLength(1);
+      expect(providerRequests[0]).toMatchObject({
+        input: expect.arrayContaining([mail]),
       });
     });
 

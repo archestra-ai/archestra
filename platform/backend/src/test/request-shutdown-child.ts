@@ -176,7 +176,7 @@ const context = {
   mcpGatewayTaskReaper: noopService,
   instanceAnalyticsService: noopService,
   rumExporter: asyncService,
-  activeUsersMetricCollector: noopService,
+  metrics: { activeUsers: { activeUsersMetricCollector: noopService } },
   cleanupEmailProvider: shutdown,
   chatOpsManager: {
     beginShutdown: async () => {

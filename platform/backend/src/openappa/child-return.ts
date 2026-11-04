@@ -844,6 +844,10 @@ function collectCodexMailboxMessage(
   const text =
     first?.type === "input_text" ? stringField(first.text) : undefined;
   const kind = text?.match(/^Message Type: ([A-Z_]+)\r?\n/)?.[1];
+  // A message between agents is not a return. In a governed session the
+  // proxy admits it against the runtime's record of its sender's send, and
+  // hides it when there is none; elsewhere it is not read.
+  if (kind === "MESSAGE") return;
   if (
     !text ||
     !isBoundedNativeMetadata(author) ||

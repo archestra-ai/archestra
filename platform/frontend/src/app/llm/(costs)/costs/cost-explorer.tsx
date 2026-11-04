@@ -145,7 +145,7 @@ export default function CostExplorer() {
     q.group === "app" && ["billed", "requests", "tokens"].includes(q.metric)
       ? "Inference attributed to app sessions. This does not mean every app itself runs a model."
       : q.group === "key" && !q.model
-        ? "Key names and recorded IDs are shown in full. Calls without an individual key ID cannot be distinguished further."
+        ? "Credential names and recorded IDs are shown in full. Calls without an individual credential ID cannot be distinguished further."
         : null;
 
   const headline = useMemo(() => {

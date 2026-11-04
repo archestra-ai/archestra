@@ -1649,7 +1649,9 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `agent_id` | `string` | Yes | The agent to do the work. |
+| `agent_id` | `string` | No | The agent to do the work. Omit when calling through an MCP gateway to select an assigned runtime subagent using the gateway's load-balancing policy. |
+| `exclude_agent_ids` | `string[]` | No | Runtime subagents that already failed on a previous attempt for this request, to skip when selecting a fallback on an MCP gateway. |
+| `credential_grant_ids` | `string[]` | No | One-time credential_grant_id handles minted by transfer_credential({ ephemeral: true }). Consumed at launch and bound only to the winning runtime pod. |
 | `message` | `string` | Yes | What the agent should do, including handoff context and acceptance criteria. |
 | `attachments` | `object[]` | No | Input files staged before the first turn. For repository work, include a patch for uncommitted changes and identify the base commit in message. Never include credentials. |
 | `attachments[].name` | `string` | Yes |  |
@@ -1836,12 +1838,14 @@ Required RBAC permission: [`credential:create`](/docs/reference/permissions#cred
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `agent_id` | `string` | Yes | The Agent to give the credential to. |
+| `agent_id` | `string` | No | The Agent to give the credential to. Omit when calling through an MCP gateway to transfer the credential to all runtime subagents assigned to the gateway. |
 | `environment` | `object[]` | Yes | Exactly one credential to transfer. Never include more than the task needs. |
 | `environment[].key` | `string` | Yes | Environment variable name, e.g. AWS_SECRET_ACCESS_KEY. |
 | `environment[].type` | `"secret"` | Yes | Always 'secret'. Marks the value for redaction in logs. |
 | `environment[].value` | `string` | No | The credential value to transfer. OMIT IT to declare the credential without a value and get back a link the person opens to paste it themselves — the value then never enters your context. Send a value only when the person asked you to move one you already hold. |
 | `label` | `string` | No | Human-readable name shown in the Agent's credential list. Defaults to the key. |
+| `ephemeral` | `boolean` | No | When true, mints a short-lived one-time credential_grant_id handle instead of persisting the secret in the database or mutating subagent declarations. Pass the returned credential_grant_id to start_agent_run so the secret is bound only to the single winning subagent pod. |
+| `ttl_seconds` | `integer` | No | Optional TTL in seconds (30–3600, default 300) for an ephemeral credential grant. Implies ephemeral: true. |
 
 ##### Output
 
@@ -1852,6 +1856,10 @@ Required RBAC permission: [`credential:create`](/docs/reference/permissions#cred
 | `declarationCreated` | `boolean` | Yes | Whether this call declared the credential on the Agent. |
 | `valueStored` | `boolean` | Yes | Whether a value is now stored. False means the credential is declared and still empty. |
 | `url` | `string \| null` | Yes | Where the person pastes the value. Null when this call already stored one. |
+| `urls` | `string[]` | No | All per-subagent setup links when declaring a credential across multiple subagents. |
+| `ephemeral` | `boolean` | No | True when the credential was minted as a short-lived one-time grant instead of stored in the database. |
+| `credential_grant_id` | `string \| null` | No | One-time credential grant handle to pass to start_agent_run when ephemeral is true. |
+| `expires_in_seconds` | `integer` | No | Seconds until the ephemeral credential grant expires. |
 | `availability` | `string` | Yes | When a run can read the value, in plain words. |
 | `next_step` | `string` | No | What to do with `url`: hand it over in the reply text, never inside a question form. Only set while a value is still missing. |
 

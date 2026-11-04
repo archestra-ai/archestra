@@ -75,6 +75,12 @@ export type AgentRunLaunchSpec = {
   effectiveNetworkPolicy: EffectiveNetworkPolicy;
   /** Number of durable input files the backend must stage before entrypoint. */
   inputFileCount: number;
+  /**
+   * True when the supervisor is retrying or failing over after a prior attempt
+   * for the same task, so the backend must wait for the prior Sandbox deletion
+   * rather than adopting it.
+   */
+  replacePriorAttempt?: boolean;
 };
 
 /**

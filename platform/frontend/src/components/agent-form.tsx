@@ -24,6 +24,7 @@ import {
   providerSupportsChat,
   resolveAgentCatalogId,
   SUBSCRIPTION_CREDENTIALS,
+  type SubagentLoadBalancingConfig,
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
@@ -123,6 +124,7 @@ import {
   SettingsSectionGroup,
 } from "@/components/settings-section";
 import { SkillAccessModeEditor } from "@/components/skill-access-mode-editor";
+import { SubagentLoadBalancingSection } from "@/components/subagent-load-balancing-section";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -1354,6 +1356,8 @@ export function AgentForm({
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
   const [githubActionsAccess, setGithubActionsAccess] =
     useState<GitHubActionsAccess | null>(null);
+  const [subagentLoadBalancing, setSubagentLoadBalancing] =
+    useState<SubagentLoadBalancingConfig | null>(null);
   const [runtime, setAgentRuntime] = useState<AgentRuntimeConfig | null>(null);
   const originalRuntimeId =
     initialRuntimeId ??
@@ -1720,6 +1724,9 @@ export function AgentForm({
             initialGrants: [],
             passthroughHeaders: agentData.passthroughHeaders ?? [],
             githubActionsAccess: agentData.githubActionsAccess ?? null,
+            subagentLoadBalancing:
+              (agentData.subagentLoadBalancing as SubagentLoadBalancingConfig | null) ??
+              null,
             runtime: (agentData.runtime as AgentRuntimeConfig | null) ?? null,
             toolExposureMode: agentData.toolExposureMode ?? "full",
             missingCredentialBehavior:
@@ -1753,6 +1760,7 @@ export function AgentForm({
             initialGrants: [],
             passthroughHeaders: [],
             githubActionsAccess: null,
+            subagentLoadBalancing: null,
             runtime: initialValues?.runtime ?? null,
             // New agents default to "Auto" (implicit access to all tools);
             // admins can switch to "Custom" (explicitly assigned tools).
@@ -1783,6 +1791,7 @@ export function AgentForm({
       setInitialGrants(nextValues.initialGrants);
       setPassthroughHeaders(nextValues.passthroughHeaders);
       setGithubActionsAccess(nextValues.githubActionsAccess);
+      setSubagentLoadBalancing(nextValues.subagentLoadBalancing);
       setAgentRuntime(nextValues.runtime);
       setToolExposureMode(nextValues.toolExposureMode);
       setMissingCredentialBehavior(nextValues.missingCredentialBehavior);
@@ -2185,6 +2194,12 @@ export function AgentForm({
       persistedAgent.githubActionsAccess ?? null,
       githubActionsAccess,
     );
+  const subagentLoadBalancingChanged =
+    !!persistedAgent &&
+    hasUnsavedChanges(
+      persistedAgent.subagentLoadBalancing ?? null,
+      subagentLoadBalancing,
+    );
   // The API validates the key and the model against each other, so whichever
   // one moved, both go.
   const llmSelectionChanged =
@@ -2399,6 +2414,10 @@ export function AgentForm({
               missingCredentialBehavior,
               accessAllTools,
               ...(supportsSubagents && { accessAllSubagents }),
+              ...(supportsSubagents &&
+                subagentLoadBalancingChanged && {
+                  subagentLoadBalancing,
+                }),
             }),
           },
         });
@@ -2449,7 +2468,10 @@ export function AgentForm({
           toolExposureMode,
           missingCredentialBehavior,
           accessAllTools,
-          ...(supportsSubagents && { accessAllSubagents }),
+          ...(supportsSubagents && {
+            accessAllSubagents,
+            ...(subagentLoadBalancing && { subagentLoadBalancing }),
+          }),
           labels: updatedLabels,
           ...(agentType === "mcp_gateway" && {
             passthroughHeaders:
@@ -2724,6 +2746,8 @@ export function AgentForm({
     showGitHubActionsAccess,
     githubActionsAccess,
     githubActionsAccessChanged,
+    subagentLoadBalancing,
+    subagentLoadBalancingChanged,
     networkPolicy,
     networkPolicyChanged,
     toolExposureMode,
@@ -2839,6 +2863,7 @@ export function AgentForm({
     initialGrants,
     passthroughHeaders,
     githubActionsAccess,
+    subagentLoadBalancing,
     toolExposureMode,
     missingCredentialBehavior,
     accessAllTools,
@@ -3831,6 +3856,17 @@ export function AgentForm({
                             : "No delegation tools appear in this gateway's tool list."
                         }
                       />
+                      {supportsSubagents && (
+                        <SubagentLoadBalancingSection
+                          value={subagentLoadBalancing}
+                          onChange={setSubagentLoadBalancing}
+                          selectedAgentIds={selectedDelegationTargetIds}
+                          canReadAgents={canReadAgents === true}
+                          readOnly={readOnly}
+                          isGateway={agentType === "mcp_gateway"}
+                          isAllSubagentsMode={accessAllSubagents}
+                        />
+                      )}
                       <OutboundAgentsEditor
                         agentId={agent?.id}
                         readOnly={readOnly}
@@ -4466,6 +4502,7 @@ type AgentFormFields = {
   scope: AgentScope;
   passthroughHeaders: string[];
   githubActionsAccess: GitHubActionsAccess | null;
+  subagentLoadBalancing: SubagentLoadBalancingConfig | null;
   runtime: AgentRuntimeConfig | null;
   toolExposureMode: ToolExposureMode;
   missingCredentialBehavior: MissingCredentialBehavior;

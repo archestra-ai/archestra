@@ -140,6 +140,8 @@ export async function buildAgentRunLaunchSpec(params: {
     OpenAppaSession,
     "session_id" | "caller_id" | "parent_id"
   >;
+  /** Ephemeral per-run credentials redeemed from a one-time `transfer_credential` grant. */
+  ephemeralCredentials?: Record<string, string>;
 }): Promise<{
   spec: AgentRunLaunchSpec;
   virtualApiKeyId: string | null;
@@ -172,6 +174,7 @@ export async function buildAgentRunLaunchSpec(params: {
       params.actor.kind === "serviceAccount"
         ? serviceAccountUserId(params.actor.id)
         : actorUserId,
+    ephemeralCredentials: params.ephemeralCredentials,
   });
   if (credentials.misconfigured.length > 0) {
     throw new ApiError(

@@ -623,6 +623,11 @@ where
         .await
         .map_err(|refusal| match refusal {
             deployments::DeploymentError::Superseded => policy_moved(),
+            deployments::DeploymentError::Diverged => Fault::binding(
+                BindingFailure::InvalidInput,
+                "OpenAPPA was handed two policy documents under one composition; the organization's deployment is unchanged",
+            )
+            .into(),
             deployments::DeploymentError::Failed(fault) => fault.into(),
         })?;
     match work(state.pinned(&deployment)).await {

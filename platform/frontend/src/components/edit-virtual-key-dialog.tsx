@@ -358,9 +358,6 @@ export function EditVirtualKeyDialog({
             <ModelPoolsField
               value={modelPoolIds ?? grantedPoolIds}
               onChange={setModelPoolIds}
-              mappings={providerApiKeyIds}
-              includeFutureProviders={includeFutureProviders}
-              providerApiKeys={providerApiKeys}
             />
           )}
         </div>

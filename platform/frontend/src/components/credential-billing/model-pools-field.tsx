@@ -6,15 +6,11 @@ import Link from "next/link";
 import { useId, useState } from "react";
 import { PoolProviderIcons } from "@/app/llm/model-pools/_parts/pool-providers";
 import {
-  poolAccess,
   poolAnswers,
   poolServes,
-  resolvedProviderKeyIds,
 } from "@/components/credential-billing/model-pool-access";
 import { ExternalDocsLink } from "@/components/external-docs-link";
-import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import { ProviderIcon } from "@/components/provider-icon";
-import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,41 +40,24 @@ export function useCanSetModelPools(): boolean {
 }
 
 /**
- * The pools a credential can call: those added by name, and those its provider
- * keys already include. Each says what it serves and, opened, which providers
- * serve it. A pool answers with its own members' keys, so any pool can be
- * added whatever providers the credential maps.
+ * The pools added to a credential by name, each removable, and a picker for
+ * the rest. Each says what it serves and, opened, which providers serve it.
+ * A pool answers with its own members' keys, so any pool can be added
+ * whatever providers the credential maps.
  */
 export function ModelPoolsField({
   value,
   onChange,
-  mappings,
-  includeFutureProviders,
-  providerApiKeys,
 }: {
   /** Pools added by name. */
   value: string[];
   onChange: (value: string[]) => void;
-  /** The credential's provider keys, as picked in the same form. */
-  mappings: ProviderApiKeyMappings;
-  includeFutureProviders: boolean;
-  /** Every provider key the form offers, to find the primary keys. */
-  providerApiKeys: LlmProviderApiKeyResponse[];
 }) {
   const id = useId();
   const { data: pools = [] } = useModelPools();
-  const keyIds = resolvedProviderKeyIds({
-    mappings,
-    includeFutureProviders,
-    providerApiKeys,
-  });
-  const listed = pools.flatMap((pool) => {
-    const access = poolAccess(pool, keyIds, value.includes(pool.id));
-    return access.kind === "none" ? [] : [{ pool, access }];
-  });
-  const addable = pools.filter(
-    (pool) => !listed.some((entry) => entry.pool.id === pool.id),
-  );
+  // A deleted pool can stay in `value` on an OAuth client until it is saved.
+  const listed = pools.filter((pool) => value.includes(pool.id));
+  const addable = pools.filter((pool) => !value.includes(pool.id));
 
   return (
     <div className="space-y-2">
@@ -101,14 +80,12 @@ export function ModelPoolsField({
       </p>
       {listed.length > 0 && (
         <div className="divide-y rounded-md border">
-          {listed.map(({ pool, access }) => (
+          {listed.map((pool) => (
             <PoolRow
               key={pool.id}
               pool={pool}
-              onRemove={
-                access.kind === "added"
-                  ? () => onChange(value.filter((poolId) => poolId !== pool.id))
-                  : undefined
+              onRemove={() =>
+                onChange(value.filter((poolId) => poolId !== pool.id))
               }
             />
           ))}
@@ -169,8 +146,7 @@ function PoolRow({
   onRemove,
 }: {
   pool: ModelPool;
-  /** Unset for a pool the credential's provider keys include. */
-  onRemove?: () => void;
+  onRemove: () => void;
 }) {
   const catalog = useModelProviderCatalog();
   const [open, setOpen] = useState(false);
@@ -193,17 +169,15 @@ function PoolRow({
             <PoolSummary pool={pool} />
           </UnstyledButton>
         </CollapsibleTrigger>
-        {onRemove && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            aria-label={`Remove ${pool.name}`}
-            onClick={onRemove}
-          >
-            <X />
-          </Button>
-        )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          aria-label={`Remove ${pool.name}`}
+          onClick={onRemove}
+        >
+          <X />
+        </Button>
       </div>
       <CollapsibleContent>
         <div className="mx-2 mb-2 rounded-md bg-muted/50 p-2 text-xs">

@@ -433,9 +433,6 @@ function OAuthClientProviderAccessFields({
           onChange={(value) =>
             form.setValue("modelPoolIds", value, { shouldDirty: true })
           }
-          mappings={values.providerApiKeys ?? []}
-          includeFutureProviders={includeFutureProviders}
-          providerApiKeys={providerApiKeys as LlmProviderApiKeyResponse[]}
         />
       )}
     </>

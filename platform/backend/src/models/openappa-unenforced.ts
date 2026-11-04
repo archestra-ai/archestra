@@ -39,7 +39,6 @@ class OpenAppaUnenforcedModel {
     else await insert.onConflictDoNothing();
   }
 
-  /** The sessions among `sessionIds` that OpenAPPA leaves alone. */
   /**
    * The recorded children of a root, at any depth, whose own client-native
    * id is `nativeId`.
@@ -73,6 +72,7 @@ class OpenAppaUnenforcedModel {
       .limit(2);
   }
 
+  /** The sessions among `sessionIds` that OpenAPPA leaves alone. */
   static async findSessions(params: {
     organizationId: string;
     sessionIds: readonly string[];

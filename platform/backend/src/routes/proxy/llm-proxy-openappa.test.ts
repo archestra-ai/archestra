@@ -11452,6 +11452,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         passes: true,
       },
       {
+        state: "the root of a governed subagent requester was superyelled",
+        requester: "worker-thread",
+        setup: "governed subagent, then superyell root",
+        passes: true,
+      },
+      {
         state: "a nested subagent requester was superyelled",
         requester: "helper-thread",
         setup: "superyell nested subagent",
@@ -11606,6 +11612,25 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         case "superyell subagent":
           await superyell("root-thread:worker-thread", "root-thread");
           break;
+        case "governed subagent, then superyell root": {
+          // The runtime's own rows: the root, and the subagent it governs.
+          const rootId = scoped("root-thread");
+          for (const [id, parent] of [
+            [rootId, undefined],
+            [scoped("root-thread:worker-thread"), rootId],
+          ] as const)
+            await db.insert(database.schema.openappaSessionsTable).values({
+              actor: openappaActor(id),
+              root: openappaActor(rootId),
+              organizationId: agent.organizationId,
+              callerId: `user:${userId}`,
+              sessionId: id,
+              ...(parent ? { parentId: parent } : {}),
+              startDecision: { decision: "ack" },
+            });
+          await superyell("root-thread");
+          break;
+        }
         case "superyell nested subagent":
           await superyell(
             "root-thread:worker-thread:helper-thread",

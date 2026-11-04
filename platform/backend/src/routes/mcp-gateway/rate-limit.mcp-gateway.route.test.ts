@@ -289,7 +289,7 @@ describe("MCP Gateway authentication rate limiting", () => {
     expect((await app.inject(request)).statusCode).toBe(401);
   });
 
-  test("limits one verified credential while other clients share the process and IP", async ({
+  test("queues one verified credential's burst while other clients share the process and IP", async ({
     makeOrganization,
     makeAgent,
     makeServiceAccountToken,
@@ -362,20 +362,26 @@ describe("MCP Gateway authentication rate limiting", () => {
           }),
         ),
       );
-      for (const instance of [app, replica]) {
-        for (const gateway of gateways) {
-          const busy = await instance.inject(
-            request(gateway.id, busyCaller.value),
-          );
-          expect(busy.statusCode).toBe(503);
-          expect(busy.headers["retry-after"]).toBe("1");
-          expect(busy.headers["www-authenticate"]).toBeUndefined();
+      // With its slots and the spare capacity full, the shared credential
+      // waits for a slot instead of failing. Other clients are not delayed.
+      let answered = 0;
+      const queued = [app, replica].flatMap((instance) =>
+        gateways.map((gateway) =>
+          instance.inject(request(gateway.id, busyCaller.value)).finally(() => {
+            answered += 1;
+          }),
+        ),
+      );
+      for (const instance of [app, replica])
+        for (const gateway of gateways)
           expect(
             (await instance.inject(request(gateway.id, otherCaller.value)))
               .statusCode,
           ).toBe(405);
-        }
-      }
+      expect(answered).toBe(0);
+      release();
+      for (const response of await Promise.all(queued))
+        expect(response.statusCode).toBe(405);
       config.authRateLimitDisabled = true;
       expect(
         (await app.inject(request(gateways[0].id, busyCaller.value)))

@@ -18,6 +18,7 @@ import OrganizationModel from "@/models/organization";
 import { rewriteConnectionProxySetupUrl } from "@/services/connection-proxy-setup-context";
 import type { ApiError } from "@/types";
 import { incomingRequestAbortTracker } from "@/utils/incoming-request-abort";
+import { registerLlmProxyDenialLog } from "./observability/llm-proxy-denial";
 import { handleServerError } from "./server/error-handler";
 import { registerLlmProxyDrain } from "./server/llm-proxy-drain";
 import { parseLoadedSourceMaps } from "./server/source-maps";
@@ -121,6 +122,7 @@ export const createFastifyInstance = () => {
     })
     .setErrorHandler<ApiError | Error>(handleServerError);
 
+  registerLlmProxyDenialLog(fastify);
   registerLlmProxyDrain(fastify, config.shutdown.drainSeconds * 1000);
   return fastify;
 };

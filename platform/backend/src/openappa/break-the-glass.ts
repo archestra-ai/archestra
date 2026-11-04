@@ -27,7 +27,7 @@ import {
 export type WaiverKind = Exclude<OpenAppaYellKind, "agent">;
 
 /** How a review the platform answered went; see `recordWaivedReview`. */
-export type WaivedReviewRecord =
+type WaivedReviewRecord =
   | "recorded"
   | "reports_off"
   | "refused"

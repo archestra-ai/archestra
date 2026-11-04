@@ -27,6 +27,7 @@ import {
   AgentRunInputModel,
   AgentRunModel,
   AgentWorkspaceModel,
+  OAuthAccessTokenModel,
   OrganizationModel,
   VirtualApiKeyModel,
 } from "@/models";
@@ -50,6 +51,7 @@ import {
   AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
   AGENT_RUNTIME_CREDENTIALS_SECRET_KEY,
   AGENT_RUNTIME_INPUTS_READY_FILE,
+  agentRunGatewayTokenId,
 } from "@/services/agent-runtime/runtime-contract";
 import { resolveCredential } from "@/services/credentials";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
@@ -1922,6 +1924,10 @@ class AgentRuntimeManager {
         organizationId: session.organizationId,
         tokenId: session.gatewayTokenId,
       });
+    } else if (session.actorKind === "user") {
+      await OAuthAccessTokenModel.deleteById(
+        agentRunGatewayTokenId(session.id),
+      );
     }
     if (!session.virtualApiKeyId) return;
     try {

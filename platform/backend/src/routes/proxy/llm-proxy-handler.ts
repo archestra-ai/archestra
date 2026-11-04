@@ -3318,7 +3318,7 @@ async function handleStreaming<
           //
           // Whatever an adapter does put in `sseData` is forwarded verbatim,
           // so an adapter that emits a chunk carrying both text and a tool call
-          // defeats this (gemini.ts, minimax.ts, and openai.ts's `delta.content`
+          // defeats this (minimax.ts and openai.ts's `delta.content`
           // branch still do; zhipuai.ts guards it), as does one whose terminal
           // frame echoes the turn's calls (the Responses adapters).
           if (result.sseData) {

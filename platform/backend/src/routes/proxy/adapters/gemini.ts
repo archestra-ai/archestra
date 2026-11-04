@@ -784,9 +784,29 @@ class GeminiStreamAdapter
       }
     }
 
-    // One chunk can contain several parallel calls. Buffer the whole chunk
-    // once so releasing it does not execute every call multiple times.
-    if (isToolCallChunk) this.state.rawToolCallEvents.push(chunk);
+    if (isToolCallChunk) {
+      sseData = null;
+      const parts = candidate.content?.parts ?? [];
+      const withParts = (parts: Part[]) =>
+        ({
+          ...chunk,
+          candidates: [
+            { ...candidate, content: { ...candidate.content, parts } },
+          ],
+        }) as GeminiStreamChunk;
+      // Hold the calls once per chunk until policy allows them. Mixed chunks
+      // can stream their other parts now without leaking or replaying calls.
+      const heldChunk = withParts(parts.filter((part) => part.functionCall));
+      heldChunk.candidates?.push(...(chunk.candidates?.slice(1) ?? []));
+      this.state.rawToolCallEvents.push(heldChunk);
+      const visibleParts = parts.filter((part) => !part.functionCall);
+      if (visibleParts.length > 0) {
+        const visibleChunk = withParts(visibleParts);
+        const visibleCandidate = visibleChunk.candidates?.[0];
+        if (visibleCandidate) visibleCandidate.finishReason = undefined;
+        sseData = `data: ${JSON.stringify(sdkResponseToRestResponse(visibleChunk, this.model))}\n\n`;
+      }
+    }
 
     // Check finish reason
     if (

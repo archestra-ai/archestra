@@ -1049,65 +1049,79 @@ poolTest(
 
 for (const vertex of [false, true]) {
   for (const usePool of [false, true]) {
-    poolTest(
-      `native Gemini delivers each parallel tool call once (vertex=${vertex}, pool=${usePool})`,
-      async ({ pool }) => {
-        if (vertex) await configureTestVertexKey(pool.keyId, true);
-        const credential = await VirtualApiKeyModel.create({
-          organizationId: pool.organizationId,
-          name: "Native Gemini parallel calls",
-          ...accessGrants("org"),
-          providerApiKeys: [
-            { provider: "gemini", providerApiKeyId: pool.keyId },
-          ],
-        });
-        const parts = [
-          {
-            functionCall: {
-              name: "query_knowledge_sources",
-              args: { query: "status" },
-            },
-            thoughtSignature: "synthetic-parallel-signature",
-          },
-          {
-            functionCall: {
-              name: "query_knowledge_sources",
-              args: { query: "diagram" },
-            },
-          },
-        ];
-        const endpoint = vertex
-          ? "https://aiplatform.googleapis.com/v1beta1/projects/pool-test-project/locations/global/publishers/google/models/:model"
-          : `${origin}/v1beta/models/:model`;
-        server.use(http.post(endpoint, () => sse([answer(parts)])));
-        const response = await pool.app.inject({
-          method: "POST",
-          url: `/v1/gemini/${pool.agentId}/v1beta/models/gemini-3.1-flash-lite:streamGenerateContent`,
-          headers: {
-            "x-goog-api-key": credential.value,
-            ...internalCallHeader(),
-            ...(usePool ? { [MODEL_POOL_ID_HEADER]: pool.poolId } : {}),
-          },
-          payload: {
-            contents: [
-              {
-                role: "user",
-                parts: [{ text: "Look up status and diagram." }],
-              },
+    for (const mixed of [false, true]) {
+      poolTest(
+        `native Gemini delivers each parallel tool call once (vertex=${vertex}, pool=${usePool}, mixed=${mixed})`,
+        async ({ pool }) => {
+          if (vertex) await configureTestVertexKey(pool.keyId, true);
+          const credential = await VirtualApiKeyModel.create({
+            organizationId: pool.organizationId,
+            name: "Native Gemini parallel calls",
+            ...accessGrants("org"),
+            providerApiKeys: [
+              { provider: "gemini", providerApiKeyId: pool.keyId },
             ],
-          },
-        });
-        expect(response.statusCode, response.body).toBe(200);
-        const streamedParts = response.body
-          .split("\n")
-          .filter((line) => line.startsWith("data: {"))
-          .flatMap(
-            (line) =>
-              JSON.parse(line.slice(6)).candidates?.[0]?.content?.parts ?? [],
-          );
-        expect(streamedParts).toEqual(parts);
-      },
-    );
+          });
+          const parts = [
+            ...(mixed
+              ? [
+                  {
+                    text: "Checking the synthetic records.",
+                    thought: true,
+                    thoughtSignature: "synthetic-text-signature",
+                  },
+                  {
+                    inlineData: { mimeType: "image/png", data: "c3ludGhldGlj" },
+                  },
+                ]
+              : []),
+            {
+              functionCall: {
+                name: "query_knowledge_sources",
+                args: { query: "status" },
+              },
+              thoughtSignature: "synthetic-parallel-signature",
+            },
+            {
+              functionCall: {
+                name: "query_knowledge_sources",
+                args: { query: "diagram" },
+              },
+            },
+          ];
+          const endpoint = vertex
+            ? "https://aiplatform.googleapis.com/v1beta1/projects/pool-test-project/locations/global/publishers/google/models/:model"
+            : `${origin}/v1beta/models/:model`;
+          server.use(http.post(endpoint, () => sse([answer(parts)])));
+          const response = await pool.app.inject({
+            method: "POST",
+            url: `/v1/gemini/${pool.agentId}/v1beta/models/gemini-3.1-flash-lite:streamGenerateContent`,
+            headers: {
+              "x-goog-api-key": credential.value,
+              ...internalCallHeader(),
+              ...(usePool ? { [MODEL_POOL_ID_HEADER]: pool.poolId } : {}),
+            },
+            payload: {
+              contents: [
+                {
+                  role: "user",
+                  parts: [{ text: "Look up status and diagram." }],
+                },
+              ],
+            },
+          });
+          expect(response.statusCode, response.body).toBe(200);
+          const streamedParts = response.body
+            .split("\n")
+            .filter((line) => line.startsWith("data: {"))
+            .flatMap(
+              (line) =>
+                JSON.parse(line.slice(6)).candidates?.[0]?.content?.parts ?? [],
+            );
+          expect(streamedParts).toEqual(parts);
+        },
+      );
+    }
   }
   for (const failureStatus of [400, 429, 503]) {
     for (const stream of [false, true]) {

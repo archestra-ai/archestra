@@ -856,6 +856,40 @@ describe("GeminiStreamAdapter", () => {
   // the fact. The withheld function call stays withheld: it never reached the
   // client, and recording it would leave a turn owing a response nothing sends.
   describe("policy refusal", () => {
+    test("holds calls from mixed chunks while preserving visible content on refusal", () => {
+      const adapter = geminiAdapterFactory.createStreamAdapter();
+      const visibleParts = [
+        { text: "Checking the record.", thoughtSignature: "text-signature" },
+        { inlineData: { mimeType: "image/png", data: "c3ludGhldGlj" } },
+      ];
+      const calls = [
+        {
+          functionCall: { name: "lookup", args: {} },
+          thoughtSignature: "call-signature",
+        },
+        { functionCall: { name: "lookup_more", args: {} } },
+      ];
+      const result = adapter.processChunk(
+        createMockResponse([...visibleParts, ...calls]) as GeminiStreamChunk,
+      );
+      const immediate = JSON.parse(String(result.sseData).slice(6));
+      expect(immediate.candidates[0].content.parts).toEqual(visibleParts);
+      expect(immediate.candidates[0].finishReason).toBeUndefined();
+      expect(result.isToolCallChunk).toBe(true);
+      const held = adapter.getRawToolCallEvents();
+      expect(held).toHaveLength(1);
+      expect(
+        JSON.parse(String(held[0]).slice(6)).candidates[0].content.parts,
+      ).toEqual(calls);
+
+      // A policy refusal emits its replacement rather than the held events.
+      const refusal = adapter.formatCompleteTextSSE("blocked message");
+      const delivered = `${result.sseData}${refusal.join("")}`;
+      expect(delivered).not.toContain("functionCall");
+      expect(
+        adapter.toProviderResponse().candidates?.[0]?.content?.parts,
+      ).toEqual([...visibleParts, { text: "blocked message" }]);
+    });
     test("toProviderResponse keeps streamed text, drops the withheld call, appends the refusal", () => {
       const adapter = geminiAdapterFactory.createStreamAdapter();
       adapter.processChunk({

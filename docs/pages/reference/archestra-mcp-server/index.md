@@ -2,6 +2,7 @@
 title: "Archestra MCP Server"
 description: "Every built-in tool an agent uses to manage Archestra, with its inputs and required permission"
 order: 4
+explore: false
 lastUpdated: 2026-11-04
 ---
 <!--
@@ -10,51 +11,66 @@ Do not edit manually.
 Renaming/deleting this page? Add a redirect in docs/redirects.json.
 -->
 
-Let an agent run Archestra for you: ask it to create an agent, install an MCP server, or build an app, and it calls these tools. The Archestra MCP Server is built into every deployment and acts as the person using the agent, with their permissions. Every tool name starts with `archestra__`. This page lists tools by their short name.
+Ask an agent to create another agent, install an MCP server, or build an app through Archestra's built-in MCP tools. Tool calls use the access of the account authenticated to Archestra. Tool names start with `archestra__`; the reference uses their short names.
 
 <span id="access"></span>
 
 ## Give an Agent These Tools
 
-Pick these tools like any other MCP server's tools, on an agent's **Tools, Skills & Knowledge** tab or a gateway's **Tools & Knowledge** settings:
+Choose the Archestra tools on an agent's **Tools, Skills & Knowledge** tab or a gateway's **Tools & Knowledge** settings.
 
 - **Manual:** assign the tools you want.
-- **All:** the agent gets every tool the person can use, but built-in tools start out excluded. Remove a tool from the exclusions to allow it.
-
-New agents include [`todo_write`](/docs/reference/archestra-mcp-server/getting-started#todo_write) and [`query_knowledge_sources`](/docs/reference/archestra-mcp-server/knowledge-and-mcp#query_knowledge_sources). Turning on a feature adds its own default tools. [`query_knowledge_sources`](/docs/reference/archestra-mcp-server/knowledge-and-mcp#query_knowledge_sources) appears only when the agent or gateway has a [knowledge base or connector](/docs/knowledge) attached.
+- **All:** allow the built-in tools you need by removing them from the exclusions.
 
 ## Permissions
 
-Each tool needs the permission in the last column of its table. A person sees only the tools their permissions allow: without [`knowledgeSource:create`](/docs/reference/permissions#knowledgeSource:create), for example, [`create_knowledge_base`](/docs/reference/archestra-mcp-server/knowledge-and-mcp#create_knowledge_base) is hidden. A tool marked † has an extra condition, described in its entry. [Guardrails](/docs/agents/guardrails) policies apply on top of these permissions.
+Assigning a tool does not grant access to the resources it manages. Each tool entry lists the RBAC permission and any additional access requirements checked for the authenticated account.
+
+- **RBAC permission:** links to the [Permissions reference](/docs/reference/permissions). `None` means no additional RBAC permission; the tool still enforces its own access checks.
+- **Granted per item:** requires access to the specific agent, app, or other resource. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
+- **Additional requirements:** notes in the tool entry cover restrictions such as ownership or an acting user. [Guardrails](/docs/agents/guardrails) policies also apply to tool calls.
 
 
 ## Tools Reference
 
-Browse a topic, or follow a tool name directly to its inputs, output, and access requirements.
+Find tool inputs, output fields, and access requirements by topic.
+
+:::cards
+- [Identity, Chat, and Tool Discovery](/docs/reference/archestra-mcp-server/getting-started): Identify the current agent, manage conversation todos, and discover available tools.
+- [Skills, Files, and Sandbox](/docs/reference/archestra-mcp-server/skills-and-files): Load and edit skills, work with files, and run commands in the sandbox.
+- [Apps and Projects](/docs/reference/archestra-mcp-server/apps-and-projects): Build and publish apps, manage projects, and configure scheduled work.
+- [Agents and Runtime](/docs/reference/archestra-mcp-server/agents): Create and configure agents, start runs, and manage their workspaces.
+- [Knowledge and MCP](/docs/reference/archestra-mcp-server/knowledge-and-mcp): Manage knowledge sources, MCP servers, gateways, and tool assignments.
+- [Guardrails](/docs/reference/archestra-mcp-server/guardrails): Inspect policy decisions, request reviews, and resolve blocked actions.
+- [Organization](/docs/reference/archestra-mcp-server/organization): Manage limits, teams, and plugins.
+:::
+
+<details>
+<summary>Find a tool by name</summary>
 
 <span id="identity"></span>
 
-### [Identity](/docs/reference/archestra-mcp-server/getting-started)
+**[Identity](/docs/reference/archestra-mcp-server/getting-started)**
 
 - <span id="whoami"></span>[`whoami`](/docs/reference/archestra-mcp-server/getting-started#whoami)
 
 <span id="chat"></span>
 
-### [Chat](/docs/reference/archestra-mcp-server/getting-started)
+**[Chat](/docs/reference/archestra-mcp-server/getting-started)**
 
 - <span id="todo_write"></span>[`todo_write`](/docs/reference/archestra-mcp-server/getting-started#todo_write)
 - <span id="ask_user"></span>[`ask_user`](/docs/reference/archestra-mcp-server/getting-started#ask_user)
 
 <span id="tool-discovery"></span>
 
-### [Tool Discovery](/docs/reference/archestra-mcp-server/getting-started)
+**[Tool Discovery](/docs/reference/archestra-mcp-server/getting-started)**
 
 - <span id="search_tools"></span>[`search_tools`](/docs/reference/archestra-mcp-server/getting-started#search_tools)
 - <span id="run_tool"></span>[`run_tool`](/docs/reference/archestra-mcp-server/getting-started#run_tool)
 
 <span id="skills"></span>
 
-### [Skills](/docs/reference/archestra-mcp-server/skills-and-files)
+**[Skills](/docs/reference/archestra-mcp-server/skills-and-files)**
 
 - <span id="list_skills"></span>[`list_skills`](/docs/reference/archestra-mcp-server/skills-and-files#list_skills)
 - <span id="load_skill"></span>[`load_skill`](/docs/reference/archestra-mcp-server/skills-and-files#load_skill)
@@ -64,7 +80,7 @@ Browse a topic, or follow a tool name directly to its inputs, output, and access
 
 <span id="files"></span>
 
-### [Files](/docs/reference/archestra-mcp-server/skills-and-files)
+**[Files](/docs/reference/archestra-mcp-server/skills-and-files)**
 
 - <span id="search_files"></span>[`search_files`](/docs/reference/archestra-mcp-server/skills-and-files#search_files)
 - <span id="read_file"></span>[`read_file`](/docs/reference/archestra-mcp-server/skills-and-files#read_file)
@@ -75,7 +91,7 @@ Browse a topic, or follow a tool name directly to its inputs, output, and access
 
 <span id="code-sandbox"></span>
 
-### [Code Sandbox](/docs/reference/archestra-mcp-server/skills-and-files)
+**[Code Sandbox](/docs/reference/archestra-mcp-server/skills-and-files)**
 
 - <span id="run_command"></span>[`run_command`](/docs/reference/archestra-mcp-server/skills-and-files#run_command)
 - <span id="download_file"></span>[`download_file`](/docs/reference/archestra-mcp-server/skills-and-files#download_file)
@@ -83,7 +99,7 @@ Browse a topic, or follow a tool name directly to its inputs, output, and access
 
 <span id="apps"></span>
 
-### [Apps](/docs/reference/archestra-mcp-server/apps-and-projects)
+**[Apps](/docs/reference/archestra-mcp-server/apps-and-projects)**
 
 - <span id="scaffold_app"></span>[`scaffold_app`](/docs/reference/archestra-mcp-server/apps-and-projects#scaffold_app)
 - <span id="refine_app"></span>[`refine_app`](/docs/reference/archestra-mcp-server/apps-and-projects#refine_app)
@@ -109,7 +125,7 @@ Browse a topic, or follow a tool name directly to its inputs, output, and access
 
 <span id="projects"></span>
 
-### [Projects](/docs/reference/archestra-mcp-server/apps-and-projects)
+**[Projects](/docs/reference/archestra-mcp-server/apps-and-projects)**
 
 - <span id="create_project_from_conversation"></span>[`create_project_from_conversation`](/docs/reference/archestra-mcp-server/apps-and-projects#create_project_from_conversation)
 - <span id="list_projects"></span>[`list_projects`](/docs/reference/archestra-mcp-server/apps-and-projects#list_projects)
@@ -130,7 +146,7 @@ Browse a topic, or follow a tool name directly to its inputs, output, and access
 
 <span id="agent-runtime"></span>
 
-### [Agent Runtime](/docs/reference/archestra-mcp-server/agents)
+**[Agent Runtime](/docs/reference/archestra-mcp-server/agents)**
 
 - <span id="delete_workspace"></span>[`delete_workspace`](/docs/reference/archestra-mcp-server/agents#delete_workspace)
 - <span id="read_workspace_file"></span>[`read_workspace_file`](/docs/reference/archestra-mcp-server/agents#read_workspace_file)
@@ -147,7 +163,7 @@ Browse a topic, or follow a tool name directly to its inputs, output, and access
 
 <span id="agents"></span>
 
-### [Agents](/docs/reference/archestra-mcp-server/agents)
+**[Agents](/docs/reference/archestra-mcp-server/agents)**
 
 - <span id="create_agent"></span>[`create_agent`](/docs/reference/archestra-mcp-server/agents#create_agent)
 - <span id="get_agent"></span>[`get_agent`](/docs/reference/archestra-mcp-server/agents#get_agent)
@@ -163,7 +179,7 @@ Browse a topic, or follow a tool name directly to its inputs, output, and access
 
 <span id="knowledge-management"></span>
 
-### [Knowledge Management](/docs/reference/archestra-mcp-server/knowledge-and-mcp)
+**[Knowledge Management](/docs/reference/archestra-mcp-server/knowledge-and-mcp)**
 
 - <span id="query_knowledge_sources"></span>[`query_knowledge_sources`](/docs/reference/archestra-mcp-server/knowledge-and-mcp#query_knowledge_sources)
 - <span id="create_knowledge_base"></span>[`create_knowledge_base`](/docs/reference/archestra-mcp-server/knowledge-and-mcp#create_knowledge_base)
@@ -185,7 +201,7 @@ Browse a topic, or follow a tool name directly to its inputs, output, and access
 
 <span id="mcp-servers"></span>
 
-### [MCP Servers](/docs/reference/archestra-mcp-server/knowledge-and-mcp)
+**[MCP Servers](/docs/reference/archestra-mcp-server/knowledge-and-mcp)**
 
 - <span id="search_private_mcp_registry"></span>[`search_private_mcp_registry`](/docs/reference/archestra-mcp-server/knowledge-and-mcp#search_private_mcp_registry)
 - <span id="get_mcp_servers"></span>[`get_mcp_servers`](/docs/reference/archestra-mcp-server/knowledge-and-mcp#get_mcp_servers)
@@ -200,7 +216,7 @@ Browse a topic, or follow a tool name directly to its inputs, output, and access
 
 <span id="mcp-gateways"></span>
 
-### [MCP Gateways](/docs/reference/archestra-mcp-server/knowledge-and-mcp)
+**[MCP Gateways](/docs/reference/archestra-mcp-server/knowledge-and-mcp)**
 
 - <span id="create_mcp_gateway"></span>[`create_mcp_gateway`](/docs/reference/archestra-mcp-server/knowledge-and-mcp#create_mcp_gateway)
 - <span id="get_mcp_gateway"></span>[`get_mcp_gateway`](/docs/reference/archestra-mcp-server/knowledge-and-mcp#get_mcp_gateway)
@@ -208,7 +224,7 @@ Browse a topic, or follow a tool name directly to its inputs, output, and access
 
 <span id="tool-assignment"></span>
 
-### [Tool Assignment](/docs/reference/archestra-mcp-server/knowledge-and-mcp)
+**[Tool Assignment](/docs/reference/archestra-mcp-server/knowledge-and-mcp)**
 
 - <span id="bulk_assign_tools_to_agents"></span>[`bulk_assign_tools_to_agents`](/docs/reference/archestra-mcp-server/knowledge-and-mcp#bulk_assign_tools_to_agents)
 - <span id="bulk_remove_tools_from_agents"></span>[`bulk_remove_tools_from_agents`](/docs/reference/archestra-mcp-server/knowledge-and-mcp#bulk_remove_tools_from_agents)
@@ -216,7 +232,7 @@ Browse a topic, or follow a tool name directly to its inputs, output, and access
 
 <span id="guardrails"></span>
 
-### [Guardrails](/docs/reference/archestra-mcp-server/guardrails)
+**[Guardrails](/docs/reference/archestra-mcp-server/guardrails)**
 
 - <span id="list_peer_messages"></span>[`list_peer_messages`](/docs/reference/archestra-mcp-server/guardrails#list_peer_messages)
 - <span id="read_peer_message"></span>[`read_peer_message`](/docs/reference/archestra-mcp-server/guardrails#read_peer_message)
@@ -252,7 +268,7 @@ Browse a topic, or follow a tool name directly to its inputs, output, and access
 
 <span id="limits"></span>
 
-### [Limits](/docs/reference/archestra-mcp-server/organization)
+**[Limits](/docs/reference/archestra-mcp-server/organization)**
 
 - <span id="create_limit"></span>[`create_limit`](/docs/reference/archestra-mcp-server/organization#create_limit)
 - <span id="get_limits"></span>[`get_limits`](/docs/reference/archestra-mcp-server/organization#get_limits)
@@ -263,7 +279,7 @@ Browse a topic, or follow a tool name directly to its inputs, output, and access
 
 <span id="teams"></span>
 
-### [Teams](/docs/reference/archestra-mcp-server/organization)
+**[Teams](/docs/reference/archestra-mcp-server/organization)**
 
 - <span id="create_team"></span>[`create_team`](/docs/reference/archestra-mcp-server/organization#create_team)
 - <span id="get_team"></span>[`get_team`](/docs/reference/archestra-mcp-server/organization#get_team)
@@ -280,7 +296,7 @@ Browse a topic, or follow a tool name directly to its inputs, output, and access
 
 <span id="plugins"></span>
 
-### [Plugins](/docs/reference/archestra-mcp-server/organization)
+**[Plugins](/docs/reference/archestra-mcp-server/organization)**
 
 - <span id="list_plugins"></span>[`list_plugins`](/docs/reference/archestra-mcp-server/organization#list_plugins)
 - <span id="get_plugin"></span>[`get_plugin`](/docs/reference/archestra-mcp-server/organization#get_plugin)
@@ -288,3 +304,5 @@ Browse a topic, or follow a tool name directly to its inputs, output, and access
 - <span id="update_plugin"></span>[`update_plugin`](/docs/reference/archestra-mcp-server/organization#update_plugin)
 - <span id="edit_plugin"></span>[`edit_plugin`](/docs/reference/archestra-mcp-server/organization#edit_plugin)
 - <span id="delete_plugin"></span>[`delete_plugin`](/docs/reference/archestra-mcp-server/organization#delete_plugin)
+
+</details>

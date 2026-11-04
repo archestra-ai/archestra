@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.5.0-rc.22](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.21...platform-v1.5.0-rc.22) (2026-11-04)
+
+
+### Features
+
+* **agents:** configure runtime tier memory independently of CPU ([#10195](https://github.com/archestra-ai/archestra/issues/10195)) ([ed460cd](https://github.com/archestra-ai/archestra/commit/ed460cdab5b39b10245de1cf147fa765e058f245))
+* **guardrails:** honour 1.4's Break the glass variables on 1.5 as overrides ([#10181](https://github.com/archestra-ai/archestra/issues/10181)) ([90851d1](https://github.com/archestra-ai/archestra/commit/90851d1bfae7943c22be607ebc865bcaf0ec82fb))
+* **roles:** role create, view and edit pages ([#10214](https://github.com/archestra-ai/archestra/issues/10214)) ([770ff8a](https://github.com/archestra-ai/archestra/commit/770ff8a0abedea35eabb37fe90b2994be94bc27d))
+
+
+### Bug Fixes
+
+* **chatops:** drain accepted bot turns before shutdown ([#10182](https://github.com/archestra-ai/archestra/issues/10182)) ([3b7dbe4](https://github.com/archestra-ai/archestra/commit/3b7dbe47e0dddb4a0bc829ee54a58dec4d3a85a7))
+* **chatops:** retain replies when shutdown interrupts reload cleanup ([#10205](https://github.com/archestra-ai/archestra/issues/10205)) ([15d9f5a](https://github.com/archestra-ai/archestra/commit/15d9f5a522505df7649a09d279538d2fbde5e2a1))
+* **logs:** clearer session label rail, oldest-first session pages, correct change attribution ([#10186](https://github.com/archestra-ai/archestra/issues/10186)) ([c3ca998](https://github.com/archestra-ai/archestra/commit/c3ca998ed404b5b539c244a2be00fad9c4b3c571))
+* **mcp-gateway:** correct denials and limit auth attempts ([#10152](https://github.com/archestra-ai/archestra/issues/10152)) ([8fd2c27](https://github.com/archestra-ai/archestra/commit/8fd2c27b7e0518aa279656c00c3c3a4ff5347b2e))
+* **mcp-gateway:** queue a verified token's burst instead of refusing it ([#10212](https://github.com/archestra-ai/archestra/issues/10212)) ([b0c3e06](https://github.com/archestra-ai/archestra/commit/b0c3e065834c4b81f2d6c50c778741ae700ab8b1))
+* **mcp:** show bounded install diagnostics for upstream failures ([#10187](https://github.com/archestra-ai/archestra/issues/10187)) ([193fcac](https://github.com/archestra-ai/archestra/commit/193fcac1fa3b3a1ec376eebae0f0d2975f8af3d2))
+* **openappa:** dispatch one policy per composition for peer reads ([#10147](https://github.com/archestra-ai/archestra/issues/10147)) ([40bda62](https://github.com/archestra-ai/archestra/commit/40bda62af9f6f0874682332c7675e6edb9b711be))
+* **openappa:** let a governed Codex session read its agents' messages ([#10207](https://github.com/archestra-ai/archestra/issues/10207)) ([99632d3](https://github.com/archestra-ai/archestra/commit/99632d3fcfe921012fba3769acb3f059eb5e2044))
+* **openappa:** redact quoted credential values in linear time ([#10156](https://github.com/archestra-ai/archestra/issues/10156)) ([b17910b](https://github.com/archestra-ai/archestra/commit/b17910b9cefde5431de17fb181d150a5e300b713))
+* **openappa:** take a Codex auto-review out of OpenAPPA with the session it reviews ([#10198](https://github.com/archestra-ai/archestra/issues/10198)) ([691888b](https://github.com/archestra-ai/archestra/commit/691888b7c717ef0972537194592581771f77244d))
+
+
+### Miscellaneous Chores
+
+* update agent runtime CLIs ([#10194](https://github.com/archestra-ai/archestra/issues/10194)) ([8186690](https://github.com/archestra-ai/archestra/commit/818669019d3cd37626563defb8a851d300d27e9b))
+* update client versions ([#10196](https://github.com/archestra-ai/archestra/issues/10196)) ([05fde84](https://github.com/archestra-ai/archestra/commit/05fde84c09106e3d0d3cdb734513044a47c70568))
+
 ## [1.5.0-rc.21](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.20...platform-v1.5.0-rc.21) (2026-11-04)
 
 

@@ -130,10 +130,7 @@ type Source = { label: string; predefined: boolean; team: string | null };
 function SourceSentence({ sources }: { sources: Source[] }) {
   const single = sources.length === 1;
   const terms = sources.map((source) => (
-    <span
-      key={`${source.label}:${source.team ?? ""}`}
-      className="inline whitespace-nowrap"
-    >
+    <span key={`${source.label}:${source.team ?? ""}`} className="inline">
       <RoleTypeIcon
         predefined={source.predefined}
         className="mr-1 inline-block size-3 align-[-2px]"

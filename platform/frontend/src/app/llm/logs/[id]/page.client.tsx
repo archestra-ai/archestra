@@ -124,6 +124,7 @@ export default function SessionDetailPage({
   });
   const firstRow = offset > 0 ? (firstPageHead.data?.data[0] ?? null) : null;
   const sessionStartPending = offset > 0 && firstPageHead.isPending;
+  const sessionStartFailed = offset > 0 && firstPageHead.isError;
   const sessionStart = firstRow
     ? new Date(firstRow.createdAt).getTime() -
       Math.max(0, firstRow.durationMs ?? 0)
@@ -138,6 +139,10 @@ export default function SessionDetailPage({
     interactionsResponse !== undefined &&
     !interactionsLoading &&
     (!hasNextPage || !nextPageHead.isPending);
+  const lastPageIndex = Math.max(
+    0,
+    Math.ceil((interactionsResponse?.pagination.total ?? 0) / pageSize) - 1,
+  );
   const paginationMeta = interactionsResponse?.pagination;
   const sessionData = sessionResponse?.data?.[0];
   const { data: lineage } = useSessionLineage({
@@ -189,9 +194,14 @@ export default function SessionDetailPage({
     sessionId,
     requests: interactions,
     nextRequest,
+    boundary: {
+      failed: hasNextPage && nextPageHead.isError,
+      retry: () => nextPageHead.refetch(),
+    },
     requestsReady,
     pageIndex,
     pageSize,
+    lastPageIndex,
     onLocatePage: goToPage,
     targetToolCallId,
   });
@@ -202,6 +212,7 @@ export default function SessionDetailPage({
     requestsReady: interactionsResponse !== undefined && !interactionsLoading,
     pageIndex,
     pageSize,
+    lastPageIndex,
     onLocatePage: goToPage,
     targetRequestId,
   });
@@ -323,7 +334,6 @@ export default function SessionDetailPage({
   };
 
   // Requests run oldest first, so the latest one lives on the last page.
-  const lastPageIndex = Math.max(0, Math.ceil(totalRequests / pageSize) - 1);
   const jumpToConversation =
     latestHasConversation && conversationRowId
       ? conversationOnPage
@@ -415,6 +425,8 @@ export default function SessionDetailPage({
                       sessionToolCalls.targetMissing ? targetToolCallId : null
                     }
                     missingRequest={linkedRequest.targetMissing}
+                    sessionStartFailed={sessionStartFailed}
+                    onRetrySessionStart={() => firstPageHead.refetch()}
                   />
                 }
                 pagination={
@@ -482,14 +494,25 @@ function ToolCallsNotice({
   truncated,
   missingToolCallId,
   missingRequest,
+  sessionStartFailed,
+  onRetrySessionStart,
 }: {
   failed: boolean;
   onRetry: () => void;
   truncated: boolean;
   missingToolCallId: string | null;
   missingRequest: boolean;
+  /** The session's first request didn't load, so the axis counts from this page. */
+  sessionStartFailed: boolean;
+  onRetrySessionStart: () => void;
 }) {
-  if (!failed && !truncated && !missingToolCallId && !missingRequest) {
+  if (
+    !failed &&
+    !truncated &&
+    !missingToolCallId &&
+    !missingRequest &&
+    !sessionStartFailed
+  ) {
     return null;
   }
   return (
@@ -507,6 +530,22 @@ function ToolCallsNotice({
             size="xs"
             className="ml-auto"
             onClick={onRetry}
+          >
+            <span>Retry</span>
+          </Button>
+        </InlineNotice>
+      ) : null}
+      {sessionStartFailed ? (
+        <InlineNotice variant="neutral">
+          <InlineNoticeText>
+            Times on the axis count from this page's first request: the
+            session's start didn't load.
+          </InlineNoticeText>
+          <Button
+            variant="outline"
+            size="xs"
+            className="ml-auto"
+            onClick={onRetrySessionStart}
           >
             <span>Retry</span>
           </Button>

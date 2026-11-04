@@ -71,9 +71,21 @@ class OpenAiResponsesInteraction implements InteractionUtils {
   }
 
   getToolCallsRequested(): RequestedToolCall[] {
-    return this.interaction.response.output
-      .filter(isResponseFunctionCall)
-      .map((item) => ({ id: item.call_id, name: item.name }));
+    // Function calls and custom (freeform) tool calls, such as apply_patch,
+    // both carry the call id the tool's result comes back under.
+    return this.interaction.response.output.flatMap((item) => {
+      const call = item as {
+        type?: unknown;
+        call_id?: unknown;
+        name?: unknown;
+      };
+      return (call.type === "function_call" ||
+        call.type === "custom_tool_call") &&
+        typeof call.call_id === "string" &&
+        typeof call.name === "string"
+        ? [{ id: call.call_id, name: call.name }]
+        : [];
+    });
   }
 
   getToolNamesRequested(): string[] {

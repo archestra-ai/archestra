@@ -69,11 +69,17 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
 
   getToolCallsRequested(): RequestedToolCall[] {
     return this.response.choices.flatMap((choice) =>
-      (choice.message.tool_calls ?? []).flatMap((toolCall) =>
-        "function" in toolCall && toolCall.id
-          ? [{ id: toolCall.id, name: toolCall.function.name }]
-          : [],
-      ),
+      (choice.message.tool_calls ?? []).flatMap((toolCall) => {
+        if (!toolCall.id) return [];
+        if ("function" in toolCall) {
+          return [{ id: toolCall.id, name: toolCall.function.name }];
+        }
+        // Custom (freeform) tools, such as a coding agent's apply_patch.
+        if (toolCall.type === "custom") {
+          return [{ id: toolCall.id, name: toolCall.custom.name }];
+        }
+        return [];
+      }),
     );
   }
 

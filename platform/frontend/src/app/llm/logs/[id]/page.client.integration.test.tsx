@@ -344,6 +344,177 @@ it("opens the request a link names, moving to the page that holds it", async () 
   ).not.toBeInTheDocument();
 });
 
+it("finds a linked request among more same-moment requests than one read holds", async () => {
+  // Forty requests share one timestamp, across the page boundary.
+  const rows = Array.from({ length: 80 }, (_, i) =>
+    summary({
+      id: `request-${String(i).padStart(2, "0")}`,
+      model: `model-${i}`,
+      createdAt: new Date(
+        Date.UTC(2026, 0, 1, 0, 0, i >= 30 && i < 70 ? 30 : i),
+      ).toISOString(),
+    }),
+  );
+  serveSession({ rows });
+  let search = new URLSearchParams("request=request-31&page=2&pageSize=50");
+  vi.mocked(useSearchParams).mockImplementation(
+    () => search as ReturnType<typeof useSearchParams>,
+  );
+  push.mockImplementation((url: string) => {
+    search = new URLSearchParams(url.split("?")[1]);
+  });
+
+  const { rerender } = await renderPage();
+  await waitFor(() =>
+    expect(push).toHaveBeenCalledWith(
+      "/llm/logs/test-session?request=request-31&page=1&pageSize=50",
+      { scroll: false },
+    ),
+  );
+  await rerender();
+
+  const requests = await screen.findByRole("list", { name: "Requests" });
+  expect(
+    await within(requests).findByRole("button", {
+      name: /^Test Agent, Model 31,/,
+    }),
+  ).toHaveAttribute("aria-current", "true");
+});
+
+it("finds a linked tool call that a long request's start puts on the next page", async () => {
+  // Request 50 finishes after the call but started long before it, so its
+  // page (two) owns the call although only 31 requests finished before it.
+  const rows = Array.from({ length: 60 }, (_, i) =>
+    summary({
+      id: `request-${String(i).padStart(2, "0")}`,
+      model: `model-${i}`,
+      createdAt: new Date(
+        Date.UTC(2026, 0, 1, 0, 0, i, i === 50 ? 900 : 0),
+      ).toISOString(),
+      durationMs: i === 50 ? 40_000 : 500,
+    }),
+  );
+  serveSession({ rows });
+  const call = {
+    id: "linked-call",
+    agentId: "agent-1",
+    ownerType: "agent",
+    mcpServerName: "github",
+    method: "tools/call",
+    sessionId: "test-session",
+    createdAt: "2026-01-01T00:00:30.000Z",
+    toolCall: { id: "c1", name: "github__search", arguments: {} },
+    toolResult: { isError: false, content: [] },
+  };
+  server.use(
+    http.get(`${origin}/api/mcp-tool-calls/linked-call`, () =>
+      HttpResponse.json(call),
+    ),
+    http.get(`${origin}/api/mcp-tool-calls`, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      const start = params.get("startDate") ?? "";
+      const end = params.get("endDate");
+      const inWindow =
+        call.createdAt >= start && (!end || call.createdAt <= end);
+      return HttpResponse.json({
+        data: inWindow ? [call] : [],
+        pagination: { hasNext: false },
+      });
+    }),
+  );
+  let search = new URLSearchParams("toolCall=linked-call");
+  vi.mocked(useSearchParams).mockImplementation(
+    () => search as ReturnType<typeof useSearchParams>,
+  );
+  push.mockImplementation((url: string) => {
+    search = new URLSearchParams(url.split("?")[1]);
+  });
+
+  const { rerender } = await renderPage();
+  await waitFor(() =>
+    expect(push).toHaveBeenLastCalledWith(
+      "/llm/logs/test-session?toolCall=linked-call&page=2&pageSize=50",
+      { scroll: false },
+    ),
+  );
+  await rerender();
+
+  const requests = await screen.findByRole("list", { name: "Requests" });
+  expect(
+    await within(requests).findByRole("button", {
+      name: /^Tool call search on github,/,
+    }),
+  ).toHaveAttribute("aria-current", "true");
+});
+
+it("keeps a page's tool-call window closed when the next page's boundary fails to load", async () => {
+  const rows = Array.from({ length: 60 }, (_, i) =>
+    summary({
+      id: `request-${i}`,
+      model: `model-${i}`,
+      createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+    }),
+  );
+  serveSession({ rows });
+  const toolCallReads = vi.fn();
+  server.use(
+    http.get(`${origin}/api/interactions/summaries`, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      if (params.get("offset") === "50" && params.get("limit") === "1") {
+        return HttpResponse.json(
+          { error: { message: "boom", type: "api_internal_server_error" } },
+          { status: 500 },
+        );
+      }
+    }),
+    http.get(`${origin}/api/mcp-tool-calls`, () => {
+      toolCallReads();
+      return HttpResponse.json({ data: [], pagination: { hasNext: false } });
+    }),
+  );
+
+  await renderPage();
+
+  expect(await screen.findByText("Tool calls didn't load")).toBeVisible();
+  // An open window would have read the later pages' calls into this one.
+  expect(toolCallReads).not.toHaveBeenCalled();
+});
+
+it("says when a later page's axis counts from the page, not the session", async () => {
+  const rows = Array.from({ length: 60 }, (_, i) =>
+    summary({
+      id: `request-${i}`,
+      model: `model-${i}`,
+      createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+    }),
+  );
+  serveSession({ rows });
+  server.use(
+    http.get(`${origin}/api/interactions/summaries`, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      if (params.get("offset") === "0" && params.get("limit") === "1") {
+        return HttpResponse.json(
+          { error: { message: "boom", type: "api_internal_server_error" } },
+          { status: 500 },
+        );
+      }
+    }),
+  );
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams("page=2&pageSize=50") as ReturnType<
+      typeof useSearchParams
+    >,
+  );
+
+  await renderPage();
+
+  expect(
+    await screen.findByText(
+      "Times on the axis count from this page's first request: the session's start didn't load.",
+    ),
+  ).toBeVisible();
+});
+
 it("opens a linked tool call on its page without drawing another page first", async () => {
   const rows = Array.from({ length: 60 }, (_, i) =>
     summary({

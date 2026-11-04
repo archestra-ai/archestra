@@ -1,18 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import {
   useInteraction,
   useInteractionSummaries,
 } from "@/lib/interactions/interaction.query";
+import { usePageSeek } from "./page-seek";
 import type { InteractionSummary } from "./session-timeline";
 import { useSettledOnce } from "./use-session-tool-calls";
 
 /**
  * When the URL names one request (`?request=`), the page of the session it
- * lives on. Requests run oldest first, ties broken by id, so its position is
- * the count of requests created up to it, less those that share its moment
- * but sort after it.
+ * lives on. Requests run oldest first, ties broken by id: the count of those
+ * created up to it is the first page to try, and each landed page's first and
+ * last rows say which way to step from there.
  */
 export function useLinkedRequest({
   sessionId,
@@ -20,6 +20,7 @@ export function useLinkedRequest({
   requestsReady,
   pageIndex,
   pageSize,
+  lastPageIndex,
   onLocatePage,
   targetRequestId,
 }: {
@@ -31,6 +32,7 @@ export function useLinkedRequest({
   requestsReady: boolean;
   pageIndex: number;
   pageSize: number;
+  lastPageIndex: number;
   /** Moves to the page that holds the linked request. */
   onLocatePage: (pageIndex: number) => void;
   targetRequestId: string | null;
@@ -53,55 +55,38 @@ export function useLinkedRequest({
       ? record
       : null;
 
-  // The page the linked request was found on, once looked up. Held per
-  // request, so a later link is looked up afresh.
-  const [located, setLocated] = useState<{ id: string; page: number } | null>(
-    null,
-  );
-  const shouldLocate =
-    target !== null &&
-    requestsReady &&
-    !targetOnPage &&
-    located?.id !== target.id;
-  // Up to the end of its millisecond (stored times are finer than the ones
-  // sent back), newest first in the list's own order: the target's index in
-  // these rows is how many of them sort after it.
+  // Up to the end of its millisecond: stored times are finer than the ones
+  // sent back.
   const atOrBeforeTarget = useInteractionSummaries({
     sessionId,
     endDate: target
       ? new Date(new Date(target.createdAt).getTime() + 1).toISOString()
       : undefined,
-    limit: TIE_WINDOW,
-    sortBy: "createdAt",
-    sortDirection: "desc",
-    enabled: shouldLocate,
+    limit: 1,
+    enabled: target !== null && requestsReady && !targetOnPage,
   });
-  const position =
-    shouldLocate && target && atOrBeforeTarget.data
-      ? atOrBeforeTarget.data.pagination.total -
-        Math.max(
-          0,
-          atOrBeforeTarget.data.data.findIndex((row) => row.id === target.id),
-        )
-      : undefined;
-  useEffect(() => {
-    if (!target || position === undefined) return;
-    const page = Math.floor(Math.max(0, position - 1) / pageSize);
-    setLocated({ id: target.id, page });
-    if (page !== pageIndex) onLocatePage(page);
-  }, [target, position, pageSize, pageIndex, onLocatePage]);
+  const count = atOrBeforeTarget.data?.pagination.total;
+  const seek = usePageSeek({
+    id: target?.id ?? null,
+    ready: requestsReady,
+    pageIndex,
+    lastPageIndex,
+    guess:
+      count === undefined
+        ? undefined
+        : Math.floor(Math.max(0, count - 1) / pageSize),
+    here: target
+      ? whereFrom({ target, requests, targetOnPage, pageIndex })
+      : undefined,
+    onLocatePage,
+  });
 
   const targetResolved =
     targetRequestId === null ||
     (targetOnPage && requestsReady) ||
     targetQuery.isError ||
     (targetQuery.isSuccess && target === null) ||
-    // Settled only on the page it was found on: until the move lands, the
-    // previous page's requests are still the ones in hand.
-    (target !== null &&
-      located?.id === target.id &&
-      located.page === pageIndex &&
-      requestsReady);
+    seek.settled;
 
   const settledFor = useSettledOnce(targetRequestId, targetResolved);
 
@@ -114,5 +99,38 @@ export function useLinkedRequest({
   };
 }
 
-/** Rows read to place the target among requests that share its moment. */
-const TIE_WINDOW = 20;
+// ============================================================================
+// Internal helpers
+// ============================================================================
+
+/** Which way the target lies from this page, in the list's (createdAt, id) order. */
+function whereFrom({
+  target,
+  requests,
+  targetOnPage,
+  pageIndex,
+}: {
+  target: { id: string; createdAt: string | Date };
+  requests: InteractionSummary[];
+  targetOnPage: boolean;
+  pageIndex: number;
+}): -1 | 0 | 1 {
+  if (targetOnPage) return 0;
+  const first = requests[0];
+  const last = requests[requests.length - 1];
+  // An empty page past the end: the rows are all before it.
+  if (!first || !last) return pageIndex > 0 ? -1 : 0;
+  if (compare(target, first) < 0) return -1;
+  if (compare(target, last) > 0) return 1;
+  return 0;
+}
+
+function compare(
+  a: { id: string; createdAt: string | Date },
+  b: { id: string; createdAt: string | Date },
+): number {
+  const byTime =
+    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  if (byTime !== 0) return byTime;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}

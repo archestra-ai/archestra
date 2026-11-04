@@ -6,6 +6,7 @@ import {
   useMcpToolCall,
   useSessionMcpToolCalls,
 } from "@/lib/mcp/mcp-tool-call.query";
+import { usePageSeek } from "./page-seek";
 import type { InteractionSummary } from "./session-timeline";
 
 /**
@@ -20,9 +21,11 @@ export function useSessionToolCalls({
   sessionId,
   requests,
   nextRequest,
+  boundary,
   requestsReady,
   pageIndex,
   pageSize,
+  lastPageIndex,
   onLocatePage,
   targetToolCallId,
 }: {
@@ -31,10 +34,16 @@ export function useSessionToolCalls({
   requests: InteractionSummary[];
   /** The oldest row of the next page; null on the last page. */
   nextRequest: InteractionSummary | null;
+  /**
+   * The read of `nextRequest`. When it failed, this page's window has no end
+   * and its calls are not read: an open window would pull in later pages'.
+   */
+  boundary: { failed: boolean; retry: () => void };
   /** Whether `requests` and `nextRequest` are the settled answer for this page. */
   requestsReady: boolean;
   pageIndex: number;
   pageSize: number;
+  lastPageIndex: number;
   /** Moves to the page that holds the linked tool call. */
   onLocatePage: (pageIndex: number) => void;
   /** A tool call the URL points at (`?toolCall=`). */
@@ -56,7 +65,7 @@ export function useSessionToolCalls({
       Math.max(0, nextRequest.durationMs ?? 0)
     : null;
 
-  const windowReady = requestsReady && windowStart !== null;
+  const windowReady = requestsReady && windowStart !== null && !boundary.failed;
   const toolCallsQuery = useSessionMcpToolCalls({
     sessionId,
     startDate: windowStart !== null ? toIso(windowStart) : undefined,
@@ -65,8 +74,9 @@ export function useSessionToolCalls({
   });
   const toolCalls = windowReady ? (toolCallsQuery.data?.data ?? []) : [];
 
-  // Finding the linked call's page: requests run oldest first, and the call
-  // sits on the page of the last request created before it.
+  // Finding the linked call's page: the count of requests created before it
+  // is the first page to try; each page's window then says which way to step
+  // (a request that overlaps the call can sort past it).
   const targetQuery = useMcpToolCall({
     mcpToolCallId: targetToolCallId ?? "",
     enabled: targetToolCallId !== null,
@@ -80,51 +90,40 @@ export function useSessionToolCalls({
     toolCalls.some((call) => call.id === targetToolCallId);
   // Looked up as soon as the call is known, alongside the page's own reads,
   // so a link to another page moves there before this one draws.
-  const [located, setLocated] = useState<{ id: string; page: number } | null>(
-    null,
-  );
-  const shouldLocate = target !== null && located?.id !== target.id;
   const olderThanTarget = useInteractionSummaries({
     sessionId,
     endDate: target?.createdAt,
     limit: 1,
-    enabled: shouldLocate,
+    enabled: target !== null,
   });
-  const olderThanTargetCount = shouldLocate
-    ? olderThanTarget.data?.pagination.total
-    : undefined;
-  // The page's window is the same bound the tool-call read applies, so a call
-  // inside it is this page's without waiting for the calls themselves.
+  const olderCount = olderThanTarget.data?.pagination.total;
+  // The page's window is the same bound the tool-call read applies, so where
+  // a call falls is known without waiting for the calls themselves.
   const targetAt = target ? new Date(target.createdAt).getTime() : null;
-  const targetInWindow =
-    targetAt !== null &&
-    windowStart !== null &&
-    targetAt >= windowStart &&
-    (windowEnd === null || targetAt <= windowEnd);
-  useEffect(() => {
-    if (!target || located?.id === target.id || !requestsReady) return;
-    if (targetInWindow) {
-      setLocated({ id: target.id, page: pageIndex });
-      return;
-    }
-    if (olderThanTargetCount === undefined) return;
-    const page = Math.floor(Math.max(0, olderThanTargetCount - 1) / pageSize);
-    setLocated({ id: target.id, page });
-    if (page !== pageIndex) onLocatePage(page);
-  }, [
-    target,
-    located,
-    requestsReady,
-    targetInWindow,
-    olderThanTargetCount,
-    pageSize,
+  const seek = usePageSeek({
+    id: target?.id ?? null,
+    ready: requestsReady && !boundary.failed,
     pageIndex,
+    lastPageIndex,
+    guess:
+      olderCount === undefined
+        ? undefined
+        : Math.floor(Math.max(0, olderCount - 1) / pageSize),
+    here:
+      targetAt === null || windowStart === null
+        ? undefined
+        : targetAt < windowStart
+          ? -1
+          : windowEnd !== null && targetAt > windowEnd
+            ? 1
+            : 0,
     onLocatePage,
-  ]);
+  });
 
   const toolCallsSettled =
     requestsReady &&
     (windowStart === null ||
+      boundary.failed ||
       toolCallsQuery.isSuccess ||
       toolCallsQuery.isError);
   const targetResolved =
@@ -132,19 +131,18 @@ export function useSessionToolCalls({
     (targetOnPage && toolCallsSettled) ||
     targetQuery.isError ||
     (targetQuery.isSuccess && target === null) ||
-    // Settled only on the page it was found on: until the move lands, the
+    // A failed boundary leaves this page unable to say.
+    boundary.failed ||
+    // Settled only on the page the walk ended on: until a move lands, the
     // previous page's records are still the ones in hand.
-    (target !== null &&
-      located?.id === target.id &&
-      located.page === pageIndex &&
-      toolCallsSettled);
+    (seek.settled && toolCallsSettled);
   // Once settled, paging away from the linked call is the viewer's choice.
   const settledFor = useSettledOnce(targetToolCallId, targetResolved);
 
   return {
     toolCalls,
-    isError: toolCallsQuery.isError,
-    refetch: toolCallsQuery.refetch,
+    isError: boundary.failed || toolCallsQuery.isError,
+    refetch: boundary.failed ? boundary.retry : toolCallsQuery.refetch,
     /** The window held more calls than one fetch returns. */
     truncated: toolCallsQuery.data?.pagination.hasNext === true,
     targetOnPage,

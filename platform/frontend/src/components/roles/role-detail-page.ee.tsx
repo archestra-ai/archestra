@@ -33,6 +33,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useDeleteRole, useRole } from "@/lib/role.query";
 import { PermissionList } from "./permission-list.ee";
 import { downloadRoleAsJson } from "./role-export";
+import { ROLE_PERMISSIONS_INTRO } from "./role-form.ee";
 import { RoleUsage } from "./role-usage.ee";
 
 /**
@@ -178,7 +179,12 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
       {tab === "usage" ? (
         <RoleUsage role={role} />
       ) : (
-        <PermissionList permissions={role.permission} />
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            {ROLE_PERMISSIONS_INTRO}
+          </p>
+          <PermissionList permissions={role.permission} />
+        </div>
       )}
       <DeleteConfirmDialog
         open={deleteOpen}

@@ -2,7 +2,7 @@
 "use client";
 
 import type { Permissions } from "@archestra/shared";
-import { Check, Lock, Search } from "lucide-react";
+import { Check, Search } from "lucide-react";
 import { Fragment, useId, useState } from "react";
 import {
   FilterBar,
@@ -14,11 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils/tailwind";
 import {
   allPermissionRows,
@@ -281,23 +276,7 @@ function ResourceCard({
           />
         )}
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-            <span className="font-medium">{resource.label}</span>
-            {resource.perObject && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                    <Lock className="size-3" aria-hidden="true" />
-                    <span>Access per {resource.perObject}</span>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-72 text-wrap">
-                  Access to a specific {resource.perObject} is granted in its
-                  "Who can use it" section, not through roles.
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </div>
+          <span className="font-medium">{resource.label}</span>
           <p className="text-xs text-muted-foreground">
             {resource.description}
           </p>

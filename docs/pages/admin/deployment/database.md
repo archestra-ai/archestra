@@ -11,7 +11,7 @@ PostgreSQL holds all of Archestra's state, so its backups and failover are your 
 
 ## Choose a Database
 
-Use PostgreSQL 17 or 18 with the `vector` (pgvector 0.8 or newer) and `pg_trgm` extensions. Every major cloud's managed PostgreSQL offers both.
+Archestra needs PostgreSQL 15 or newer; use 17 or 18. It also needs the `vector` (pgvector 0.8 or newer) and `pg_trgm` extensions, which every major cloud's managed PostgreSQL offers.
 
 - Archestra's migrations create both extensions. The migration user must be allowed to, or a database administrator must create them first.
 - Older pgvector versions can return fewer knowledge base results when a search filters by document.
@@ -23,7 +23,7 @@ Pick the instance for your [size](/docs/admin/deployment/scaling#pick-a-size), t
 
 :::tabs
 @tab AWS
-Amazon RDS for PostgreSQL fits every size. Choose Aurora PostgreSQL for faster failover and storage that grows on its own.
+Amazon RDS for PostgreSQL fits every size. Aurora PostgreSQL also works and grows its storage on its own; it offers memory-optimized classes only.
 
 | Size | RDS Instance | Aurora Instance | RDS Storage |
 | --- | --- | --- | --- |
@@ -38,19 +38,19 @@ Amazon RDS for PostgreSQL fits every size. Choose Aurora PostgreSQL for faster f
 - **Connections:** the default `max_connections` follows instance memory and covers each size.
 - **Avoid:** burstable `db.t4g` classes. They slow down when CPU credits run out.
 @tab Google Cloud
-Cloud SQL for PostgreSQL fits every size. Enterprise Plus edition fails over faster and keeps point-in-time recovery longer. AlloyDB for PostgreSQL also works, with the same extensions.
+Cloud SQL for PostgreSQL fits every size. Enterprise Plus edition has shorter maintenance downtime and keeps point-in-time recovery longer. AlloyDB for PostgreSQL also works, with the same extensions.
 
 | Size | Cloud SQL Enterprise | Cloud SQL Enterprise Plus | Storage |
 | --- | --- | --- | --- |
-| Small | `db-custom-2-8192` | `db-perf-optimized-N-2` | 100 GB SSD |
-| Medium | `db-custom-4-16384` | `db-perf-optimized-N-4` | 250 GB SSD |
-| Large | `db-custom-8-32768` | `db-perf-optimized-N-8` | 500 GB SSD |
+| Small | `db-custom-2-8192` (2 vCPU, 8 GB) | `db-perf-optimized-N-2` (2 vCPU, 16 GB) | 100 GB SSD |
+| Medium | `db-custom-4-16384` (4 vCPU, 16 GB) | `db-perf-optimized-N-4` (4 vCPU, 32 GB) | 250 GB SSD |
+| Large | `db-custom-8-32768` (8 vCPU, 32 GB) | `db-perf-optimized-N-8` (8 vCPU, 64 GB) | 500 GB SSD |
 
 - **High availability:** turn on regional availability. The standby runs in another zone.
 - **Backups:** turn on automated backups and point-in-time recovery.
 - **Extensions:** the `postgres` user can create `vector` and `pg_trgm`.
-- **Storage:** turn on automatic storage increases. Disk throughput grows with disk size, so a small disk limits a large instance.
-- **Connections:** Cloud SQL sets `max_connections` from instance memory. Compare it with your size, and raise it with the `max_connections` flag when it falls short.
+- **Storage:** keep automatic storage increases on. Cloud SQL sets IOPS and throughput from the machine type and disk size, so grow the disk to raise them.
+- **Connections:** Cloud SQL sets `max_connections` from instance memory, which covers the Small and Medium sizes. For Large, set the `max_connections` flag to at least 1,000.
 - **Network:** connect over private IP from the cluster's VPC.
 @tab Azure
 Azure Database for PostgreSQL flexible server fits every size. Use the General Purpose tier, and Memory Optimized for a large knowledge base.

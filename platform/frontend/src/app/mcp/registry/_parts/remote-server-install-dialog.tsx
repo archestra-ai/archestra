@@ -7,7 +7,11 @@ import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkifiedText } from "@/components/ui/linkified-text";
@@ -307,39 +311,31 @@ export function RemoteServerInstallDialog({
       }
     >
       {installError && (
-        <div
-          role="alert"
-          className="rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-3"
-        >
-          <div className="flex items-start gap-2.5">
-            <AlertTriangle
-              aria-hidden
-              className="mt-0.5 size-4 shrink-0 text-destructive"
-            />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium">Connection failed</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Check the server credentials and provider configuration, then
-                try again.
-              </p>
-              <Button
-                type="button"
-                variant="link"
-                size="sm"
-                aria-expanded={showDiagnostics}
-                onClick={() => setShowDiagnostics((visible) => !visible)}
-                className="mt-2 h-auto p-0 text-xs text-muted-foreground hover:text-foreground"
-              >
-                {showDiagnostics ? "Hide diagnostics" : "Show diagnostics"}
-              </Button>
-              {showDiagnostics && (
-                <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border bg-background/70 p-2 font-mono text-xs text-muted-foreground">
-                  {installError}
-                </pre>
-              )}
-            </div>
-          </div>
-        </div>
+        <InlineNotice variant="error" className="items-start p-3 text-sm">
+          <AlertTriangle aria-hidden className="mt-0.5" />
+          <InlineNoticeBody className="gap-1">
+            <span className="font-medium">Connection failed</span>
+            <InlineNoticeText>
+              Check the server credentials and provider configuration, then try
+              again.
+            </InlineNoticeText>
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              aria-expanded={showDiagnostics}
+              onClick={() => setShowDiagnostics((visible) => !visible)}
+              className="h-auto self-start p-0 text-xs text-muted-foreground hover:text-foreground"
+            >
+              {showDiagnostics ? "Hide diagnostics" : "Show diagnostics"}
+            </Button>
+            {showDiagnostics && (
+              <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border bg-background/70 p-2 font-mono text-xs text-muted-foreground">
+                {installError}
+              </pre>
+            )}
+          </InlineNoticeBody>
+        </InlineNotice>
       )}
 
       {isReauth && (

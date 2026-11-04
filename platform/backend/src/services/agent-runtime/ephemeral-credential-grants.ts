@@ -17,9 +17,7 @@ export interface EphemeralCredentialGrant {
   expiresAt: number;
 }
 
-export function ephemeralCredentialGrantCacheKey(
-  grantId: string,
-): AllowedCacheKey {
+function ephemeralCredentialGrantCacheKey(grantId: string): AllowedCacheKey {
   return `${CacheKey.EphemeralCredentialGrant}-${grantId}`;
 }
 
@@ -91,7 +89,7 @@ function buildGrantResolution(resolvedGrants: EphemeralCredentialGrant[]): {
  * it reach whichever replica the load balancer picks, so grants live in the
  * shared cache and this class keeps no state of its own.
  */
-export class EphemeralCredentialGrantManager {
+class EphemeralCredentialGrantManager {
   async createGrant(
     params: Omit<EphemeralCredentialGrant, "id" | "expiresAt"> & {
       ttlSeconds?: number;

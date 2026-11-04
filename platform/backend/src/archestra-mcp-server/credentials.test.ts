@@ -4,13 +4,10 @@ import {
   TOOL_TRANSFER_CREDENTIAL_FULL_NAME,
 } from "@archestra/shared";
 import { vi } from "vitest";
-import { cacheManager } from "@/cache-manager";
+import { CacheKey, cacheManager } from "@/cache-manager";
 import { AgentExcludedSubagentModel, AgentModel } from "@/models";
 import { preflightAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
-import {
-  EphemeralCredentialGrantManager,
-  ephemeralCredentialGrantCacheKey,
-} from "@/services/agent-runtime/ephemeral-credential-grants";
+import { ephemeralCredentialGrantManager } from "@/services/agent-runtime/ephemeral-credential-grants";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import { beforeEach, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
@@ -467,9 +464,9 @@ test("mints a one-time ephemeral credential_grant_id without writing to the data
   // Stored in the shared cache so a separate replica instance can resolve and consume it.
   const grantId = structured.credential_grant_id ?? "";
   expect(grantId).not.toBe("");
-  const cached = await cacheManager.get(
-    ephemeralCredentialGrantCacheKey(grantId),
-  );
+  const grantCacheKey =
+    `${CacheKey.EphemeralCredentialGrant}-${grantId}` as const;
+  const cached = await cacheManager.get(grantCacheKey);
   expect(cached).toMatchObject({
     id: grantId,
     organizationId,
@@ -477,8 +474,7 @@ test("mints a one-time ephemeral credential_grant_id without writing to the data
     callerAgentId: context.agent.id,
     key: "GH_TOKEN",
   });
-  const secondReplicaManager = new EphemeralCredentialGrantManager();
-  const consumed = await secondReplicaManager.consumeGrants({
+  const consumed = await ephemeralCredentialGrantManager.consumeGrants({
     grantIds: [grantId],
     organizationId,
     userId: actorId,
@@ -490,9 +486,7 @@ test("mints a one-time ephemeral credential_grant_id without writing to the data
   expect(consumed.envForAgent(targetA.id)).toEqual({
     GH_TOKEN: SECRET_VALUE,
   });
-  await expect(
-    cacheManager.get(ephemeralCredentialGrantCacheKey(grantId)),
-  ).resolves.toBeUndefined();
+  await expect(cacheManager.get(grantCacheKey)).resolves.toBeUndefined();
 
   // Restoring writes only the remaining lifetime, and restoring after expiresAt writes nothing.
   const setSpy = vi.spyOn(cacheManager, "set");
@@ -502,16 +496,17 @@ test("mints a one-time ephemeral credential_grant_id without writing to the data
     .mockReturnValue(originalExpiresAt - 12_500);
   await consumed.restore();
   expect(setSpy).toHaveBeenCalledWith(
-    ephemeralCredentialGrantCacheKey(grantId),
+    grantCacheKey,
     expect.objectContaining({ id: grantId, expiresAt: originalExpiresAt }),
     12_500,
   );
-  await expect(
-    cacheManager.get(ephemeralCredentialGrantCacheKey(grantId)),
-  ).resolves.toMatchObject({ id: grantId, expiresAt: originalExpiresAt });
+  await expect(cacheManager.get(grantCacheKey)).resolves.toMatchObject({
+    id: grantId,
+    expiresAt: originalExpiresAt,
+  });
 
   // Consume again and restore after original expiry has passed: nothing is restored.
-  const reconsumed = await secondReplicaManager.consumeGrants({
+  const reconsumed = await ephemeralCredentialGrantManager.consumeGrants({
     grantIds: [grantId],
     organizationId,
     userId: actorId,
@@ -524,9 +519,7 @@ test("mints a one-time ephemeral credential_grant_id without writing to the data
   nowSpy.mockReturnValue(originalExpiresAt + 1_000);
   await reconsumed.restore();
   expect(setSpy).not.toHaveBeenCalled();
-  await expect(
-    cacheManager.get(ephemeralCredentialGrantCacheKey(grantId)),
-  ).resolves.toBeUndefined();
+  await expect(cacheManager.get(grantCacheKey)).resolves.toBeUndefined();
   nowSpy.mockRestore();
   setSpy.mockRestore();
 });

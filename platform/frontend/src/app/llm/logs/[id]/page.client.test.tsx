@@ -37,6 +37,7 @@ vi.mock("@/lib/interactions/interaction.query", () => ({
   useInteractionSummaries: vi.fn(),
   useInteractionSessions: vi.fn(),
   useSessionLineage: vi.fn(() => ({ data: undefined })),
+  useSessionToolCallAskers: vi.fn(() => new Map()),
   useExportSessionInteractions: vi.fn(() => ({
     mutate: vi.fn(),
     isPending: false,

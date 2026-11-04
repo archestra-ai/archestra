@@ -6,6 +6,7 @@ import {
   useMcpToolCall,
   useSessionMcpToolCalls,
 } from "@/lib/mcp/mcp-tool-call.query";
+import { usePageSeek } from "./page-seek";
 import type { InteractionSummary } from "./session-timeline";
 
 /**
@@ -13,29 +14,36 @@ import type { InteractionSummary } from "./session-timeline";
  * and, when the URL names one tool call, the page it lives on.
  *
  * A call runs after the request that asked for it, so a page owns the calls
- * from its oldest request's start up to the start of the next newer request
- * (the newest row of the previous page). Page one is open-ended: nothing
- * newer exists yet.
+ * from its oldest request's start up to the start of the next page's oldest
+ * request. The last page is open-ended: nothing newer exists yet.
  */
 export function useSessionToolCalls({
   sessionId,
   requests,
-  newerRequest,
+  nextRequest,
+  boundary,
   requestsReady,
   pageIndex,
   pageSize,
+  lastPageIndex,
   onLocatePage,
   targetToolCallId,
 }: {
   sessionId: string;
   /** This page's requests. */
   requests: InteractionSummary[];
-  /** The newest row of the previous page; null on page one. */
-  newerRequest: InteractionSummary | null;
-  /** Whether `requests` and `newerRequest` are the settled answer for this page. */
+  /** The oldest row of the next page; null on the last page. */
+  nextRequest: InteractionSummary | null;
+  /**
+   * The read of `nextRequest`. When it failed, this page's window has no end
+   * and its calls are not read: an open window would pull in later pages'.
+   */
+  boundary: { failed: boolean; retry: () => void };
+  /** Whether `requests` and `nextRequest` are the settled answer for this page. */
   requestsReady: boolean;
   pageIndex: number;
   pageSize: number;
+  lastPageIndex: number;
   /** Moves to the page that holds the linked tool call. */
   onLocatePage: (pageIndex: number) => void;
   /** A tool call the URL points at (`?toolCall=`). */
@@ -52,12 +60,12 @@ export function useSessionToolCalls({
         )
       : null;
 
-  const windowEnd = newerRequest
-    ? new Date(newerRequest.createdAt).getTime() -
-      Math.max(0, newerRequest.durationMs ?? 0)
+  const windowEnd = nextRequest
+    ? new Date(nextRequest.createdAt).getTime() -
+      Math.max(0, nextRequest.durationMs ?? 0)
     : null;
 
-  const windowReady = requestsReady && windowStart !== null;
+  const windowReady = requestsReady && windowStart !== null && !boundary.failed;
   const toolCallsQuery = useSessionMcpToolCalls({
     sessionId,
     startDate: windowStart !== null ? toIso(windowStart) : undefined,
@@ -66,8 +74,9 @@ export function useSessionToolCalls({
   });
   const toolCalls = windowReady ? (toolCallsQuery.data?.data ?? []) : [];
 
-  // Finding the linked call's page: every request created after it sits
-  // before it in the newest-first list, so their count is its position.
+  // Finding the linked call's page: the count of requests created before it
+  // is the first page to try; each page's window then says which way to step
+  // (a request that overlaps the call can sort past it).
   const targetQuery = useMcpToolCall({
     mcpToolCallId: targetToolCallId ?? "",
     enabled: targetToolCallId !== null,
@@ -81,51 +90,47 @@ export function useSessionToolCalls({
     toolCalls.some((call) => call.id === targetToolCallId);
   // Looked up as soon as the call is known, alongside the page's own reads,
   // so a link to another page moves there before this one draws.
-  const [located, setLocated] = useState<{ id: string; page: number } | null>(
-    null,
-  );
-  const shouldLocate = target !== null && located?.id !== target.id;
-  const newerThanTarget = useInteractionSummaries({
+  const olderThanTarget = useInteractionSummaries({
     sessionId,
-    startDate: target?.createdAt,
+    endDate: target?.createdAt,
     limit: 1,
-    enabled: shouldLocate,
+    enabled: target !== null,
   });
-  const newerThanTargetCount = shouldLocate
-    ? newerThanTarget.data?.pagination.total
-    : undefined;
-  // The page's window is the same bound the tool-call read applies, so a call
-  // inside it is this page's without waiting for the calls themselves.
+  const olderCount = olderThanTarget.data?.pagination.total;
+  // The page's window is the same bound the tool-call read applies, so where
+  // a call falls is known without waiting for the calls themselves.
   const targetAt = target ? new Date(target.createdAt).getTime() : null;
-  const targetInWindow =
-    targetAt !== null &&
-    windowStart !== null &&
-    targetAt >= windowStart &&
-    (windowEnd === null || targetAt <= windowEnd);
-  useEffect(() => {
-    if (!target || located?.id === target.id || !requestsReady) return;
-    if (targetInWindow) {
-      setLocated({ id: target.id, page: pageIndex });
-      return;
-    }
-    if (newerThanTargetCount === undefined) return;
-    const page = Math.floor(newerThanTargetCount / pageSize);
-    setLocated({ id: target.id, page });
-    if (page !== pageIndex) onLocatePage(page);
-  }, [
-    target,
-    located,
-    requestsReady,
-    targetInWindow,
-    newerThanTargetCount,
-    pageSize,
+  const seek = usePageSeek({
+    id: target?.id ?? null,
+    ready: requestsReady && !boundary.failed,
     pageIndex,
+    lastPageIndex,
+    guess:
+      olderCount === undefined
+        ? undefined
+        : Math.floor(Math.max(0, olderCount - 1) / pageSize),
+    here:
+      targetAt === null
+        ? undefined
+        : windowStart === null
+          ? // An empty page lies past the session's end.
+            requestsReady && requests.length === 0
+            ? pageIndex > 0
+              ? -1
+              : 0
+            : undefined
+          : targetAt < windowStart
+            ? -1
+            : windowEnd !== null && targetAt > windowEnd
+              ? 1
+              : 0,
     onLocatePage,
-  ]);
+  });
 
   const toolCallsSettled =
     requestsReady &&
     (windowStart === null ||
+      boundary.failed ||
       toolCallsQuery.isSuccess ||
       toolCallsQuery.isError);
   const targetResolved =
@@ -133,19 +138,23 @@ export function useSessionToolCalls({
     (targetOnPage && toolCallsSettled) ||
     targetQuery.isError ||
     (targetQuery.isSuccess && target === null) ||
-    // Settled only on the page it was found on: until the move lands, the
+    // Settled only on the page the walk ended on: until a move lands, the
     // previous page's records are still the ones in hand.
-    (target !== null &&
-      located?.id === target.id &&
-      located.page === pageIndex &&
-      toolCallsSettled);
+    (seek.settled && toolCallsSettled);
   // Once settled, paging away from the linked call is the viewer's choice.
   const settledFor = useSettledOnce(targetToolCallId, targetResolved);
 
+  // Counting the requests before the call failed: no verdict either way.
+  const rankFailed =
+    target !== null && olderThanTarget.isError && !seek.settled;
+
   return {
     toolCalls,
-    isError: toolCallsQuery.isError,
-    refetch: toolCallsQuery.refetch,
+    /** Finding the linked call's page failed; `retryRank` tries again. */
+    rankFailed,
+    retryRank: () => olderThanTarget.refetch(),
+    isError: boundary.failed || toolCallsQuery.isError,
+    refetch: boundary.failed ? boundary.retry : toolCallsQuery.refetch,
     /** The window held more calls than one fetch returns. */
     truncated: toolCallsQuery.data?.pagination.hasNext === true,
     targetOnPage,
@@ -153,11 +162,15 @@ export function useSessionToolCalls({
     targetMissing: targetToolCallId !== null && targetResolved && !targetOnPage,
     /**
      * This page's calls are in, and a linked call has been found on its page
-     * (or found missing): what the trace waits for, so it draws once.
+     * (or found missing): what the trace waits for, so it draws once. A failed
+     * boundary draws the page with its error; the link waits for a retry.
      */
     ready:
       toolCallsSettled &&
-      (targetToolCallId === null || settledFor === targetToolCallId),
+      (targetToolCallId === null ||
+        settledFor === targetToolCallId ||
+        boundary.failed ||
+        rankFailed),
   };
 }
 

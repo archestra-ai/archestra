@@ -5,6 +5,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
 } from "react";
@@ -37,20 +38,19 @@ import { formatElapsed, formatLatency } from "@/lib/utils/format-duration";
 import { cn } from "@/lib/utils/tailwind";
 import {
   buildEntries,
-  ChangeNote,
   ConsultRow,
   type Entry,
   GuardrailsBar,
   type GutterProps,
   gutterWords,
   type LabelChange,
-  LabelGutter,
   pageChanges,
   pageConsults,
   SELECTED_EDGE,
   SELECTED_PAST_GUTTER,
 } from "./guardrail-rows";
 import type { GuardrailsData, TraceYell } from "./guardrails";
+import { LabelChangeNote, LabelRail } from "./label-rail";
 import {
   type InteractionSummary,
   type RequestSpan,
@@ -109,6 +109,7 @@ export function RequestWaterfall({
   guardrails = null,
   selectedConsultKey = null,
   onSelectConsult,
+  onOpenRequest,
 }: {
   /** The session's guardrail checks and label history, when OpenAPPA is on. */
   guardrails?: GuardrailsData | null;
@@ -119,6 +120,8 @@ export function RequestWaterfall({
    * Null closes it.
    */
   onSelectConsult?: (key: string | null) => void;
+  /** Opens a request of this session that is on another page. */
+  onOpenRequest?: (requestId: string) => void;
   timeline: Timeline | null;
   loading: boolean;
   profileName: string | null;
@@ -219,7 +222,11 @@ export function RequestWaterfall({
   // label changed), else the check, else the first row under the new label.
   const activateChange = (change: LabelChange) => {
     if (change.target.type === "consult") onSelectConsult?.(change.target.key);
-    else onSelect(change.target.key);
+    else if (change.target.type === "request") {
+      // The details pane follows the request, not a check left open.
+      onSelectConsult?.(null);
+      onOpenRequest?.(change.target.key);
+    } else onSelect(change.target.key);
   };
   const yellByKey = new Map(
     (guardrails?.yells ?? []).flatMap((yell) =>
@@ -233,12 +240,13 @@ export function RequestWaterfall({
   const isChangeActive = (change: LabelChange) =>
     change.target.type === "consult"
       ? change.target.key === selectedConsultKey
-      : !selectedConsultKey && change.target.key === selectedKey;
-  const gutterFor = (entry: Entry, index: number): GutterProps | null =>
+      : change.target.type === "span" &&
+        !selectedConsultKey &&
+        change.target.key === selectedKey;
+  const gutterFor = (entry: Entry): GutterProps | null =>
     entry.gutter
       ? {
           label: entry.gutter,
-          odd: index % 2 === 1,
           nodes: nodesByKey.get(entry.key) ?? null,
           isChangeActive,
           onActivateChange: activateChange,
@@ -333,13 +341,9 @@ export function RequestWaterfall({
     moveTo(Math.min(steppable.length - 1, Math.max(0, targets[event.key])));
   };
 
-  // Keep tick labels clear of the idle-break pills in the axis.
-  const ticks = (timeline?.ticks ?? []).filter(
-    (tick) =>
-      !(timeline?.breaks ?? []).some(
-        (b) => Math.abs(tick.x - (b.x + b.w / 2)) < 0.075,
-      ),
-  );
+  const ticks = timeline?.ticks ?? [];
+  const axisRef = useRef<HTMLDivElement>(null);
+  useAxisLabelsClear(axisRef, ticks, timeline?.breaks ?? []);
 
   return (
     <div>
@@ -440,7 +444,7 @@ export function RequestWaterfall({
                 {layout === "tools" ? "server, time" : "model, time"}
               </span>
             </div>
-            <div className="relative mx-2 lg:mx-3">
+            <div ref={axisRef} className="relative mx-2 lg:mx-3">
               {/* A phone's track is too narrow for tick labels. */}
               <span className="flex h-full items-center lg:hidden">
                 Timeline
@@ -455,6 +459,7 @@ export function RequestWaterfall({
               {ticks.map((tick) => (
                 <span
                   key={`tick-${tick.x}`}
+                  data-axis-tick=""
                   className={cn(
                     "absolute top-1/2 hidden -translate-y-1/2 whitespace-nowrap tabular-nums lg:block",
                     tick.x === 0
@@ -471,6 +476,7 @@ export function RequestWaterfall({
               {timeline?.breaks.map((b) => (
                 <span
                   key={`axis-idle-${b.x}`}
+                  data-axis-idle=""
                   className="absolute top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 rounded-sm border bg-card px-1 text-[10px] leading-4 font-medium whitespace-nowrap text-foreground/80 tabular-nums lg:block"
                   style={{ left: `${(b.x + b.w / 2) * 100}%` }}
                 >
@@ -518,7 +524,10 @@ export function RequestWaterfall({
                     <span
                       key={`fold-${b.x}`}
                       className="absolute inset-y-0 border-x border-dashed border-border bg-[repeating-linear-gradient(135deg,transparent_0_4px,var(--color-border)_4px_5px)] opacity-60"
-                      style={{ left: `${b.x * 100}%`, width: `${b.w * 100}%` }}
+                      style={{
+                        left: `${b.x * 100}%`,
+                        width: `${b.w * 100}%`,
+                      }}
                     />
                   ))}
                   {edges ? (
@@ -547,7 +556,7 @@ export function RequestWaterfall({
                 onKeyDown={onKeyDown}
                 aria-label="Requests"
               >
-                {entries.map((entry, index) => {
+                {entries.map((entry) => {
                   if (entry.type === "consult") {
                     const { consult } = entry;
                     const isSelected =
@@ -558,7 +567,7 @@ export function RequestWaterfall({
                         layout={layout}
                         consult={consult}
                         toolSpan={entry.toolSpan}
-                        gutter={gutterFor(entry, index)}
+                        gutter={gutterFor(entry)}
                         note={notesByKey.get(entry.key) ?? null}
                         selected={isSelected}
                         buttonRef={(el) => {
@@ -574,7 +583,7 @@ export function RequestWaterfall({
                     layout,
                     selected: span.key === selectedKey && !consultRowSelected,
                     ancestor: span.key === selectedKey && consultRowSelected,
-                    gutter: gutterFor(entry, index),
+                    gutter: gutterFor(entry),
                     note: notesByKey.get(entry.key) ?? null,
                     yell: yellByKey.get(span.key) ?? null,
                     guardrailsOffAt: guardrails?.guardrailsOffAt ?? null,
@@ -877,7 +886,7 @@ function RowShell({
           onSelectRow={onSelect}
         />
       ) : null}
-      {gutter ? <LabelGutter {...gutter} onSelectRow={onSelect} /> : null}
+      {gutter ? <LabelRail {...gutter} onSelectRow={onSelect} /> : null}
       <UnstyledButton
         ref={buttonRef}
         tabIndex={selected ? 0 : -1}
@@ -941,7 +950,9 @@ function RowShell({
               <span className="shrink-0 lg:hidden">
                 {tools ? time : (latency?.text ?? "—")}
               </span>
-              {note && note.length > 0 ? <ChangeNote changes={note} /> : null}
+              {note && note.length > 0 ? (
+                <LabelChangeNote changes={note} />
+              ) : null}
             </span>
           </span>
         </span>
@@ -1295,3 +1306,46 @@ function TokensStack({ row }: { row: InteractionSummary }) {
     </Tooltip>
   );
 }
+
+/**
+ * Hides any axis tick label whose drawn box would touch an idle pill or the
+ * tick before it, measured after layout and again whenever the axis resizes:
+ * how wide a label or pill is depends on its text and the track's width.
+ */
+function useAxisLabelsClear(
+  axisRef: { current: HTMLDivElement | null },
+  ticks: Timeline["ticks"],
+  breaks: Timeline["breaks"],
+) {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the labels and pills are read from the DOM, so a change to them must re-measure too.
+  useLayoutEffect(() => {
+    const axis = axisRef.current;
+    if (!axis) return;
+    const place = () => {
+      const pills = [
+        ...axis.querySelectorAll<HTMLElement>("[data-axis-idle]"),
+      ].map((pill) => pill.getBoundingClientRect());
+      let previous: DOMRect | null = null;
+      for (const tick of axis.querySelectorAll<HTMLElement>(
+        "[data-axis-tick]",
+      )) {
+        tick.style.visibility = "";
+        const box = tick.getBoundingClientRect();
+        const clash = [...pills, ...(previous ? [previous] : [])].some(
+          (other) =>
+            box.left < other.right + AXIS_LABEL_GAP_PX &&
+            other.left < box.right + AXIS_LABEL_GAP_PX,
+        );
+        if (clash) tick.style.visibility = "hidden";
+        else previous = box;
+      }
+    };
+    place();
+    const observer = new ResizeObserver(place);
+    observer.observe(axis);
+    return () => observer.disconnect();
+  }, [axisRef, ticks, breaks]);
+}
+
+/** The least room kept between an axis label and its neighbours. */
+const AXIS_LABEL_GAP_PX = 6;

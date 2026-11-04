@@ -556,6 +556,13 @@ export function PageLayout({
           the bottom of even a short one had a band of nothing under it. */}
         <div
           data-page-content
+          // What a sticky element inside the content must clear: the page
+          // header above it, from `md` up, where the header itself sticks.
+          style={
+            {
+              "--page-header-height": `${headerHeight}px`,
+            } as React.CSSProperties
+          }
           className={cn(
             "w-full flex-1",
             fillContent && "flex min-h-0 flex-col",

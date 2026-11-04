@@ -35,6 +35,11 @@ export function useTeams(params?: {
    * `memberCount`.
    */
   includeMembers?: boolean;
+  /**
+   * Read every page rather than the first: for a list that filters teams
+   * client-side and must not miss one.
+   */
+  all?: boolean;
   /** Server-side name filter (case-insensitive substring match). */
   name?: string;
   /** Server-side label filter, serialized as `key:val1|val2;key2:val3`. */
@@ -47,6 +52,7 @@ export function useTeams(params?: {
     queryKey: [
       "teams",
       ...(mine ? ["mine"] : []),
+      ...(params?.all ? ["all"] : []),
       ...(params?.includeRelations === false ? ["metadata"] : []),
       ...(params?.includeMembers === false ? ["without-members"] : []),
       ...(name || labels ? [{ name, labels }] : []),
@@ -55,8 +61,8 @@ export function useTeams(params?: {
       const teams: Team[] = [];
       // The viewer's own teams decide who may re-authenticate a team
       // connection, the same rule the server ranks with over every direct
-      // membership, so that list is read to the end. Other lists keep their
-      // first page.
+      // membership, so that list is read to the end, as is any list that asks
+      // for `all`. Other lists keep their first page.
       for (let offset = 0; ; offset += TEAMS_PAGE_SIZE) {
         const { data, error } = await getTeams({
           query: {
@@ -77,7 +83,11 @@ export function useTeams(params?: {
         const page = data?.data ?? [];
         teams.push(...page);
         const total = data?.pagination?.total ?? teams.length;
-        if (!mine || page.length < TEAMS_PAGE_SIZE || teams.length >= total) {
+        if (
+          (!mine && !params?.all) ||
+          page.length < TEAMS_PAGE_SIZE ||
+          teams.length >= total
+        ) {
           return teams;
         }
       }

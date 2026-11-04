@@ -510,8 +510,8 @@ for (const provider of [
         expect(rows).toHaveLength(1);
         const reportsPartialUsage =
           provider === "anthropic" || provider === "gemini";
-        expect(rows[0].outputTokens).toBe(reportsPartialUsage ? 1 : 0);
-        expect(rows[0].inputTokens).toBe(reportsPartialUsage ? 12 : 0);
+        expect(rows[0].outputTokens).toBe(reportsPartialUsage ? 1 : null);
+        expect(rows[0].inputTokens).toBe(reportsPartialUsage ? 12 : null);
         if (reportsPartialUsage) {
           const receipts = await InteractionBillingModel.findMany([rows[0].id]);
           expect(receipts).toHaveLength(1);
@@ -545,8 +545,8 @@ for (const provider of [
         const rows =
           await InteractionModel.getAllInteractionsForProfile(agentId);
         expect(rows).toHaveLength(1);
-        expect(rows[0].inputTokens).toBe(provider === "openai" ? 0 : 12);
-        expect(rows[0].outputTokens).toBe(provider === "openai" ? 0 : 1);
+        expect(rows[0].inputTokens).toBe(provider === "openai" ? null : 12);
+        expect(rows[0].outputTokens).toBe(provider === "openai" ? null : 1);
         expect(JSON.stringify(rows[0].response)).not.toContain("held-call");
         expect(JSON.stringify(rows[0].response)).not.toContain("lookup");
         if (provider === "responses") {

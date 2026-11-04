@@ -4,6 +4,44 @@ import { enrichOpenApiWithRbac } from "./enrich-openapi-with-rbac";
 
 describe("enrichOpenApiWithRbac", () => {
   it.each([
+    [RouteId.McpProxyPost, "agent"],
+    [RouteId.McpAppProxyPost, "app"],
+    [RouteId.McpServerProxyPost, "installed MCP server"],
+  ])("documents per-resource access for %s", (operationId, resource) => {
+    const spec = { paths: { "/api/mcp/example": { post: { operationId } } } };
+    const operation = enrichOpenApiWithRbac(spec).paths["/api/mcp/example"]
+      .post as {
+      description?: string;
+      "x-required-permissions"?: { kind: string; note: string };
+    };
+    expect(operation["x-required-permissions"]).toMatchObject({
+      kind: "dynamic",
+      note: expect.stringContaining(`access to the ${resource}`),
+    });
+    expect(operation.description).not.toContain(
+      "None (no additional RBAC permission required)",
+    );
+  });
+
+  it("documents bearer authentication for external MCP App clients", () => {
+    const spec = {
+      paths: {
+        "/api/mcp/app/{appId}": {
+          post: { operationId: RouteId.McpAppProxyPost },
+        },
+      },
+    };
+    const operation = enrichOpenApiWithRbac(spec).paths[
+      "/api/mcp/app/{appId}"
+    ].post as { description?: string };
+    expect(operation.description).toContain("app-scoped OAuth access token");
+    expect(operation.description).toContain("as a Bearer token");
+    expect(operation.description).toContain(
+      "Organization and team tokens cannot access an app",
+    );
+  });
+
+  it.each([
     RouteId.GetLimits,
     RouteId.GetLimit,
     RouteId.CreateLimit,

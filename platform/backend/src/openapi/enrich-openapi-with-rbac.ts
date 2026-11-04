@@ -207,6 +207,13 @@ function appendDescriptionSection(
 }
 
 function createAuthenticationSection(operationId: string): string {
+  if (operationId === RouteId.McpAppProxyPost) {
+    return [
+      "Authentication:",
+      "",
+      "Use a browser session or an Archestra API key. External MCP clients can send a personal token or an app-scoped OAuth access token as a Bearer token. Organization and team tokens cannot access an app because they have no viewer.",
+    ].join("\n");
+  }
   if (
     PUBLIC_UNAUTHENTICATED_ROUTE_IDS.has(
       operationId as typeof PUBLIC_UNAUTHENTICATED_ROUTE_IDS extends Set<
@@ -296,6 +303,12 @@ const HTTP_METHODS = new Set<HttpMethod>([
 ]);
 
 const DYNAMIC_ROUTE_PERMISSION_NOTES = {
+  [RouteId.McpProxyPost]:
+    "The caller must have access to the agent. App tools must be visible to apps.",
+  [RouteId.McpAppProxyPost]:
+    "The caller must have `use` access to the app. Calls to assigned tools must be allowed for the app.",
+  [RouteId.McpServerProxyPost]:
+    "The caller must have access to the installed MCP server. App tools must be visible to apps.",
   [RouteId.GetLimits]:
     "Requires `llmLimit:read` for organization-wide access. A session-authenticated team admin receives only limits for teams they directly administer, with optional entity filters.",
   [RouteId.GetLimit]:
@@ -352,6 +365,18 @@ const DYNAMIC_ROUTE_PERMISSION_NOTES = {
 } satisfies Partial<Record<RouteId, string>>;
 
 const STATIC_ROUTE_PERMISSION_NOTES = {
+  [RouteId.GetLlmProxyLogs]:
+    "`log:read` returns the caller's rows. `log:admin` includes every row in the active organization.",
+  [RouteId.GetLlmProxyLogSummaries]:
+    "`log:read` returns the caller's rows. `log:admin` includes every row in the active organization.",
+  [RouteId.GetLlmProxyLogSessions]:
+    "`log:read` returns the caller's sessions. `log:admin` includes every session in the active organization.",
+  [RouteId.GetLlmProxyLogExternalAgentIds]:
+    "`log:read` returns identifiers from the caller's rows. `log:admin` includes identifiers from every row in the active organization.",
+  [RouteId.GetLlmProxyLogUserIds]:
+    "`log:read` returns the caller's identity. `log:admin` includes every represented user in the active organization.",
+  [RouteId.GetLlmProxyLog]:
+    "`log:read` permits a row attributed to the caller. `log:admin` permits any row in the active organization.",
   [RouteId.GetInteractions]:
     "`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
   [RouteId.GetInteractionSummaries]:

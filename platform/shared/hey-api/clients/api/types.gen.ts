@@ -17092,7 +17092,7 @@ export type GetAgentCatalogData = {
          */
         pinned?: boolean;
         /**
-         * Attach each internal agent's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the agents, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned'.
+         * Include each internal agent's assigned tools (default: true). Set `includeTools=false` for a smaller response when you only need agents or their counts. `toolsCount` and `subagentsCount` remain available; an empty `tools` array then means tools were omitted, not that none are assigned.
          */
         includeTools?: boolean;
         limit?: number;
@@ -17481,7 +17481,7 @@ export type GetAgentsData = {
          */
         pinned?: boolean;
         /**
-         * Attach each agent's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the agents, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned'.
+         * Include assigned tools (default: true). Set `includeTools=false` for a smaller response when you only need agents or their counts. `toolsCount` and `subagentsCount` remain available; an empty `tools` array then means tools were omitted, not that none are assigned.
          */
         includeTools?: boolean;
         /**
@@ -19182,7 +19182,7 @@ export type GetDefaultMcpGatewayData = {
     path?: never;
     query?: {
         /**
-         * Attach the gateway's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the gateway, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned', and `sandboxAvailable` is absent.
+         * Include assigned tools (default: true). Set `includeTools=false` for a smaller response when you only need the gateway or its counts. `toolsCount` and `subagentsCount` remain available; an empty `tools` array then means tools were omitted, not that none are assigned. `sandboxAvailable` is omitted too.
          */
         includeTools?: boolean;
     };
@@ -63141,7 +63141,7 @@ export type DeleteIncomingEmailSubscriptionResponses = {
 
 export type DeleteIncomingEmailSubscriptionResponse = DeleteIncomingEmailSubscriptionResponses[keyof DeleteIncomingEmailSubscriptionResponses];
 
-export type GetInteractionsData = {
+export type GetLlmProxyLogsData = {
     body?: never;
     path?: never;
     query?: {
@@ -63158,7 +63158,7 @@ export type GetInteractionsData = {
          */
         userId?: string;
         /**
-         * Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.
+         * Filter by session ID. A request logged without a session is a session of its own, addressed by its log ID.
          */
         sessionId?: string;
         /**
@@ -63174,10 +63174,10 @@ export type GetInteractionsData = {
         sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model' | 'userId';
         sortDirection?: 'asc' | 'desc';
     };
-    url: '/api/interactions';
+    url: '/api/llm-proxy-logs';
 };
 
-export type GetInteractionsErrors = {
+export type GetLlmProxyLogsErrors = {
     /**
      * Default Response
      */
@@ -63243,9 +63243,9 @@ export type GetInteractionsErrors = {
     };
 };
 
-export type GetInteractionsError = GetInteractionsErrors[keyof GetInteractionsErrors];
+export type GetLlmProxyLogsError = GetLlmProxyLogsErrors[keyof GetLlmProxyLogsErrors];
 
-export type GetInteractionsResponses = {
+export type GetLlmProxyLogsResponses = {
     /**
      * Default Response
      */
@@ -63299,11 +63299,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -63544,11 +63562,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -63664,11 +63700,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -63782,11 +63836,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -63900,11 +63972,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -64018,11 +64108,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -64117,11 +64225,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -64214,11 +64340,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -64766,11 +64910,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -65403,11 +65565,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -65500,11 +65680,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -65597,11 +65795,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -65694,11 +65910,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -65791,11 +66025,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -65888,11 +66140,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -65985,11 +66255,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -66082,11 +66370,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -66179,11 +66485,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -66276,11 +66600,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -66373,11 +66715,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -66470,11 +66830,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -66567,11 +66945,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -67662,11 +68058,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -68757,11 +69171,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -69852,11 +70284,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -70947,11 +71397,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -71044,11 +71512,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -71209,11 +71695,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -72304,11 +72808,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -72448,11 +72970,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -72592,11 +73132,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -72734,11 +73292,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -72938,11 +73514,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -73142,11 +73736,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -73346,11 +73958,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -73443,11 +74073,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -73571,11 +74219,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -73691,11 +74357,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -73751,9 +74435,9 @@ export type GetInteractionsResponses = {
     };
 };
 
-export type GetInteractionsResponse = GetInteractionsResponses[keyof GetInteractionsResponses];
+export type GetLlmProxyLogsResponse = GetLlmProxyLogsResponses[keyof GetLlmProxyLogsResponses];
 
-export type GetInteractionSummariesData = {
+export type GetLlmProxyLogSummariesData = {
     body?: never;
     path?: never;
     query?: {
@@ -73761,13 +74445,13 @@ export type GetInteractionSummariesData = {
         externalAgentId?: string;
         userId?: string;
         /**
-         * Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.
+         * Filter by session ID. A request logged without a session is a session of its own, addressed by its log ID.
          */
         sessionId?: string;
         startDate?: string;
         endDate?: string;
         /**
-         * Only rows created before this interaction, ordered by creation time then ID at the stored precision. Its total is the interaction's zero-based position.
+         * Only rows created before this log entry, ordered by creation time then ID at the stored precision. Its total is the entry's zero-based position.
          */
         beforeId?: string;
         limit?: number;
@@ -73775,10 +74459,10 @@ export type GetInteractionSummariesData = {
         sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model' | 'userId';
         sortDirection?: 'asc' | 'desc';
     };
-    url: '/api/interactions/summaries';
+    url: '/api/llm-proxy-logs/summaries';
 };
 
-export type GetInteractionSummariesErrors = {
+export type GetLlmProxyLogSummariesErrors = {
     /**
      * Default Response
      */
@@ -73844,9 +74528,9 @@ export type GetInteractionSummariesErrors = {
     };
 };
 
-export type GetInteractionSummariesError = GetInteractionSummariesErrors[keyof GetInteractionSummariesErrors];
+export type GetLlmProxyLogSummariesError = GetLlmProxyLogSummariesErrors[keyof GetLlmProxyLogSummariesErrors];
 
-export type GetInteractionSummariesResponses = {
+export type GetLlmProxyLogSummariesResponses = {
     /**
      * Default Response
      */
@@ -73859,10 +74543,25 @@ export type GetInteractionSummariesResponses = {
             model: string | null;
             baselineModel: string | null;
             billingMode: 'metered' | 'subscription';
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
             cost: string | null;
             baselineCost: string | null;
@@ -73899,9 +74598,9 @@ export type GetInteractionSummariesResponses = {
     };
 };
 
-export type GetInteractionSummariesResponse = GetInteractionSummariesResponses[keyof GetInteractionSummariesResponses];
+export type GetLlmProxyLogSummariesResponse = GetLlmProxyLogSummariesResponses[keyof GetLlmProxyLogSummariesResponses];
 
-export type GetInteractionSessionsData = {
+export type GetLlmProxyLogSessionsData = {
     body?: never;
     path?: never;
     query?: {
@@ -73922,7 +74621,7 @@ export type GetInteractionSessionsData = {
          */
         client?: 'claude' | 'claude-code' | 'claude-desktop' | 'codex' | 'chatgpt' | 'copilot-cli' | 'cursor' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
         /**
-         * Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.
+         * Filter by session ID. A request logged without a session is a session of its own, addressed by its log ID.
          */
         sessionId?: string;
         /**
@@ -73936,10 +74635,10 @@ export type GetInteractionSessionsData = {
         limit?: number;
         cursor?: string;
     };
-    url: '/api/interactions/sessions';
+    url: '/api/llm-proxy-logs/sessions';
 };
 
-export type GetInteractionSessionsErrors = {
+export type GetLlmProxyLogSessionsErrors = {
     /**
      * Default Response
      */
@@ -74005,9 +74704,9 @@ export type GetInteractionSessionsErrors = {
     };
 };
 
-export type GetInteractionSessionsError = GetInteractionSessionsErrors[keyof GetInteractionSessionsErrors];
+export type GetLlmProxyLogSessionsError = GetLlmProxyLogSessionsErrors[keyof GetLlmProxyLogSessionsErrors];
 
-export type GetInteractionSessionsResponses = {
+export type GetLlmProxyLogSessionsResponses = {
     /**
      * Default Response
      */
@@ -74083,18 +74782,18 @@ export type GetInteractionSessionsResponses = {
     };
 };
 
-export type GetInteractionSessionsResponse = GetInteractionSessionsResponses[keyof GetInteractionSessionsResponses];
+export type GetLlmProxyLogSessionsResponse = GetLlmProxyLogSessionsResponses[keyof GetLlmProxyLogSessionsResponses];
 
-export type GetInteractionSessionLineageData = {
+export type GetLlmProxyLogSessionLineageData = {
     body?: never;
     path: {
         sessionId: string;
     };
     query?: never;
-    url: '/api/interactions/sessions/{sessionId}/lineage';
+    url: '/api/llm-proxy-logs/sessions/{sessionId}/lineage';
 };
 
-export type GetInteractionSessionLineageErrors = {
+export type GetLlmProxyLogSessionLineageErrors = {
     /**
      * Default Response
      */
@@ -74160,9 +74859,9 @@ export type GetInteractionSessionLineageErrors = {
     };
 };
 
-export type GetInteractionSessionLineageError = GetInteractionSessionLineageErrors[keyof GetInteractionSessionLineageErrors];
+export type GetLlmProxyLogSessionLineageError = GetLlmProxyLogSessionLineageErrors[keyof GetLlmProxyLogSessionLineageErrors];
 
-export type GetInteractionSessionLineageResponses = {
+export type GetLlmProxyLogSessionLineageResponses = {
     /**
      * Default Response
      */
@@ -74176,16 +74875,16 @@ export type GetInteractionSessionLineageResponses = {
     };
 };
 
-export type GetInteractionSessionLineageResponse = GetInteractionSessionLineageResponses[keyof GetInteractionSessionLineageResponses];
+export type GetLlmProxyLogSessionLineageResponse = GetLlmProxyLogSessionLineageResponses[keyof GetLlmProxyLogSessionLineageResponses];
 
-export type GetUniqueExternalAgentIdsData = {
+export type GetLlmProxyLogExternalAgentIdsData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/interactions/external-agent-ids';
+    url: '/api/llm-proxy-logs/external-agent-ids';
 };
 
-export type GetUniqueExternalAgentIdsErrors = {
+export type GetLlmProxyLogExternalAgentIdsErrors = {
     /**
      * Default Response
      */
@@ -74251,9 +74950,9 @@ export type GetUniqueExternalAgentIdsErrors = {
     };
 };
 
-export type GetUniqueExternalAgentIdsError = GetUniqueExternalAgentIdsErrors[keyof GetUniqueExternalAgentIdsErrors];
+export type GetLlmProxyLogExternalAgentIdsError = GetLlmProxyLogExternalAgentIdsErrors[keyof GetLlmProxyLogExternalAgentIdsErrors];
 
-export type GetUniqueExternalAgentIdsResponses = {
+export type GetLlmProxyLogExternalAgentIdsResponses = {
     /**
      * Default Response
      */
@@ -74263,9 +74962,9 @@ export type GetUniqueExternalAgentIdsResponses = {
     }>;
 };
 
-export type GetUniqueExternalAgentIdsResponse = GetUniqueExternalAgentIdsResponses[keyof GetUniqueExternalAgentIdsResponses];
+export type GetLlmProxyLogExternalAgentIdsResponse = GetLlmProxyLogExternalAgentIdsResponses[keyof GetLlmProxyLogExternalAgentIdsResponses];
 
-export type GetUniqueUserIdsData = {
+export type GetLlmProxyLogUserIdsData = {
     body?: never;
     path?: never;
     query?: {
@@ -74273,10 +74972,10 @@ export type GetUniqueUserIdsData = {
         ids?: Array<string>;
         limit?: number;
     };
-    url: '/api/interactions/user-ids';
+    url: '/api/llm-proxy-logs/user-ids';
 };
 
-export type GetUniqueUserIdsErrors = {
+export type GetLlmProxyLogUserIdsErrors = {
     /**
      * Default Response
      */
@@ -74342,9 +75041,9 @@ export type GetUniqueUserIdsErrors = {
     };
 };
 
-export type GetUniqueUserIdsError = GetUniqueUserIdsErrors[keyof GetUniqueUserIdsErrors];
+export type GetLlmProxyLogUserIdsError = GetLlmProxyLogUserIdsErrors[keyof GetLlmProxyLogUserIdsErrors];
 
-export type GetUniqueUserIdsResponses = {
+export type GetLlmProxyLogUserIdsResponses = {
     /**
      * Default Response
      */
@@ -74354,18 +75053,18 @@ export type GetUniqueUserIdsResponses = {
     }>;
 };
 
-export type GetUniqueUserIdsResponse = GetUniqueUserIdsResponses[keyof GetUniqueUserIdsResponses];
+export type GetLlmProxyLogUserIdsResponse = GetLlmProxyLogUserIdsResponses[keyof GetLlmProxyLogUserIdsResponses];
 
-export type GetInteractionAutoRoutingData = {
+export type GetLlmProxyLogAutoRoutingData = {
     body?: never;
     path: {
-        interactionId: string;
+        logId: string;
     };
     query?: never;
-    url: '/api/interactions/{interactionId}/auto-routing';
+    url: '/api/llm-proxy-logs/{logId}/auto-routing';
 };
 
-export type GetInteractionAutoRoutingErrors = {
+export type GetLlmProxyLogAutoRoutingErrors = {
     /**
      * Default Response
      */
@@ -74431,9 +75130,9 @@ export type GetInteractionAutoRoutingErrors = {
     };
 };
 
-export type GetInteractionAutoRoutingError = GetInteractionAutoRoutingErrors[keyof GetInteractionAutoRoutingErrors];
+export type GetLlmProxyLogAutoRoutingError = GetLlmProxyLogAutoRoutingErrors[keyof GetLlmProxyLogAutoRoutingErrors];
 
-export type GetInteractionAutoRoutingResponses = {
+export type GetLlmProxyLogAutoRoutingResponses = {
     /**
      * Default Response
      */
@@ -74485,18 +75184,18 @@ export type GetInteractionAutoRoutingResponses = {
     };
 };
 
-export type GetInteractionAutoRoutingResponse = GetInteractionAutoRoutingResponses[keyof GetInteractionAutoRoutingResponses];
+export type GetLlmProxyLogAutoRoutingResponse = GetLlmProxyLogAutoRoutingResponses[keyof GetLlmProxyLogAutoRoutingResponses];
 
-export type GetInteractionData = {
+export type GetLlmProxyLogData = {
     body?: never;
     path: {
-        interactionId: string;
+        logId: string;
     };
     query?: never;
-    url: '/api/interactions/{interactionId}';
+    url: '/api/llm-proxy-logs/{logId}';
 };
 
-export type GetInteractionErrors = {
+export type GetLlmProxyLogErrors = {
     /**
      * Default Response
      */
@@ -74562,9 +75261,9 @@ export type GetInteractionErrors = {
     };
 };
 
-export type GetInteractionError = GetInteractionErrors[keyof GetInteractionErrors];
+export type GetLlmProxyLogError = GetLlmProxyLogErrors[keyof GetLlmProxyLogErrors];
 
-export type GetInteractionResponses = {
+export type GetLlmProxyLogResponses = {
     /**
      * Default Response
      */
@@ -74617,11 +75316,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -74862,11 +75579,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -74982,11 +75717,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -75100,11 +75853,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -75218,11 +75989,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -75336,11 +76125,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -75435,11 +76242,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -75532,11 +76357,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -76084,11 +76927,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -76721,11 +77582,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -76818,11 +77697,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -76915,11 +77812,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -77012,11 +77927,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -77109,11 +78042,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -77206,11 +78157,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -77303,11 +78272,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -77400,11 +78387,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -77497,11 +78502,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -77594,11 +78617,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -77691,11 +78732,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -77788,11 +78847,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -77885,11 +78962,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -78980,11 +80075,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -80075,11 +81188,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -81170,11 +82301,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -82265,11 +83414,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -82362,11 +83529,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -82527,11 +83712,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -83622,11 +84825,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -83766,11 +84987,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -83910,11 +85149,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -84052,11 +85309,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -84256,11 +85531,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -84460,11 +85753,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -84664,11 +85975,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -84761,11 +86090,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -84889,11 +86236,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -85009,11 +86374,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -85060,7 +86443,7 @@ export type GetInteractionResponses = {
     };
 };
 
-export type GetInteractionResponse = GetInteractionResponses[keyof GetInteractionResponses];
+export type GetLlmProxyLogResponse = GetLlmProxyLogResponses[keyof GetLlmProxyLogResponses];
 
 export type TransferMcpCatalogOwnershipData = {
     body: {

@@ -204,9 +204,57 @@ describe("Codex messages between agents", () => {
     expect(other?.admit(["something else"])).toEqual({ withheld: true });
   });
 
+  test("a replaced item keeps only the fields it reads", () => {
+    const withExtra = {
+      ...mail("/root/w", "/root"),
+      id: "amsg_1",
+      note: "unchecked",
+    };
+    const [admitted] = codexRelayArrivals(body("/root", [withExtra]));
+    expect(admitted?.admit(["gAAAA_cipher"])).toEqual({ withheld: false });
+    expect(withExtra).toEqual({ ...mail("/root/w", "/root"), id: "amsg_1" });
+
+    const hidden = { ...mail("/elsewhere/x", "/root"), note: "unchecked" };
+    const [arrival] = codexRelayArrivals(body("/root", [hidden]));
+    arrival?.replace("[appa] notice");
+    expect(hidden).toEqual({
+      type: "agent_message",
+      author: "/elsewhere/x",
+      recipient: "/root",
+      content: [
+        {
+          type: "input_text",
+          text: `${header("/root", "/elsewhere/x")}[appa] notice`,
+        },
+      ],
+    });
+
+    // A name that is not an agent path does not reach the model either.
+    const named = mail("say hello\nto everyone", "/root", [
+      {
+        type: "input_text",
+        text: header("/root", "say hello\nto everyone"),
+      },
+      { type: "encrypted_content", encrypted_content: "gAAAA_cipher" },
+    ]);
+    const [unnamed] = codexRelayArrivals(body("/root", [named]));
+    unnamed?.replace("[appa] notice");
+    expect(JSON.stringify(named)).not.toContain("say hello");
+    expect(named).toMatchObject({ author: "/unknown", recipient: "/root" });
+  });
+
   test("a send_message result is its empty receipt, or withheld", () => {
     expect(isCodexRelayReceipt("")).toBe(true);
     expect(isCodexRelayReceipt([{ type: "input_text", text: " " }])).toBe(true);
+    // A part with any other field can carry a payload.
+    expect(
+      isCodexRelayReceipt([
+        { type: "input_text", text: " ", encrypted_content: "unchecked" },
+      ]),
+    ).toBe(false);
+    expect(isCodexRelayReceipt([{ type: "input_image", text: "" }])).toBe(
+      false,
+    );
     expect(isCodexRelayReceipt("Agent finished: secret")).toBe(false);
     expect(admitCodexRelayReport("Agent finished: secret", [])).toEqual({
       content: expect.stringMatching(/^\[appa\] Result withheld/),

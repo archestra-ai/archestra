@@ -174,6 +174,10 @@ export class AppaCodexAdapter implements AppaClientAdapter {
     return isCodexRelayReceipt(content);
   }
 
+  // Codex reports a failed send in text the proxy cannot tell apart from a
+  // report that carries another agent's output.
+  readonly admitsFailedRelayReports = true as const;
+
   admitRelayReport(
     content: unknown,
     records: readonly string[],

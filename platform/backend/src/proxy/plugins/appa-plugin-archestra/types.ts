@@ -302,6 +302,11 @@ export type AppaClientAdapter = {
   /** True when a message call's result is only the client's delivery receipt. */
   isRelayReceipt?(content: unknown): boolean;
   /**
+   * A failed message call's result is admitted like any other report: the
+   * client's error text is not the only text such a result can carry.
+   */
+  readonly admitsFailedRelayReports?: true;
+  /**
    * Admits the report a message call returned from an agent it resumed,
    * against the values this session's children are on record for returning.
    */

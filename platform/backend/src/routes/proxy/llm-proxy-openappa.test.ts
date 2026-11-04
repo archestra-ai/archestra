@@ -14543,7 +14543,27 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         expect(appaService.sendPeerMessage).not.toHaveBeenCalled();
       });
 
-      test("a send_message result other than its receipt is withheld", async () => {
+      test.for([
+        { result: "a report", output: "Agent finished: unchecked report" },
+        {
+          result: "a failed send's text",
+          output: "unchecked report",
+          is_error: true,
+        },
+        {
+          result: "a receipt part with a payload",
+          output: [
+            {
+              type: "input_text",
+              text: " ",
+              encrypted_content: "unchecked report",
+            },
+          ],
+        },
+      ])("a send_message result other than its empty receipt is withheld: $result", async ({
+        output,
+        is_error,
+      }) => {
         await recordFamily();
         const response = await send({
           thread: "root-thread",
@@ -14554,13 +14574,30 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             {
               type: "function_call_output",
               call_id: "call_send",
-              output: "Agent finished: unchecked report",
+              output,
+              ...(is_error ? { is_error } : {}),
             },
           ],
         });
         expect(response.statusCode, response.body).toBe(200);
         const forwarded = JSON.stringify(providerRequests.at(-1));
         expect(forwarded).not.toContain("unchecked report");
+      });
+
+      test("a hidden message keeps none of the fields the client added", async () => {
+        await recordFamily();
+        const response = await send({
+          thread: "root-thread",
+          agentName: "/root",
+          input: [
+            { role: "user", content: "Coordinate" },
+            { ...mail("/root/worker", "/root"), note: "unchecked note" },
+          ],
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        const forwarded = JSON.stringify(providerRequests.at(-1));
+        expect(forwarded).not.toContain(cipher);
+        expect(forwarded).not.toContain("unchecked note");
       });
 
       test("a parent's message to its subagent names the child its spawn started", async () => {

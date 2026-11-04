@@ -3905,7 +3905,7 @@ async function admitRelayReports(params: {
   const reports = params.results.filter(
     (result) =>
       adapter.isRelayTool?.(result.name, result.namespace) &&
-      !result.isError &&
+      (!result.isError || adapter.admitsFailedRelayReports) &&
       !adapter.isRelayReceipt?.(result.content),
   );
   if (reports.length === 0) return;
@@ -4233,22 +4233,22 @@ async function childOfNamedSpawn(params: {
         .map((alias) => alias.spawnCallId),
     ),
   ];
-  const children = await Promise.all(
-    spawnCallIds.map(async (spawnCallId) => ({
-      spawnCallId,
-      childNativeId: await OpenAppaSpawnCorrelationModel.childOfSpawn({
-        organizationId: params.parent.organization_id,
-        callerId: params.parent.caller_id,
-        parentSessionId: params.parent.session_id,
-        spawnCallId,
-      }),
-    })),
-  );
-  if (children.some((child) => child.childNativeId === "ambiguous"))
-    return "ambiguous";
-  const found = children.filter(
-    (child): child is { spawnCallId: string; childNativeId: string } =>
-      typeof child.childNativeId === "string",
+  const prefix = `${params.parent.session_id}:`;
+  const rows = await OpenAppaSpawnCorrelationModel.childrenOfSpawns({
+    organizationId: params.parent.organization_id,
+    callerId: params.parent.caller_id,
+    childSessionIds: params.started.map((id) => `${prefix}${id}`),
+    spawnCallIds,
+  });
+  const found = rows.flatMap((row) =>
+    row.childSessionId.startsWith(prefix)
+      ? [
+          {
+            spawnCallId: row.spawnCallId,
+            childNativeId: row.childSessionId.slice(prefix.length),
+          },
+        ]
+      : [],
   );
   if (new Set(found.map((child) => child.childNativeId)).size > 1)
     return "ambiguous";

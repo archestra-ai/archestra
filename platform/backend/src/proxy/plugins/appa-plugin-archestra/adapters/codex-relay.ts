@@ -19,6 +19,9 @@ const AGENT_PATH =
   /^\/[A-Za-z0-9_.@-]{1,128}(?:\/[A-Za-z0-9_.@-]{1,128}){0,15}$/;
 const TASK_NAME = /^[A-Za-z0-9_.@-]{1,128}$/;
 const MESSAGE_KIND = "MESSAGE";
+const UNKNOWN_AGENT = "/unknown";
+const ITEM_ID = /^[A-Za-z0-9_.:@-]{1,128}$/;
+const TEXT_PART_TYPES = new Set(["input_text", "output_text", "text"]);
 
 const WITHHELD_REPORT =
   "[appa] Result withheld: OpenAPPA has no record of this message result, so its text is hidden.";
@@ -89,10 +92,14 @@ export function admitCodexRelayReport(
 export function isCodexRelayReceipt(content: unknown): boolean {
   if (typeof content === "string") return content.trim() === "";
   if (Array.isArray(content))
+    // Only blank text parts: a part with any other field can carry a payload.
     return content.every((part) => {
       const record = asRecord(part);
       return (
         record !== undefined &&
+        Object.keys(record).every((key) => key === "type" || key === "text") &&
+        (record.type === undefined ||
+          TEXT_PART_TYPES.has(String(record.type))) &&
         typeof record.text === "string" &&
         record.text.trim() === ""
       );
@@ -143,10 +150,9 @@ type Relation = { kind: "lead" } | { kind: "child" | "sibling"; name: string };
 type MailboxMessage = {
   author: string;
   recipient: string;
-  header: string;
   body: string;
-  /** The content as the client sent it. */
-  content: unknown[];
+  /** The body is one encrypted part after the header. */
+  encrypted: boolean;
 };
 
 /** How `other`, as `own` names it, relates to the agent at path `own`. */
@@ -168,6 +174,24 @@ function relationTo(
   if (targetParent === own) return { kind: "child", name };
   if (lead && targetParent === lead) return { kind: "sibling", name };
   return undefined;
+}
+
+function messageHeader(
+  recipient: string,
+  author: string,
+  newline: string,
+): string {
+  return [
+    `Message Type: ${MESSAGE_KIND}`,
+    `Task name: ${recipient}`,
+    `Sender: ${author}`,
+    "Payload:",
+    "",
+  ].join(newline);
+}
+
+function agentPathOrUnknown(value: string): string {
+  return AGENT_PATH.test(value) ? value : UNKNOWN_AGENT;
 }
 
 function parentPath(path: string): string | undefined {
@@ -192,26 +216,20 @@ function readMessage(
   const author = stringField(item.author) ?? "";
   const recipient = stringField(item.recipient) ?? "";
   const header = ["\n", "\r\n"]
-    .map((newline) =>
-      [
-        `Message Type: ${MESSAGE_KIND}`,
-        `Task name: ${recipient}`,
-        `Sender: ${author}`,
-        "Payload:",
-        "",
-      ].join(newline),
-    )
+    .map((newline) => messageHeader(recipient, author, newline))
     .find((prefix) => text.startsWith(prefix));
-  const content = [...parts];
-  const encrypted = asRecord(parts[1]);
+  const second = asRecord(parts[1]);
+  const encrypted =
+    header !== undefined &&
+    parts.length === 2 &&
+    text === header &&
+    second?.type === "encrypted_content" &&
+    typeof second.encrypted_content === "string";
   const body =
     header === undefined
       ? undefined
-      : parts.length === 2 &&
-          text === header &&
-          encrypted?.type === "encrypted_content" &&
-          typeof encrypted.encrypted_content === "string"
-        ? encrypted.encrypted_content
+      : encrypted
+        ? String(second?.encrypted_content)
         : parts.every(
               (part) =>
                 asRecord(part)?.type === "input_text" &&
@@ -225,10 +243,9 @@ function readMessage(
   return {
     author,
     recipient,
-    header: header ?? `Message Type: ${MESSAGE_KIND}\nPayload:\n`,
     // A message whose shape this does not read has no body any record holds.
     body: body ?? "",
-    content,
+    encrypted,
   };
 }
 
@@ -237,11 +254,35 @@ function arrival(
   message: MailboxMessage,
   relation: Relation | undefined,
 ): AppaRelayArrival {
+  /**
+   * Rebuilds the item from the fields this reads, so nothing the client added
+   * to it reaches the model: names that are not agent paths are not kept, and
+   * the text is the admitted body or the notice.
+   */
   const replace = (text: string) => {
-    item.content =
-      message.body !== "" && text === message.body
-        ? message.content
-        : [{ type: "input_text", text: message.header + text }];
+    const author = agentPathOrUnknown(message.author);
+    const recipient = agentPathOrUnknown(message.recipient);
+    const header = messageHeader(recipient, author, "\n");
+    const id =
+      typeof item.id === "string" && ITEM_ID.test(item.id)
+        ? item.id
+        : undefined;
+    const admitted = message.body !== "" && text === message.body;
+    const content =
+      admitted && message.encrypted
+        ? [
+            { type: "input_text", text: header },
+            { type: "encrypted_content", encrypted_content: message.body },
+          ]
+        : [{ type: "input_text", text: header + text }];
+    for (const key of Object.keys(item)) delete item[key];
+    Object.assign(item, {
+      type: "agent_message",
+      ...(id ? { id } : {}),
+      author,
+      recipient,
+      content,
+    });
   };
   const recorded = (records: readonly string[]) =>
     message.body !== "" && records.includes(message.body);
@@ -267,7 +308,10 @@ function arrival(
     structured: true,
     recorded,
     admit(records) {
-      if (recorded(records)) return { withheld: false };
+      if (recorded(records)) {
+        replace(message.body);
+        return { withheld: false };
+      }
       replace(WITHHELD_MESSAGE);
       return { withheld: true };
     },

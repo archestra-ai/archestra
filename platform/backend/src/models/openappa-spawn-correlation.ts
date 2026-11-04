@@ -246,46 +246,37 @@ class OpenAppaSpawnCorrelationModel {
   }
 
   /**
-   * The client-native id of the child that started under `spawnCallId`, by
-   * the signed spawn binding its own events store. Several children under one
-   * call fit none.
+   * Which of `childSessionIds`, the children a parent started, each of
+   * `spawnCallIds` started, by the signed spawn binding each child's own
+   * events store. One query, on the operations key.
    */
-  static async childOfSpawn(params: {
+  static async childrenOfSpawns(params: {
     organizationId: string;
     callerId: string | undefined;
-    parentSessionId: string;
-    spawnCallId: string;
-  }): Promise<string | "ambiguous" | undefined> {
-    const prefix = `${params.parentSessionId}:`;
+    childSessionIds: readonly string[];
+    spawnCallIds: readonly string[];
+  }): Promise<Array<{ spawnCallId: string; childSessionId: string }>> {
+    if (params.childSessionIds.length === 0 || params.spawnCallIds.length === 0)
+      return [];
     const storedCallId = sql<string>`COALESCE(${operations.input}->'semantic'->>'spawn_call_id', ${operations.input}->>'spawn_call_id')`;
-    const rows = await db
-      .selectDistinct({ sessionId: operations.sessionId })
+    return db
+      .selectDistinct({
+        spawnCallId: storedCallId,
+        childSessionId: operations.sessionId,
+      })
       .from(operations)
-      .innerJoin(
-        sessions,
-        and(
-          eq(sessions.organizationId, operations.organizationId),
-          eq(sessions.sessionId, operations.sessionId),
-        ),
-      )
       .where(
         and(
           eq(operations.organizationId, params.organizationId),
-          eq(sessions.parentId, params.parentSessionId),
+          inArray(operations.sessionId, [...params.childSessionIds]),
           eq(operations.status, "complete"),
           params.callerId
             ? eq(operations.callerId, params.callerId)
             : isNull(operations.callerId),
           sql`COALESCE(${operations.input}->'semantic'->>'event', ${operations.input}->>'event') IN ('session_start', 'prompt', 'tool_call', 'child_end')`,
-          sql`${storedCallId} = ${params.spawnCallId}`,
+          inArray(storedCallId, [...params.spawnCallIds]),
         ),
-      )
-      .limit(2);
-    const children = rows
-      .map((row) => row.sessionId)
-      .filter((sessionId) => sessionId.startsWith(prefix));
-    if (children.length > 1) return "ambiguous";
-    return children[0]?.slice(prefix.length);
+      );
   }
 
   /**

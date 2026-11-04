@@ -394,6 +394,7 @@ test.each([
     "check-workspace.mjs",
     "check-workspace.ts",
     "check-sequence.ts",
+    "commit-scope.ts",
     "heavy-lane.ts",
   ]) {
     fs.copyFileSync(

@@ -480,8 +480,8 @@ class OpenAppaSessionModel {
       .from(table)
       .where(
         and(
+          eq(table.actor, openappaActor(params.rootSessionId)),
           eq(table.organizationId, params.organizationId),
-          eq(table.sessionId, params.rootSessionId),
           isNull(table.parentId),
         ),
       )

@@ -3330,7 +3330,9 @@ async function handleStreaming<
 
           if (result.isFinal) {
             providerTerminalSeen = true;
-            break;
+            // Gemini finishes candidates independently and can send usage
+            // afterward. Drain its SDK iterator so every call reaches policy.
+            if (streamAdapter.provider !== "gemini") break;
           }
         }
 

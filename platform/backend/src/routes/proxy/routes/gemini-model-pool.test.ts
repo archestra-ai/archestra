@@ -1097,6 +1097,81 @@ for (const name of [
   }
 }
 
+for (const first of [0, 1]) {
+  poolTest(
+    `native Gemini drains all candidates and trailing usage (first=${first})`,
+    async ({ pool }) => {
+      const candidates = [0, 1].map((index) => ({
+        index,
+        content: {
+          role: "model",
+          parts: [
+            {
+              functionCall: {
+                id: `call-${index}`,
+                name: "lookup",
+                args: { index },
+              },
+              thoughtSignature: `signature-${index}`,
+            },
+          ],
+        },
+        finishReason: "STOP",
+      }));
+      server.use(
+        http.post(`${origin}/v1beta/models/:model`, () =>
+          sse([
+            {
+              candidates: [candidates[first]],
+              modelVersion: "gemini-3.1-flash-lite",
+            },
+            { candidates: [candidates[1 - first]] },
+            { usageMetadata },
+          ]),
+        ),
+      );
+      const response = await pool.app.inject({
+        method: "POST",
+        url: `/v1/gemini/${pool.agentId}/v1beta/models/gemini-pool:streamGenerateContent`,
+        headers: { "x-goog-api-key": pool.token },
+        payload: {
+          contents: [{ role: "user", parts: [{ text: "Look up a status." }] }],
+          generationConfig: { candidateCount: 2 },
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const chunks = response.body
+        .split("\n")
+        .filter((line) => line.startsWith("data: {"))
+        .map((line) => JSON.parse(line.slice(6)));
+      expect(chunks.flatMap((chunk) => chunk.candidates ?? [])).toEqual([
+        candidates[first],
+        candidates[1 - first],
+      ]);
+      expect(
+        chunks.some(
+          (chunk) =>
+            chunk.usageMetadata?.promptTokenCount ===
+            usageMetadata.promptTokenCount,
+        ),
+      ).toBe(true);
+      const rows = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.modelPoolId, pool.poolId));
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        inputTokens: 16,
+        cacheReadTokens: 4,
+        attemptOutcome: "answered",
+      });
+      expect(rows[0].response).toMatchObject({
+        candidates: [candidates[first], candidates[1 - first]],
+      });
+    },
+  );
+}
+
 for (const vertex of [false, true]) {
   for (const usePool of [false, true]) {
     for (const mixed of [false, true]) {

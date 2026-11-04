@@ -3,7 +3,7 @@
 
 import type { Permissions } from "@archestra/shared";
 import { Check, Search } from "lucide-react";
-import { Fragment, useId, useState } from "react";
+import { Fragment, type ReactNode, useId, useState } from "react";
 import {
   FilterBar,
   FilterSelect,
@@ -33,16 +33,23 @@ import {
  * Every permission a role can hold, a card per resource, filtered by a search
  * and by area. With `onChange` the rows are checkboxes and `grantable` says
  * which the author may grant; without it the list is read-only and opens on
- * the granted rows alone.
+ * the granted rows alone. `attribution` names, for a granted row, where the
+ * grant comes from ("Editor, Reviewer via Security") when the holder is a
+ * person rather than a role.
  */
 export function PermissionList({
   permissions,
   onChange,
   grantable = {},
+  attribution,
+  emptyMessage = "This role grants no permissions.",
 }: {
   permissions: Permissions;
   onChange?: (permissions: Permissions) => void;
   grantable?: Permissions;
+  attribution?: (row: PermissionRow) => string | null;
+  /** Shown in place of the list when nothing is granted. */
+  emptyMessage?: ReactNode;
 }) {
   const readOnly = !onChange;
   const [query, setQuery] = useState("");
@@ -80,13 +87,14 @@ export function PermissionList({
               permissions={permissions}
               grantable={grantable}
               onChange={onChange}
+              attribution={attribution}
             />
           </Fragment>
         ))}
         {entries.length === 0 && (
           <p className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
             {readOnly && filter === "granted" && !query ? (
-              <span>This role grants no permissions.</span>
+              <span>{emptyMessage}</span>
             ) : (
               <span>No permissions match.</span>
             )}
@@ -236,11 +244,13 @@ function ResourceCard({
   permissions,
   grantable,
   onChange,
+  attribution,
 }: {
   entry: PermissionEntry;
   permissions: Permissions;
   grantable: Permissions;
   onChange?: (permissions: Permissions) => void;
+  attribution?: (row: PermissionRow) => string | null;
 }) {
   const { resource } = entry;
   const selected = countGranted(permissions, resource.rows);
@@ -301,6 +311,11 @@ function ResourceCard({
             onToggle={
               onChange ? () => onChange(toggleRow(permissions, row)) : undefined
             }
+            attribution={
+              attribution && isGranted(permissions, row)
+                ? attribution(row)
+                : null
+            }
           />
         ))}
       </div>
@@ -309,20 +324,22 @@ function ResourceCard({
 }
 
 /**
- * One permission on one line: the control, its label, what it allows, and
- * its key. On a phone the line stacks, and the key moves under the text so
- * the description keeps the row's width.
+ * One permission on one line: the control, its label, what it allows, where
+ * it comes from when that is known, and its key. On a phone the line stacks,
+ * and the key moves under the text so the description keeps the row's width.
  */
 function PermissionRowItem({
   row,
   granted,
   disabled,
   onToggle,
+  attribution,
 }: {
   row: PermissionRow;
   granted: boolean;
   disabled: boolean;
   onToggle?: () => void;
+  attribution: string | null;
 }) {
   const id = useId();
   return (
@@ -364,6 +381,14 @@ function PermissionRowItem({
         <span className="min-w-0 text-xs text-muted-foreground sm:truncate">
           {row.description}
         </span>
+        {attribution && (
+          <span
+            className="mt-0.5 shrink-0 text-xs text-muted-foreground/80 sm:mt-0 sm:ml-auto sm:max-w-[40%] sm:truncate"
+            title={attribution}
+          >
+            {attribution}
+          </span>
+        )}
         <code className="mt-1 font-mono text-[11px] text-muted-foreground/60 sm:hidden">
           {row.key}
         </code>

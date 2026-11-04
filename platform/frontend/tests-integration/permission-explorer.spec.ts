@@ -45,6 +45,8 @@ test.beforeEach(async ({ mswControl, page, request }) => {
       },
     },
     { method: "get", url: "/api/user/permissions", body: adminPermissions },
+    // The role page lists who holds the role; nobody does in this fixture.
+    { method: "get", url: "/api/service-accounts", body: [] },
     {
       method: "get",
       url: "/api/roles",
@@ -155,32 +157,30 @@ test("read-only roles and personal access expose permissions and keyboard source
   await capture(page, "role-view-desktop");
 
   const personal = await openAccountPermissions(page);
-  const permission = personal.getByRole("button", {
-    name: "Agents Read granted",
+  const personalAgents = personal.getByRole("region", {
+    name: "Agents",
     exact: true,
   });
-  await expect(permission).toBeVisible();
+  await expect(
+    personalAgents.getByText("View agents", { exact: true }),
+  ).toBeVisible();
   await capture(page, "account-permissions-desktop");
-  await permission.focus();
-  await expect(page.getByRole("tooltip")).toContainText(
-    "Admin · Direct assignment",
-  );
-  await expect(page.getByRole("tooltip")).toContainText(
-    "Agent Editor · Team: Platform",
-  );
+  // Each row says which roles grant it, directly or through a team: the
+  // custom role covers read, create and delete, so those three rows name it.
   await expect(
-    personal.getByPlaceholder("Find a resource or action…"),
-  ).toHaveCount(0);
-  await personal.getByRole("button", { name: "Other", exact: true }).click();
-  await expect(
-    personal.getByRole("button", {
-      name: "Knowledge Sources Query granted",
+    personalAgents.getByText("Admin, agent editor via Platform", {
       exact: true,
     }),
-  ).toBeVisible();
+  ).toHaveCount(3);
+  await expect(personalAgents.getByText("Admin", { exact: true })).toHaveCount(
+    1,
+  );
+  await expect(personal.getByRole("checkbox")).toHaveCount(0);
+  await personal.getByRole("button", { name: "Other", exact: true }).click();
   await expect(
-    personal.getByRole("button", { name: "Agents Read granted", exact: true }),
-  ).toHaveCount(0);
+    personal.getByText("Query knowledge sources", { exact: true }),
+  ).toBeVisible();
+  await expect(personalAgents).toHaveCount(0);
 });
 
 for (const viewport of [
@@ -231,34 +231,29 @@ for (const viewport of [
     await capture(page, `role-view-${viewport.width}`);
 
     const personal = await openAccountPermissions(page);
-    await expect(
-      personal.getByPlaceholder("Find a resource or action…"),
-    ).toHaveCount(0);
-    await insideViewport(page, personal);
+    // The unfolded list is taller than a phone; it must still fit the width.
+    await insideViewportWidth(page, personal);
     await expectNoOverflow(personal);
-    const read = personal.getByRole("button", {
-      name: "Agents Read granted",
-      exact: true,
-    });
+    const read = personal.getByText("View agents", { exact: true });
     await read.scrollIntoViewIfNeeded();
     await insideViewport(page, read);
     await expectNoOverflow(
-      personal.getByRole("region", { name: "Agents resources" }),
+      personal.getByRole("region", { name: "Agents", exact: true }),
     );
     await capture(page, `account-permissions-${viewport.width}`);
   });
 }
 
-/** Personal permissions live behind View in the Account tab's Access section. */
+/**
+ * Personal permissions unfold inside the Account tab's Access box, under the
+ * Roles and Teams rows.
+ */
 async function openAccountPermissions(page: Page) {
   await page.goto("/account");
-  await page.getByRole("button", { name: "View", exact: true }).click();
-  const dialog = page.getByRole("dialog", {
-    name: "Your permissions",
-    exact: true,
-  });
-  await expect(dialog).toBeVisible();
-  return dialog;
+  await page.getByRole("button", { name: "Show", exact: true }).click();
+  const access = page.getByRole("list", { name: "Access", exact: true });
+  await expect(access.getByText("View agents", { exact: true })).toBeVisible();
+  return access;
 }
 
 async function insideViewport(page: Page, element: Locator) {

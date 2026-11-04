@@ -129,6 +129,54 @@ test("an admitted HTTP handler can start its loopback model call after shutdown 
   await closing;
 });
 
+test("drains persistence from a loopback handler started while socket work is draining", async () => {
+  const app = createApp();
+  registerLlmProxyDrain(app, 2000);
+  const proceed = gate();
+  const persist = gate();
+  let dependencyClosed = false;
+  let persisted = false;
+  app.addHook("onClose", async () => {
+    dependencyClosed = true;
+  });
+  app.post("/v1/openai/chat/completions", async (_request, reply) => {
+    reply.raw.writeHead(200, { "Content-Type": "application/json" });
+    reply.raw.end('{"completed":true}');
+    await persist.promise;
+    expect(dependencyClosed).toBe(false);
+    persisted = true;
+  });
+  await app.ready();
+  const turn = withDrainScope(async () => {
+    await proceed.promise;
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/openai/chat/completions",
+      headers: internalCallHeader(),
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ completed: true });
+  });
+  trackBackgroundWork(turn);
+  let drained = false;
+  const closing = drainLlmProxyRequests(app).then(async () => {
+    drained = true;
+    await app.close();
+  });
+  // The drain initially sees no HTTP handlers and waits on socket work.
+  await setImmediate();
+  proceed.resolve();
+  await turn;
+  await setImmediate();
+  expect(persisted).toBe(false);
+  expect(drained).toBe(false);
+  expect(dependencyClosed).toBe(false);
+  persist.resolve();
+  await closing;
+  expect(persisted).toBe(true);
+  expect(dependencyClosed).toBe(true);
+});
+
 test("forged scopes and live scopes past the drain deadline cannot admit new calls", async () => {
   const app = createApp();
   const drain = registerLlmProxyDrain(app, 5);

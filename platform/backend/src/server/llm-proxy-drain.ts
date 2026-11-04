@@ -218,10 +218,16 @@ class RequestDrain {
     try {
       const completed = await Promise.race([
         (async () => {
-          if (this.active.size > 0)
-            await new Promise<void>((resolve) => {
-              this.drained = resolve;
-            });
+          do {
+            if (this.active.size > 0)
+              await new Promise<void>((resolve) => {
+                this.drained = resolve;
+              });
+            await setImmediate(); // finish/onResponse hooks may launch audit writes
+            await drainBackgroundWork();
+            // Socket work can start a loopback handler after the previous
+            // active-request check, then finish before that handler persists.
+          } while (this.active.size > 0);
           // End notification streams only after their outstanding calls finish.
           for (const close of this.streams.values()) close();
           await setImmediate(); // finish/onResponse hooks may launch audit writes

@@ -289,14 +289,16 @@ export type AppaClientAdapter = {
   /**
    * Reads a native message between agents of one session, such as a
    * teammate writing to its lead. `to` is the recipient as the client names
-   * it; `value` is the message text the runtime checks and retains.
+   * it; `value` is the message text the runtime checks and retains. The
+   * request the call came back for tells a client that names agents by path
+   * who the sender is.
    */
-  relayMessage?(call: {
-    name: string;
-    arguments: unknown;
-  }): AppaRelayMessage | undefined;
+  relayMessage?(
+    call: { name: string; arguments: unknown; namespace?: string },
+    requestBody?: unknown,
+  ): AppaRelayMessage | undefined;
   /** True for the local tool that sends messages between agents. */
-  isRelayTool?(name: string): boolean;
+  isRelayTool?(name: string, namespace?: string): boolean;
   /** True when a message call's result is only the client's delivery receipt. */
   isRelayReceipt?(content: unknown): boolean;
   /**
@@ -406,7 +408,15 @@ export type AppaRelayMessage = {
 
 export type AppaRelayRecipient =
   | { kind: "lead" }
-  | { kind: "teammate"; name: string }
+  | {
+      kind: "teammate";
+      name: string;
+      /**
+       * Where the name is: among the sender's own children or among its
+       * siblings. Without it, the sender's children are looked in first.
+       */
+      among?: "children" | "siblings";
+    }
   | { kind: "session"; id: string }
   | { kind: "broadcast" };
 
@@ -427,6 +437,13 @@ export type AppaRelayArrival = {
   kind: "teammate" | "agent" | "coordinator" | "session";
   /** The sender as the client names it. */
   from: string;
+  /**
+   * For a client that names its agents by place, whether the sender is one
+   * of this agent's children or one of its siblings. Without it, the sender
+   * is looked for among the children first, and the parent's envelope names
+   * name the parent.
+   */
+  sender?: "child" | "sibling";
   /** The message as its envelope carries it. */
   body: string;
   /**

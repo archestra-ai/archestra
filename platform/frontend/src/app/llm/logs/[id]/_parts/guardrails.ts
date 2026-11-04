@@ -70,6 +70,8 @@ export type LabelSegment = LabelState & {
   /** What changed the label at `start` (absent on the first segment). */
   cause: {
     kind: "admitted" | "narrowed" | "reset" | "released";
+    /** The recorded event, which names the cause more finely than `kind`. */
+    event: LabelChangeRecord["event"];
     /** Tool whose result or call moved the label. */
     toolName: string | null;
     /**
@@ -396,6 +398,7 @@ function toSegments({
       Math.max(first, new Date(change.createdAt).getTime()),
       {
         kind: CHANGE_KIND[change.event],
+        event: change.event,
         toolName,
         toolCallKey: tool?.key ?? asked?.key ?? null,
         consultKey: consult?.key ?? null,

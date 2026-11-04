@@ -5,6 +5,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
 } from "react";
@@ -332,20 +333,9 @@ export function RequestWaterfall({
     moveTo(Math.min(steppable.length - 1, Math.max(0, targets[event.key])));
   };
 
-  // Keep tick labels clear of the idle-break pills in the axis. The first
-  // and last labels hang off one side of their tick, the rest are centred.
-  const ticks = (timeline?.ticks ?? []).filter((tick) => {
-    const [from, to] =
-      tick.x === 0
-        ? [0, TICK_LABEL_SHARE]
-        : tick.x === 1
-          ? [1 - TICK_LABEL_SHARE, 1]
-          : [tick.x - TICK_LABEL_SHARE / 2, tick.x + TICK_LABEL_SHARE / 2];
-    return !(timeline?.breaks ?? []).some((b) => {
-      const pill = b.x + b.w / 2;
-      return pill > from - IDLE_PILL_SHARE && pill < to + IDLE_PILL_SHARE;
-    });
-  });
+  const ticks = timeline?.ticks ?? [];
+  const axisRef = useRef<HTMLDivElement>(null);
+  useAxisLabelsClear(axisRef, ticks, timeline?.breaks ?? []);
 
   return (
     <div>
@@ -446,7 +436,7 @@ export function RequestWaterfall({
                 {layout === "tools" ? "server, time" : "model, time"}
               </span>
             </div>
-            <div className="relative mx-2 lg:mx-3">
+            <div ref={axisRef} className="relative mx-2 lg:mx-3">
               {/* A phone's track is too narrow for tick labels. */}
               <span className="flex h-full items-center lg:hidden">
                 Timeline
@@ -461,6 +451,7 @@ export function RequestWaterfall({
               {ticks.map((tick) => (
                 <span
                   key={`tick-${tick.x}`}
+                  data-axis-tick=""
                   className={cn(
                     "absolute top-1/2 hidden -translate-y-1/2 whitespace-nowrap tabular-nums lg:block",
                     tick.x === 0
@@ -477,6 +468,7 @@ export function RequestWaterfall({
               {timeline?.breaks.map((b) => (
                 <span
                   key={`axis-idle-${b.x}`}
+                  data-axis-idle=""
                   className="absolute top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 rounded-sm border bg-card px-1 text-[10px] leading-4 font-medium whitespace-nowrap text-foreground/80 tabular-nums lg:block"
                   style={{ left: `${(b.x + b.w / 2) * 100}%` }}
                 >
@@ -679,10 +671,6 @@ export function McpCallChip({ method }: { method: string }) {
 
 /** The sticky column header, which a row scrolled to the top must clear. */
 const COLUMN_HEADER_PX = 32;
-/** A tick label's width, as a share of the track (about 60px of 600). */
-const TICK_LABEL_SHARE = 0.1;
-/** Half an idle pill ("2m 19s idle"), as a share of the track. */
-const IDLE_PILL_SHARE = 0.05;
 
 function scrollWithin(scroller: HTMLElement, row: HTMLElement) {
   const box = scroller.getBoundingClientRect();
@@ -1310,3 +1298,46 @@ function TokensStack({ row }: { row: InteractionSummary }) {
     </Tooltip>
   );
 }
+
+/**
+ * Hides any axis tick label whose drawn box would touch an idle pill or the
+ * tick before it, measured after layout and again whenever the axis resizes:
+ * how wide a label or pill is depends on its text and the track's width.
+ */
+function useAxisLabelsClear(
+  axisRef: { current: HTMLDivElement | null },
+  ticks: Timeline["ticks"],
+  breaks: Timeline["breaks"],
+) {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the labels and pills are read from the DOM, so a change to them must re-measure too.
+  useLayoutEffect(() => {
+    const axis = axisRef.current;
+    if (!axis) return;
+    const place = () => {
+      const pills = [
+        ...axis.querySelectorAll<HTMLElement>("[data-axis-idle]"),
+      ].map((pill) => pill.getBoundingClientRect());
+      let previous: DOMRect | null = null;
+      for (const tick of axis.querySelectorAll<HTMLElement>(
+        "[data-axis-tick]",
+      )) {
+        tick.style.visibility = "";
+        const box = tick.getBoundingClientRect();
+        const clash = [...pills, ...(previous ? [previous] : [])].some(
+          (other) =>
+            box.left < other.right + AXIS_LABEL_GAP_PX &&
+            other.left < box.right + AXIS_LABEL_GAP_PX,
+        );
+        if (clash) tick.style.visibility = "hidden";
+        else previous = box;
+      }
+    };
+    place();
+    const observer = new ResizeObserver(place);
+    observer.observe(axis);
+    return () => observer.disconnect();
+  }, [axisRef, ticks, breaks]);
+}
+
+/** The least room kept between an axis label and its neighbours. */
+const AXIS_LABEL_GAP_PX = 6;

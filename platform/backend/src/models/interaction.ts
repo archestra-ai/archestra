@@ -1015,7 +1015,14 @@ class InteractionModel {
           ),
         )
         .where(whereClause)
-        .orderBy(InteractionModel.getOrderByClause(sorting))
+        // Ties on the sort column break by id, so offset pages never swap
+        // rows that share a timestamp and a row's rank is well defined.
+        .orderBy(
+          InteractionModel.getOrderByClause(sorting),
+          sorting?.sortDirection === "asc"
+            ? asc(schema.interactionsTable.id)
+            : desc(schema.interactionsTable.id),
+        )
         .limit(pagination.limit)
         .offset(pagination.offset),
       db

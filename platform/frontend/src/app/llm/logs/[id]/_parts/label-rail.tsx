@@ -331,7 +331,15 @@ function Stepper({
   const arrow =
     "flex w-7 shrink-0 cursor-pointer items-center justify-center outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset lg:w-6";
   const count = `${changes.length} label ${changes.length === 1 ? "change" : "changes"}`;
-  const StepperIcon = trustIcon(changes[Math.max(0, active)].segment.trust);
+  // The shown change's own icon, as its marker draws it: a lock when only
+  // the audience moved.
+  const shown = changes[Math.max(0, active)];
+  const StepperIcon =
+    movedTrust(shown) || !movedAudience(shown)
+      ? trustIcon(shown.segment.trust)
+      : shown.segment.audience === "public"
+        ? LockOpen
+        : Lock;
   return (
     <span className="ml-auto inline-flex h-7 shrink-0 items-stretch overflow-hidden rounded-md border bg-card text-foreground/85 xl:ml-0 lg:h-6">
       <UnstyledButton
@@ -551,15 +559,25 @@ function changeSentence(change: LabelChange): string {
 }
 
 function causeSentence(change: LabelChange): string {
-  const { kind, toolName, summary } = change.cause;
-  if (toolName) {
-    if (kind === "admitted") return `Caused by the result of ${toolName}.`;
-    if (kind === "reset") return `Reset by ${toolName}.`;
-    return `Caused by calling ${toolName}.`;
+  const { event, toolName } = change.cause;
+  switch (event) {
+    case "tool_result":
+      return toolName
+        ? `Caused by the result of ${toolName}.`
+        : "Caused by a tool result.";
+    case "tool_call":
+      return toolName
+        ? `Caused by calling ${toolName}.`
+        : "Caused by a tool call.";
+    case "remedy":
+      return "Caused by an approved remedy plan.";
+    case "child_return":
+      return "Caused by a sub-agent's result.";
+    case "session_start":
+      return "Set when the session started.";
+    case "other":
+      return "The policy changed the session's label.";
   }
-  if (summary === "a tool returned") return "Caused by a tool result.";
-  if (summary === "a tool was called") return "Caused by a tool call.";
-  return `${summary.charAt(0).toUpperCase()}${summary.slice(1)}.`;
 }
 
 function movedTrust(change: LabelChange): boolean {

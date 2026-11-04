@@ -10,8 +10,9 @@ import { useSettledOnce } from "./use-session-tool-calls";
 
 /**
  * When the URL names one request (`?request=`), the page of the session it
- * lives on. Requests run oldest first, so the requests created at or before
- * it — itself included — are its position plus one.
+ * lives on. Requests run oldest first, ties broken by id, so its position is
+ * the count of requests created up to it, less those that share its moment
+ * but sort after it.
  */
 export function useLinkedRequest({
   sessionId,
@@ -62,21 +63,33 @@ export function useLinkedRequest({
     requestsReady &&
     !targetOnPage &&
     located?.id !== target.id;
+  // Up to the end of its millisecond (stored times are finer than the ones
+  // sent back), newest first in the list's own order: the target's index in
+  // these rows is how many of them sort after it.
   const atOrBeforeTarget = useInteractionSummaries({
     sessionId,
-    endDate: target?.createdAt,
-    limit: 1,
+    endDate: target
+      ? new Date(new Date(target.createdAt).getTime() + 1).toISOString()
+      : undefined,
+    limit: TIE_WINDOW,
+    sortBy: "createdAt",
+    sortDirection: "desc",
     enabled: shouldLocate,
   });
-  const atOrBeforeCount = shouldLocate
-    ? atOrBeforeTarget.data?.pagination.total
-    : undefined;
+  const position =
+    shouldLocate && target && atOrBeforeTarget.data
+      ? atOrBeforeTarget.data.pagination.total -
+        Math.max(
+          0,
+          atOrBeforeTarget.data.data.findIndex((row) => row.id === target.id),
+        )
+      : undefined;
   useEffect(() => {
-    if (!target || atOrBeforeCount === undefined) return;
-    const page = Math.floor(Math.max(0, atOrBeforeCount - 1) / pageSize);
+    if (!target || position === undefined) return;
+    const page = Math.floor(Math.max(0, position - 1) / pageSize);
     setLocated({ id: target.id, page });
     if (page !== pageIndex) onLocatePage(page);
-  }, [target, atOrBeforeCount, pageSize, pageIndex, onLocatePage]);
+  }, [target, position, pageSize, pageIndex, onLocatePage]);
 
   const targetResolved =
     targetRequestId === null ||
@@ -100,3 +113,6 @@ export function useLinkedRequest({
     ready: targetRequestId === null || settledFor === targetRequestId,
   };
 }
+
+/** Rows read to place the target among requests that share its moment. */
+const TIE_WINDOW = 20;

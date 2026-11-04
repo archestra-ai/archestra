@@ -240,6 +240,69 @@ it("starts page one at the session's first request", async () => {
   expect(names).not.toContain("59");
 });
 
+it("shows a full page of 100 requests", async () => {
+  const rows = Array.from({ length: 120 }, (_, i) =>
+    summary({
+      id: `request-${i}`,
+      model: `model-${i}`,
+      createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, 0, i * 100)).toISOString(),
+    }),
+  );
+  serveSession({ rows });
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams("pageSize=100") as ReturnType<typeof useSearchParams>,
+  );
+
+  await renderPage();
+
+  const requests = await screen.findByRole("list", { name: "Requests" });
+  expect(
+    within(requests).getAllByRole("button", {
+      name: /^Test Agent, Model \d+,/,
+    }),
+  ).toHaveLength(100);
+});
+
+it("places a linked request among others created at the same moment", async () => {
+  // The 50th and 51st requests share a timestamp: the id breaks the tie, so
+  // request-49 is the last row of page one, not the first of page two.
+  const rows = Array.from({ length: 60 }, (_, i) =>
+    summary({
+      id: `request-${String(i).padStart(2, "0")}`,
+      model: `model-${i}`,
+      createdAt: new Date(
+        Date.UTC(2026, 0, 1, 0, 0, i === 50 ? 49 : i),
+      ).toISOString(),
+    }),
+  );
+  serveSession({ rows });
+  // Opened on page two: a count of requests up to its timestamp (51) would
+  // keep it there and report it missing.
+  let search = new URLSearchParams("request=request-49&page=2&pageSize=50");
+  vi.mocked(useSearchParams).mockImplementation(
+    () => search as ReturnType<typeof useSearchParams>,
+  );
+  push.mockImplementation((url: string) => {
+    search = new URLSearchParams(url.split("?")[1]);
+  });
+
+  const { rerender } = await renderPage();
+  await waitFor(() =>
+    expect(push).toHaveBeenCalledWith(
+      "/llm/logs/test-session?request=request-49&page=1&pageSize=50",
+      { scroll: false },
+    ),
+  );
+  await rerender();
+
+  const requests = await screen.findByRole("list", { name: "Requests" });
+  expect(
+    await within(requests).findByRole("button", {
+      name: /^Test Agent, Model 49,/,
+    }),
+  ).toHaveAttribute("aria-current", "true");
+});
+
 it("opens the request a link names, moving to the page that holds it", async () => {
   // Sixty requests, oldest first: the linked one is the 56th, so it sits on
   // page two of fifty.
@@ -642,8 +705,10 @@ function serveSession({
   lastInteractionId?: string | null;
   records?: Record<string, ReturnType<typeof makeInteraction>>;
 }) {
-  const sorted = [...rows].sort((a, b) =>
-    b.createdAt.localeCompare(a.createdAt),
+  // Newest first, ties by id, as the API orders them.
+  const sorted = [...rows].sort(
+    (a, b) =>
+      b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id),
   );
   const latestId = lastInteractionId ?? sorted[0]?.id ?? null;
   server.use(
@@ -671,6 +736,15 @@ function serveSession({
       );
       const offset = Number(params.get("offset") ?? 0);
       const limit = Number(params.get("limit") ?? 10);
+      // The list endpoint's largest page, as PaginationQuerySchema enforces.
+      if (limit > 100) {
+        return HttpResponse.json(
+          {
+            error: { message: "limit too large", type: "api_validation_error" },
+          },
+          { status: 400 },
+        );
+      }
       return HttpResponse.json(
         paginated(matching.slice(offset, offset + limit), {
           total: matching.length,

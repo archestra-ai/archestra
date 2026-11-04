@@ -77,17 +77,29 @@ export default function SessionDetailPage({
   const targetToolCallId = searchParams.get(LLM_LOG_FOCUS_PARAM.toolCall);
   const targetRequestId = searchParams.get(LLM_LOG_FOCUS_PARAM.request);
 
-  // Requests run oldest first, so page one is where the session began. Each
-  // read also takes the next page's oldest row: it bounds this page's
-  // tool-call window, and a second read would delay them.
+  // Requests run oldest first, so page one is where the session began.
   const { data: interactionsResponse, isLoading: interactionsLoading } =
     useInteractionSummaries({
       sessionId: sessionId,
-      limit: pageSize + 1,
+      limit: pageSize,
       offset,
       sortBy: "createdAt",
       sortDirection: "asc",
     });
+  // The next page's oldest row bounds this page's tool-call window. It is its
+  // own read: the list endpoint caps a page at 100 rows, so a 100-row page
+  // has no room for it.
+  const hasNextPage =
+    interactionsResponse !== undefined &&
+    offset + pageSize < interactionsResponse.pagination.total;
+  const nextPageHead = useInteractionSummaries({
+    sessionId,
+    limit: 1,
+    offset: offset + pageSize,
+    sortBy: "createdAt",
+    sortDirection: "asc",
+    enabled: hasNextPage,
+  });
 
   // Fetch session metadata (profile name, user names, etc.)
   const {
@@ -101,7 +113,8 @@ export default function SessionDetailPage({
   });
 
   // Past page one, the session's first request: the axis counts from it.
-  const { data: firstPageHead } = useInteractionSummaries({
+  // Should it fail, the axis falls back to counting from this page's start.
+  const firstPageHead = useInteractionSummaries({
     sessionId,
     limit: 1,
     offset: 0,
@@ -109,18 +122,22 @@ export default function SessionDetailPage({
     sortDirection: "asc",
     enabled: offset > 0,
   });
-  const firstRow = offset > 0 ? (firstPageHead?.data[0] ?? null) : null;
+  const firstRow = offset > 0 ? (firstPageHead.data?.data[0] ?? null) : null;
+  const sessionStartPending = offset > 0 && firstPageHead.isPending;
   const sessionStart = firstRow
     ? new Date(firstRow.createdAt).getTime() -
       Math.max(0, firstRow.durationMs ?? 0)
     : null;
 
-  const pageRows = interactionsResponse?.data ?? [];
-  const nextRequest = pageRows[pageSize] ?? null;
   const interactions = useMemo(
-    () => pageRows.slice(0, pageSize),
-    [pageRows, pageSize],
+    () => interactionsResponse?.data ?? [],
+    [interactionsResponse],
   );
+  const nextRequest = hasNextPage ? (nextPageHead.data?.data[0] ?? null) : null;
+  const requestsReady =
+    interactionsResponse !== undefined &&
+    !interactionsLoading &&
+    (!hasNextPage || !nextPageHead.isPending);
   const paginationMeta = interactionsResponse?.pagination;
   const sessionData = sessionResponse?.data?.[0];
   const { data: lineage } = useSessionLineage({
@@ -172,7 +189,7 @@ export default function SessionDetailPage({
     sessionId,
     requests: interactions,
     nextRequest,
-    requestsReady: interactionsResponse !== undefined && !interactionsLoading,
+    requestsReady,
     pageIndex,
     pageSize,
     onLocatePage: goToPage,
@@ -193,7 +210,10 @@ export default function SessionDetailPage({
   // link points at. Drawing each as it lands reflows the rows and moves the
   // selection.
   const traceLoading =
-    interactionsLoading || !sessionToolCalls.ready || !linkedRequest.ready;
+    interactionsLoading ||
+    sessionStartPending ||
+    !sessionToolCalls.ready ||
+    !linkedRequest.ready;
 
   // Whether the latest main request captured a thread: its thread is the
   // whole conversation, so the list marks it and the details offer a way to

@@ -372,6 +372,11 @@ class SlackProvider implements ChatOpsProvider {
 
   async cleanup(): Promise<void> {
     await this.beginShutdown();
+    this.finishCleanup();
+  }
+
+  /** Release reply resources synchronously after intake has stopped. */
+  finishCleanup(): void {
     this.eventHandler = null;
     this.socketDedup.clear();
     this.client = null;

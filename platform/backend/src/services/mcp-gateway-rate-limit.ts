@@ -17,7 +17,11 @@ const WINDOW_MS = 60_000;
 const MAX_PER_CREDENTIAL = 10;
 const MAX_TRACKED_CREDENTIALS_PER_IP = 100;
 const MAX_AUTHENTICATION_OPERATIONS_PER_POOL = 16;
+const MAX_VERIFIED_OPERATIONS_PER_CREDENTIAL = 4;
 type AuthenticationPool = "unverified" | "verified";
+type AuthenticationAdmission =
+  | { pool: "unverified" }
+  | { pool: "verified"; credential: string };
 
 export class McpGatewayAuthenticationBusyError extends Error {}
 
@@ -27,20 +31,42 @@ class McpGatewayAuthenticationCapacity {
     verified: 0,
   };
 
+  // Live permits, not a cache: never expire or evict work that is still running.
+  // The total pool bounds this map to 16 entries; finally removes idle entries.
+  private readonly verifiedActive = new Map<string, number>();
+
   async run<T>(
     operation: () => Promise<T>,
-    pool: AuthenticationPool,
+    admission: AuthenticationAdmission,
   ): Promise<T> {
-    if (this.active[pool] >= MAX_AUTHENTICATION_OPERATIONS_PER_POOL) {
+    const { pool } = admission;
+    const credentialKey =
+      admission.pool === "verified"
+        ? fingerprint(admission.credential)
+        : undefined;
+    const credentialActive = credentialKey
+      ? (this.verifiedActive.get(credentialKey) ?? 0)
+      : 0;
+    if (
+      this.active[pool] >= MAX_AUTHENTICATION_OPERATIONS_PER_POOL ||
+      credentialActive >= MAX_VERIFIED_OPERATIONS_PER_CREDENTIAL
+    ) {
       throw new McpGatewayAuthenticationBusyError(
         "Gateway authentication capacity is exhausted",
       );
     }
     this.active[pool] += 1;
+    if (credentialKey)
+      this.verifiedActive.set(credentialKey, credentialActive + 1);
     try {
       return await operation();
     } finally {
       this.active[pool] -= 1;
+      if (credentialKey) {
+        const remaining = (this.verifiedActive.get(credentialKey) ?? 1) - 1;
+        if (remaining === 0) this.verifiedActive.delete(credentialKey);
+        else this.verifiedActive.set(credentialKey, remaining);
+      }
     }
   }
 }
@@ -50,9 +76,9 @@ const authenticationCapacity = new McpGatewayAuthenticationCapacity();
 /** Separate bounded pools prevent unknown callers from consuming verified capacity. */
 export function withMcpGatewayAuthenticationCapacity<T>(
   operation: () => Promise<T>,
-  pool: AuthenticationPool = "unverified",
+  admission: AuthenticationAdmission = { pool: "unverified" },
 ): Promise<T> {
-  return authenticationCapacity.run(operation, pool);
+  return authenticationCapacity.run(operation, admission);
 }
 const FINGERPRINT_KEY = config.auth.secret || randomBytes(32);
 
@@ -129,7 +155,7 @@ export class McpGatewayRateLimiter extends RateLimiterCompatibleAbstract {
       }
     }
     const ipKey: AllowedCacheKey = `${CacheKey.McpGatewayRateLimit}-credentials-${key}`;
-    const pair = this.fingerprint(
+    const pair = fingerprint(
       JSON.stringify([caller.gateway, caller.credential]),
     );
     return cacheManager.withLock(ipKey, async (cache) => {
@@ -209,15 +235,8 @@ export class McpGatewayRateLimiter extends RateLimiterCompatibleAbstract {
 
   private verifiedKey(caller: Caller): AllowedCacheKey | null {
     return caller.credential
-      ? `${CacheKey.McpGatewayRateLimit}-ok-${this.fingerprint(JSON.stringify([caller.gateway, caller.credential]))}`
+      ? `${CacheKey.McpGatewayRateLimit}-ok-${fingerprint(JSON.stringify([caller.gateway, caller.credential]))}`
       : null;
-  }
-
-  private fingerprint(value: string): string {
-    return createHmac("sha256", FINGERPRINT_KEY)
-      .update("mcp-gateway-rate-limit\0")
-      .update(value)
-      .digest("base64url");
   }
 
   private exhausted(window: Window, now: number): RateLimiterRes {
@@ -227,4 +246,11 @@ export class McpGatewayRateLimiter extends RateLimiterCompatibleAbstract {
   private exempt(): RateLimiterRes {
     return new RateLimiterRes(MAX_PER_CREDENTIAL, 0, 0, false);
   }
+}
+
+function fingerprint(value: string): string {
+  return createHmac("sha256", FINGERPRINT_KEY)
+    .update("mcp-gateway-rate-limit\0")
+    .update(value)
+    .digest("base64url");
 }

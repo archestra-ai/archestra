@@ -722,10 +722,13 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
     operation: () => Promise<T>,
   ): Promise<T> => {
     if (config.authRateLimitDisabled) return operation();
+    const credential = extractBearerToken(request);
     try {
       return await withMcpGatewayAuthenticationCapacity(
         operation,
-        verifiedRequests.has(request) ? "verified" : "unverified",
+        verifiedRequests.has(request) && credential
+          ? { pool: "verified", credential }
+          : { pool: "unverified" },
       );
     } catch (error) {
       if (!(error instanceof McpGatewayAuthenticationBusyError)) throw error;
@@ -1050,13 +1053,16 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         throw new ApiError(401, "Unauthorized");
       }
 
-      const { result: tokenAuth } = await authenticate(
+      const { result: tokenAuth, reason } = await authenticate(
         request,
         reply,
         profileId,
         token,
       );
       if (!tokenAuth) {
+        if (reason === "no_gateway_access") {
+          throw new ApiError(403, describeGatewayAuthFailure(reason));
+        }
         throw new ApiError(401, "Unauthorized");
       }
 

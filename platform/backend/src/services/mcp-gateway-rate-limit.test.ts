@@ -113,10 +113,16 @@ describe("gateway attempt budgets", () => {
       ).rejects.toBeInstanceOf(McpGatewayAuthenticationBusyError);
       // Unverified saturation cannot consume the reserved verified pool.
       verified = Array.from({ length: 16 }, () =>
-        withMcpGatewayAuthenticationCapacity(() => pendingWork, "verified"),
+        withMcpGatewayAuthenticationCapacity(() => pendingWork, {
+          pool: "verified",
+          credential: randomUUID(),
+        }),
       );
       await expect(
-        withMcpGatewayAuthenticationCapacity(async () => true, "verified"),
+        withMcpGatewayAuthenticationCapacity(async () => true, {
+          pool: "verified",
+          credential: randomUUID(),
+        }),
       ).rejects.toBeInstanceOf(McpGatewayAuthenticationBusyError);
     } finally {
       release();
@@ -124,15 +130,63 @@ describe("gateway attempt budgets", () => {
     }
     for (const pool of ["unverified", "verified"] as const) {
       await expect(
-        withMcpGatewayAuthenticationCapacity(async () => {
-          throw new Error("Validation failed");
-        }, pool),
+        withMcpGatewayAuthenticationCapacity(
+          async () => {
+            throw new Error("Validation failed");
+          },
+          pool === "verified"
+            ? { pool, credential: "throwing-credential" }
+            : { pool },
+        ),
       ).rejects.toThrow("Validation failed");
       const resumed = Array.from({ length: 16 }, () =>
-        withMcpGatewayAuthenticationCapacity(async () => true, pool),
+        withMcpGatewayAuthenticationCapacity(
+          async () => true,
+          pool === "verified" ? { pool, credential: randomUUID() } : { pool },
+        ),
       );
       await expect(Promise.all(resumed)).resolves.toHaveLength(16);
     }
+  });
+
+  test("caps a verified credential and releases its permits after success and failure", async () => {
+    const admission = { pool: "verified" as const, credential: randomUUID() };
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const pending = Array.from({ length: 4 }, (_, index) =>
+      withMcpGatewayAuthenticationCapacity(async () => {
+        await held;
+        if (index === 0) throw new Error("Authentication failed");
+        return true;
+      }, admission),
+    );
+    const settled = Promise.allSettled(pending);
+    try {
+      await expect(
+        withMcpGatewayAuthenticationCapacity(async () => true, admission),
+      ).rejects.toBeInstanceOf(McpGatewayAuthenticationBusyError);
+      await expect(
+        withMcpGatewayAuthenticationCapacity(async () => true, {
+          pool: "verified",
+          credential: randomUUID(),
+        }),
+      ).resolves.toBe(true);
+    } finally {
+      release();
+      await settled;
+    }
+    expect(
+      (await settled).filter((result) => result.status === "rejected"),
+    ).toHaveLength(1);
+    const resumed = Array.from({ length: 4 }, () =>
+      withMcpGatewayAuthenticationCapacity(async () => true, admission),
+    );
+    await expect(
+      withMcpGatewayAuthenticationCapacity(async () => true, admission),
+    ).rejects.toBeInstanceOf(McpGatewayAuthenticationBusyError);
+    await expect(Promise.all(resumed)).resolves.toHaveLength(4);
   });
 
   test("does not admit an unknown caller when shared storage is unavailable", async () => {

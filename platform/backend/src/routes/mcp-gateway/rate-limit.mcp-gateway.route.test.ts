@@ -289,6 +289,81 @@ describe("MCP Gateway authentication rate limiting", () => {
     expect((await app.inject(request)).statusCode).toBe(401);
   });
 
+  test("limits one verified credential while other clients share the process and IP", async ({
+    makeOrganization,
+    makeAgent,
+    makeServiceAccountToken,
+  }) => {
+    const org = await makeOrganization();
+    const gateways = await Promise.all([
+      makeAgent({ organizationId: org.id }),
+      makeAgent({ organizationId: org.id }),
+    ]);
+    const busyCaller = await makeServiceAccountToken({
+      organizationId: org.id,
+    });
+    const otherCaller = await makeServiceAccountToken({
+      organizationId: org.id,
+    });
+    const replica = createFastifyInstance();
+    await replica.register(mcpGatewayRoutes);
+    const request = (gateway: string, token: string) => ({
+      method: "GET" as const,
+      url: `/v1/mcp/${gateway}`,
+      headers: { authorization: `bEaReR    ${token}` },
+    });
+    let release = () => {};
+    let pending: Promise<void>[] = [];
+    try {
+      for (const instance of [app, replica])
+        for (const gateway of gateways)
+          for (const caller of [busyCaller, otherCaller])
+            expect(
+              (await instance.inject(request(gateway.id, caller.value)))
+                .statusCode,
+            ).toBe(405);
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      pending = Array.from({ length: 4 }, () =>
+        withMcpGatewayAuthenticationCapacity(() => held, {
+          pool: "verified",
+          credential: busyCaller.value,
+        }),
+      );
+      for (const instance of [app, replica]) {
+        for (const gateway of gateways) {
+          const busy = await instance.inject(
+            request(gateway.id, busyCaller.value),
+          );
+          expect(busy.statusCode).toBe(503);
+          expect(busy.headers["retry-after"]).toBe("1");
+          expect(busy.headers["www-authenticate"]).toBeUndefined();
+          expect(
+            (await instance.inject(request(gateway.id, otherCaller.value)))
+              .statusCode,
+          ).toBe(405);
+        }
+      }
+      config.authRateLimitDisabled = true;
+      expect(
+        (await app.inject(request(gateways[0].id, busyCaller.value)))
+          .statusCode,
+      ).toBe(405);
+      expect(
+        (await app.inject(request(gateways[0].id, "invalid"))).statusCode,
+      ).toBe(401);
+      config.authRateLimitDisabled = false;
+    } finally {
+      release();
+      await Promise.all(pending);
+      await replica.close();
+    }
+    expect(
+      (await app.inject(request(gateways[0].id, busyCaller.value))).statusCode,
+    ).toBe(405);
+  });
+
   test("returns 503 before authentication when the budget cannot be read", async () => {
     cacheManager.shutdown();
     const response = await app.inject({

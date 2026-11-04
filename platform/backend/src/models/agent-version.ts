@@ -242,6 +242,7 @@ class AgentVersionModel {
       identityProviderId: agent.identityProviderId ?? null,
       environmentId: agent.environmentId ?? null,
       networkPolicy: agent.networkPolicy ?? null,
+      subagentLoadBalancing: agent.subagentLoadBalancing ?? null,
       // Names can collide, so every sort tie-breaks on the id — a name-only
       // sort would leave equal-name rows in unspecified DB order and hash the
       // same config differently across reads.

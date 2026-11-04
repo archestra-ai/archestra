@@ -33,36 +33,37 @@ const DEFAULT_LOAD_BALANCING_CONFIG: SubagentLoadBalancingConfig = {
   maxFallbacks: null,
 };
 
-const ALGORITHM_OPTIONS: ReadonlyArray<{
+function getAlgorithmOptions(targetLabel: string): ReadonlyArray<{
   value: SubagentLoadBalancingAlgorithm;
   label: string;
   description: string;
-}> = [
-  {
-    value: "round_robin",
-    label: "Round robin (rotate)",
-    description:
-      "Rotate incoming requests evenly across the subagents assigned to this gateway.",
-  },
-  {
-    value: "weighted",
-    label: "Weighted",
-    description:
-      "Distribute incoming requests across assigned subagents in proportion to their configured weights.",
-  },
-  {
-    value: "random",
-    label: "Random",
-    description:
-      "Select an assigned subagent uniformly at random for each incoming request.",
-  },
-  {
-    value: "ordered",
-    label: "Priority order",
-    description:
-      "Always route requests starting from the first assigned subagent, using the rest in order as fallbacks.",
-  },
-];
+}> {
+  return [
+    {
+      value: "round_robin",
+      label: "Round robin (rotate)",
+      description: `Rotate incoming requests evenly across the subagents assigned to ${targetLabel}.`,
+    },
+    {
+      value: "weighted",
+      label: "Weighted",
+      description:
+        "Distribute incoming requests across assigned subagents in proportion to their configured weights.",
+    },
+    {
+      value: "random",
+      label: "Random",
+      description:
+        "Select an assigned subagent uniformly at random for each incoming request.",
+    },
+    {
+      value: "ordered",
+      label: "Priority order",
+      description:
+        "Always route requests starting from the first assigned subagent, using the rest in order as fallbacks.",
+    },
+  ];
+}
 
 const RETRY_OPTIONS = Array.from(
   { length: SUBAGENT_LOAD_BALANCING_MAX_RETRIES + 1 },
@@ -83,6 +84,8 @@ export interface SubagentLoadBalancingSectionProps {
   selectedAgentIds: string[];
   canReadAgents?: boolean;
   readOnly?: boolean;
+  isGateway?: boolean;
+  isAllSubagentsMode?: boolean;
 }
 
 export function SubagentLoadBalancingSection({
@@ -91,12 +94,17 @@ export function SubagentLoadBalancingSection({
   selectedAgentIds,
   canReadAgents = true,
   readOnly = false,
+  isGateway = true,
+  isAllSubagentsMode = false,
 }: SubagentLoadBalancingSectionProps) {
   const enableSwitchId = useId();
   const algorithmSelectId = useId();
   const retriesSelectId = useId();
   const fallbackSwitchId = useId();
   const maxFallbacksInputId = useId();
+
+  const targetLabel = isGateway ? "this gateway" : "this agent";
+  const algorithmOptions = getAlgorithmOptions(targetLabel);
 
   const isEnabled = value?.enabled === true;
   const currentConfig: SubagentLoadBalancingConfig = value ?? {
@@ -114,8 +122,8 @@ export function SubagentLoadBalancingSection({
   );
 
   const selectedAlgorithm =
-    ALGORITHM_OPTIONS.find((opt) => opt.value === currentConfig.algorithm) ??
-    ALGORITHM_OPTIONS[0];
+    algorithmOptions.find((opt) => opt.value === currentConfig.algorithm) ??
+    algorithmOptions[0];
 
   const totalWeight = selectedAgentIds.reduce(
     (sum, id) => sum + (currentConfig.weights?.[id] ?? 1),
@@ -188,8 +196,9 @@ export function SubagentLoadBalancingSection({
             <FieldDescription>
               <span>
                 Control how incoming requests are distributed across the
-                subagents assigned to this gateway, and how failed subagent
-                requests are retried or routed to fallback subagents.
+                subagents assigned to {targetLabel}, and how failed subagent
+                requests are retried, escalated on OOM, or routed to fallback
+                subagents.
               </span>
             </FieldDescription>
           </div>
@@ -219,7 +228,7 @@ export function SubagentLoadBalancingSection({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {ALGORITHM_OPTIONS.map((option) => (
+                  {algorithmOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       <span>{option.label}</span>
                     </SelectItem>
@@ -249,7 +258,9 @@ export function SubagentLoadBalancingSection({
                 {selectedAgentIds.length === 0 ? (
                   <p className="text-xs text-muted-foreground">
                     <span>
-                      Assign subagents above to configure individual weights.
+                      {isAllSubagentsMode
+                        ? 'In "All agents" mode, all accessible runtime subagents receive equal weight (1). Switch to Manual mode above to assign custom weights to specific subagents.'
+                        : "Assign subagents above to configure individual weights."}
                     </span>
                   </p>
                 ) : (

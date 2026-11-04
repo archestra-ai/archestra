@@ -2194,6 +2194,12 @@ export function AgentForm({
       persistedAgent.githubActionsAccess ?? null,
       githubActionsAccess,
     );
+  const subagentLoadBalancingChanged =
+    !!persistedAgent &&
+    hasUnsavedChanges(
+      persistedAgent.subagentLoadBalancing ?? null,
+      subagentLoadBalancing,
+    );
   // The API validates the key and the model against each other, so whichever
   // one moved, both go.
   const llmSelectionChanged =
@@ -2408,9 +2414,10 @@ export function AgentForm({
               missingCredentialBehavior,
               accessAllTools,
               ...(supportsSubagents && { accessAllSubagents }),
-              ...(agentType === "mcp_gateway" && {
-                subagentLoadBalancing,
-              }),
+              ...(supportsSubagents &&
+                subagentLoadBalancingChanged && {
+                  subagentLoadBalancing,
+                }),
             }),
           },
         });
@@ -2461,12 +2468,14 @@ export function AgentForm({
           toolExposureMode,
           missingCredentialBehavior,
           accessAllTools,
-          ...(supportsSubagents && { accessAllSubagents }),
+          ...(supportsSubagents && {
+            accessAllSubagents,
+            ...(subagentLoadBalancing && { subagentLoadBalancing }),
+          }),
           labels: updatedLabels,
           ...(agentType === "mcp_gateway" && {
             passthroughHeaders:
               passthroughHeaders.length > 0 ? passthroughHeaders : null,
-            ...(subagentLoadBalancing && { subagentLoadBalancing }),
           }),
           ...(agentRuntimeEnabled && {
             runtime: runtimeToSave,
@@ -2738,6 +2747,7 @@ export function AgentForm({
     githubActionsAccess,
     githubActionsAccessChanged,
     subagentLoadBalancing,
+    subagentLoadBalancingChanged,
     networkPolicy,
     networkPolicyChanged,
     toolExposureMode,
@@ -3846,13 +3856,15 @@ export function AgentForm({
                             : "No delegation tools appear in this gateway's tool list."
                         }
                       />
-                      {agentType === "mcp_gateway" && (
+                      {supportsSubagents && (
                         <SubagentLoadBalancingSection
                           value={subagentLoadBalancing}
                           onChange={setSubagentLoadBalancing}
                           selectedAgentIds={selectedDelegationTargetIds}
                           canReadAgents={canReadAgents === true}
                           readOnly={readOnly}
+                          isGateway={agentType === "mcp_gateway"}
+                          isAllSubagentsMode={accessAllSubagents}
                         />
                       )}
                       <OutboundAgentsEditor

@@ -19,6 +19,7 @@ const AGENT_B_ID = "00000000-0000-4000-8000-00000000000b";
 function renderSection(
   initial: SubagentLoadBalancingConfig | null = null,
   selectedAgentIds: string[] = [AGENT_A_ID, AGENT_B_ID],
+  extraProps: { isGateway?: boolean; isAllSubagentsMode?: boolean } = {},
 ) {
   const onChange = vi.fn<(value: SubagentLoadBalancingConfig | null) => void>();
   function Host() {
@@ -27,6 +28,8 @@ function renderSection(
       <SubagentLoadBalancingSection
         value={value}
         selectedAgentIds={selectedAgentIds}
+        isGateway={extraProps.isGateway}
+        isAllSubagentsMode={extraProps.isAllSubagentsMode}
         onChange={(next) => {
           setValue(next);
           onChange(next);
@@ -160,5 +163,28 @@ describe("SubagentLoadBalancingSection", () => {
         { random: () => 0.5 },
       ),
     ).toEqual([AGENT_B_ID, AGENT_A_ID]);
+  });
+
+  it("renders regular agent copy and All-agents weighted notice", () => {
+    renderSection(
+      {
+        enabled: true,
+        algorithm: "weighted",
+        retries: 1,
+        fallbackEnabled: true,
+        maxFallbacks: null,
+      },
+      [],
+      { isGateway: false, isAllSubagentsMode: true },
+    );
+
+    expect(
+      screen.getByText(/subagents assigned to this agent/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /In "All agents" mode, all accessible runtime subagents receive equal weight/i,
+      ),
+    ).toBeInTheDocument();
   });
 });

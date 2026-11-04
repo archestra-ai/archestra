@@ -600,6 +600,29 @@ function renderNetworkPolicy(
   return parts.join(" · ");
 }
 
+function renderSubagentLoadBalancing(
+  policy: Snapshot["subagentLoadBalancing"] | undefined,
+): string | null {
+  if (!policy) return null;
+  if (!policy.enabled) return "Disabled";
+  const parts: string[] = [policy.algorithm];
+  parts.push(`retries: ${policy.retries}`);
+  parts.push(
+    policy.fallbackEnabled
+      ? `max fallbacks: ${policy.maxFallbacks ?? "all"}`
+      : "fallback: disabled",
+  );
+  const weightEntries = Object.entries(policy.weights ?? {}).sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
+  if (weightEntries.length > 0) {
+    parts.push(
+      `weights: ${weightEntries.map(([id, w]) => `${id}=${w}`).join(", ")}`,
+    );
+  }
+  return parts.join(" · ");
+}
+
 /**
  * Every scalar setting a snapshot carries, in the order the configuration pane
  * reads them. Each renders to a display string, and a setting neither side
@@ -697,6 +720,25 @@ const CONFIGURATION_FIELDS: {
             domainPreset: s.networkPolicy.domainPreset,
             allowedDomains: s.networkPolicy.allowedDomains,
             allowedCidrs: s.networkPolicy.allowedCidrs,
+          })
+        : null,
+  },
+  {
+    label: "Subagent load balancing",
+    render: (s) => renderSubagentLoadBalancing(s.subagentLoadBalancing),
+    identity: (s) =>
+      s.subagentLoadBalancing
+        ? JSON.stringify({
+            enabled: s.subagentLoadBalancing.enabled,
+            algorithm: s.subagentLoadBalancing.algorithm,
+            weights: Object.fromEntries(
+              Object.entries(s.subagentLoadBalancing.weights ?? {}).sort(
+                ([a], [b]) => a.localeCompare(b),
+              ),
+            ),
+            retries: s.subagentLoadBalancing.retries,
+            fallbackEnabled: s.subagentLoadBalancing.fallbackEnabled,
+            maxFallbacks: s.subagentLoadBalancing.maxFallbacks ?? null,
           })
         : null,
   },

@@ -400,3 +400,102 @@ test("its argument shape is redacted before a tool call is logged", () => {
   const enveloped = redactCatalogToolArguments({ tool_args: args });
   expect(JSON.stringify(enveloped)).not.toContain(SECRET_VALUE);
 });
+
+test("mints a one-time ephemeral credential_grant_id without writing to the database", async ({
+  makeAgent,
+}) => {
+  const targetA = await makeAgent({
+    organizationId,
+    authorId: actorId,
+    agentType: "agent",
+    runtime: runtimeConfig(),
+  });
+  const targetB = await makeAgent({
+    organizationId,
+    authorId: actorId,
+    agentType: "agent",
+    runtime: runtimeConfig(),
+  });
+
+  const result = await executeArchestraTool(
+    TOOL_TRANSFER_CREDENTIAL_FULL_NAME,
+    {
+      ephemeral: true,
+      ttl_seconds: 120,
+      environment: [{ key: "GH_TOKEN", type: "secret", value: SECRET_VALUE }],
+    },
+    context,
+  );
+
+  expect(result.isError).toBeFalsy();
+  const structured = result.structuredContent as {
+    key: string;
+    ephemeral?: boolean;
+    credential_grant_id?: string;
+    expires_in_seconds?: number;
+    valueStored: boolean;
+  };
+  expect(structured.key).toBe("GH_TOKEN");
+  expect(structured.ephemeral).toBe(true);
+  expect(structured.valueStored).toBe(true);
+  expect(structured.expires_in_seconds).toBe(120);
+  expect(typeof structured.credential_grant_id).toBe("string");
+
+  // Neither target agent's DB declaration nor user_credentials row was written.
+  const storedA = await AgentModel.findById(targetA.id);
+  const storedB = await AgentModel.findById(targetB.id);
+  expect(storedA?.runtime?.credentials ?? []).toEqual([]);
+  expect(storedB?.runtime?.credentials ?? []).toEqual([]);
+  const preflightA = await preflightAgentRuntimeCredentials({
+    runtime: resolveAgentRuntime(storedA!)!,
+    organizationId,
+    userId: actorId,
+  });
+  expect(preflightA.configured).not.toContain("GH_TOKEN");
+});
+
+test("lists all target subagent names and setup URLs when agent_id is omitted", async ({
+  makeAgent,
+}) => {
+  const targetA = await makeAgent({
+    name: "Subagent Alpha",
+    organizationId,
+    authorId: actorId,
+    agentType: "agent",
+    runtime: runtimeConfig(),
+  });
+  const targetB = await makeAgent({
+    name: "Subagent Beta",
+    organizationId,
+    authorId: actorId,
+    agentType: "agent",
+    runtime: runtimeConfig(),
+  });
+
+  const declared = await executeArchestraTool(
+    TOOL_TRANSFER_CREDENTIAL_FULL_NAME,
+    {
+      environment: [{ key: "MULTI_KEY", type: "secret" }],
+    },
+    context,
+  );
+  expect(declared.isError).toBeFalsy();
+  const urls = (declared.structuredContent as { urls?: string[] }).urls ?? [];
+  expect(urls).toEqual(
+    expect.arrayContaining([
+      expect.stringContaining(`/agents/${targetA.id}?setup=credentials`),
+      expect.stringContaining(`/agents/${targetB.id}?setup=credentials`),
+    ]),
+  );
+
+  const stored = await executeArchestraTool(
+    TOOL_TRANSFER_CREDENTIAL_FULL_NAME,
+    {
+      environment: [{ key: "MULTI_KEY", type: "secret", value: SECRET_VALUE }],
+    },
+    context,
+  );
+  expect(stored.isError).toBeFalsy();
+  expect(textOf(stored)).toContain("Subagent Alpha");
+  expect(textOf(stored)).toContain("Subagent Beta");
+});

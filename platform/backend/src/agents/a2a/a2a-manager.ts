@@ -211,6 +211,10 @@ export interface A2ASystemParams {
    * Protocol requests cannot set this.
    */
   runtimeCrossing?: import("@/services/agent-runtime/runtime-crossing").RuntimeCrossing;
+  /** Ephemeral per-run credentials redeemed from a one-time `transfer_credential` grant. */
+  ephemeralCredentials?: Record<string, string>;
+  /** Supervisor retry and subagent failover policy for this run. */
+  subagentExecutionPolicy?: import("@/services/agent-runtime/pod-run").SubagentExecutionPolicy;
 }
 
 /**
@@ -712,6 +716,8 @@ export class A2AManager {
                 runMode: systemParams?.runtimeMode ?? "one_shot",
                 titleUserId: actor.kind === "user" ? actor.id : undefined,
                 runtimeCrossing: systemParams?.runtimeCrossing,
+                ephemeralCredentials: systemParams?.ephemeralCredentials,
+                subagentExecutionPolicy: systemParams?.subagentExecutionPolicy,
                 onTextDelta: runOpts.onTextDelta,
                 abortSignal: runOpts.abortSignal,
               });

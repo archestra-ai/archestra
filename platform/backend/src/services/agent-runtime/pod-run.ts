@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   DEFAULT_APP_NAME,
   followAgentCatalogImage,
+  nextLargerAgentRuntimeTier,
   toPlaceholderTitle,
 } from "@archestra/shared";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
@@ -33,6 +34,7 @@ import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-p
 import type {
   Agent,
   AgentRunCompletionTarget,
+  AgentRunLimitsRequest,
   AgentRunRecord,
   ResolvedAgentRuntime,
 } from "@/types";
@@ -61,12 +63,25 @@ import {
   stampRuntimeBinding,
 } from "./runtime-identity";
 import {
+  agentRuntimeAllowedTiers,
   organizationAgentRuntimeTiers,
   resolveAgentRunLimits,
   resolveRunWorkspaceGiB,
+  tierWorkspaceGiB,
 } from "./runtime-tiers";
 import { generateAgentRunTitle } from "./title";
 import { agentRunTranscriptStore } from "./transcript-store";
+
+export interface SubagentExecutionPolicy {
+  /** Number of automatic retries on the same subagent for retriable failures (0–3). */
+  retries?: number;
+  /** Ordered fallback runtime subagent IDs to try if the current subagent fails. */
+  fallbackAgentIds?: string[];
+  /** Original requested limits from the caller, used when resolving limits on a fallback subagent. */
+  requestedLimits?: AgentRunLimitsRequest;
+  /** Ephemeral credentials scoped per subagent ID. */
+  ephemeralCredentialsByAgentId?: Record<string, Record<string, string>>;
+}
 
 /**
  * Start one delegated A2A task through its configured run backend.
@@ -99,6 +114,9 @@ async function startAgentRunSession(params: {
   titleUserId?: string;
   resumeFromTaskId?: string;
   runtimeCrossing?: RuntimeCrossing;
+  ephemeralCredentials?: Record<string, string>;
+  settleTaskOnFailure?: boolean;
+  boundContract?: { resolved: boolean; contract?: string };
 }): Promise<AgentRunRecord> {
   const backend = await prepareAgentRuntimeBackendDriver(
     params.runtime.backend,
@@ -151,17 +169,25 @@ async function startAgentRunSession(params: {
 
   let task = params.task;
   if (params.runtimeCrossing && !params.resumeFromTaskId) {
-    const agent = await AgentModel.findById(params.agentId);
-    if (!agent) throw new ApiError(404, "Agent not found");
-    const contract = await bindRuntimeChild({
-      crossing: params.runtimeCrossing,
-      organizationId: params.organizationId,
-      workspaceId: params.taskId,
-      workloadName: constructStableRunName(agent.name, params.taskId),
-      actorKind: params.actor.kind,
-      actorId: params.actor.id,
-    });
-    task = promptWithContract(task, contract);
+    if (params.boundContract?.resolved) {
+      task = promptWithContract(task, params.boundContract.contract);
+    } else {
+      const agent = await AgentModel.findById(params.agentId);
+      if (!agent) throw new ApiError(404, "Agent not found");
+      const contract = await bindRuntimeChild({
+        crossing: params.runtimeCrossing,
+        organizationId: params.organizationId,
+        workspaceId: params.taskId,
+        workloadName: constructStableRunName(agent.name, params.taskId),
+        actorKind: params.actor.kind,
+        actorId: params.actor.id,
+      });
+      if (params.boundContract) {
+        params.boundContract.resolved = true;
+        params.boundContract.contract = contract;
+      }
+      task = promptWithContract(task, contract);
+    }
   }
 
   // A continuation keeps the first turn's tier and limits; its workspace
@@ -197,6 +223,7 @@ async function startAgentRunSession(params: {
       task,
       runMode: params.runMode,
       inputFiles,
+      ephemeralCredentials: params.ephemeralCredentials,
       ...(workspace
         ? {
             workspaceId: workspace.id,
@@ -358,10 +385,12 @@ async function startAgentRunSession(params: {
     // Settle the task before cleanup is visible: the reconciler cancels any
     // unfinished task whose workspace is being deleted, which would otherwise
     // replace this launch error with a generic reason.
-    await recordLaunchFailure({
-      taskId: params.taskId,
-      failure: launchFailure,
-    });
+    if (params.settleTaskOnFailure !== false) {
+      await recordLaunchFailure({
+        taskId: params.taskId,
+        failure: launchFailure,
+      });
+    }
     // A publication can succeed before its exec connection fails. Keep the
     // claim until stopping that possibly-running turn has been acknowledged.
     try {
@@ -436,6 +465,26 @@ export function resolveAgentRuntime(
 }
 
 /**
+ * Tear down a failed attempt's workload and delete its run/workspace rows so
+ * the supervisor can retry or fail over the same A2A task cleanly.
+ */
+async function cleanupFailedAttemptForRetry(taskId: string): Promise<void> {
+  const existingRun = await AgentRunModel.findByTaskId(taskId);
+  if (existingRun) {
+    try {
+      const backend = resolveAgentRuntimeBackendDriver(existingRun.backend);
+      await backend.teardown(existingRun);
+    } catch (error) {
+      logger.warn(
+        { error, taskId, sessionId: existingRun.id },
+        "Could not tear down failed Agent Runtime attempt before retry",
+      );
+    }
+  }
+  await AgentRunModel.deleteAttemptByTaskId(taskId);
+}
+
+/**
  * Run one delegated A2A task to completion, shaped as the lifecycle's
  * `executeRun`.
  *
@@ -463,26 +512,171 @@ export async function runTaskInAgentRuntime(params: {
   titleUserId?: string;
   resumeFromTaskId?: string;
   runtimeCrossing?: RuntimeCrossing;
+  ephemeralCredentials?: Record<string, string>;
+  subagentExecutionPolicy?: SubagentExecutionPolicy;
   onTextDelta?: (delta: string) => void;
   abortSignal?: AbortSignal;
 }): Promise<A2AExecuteResult> {
-  const launchedAt = Date.now();
-  try {
-    const session = await startAgentRunSession(params);
-    return await followAgentRun({
-      session,
-      launchedAt,
-      onTextDelta: params.onTextDelta,
-      abortSignal: params.abortSignal,
-    });
-  } catch (error) {
-    await recordRunFailure({
-      taskId: params.taskId,
-      failure: error,
-      abortSignal: params.abortSignal,
-    });
-    throw error;
+  if (params.resumeFromTaskId) {
+    const launchedAt = Date.now();
+    try {
+      const session = await startAgentRunSession(params);
+      return await followAgentRun({
+        session,
+        launchedAt,
+        onTextDelta: params.onTextDelta,
+        abortSignal: params.abortSignal,
+      });
+    } catch (error) {
+      await recordRunFailure({
+        taskId: params.taskId,
+        failure: error,
+        abortSignal: params.abortSignal,
+      });
+      throw error;
+    }
   }
+
+  const policy = params.subagentExecutionPolicy;
+  const maxRetries = Math.max(0, Math.min(3, policy?.retries ?? 0));
+  const maxOomEscalations = 2;
+  const fallbackAgentIds = params.runtimeCrossing
+    ? []
+    : (policy?.fallbackAgentIds ?? []);
+  const candidateAgentIds = [params.agentId, ...fallbackAgentIds];
+  const boundContract: { resolved: boolean; contract?: string } = {
+    resolved: false,
+  };
+
+  let lastError: unknown;
+
+  for (
+    let candidateIndex = 0;
+    candidateIndex < candidateAgentIds.length;
+    candidateIndex++
+  ) {
+    const candidateAgentId = candidateAgentIds[candidateIndex];
+    let currentRuntime = params.runtime;
+    let currentLimits = params.limits;
+    let currentModelId = params.modelId;
+    let currentLlmApiKeyId = params.llmApiKeyId;
+
+    if (candidateIndex > 0) {
+      const nextAgent = await AgentModel.findById(candidateAgentId);
+      if (!nextAgent || nextAgent.organizationId !== params.organizationId) {
+        continue;
+      }
+      const nextRuntime = resolveAgentRuntime(nextAgent);
+      if (!nextRuntime) {
+        continue;
+      }
+      try {
+        const tiers = await organizationAgentRuntimeTiers(
+          params.organizationId,
+        );
+        currentLimits = resolveAgentRunLimits({
+          runtime: nextRuntime,
+          requested: policy?.requestedLimits,
+          tiers,
+        });
+      } catch {
+        continue;
+      }
+      currentRuntime = nextRuntime;
+      currentModelId = nextAgent.modelId;
+      currentLlmApiKeyId = nextAgent.llmApiKeyId;
+      await A2ATaskModel.updateAgentId(params.taskId, nextAgent.id);
+    }
+
+    const candidateEphemeralCredentials =
+      policy?.ephemeralCredentialsByAgentId?.[candidateAgentId] ??
+      params.ephemeralCredentials;
+
+    let retryCount = 0;
+    let oomEscalations = 0;
+
+    while (true) {
+      const launchedAt = Date.now();
+      try {
+        const session = await startAgentRunSession({
+          ...params,
+          agentId: candidateAgentId,
+          runtime: currentRuntime,
+          limits: currentLimits,
+          modelId: currentModelId,
+          llmApiKeyId: currentLlmApiKeyId,
+          ephemeralCredentials: candidateEphemeralCredentials,
+          settleTaskOnFailure: false,
+          boundContract,
+        });
+        return await followAgentRun({
+          session,
+          launchedAt,
+          onTextDelta: params.onTextDelta,
+          abortSignal: params.abortSignal,
+        });
+      } catch (error) {
+        lastError = error;
+        if (params.abortSignal?.aborted) {
+          await recordRunFailure({
+            taskId: params.taskId,
+            failure: error,
+            abortSignal: params.abortSignal,
+          });
+          throw error;
+        }
+
+        const classified = classifyAgentRunFailure(error);
+
+        // Automatic OOM tier escalation on the same subagent up to its maxTier.
+        if (
+          classified?.code === "pod.oom_killed" &&
+          oomEscalations < maxOomEscalations
+        ) {
+          const tiers = await organizationAgentRuntimeTiers(
+            params.organizationId,
+          );
+          const baseLimits =
+            currentLimits ??
+            resolveAgentRunLimits({ runtime: currentRuntime, tiers });
+          const allowedTiers = agentRuntimeAllowedTiers(currentRuntime, tiers);
+          const nextTier = baseLimits.tier
+            ? nextLargerAgentRuntimeTier(allowedTiers, baseLimits.tier)
+            : undefined;
+          if (nextTier) {
+            oomEscalations += 1;
+            currentLimits = {
+              ...baseLimits,
+              tier: nextTier.name,
+              workspaceGiB: tierWorkspaceGiB(nextTier),
+            };
+            await cleanupFailedAttemptForRetry(params.taskId);
+            continue;
+          }
+        }
+
+        // Automatic retry on the same subagent for retriable failures.
+        if (classified?.retriable === true && retryCount < maxRetries) {
+          retryCount += 1;
+          await cleanupFailedAttemptForRetry(params.taskId);
+          continue;
+        }
+
+        break;
+      }
+    }
+
+    if (candidateIndex + 1 < candidateAgentIds.length) {
+      await cleanupFailedAttemptForRetry(params.taskId);
+    }
+  }
+
+  await recordRunFailure({
+    taskId: params.taskId,
+    failure: lastError,
+    abortSignal: params.abortSignal,
+  });
+  throw lastError;
 }
 
 /**

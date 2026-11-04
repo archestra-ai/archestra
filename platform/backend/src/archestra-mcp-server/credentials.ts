@@ -10,7 +10,9 @@ import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   declarePersonalRuntimeCredential,
   transferPersonalRuntimeCredential,
+  validateEphemeralRuntimeCredential,
 } from "@/services/agent-runtime/credentials";
+import { ephemeralCredentialGrantManager } from "@/services/agent-runtime/ephemeral-credential-grants";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import {
   createRuntimeCredentialDefinition,
@@ -35,7 +37,11 @@ import {
   errorResult,
   structuredSuccessResult,
 } from "./helpers";
-import { checkCallerSubagentAccess, requireActor } from "./tasks";
+import {
+  checkCallerSubagentAccess,
+  requireActor,
+  resolveCandidateRuntimeSubagentIds,
+} from "./tasks";
 
 /**
  * The secret-bearing argument reuses the catalog tools' `environment` shape on
@@ -82,6 +88,31 @@ const TransferCredentialOutputSchema = z.object({
     .describe(
       "Where the person pastes the value. Null when this call already stored one.",
     ),
+  urls: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "All per-subagent setup links when declaring a credential across multiple subagents.",
+    ),
+  ephemeral: z
+    .boolean()
+    .optional()
+    .describe(
+      "True when the credential was minted as a short-lived one-time grant instead of stored in the database.",
+    ),
+  credential_grant_id: z
+    .string()
+    .uuid()
+    .nullable()
+    .optional()
+    .describe(
+      "One-time credential grant handle to pass to start_agent_run when ephemeral is true.",
+    ),
+  expires_in_seconds: z
+    .number()
+    .int()
+    .optional()
+    .describe("Seconds until the ephemeral credential grant expires."),
   availability: z
     .string()
     .describe("When a run can read the value, in plain words."),
@@ -297,6 +328,21 @@ const registry = defineArchestraTools([
         .describe(
           "Human-readable name shown in the Agent's credential list. Defaults to the key.",
         ),
+      ephemeral: z
+        .boolean()
+        .optional()
+        .describe(
+          "When true, mints a short-lived one-time credential_grant_id handle instead of persisting the secret in the database or mutating subagent declarations. Pass the returned credential_grant_id to start_agent_run so the secret is bound only to the single winning subagent pod.",
+        ),
+      ttl_seconds: z
+        .number()
+        .int()
+        .min(30)
+        .max(3600)
+        .optional()
+        .describe(
+          "Optional TTL in seconds (30–3600, default 300) for an ephemeral credential grant. Implies ephemeral: true.",
+        ),
     }),
     outputSchema: TransferCredentialOutputSchema,
     handler: async ({ args, context }) => {
@@ -310,10 +356,10 @@ const registry = defineArchestraTools([
         const candidateAgentIds = explicitAgentId
           ? [explicitAgentId]
           : callerAgent
-            ? await AgentModel.findAssignedRuntimeSubagentIds(
-                callerAgent.id,
-                callerAgent.environmentId,
-              )
+            ? await resolveCandidateRuntimeSubagentIds({
+                callerAgent,
+                actorUserId: actor.id,
+              })
             : [];
         if (!explicitAgentId && candidateAgentIds.length === 0) {
           return errorResult(
@@ -382,6 +428,14 @@ const registry = defineArchestraTools([
         }
 
         const [entry] = args.environment;
+        const isEphemeral =
+          args.ephemeral === true || args.ttl_seconds !== undefined;
+
+        if (isEphemeral && entry.value === undefined) {
+          return errorResult(
+            "Ephemeral credential grants require a `value`. Omit `ephemeral` and `ttl_seconds` to declare the credential without a value.",
+          );
+        }
 
         for (const { agent, runtime } of targets) {
           // The gate governs storing a client-supplied secret. Declaring carries
@@ -411,21 +465,81 @@ const registry = defineArchestraTools([
           }
         }
 
-        const primaryTarget = targets[0];
+        const targetNamesLabel = targets
+          .map(({ agent }) => `"${agent.name}"`)
+          .join(", ");
+
+        if (isEphemeral && entry.value !== undefined) {
+          for (const { runtime } of targets) {
+            await validateEphemeralRuntimeCredential({
+              runtime,
+              organizationId: actor.organizationId,
+              userId: actor.id,
+              key: entry.key,
+              label: args.label,
+            });
+          }
+          const { grantId, expiresInSeconds } =
+            ephemeralCredentialGrantManager.createGrant({
+              organizationId: actor.organizationId,
+              userId: actor.id,
+              callerAgentId: context.agent.id,
+              allowedAgentIds: targets.map(({ agent }) => agent.id),
+              key: entry.key,
+              value: entry.value,
+              ttlSeconds: args.ttl_seconds,
+            });
+          const availability = `Bound to one-time grant ${grantId} (expires in ${expiresInSeconds}s). Pass credential_grant_ids: ["${grantId}"] to start_agent_run so the credential is injected only into the single winning subagent pod.`;
+          return structuredSuccessResult(
+            {
+              key: entry.key,
+              scope: "personal" as const,
+              declarationCreated: false,
+              valueStored: true,
+              url: null,
+              ephemeral: true,
+              credential_grant_id: grantId,
+              expires_in_seconds: expiresInSeconds,
+              availability,
+            },
+            [
+              `Minted ephemeral credential grant ${grantId} for ${entry.key} on ${targetNamesLabel}.`,
+              "Scope: personal & ephemeral — never written to the database; consumed once by start_agent_run.",
+              availability,
+            ].join("\n"),
+          );
+        }
+
         if (entry.value === undefined) {
           let anyDeclarationCreated = false;
-          for (const { runtime } of targets) {
-            const { declarationCreated } =
-              await declarePersonalRuntimeCredential({
-                runtime,
-                key: entry.key,
-                label: args.label,
-              });
-            if (declarationCreated) anyDeclarationCreated = true;
+          const completedNames: string[] = [];
+          try {
+            for (const { agent, runtime } of targets) {
+              const { declarationCreated } =
+                await declarePersonalRuntimeCredential({
+                  runtime,
+                  key: entry.key,
+                  label: args.label,
+                });
+              if (declarationCreated) anyDeclarationCreated = true;
+              completedNames.push(`"${agent.name}"`);
+            }
+          } catch (error) {
+            const response = catchError(error, "transferring the credential");
+            if (
+              completedNames.length > 0 &&
+              response.content?.[0]?.type === "text"
+            ) {
+              return errorResult(
+                `${response.content[0].text} (Already declared on: ${completedNames.join(", ")}.)`,
+              );
+            }
+            return response;
           }
-          const url = agentCredentialSetupUrl(primaryTarget.agent.id, [
-            entry.key,
-          ]);
+          const urls = targets.map(({ agent }) =>
+            agentCredentialSetupUrl(agent.id, [entry.key]),
+          );
+          const url = urls[0];
           const availability =
             "Nothing is stored yet. A run can read it once the person saves a value, from that Agent's next turn onward.";
           // Question forms show a link as plain text, so the model must hand
@@ -441,12 +555,15 @@ const registry = defineArchestraTools([
               declarationCreated: anyDeclarationCreated,
               valueStored: false,
               url,
+              ...(urls.length > 1 ? { urls } : {}),
               availability,
               next_step: nextStep,
             },
             [
-              `Declared ${entry.key} on "${primaryTarget.agent.name}". No value is stored.`,
-              `Put this link in your reply text, never inside a question form, so the person can paste it: ${url}`,
+              `Declared ${entry.key} on ${targetNamesLabel}. No value is stored.`,
+              urls.length > 1
+                ? `Put these links in your reply text, never inside a question form, so the person can paste it:\n${urls.map((u, idx) => `- ${targets[idx].agent.name}: ${u}`).join("\n")}`
+                : `Put this link in your reply text, never inside a question form, so the person can paste it: ${url}`,
               "Scope: personal — whatever they save applies to every run they start on this Agent, and to no one else's runs.",
               availability,
             ].join("\n"),
@@ -454,17 +571,32 @@ const registry = defineArchestraTools([
         }
 
         let anyDeclarationCreated = false;
-        for (const { runtime } of targets) {
-          const { declarationCreated } =
-            await transferPersonalRuntimeCredential({
-              runtime,
-              organizationId: actor.organizationId,
-              userId: actor.id,
-              key: entry.key,
-              value: entry.value,
-              label: args.label,
-            });
-          if (declarationCreated) anyDeclarationCreated = true;
+        const completedNames: string[] = [];
+        try {
+          for (const { agent, runtime } of targets) {
+            const { declarationCreated } =
+              await transferPersonalRuntimeCredential({
+                runtime,
+                organizationId: actor.organizationId,
+                userId: actor.id,
+                key: entry.key,
+                value: entry.value,
+                label: args.label,
+              });
+            if (declarationCreated) anyDeclarationCreated = true;
+            completedNames.push(`"${agent.name}"`);
+          }
+        } catch (error) {
+          const response = catchError(error, "transferring the credential");
+          if (
+            completedNames.length > 0 &&
+            response.content?.[0]?.type === "text"
+          ) {
+            return errorResult(
+              `${response.content[0].text} (Already stored on: ${completedNames.join(", ")}.)`,
+            );
+          }
+          return response;
         }
 
         const availability =
@@ -480,7 +612,7 @@ const registry = defineArchestraTools([
             availability,
           },
           [
-            `Stored ${entry.key} for you on "${primaryTarget.agent.name}".`,
+            `Stored ${entry.key} for you on ${targetNamesLabel}.`,
             "Scope: personal — it applies to every run you start on this Agent, and to no one else's runs.",
             availability,
           ].join("\n"),

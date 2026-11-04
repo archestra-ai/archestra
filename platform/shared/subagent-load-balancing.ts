@@ -111,7 +111,11 @@ export function resetGatewayRoundRobinSeeds(): void {
  */
 export function orderSubagentsByLoadBalancing(
   agentIds: readonly string[],
-  config: SubagentLoadBalancingConfig | null | undefined,
+  config:
+    | (Pick<SubagentLoadBalancingConfig, "enabled" | "algorithm" | "weights"> &
+        Partial<SubagentLoadBalancingConfig>)
+    | null
+    | undefined,
   options?: {
     seed?: number;
     random?: () => number;

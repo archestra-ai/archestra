@@ -20756,6 +20756,16 @@ export type GetAgentVersionResponses = {
                 allowedDomains: Array<string>;
                 allowedCidrs: Array<string>;
             } | null;
+            subagentLoadBalancing: {
+                enabled: boolean;
+                algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+                weights?: {
+                    [key: string]: number;
+                };
+                retries: number;
+                fallbackEnabled: boolean;
+                maxFallbacks?: number | null;
+            } | null;
             tools: Array<{
                 toolId: string;
                 name: string;

@@ -102,6 +102,29 @@ class AgentRunModel {
   }
 
   /**
+   * Remove a failed attempt's run record, workspace row, and initial permission
+   * policy before the supervisor retries or fails over the same task.
+   */
+  static async deleteAttemptByTaskId(taskId: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(schema.agentRunsTable)
+        .where(eq(schema.agentRunsTable.taskId, taskId));
+      await tx
+        .delete(schema.agentWorkspacesTable)
+        .where(eq(schema.agentWorkspacesTable.id, taskId));
+      await tx
+        .delete(schema.resourcePermissionPoliciesTable)
+        .where(
+          and(
+            eq(schema.resourcePermissionPoliciesTable.resource, "agentRun"),
+            eq(schema.resourcePermissionPoliciesTable.scope, taskId),
+          ),
+        );
+    });
+  }
+
+  /**
    * The run a live virtual key was minted for. Two rows for one key is not a
    * binding: the caller must fail closed rather than pick a workspace.
    */

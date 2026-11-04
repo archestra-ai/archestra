@@ -353,7 +353,7 @@ function Stepper({
         <TooltipTrigger asChild>
           <UnstyledButton
             onClick={() => onActivate(changes[Math.max(0, active)])}
-            aria-label={`${count}.${active >= 0 ? ` Showing change ${active + 1}: ${changeSentence(changes[active])}` : ""} Selects the row that caused it.`}
+            aria-label={`${count}.${active >= 0 ? ` Showing change ${active + 1}: ${changeSentence(changes[active])}` : ""} ${shown.target.type === "request" ? "Opens the request that caused it." : "Selects the row that caused it."}`}
             className="inline-flex cursor-pointer items-center gap-1 border-x px-1.5 font-medium whitespace-nowrap tabular-nums outline-none transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset"
           >
             <StepperIcon

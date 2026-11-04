@@ -71,18 +71,34 @@ export function useLinkedRequest({
   });
   const position = shouldLocate ? before.data?.pagination.total : undefined;
   useEffect(() => {
-    if (!target || position === undefined) return;
+    if (!target || located?.id === target.id) return;
+    // Found where the page opened: paging away later is the viewer's choice.
+    if (targetOnPage && requestsReady) {
+      setLocated({ id: target.id, page: pageIndex });
+      return;
+    }
+    if (position === undefined) return;
     const page = Math.floor(position / pageSize);
     setLocated({ id: target.id, page });
     if (page !== pageIndex) onLocatePage(page);
-  }, [target, position, pageSize, pageIndex, onLocatePage]);
+  }, [
+    target,
+    located,
+    targetOnPage,
+    requestsReady,
+    position,
+    pageSize,
+    pageIndex,
+    onLocatePage,
+  ]);
+  // The lookup failed, which says nothing about whether the request is here.
+  const rankFailed = shouldLocate && before.isError;
 
   const targetResolved =
     targetRequestId === null ||
     (targetOnPage && requestsReady) ||
     targetQuery.isError ||
     (targetQuery.isSuccess && target === null) ||
-    (shouldLocate && before.isError) ||
     // Settled only on the page it was found on: until the move lands, the
     // previous page's requests are still the ones in hand.
     (target !== null &&
@@ -96,7 +112,14 @@ export function useLinkedRequest({
     targetOnPage,
     /** The URL named a request this page cannot show, and looking is over. */
     targetMissing: targetRequestId !== null && targetResolved && !targetOnPage,
-    /** A linked request has been found on its page, or found missing. */
-    ready: targetRequestId === null || settledFor === targetRequestId,
+    /** Finding the linked request's page failed; `retry` tries again. */
+    rankFailed,
+    retry: () => before.refetch(),
+    /**
+     * A linked request has been found on its page, or found missing, or
+     * looking failed (the page draws with that error).
+     */
+    ready:
+      targetRequestId === null || settledFor === targetRequestId || rankFailed,
   };
 }

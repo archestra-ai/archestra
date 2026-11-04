@@ -222,9 +222,11 @@ export function RequestWaterfall({
   // label changed), else the check, else the first row under the new label.
   const activateChange = (change: LabelChange) => {
     if (change.target.type === "consult") onSelectConsult?.(change.target.key);
-    else if (change.target.type === "request")
+    else if (change.target.type === "request") {
+      // The details pane follows the request, not a check left open.
+      onSelectConsult?.(null);
       onOpenRequest?.(change.target.key);
-    else onSelect(change.target.key);
+    } else onSelect(change.target.key);
   };
   const yellByKey = new Map(
     (guardrails?.yells ?? []).flatMap((yell) =>

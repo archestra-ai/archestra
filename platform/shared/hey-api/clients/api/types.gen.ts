@@ -73762,10 +73762,6 @@ export type GetInteractionSummariesData = {
          * Only rows created before this interaction, ordered by creation time then ID at the stored precision. Its total is the interaction's zero-based position.
          */
         beforeId?: string;
-        /**
-         * Comma-separated tool call IDs. Only rows whose response asked for at least one of them.
-         */
-        requestedToolCallIds?: string;
         limit?: number;
         offset?: number;
         sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model' | 'userId';

@@ -303,7 +303,7 @@ describe("interaction routes", () => {
     expect(response.json().data[0]).not.toHaveProperty("response");
   });
 
-  test("ranks a session's request at the stored precision and finds who asked for a tool call", async ({
+  test("ranks a session's request at the stored precision", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent({
@@ -371,17 +371,6 @@ describe("interaction routes", () => {
       ),
     );
     expect(before.map((r) => r.json().pagination.total)).toEqual([0, 1, 2]);
-
-    const asked = await app.inject({
-      method: "GET",
-      url: "/api/interactions/summaries?sessionId=rank-session&requestedToolCallIds=call_other,call_shell&limit=10&offset=0",
-    });
-    expect(asked.json().data).toEqual([
-      expect.objectContaining({
-        id: rows[1].id,
-        responseToolCalls: [{ id: "call_shell", name: "exec_command" }],
-      }),
-    ]);
   });
 
   test("lists interactions whose response carries a non-standard finish_reason", async ({

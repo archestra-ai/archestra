@@ -217,9 +217,16 @@ export type AskedFor = { requestId: string; name: string };
 export function unexplainedCallIds({
   timeline,
   labelChanges,
+  until,
 }: {
   timeline: Timeline | null;
   labelChanges: LabelChangeRecord[];
+  /**
+   * The end of this page's ownership, epoch ms: a change after its last row
+   * but before the next page's first request still shows here. Null on the
+   * last page.
+   */
+  until: number | null;
 }): string[] {
   if (!timeline || timeline.spans.length === 0) return [];
   const known = new Set<string>();
@@ -232,12 +239,11 @@ export function unexplainedCallIds({
     }
   }
   const first = Math.min(...timeline.spans.map((span) => span.start));
-  const last = Math.max(...timeline.spans.map((span) => span.end));
   const ids = new Set<string>();
   for (const change of labelChanges) {
     if (!change.callId) continue;
     const at = new Date(change.createdAt).getTime();
-    if (at < first || at > last) continue;
+    if (at < first || (until !== null && at > until)) continue;
     const id = modelCallId(change.callId.replace(/^call:/, ""));
     if (!known.has(id)) ids.add(id);
   }

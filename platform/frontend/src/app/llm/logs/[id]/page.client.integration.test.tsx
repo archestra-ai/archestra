@@ -22,6 +22,7 @@ import {
   it,
   vi,
 } from "vitest";
+import { useFeature } from "@/lib/config/config.query";
 import {
   makeInteraction,
   makeSessionSummary,
@@ -32,6 +33,12 @@ import SessionDetailPage from "./page.client";
 vi.mock("next/navigation");
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("sonner");
+// Signed out here, so the config never loads and every flag reads as unset;
+// a test turns OpenAPPA on.
+vi.mock("@/lib/config/config.query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/config/config.query")>()),
+  useFeature: vi.fn(),
+}));
 
 const origin = "http://localhost:9000";
 const sessionsUrl = `${origin}/api/interactions/sessions`;
@@ -48,6 +55,7 @@ beforeEach(() => {
     new URLSearchParams() as ReturnType<typeof useSearchParams>,
   );
   vi.mocked(usePathname).mockReturnValue("/llm/logs/test-session");
+  vi.mocked(useFeature).mockReturnValue(undefined);
   push.mockReset();
   vi.mocked(useRouter).mockReturnValue({ push } as unknown as ReturnType<
     typeof useRouter
@@ -575,6 +583,166 @@ it("keeps looking for a linked tool call while the next page's boundary is unava
   ).not.toBeInTheDocument();
 });
 
+it("lets the viewer page away from a linked request that was already on the page", async () => {
+  const rows = Array.from({ length: 60 }, (_, i) =>
+    summary({
+      id: `request-${String(i).padStart(2, "0")}`,
+      model: `model-${i}`,
+      createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+    }),
+  );
+  serveSession({ rows });
+  let search = new URLSearchParams("request=request-10&pageSize=50");
+  vi.mocked(useSearchParams).mockImplementation(
+    () => search as ReturnType<typeof useSearchParams>,
+  );
+  push.mockImplementation((url: string) => {
+    search = new URLSearchParams(url.split("?")[1]);
+  });
+
+  const { rerender } = await renderPage();
+  const requests = await screen.findByRole("list", { name: "Requests" });
+  expect(
+    await within(requests).findByRole("button", {
+      name: /^Test Agent, Model 10,/,
+    }),
+  ).toHaveAttribute("aria-current", "true");
+
+  // The viewer moves to page two; the link stays in the URL.
+  search = new URLSearchParams("request=request-10&page=2&pageSize=50");
+  push.mockClear();
+  await rerender();
+  expect(
+    await within(
+      await screen.findByRole("list", { name: "Requests" }),
+    ).findByRole("button", { name: /^Test Agent, Model 55,/ }),
+  ).toBeVisible();
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  expect(push).not.toHaveBeenCalled();
+});
+
+it("reports a failed lookup of a linked request's page as an error, not a missing request", async () => {
+  const rows = Array.from({ length: 60 }, (_, i) =>
+    summary({
+      id: `request-${String(i).padStart(2, "0")}`,
+      model: `model-${i}`,
+      createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+    }),
+  );
+  serveSession({ rows });
+  server.use(
+    http.get(`${origin}/api/interactions/summaries`, ({ request }) => {
+      if (new URL(request.url).searchParams.has("beforeId")) {
+        return HttpResponse.json(
+          { error: { message: "boom", type: "api_internal_server_error" } },
+          { status: 500 },
+        );
+      }
+    }),
+  );
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams("request=request-55&pageSize=50") as ReturnType<
+      typeof useSearchParams
+    >,
+  );
+
+  await renderPage();
+
+  expect(
+    await screen.findByText(
+      "Couldn't find the page that holds the linked request.",
+    ),
+  ).toBeVisible();
+  expect(
+    screen.queryByText(
+      "The linked request isn't one of this session's requests.",
+    ),
+  ).not.toBeInTheDocument();
+});
+
+it("opens the request on an earlier page that asked for the tool behind a label change", async () => {
+  const rows = Array.from({ length: 60 }, (_, i) =>
+    summary({
+      id: `request-${String(i).padStart(2, "0")}`,
+      model: `model-${i}`,
+      createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+      ...(i === 10
+        ? {
+            responseToolCalls: [{ id: "call_shell", name: "exec_command" }],
+          }
+        : { responseToolCalls: [] }),
+    } as Partial<ReturnType<typeof makeInteraction>>),
+  );
+  serveSession({ rows });
+  const labelChange = (params: {
+    event: string;
+    at: string;
+    callId: string | null;
+    trustAfter: string;
+  }) => ({
+    id: `${params.event}-${params.at}`,
+    organizationId: "org",
+    root: "root",
+    sessionId: "test-session",
+    callerId: null,
+    createdAt: params.at,
+    event: params.event,
+    callId: params.callId,
+    tool: null,
+    trustBefore: "trusted",
+    audienceBefore: "public",
+    trustAfter: params.trustAfter,
+    audienceAfter: "public",
+    policyRevision: null,
+    rule: null,
+  });
+  server.use(
+    http.get(`${origin}/api/openappa/external-consults`, () =>
+      HttpResponse.json({ data: [] }),
+    ),
+    http.get(`${origin}/api/openappa/yells`, () =>
+      HttpResponse.json({ data: [], pagination: { hasNext: false } }),
+    ),
+    http.get(`${origin}/api/openappa/label-changes`, () =>
+      HttpResponse.json({
+        data: [
+          labelChange({
+            event: "session_start",
+            at: "2026-01-01T00:00:00.000Z",
+            callId: null,
+            trustAfter: "trusted",
+          }),
+          labelChange({
+            event: "tool_result",
+            at: "2026-01-01T00:00:55.500Z",
+            callId: "call:call_shell",
+            trustAfter: "suspicious",
+          }),
+        ],
+      }),
+    ),
+  );
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams("page=2&pageSize=50") as ReturnType<
+      typeof useSearchParams
+    >,
+  );
+
+  vi.mocked(useFeature).mockImplementation(((flag: string) =>
+    flag === "openappaEnabled" ? true : undefined) as typeof useFeature);
+
+  await renderPage();
+
+  const stepper = await screen.findByRole("button", {
+    name: /^1 label change\. Opens the request that caused it\.$/,
+  });
+  await userEvent.click(stepper);
+  expect(push).toHaveBeenCalledWith(
+    "/llm/logs/test-session?request=request-10&pageSize=50",
+    { scroll: false },
+  );
+});
+
 it("says when a later page's axis counts from the page, not the session", async () => {
   const rows = Array.from({ length: 60 }, (_, i) =>
     summary({
@@ -1004,7 +1172,6 @@ function serveSession({
       const startDate = params.get("startDate");
       const endDate = params.get("endDate");
       const beforeId = params.get("beforeId");
-      const toolCallIds = params.get("requestedToolCallIds")?.split(",");
       const ordered =
         params.get("sortDirection") === "asc" ? [...sorted].reverse() : sorted;
       // Before `beforeId` in the stored order, which `sorted` reverses.
@@ -1016,12 +1183,7 @@ function serveSession({
           (!startDate || row.createdAt >= startDate) &&
           (!endDate || row.createdAt <= endDate) &&
           (beforeRank === null ||
-            sorted.length - 1 - sorted.indexOf(row) < beforeRank) &&
-          (!toolCallIds ||
-            (
-              (row as { responseToolCalls?: { id: string }[] | null })
-                .responseToolCalls ?? []
-            ).some((call) => toolCallIds.includes(call.id))),
+            sorted.length - 1 - sorted.indexOf(row) < beforeRank),
       );
       const offset = Number(params.get("offset") ?? 0);
       const limit = Number(params.get("limit") ?? 10);

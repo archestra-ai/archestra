@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useFeature } from "@/lib/config/config.query";
-import { useInteractionSummaries } from "@/lib/interactions/interaction.query";
+import { useSessionToolCallAskers } from "@/lib/interactions/interaction.query";
 import { LLM_LOG_FOCUS_PARAM } from "@/lib/interactions/llm-log-links";
 import { useSessionConsults } from "@/lib/openappa/external-consults.query";
 import { useSessionLabelChanges } from "@/lib/openappa/label-changes.query";
@@ -34,7 +34,6 @@ import { useSessionYells } from "@/lib/openappa-yells.query";
 import { cn } from "@/lib/utils/tailwind";
 import { ConsultDetails } from "./consult-details";
 import {
-  type AskedFor,
   audienceTone,
   buildGuardrails,
   DECISION_TONE,
@@ -70,11 +69,17 @@ const GuardrailsContext = createContext<GuardrailsState | null>(null);
 
 export function GuardrailsProvider({
   timeline,
+  pageEndsAt = null,
   sessionId,
   onSelectSpan,
   children,
 }: {
   timeline: Timeline | null;
+  /**
+   * Where this page's ownership ends, epoch ms: the next page's first
+   * request's start. Null on the last page.
+   */
+  pageEndsAt?: number | null;
   /** The LLM session whose guardrail records to read. */
   sessionId: string;
   onSelectSpan: (key: string | null) => void;
@@ -97,27 +102,27 @@ export function GuardrailsProvider({
   // A label change a client-run tool caused, whose asking request sits on
   // another page: found by the call id its response recorded.
   const offPageCallIds = useMemo(
-    () => unexplainedCallIds({ timeline, labelChanges: labelChanges ?? [] }),
-    [timeline, labelChanges],
+    () =>
+      unexplainedCallIds({
+        timeline,
+        labelChanges: labelChanges ?? [],
+        until: pageEndsAt,
+      }),
+    [timeline, labelChanges, pageEndsAt],
   );
-  const { data: askers } = useInteractionSummaries({
+  const pageStartsAt = useMemo(() => {
+    const starts = (timeline?.spans ?? []).flatMap((span) =>
+      span.type === "request" ? [new Date(span.row.createdAt).getTime()] : [],
+    );
+    return starts.length > 0
+      ? new Date(Math.min(...starts)).toISOString()
+      : null;
+  }, [timeline]);
+  const askedElsewhere = useSessionToolCallAskers({
     sessionId,
-    requestedToolCallIds: offPageCallIds,
-    limit: offPageCallIds.length,
-    enabled: offPageCallIds.length > 0,
+    callIds: offPageCallIds,
+    endDate: pageStartsAt,
   });
-  const askedElsewhere = useMemo(() => {
-    const byCallId = new Map<string, AskedFor>();
-    const wanted = new Set(offPageCallIds);
-    for (const row of askers?.data ?? []) {
-      for (const call of row.responseToolCalls ?? []) {
-        if (wanted.has(call.id) && !byCallId.has(call.id)) {
-          byCallId.set(call.id, { requestId: row.id, name: call.name });
-        }
-      }
-    }
-    return byCallId;
-  }, [askers, offPageCallIds]);
   const guardrails = useMemo(
     () =>
       buildGuardrails({

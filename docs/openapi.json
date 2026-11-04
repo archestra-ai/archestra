@@ -286066,15 +286066,6 @@
           },
           {
             "schema": {
-              "type": "string"
-            },
-            "in": "query",
-            "name": "requestedToolCallIds",
-            "required": false,
-            "description": "Comma-separated tool call IDs. Only rows whose response asked for at least one of them."
-          },
-          {
-            "schema": {
               "default": 20,
               "type": "integer",
               "minimum": 1,

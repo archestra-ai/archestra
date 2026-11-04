@@ -138,6 +138,16 @@ export default function SessionDetailPage({
     [interactionsResponse],
   );
   const nextRequest = hasNextPage ? (nextPageHead.data?.data[0] ?? null) : null;
+  // Where this page's records end: the next page's first request's start.
+  // Without that boundary, the page's own last request bounds it.
+  const pageEndsAt = nextRequest
+    ? new Date(nextRequest.createdAt).getTime() -
+      Math.max(0, nextRequest.durationMs ?? 0)
+    : hasNextPage && interactions.length > 0
+      ? Math.max(
+          ...interactions.map((row) => new Date(row.createdAt).getTime()),
+        )
+      : null;
   const requestsReady =
     interactionsResponse !== undefined &&
     !interactionsLoading &&
@@ -414,6 +424,7 @@ export default function SessionDetailPage({
           >
             <GuardrailsProvider
               timeline={timeline}
+              pageEndsAt={pageEndsAt}
               sessionId={sessionId}
               onSelectSpan={setPickedKey}
             >
@@ -438,6 +449,8 @@ export default function SessionDetailPage({
                       sessionToolCalls.targetMissing ? targetToolCallId : null
                     }
                     missingRequest={linkedRequest.targetMissing}
+                    requestLookupFailed={linkedRequest.rankFailed}
+                    onRetryRequestLookup={linkedRequest.retry}
                     sessionStartFailed={sessionStartFailed}
                     onRetrySessionStart={() => firstPageHead.refetch()}
                   />
@@ -507,6 +520,8 @@ function ToolCallsNotice({
   truncated,
   missingToolCallId,
   missingRequest,
+  requestLookupFailed,
+  onRetryRequestLookup,
   sessionStartFailed,
   onRetrySessionStart,
 }: {
@@ -515,6 +530,9 @@ function ToolCallsNotice({
   truncated: boolean;
   missingToolCallId: string | null;
   missingRequest: boolean;
+  /** Finding the linked request's page failed. */
+  requestLookupFailed: boolean;
+  onRetryRequestLookup: () => void;
   /** The session's first request didn't load, so the axis counts from this page. */
   sessionStartFailed: boolean;
   onRetrySessionStart: () => void;
@@ -524,6 +542,7 @@ function ToolCallsNotice({
     !truncated &&
     !missingToolCallId &&
     !missingRequest &&
+    !requestLookupFailed &&
     !sessionStartFailed
   ) {
     return null;
@@ -543,6 +562,22 @@ function ToolCallsNotice({
             size="xs"
             className="ml-auto"
             onClick={onRetry}
+          >
+            <span>Retry</span>
+          </Button>
+        </InlineNotice>
+      ) : null}
+      {requestLookupFailed ? (
+        <InlineNotice variant="error">
+          <TriangleAlert />
+          <InlineNoticeText>
+            Couldn't find the page that holds the linked request.
+          </InlineNoticeText>
+          <Button
+            variant="outline"
+            size="xs"
+            className="ml-auto"
+            onClick={onRetryRequestLookup}
           >
             <span>Retry</span>
           </Button>

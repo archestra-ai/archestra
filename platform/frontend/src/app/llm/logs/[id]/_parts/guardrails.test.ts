@@ -119,10 +119,11 @@ describe("buildGuardrails", () => {
   });
 
   it("points a change at the request on another page that asked for its client-run tool", () => {
-    // The asking request is on the previous page: this page holds only the
-    // request that carried the result back.
+    // The asking request is on an earlier page, and the result changes the
+    // label after this page's last row (ending at 10s) but before the next
+    // page's first request (at 20s): the change is still this page's.
     const result = buildTimeline({
-      requests: [row({ id: "next", createdAt: at(20_000), durationMs: 5_000 })],
+      requests: [row({ id: "last", createdAt: at(10_000), durationMs: 5_000 })],
     });
     if (!result) throw new Error("no timeline");
     const labelChanges = [
@@ -133,11 +134,22 @@ describe("buildGuardrails", () => {
         callId: "call:call_shell",
         trustAfter: "suspicious",
       }),
+      // The next page's: not looked up here.
+      change({
+        event: "tool_result",
+        at: 25_000,
+        callId: "call:call_later",
+        trustAfter: "suspicious",
+      }),
     ];
 
-    expect(unexplainedCallIds({ timeline: result, labelChanges })).toEqual([
-      "call_shell",
-    ]);
+    expect(
+      unexplainedCallIds({
+        timeline: result,
+        labelChanges,
+        until: BASE + 20_000,
+      }),
+    ).toEqual(["call_shell"]);
 
     const guardrails = buildGuardrails({
       timeline: result,

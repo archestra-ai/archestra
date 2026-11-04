@@ -899,8 +899,6 @@ class InteractionModel {
       endDate?: Date;
       /** Rows before this interaction in (createdAt, id) order. */
       beforeId?: string;
-      /** Rows whose response asked for any of these tool calls. */
-      requestedToolCallIds?: string[];
     };
   }): Promise<PaginatedResult<InteractionSummary>> {
     const { pagination, sorting, requestingUserId, isAgentAdmin, filters } =
@@ -955,13 +953,6 @@ class InteractionModel {
           WHERE ${schema.interactionsTable.id} = ${filters.beforeId}
         )`,
       );
-    }
-    if (filters?.requestedToolCallIds?.length) {
-      const matches = filters.requestedToolCallIds.map(
-        (id) =>
-          sql`${schema.interactionsTable.sessionPreview} -> 'responseToolCalls' @> jsonb_build_array(jsonb_build_object('id', ${id}::text))`,
-      );
-      conditions.push(or(...matches) as SQL);
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

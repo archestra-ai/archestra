@@ -7,7 +7,13 @@ import {
   type InteractionSource,
   isUuid,
 } from "@archestra/shared";
-import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+} from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
@@ -131,6 +137,80 @@ export function useInteractions({
   });
 }
 
+/**
+ * The requests of a session that asked for some tool calls, found by reading
+ * the session backwards from `endDate`. A client runs such a tool, so only
+ * the asking request's stored preview knows the call id; previews are
+ * decrypted on read, so the match happens here. Reading stops once every id
+ * is found, the session's start is reached, or rows predate recorded call ids.
+ */
+export function useSessionToolCallAskers({
+  sessionId,
+  callIds,
+  endDate,
+}: {
+  sessionId: string;
+  callIds: string[];
+  endDate: string | null;
+}): Map<string, { requestId: string; name: string }> {
+  const wanted = callIds.join(",");
+  const query = useInfiniteQuery({
+    queryKey: ["interaction-tool-call-askers", sessionId, endDate, wanted],
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      const response = await getInteractionSummaries({
+        query: {
+          sessionId,
+          endDate: endDate ?? undefined,
+          limit: ASKER_BATCH,
+          offset: pageParam,
+          sortBy: "createdAt",
+          sortDirection: "desc",
+        },
+      });
+      throwOnApiError(response.error);
+      return response.data ?? null;
+    },
+    getNextPageParam: (last, all) => {
+      if (!last?.pagination.hasNext) return undefined;
+      const found = new Set(
+        all.flatMap((page) =>
+          (page?.data ?? []).flatMap((row) =>
+            (row.responseToolCalls ?? []).map((call) => call.id),
+          ),
+        ),
+      );
+      if (callIds.every((id) => found.has(id))) return undefined;
+      // Rows from before call ids were recorded cannot match; nor can older.
+      if (last.data.some((row) => row.responseToolCalls == null)) {
+        return undefined;
+      }
+      return all.length * ASKER_BATCH;
+    },
+    enabled: callIds.length > 0 && endDate !== null,
+  });
+  const { hasNextPage, isFetchingNextPage, fetchNextPage, isError } = query;
+  useEffect(() => {
+    if (hasNextPage && !isFetchingNextPage && !isError) fetchNextPage();
+  }, [hasNextPage, isFetchingNextPage, isError, fetchNextPage]);
+
+  const pages = query.data?.pages;
+  return useMemo(() => {
+    const ids = new Set(wanted ? wanted.split(",") : []);
+    const byCallId = new Map<string, { requestId: string; name: string }>();
+    for (const page of pages ?? []) {
+      for (const row of page?.data ?? []) {
+        for (const call of row.responseToolCalls ?? []) {
+          if (ids.has(call.id) && !byCallId.has(call.id)) {
+            byCallId.set(call.id, { requestId: row.id, name: call.name });
+          }
+        }
+      }
+    }
+    return byCallId;
+  }, [pages, wanted]);
+}
+
 export function useInteractionSummaries({
   profileId,
   externalAgentId,
@@ -139,7 +219,6 @@ export function useInteractionSummaries({
   startDate,
   endDate,
   beforeId,
-  requestedToolCallIds,
   limit = DEFAULT_TABLE_LIMIT,
   offset = 0,
   sortBy,
@@ -154,8 +233,6 @@ export function useInteractionSummaries({
   endDate?: string;
   /** Only rows before this interaction; the total is its position. */
   beforeId?: string;
-  /** Only rows whose response asked for one of these tool calls. */
-  requestedToolCallIds?: string[];
   limit?: number;
   offset?: number;
   sortBy?: NonNullable<
@@ -176,7 +253,6 @@ export function useInteractionSummaries({
       startDate,
       endDate,
       beforeId,
-      requestedToolCallIds?.join(","),
       limit,
       offset,
       sortBy,
@@ -192,7 +268,6 @@ export function useInteractionSummaries({
           startDate,
           endDate,
           beforeId,
-          requestedToolCallIds: requestedToolCallIds?.join(",") || undefined,
           limit,
           offset,
           sortBy,
@@ -488,3 +563,6 @@ function downloadSessionInteractionsFile(
 }
 
 const LOG_USER_OPTIONS_LIMIT = 50;
+
+/** Rows read per step of the backward search for tool-call askers. */
+const ASKER_BATCH = 100;

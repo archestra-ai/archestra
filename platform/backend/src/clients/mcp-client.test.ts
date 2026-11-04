@@ -1178,6 +1178,9 @@ describe("McpClient", () => {
         secrets: {},
       })
       .catch((error: Error) => error);
+    if (!(failure instanceof Error)) {
+      throw new Error("Expected MCP discovery to fail");
+    }
     expect(failure.message).toContain(
       "Upstream MCP server returned HTTP 401 (invalid_token) while listing tools",
     );

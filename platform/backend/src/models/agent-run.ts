@@ -74,7 +74,48 @@ class AgentRunModel {
     // grant is what lets them open the share editor and share it.
     return db.transaction(async (tx) => {
       if (replacePriorAttempt) {
-        await AgentRunModel.deleteAttemptRowsInTransaction(tx, values.taskId);
+        const existingRuns = await tx
+          .select({
+            id: schema.agentRunsTable.id,
+            workloadName: schema.agentRunsTable.workloadName,
+          })
+          .from(schema.agentRunsTable)
+          .where(eq(schema.agentRunsTable.taskId, values.taskId));
+        const workloadNames = existingRuns.map(
+          (existing) => existing.workloadName,
+        );
+        // Delete the previous attempt's agent_workspaces row in the same
+        // transaction that inserts the replacement agent_runs row, so the row
+        // is gone before startAgentRunSession inserts the next workspace with
+        // id: taskId (including after a post-launch failure in followAgentRun).
+        await tx
+          .delete(schema.agentWorkspacesTable)
+          .where(
+            or(
+              eq(schema.agentWorkspacesTable.id, values.taskId),
+              eq(schema.agentWorkspacesTable.activeTaskId, values.taskId),
+              eq(schema.agentWorkspacesTable.lastTaskId, values.taskId),
+              ...(workloadNames.length > 0
+                ? [
+                    inArray(
+                      schema.agentWorkspacesTable.workloadName,
+                      workloadNames,
+                    ),
+                  ]
+                : []),
+            ),
+          );
+        await tx
+          .delete(schema.agentRunsTable)
+          .where(eq(schema.agentRunsTable.taskId, values.taskId));
+        await tx
+          .delete(schema.resourcePermissionPoliciesTable)
+          .where(
+            and(
+              eq(schema.resourcePermissionPoliciesTable.resource, "agentRun"),
+              eq(schema.resourcePermissionPoliciesTable.scope, values.taskId),
+            ),
+          );
       }
       const [created] = await tx
         .insert(schema.agentRunsTable)
@@ -114,40 +155,17 @@ class AgentRunModel {
    */
   static async deleteAttemptByTaskId(taskId: string): Promise<void> {
     await db.transaction(async (tx) => {
-      await AgentRunModel.deleteAttemptRowsInTransaction(tx, taskId);
-    });
-  }
-
-  private static async deleteAttemptRowsInTransaction(
-    tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
-    taskId: string,
-  ): Promise<void> {
-    const existingRuns = await tx
-      .select({
-        id: schema.agentRunsTable.id,
-        workloadName: schema.agentRunsTable.workloadName,
-      })
-      .from(schema.agentRunsTable)
-      .where(eq(schema.agentRunsTable.taskId, taskId));
-    const workloadNames = existingRuns.map((run) => run.workloadName);
-    // Delete the run row even when endedAt was already set by a failed launch.
-    await tx
-      .delete(schema.agentRunsTable)
-      .where(eq(schema.agentRunsTable.taskId, taskId));
-    // Delete the workspace row in deleting or deleted as well as active/idle.
-    await tx
-      .delete(schema.agentWorkspacesTable)
-      .where(
-        and(
-          inArray(schema.agentWorkspacesTable.state, [
-            "active",
-            "idle",
-            "suspending",
-            "suspended",
-            "resuming",
-            "deleting",
-            "deleted",
-          ]),
+      const existingRuns = await tx
+        .select({
+          id: schema.agentRunsTable.id,
+          workloadName: schema.agentRunsTable.workloadName,
+        })
+        .from(schema.agentRunsTable)
+        .where(eq(schema.agentRunsTable.taskId, taskId));
+      const workloadNames = existingRuns.map((run) => run.workloadName);
+      await tx
+        .delete(schema.agentWorkspacesTable)
+        .where(
           or(
             eq(schema.agentWorkspacesTable.id, taskId),
             eq(schema.agentWorkspacesTable.activeTaskId, taskId),
@@ -161,16 +179,19 @@ class AgentRunModel {
                 ]
               : []),
           ),
-        ),
-      );
-    await tx
-      .delete(schema.resourcePermissionPoliciesTable)
-      .where(
-        and(
-          eq(schema.resourcePermissionPoliciesTable.resource, "agentRun"),
-          eq(schema.resourcePermissionPoliciesTable.scope, taskId),
-        ),
-      );
+        );
+      await tx
+        .delete(schema.agentRunsTable)
+        .where(eq(schema.agentRunsTable.taskId, taskId));
+      await tx
+        .delete(schema.resourcePermissionPoliciesTable)
+        .where(
+          and(
+            eq(schema.resourcePermissionPoliciesTable.resource, "agentRun"),
+            eq(schema.resourcePermissionPoliciesTable.scope, taskId),
+          ),
+        );
+    });
   }
 
   /**

@@ -98,11 +98,12 @@ test("re-checks a negative answer once it is stale and flips without a restart",
   expect(discoveryRequests).toBe(afterInstall);
 });
 
-test("launch waits for a terminating Sandbox to finish deleting before creating the replacement", async () => {
+test("launch on retry waits for a Sandbox whose first read has no deletionTimestamp yet until it finishes deleting", async () => {
   serveController({ installed: true });
   await expect(manager.assertSandboxApiInstalled()).resolves.toBeUndefined();
 
   let sandboxReads = 0;
+  const cacheControlHeaders: Array<string | null> = [];
   let createdSandboxName: string | undefined;
 
   server.use(
@@ -112,9 +113,22 @@ test("launch waits for a terminating Sandbox to finish deleting before creating 
     ),
     http.get(
       `${origin}/apis/agents.x-k8s.io/v1beta1/namespaces/test/sandboxes/workspace`,
-      () => {
+      ({ request }) => {
         sandboxReads += 1;
+        cacheControlHeaders.push(request.headers.get("cache-control"));
         if (sandboxReads === 1) {
+          // Simulate a cached Sandbox snapshot that does not yet carry deletionTimestamp.
+          return HttpResponse.json({
+            apiVersion: "agents.x-k8s.io/v1beta1",
+            kind: "Sandbox",
+            metadata: {
+              name: "workspace",
+              namespace: "test",
+            },
+            spec: {},
+          });
+        }
+        if (sandboxReads === 2) {
           return HttpResponse.json({
             apiVersion: "agents.x-k8s.io/v1beta1",
             kind: "Sandbox",
@@ -187,9 +201,11 @@ test("launch waits for a terminating Sandbox to finish deleting before creating 
     nodeSelector: {},
     imagePullSecrets: [],
     effectiveNetworkPolicy: { source: "built_in", policy: null },
+    replacePriorAttempt: true,
   });
 
-  expect(sandboxReads).toBe(2);
+  expect(sandboxReads).toBe(3);
+  expect(cacheControlHeaders).toEqual(["no-cache", "no-cache", "no-cache"]);
   expect(createdSandboxName).toBe("workspace");
 });
 

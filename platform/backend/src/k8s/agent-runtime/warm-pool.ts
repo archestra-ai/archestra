@@ -53,17 +53,33 @@ export async function readWorkspaceSandbox(params: {
   namespace: string;
   name: string;
   includeDeletingClaim?: boolean;
+  bypassCache?: boolean;
 }): Promise<AgentSandbox> {
-  const { api, namespace, name, includeDeletingClaim = false } = params;
+  const {
+    api,
+    namespace,
+    name,
+    includeDeletingClaim = false,
+    bypassCache = false,
+  } = params;
+  const getCustomObject = (
+    request: Parameters<CustomObjectsApi["getNamespacedCustomObject"]>[0],
+  ) =>
+    bypassCache
+      ? api.getNamespacedCustomObject(
+          request,
+          setHeaderOptions("Cache-Control", "no-cache"),
+        )
+      : api.getNamespacedCustomObject(request);
   try {
-    return (await api.getNamespacedCustomObject({
+    return (await getCustomObject({
       ...AGENT_SANDBOX_API,
       namespace,
       name,
     })) as AgentSandbox;
   } catch (error) {
     if (!isK8sNotFoundError(error)) throw error;
-    const claim = (await api.getNamespacedCustomObject({
+    const claim = (await getCustomObject({
       ...SANDBOX_CLAIM_API,
       namespace,
       name,
@@ -91,7 +107,7 @@ export async function readWorkspaceSandbox(params: {
       throw new Error(`Agent allocation rejected: ${failure.reason}`);
     const assigned = claim.status?.sandbox?.name;
     if (!assigned) throw error;
-    const sandbox = (await api.getNamespacedCustomObject({
+    const sandbox = (await getCustomObject({
       ...AGENT_SANDBOX_API,
       namespace,
       name: assigned,

@@ -253,9 +253,16 @@ async function startAgentRunSession(params: {
   // The image sends this value as X-Archestra-Session-Id; it is the key of
   // the run's LLM session (see agentRunLlmSessionId).
   spec.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID = spec.frozenName;
+  if (params.replacePriorAttempt) {
+    spec.replacePriorAttempt = true;
+  }
 
   // The row lands before the workload: it is what teardown reads to find the
   // objects, so a crash between the two must leave a record, not an orphan.
+  // On a retry or failover (`replacePriorAttempt: true`), `AgentRunModel.create`
+  // deletes the previous attempt's `agent_workspaces` and `agent_runs` rows in
+  // the same transaction that inserts `session`, and `AgentWorkspaceModel.create`
+  // below inserts the next workspace only after that transaction commits.
   const resumeWithoutPrompt = Boolean(priorRun && !params.task?.trim());
   const placeholderTitle =
     params.title ??
@@ -282,33 +289,6 @@ async function startAgentRunSession(params: {
     completionTarget: params.completionTarget,
     replacePriorAttempt: params.replacePriorAttempt,
   });
-
-  if (params.title === undefined && !resumeWithoutPrompt) {
-    trackBackgroundWork(
-      generateAgentRunTitle({
-        taskId: params.taskId,
-        workloadName: spec.frozenName,
-        prompt: params.task ?? "Run",
-        organizationId: params.organizationId,
-        userId: params.titleUserId,
-        modelId: params.modelId,
-        llmApiKeyId: params.llmApiKeyId,
-      })
-        .then((title) =>
-          AgentRunModel.updateTitleIfCurrent({
-            taskId: params.taskId,
-            expectedTitle: placeholderTitle,
-            title,
-          }),
-        )
-        .catch((error) => {
-          logger.warn(
-            { error, taskId: params.taskId },
-            "Could not generate an Agent run title",
-          );
-        }),
-    );
-  }
 
   let claimedWorkspace = false;
   let createdWorkspace:
@@ -355,6 +335,9 @@ async function startAgentRunSession(params: {
       });
       await backend.continueRun({ session, spec });
     } else {
+      // Inserted after AgentRunModel.create commits so any prior attempt's
+      // agent_workspaces row (whether from launch failure or post-launch
+      // waitForCompletion failure) was already removed in that transaction.
       createdWorkspace = await AgentWorkspaceModel.create({
         // The initial public run URL is the permanent session URL.
         id: params.taskId,
@@ -453,6 +436,33 @@ async function startAgentRunSession(params: {
       );
     }
     throw launchFailure;
+  }
+
+  if (params.title === undefined && !resumeWithoutPrompt) {
+    trackBackgroundWork(
+      generateAgentRunTitle({
+        taskId: params.taskId,
+        workloadName: spec.frozenName,
+        prompt: params.task ?? "Run",
+        organizationId: params.organizationId,
+        userId: params.titleUserId,
+        modelId: params.modelId,
+        llmApiKeyId: params.llmApiKeyId,
+      })
+        .then((title) =>
+          AgentRunModel.updateTitleIfCurrent({
+            taskId: params.taskId,
+            expectedTitle: placeholderTitle,
+            title,
+          }),
+        )
+        .catch((error) => {
+          logger.warn(
+            { error, taskId: params.taskId },
+            "Could not generate an Agent run title",
+          );
+        }),
+    );
   }
 
   return session;

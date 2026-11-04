@@ -148,6 +148,7 @@ type K8sClients = ReturnType<typeof createK8sClients>;
  */
 class AgentRuntimeManager {
   private clients: K8sClients | null = null;
+  private readonly terminatingSandboxes = new Set<string>();
 
   /** Whether the cluster serves the Agent Sandbox API; see `agentSandboxApi`. */
   get isEnabled(): boolean {
@@ -194,6 +195,10 @@ class AgentRuntimeManager {
       }),
     };
 
+    const sandboxKey = `${withOwner.namespace}/${names.sandbox}`;
+    let awaitingPriorDeletion =
+      Boolean(spec.replacePriorAttempt) ||
+      this.terminatingSandboxes.has(sandboxKey);
     const startupDeadline =
       Date.now() + config.agentRuntime.podStartTimeoutSeconds * 1000;
     let deletionPollDelayMs = 250;
@@ -203,12 +208,19 @@ class AgentRuntimeManager {
         name: names.sandbox,
         namespace: withOwner.namespace,
         includeDeletingClaim: true,
+        bypassCache: awaitingPriorDeletion,
       }).catch((error) => {
         if (isK8sNotFoundError(error)) return null;
         throw error;
       });
-      if (!existingSandbox) break;
-      if (!existingSandbox.metadata.deletionTimestamp) {
+      if (!existingSandbox) {
+        this.terminatingSandboxes.delete(sandboxKey);
+        break;
+      }
+      if (existingSandbox.metadata.deletionTimestamp) {
+        awaitingPriorDeletion = true;
+      }
+      if (!awaitingPriorDeletion) {
         logger.info(
           { taskId: withOwner.taskId, sandbox: names.sandbox },
           "Adopting an existing Agent Sandbox with the same frozen name",
@@ -1559,6 +1571,7 @@ class AgentRuntimeManager {
     const clients = this.requireClients();
     const names = agentRuntimeNames(session.workloadName);
     const namespace = session.runtimeScope;
+    this.terminatingSandboxes.add(`${namespace}/${names.sandbox}`);
 
     const deletions: Array<[string, () => Promise<unknown>]> = [
       [

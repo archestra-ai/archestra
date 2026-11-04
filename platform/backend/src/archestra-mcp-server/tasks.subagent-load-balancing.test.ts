@@ -440,12 +440,43 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       agentId: string;
       tier: string;
       secretEnv: Record<string, string>;
+      replacePriorAttempt: boolean;
+      workspaceAgentId: string | undefined;
+      workspaceState: string | undefined;
+    }> = [];
+    const postCompletionReplacementChecks: Array<{
+      priorRunPresentBeforeCreate: boolean;
+      reapedDuringGap: number;
+      workspaceAfterRunCreateTransaction: null | object;
     }> = [];
     let attemptCount = 0;
+
+    const origCreateRun = AgentRunModel.create.bind(AgentRunModel);
+    vi.spyOn(AgentRunModel, "create").mockImplementation(async (run) => {
+      if (run.replacePriorAttempt) {
+        const priorRun = await AgentRunModel.findByTaskId(task.id);
+        const reapedDuringGap = await A2ATaskModel.reapStaleRunning({
+          staleMs: -60_000,
+          statusReason: "Orphaned",
+          buildEventPayload: () => ({}),
+        });
+        const created = await origCreateRun(run);
+        const workspaceAfterRunCreateTransaction =
+          await AgentWorkspaceModel.findById(task.id);
+        postCompletionReplacementChecks.push({
+          priorRunPresentBeforeCreate: Boolean(priorRun?.endedAt),
+          reapedDuringGap,
+          workspaceAfterRunCreateTransaction,
+        });
+        return created;
+      }
+      return origCreateRun(run);
+    });
 
     vi.spyOn(backend, "launch").mockImplementation(
       async (spec: AgentRunLaunchSpec) => {
         attemptCount += 1;
+        const workspace = await AgentWorkspaceModel.findById(task.id);
         const tiers = JSON.parse(
           spec.env.ARCHESTRA_AGENT_RUNTIME_TIERS,
         ) as Array<{
@@ -457,6 +488,9 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
           agentId: spec.agentRuntimeId,
           tier: currentTier,
           secretEnv: spec.secretEnv,
+          replacePriorAttempt: Boolean(spec.replacePriorAttempt),
+          workspaceAgentId: workspace?.agentId,
+          workspaceState: workspace?.state,
         });
       },
     );
@@ -530,29 +564,62 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
 
     expect(result.text).toBe("Review completed on Subagent B");
     expect(launchedSpecs).toHaveLength(4);
-    // Attempt 1: Subagent A on default tier S -> OOM killed
+    // Attempt 1: Subagent A on default tier S -> OOM killed in waitForCompletion
     expect(launchedSpecs[0]?.agentId).toBe(subagentA.id);
     expect(launchedSpecs[0]?.tier).toBe("S");
     expect(launchedSpecs[0]?.secretEnv.GH_TOKEN).toBe("ghs_ephemeral_token_A");
-    // Attempt 2: Subagent A escalated to tier M after OOM -> evicted (retriable)
+    expect(launchedSpecs[0]?.replacePriorAttempt).toBe(false);
+    expect(launchedSpecs[0]?.workspaceAgentId).toBe(subagentA.id);
+    expect(launchedSpecs[0]?.workspaceState).toBe("active");
+    // Attempt 2: Subagent A escalated to tier M after OOM -> evicted in waitForCompletion
     expect(launchedSpecs[1]?.agentId).toBe(subagentA.id);
     expect(launchedSpecs[1]?.tier).toBe("M");
     expect(launchedSpecs[1]?.secretEnv.GH_TOKEN).toBe("ghs_ephemeral_token_A");
-    // Attempt 3: Subagent A retry 1/1 on tier M -> failed
+    expect(launchedSpecs[1]?.replacePriorAttempt).toBe(true);
+    expect(launchedSpecs[1]?.workspaceAgentId).toBe(subagentA.id);
+    expect(launchedSpecs[1]?.workspaceState).toBe("active");
+    // Attempt 3: Subagent A retry 1/1 on tier M -> failed in waitForCompletion
     expect(launchedSpecs[2]?.agentId).toBe(subagentA.id);
     expect(launchedSpecs[2]?.tier).toBe("M");
     expect(launchedSpecs[2]?.secretEnv.GH_TOKEN).toBe("ghs_ephemeral_token_A");
+    expect(launchedSpecs[2]?.replacePriorAttempt).toBe(true);
+    expect(launchedSpecs[2]?.workspaceAgentId).toBe(subagentA.id);
+    expect(launchedSpecs[2]?.workspaceState).toBe("active");
     // Attempt 4: Failover to Subagent B with its ephemeral credential
     expect(launchedSpecs[3]?.agentId).toBe(subagentB.id);
     expect(launchedSpecs[3]?.tier).toBe("S");
     expect(launchedSpecs[3]?.secretEnv.GH_TOKEN).toBe("ghs_ephemeral_token_B");
+    expect(launchedSpecs[3]?.replacePriorAttempt).toBe(true);
+    expect(launchedSpecs[3]?.workspaceAgentId).toBe(subagentB.id);
+    expect(launchedSpecs[3]?.workspaceState).toBe("active");
 
-    // Task and final AgentRun record now reflect the winning fallback subagent (Subagent B)
+    expect(postCompletionReplacementChecks).toEqual([
+      {
+        priorRunPresentBeforeCreate: true,
+        reapedDuringGap: 0,
+        workspaceAfterRunCreateTransaction: null,
+      },
+      {
+        priorRunPresentBeforeCreate: true,
+        reapedDuringGap: 0,
+        workspaceAfterRunCreateTransaction: null,
+      },
+      {
+        priorRunPresentBeforeCreate: true,
+        reapedDuringGap: 0,
+        workspaceAfterRunCreateTransaction: null,
+      },
+    ]);
+
+    // Task, final AgentRun record, and workspace row now reflect the winning fallback subagent (Subagent B)
     const updatedTask = await A2ATaskModel.findById(task.id);
     expect(updatedTask?.agentId).toBe(subagentB.id);
     const finalRun = await AgentRunModel.findByTaskId(task.id);
     expect(finalRun?.agentId).toBe(subagentB.id);
     expect(finalRun?.endedAt).not.toBeNull();
+    const finalWorkspace = await AgentWorkspaceModel.findById(task.id);
+    expect(finalWorkspace?.agentId).toBe(subagentB.id);
+    expect(finalWorkspace?.state).toBe("idle");
   });
 
   test("fails over cleanly when backend.launch rejects on the first subagent after OOM escalation and retry while keeping the task working and protected from orphan reaping", async ({

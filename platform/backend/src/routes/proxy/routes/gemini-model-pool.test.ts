@@ -956,27 +956,31 @@ poolTest(
   },
 );
 
+async function configureTestVertexKey(keyId: string, allowGlobal: boolean) {
+  config.llm.gemini.vertexAi.enabled = true;
+  config.llm.gemini.vertexAi.project = "pool-test-project";
+  config.llm.gemini.vertexAi.location = "us-central1";
+  config.llm.gemini.vertexAi.allowGlobalEndpoint = allowGlobal;
+  config.llm.gemini.vertexAi.credentialsFile = "";
+  await db
+    .update(schema.llmProviderApiKeysTable)
+    .set({ secretId: null, isSystem: true })
+    .where(eq(schema.llmProviderApiKeysTable.id, keyId));
+  // Substitute only the external credential lookup; the Google client,
+  // URL construction, pool and request/response adapters stay real.
+  const auth = new OAuth2Client();
+  auth.setCredentials({ access_token: "synthetic-vertex-token" });
+  const getClient = vi
+    .spyOn(GoogleAuth.prototype, "getClient")
+    .mockResolvedValue(auth);
+  onTestFinished(() => getClient.mockRestore());
+}
+
 for (const allowGlobal of [false, true]) {
   poolTest(
     `uses the keyless Vertex project and location policy (global allowed=${allowGlobal})`,
     async ({ pool }) => {
-      config.llm.gemini.vertexAi.enabled = true;
-      config.llm.gemini.vertexAi.project = "pool-test-project";
-      config.llm.gemini.vertexAi.location = "us-central1";
-      config.llm.gemini.vertexAi.allowGlobalEndpoint = allowGlobal;
-      config.llm.gemini.vertexAi.credentialsFile = "";
-      await db
-        .update(schema.llmProviderApiKeysTable)
-        .set({ secretId: null, isSystem: true })
-        .where(eq(schema.llmProviderApiKeysTable.id, pool.keyId));
-      // Substitute only the external credential lookup; the Google client,
-      // URL construction, pool and request/response adapters stay real.
-      const auth = new OAuth2Client();
-      auth.setCredentials({ access_token: "synthetic-vertex-token" });
-      const getClient = vi
-        .spyOn(GoogleAuth.prototype, "getClient")
-        .mockResolvedValue(auth);
-      onTestFinished(() => getClient.mockRestore());
+      await configureTestVertexKey(pool.keyId, allowGlobal);
       const hits: string[] = [];
       for (const location of ["global", "us-central1"]) {
         const host =
@@ -1043,144 +1047,197 @@ poolTest(
   },
 );
 
-for (const failureStatus of [400, 429, 503]) {
-  for (const stream of [false, true]) {
-    poolTest(
-      `native Gemini chat honors its pool and preserves image tool results (status=${failureStatus}, stream=${stream})`,
-      async ({ pool }) => {
-        const credential = await VirtualApiKeyModel.create({
-          organizationId: pool.organizationId,
-          name: "Native Gemini chat",
-          ...accessGrants("org"),
-          providerApiKeys: [
-            { provider: "gemini", providerApiKeyId: pool.keyId },
-          ],
-        });
-        const contents = [
-          {
-            role: "user",
-            parts: [{ text: "Look up the synthetic lighthouse status." }],
-          },
-          {
-            role: "model",
-            parts: [
-              {
-                functionCall: {
-                  id: "lookup",
-                  name: "query_knowledge_sources",
-                  args: { query: "status" },
-                },
-                thoughtSignature: "synthetic-signature",
-              },
+for (const vertex of [false, true]) {
+  for (const failureStatus of [400, 429, 503]) {
+    for (const stream of [false, true]) {
+      poolTest(
+        `native Gemini chat honors its pool and preserves image tool results (vertex=${vertex}, status=${failureStatus}, stream=${stream})`,
+        async ({ pool }) => {
+          if (vertex) await configureTestVertexKey(pool.keyId, true);
+          const credential = await VirtualApiKeyModel.create({
+            organizationId: pool.organizationId,
+            name: "Native Gemini chat",
+            ...accessGrants("org"),
+            providerApiKeys: [
+              { provider: "gemini", providerApiKeyId: pool.keyId },
             ],
-          },
-          {
-            role: "user",
-            parts: [
-              {
-                functionResponse: {
-                  id: "lookup",
-                  name: "query_knowledge_sources",
-                  response: { content: "GREEN" },
-                },
-              },
-              {
-                inlineData: {
-                  mimeType: "image/png",
-                  data: "c3ludGhldGljLWltYWdl",
-                },
-              },
-              { text: "Synthetic status image" },
-            ],
-          },
-        ];
-        const hits: string[] = [];
-        server.use(
-          http.post(
-            `${origin}/v1beta/models/:model`,
-            async ({ request, params }) => {
-              hits.push(String(params.model));
-              expect(await request.json()).toMatchObject({
-                contents,
-                generationConfig: { maxOutputTokens: 32 },
-              });
-              if (hits.length === 1)
-                return HttpResponse.json(
-                  {
-                    error: {
-                      code: failureStatus,
-                      message:
-                        failureStatus === 400
-                          ? "Requests ending with a model turn are not supported."
-                          : "Temporarily unavailable",
-                    },
-                  },
-                  { status: failureStatus },
-                );
-              return stream
-                ? sse([answer([{ text: "Status is GREEN." }])])
-                : HttpResponse.json(answer([{ text: "Status is GREEN." }]));
+          });
+          const contents = [
+            {
+              role: "user",
+              parts: [{ text: "Look up the synthetic lighthouse status." }],
             },
-          ),
-        );
-        const operation = stream ? "streamGenerateContent" : "generateContent";
-        const response = await pool.app.inject({
-          method: "POST",
-          url: `/v1/gemini/${pool.agentId}/v1beta/models/gemini-3.1-flash-lite:${operation}`,
-          headers: {
-            "x-goog-api-key": credential.value,
-            ...internalCallHeader(),
-            [MODEL_POOL_ID_HEADER]: pool.poolId,
-          },
-          payload: { contents, generationConfig: { maxOutputTokens: 32 } },
-        });
-        if (failureStatus === 400) {
-          expect(response.statusCode, response.body).toBe(400);
-          expect(hits).toEqual([`gemini-3.1-flash-lite:${operation}`]);
+            {
+              role: "model",
+              parts: [
+                {
+                  thought: true,
+                  text: "Inspect the synthetic records.",
+                  thoughtSignature: "synthetic-thought-signature",
+                },
+                {
+                  functionCall: {
+                    id: "lookup",
+                    name: "query_knowledge_sources",
+                    args: { query: "status" },
+                  },
+                  thoughtSignature: "synthetic-signature",
+                },
+                {
+                  functionCall: {
+                    id: "lookup-weather",
+                    name: "query_knowledge_sources",
+                    args: { query: "weather" },
+                  },
+                },
+              ],
+            },
+            {
+              role: "user",
+              parts: [
+                {
+                  functionResponse: {
+                    id: "lookup",
+                    name: "query_knowledge_sources",
+                    response: { content: "GREEN" },
+                  },
+                },
+                {
+                  functionResponse: {
+                    id: "lookup-weather",
+                    name: "query_knowledge_sources",
+                    response: { content: "CLEAR" },
+                  },
+                },
+                {
+                  inlineData: {
+                    mimeType: "image/png",
+                    data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
+                  },
+                },
+                { text: "Synthetic status image" },
+                {
+                  inlineData: {
+                    mimeType: "image/png",
+                    data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
+                  },
+                },
+                { text: "Synthetic weather image" },
+              ],
+            },
+          ];
+          const hits: string[] = [];
+          const endpoints = vertex
+            ? ["global", "us-central1"].map((location) => {
+                const host =
+                  location === "global"
+                    ? "aiplatform.googleapis.com"
+                    : `${location}-aiplatform.googleapis.com`;
+                return `https://${host}/v1beta1/projects/pool-test-project/locations/${location}/publishers/google/models/:model`;
+              })
+            : [`${origin}/v1beta/models/:model`];
+          for (const endpoint of endpoints)
+            server.use(
+              http.post(endpoint, async ({ request, params }) => {
+                hits.push(String(params.model));
+                expect(request.headers.get("authorization")).toBe(
+                  vertex ? "Bearer synthetic-vertex-token" : null,
+                );
+                expect(request.headers.get("x-goog-api-key")).toBe(
+                  vertex ? null : "selected-gemini-key",
+                );
+                if (vertex) {
+                  const location = String(params.model).startsWith("gemini-3")
+                    ? "global"
+                    : "us-central1";
+                  expect(new URL(request.url).pathname).toContain(
+                    `/locations/${location}/`,
+                  );
+                }
+                const body = (await request.json()) as Record<string, unknown>;
+                expect(body.contents).toEqual(contents);
+                expect(body.generationConfig).toMatchObject({
+                  maxOutputTokens: 32,
+                });
+                if (hits.length === 1)
+                  return HttpResponse.json(
+                    {
+                      error: {
+                        code: failureStatus,
+                        message:
+                          failureStatus === 400
+                            ? "Requests ending with a model turn are not supported."
+                            : "Temporarily unavailable",
+                      },
+                    },
+                    { status: failureStatus },
+                  );
+                return stream
+                  ? sse([answer([{ text: "Status is GREEN." }])])
+                  : HttpResponse.json(answer([{ text: "Status is GREEN." }]));
+              }),
+            );
+          const operation = stream
+            ? "streamGenerateContent"
+            : "generateContent";
+          const response = await pool.app.inject({
+            method: "POST",
+            url: `/v1/gemini/${pool.agentId}/v1beta/models/gemini-3.1-flash-lite:${operation}`,
+            headers: {
+              "x-goog-api-key": credential.value,
+              ...internalCallHeader(),
+              [MODEL_POOL_ID_HEADER]: pool.poolId,
+            },
+            payload: { contents, generationConfig: { maxOutputTokens: 32 } },
+          });
+          if (failureStatus === 400) {
+            expect(response.statusCode, response.body).toBe(400);
+            expect(hits).toEqual([`gemini-3.1-flash-lite:${operation}`]);
+            const rows = await db
+              .select()
+              .from(schema.interactionsTable)
+              .where(eq(schema.interactionsTable.modelPoolId, pool.poolId));
+            expect(rows).toHaveLength(1);
+            expect(rows[0]).toMatchObject({
+              attemptOutcome: "failed",
+              failureReason: "error",
+            });
+            expect(rows[0].response).toMatchObject({
+              error: "Requests ending with a model turn are not supported.",
+            });
+            return;
+          }
+          expect(response.statusCode, response.body).toBe(200);
+          expect(response.body).toContain("Status is GREEN.");
+          expect(hits).toEqual([
+            `gemini-3.1-flash-lite:${operation}`,
+            `gemini-2.5-flash:${operation}`,
+          ]);
+          expect(response.headers["x-archestra-provider-key"]).toBe(pool.keyId);
           const rows = await db
             .select()
             .from(schema.interactionsTable)
             .where(eq(schema.interactionsTable.modelPoolId, pool.poolId));
-          expect(rows).toHaveLength(1);
-          expect(rows[0]).toMatchObject({
-            attemptOutcome: "failed",
-            failureReason: "error",
-          });
-          expect(rows[0].response).toMatchObject({
-            error: "Requests ending with a model turn are not supported.",
-          });
-          return;
-        }
-        expect(response.statusCode, response.body).toBe(200);
-        expect(response.body).toContain("Status is GREEN.");
-        expect(hits).toEqual([
-          `gemini-3.1-flash-lite:${operation}`,
-          `gemini-2.5-flash:${operation}`,
-        ]);
-        expect(response.headers["x-archestra-provider-key"]).toBe(pool.keyId);
-        const rows = await db
-          .select()
-          .from(schema.interactionsTable)
-          .where(eq(schema.interactionsTable.modelPoolId, pool.poolId));
-        expect(rows).toHaveLength(2);
-        expect(rows).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({
-              model: "gemini-3.1-flash-lite",
-              attemptOutcome: "failed_over",
-              failureReason:
-                failureStatus === 429
-                  ? "rate_limited (429)"
-                  : "server_error (503)",
-            }),
-            expect.objectContaining({
-              model: "gemini-2.5-flash",
-              attemptOutcome: "answered",
-              failureReason: null,
-            }),
-          ]),
-        );
-      },
-    );
+          expect(rows).toHaveLength(2);
+          expect(rows).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                model: "gemini-3.1-flash-lite",
+                attemptOutcome: "failed_over",
+                failureReason:
+                  failureStatus === 429
+                    ? "rate_limited (429)"
+                    : "server_error (503)",
+              }),
+              expect.objectContaining({
+                model: "gemini-2.5-flash",
+                attemptOutcome: "answered",
+                failureReason: null,
+              }),
+            ]),
+          );
+        },
+      );
+    }
   }
 }

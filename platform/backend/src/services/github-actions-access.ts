@@ -221,7 +221,14 @@ export async function exchangeGitHubActionsToken(params: {
 
   let gatewayToken: { value: string; hash: string } | null = null;
   try {
-    gatewayToken = await mintGatewayAccessToken({ gatewayId, userId });
+    const [mintedToken, agentIds] = await Promise.all([
+      mintGatewayAccessToken({ gatewayId, userId }),
+      AgentModel.findAssignedRuntimeSubagentIds(
+        gatewayId,
+        gateway.environmentId,
+      ),
+    ]);
+    gatewayToken = mintedToken;
     // By id: a name can belong to another account once an owner is renamed
     // and its old name taken, and must never reach its repository.
     let githubToken: { token: string; expiresAt: number };
@@ -288,6 +295,7 @@ export async function exchangeGitHubActionsToken(params: {
         github_token_expires_at: new Date(githubToken.expiresAt).toISOString(),
         github_login: login,
         user_id: userId,
+        agent_ids: agentIds,
       },
     };
   } catch (error) {

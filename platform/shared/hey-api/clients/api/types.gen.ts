@@ -57608,6 +57608,7 @@ export type ExchangeGitHubActionsTokenResponses = {
         github_token_expires_at: string;
         github_login: string;
         user_id: string;
+        agent_ids: Array<string>;
     };
 };
 

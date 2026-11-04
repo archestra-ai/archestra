@@ -5,7 +5,9 @@ import { vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import logger from "@/logging";
 import {
+  AgentExcludedSubagentModel,
   AgentModel,
+  AgentToolModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
   RuntimeCredentialConnectionModel,
@@ -27,7 +29,7 @@ import {
 import { authenticatedRouteApp } from "@/test/authenticated-route-app";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
-import { GitHubUserIdSchema, type User } from "@/types";
+import { AgentRuntimeSchema, GitHubUserIdSchema, type User } from "@/types";
 import githubActionsRoutes from "./github-actions.routes";
 
 vi.mock("@/logging");
@@ -202,6 +204,7 @@ describe("POST /api/github-actions/token", () => {
       github_token: SCOPED_GITHUB_TOKEN,
       github_login: AUTHOR.login,
       user_id: author.id,
+      agent_ids: [],
     });
     expect(Date.parse(body.github_token_expires_at)).toBeGreaterThan(
       Date.now(),
@@ -268,6 +271,58 @@ describe("POST /api/github-actions/token", () => {
         tokenValue: response.json().access_token,
       }),
     ).toMatchObject({ userId: author.id });
+  });
+
+  test("returns the gateway's assigned runtime subagent IDs in assignment order", async ({
+    makeAgent,
+  }) => {
+    const runtimeConfig = AgentRuntimeSchema.parse({
+      image: "ghcr.io/archestra-ai/agent-runtime-claude-code:latest",
+      command: ["archestra-claude-code-runtime"],
+    });
+    const firstRuntimeAgent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      name: "Reviewer One",
+    });
+    const secondRuntimeAgent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      name: "Reviewer Two",
+    });
+    const chatOnlyAgent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      name: "Chat Only Reviewer",
+    });
+    const excludedRuntimeAgent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      name: "Excluded Reviewer",
+    });
+    await AgentModel.update(firstRuntimeAgent.id, { runtime: runtimeConfig });
+    await AgentModel.update(secondRuntimeAgent.id, { runtime: runtimeConfig });
+    await AgentModel.update(excludedRuntimeAgent.id, {
+      runtime: runtimeConfig,
+    });
+
+    await AgentToolModel.syncDelegations(gateway.id, [
+      secondRuntimeAgent.id,
+      chatOnlyAgent.id,
+      firstRuntimeAgent.id,
+      excludedRuntimeAgent.id,
+    ]);
+    await AgentExcludedSubagentModel.replaceForAgent(gateway.id, [
+      excludedRuntimeAgent.id,
+    ]);
+
+    const response = await exchange({ token: await oidcToken() });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().agent_ids).toEqual([
+      secondRuntimeAgent.id,
+      firstRuntimeAgent.id,
+    ]);
   });
 
   test("refuses, by default, a run someone other than the author started", async () => {

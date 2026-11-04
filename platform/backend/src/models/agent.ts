@@ -3606,7 +3606,9 @@ class AgentModel {
   static async findGitHubActionsGateway(
     id: string,
   ): Promise<
-    (AgentAccessContext & Pick<Agent, "name" | "githubActionsAccess">) | null
+    | (AgentAccessContext &
+        Pick<Agent, "name" | "githubActionsAccess" | "environmentId">)
+    | null
   > {
     const [agent] = await db
       .select({
@@ -3618,12 +3620,68 @@ class AgentModel {
         agentType: schema.agentsTable.agentType,
         name: schema.agentsTable.name,
         githubActionsAccess: schema.agentsTable.githubActionsAccess,
+        environmentId: schema.agentsTable.environmentId,
       })
       .from(schema.agentsTable)
       .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
       .limit(1);
 
     return agent ?? null;
+  }
+
+  /**
+   * IDs of live runtime-backed subagents explicitly assigned to this agent
+   * (`agent_tools` -> `tools.delegate_to_agent_id`), in assignment order.
+   */
+  static async findAssignedRuntimeSubagentIds(
+    agentId: string,
+    environmentId: string | null = null,
+  ): Promise<string[]> {
+    const rows = await db
+      .select({
+        targetAgentId: schema.agentsTable.id,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.toolsTable.delegateToAgentId, schema.agentsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          isNotNull(schema.toolsTable.delegateToAgentId),
+          isNotNull(schema.agentsTable.runtime),
+          environmentId === null
+            ? isNull(schema.agentsTable.environmentId)
+            : eq(schema.agentsTable.environmentId, environmentId),
+          notExists(
+            db
+              .select({ one: sql`1` })
+              .from(schema.agentExcludedSubagentsTable)
+              .where(
+                and(
+                  eq(schema.agentExcludedSubagentsTable.agentId, agentId),
+                  eq(
+                    schema.agentExcludedSubagentsTable.targetAgentId,
+                    schema.agentsTable.id,
+                  ),
+                ),
+              ),
+          ),
+          notDeleted(schema.toolsTable),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .orderBy(
+        asc(schema.agentToolsTable.createdAt),
+        asc(schema.agentToolsTable.id),
+      );
+
+    return [...new Set(rows.map((row) => row.targetAgentId))];
   }
 
   /**

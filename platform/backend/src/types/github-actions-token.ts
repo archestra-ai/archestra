@@ -25,6 +25,11 @@ export const GitHubActionsTokenResponseSchema = z.object({
   github_login: z.string(),
   /** That person's user id in this deployment. */
   user_id: z.string(),
+  /**
+   * Runtime subagent IDs assigned to the gateway (`tools.delegateToAgentId`),
+   * in assignment order.
+   */
+  agent_ids: z.array(z.string().uuid()),
 });
 export type GitHubActionsTokenResponse = z.infer<
   typeof GitHubActionsTokenResponseSchema

@@ -39,7 +39,9 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -413,7 +415,10 @@ export function RequestExample({
   credentialEnvVar = "ARCHESTRA_LLM_VIRTUAL_KEY",
   secret,
   credentialField,
-  model: fixedModel,
+  pools = [],
+  initialModel,
+  onModelChange,
+  poolNotice,
 }: {
   connectionBaseUrl: string;
   target: RequestTarget;
@@ -436,17 +441,22 @@ export function RequestExample({
    */
   credentialField?: React.ReactNode;
   /**
-   * The model the request asks for, such as a model pool's name, in place of
-   * one picked from what the credential can reach.
+   * Model pools offered above the models. A pool is asked for by its name,
+   * on chat completions.
    */
-  model?: string;
+  pools?: Array<{ name: string; description: React.ReactNode }>;
+  /** The model or pool name picked at first, such as one linked to. */
+  initialModel?: string;
+  /** Told the picked option's value, so a remount can start from it. */
+  onModelChange?: (value: string) => void;
+  /** Shown under the picker while a pool is picked. */
+  poolNotice?: (poolName: string) => React.ReactNode;
 }) {
   const providerCatalog = useModelProviderCatalog();
   const isPassthrough = keyType === "passthrough";
   // A credential with no provider keys of its own (passthrough, an identity
   // provider's JWT) can reach the whole catalog.
-  const usesCatalog =
-    !fixedModel && keyType !== "standard" && mappedProviderKeys.length === 0;
+  const usesCatalog = keyType !== "standard" && mappedProviderKeys.length === 0;
   const { data: passthroughModels, isPending: passthroughModelsPending } =
     useLlmModels({ enabled: usesCatalog });
   // The general catalog spans every key the creator can access. For mapped
@@ -455,8 +465,7 @@ export function RequestExample({
   const mappedKeyIds = new Set(
     mappedProviderKeys.map((mapping) => mapping.providerApiKeyId),
   );
-  const readsLinkedModels =
-    !fixedModel && !usesCatalog && mappedKeyIds.size > 0;
+  const readsLinkedModels = !usesCatalog && mappedKeyIds.size > 0;
   const { data: linkedModels, isPending: linkedModelsPending } =
     useModelsWithApiKeys({
       enabled: readsLinkedModels,
@@ -503,8 +512,12 @@ export function RequestExample({
               )
             : null,
         }));
-  // With a fixed model both queries are off, so there are no candidates.
-  const modelOptions = candidates
+  const modelOptions: Array<{
+    value: string;
+    supportedEndpoints: string[] | null | undefined;
+    isImage: boolean;
+    pool?: string;
+  }> = candidates
     .filter((model) => !model.isImage || imageOperations.length > 0)
     .filter((model) =>
       target.kind === "model-router"
@@ -532,13 +545,7 @@ export function RequestExample({
     target.kind === "provider"
       ? PROVIDER_MODEL_TIERS[target.provider]?.normal
       : undefined;
-  if (fixedModel) {
-    modelOptions.push({
-      value: fixedModel,
-      supportedEndpoints: null,
-      isImage: false,
-    });
-  } else if (!isPending && modelOptions.length === 0 && defaultModel) {
+  if (!isPending && modelOptions.length === 0 && defaultModel) {
     modelOptions.push({
       value: defaultModel,
       supportedEndpoints: null,
@@ -546,12 +553,26 @@ export function RequestExample({
     });
   }
 
+  // A pool has no listed endpoints, so its request uses chat completions.
+  const poolOptions = pools.map((pool) => ({
+    value: POOL_VALUE_PREFIX + pool.name,
+    supportedEndpoints: null,
+    isImage: false,
+    pool: pool.name,
+  }));
+  const allOptions = [...poolOptions, ...modelOptions];
+  const initialOption = initialModel
+    ? allOptions.find(
+        (option) =>
+          option.value === initialModel || option.pool === initialModel,
+      )?.value
+    : undefined;
   const [pickedModel, setPickedModel] = useState<string | null>(null);
   const model =
-    pickedModel && modelOptions.some((option) => option.value === pickedModel)
+    pickedModel && allOptions.some((option) => option.value === pickedModel)
       ? pickedModel
-      : modelOptions[0]?.value;
-  const selectedModel = modelOptions.find((option) => option.value === model);
+      : (initialOption ?? modelOptions[0]?.value ?? allOptions[0]?.value);
+  const selectedModel = allOptions.find((option) => option.value === model);
   const [imageOperation, setImageOperation] =
     useState<ImageExampleOperation>("generate");
   const selectedImageOperation = selectedModel?.isImage
@@ -568,14 +589,14 @@ export function RequestExample({
       target,
       keyType,
       keyValue: secret ? MASKED_KEY : (keyValue ?? `$${credentialEnvVar}`),
-      model,
+      model: selectedModel?.pool ?? model,
       supportedEndpoints: selectedModel?.supportedEndpoints,
       imageOperation: selectedImageOperation,
     });
   const providerLabel =
     target.kind === "provider" ? providerCatalog.label(target.provider) : null;
 
-  if (!isPending && modelOptions.length === 0) {
+  if (!isPending && allOptions.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
         {target.kind === "model-router" &&
@@ -629,75 +650,92 @@ export function RequestExample({
           )}
         </p>
       )}
-      {!fixedModel && (
-        <div
-          className={cn(
-            "grid gap-3",
-            showImageOperationPicker ? "sm:grid-cols-2" : "sm:max-w-80",
-          )}
-        >
-          <div className="space-y-1.5">
-            <Label htmlFor="virtual-key-example-model">Model</Label>
-            <Select
-              value={model ?? ""}
-              onValueChange={setPickedModel}
-              disabled={isPending || modelOptions.length === 0}
-            >
-              <SelectTrigger id="virtual-key-example-model" className="w-full">
-                <SelectValue
-                  placeholder={
-                    isPending
-                      ? "Loading models…"
-                      : "No models found for this key"
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
+      <div
+        className={cn(
+          "grid gap-3",
+          showImageOperationPicker ? "sm:grid-cols-2" : "sm:max-w-80",
+        )}
+      >
+        <div className="space-y-1.5">
+          <Label htmlFor="virtual-key-example-model">Model</Label>
+          <Select
+            value={model ?? ""}
+            onValueChange={(value) => {
+              setPickedModel(value);
+              onModelChange?.(value);
+            }}
+            disabled={isPending || allOptions.length === 0}
+          >
+            <SelectTrigger id="virtual-key-example-model" className="w-full">
+              <SelectValue
+                placeholder={
+                  isPending ? "Loading models…" : "No models found for this key"
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {pools.length > 0 && (
+                <SelectGroup>
+                  <SelectLabel>Model pools</SelectLabel>
+                  {pools.map((pool) => (
+                    <SelectItem
+                      key={pool.name}
+                      value={POOL_VALUE_PREFIX + pool.name}
+                      description={pool.description}
+                    >
+                      {pool.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              )}
+              <SelectGroup>
+                {pools.length > 0 && modelOptions.length > 0 && (
+                  <SelectLabel>Models</SelectLabel>
+                )}
                 {modelOptions.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.value}
                   </SelectItem>
                 ))}
-              </SelectContent>
-            </Select>
-            {usesCatalog && (
-              <p className="text-xs text-muted-foreground">
-                From your organization&apos;s model catalog. Your own key may
-                have access to different models.
-              </p>
-            )}
-          </div>
-          {showImageOperationPicker && (
-            <div className="space-y-1.5">
-              <Label htmlFor="virtual-key-image-operation">
-                Image operation
-              </Label>
-              <Select
-                value={selectedImageOperation}
-                onValueChange={(value) =>
-                  setImageOperation(value as ImageExampleOperation)
-                }
-              >
-                <SelectTrigger
-                  id="virtual-key-image-operation"
-                  className="w-full"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {imageOperations.map((operation) => (
-                    <SelectItem key={operation} value={operation}>
-                      {operation === "generate"
-                        ? "Generate an image"
-                        : "Edit an image"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          {usesCatalog && (
+            <p className="text-xs text-muted-foreground">
+              From your organization&apos;s model catalog. Your own key may have
+              access to different models.
+            </p>
           )}
         </div>
-      )}
+        {showImageOperationPicker && (
+          <div className="space-y-1.5">
+            <Label htmlFor="virtual-key-image-operation">Image operation</Label>
+            <Select
+              value={selectedImageOperation}
+              onValueChange={(value) =>
+                setImageOperation(value as ImageExampleOperation)
+              }
+            >
+              <SelectTrigger
+                id="virtual-key-image-operation"
+                className="w-full"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {imageOperations.map((operation) => (
+                  <SelectItem key={operation} value={operation}>
+                    {operation === "generate"
+                      ? "Generate an image"
+                      : "Edit an image"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      </div>
+      {selectedModel?.pool && poolNotice?.(selectedModel.pool)}
       {selectedImageOperation === "edit" && (
         <p className="text-xs text-muted-foreground">
           Save your input image as <InlineCode>edit.png</InlineCode> in the
@@ -767,6 +805,10 @@ function CopyField({
 
 /** Stands in for a key the reader has not asked to reveal. */
 export const MASKED_KEY = "arch_••••••••••••••••";
+
+// A pool can share its name with a model a provider lists, so a picked pool
+// keeps its own value in the picker.
+const POOL_VALUE_PREFIX = "pool:";
 
 /**
  * A key the reader may see once they ask. The caller owns `revealed` so every

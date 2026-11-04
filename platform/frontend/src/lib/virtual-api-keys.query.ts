@@ -147,6 +147,62 @@ export function useUpdateVirtualApiKey() {
       queryClient.invalidateQueries({
         queryKey: ["virtual-api-keys"],
       });
+      // A key's pools are read from each pool's list of keys.
+      queryClient.invalidateQueries({ queryKey: ["model-pools"] });
+    },
+  });
+}
+
+type ListedVirtualApiKey =
+  archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"][number];
+
+/**
+ * Add a model pool to a standard virtual key from where it is used, then
+ * confirm with an Undo that puts the key's pools back. The update replaces
+ * the key's settings, so the rest of the key is sent as it is.
+ */
+export function useAddModelPoolToVirtualKey() {
+  const queryClient = useQueryClient();
+  const save = async (key: ListedVirtualApiKey, modelPoolIds: string[]) => {
+    const { error } = await updateVirtualApiKey({
+      path: { id: key.id },
+      body: {
+        name: key.name,
+        keyType: "standard",
+        expiresAt: key.expiresAt,
+        includeFutureProviders: key.includeFutureProviders,
+        providerApiKeys: key.providerApiKeys.map((mapping) => ({
+          provider: mapping.provider,
+          providerApiKeyId: mapping.providerApiKeyId,
+        })),
+        modelPoolIds,
+      },
+    });
+    if (error) {
+      handleApiError(error);
+      throw toApiError(error);
+    }
+  };
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["model-pools"] });
+    queryClient.invalidateQueries({ queryKey: ["all-virtual-api-keys"] });
+  };
+  return useMutation({
+    mutationFn: async (params: {
+      key: ListedVirtualApiKey;
+      pool: { id: string; name: string };
+      addedPoolIds: string[];
+    }) => save(params.key, [...params.addedPoolIds, params.pool.id]),
+    onSettled: refresh,
+    onSuccess: (_data, { key, pool, addedPoolIds }) => {
+      toast.success(`Added ${pool.name} to ${key.name}`, {
+        action: {
+          label: "Undo",
+          onClick: () => {
+            void save(key, addedPoolIds).then(refresh, () => undefined);
+          },
+        },
+      });
     },
   });
 }

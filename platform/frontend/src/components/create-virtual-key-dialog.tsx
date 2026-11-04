@@ -496,6 +496,9 @@ export function CreateVirtualKeyDialog({
                 <ModelPoolsField
                   value={modelPoolIds}
                   onChange={setModelPoolIds}
+                  mappings={providerApiKeyIds}
+                  includeFutureProviders={includeFutureProviders}
+                  providerApiKeys={parentableKeys}
                 />
               )}
               {canChooseOwner && (

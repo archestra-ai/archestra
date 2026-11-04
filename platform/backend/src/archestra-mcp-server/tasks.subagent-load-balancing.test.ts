@@ -5,6 +5,7 @@ import {
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
+import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import {
@@ -497,6 +498,101 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     expect((replayAfterSuccess.content[0] as { text: string }).text).toContain(
       "expired, already consumed, or invalid",
     );
+  });
+
+  test("keeps a consumed ephemeral grant out of the shared cache while a retriable launch failure is retried", async ({
+    makeAgent,
+  }) => {
+    const subagentA = await createRuntimeSubagent(makeAgent, "Subagent A");
+    await AgentModel.update(gateway.id, {
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "ordered",
+        retries: 1,
+        fallbackEnabled: false,
+        maxFallbacks: 0,
+      },
+    });
+
+    const mintResult = await executeArchestraTool(
+      TOOL_TRANSFER_CREDENTIAL_FULL_NAME,
+      {
+        ephemeral: true,
+        ttl_seconds: 60,
+        environment: [
+          {
+            key: "GH_TOKEN",
+            type: "secret",
+            value: "ghs_retriable_launch_token",
+          },
+        ],
+      },
+      context,
+    );
+    expect(mintResult.isError).toBeFalsy();
+    const grantId = (
+      mintResult.structuredContent as { credential_grant_id: string }
+    ).credential_grant_id;
+    const grantCacheKey =
+      `${CacheKey.EphemeralCredentialGrant}-${grantId}` as const;
+
+    let launchAttempt = 0;
+    let cachedBeforeSecondLaunch: unknown = "not-checked";
+    const launchedSecretEnvs: Array<Record<string, string>> = [];
+    vi.spyOn(backend, "launch").mockImplementation(
+      async (spec: AgentRunLaunchSpec) => {
+        launchAttempt += 1;
+        if (launchAttempt === 1) {
+          throw tagAgentRunFailure(
+            new Error("Kubernetes API temporarily unavailable"),
+            "launch.kubernetes_unavailable",
+          );
+        }
+        cachedBeforeSecondLaunch = await cacheManager.get(grantCacheKey);
+        launchedSecretEnvs.push(spec.secretEnv);
+      },
+    );
+    vi.spyOn(backend, "waitUntilRunning").mockResolvedValue();
+    vi.spyOn(backend, "streamOutput").mockImplementation(
+      async ({ destination }) => {
+        destination.end();
+      },
+    );
+    vi.spyOn(backend, "snapshotOutput").mockImplementation(
+      async ({ destination }) => {
+        destination.end("===ARCHESTRA-FINAL-ANSWER===\nDone after retry");
+      },
+    );
+    vi.spyOn(backend, "waitForCompletion").mockResolvedValue({
+      outcome: "succeeded",
+    });
+    vi.spyOn(backend, "teardown").mockResolvedValue();
+    vi.spyOn(backend, "releaseRun").mockResolvedValue();
+    vi.spyOn(backend, "stopRun").mockResolvedValue(undefined);
+
+    const startResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      {
+        agent_id: subagentA.id,
+        message: "Run with transient k8s launch failure",
+        credential_grant_ids: [grantId],
+      },
+      context,
+    );
+    expect(startResult.isError).toBeFalsy();
+    const taskId = (
+      startResult.structuredContent as { run: { run_id: string } }
+    ).run.run_id;
+
+    await vi.waitFor(async () => {
+      const task = await A2ATaskModel.findById(taskId);
+      expect(task?.state).toBe("TASK_STATE_COMPLETED");
+    });
+
+    expect(launchAttempt).toBe(2);
+    expect(cachedBeforeSecondLaunch).toBeUndefined();
+    expect(launchedSecretEnvs).toHaveLength(1);
+    expect(launchedSecretEnvs[0]?.GH_TOKEN).toBe("ghs_retriable_launch_token");
   });
 
   test("snapshots and restores subagentLoadBalancing across agent versions", async () => {

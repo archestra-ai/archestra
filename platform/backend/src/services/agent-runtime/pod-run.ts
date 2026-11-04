@@ -747,15 +747,7 @@ export async function runTaskInAgentRuntime(params: {
       } catch (error) {
         lastError = error;
         if (params.abortSignal?.aborted) {
-          if (!anySessionLaunched) {
-            await notifyLaunchFailed();
-          }
-          await recordRunFailure({
-            taskId: params.taskId,
-            failure: error,
-            abortSignal: params.abortSignal,
-          });
-          throw error;
+          break;
         }
 
         const classified = classifyAgentRunFailure(error);
@@ -780,6 +772,9 @@ export async function runTaskInAgentRuntime(params: {
       }
     }
 
+    if (params.abortSignal?.aborted) {
+      break;
+    }
     const nextCandidate = await peekNextFallbackCandidate();
     if (!nextCandidate) {
       break;

@@ -1,5 +1,8 @@
 # compiled output
 dist
+# dev/run-backend-dev.sh build staging (moved over backend/dist on success)
+.dist-next
+.dist-old
 node_modules
 build
 target

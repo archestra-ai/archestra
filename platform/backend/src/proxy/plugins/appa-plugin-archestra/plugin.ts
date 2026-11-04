@@ -1697,6 +1697,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         decision.recorded === true &&
         decision.offers?.length === 0 &&
         !decision.review?.length;
+      // An annotator failure has no ruling or remedy. Pass its notice through
+      // without treating the missing gateway tools as a client failure.
+      const unanswered = decision.unanswered === true;
       const ruling =
         decision.feedback + clarification + (noPlan ? NO_REMEDY_PLAN_HINT : "");
       if (decision.recorded && clarification) {
@@ -1748,12 +1751,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         // resend normally carries the tools; only a repeat within the same
         // session is a client that cannot receive remedies.
         const transient =
+          !unanswered &&
           !binding.request.defersTools &&
           binding.request.declaredTools.length > 0 &&
           !(await this.remedyToolsMissingBefore(session));
         // A client that defers tools has not failed to receive remedies: it
         // has not loaded the tools yet.
-        if (!transient && !binding.request.defersTools) {
+        if (!unanswered && !transient && !binding.request.defersTools) {
           await recordOpenAppaClientFailure({
             session,
             toolCallId: call.id,
@@ -1769,19 +1773,23 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         // runtime renders whether or not it offers a plan; here it is cut too.
         const contentMessage = notLoaded.has(call.id)
           ? decision.feedback
-          : binding.request.defersTools
-            ? noPlan
-              ? ruling
-              : `${ruling}\n\n[appa] This client defers tools it has not loaded, and the ${archestraMcpBranding.serverName} MCP gateway remedy tools are not loaded in this session, so the ruling could not be offered as a remedy and the call is refused. Search for ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} with your tool search, then call the denied tool again to receive the remedy.`
-            : noPlan
-              ? `${withoutRemedySections(decision.feedback)}${clarification}${NO_REMEDY_PLAN_HINT}`
-              : `${withoutRemedySections(decision.feedback)}${clarification}\n\n${remedylessRefusalNote({ binding, transient })}`;
+          : unanswered
+            ? ruling
+            : binding.request.defersTools
+              ? noPlan
+                ? ruling
+                : `${ruling}\n\n[appa] This client defers tools it has not loaded, and the ${archestraMcpBranding.serverName} MCP gateway remedy tools are not loaded in this session, so the ruling could not be offered as a remedy and the call is refused. Search for ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} with your tool search, then call the denied tool again to receive the remedy.`
+              : noPlan
+                ? `${withoutRemedySections(decision.feedback)}${clarification}${NO_REMEDY_PLAN_HINT}`
+                : `${withoutRemedySections(decision.feedback)}${clarification}\n\n${remedylessRefusalNote({ binding, transient })}`;
         return {
           decision: "refuse",
           refusal: {
             refusalMessage: contentMessage,
             contentMessage,
-            reason: "openappa_no_notice_tool",
+            reason: unanswered
+              ? "openappa_unanswered_annotation"
+              : "openappa_no_notice_tool",
             blockedToolName: identity.name,
             blockedToolId: call.id,
             toolInput: toolInputOf(identity.arguments),

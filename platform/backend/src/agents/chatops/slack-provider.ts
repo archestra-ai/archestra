@@ -124,6 +124,7 @@ class SlackProvider implements ChatOpsProvider {
   private socketModeClient: SocketModeClient | null = null;
   private stopping = false;
   private stopped: Promise<void> | undefined;
+  private startupAbort: AbortController | undefined;
   private eventHandler: ChatOpsEventHandler | null = null;
   private socketDedup = new EventDedupMap();
   private missingScopes: string[] = [];
@@ -241,6 +242,7 @@ class SlackProvider implements ChatOpsProvider {
     }
 
     const abortController = new AbortController();
+    this.startupAbort = abortController;
     const deadline = setTimeout(
       () => abortController.abort(),
       SLACK_CONNECT_TIMEOUT_MS,
@@ -334,6 +336,7 @@ class SlackProvider implements ChatOpsProvider {
       );
     } finally {
       clearTimeout(deadline);
+      if (this.startupAbort === abortController) this.startupAbort = undefined;
     }
   }
 
@@ -352,6 +355,7 @@ class SlackProvider implements ChatOpsProvider {
   /** Stop ingress immediately; keep the Web API client for admitted replies. */
   beginShutdown(): Promise<void> {
     this.stopping = true;
+    this.startupAbort?.abort();
     this.stopped ??= (async () => {
       try {
         await this.socketModeClient?.disconnect();
@@ -2460,7 +2464,7 @@ class SlackProvider implements ChatOpsProvider {
       rejectInitial = undefined;
       if (onAbort) signal.removeEventListener("abort", onAbort);
       if (onInitialClose)
-        this.socketModeClient.removeListener("close", onInitialClose);
+        this.socketModeClient?.removeListener("close", onInitialClose);
     }
   }
 

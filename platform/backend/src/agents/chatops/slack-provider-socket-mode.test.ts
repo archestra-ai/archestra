@@ -12,6 +12,7 @@ import {
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { createSlackSocketFixture } from "@/test/slack-socket-fixture";
 import type { ChatOpsEventHandler } from "@/types/chatops";
+import { ChatOpsManager } from "./chatops-manager";
 import SlackProvider from "./slack-provider";
 
 setupTestCacheManager();
@@ -160,6 +161,104 @@ test("shutdown disconnects Slack intake and drains an acknowledged turn through 
 });
 
 describe("Slack startup cancellation", () => {
+  test("shutdown during metadata startup prevents late socket creation", async () => {
+    const fixture = await createSlackSocketFixture();
+    fixture.stall("users.info");
+    const provider = new SlackProvider(slackConfig);
+    const pending = provider.initialize().catch((error: unknown) => error);
+    try {
+      await vi.waitFor(() => expect(fixture.calls).toContain("users.info"));
+      await provider.beginShutdown();
+      fixture.release();
+      expect(await pending).toBeInstanceOf(Error);
+      expect(fixture.calls).not.toContain("apps.connections.open");
+      expect(fixture.handshakes).toBe(0);
+      expect(provider.getBotUserId()).toBeNull();
+    } finally {
+      fixture.release();
+      await pending;
+      await provider.cleanup();
+      await fixture.close();
+    }
+  });
+
+  test("manager shutdown during config loading cannot start a late provider", async () => {
+    const fixture = await createSlackSocketFixture();
+    const manager = new ChatOpsManager();
+    try {
+      await ChatOpsConfigModel.saveSlackConfig(slackConfig);
+      const initializing = manager.initialize();
+      await manager.beginShutdown();
+      await initializing;
+      expect(fixture.calls).toEqual([]);
+      expect(manager.getSlackProvider()).toBeNull();
+    } finally {
+      await manager.cleanup();
+      await fixture.close();
+    }
+  });
+
+  test("settings can restart intake before shutdown and preserve reply clients after shutdown", async () => {
+    const fixture = await createSlackSocketFixture();
+    const manager = new ChatOpsManager();
+    try {
+      await ChatOpsConfigModel.saveSlackConfig(slackConfig);
+      await manager.initialize();
+      const first = manager.getSlackProvider();
+      await manager.reinitialize();
+      const current = manager.getSlackProvider();
+      expect(current).not.toBe(first);
+      expect(current?.getBotUserId()).toBe("UBOT_TEST");
+      expect(fixture.connections).toBe(2);
+      await manager.beginShutdown();
+      const connectionRequests = fixture.calls.filter(
+        (method) => method === "apps.connections.open",
+      ).length;
+      await manager.reinitialize();
+      await manager.initialize();
+      expect(manager.getSlackProvider()).toBe(current);
+      expect(current?.getBotUserId()).toBe("UBOT_TEST");
+      expect(
+        fixture.calls.filter((method) => method === "apps.connections.open"),
+      ).toHaveLength(connectionRequests);
+      expect(fixture.handshakes).toBe(2);
+      expect(fixture.connections).toBe(2);
+    } finally {
+      await manager.cleanup();
+      await fixture.close();
+    }
+  });
+
+  test("concurrent settings saves cannot orphan a socket outside the shutdown snapshot", async () => {
+    const fixture = await createSlackSocketFixture();
+    const manager = new ChatOpsManager();
+    let pending: Promise<unknown> | undefined;
+    try {
+      await ChatOpsConfigModel.saveSlackConfig(slackConfig);
+      await manager.initialize();
+      const metadataCalls = fixture.calls.filter(
+        (method) => method === "users.info",
+      ).length;
+      fixture.stall("users.info");
+      pending = Promise.all([manager.reinitialize(), manager.reinitialize()]);
+      await vi.waitFor(() =>
+        expect(
+          fixture.calls.filter((method) => method === "users.info").length,
+        ).toBeGreaterThan(metadataCalls),
+      );
+      fixture.release();
+      await pending;
+      expect(fixture.connections).toBe(3);
+      await manager.beginShutdown();
+      await vi.waitFor(() => expect(fixture.activeConnections).toBe(0));
+    } finally {
+      fixture.release();
+      await pending;
+      await manager.cleanup();
+      await fixture.close();
+    }
+  });
+
   for (const stage of [
     "apps.connections.open",
     "users.info",

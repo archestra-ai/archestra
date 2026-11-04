@@ -158,6 +158,8 @@ export class ChatOpsManager {
   private slackAgentBots = new Map<string, SlackProvider>();
   private telegramProvider: TelegramProvider | null = null;
   private jiraAgentBots = new Map<string, JiraProvider>();
+  private stopping = false;
+  private reinitializing: Promise<void> = Promise.resolve();
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
   private readonly a2aManager: A2AManager;
   private readonly statefulA2aManager: A2AManager;
@@ -581,8 +583,10 @@ export class ChatOpsManager {
   }
 
   async initialize(): Promise<void> {
+    if (this.stopping) return;
     // Seed DB from env vars on first run (no-op if DB already has config)
     await this.seedConfigFromEnvVars();
+    if (this.stopping) return;
 
     // Load configs from DB (the single source of truth)
     // Errors are caught individually so a single broken config doesn't prevent other providers from initializing
@@ -617,6 +621,7 @@ export class ChatOpsManager {
           return [];
         }),
       ]);
+    if (this.stopping) return;
 
     // A channel an admin switched off must actually stop listening — a bot
     // left running would keep answering messages the organization no longer
@@ -635,6 +640,7 @@ export class ChatOpsManager {
       );
       return new Set<MessagingChannelId>();
     });
+    if (this.stopping) return;
 
     // Create providers with their config
     if (
@@ -647,6 +653,7 @@ export class ChatOpsManager {
       // configuration that is disabled or incomplete gets no provider, as
       // none was configured.
       const { default: MSTeamsProvider } = await import("./ms-teams-provider");
+      if (this.stopping) return;
       this.msTeamsProvider = new MSTeamsProvider(msTeamsConfig);
       this.msTeamsProvider.setEventHandler(this);
     }
@@ -679,6 +686,7 @@ export class ChatOpsManager {
     }
 
     await this.reloadJiraProviders();
+    if (this.stopping) return;
 
     if (!this.isAnyProviderConfigured()) {
       return;
@@ -695,6 +703,7 @@ export class ChatOpsManager {
     ];
 
     for (const { name, provider } of providers) {
+      if (this.stopping) return;
       if (provider?.isConfigured()) {
         try {
           await provider.initialize();
@@ -707,6 +716,7 @@ export class ChatOpsManager {
         }
       }
     }
+    if (this.stopping) return;
 
     // Each Slack bot ignores messages that @mention one of the others.
     const slackBotUserIds = this.getSlackProviders().flatMap(
@@ -740,12 +750,23 @@ export class ChatOpsManager {
   }
 
   async reinitialize(): Promise<void> {
-    await this.cleanup();
-    await this.initialize();
+    // A settings save admitted before shutdown may finish afterward. Keep the
+    // stopped providers' reply clients available to turns already draining.
+    if (this.stopping) return;
+    const reinitializing = this.reinitializing.then(async () => {
+      if (this.stopping) return;
+      await this.cleanup();
+      await this.initialize();
+    });
+    // Serialize settings saves so every opened provider remains owned by this
+    // manager. A failed save must not prevent the next one from retrying.
+    this.reinitializing = reinitializing.catch(() => {});
+    await reinitializing;
   }
 
   /** Disconnect event sources before HTTP drain; admitted handlers still reply. */
   async beginShutdown(): Promise<void> {
+    this.stopping = true;
     await Promise.all([
       ...this.getSlackProviders().map((provider) => provider.beginShutdown()),
       this.telegramProvider?.beginShutdown(),

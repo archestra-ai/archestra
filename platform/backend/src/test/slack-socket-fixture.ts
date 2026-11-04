@@ -154,6 +154,9 @@ export async function createSlackSocketFixture() {
     get connections() {
       return connections;
     },
+    get activeConnections() {
+      return websocket.clients.size;
+    },
     get handshakes() {
       return handshakes;
     },

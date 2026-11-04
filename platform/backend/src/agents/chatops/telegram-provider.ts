@@ -86,7 +86,12 @@ class TelegramProvider implements ChatOpsProvider {
       return;
     }
 
-    const me = await this.callApi<TelegramUser>("getMe");
+    // Own cancellation before the first request: shutdown can happen while
+    // authentication or webhook removal is still in flight.
+    this.pollAbort = new AbortController();
+    const { signal } = this.pollAbort;
+    const me = await this.callApi<TelegramUser>("getMe", undefined, signal);
+    signal.throwIfAborted();
     this.botId = me.id;
     this.botUsername = me.username ?? null;
     logger.info(
@@ -96,17 +101,19 @@ class TelegramProvider implements ChatOpsProvider {
 
     // Long polling and webhooks are mutually exclusive in the Bot API; drop
     // any webhook a previous deployment may have registered.
-    await this.callApi("deleteWebhook", { drop_pending_updates: false });
-
-    this.pollAbort = new AbortController();
-    this.pollDone = this.runPollingLoop(this.pollAbort.signal).catch(
-      (error) => {
-        logger.error(
-          { error: errorMessage(error) },
-          "[TelegramProvider] Polling loop terminated unexpectedly",
-        );
-      },
+    await this.callApi(
+      "deleteWebhook",
+      { drop_pending_updates: false },
+      signal,
     );
+    signal.throwIfAborted();
+
+    this.pollDone = this.runPollingLoop(signal).catch((error) => {
+      logger.error(
+        { error: errorMessage(error) },
+        "[TelegramProvider] Polling loop terminated unexpectedly",
+      );
+    });
   }
 
   async beginShutdown(): Promise<void> {

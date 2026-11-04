@@ -465,12 +465,15 @@ export function resolveAgentRuntime(
 }
 
 /**
- * Tear down a failed attempt's workload and delete its run/workspace rows so
- * the supervisor can retry or fail over the same A2A task cleanly.
+ * Tear down a failed attempt's workload and delete its run/workspace rows
+ * (even when `endedAt` is already set and the workspace is in `deleting` or
+ * `deleted` as well as `active`) so the supervisor can retry or fail over the
+ * same A2A task cleanly before the next `AgentRunModel.create` and
+ * `AgentWorkspaceModel.create`.
  */
 async function cleanupFailedAttemptForRetry(taskId: string): Promise<void> {
   const existingRun = await AgentRunModel.findByTaskId(taskId);
-  if (existingRun) {
+  if (existingRun && !existingRun.endedAt) {
     try {
       const backend = resolveAgentRuntimeBackendDriver(existingRun.backend);
       await backend.teardown(existingRun);
@@ -549,6 +552,7 @@ export async function runTaskInAgentRuntime(params: {
   };
 
   let lastError: unknown;
+  let hasPriorAttempt = false;
 
   for (
     let candidateIndex = 0;
@@ -596,6 +600,11 @@ export async function runTaskInAgentRuntime(params: {
     let oomEscalations = 0;
 
     while (true) {
+      if (hasPriorAttempt) {
+        await cleanupFailedAttemptForRetry(params.taskId);
+      }
+      hasPriorAttempt = true;
+
       const launchedAt = Date.now();
       try {
         const session = await startAgentRunSession({
@@ -650,7 +659,6 @@ export async function runTaskInAgentRuntime(params: {
               tier: nextTier.name,
               workspaceGiB: tierWorkspaceGiB(nextTier),
             };
-            await cleanupFailedAttemptForRetry(params.taskId);
             continue;
           }
         }
@@ -658,16 +666,11 @@ export async function runTaskInAgentRuntime(params: {
         // Automatic retry on the same subagent for retriable failures.
         if (classified?.retriable === true && retryCount < maxRetries) {
           retryCount += 1;
-          await cleanupFailedAttemptForRetry(params.taskId);
           continue;
         }
 
         break;
       }
-    }
-
-    if (candidateIndex + 1 < candidateAgentIds.length) {
-      await cleanupFailedAttemptForRetry(params.taskId);
     }
   }
 

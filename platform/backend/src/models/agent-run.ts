@@ -107,12 +107,47 @@ class AgentRunModel {
    */
   static async deleteAttemptByTaskId(taskId: string): Promise<void> {
     await db.transaction(async (tx) => {
+      const existingRuns = await tx
+        .select({
+          id: schema.agentRunsTable.id,
+          workloadName: schema.agentRunsTable.workloadName,
+        })
+        .from(schema.agentRunsTable)
+        .where(eq(schema.agentRunsTable.taskId, taskId));
+      const workloadNames = existingRuns.map((run) => run.workloadName);
+      // Delete the run row even when endedAt was already set by a failed launch.
       await tx
         .delete(schema.agentRunsTable)
         .where(eq(schema.agentRunsTable.taskId, taskId));
+      // Delete the workspace row in deleting or deleted as well as active/idle.
       await tx
         .delete(schema.agentWorkspacesTable)
-        .where(eq(schema.agentWorkspacesTable.id, taskId));
+        .where(
+          and(
+            inArray(schema.agentWorkspacesTable.state, [
+              "active",
+              "idle",
+              "suspending",
+              "suspended",
+              "resuming",
+              "deleting",
+              "deleted",
+            ]),
+            or(
+              eq(schema.agentWorkspacesTable.id, taskId),
+              eq(schema.agentWorkspacesTable.activeTaskId, taskId),
+              eq(schema.agentWorkspacesTable.lastTaskId, taskId),
+              ...(workloadNames.length > 0
+                ? [
+                    inArray(
+                      schema.agentWorkspacesTable.workloadName,
+                      workloadNames,
+                    ),
+                  ]
+                : []),
+            ),
+          ),
+        );
       await tx
         .delete(schema.resourcePermissionPoliciesTable)
         .where(

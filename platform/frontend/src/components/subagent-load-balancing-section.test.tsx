@@ -1,5 +1,6 @@
 import {
   orderSubagentsByLoadBalancing,
+  StoredSubagentLoadBalancingConfigSchema,
   type SubagentLoadBalancingConfig,
   SubagentLoadBalancingConfigSchema,
 } from "@archestra/shared";
@@ -186,5 +187,16 @@ describe("SubagentLoadBalancingSection", () => {
         /In "All agents" mode, all accessible runtime subagents receive equal weight/i,
       ),
     ).toBeInTheDocument();
+  });
+
+  it("clamps stored retry counts above 3 on read so UI and supervisor agree", () => {
+    const parsed = StoredSubagentLoadBalancingConfigSchema.parse({
+      enabled: true,
+      algorithm: "round_robin",
+      retries: 5,
+      fallbackEnabled: true,
+      maxFallbacks: null,
+    });
+    expect(parsed.retries).toBe(3);
   });
 });

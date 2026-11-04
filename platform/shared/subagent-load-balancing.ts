@@ -16,7 +16,7 @@ export type SubagentLoadBalancingAlgorithm = z.infer<
 
 export const SUBAGENT_LOAD_BALANCING_MIN_WEIGHT = 1;
 export const SUBAGENT_LOAD_BALANCING_MAX_WEIGHT = 1000;
-export const SUBAGENT_LOAD_BALANCING_MAX_RETRIES = 5;
+export const SUBAGENT_LOAD_BALANCING_MAX_RETRIES = 3;
 export const SUBAGENT_LOAD_BALANCING_MAX_FALLBACKS = 100;
 
 export const SubagentLoadBalancingConfigSchema = z.object({
@@ -38,7 +38,7 @@ export const SubagentLoadBalancingConfigSchema = z.object({
         .max(SUBAGENT_LOAD_BALANCING_MAX_WEIGHT),
     )
     .optional(),
-  /** Number of retries on the same subagent after a retriable failure (0..5). */
+  /** Number of retries on the same subagent after a retriable failure (0..3). */
   retries: z
     .number()
     .int()
@@ -75,7 +75,13 @@ export const StoredSubagentLoadBalancingConfigSchema = z.object({
     .record(z.string(), z.number().int().min(1).max(1000))
     .optional()
     .catch(undefined),
-  retries: z.number().int().min(0).max(5).catch(1),
+  retries: z
+    .number()
+    .int()
+    .transform((value) =>
+      Math.max(0, Math.min(SUBAGENT_LOAD_BALANCING_MAX_RETRIES, value)),
+    )
+    .catch(1),
   fallbackEnabled: z.boolean().catch(true),
   maxFallbacks: z
     .number()

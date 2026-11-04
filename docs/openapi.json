@@ -63144,10 +63144,7 @@
                                         }
                                       },
                                       "retries": {
-                                        "default": 1,
-                                        "type": "integer",
-                                        "minimum": 0,
-                                        "maximum": 5
+                                        "default": 1
                                       },
                                       "fallbackEnabled": {
                                         "default": true,
@@ -64977,10 +64974,7 @@
                                 }
                               },
                               "retries": {
-                                "default": 1,
-                                "type": "integer",
-                                "minimum": 0,
-                                "maximum": 5
+                                "default": 1
                               },
                               "fallbackEnabled": {
                                 "default": true,
@@ -66108,7 +66102,7 @@
                         "default": 1,
                         "type": "integer",
                         "minimum": 0,
-                        "maximum": 5
+                        "maximum": 3
                       },
                       "fallbackEnabled": {
                         "default": true,
@@ -67054,10 +67048,7 @@
                           }
                         },
                         "retries": {
-                          "default": 1,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 5
+                          "default": 1
                         },
                         "fallbackEnabled": {
                           "default": true,
@@ -72413,10 +72404,7 @@
                           }
                         },
                         "retries": {
-                          "default": 1,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 5
+                          "default": 1
                         },
                         "fallbackEnabled": {
                           "default": true,
@@ -73935,10 +73923,7 @@
                               }
                             },
                             "retries": {
-                              "default": 1,
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 5
+                              "default": 1
                             },
                             "fallbackEnabled": {
                               "default": true,
@@ -75130,10 +75115,7 @@
                           }
                         },
                         "retries": {
-                          "default": 1,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 5
+                          "default": 1
                         },
                         "fallbackEnabled": {
                           "default": true,
@@ -76239,7 +76221,7 @@
                         "default": 1,
                         "type": "integer",
                         "minimum": 0,
-                        "maximum": 5
+                        "maximum": 3
                       },
                       "fallbackEnabled": {
                         "default": true,
@@ -76874,10 +76856,7 @@
                           }
                         },
                         "retries": {
-                          "default": 1,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 5
+                          "default": 1
                         },
                         "fallbackEnabled": {
                           "default": true,
@@ -78737,7 +78716,7 @@
                               "default": 1,
                               "type": "integer",
                               "minimum": 0,
-                              "maximum": 5
+                              "maximum": 3
                             },
                             "fallbackEnabled": {
                               "default": true,
@@ -79758,10 +79737,7 @@
                           }
                         },
                         "retries": {
-                          "default": 1,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 5
+                          "default": 1
                         },
                         "fallbackEnabled": {
                           "default": true,
@@ -81070,10 +81046,7 @@
                           }
                         },
                         "retries": {
-                          "default": 1,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 5
+                          "default": 1
                         },
                         "fallbackEnabled": {
                           "default": true,
@@ -89193,10 +89166,7 @@
                           }
                         },
                         "retries": {
-                          "default": 1,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 5
+                          "default": 1
                         },
                         "fallbackEnabled": {
                           "default": true,
@@ -161360,10 +161330,7 @@
                                   }
                                 },
                                 "retries": {
-                                  "default": 1,
-                                  "type": "integer",
-                                  "minimum": 0,
-                                  "maximum": 5
+                                  "default": 1
                                 },
                                 "fallbackEnabled": {
                                   "default": true,
@@ -164679,10 +164646,7 @@
                                       }
                                     },
                                     "retries": {
-                                      "default": 1,
-                                      "type": "integer",
-                                      "minimum": 0,
-                                      "maximum": 5
+                                      "default": 1
                                     },
                                     "fallbackEnabled": {
                                       "default": true,

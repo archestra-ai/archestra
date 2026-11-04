@@ -423,7 +423,13 @@ export async function startDelegatedTask(params: {
       },
     });
     lastAttempt = attempt;
-    if (attempt.outcome?.kind === "launched") {
+    if (
+      attempt.outcome?.kind === "launched" ||
+      (attempt.outcome?.kind === "failed" &&
+        (attempt.outcome.reason === "refused" ||
+          attempt.outcome.reason === "agent_not_found" ||
+          attempt.outcome.reason === "credentials_misconfigured"))
+    ) {
       await recordRuntimeLaunch(params.context, attempt.outcome);
       return attempt.result;
     }

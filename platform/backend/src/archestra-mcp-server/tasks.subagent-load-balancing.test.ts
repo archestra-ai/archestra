@@ -487,9 +487,8 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     vi.spyOn(backend, "releaseRun").mockResolvedValue();
     vi.spyOn(backend, "stopRun").mockResolvedValue(undefined);
 
-    const runtimeA = resolveAgentRuntime(
-      (await AgentModel.findById(subagentA.id))!,
-    )!;
+    const runtimeA = resolveAgentRuntime(subagentA);
+    if (!runtimeA) throw new Error("Expected subagentA runtime");
     const result = await runTaskInAgentRuntime({
       runtime: runtimeA,
       taskId: task.id,
@@ -536,5 +535,136 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     const finalRun = await AgentRunModel.findByTaskId(task.id);
     expect(finalRun?.agentId).toBe(subagentB.id);
     expect(finalRun?.endedAt).not.toBeNull();
+  });
+
+  test("fails over cleanly when backend.launch rejects on the first subagent after closing the run and workspace", async ({
+    makeAgent,
+  }) => {
+    const subagentA = await createRuntimeSubagent(makeAgent, "Subagent A");
+    const subagentB = await createRuntimeSubagent(makeAgent, "Subagent B");
+
+    const a2aContext = await A2AContextModel.create({
+      actorKind: "user",
+      actorId,
+    });
+    const task = await A2ATaskModel.createForRun({
+      contextId: a2aContext.id,
+      agentId: subagentA.id,
+    });
+
+    const launchedAgentIds: string[] = [];
+    vi.spyOn(backend, "launch").mockImplementation(
+      async (spec: AgentRunLaunchSpec) => {
+        launchedAgentIds.push(spec.agentRuntimeId);
+        if (spec.agentRuntimeId === subagentA.id) {
+          throw new Error("Kubernetes pod publish failed on Subagent A");
+        }
+      },
+    );
+    vi.spyOn(backend, "waitUntilRunning").mockResolvedValue();
+    vi.spyOn(backend, "streamOutput").mockImplementation(
+      async ({ destination }) => {
+        destination.end();
+      },
+    );
+    vi.spyOn(backend, "snapshotOutput").mockImplementation(
+      async ({ destination }) => {
+        destination.end(
+          "===ARCHESTRA-FINAL-ANSWER===\nFallback succeeded after launch failure",
+        );
+      },
+    );
+    vi.spyOn(backend, "waitForCompletion").mockResolvedValue({
+      outcome: "succeeded",
+    });
+    vi.spyOn(backend, "teardown").mockResolvedValue();
+    vi.spyOn(backend, "releaseRun").mockResolvedValue();
+    vi.spyOn(backend, "stopRun").mockResolvedValue(undefined);
+
+    const runtimeA = resolveAgentRuntime(subagentA);
+    if (!runtimeA) throw new Error("Expected subagentA runtime");
+    const result = await runTaskInAgentRuntime({
+      runtime: runtimeA,
+      taskId: task.id,
+      agentId: subagentA.id,
+      actor: { kind: "user", id: actorId, organizationId },
+      organizationId,
+      runMode: "one_shot",
+      task: "Review PR #43",
+      modelId,
+      llmApiKeyId,
+      subagentExecutionPolicy: {
+        retries: 1,
+        fallbackAgentIds: [subagentB.id],
+      },
+    });
+
+    expect(result.text).toBe("Fallback succeeded after launch failure");
+    expect(launchedAgentIds).toEqual([subagentA.id, subagentB.id]);
+
+    const updatedTask = await A2ATaskModel.findById(task.id);
+    expect(updatedTask?.agentId).toBe(subagentB.id);
+    const finalRun = await AgentRunModel.findByTaskId(task.id);
+    expect(finalRun?.agentId).toBe(subagentB.id);
+    expect(finalRun?.endedAt).not.toBeNull();
+  });
+
+  test("returns immediately on a permanent pre-launch refusal without walking to the next subagent", async ({
+    makeAgent,
+  }) => {
+    await OrganizationModel.patch(organizationId, {
+      agentRuntimeTiers: {
+        tiers: [
+          { name: "S", cpuRequest: 2, cpuLimit: null, warmSpares: 0 },
+          { name: "M", cpuRequest: 4, cpuLimit: null, warmSpares: 0 },
+          { name: "XL", cpuRequest: 8, cpuLimit: null, warmSpares: 0 },
+        ],
+        defaultTier: "S",
+      },
+    });
+
+    const subagentA = await createRuntimeSubagent(makeAgent, "Subagent A");
+    const subagentB = await makeAgent({
+      name: "Subagent B (XL capable)",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      modelId,
+      llmApiKeyId,
+      runtime: runtimeConfig({
+        allowAgentSuppliedCredentialValues: true,
+        maxTier: "XL",
+      }),
+    });
+    const delegationToolB = await ToolModel.findOrCreateDelegationTool(
+      subagentB.id,
+    );
+    await AgentToolModel.create(gateway.id, delegationToolB.id);
+
+    await AgentModel.update(gateway.id, {
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "ordered",
+        retries: 1,
+        fallbackEnabled: true,
+        maxFallbacks: null,
+      },
+    });
+
+    const sendSpy = await mockDetachedTaskStart();
+
+    const result = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      {
+        message: "Review with tier above Subagent A maxTier",
+        limits: { tier: "XL" },
+      },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toContain("XL");
+    expect(sendSpy).not.toHaveBeenCalled();
+    expect(subagentA.id).toBeDefined();
   });
 });

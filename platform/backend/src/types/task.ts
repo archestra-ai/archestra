@@ -56,6 +56,7 @@ export const TaskTypeSchema = z.enum([
   "model_cost_backfill",
   "jira_chatops_event",
   "jira_chatops_poll",
+  "virtual_key_rotation",
 ]);
 export type TaskType = z.infer<typeof TaskTypeSchema>;
 
@@ -123,6 +124,7 @@ export const TASK_LANES = {
     "model_cost_backfill",
     "jira_chatops_event",
     "jira_chatops_poll",
+    "virtual_key_rotation",
   ],
 } as const satisfies Record<string, TaskType[]>;
 

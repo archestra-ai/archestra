@@ -1048,6 +1048,11 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "virtualApiKey",
     fetchById: (id, orgId) => VirtualApiKeyModel.findByIdForAudit(id, orgId),
   },
+  "/api/llm-virtual-keys/:id/rotate": {
+    resourceType: "virtualApiKey",
+    action: "virtualApiKey.rotated",
+    fetchById: (id, orgId) => VirtualApiKeyModel.findByIdForAudit(id, orgId),
+  },
 
   // Saved browser logins (admin "Sign out" on the Playwright server page)
   "/api/browser-storage-states/:userId": {

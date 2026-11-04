@@ -152,6 +152,11 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
     intervalSeconds: 1800,
     payload: {},
   },
+  // Rotates virtual keys whose automatic rotation is due and removes
+  // rotated-out values once their grace period ends. Intervals are days long,
+  // so a five-minute tick keeps rotations close to schedule. Authentication
+  // enforces grace deadlines itself; the cleanup is housekeeping.
+  { taskType: "virtual_key_rotation", intervalSeconds: 300, payload: {} },
 ];
 
 export default PERIODIC_TASK_DEFINITIONS;

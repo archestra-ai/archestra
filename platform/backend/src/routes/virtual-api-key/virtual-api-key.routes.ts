@@ -37,11 +37,14 @@ import {
   ApiError,
   CredentialSpendCapInputSchema,
   constructResponseSchema,
+  DEFAULT_VIRTUAL_API_KEY_ROTATION_GRACE_PERIOD_SECONDS,
   type LabelWithDetails,
   LabelWithDetailsSchema,
   ModelPoolIdsInputSchema,
   ResourceVisibilityScopeSchema,
   type User,
+  VirtualApiKeyRotationGracePeriodSchema,
+  VirtualApiKeyRotationIntervalSchema,
   VirtualApiKeyTypeSchema,
   VirtualApiKeyWithParentInfoSchema,
   VirtualApiKeyWithValueSchema,
@@ -87,6 +90,31 @@ const VirtualApiKeyBodyObjectSchema = z.object({
    * members. Omit to keep the key's current pools. Needs model pools on.
    */
   modelPoolIds: ModelPoolIdsInputSchema,
+  /**
+   * Replace the key's value automatically at this interval, in seconds. Omit
+   * to keep the current schedule; `null` turns automatic rotation off.
+   */
+  rotationIntervalSeconds: VirtualApiKeyRotationIntervalSchema.nullable()
+    .optional()
+    .describe(
+      "Automatic rotation interval in seconds (1 to 365 days). Omit to keep the current schedule; null turns automatic rotation off.",
+    ),
+  /**
+   * How long the old value keeps working after an automatic rotation, in
+   * seconds. Omit to keep the current one (24 hours when first set).
+   */
+  rotationGracePeriodSeconds:
+    VirtualApiKeyRotationGracePeriodSchema.optional().describe(
+      "Seconds the old value keeps working after an automatic rotation (0 to 30 days, default 24 hours). Must be shorter than the interval.",
+    ),
+});
+
+const RotateVirtualApiKeyBodySchema = z.object({
+  gracePeriodSeconds: VirtualApiKeyRotationGracePeriodSchema.default(
+    0,
+  ).describe(
+    "Seconds the current value keeps working after the rotation (0 to 30 days). 0 revokes it immediately.",
+  ),
 });
 
 /**
@@ -371,6 +399,32 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.post(
+    "/api/llm-virtual-keys/:id/rotate",
+    {
+      schema: {
+        operationId: RouteId.RotateVirtualApiKey,
+        description:
+          "Replace a virtual API key's value, keeping its id, configuration, limits and attribution. With a grace period the current value keeps working until it ends. The new value is returned only to the key's creator, who can also read it later; anyone else receives metadata only.",
+        tags: ["Virtual API Keys"],
+        params: z.object({
+          id: z.string().uuid(),
+        }),
+        body: RotateVirtualApiKeyBodySchema,
+        response: constructResponseSchema(VirtualApiKeyWithValueSchema),
+      },
+    },
+    async ({ params, body, organizationId, user }, reply) => {
+      const response = await rotateVirtualApiKey({
+        id: params.id,
+        gracePeriodSeconds: body.gracePeriodSeconds,
+        organizationId,
+        user,
+      });
+      return reply.send(response);
+    },
+  );
+
   fastify.delete(
     "/api/llm-virtual-keys/bulk",
     {
@@ -465,6 +519,7 @@ async function createVirtualApiKey(params: {
   if (body.expiresAt && body.expiresAt <= new Date()) {
     throw new ApiError(400, "Expiration date must be in the future");
   }
+  const rotation = resolveRotationSettings({ body, current: null }) ?? null;
 
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -524,6 +579,7 @@ async function createVirtualApiKey(params: {
       scope: "personal",
       authorId: ownerId,
       billingTeamId: body.billingTeamId ?? null,
+      rotation,
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -579,6 +635,7 @@ async function createVirtualApiKey(params: {
       authorId: ownerId,
       providerApiKeys: body.providerApiKeys,
       billingTeamId: body.billingTeamId ?? null,
+      rotation,
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -660,6 +717,10 @@ async function updateVirtualApiKey(params: {
   if (body.expiresAt && body.expiresAt <= new Date()) {
     throw new ApiError(400, "Expiration date must be in the future");
   }
+  const rotation = resolveRotationSettings({
+    body,
+    current: await VirtualApiKeyModel.findById(id),
+  });
 
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -723,6 +784,7 @@ async function updateVirtualApiKey(params: {
       teamIds: [],
       providerApiKeys: [],
       billingTeamId: body.billingTeamId,
+      rotation,
     });
   } else {
     // An edit changes the key itself, never who can reach it. Access lives in
@@ -772,6 +834,7 @@ async function updateVirtualApiKey(params: {
       teamIds: accessContext.teamIds,
       providerApiKeys: body.providerApiKeys,
       billingTeamId: body.billingTeamId,
+      rotation,
     });
   }
 
@@ -870,6 +933,95 @@ async function deleteVirtualApiKey(params: {
 
   await VirtualApiKeyModel.delete(id);
   return { success: true };
+}
+
+async function rotateVirtualApiKey(params: {
+  id: string;
+  gracePeriodSeconds: number;
+  organizationId: string;
+  user: User;
+}): Promise<z.infer<typeof VirtualApiKeyWithValueSchema>> {
+  const { id, gracePeriodSeconds, organizationId, user } = params;
+
+  const accessContext = await VirtualApiKeyModel.findAccessContextById(id);
+  if (!accessContext || accessContext.organizationId !== organizationId) {
+    throw new ApiError(404, "Virtual API key not found");
+  }
+  await requireVirtualKeyModifyPermission({
+    virtualKey: accessContext,
+    userId: user.id,
+    organizationId,
+  });
+
+  const rotated = await VirtualApiKeyModel.rotate({ id, gracePeriodSeconds });
+  if (!rotated) {
+    throw new ApiError(404, "Virtual API key not found");
+  }
+  const virtualKey = await VirtualApiKeyModel.findByIdWithParentInfo(
+    id,
+    organizationId,
+  );
+  if (!virtualKey) {
+    throw new ApiError(404, "Virtual API key not found");
+  }
+
+  // The same rule as reading the value: only the key's creator principal
+  // receives the new bearer credential. Others who may manage the key rotate
+  // it without learning it; the creator copies it from the key list.
+  const mayRevealValue =
+    CreatedByModel.id(virtualKey, virtualKey.authorId) === user.id;
+  return {
+    ...virtualKey,
+    ...(mayRevealValue && { value: rotated.value }),
+  };
+}
+
+/**
+ * The automatic rotation a create or update body asks for: undefined keeps
+ * the key's current settings, null turns rotation off. A body that sets only
+ * the grace period applies it to the key's current interval.
+ */
+function resolveRotationSettings(params: {
+  body: {
+    rotationIntervalSeconds?: number | null;
+    rotationGracePeriodSeconds?: number;
+  };
+  current: {
+    rotationIntervalSeconds: number | null;
+    rotationGracePeriodSeconds: number | null;
+  } | null;
+}): { intervalSeconds: number; gracePeriodSeconds: number } | null | undefined {
+  const { body, current } = params;
+  if (
+    body.rotationIntervalSeconds === undefined &&
+    body.rotationGracePeriodSeconds === undefined
+  ) {
+    return undefined;
+  }
+  const intervalSeconds =
+    body.rotationIntervalSeconds === undefined
+      ? (current?.rotationIntervalSeconds ?? null)
+      : body.rotationIntervalSeconds;
+  if (intervalSeconds === null) {
+    if (body.rotationGracePeriodSeconds !== undefined) {
+      throw new ApiError(
+        400,
+        "A rotation grace period needs an automatic rotation interval",
+      );
+    }
+    return null;
+  }
+  const gracePeriodSeconds =
+    body.rotationGracePeriodSeconds ??
+    current?.rotationGracePeriodSeconds ??
+    DEFAULT_VIRTUAL_API_KEY_ROTATION_GRACE_PERIOD_SECONDS;
+  if (gracePeriodSeconds >= intervalSeconds) {
+    throw new ApiError(
+      400,
+      "The rotation grace period must be shorter than the rotation interval",
+    );
+  }
+  return { intervalSeconds, gracePeriodSeconds };
 }
 
 async function resolveKeyOwner(params: {

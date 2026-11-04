@@ -9,6 +9,7 @@ import {
   syncAppaGithubPolicy,
 } from "@/services/openappa-github-sync";
 import { runAutomaticOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
+import { rotateDueVirtualKeys } from "@/services/virtual-key-rotation";
 import type { TaskQueueService } from "../task-queue";
 import { handleAgentRunAttentionNotice } from "./agent-run-attention-notice-handler";
 import { handleAuditLogCleanup } from "./audit-log-cleanup-handler";
@@ -41,6 +42,9 @@ import { handleSkillPublicationBackfill } from "./skill-publication-backfill-han
 
 export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
   taskQueueService.registerHandler("jira_chatops_poll", pollJiraChatOps);
+  taskQueueService.registerHandler("virtual_key_rotation", async () => {
+    await rotateDueVirtualKeys();
+  });
   taskQueueService.registerHandler(
     "jira_chatops_event",
     handleJiraChatOpsEvent,

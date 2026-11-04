@@ -644,6 +644,7 @@ export const RouteId = {
   CreateVirtualApiKey: "createVirtualApiKey",
   UpdateVirtualApiKey: "updateVirtualApiKey",
   DeleteVirtualApiKey: "deleteVirtualApiKey",
+  RotateVirtualApiKey: "rotateVirtualApiKey",
   BulkDeleteVirtualApiKeys: "bulkDeleteVirtualApiKeys",
 
   // Unified OAuth Client Routes

@@ -12,12 +12,16 @@ import {
   desc,
   eq,
   getTableColumns,
+  gt,
   ilike,
   inArray,
+  isNotNull,
   isNull,
   lt,
+  lte,
   ne,
   or,
+  type Placeholder,
   sql,
 } from "drizzle-orm";
 import type { SelectedFields } from "drizzle-orm/pg-core";
@@ -91,6 +95,11 @@ type ProviderApiKeyRoutingInfo = ProviderApiKeyInfo & {
   userId: string | null;
 };
 
+type VirtualApiKeyRotationSettings = {
+  intervalSeconds: number;
+  gracePeriodSeconds: number;
+};
+
 type VirtualApiKeyAccessContext = {
   id: string;
   organizationId: string;
@@ -122,6 +131,8 @@ class VirtualApiKeyModel {
     publishToOrganization?: boolean;
     /** Team the key's spend is charged to. */
     billingTeamId?: string | null;
+    /** Automatic rotation; omitted or null leaves it off. */
+    rotation?: VirtualApiKeyRotationSettings | null;
   }): Promise<{
     virtualKey: SelectVirtualApiKey;
     value: string;
@@ -174,6 +185,11 @@ class VirtualApiKeyModel {
               authorId,
               expiresAt: expiresAt ?? null,
               billingTeamId: params.billingTeamId ?? null,
+              ...rotationScheduleColumns({
+                current: null,
+                rotation: params.rotation ?? null,
+                now: new Date(),
+              }),
             },
             userIdField: "authorId",
             transaction: tx,
@@ -247,11 +263,32 @@ class VirtualApiKeyModel {
     includeFutureProviders?: boolean;
     /** Omit to keep the current billing team. */
     billingTeamId?: string | null;
+    /** Omit to keep the key's automatic rotation; null turns it off. */
+    rotation?: VirtualApiKeyRotationSettings | null;
   }): Promise<SelectVirtualApiKey | null> {
     const { id, name, expiresAt, scope, authorId, teamIds, providerApiKeys } =
       params;
 
     const updatedVirtualKey = await withDbTransaction(async (tx) => {
+      let rotationColumns = {};
+      if (params.rotation !== undefined) {
+        const [current] = await tx
+          .select({
+            rotationIntervalSeconds:
+              schema.virtualApiKeysTable.rotationIntervalSeconds,
+            nextRotationAt: schema.virtualApiKeysTable.nextRotationAt,
+          })
+          .from(schema.virtualApiKeysTable)
+          .where(eq(schema.virtualApiKeysTable.id, id))
+          .for("update");
+        if (!current) return null;
+        rotationColumns = rotationScheduleColumns({
+          current,
+          rotation: params.rotation,
+          now: new Date(),
+        });
+      }
+
       const [updated] = await tx
         .update(schema.virtualApiKeysTable)
         .set({
@@ -265,6 +302,7 @@ class VirtualApiKeyModel {
           ...(params.billingTeamId !== undefined
             ? { billingTeamId: params.billingTeamId }
             : {}),
+          ...rotationColumns,
         })
         .where(eq(schema.virtualApiKeysTable.id, id))
         .returning();
@@ -296,6 +334,199 @@ class VirtualApiKeyModel {
     }
 
     return updatedVirtualKey ?? null;
+  }
+
+  /**
+   * Replace a key's value. The key keeps its id, name, configuration, limits
+   * and attribution; only the secret changes. With a grace period the
+   * replaced value keeps working until it runs out, so clients can move over.
+   * A value that was still in an earlier grace period stops working at once.
+   *
+   * `onlyIfDueBy` makes the rotation conditional on the key's automatic
+   * schedule, for the periodic task: it returns null when the key is no
+   * longer due (rotated or reconfigured meanwhile).
+   *
+   * Returns the new value once, or null when the key does not exist.
+   */
+  static async rotate(params: {
+    id: string;
+    gracePeriodSeconds: number;
+    onlyIfDueBy?: Date;
+  }): Promise<{ virtualKey: SelectVirtualApiKey; value: string } | null> {
+    const now = new Date();
+    const tokenValue = generateToken();
+    const secret = await secretManager().createSecret(
+      { token: tokenValue },
+      `virtual-api-key-rotation-${params.id}-${now.getTime()}`,
+      FORCE_DB,
+    );
+
+    let outcome: {
+      virtualKey: SelectVirtualApiKey;
+      releasedSecretIds: string[];
+    } | null;
+    try {
+      outcome = await withDbTransaction(async (tx) => {
+        const [current] = await tx
+          .select()
+          .from(schema.virtualApiKeysTable)
+          .where(eq(schema.virtualApiKeysTable.id, params.id))
+          .for("update");
+        if (!current) return null;
+        if (
+          params.onlyIfDueBy &&
+          (!current.nextRotationAt ||
+            current.nextRotationAt > params.onlyIfDueBy)
+        ) {
+          return null;
+        }
+
+        const keepPrevious = params.gracePeriodSeconds > 0;
+        const [rotated] = await tx
+          .update(schema.virtualApiKeysTable)
+          .set({
+            secretId: secret.id,
+            tokenStart: getTokenStart(tokenValue),
+            previousSecretId: keepPrevious ? current.secretId : null,
+            previousTokenStart: keepPrevious ? current.tokenStart : null,
+            previousTokenExpiresAt: keepPrevious
+              ? new Date(now.getTime() + params.gracePeriodSeconds * 1000)
+              : null,
+            lastRotatedAt: now,
+            rotationCount: sql`${schema.virtualApiKeysTable.rotationCount} + 1`,
+            nextRotationAt: current.rotationIntervalSeconds
+              ? new Date(now.getTime() + current.rotationIntervalSeconds * 1000)
+              : null,
+          })
+          .where(eq(schema.virtualApiKeysTable.id, params.id))
+          .returning();
+
+        return {
+          virtualKey: rotated,
+          releasedSecretIds: [
+            ...(current.previousSecretId ? [current.previousSecretId] : []),
+            ...(keepPrevious ? [] : [current.secretId]),
+          ],
+        };
+      });
+    } catch (error) {
+      await deleteSecretQuietly({
+        secretId: secret.id,
+        virtualKeyId: params.id,
+      });
+      throw error;
+    }
+
+    if (!outcome) {
+      await deleteSecretQuietly({
+        secretId: secret.id,
+        virtualKeyId: params.id,
+      });
+      return null;
+    }
+
+    for (const secretId of outcome.releasedSecretIds) {
+      await deleteSecretQuietly({ secretId, virtualKeyId: params.id });
+    }
+
+    logger.info(
+      {
+        virtualKeyId: params.id,
+        gracePeriodSeconds: params.gracePeriodSeconds,
+        automatic: params.onlyIfDueBy !== undefined,
+      },
+      "VirtualApiKeyModel.rotate: virtual key rotated",
+    );
+
+    return { virtualKey: outcome.virtualKey, value: tokenValue };
+  }
+
+  /**
+   * Keys whose automatic rotation is due, oldest first. Expired keys are
+   * skipped: they no longer authenticate, so a new value would be unusable.
+   */
+  static async findDueForRotation(params: {
+    now: Date;
+    limit: number;
+  }): Promise<
+    Array<{
+      id: string;
+      organizationId: string;
+      name: string;
+      rotationGracePeriodSeconds: number | null;
+    }>
+  > {
+    const table = schema.virtualApiKeysTable;
+    return db
+      .select({
+        id: table.id,
+        organizationId: table.organizationId,
+        name: table.name,
+        rotationGracePeriodSeconds: table.rotationGracePeriodSeconds,
+      })
+      .from(table)
+      .where(
+        and(
+          lte(table.nextRotationAt, params.now),
+          or(isNull(table.expiresAt), gt(table.expiresAt, params.now)),
+        ),
+      )
+      .orderBy(asc(table.nextRotationAt))
+      .limit(params.limit);
+  }
+
+  /**
+   * Forget rotated-out values whose grace period has ended and delete their
+   * secrets. Authentication already refuses them once the deadline passes;
+   * this only removes what is left. Returns how many were removed.
+   */
+  static async purgeExpiredPreviousTokens(params: {
+    now: Date;
+    limit: number;
+  }): Promise<number> {
+    const table = schema.virtualApiKeysTable;
+    const expired = await db
+      .select({ id: table.id, previousSecretId: table.previousSecretId })
+      .from(table)
+      .where(
+        and(
+          isNotNull(table.previousTokenStart),
+          lte(table.previousTokenExpiresAt, params.now),
+        ),
+      )
+      .limit(params.limit);
+
+    let purged = 0;
+    for (const row of expired) {
+      // Matched on the secret too, so a rotation that replaced the previous
+      // value meanwhile is left alone.
+      const [cleared] = await db
+        .update(table)
+        .set({
+          previousSecretId: null,
+          previousTokenStart: null,
+          previousTokenExpiresAt: null,
+        })
+        .where(
+          and(
+            eq(table.id, row.id),
+            row.previousSecretId
+              ? eq(table.previousSecretId, row.previousSecretId)
+              : isNull(table.previousSecretId),
+            lte(table.previousTokenExpiresAt, params.now),
+          ),
+        )
+        .returning({ id: table.id });
+      if (!cleared) continue;
+      purged++;
+      if (row.previousSecretId) {
+        await deleteSecretQuietly({
+          secretId: row.previousSecretId,
+          virtualKeyId: row.id,
+        });
+      }
+    }
+    return purged;
   }
 
   /**
@@ -388,24 +619,7 @@ class VirtualApiKeyModel {
   ): Promise<SelectVirtualApiKey[]> {
     if (typeof params === "string") {
       return db
-        .select({
-          id: schema.virtualApiKeysTable.id,
-          organizationId: schema.virtualApiKeysTable.organizationId,
-          name: schema.virtualApiKeysTable.name,
-          keyType: schema.virtualApiKeysTable.keyType,
-          includeFutureProviders:
-            schema.virtualApiKeysTable.includeFutureProviders,
-          secretId: schema.virtualApiKeysTable.secretId,
-          tokenStart: schema.virtualApiKeysTable.tokenStart,
-          scope: schema.virtualApiKeysTable.scope,
-          authorId: schema.virtualApiKeysTable.authorId,
-          createdByServiceAccountId:
-            schema.virtualApiKeysTable.createdByServiceAccountId,
-          expiresAt: schema.virtualApiKeysTable.expiresAt,
-          billingTeamId: schema.virtualApiKeysTable.billingTeamId,
-          createdAt: schema.virtualApiKeysTable.createdAt,
-          lastUsedAt: schema.virtualApiKeysTable.lastUsedAt,
-        })
+        .select(getTableColumns(schema.virtualApiKeysTable))
         .from(schema.virtualApiKeysTable)
         .innerJoin(
           schema.virtualApiKeyProviderApiKeysTable,
@@ -808,17 +1022,11 @@ class VirtualApiKeyModel {
       // SPDX-SnippetEnd
     });
 
-    try {
-      await secretManager().deleteSecret(virtualKey.secretId);
-    } catch (error) {
-      logger.warn(
-        {
-          virtualKeyId: id,
-          secretId: virtualKey.secretId,
-          error: String(error),
-        },
-        "VirtualApiKeyModel.delete: failed to delete secret (orphaned). DB record already removed.",
-      );
+    for (const secretId of [
+      virtualKey.secretId,
+      ...(virtualKey.previousSecretId ? [virtualKey.previousSecretId] : []),
+    ]) {
+      await deleteSecretQuietly({ secretId, virtualKeyId: id });
     }
 
     logger.info(
@@ -979,24 +1187,7 @@ class VirtualApiKeyModel {
 
     const [rows, [{ total }]] = await Promise.all([
       db
-        .select({
-          id: schema.virtualApiKeysTable.id,
-          organizationId: schema.virtualApiKeysTable.organizationId,
-          name: schema.virtualApiKeysTable.name,
-          keyType: schema.virtualApiKeysTable.keyType,
-          includeFutureProviders:
-            schema.virtualApiKeysTable.includeFutureProviders,
-          secretId: schema.virtualApiKeysTable.secretId,
-          tokenStart: schema.virtualApiKeysTable.tokenStart,
-          scope: schema.virtualApiKeysTable.scope,
-          authorId: schema.virtualApiKeysTable.authorId,
-          createdByServiceAccountId:
-            schema.virtualApiKeysTable.createdByServiceAccountId,
-          expiresAt: schema.virtualApiKeysTable.expiresAt,
-          billingTeamId: schema.virtualApiKeysTable.billingTeamId,
-          lastUsedAt: schema.virtualApiKeysTable.lastUsedAt,
-          createdAt: schema.virtualApiKeysTable.createdAt,
-        })
+        .select(getTableColumns(schema.virtualApiKeysTable))
         .from(schema.virtualApiKeysTable)
         .where(whereClause)
         .orderBy(schema.virtualApiKeysTable.createdAt)
@@ -1119,25 +1310,37 @@ class VirtualApiKeyModel {
     return VirtualApiKeyModel.validateCandidates(tokenValue, candidates);
   }
 
+  /**
+   * A candidate matches on its current value, or on the value its last
+   * rotation replaced while that value's grace period runs. The deadline is
+   * checked here, on every request, so a cached row cannot keep a rotated-out
+   * value working past it.
+   */
   private static async validateCandidates<
     T extends { virtualKey: SelectVirtualApiKey },
   >(tokenValue: string, candidates: T[]): Promise<T | null> {
+    const tokenStart = getTokenStart(tokenValue);
     for (const candidate of candidates) {
       const { virtualKey } = candidate;
-      const secret = await secretManager().getSecret(virtualKey.secretId);
-      if (!secret) {
-        logger.warn(
-          {
+      const matchesCurrent =
+        virtualKey.tokenStart === tokenStart &&
+        (await storedTokenMatches({
+          secretId: virtualKey.secretId,
+          tokenValue,
+          virtualKeyId: virtualKey.id,
+        }));
+      const matches =
+        matchesCurrent ||
+        (virtualKey.previousSecretId !== null &&
+          virtualKey.previousTokenStart === tokenStart &&
+          virtualKey.previousTokenExpiresAt !== null &&
+          virtualKey.previousTokenExpiresAt.getTime() > Date.now() &&
+          (await storedTokenMatches({
+            secretId: virtualKey.previousSecretId,
+            tokenValue,
             virtualKeyId: virtualKey.id,
-            secretId: virtualKey.secretId,
-          },
-          "Virtual API key references a missing secret",
-        );
-        continue;
-      }
-
-      const storedToken = (secret.secret as { token?: string })?.token;
-      if (storedToken && constantTimeEqual(storedToken, tokenValue)) {
+          })));
+      if (matches) {
         // The row we just read already tells us when the conditional UPDATE
         // would be a no-op. Avoid occupying a pool connection for that no-op.
         // Cached rows keep an old timestamp, so also remember refreshes here.
@@ -1304,6 +1507,13 @@ class VirtualApiKeyModel {
       providerApiKeyIds: providerKeyRows.map((r) => r.providerApiKeyId).sort(),
       tokenStart: row.tokenStart,
       expiresAt: row.expiresAt?.toISOString() ?? null,
+      rotationIntervalSeconds: row.rotationIntervalSeconds,
+      rotationGracePeriodSeconds: row.rotationGracePeriodSeconds,
+      nextRotationAt: row.nextRotationAt?.toISOString() ?? null,
+      lastRotatedAt: row.lastRotatedAt?.toISOString() ?? null,
+      rotationCount: row.rotationCount,
+      previousTokenStart: row.previousTokenStart,
+      previousTokenExpiresAt: row.previousTokenExpiresAt?.toISOString() ?? null,
       billingTeamId: row.billingTeamId,
       spendCap: spendCap
         ? {
@@ -1528,7 +1738,7 @@ class VirtualApiKeyModel {
       .from(keys)
       .leftJoin(users, eq(users.id, keys.authorId))
       .leftJoinLateral(membership, sql`true`)
-      .where(eq(keys.tokenStart, sql.placeholder("tokenStart")));
+      .where(tokenStartMatches(sql.placeholder("tokenStart")));
   }
 
   private static readonly byTokenStartWithOwner = new PreparedQuery(
@@ -1572,12 +1782,7 @@ class VirtualApiKeyModel {
     database
       .select()
       .from(schema.virtualApiKeysTable)
-      .where(
-        eq(
-          schema.virtualApiKeysTable.tokenStart,
-          sql.placeholder("tokenStart"),
-        ),
-      )
+      .where(tokenStartMatches(sql.placeholder("tokenStart")))
       .prepare("archestra_virtual_key_by_token_start"),
   );
 }
@@ -1595,6 +1800,92 @@ function generateToken(): string {
 
 function getTokenStart(token: string): string {
   return token.substring(0, TOKEN_START_LENGTH);
+}
+
+/**
+ * A token start matches a key's current value, or the value its last rotation
+ * replaced. Whether that older value is still in its grace period is decided
+ * per request (see `validateCandidates`), never by this lookup.
+ */
+function tokenStartMatches(tokenStart: Placeholder) {
+  return or(
+    eq(schema.virtualApiKeysTable.tokenStart, tokenStart),
+    eq(schema.virtualApiKeysTable.previousTokenStart, tokenStart),
+  );
+}
+
+async function storedTokenMatches(params: {
+  secretId: string;
+  tokenValue: string;
+  virtualKeyId: string;
+}): Promise<boolean> {
+  const secret = await secretManager().getSecret(params.secretId);
+  if (!secret) {
+    logger.warn(
+      { virtualKeyId: params.virtualKeyId, secretId: params.secretId },
+      "Virtual API key references a missing secret",
+    );
+    return false;
+  }
+  const storedToken = (secret.secret as { token?: string })?.token;
+  return Boolean(
+    storedToken && constantTimeEqual(storedToken, params.tokenValue),
+  );
+}
+
+/**
+ * The schedule columns for a key's automatic rotation. Changing the interval
+ * (or turning rotation on) starts a fresh interval from now; keeping it keeps
+ * the next rotation where it was.
+ */
+function rotationScheduleColumns(params: {
+  current: {
+    rotationIntervalSeconds: number | null;
+    nextRotationAt: Date | null;
+  } | null;
+  rotation: VirtualApiKeyRotationSettings | null;
+  now: Date;
+}): {
+  rotationIntervalSeconds: number | null;
+  rotationGracePeriodSeconds: number | null;
+  nextRotationAt: Date | null;
+} {
+  const { current, rotation, now } = params;
+  if (!rotation) {
+    return {
+      rotationIntervalSeconds: null,
+      rotationGracePeriodSeconds: null,
+      nextRotationAt: null,
+    };
+  }
+  const unchanged =
+    current?.rotationIntervalSeconds === rotation.intervalSeconds &&
+    current.nextRotationAt !== null;
+  return {
+    rotationIntervalSeconds: rotation.intervalSeconds,
+    rotationGracePeriodSeconds: rotation.gracePeriodSeconds,
+    nextRotationAt: unchanged
+      ? current.nextRotationAt
+      : new Date(now.getTime() + rotation.intervalSeconds * 1000),
+  };
+}
+
+async function deleteSecretQuietly(params: {
+  secretId: string;
+  virtualKeyId: string;
+}): Promise<void> {
+  try {
+    await secretManager().deleteSecret(params.secretId);
+  } catch (error) {
+    logger.warn(
+      {
+        virtualKeyId: params.virtualKeyId,
+        secretId: params.secretId,
+        error: String(error),
+      },
+      "VirtualApiKeyModel: failed to delete a virtual key secret (orphaned)",
+    );
+  }
 }
 
 function constantTimeEqual(a: string, b: string): boolean {

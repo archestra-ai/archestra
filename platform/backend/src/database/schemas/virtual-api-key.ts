@@ -1,6 +1,8 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -58,6 +60,37 @@ const virtualApiKeysTable = pgTable(
     billingTeamId: text("billing_team_id").references(() => team.id, {
       onDelete: "set null",
     }),
+    /**
+     * Automatic rotation interval. Null leaves the key's value in place until
+     * someone rotates it.
+     */
+    rotationIntervalSeconds: integer("rotation_interval_seconds"),
+    /** How long the old value keeps working after an automatic rotation. */
+    rotationGracePeriodSeconds: integer("rotation_grace_period_seconds"),
+    /** When automatic rotation next replaces the value; null when it is off. */
+    nextRotationAt: timestamp("next_rotation_at", {
+      mode: "date",
+      withTimezone: true,
+    }),
+    lastRotatedAt: timestamp("last_rotated_at", {
+      mode: "date",
+      withTimezone: true,
+    }),
+    rotationCount: integer("rotation_count").notNull().default(0),
+    /**
+     * The value a rotation replaced, kept while its grace period runs so
+     * clients can move to the new value. Accepted only until
+     * `previousTokenExpiresAt`.
+     */
+    previousSecretId: uuid("previous_secret_id").references(
+      () => secretsTable.id,
+      { onDelete: "set null" },
+    ),
+    previousTokenStart: varchar("previous_token_start", { length: 16 }),
+    previousTokenExpiresAt: timestamp("previous_token_expires_at", {
+      mode: "date",
+      withTimezone: true,
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     lastUsedAt: timestamp("last_used_at", { mode: "date" }),
   },
@@ -66,6 +99,12 @@ const virtualApiKeysTable = pgTable(
     index("idx_virtual_api_key_token_start").on(table.tokenStart),
     index("idx_virtual_api_key_scope").on(table.scope),
     index("idx_virtual_api_key_author_id").on(table.authorId),
+    index("idx_virtual_api_key_previous_token_start")
+      .on(table.previousTokenStart)
+      .where(sql`${table.previousTokenStart} IS NOT NULL`),
+    index("idx_virtual_api_key_next_rotation_at")
+      .on(table.nextRotationAt)
+      .where(sql`${table.nextRotationAt} IS NOT NULL`),
   ],
 );
 

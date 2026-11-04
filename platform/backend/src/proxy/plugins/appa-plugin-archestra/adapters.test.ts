@@ -1602,6 +1602,74 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
     ).toBeUndefined();
   });
 
+  test("names the sessions a Codex auto-review assesses", () => {
+    const review = (turn: Record<string, string>) => ({
+      headers: {
+        "user-agent": "codex_cli_rs/0.164.0",
+        "x-openai-subagent": "guardian",
+        "x-codex-turn-metadata": JSON.stringify(turn),
+      },
+      requestBody: { model: "gpt-5.5", tools: [] },
+    });
+    // The root thread asked for the review.
+    expect(
+      codex.reviewedSessions(
+        review({
+          session_id: "t0",
+          thread_id: "review",
+          parent_thread_id: "t0",
+        }),
+      ),
+    ).toEqual([{ sessionId: "t0" }]);
+    // A subagent asked: a root, a direct child of the root, or a deeper one.
+    expect(
+      codex.reviewedSessions(
+        review({
+          session_id: "t0",
+          thread_id: "review",
+          parent_thread_id: "t1",
+        }),
+      ),
+    ).toEqual([
+      { sessionId: "t1" },
+      { sessionId: "t0:t1", parentId: "t0" },
+      { sessionId: "t0" },
+    ]);
+    // Body metadata alone also names the requester.
+    expect(
+      codex.reviewedSessions({
+        headers: { "user-agent": "codex_cli_rs/0.164.0" },
+        requestBody: {
+          model: "codex-auto-review",
+          client_metadata: {
+            thread_id: "review",
+            "x-codex-parent-thread-id": "t0",
+          },
+        },
+      }),
+    ).toEqual([{ sessionId: "t0" }]);
+    // A review never stands for itself.
+    expect(
+      codex.reviewedSessions(
+        review({ session_id: "review", thread_id: "review" }),
+      ),
+    ).toEqual([]);
+    // A request that is not a review, such as a subagent's, names none.
+    expect(
+      codex.reviewedSessions({
+        headers: {
+          "user-agent": "codex_cli_rs/0.164.0",
+          "x-codex-turn-metadata": JSON.stringify({
+            session_id: "t0",
+            thread_id: "t1",
+            parent_thread_id: "t0",
+          }),
+        },
+        requestBody: { model: "gpt-5.5" },
+      }),
+    ).toBeUndefined();
+  });
+
   test("mints OpenCode child ids from the child session under the parent session", () => {
     const context = {
       headers: {

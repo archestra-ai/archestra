@@ -3,6 +3,7 @@ import {
   codexClientMetadataSessionId,
   isCodexClientMetadata,
 } from "@archestra/shared";
+import { childSessionId } from "@/openappa/actor";
 import type { AppaSessionIdentity } from "@/openappa/wire";
 import { ApiError } from "@/types";
 import type { CommonToolResult } from "@/types/common-llm-format";
@@ -10,6 +11,7 @@ import { asRecord } from "@/utils/as-record";
 import type {
   AppaClientAdapter,
   AppaMatchContext,
+  AppaReviewedSession,
   AppaSpawnPromptField,
   AskUserArguments,
   NativeQuestionResult,
@@ -117,38 +119,7 @@ export class AppaCodexAdapter implements AppaClientAdapter {
   extractSessionIdentity(
     context: AppaMatchContext,
   ): AppaSessionIdentity | undefined {
-    const claims: Array<{ sessionId?: string; threadId?: string } | undefined> =
-      [];
-    const clientMetadata = asRecord(context.requestBody)?.client_metadata;
-    if (clientMetadata !== undefined) {
-      const flat = asRecord(clientMetadata);
-      if (flat) claims.push(idClaims(flat, "client_metadata"));
-      claims.push(
-        turnMetadataClaims(asRecord(clientMetadata)?.["x-codex-turn-metadata"]),
-      );
-    }
-    claims.push(
-      turnMetadataClaims(readHeader(context.headers, "x-codex-turn-metadata")),
-    );
-    const headerSessionId = readHeader(context.headers, "session-id")?.trim();
-    if (headerSessionId) claims.push({ sessionId: headerSessionId });
-
-    let sessionId: string | undefined;
-    let threadId: string | undefined;
-    for (const claim of claims) {
-      if (!claim) continue;
-      if (
-        (claim.sessionId && sessionId && claim.sessionId !== sessionId) ||
-        (claim.threadId && threadId && claim.threadId !== threadId)
-      ) {
-        throw new ApiError(
-          400,
-          "OpenAPPA cannot bind contradictory Codex trajectory metadata",
-        );
-      }
-      sessionId ??= claim.sessionId;
-      threadId ??= claim.threadId;
-    }
+    const { sessionId, threadId } = turnIds(context);
     // `forked_from_thread_id` marks a client fork.
     // The runtime only opens a child trajectory for a prepared spawn call.
     // Replayed history carries parent trajectory stamps that continue the parent root.
@@ -156,6 +127,34 @@ export class AppaCodexAdapter implements AppaClientAdapter {
     return root
       ? { sessionId: root, provenance: "codex-turn-metadata" }
       : undefined;
+  }
+
+  /**
+   * An auto-review assesses the action of the thread that asked for it, the
+   * requester. Codex names the requester as `parent_thread_id`, and the root
+   * thread of the requester's tree as `session_id`. The requester can be that
+   * root, or a subagent: a direct child of the root, or a deeper one.
+   */
+  reviewedSessions(
+    context: AppaMatchContext,
+  ): readonly AppaReviewedSession[] | undefined {
+    if (!isGuardianReview(context)) return undefined;
+    const { sessionId: root, threadId: review } = turnIds(context);
+    const requester = parentThreadId(context);
+    const reviewed: AppaReviewedSession[] = [];
+    if (requester && requester !== review) {
+      reviewed.push({ sessionId: requester });
+      if (root && root !== requester)
+        reviewed.push({
+          sessionId: childSessionId(root, requester),
+          parentId: root,
+        });
+    }
+    // A subagent deeper in the tree has an id this request does not name.
+    // A root that is out of OpenAPPA takes its whole tree out with it.
+    if (root && root !== review && root !== requester)
+      reviewed.push({ sessionId: root });
+    return reviewed;
   }
 
   isSpawnTool(name: string, namespace?: string): boolean {
@@ -362,6 +361,52 @@ function isNativeCodexNamespace(namespace: string | undefined): boolean {
  * `client_metadata`; any other shape is the client's own reserved key misused,
  * which is refused rather than guessed at.
  */
+/**
+ * The session and thread ids that a request's turn metadata claims, across
+ * its body and header fields. Contradictory claims are rejected.
+ */
+function turnIds(context: AppaMatchContext): {
+  sessionId?: string;
+  threadId?: string;
+} {
+  const claims: Array<{ sessionId?: string; threadId?: string } | undefined> =
+    [];
+  const clientMetadata = asRecord(context.requestBody)?.client_metadata;
+  if (clientMetadata !== undefined) {
+    const flat = asRecord(clientMetadata);
+    if (flat) claims.push(idClaims(flat, "client_metadata"));
+    claims.push(
+      turnMetadataClaims(asRecord(clientMetadata)?.["x-codex-turn-metadata"]),
+    );
+  }
+  claims.push(
+    turnMetadataClaims(readHeader(context.headers, "x-codex-turn-metadata")),
+  );
+  const headerSessionId = readHeader(context.headers, "session-id")?.trim();
+  if (headerSessionId) claims.push({ sessionId: headerSessionId });
+
+  let sessionId: string | undefined;
+  let threadId: string | undefined;
+  for (const claim of claims) {
+    if (!claim) continue;
+    if (
+      (claim.sessionId && sessionId && claim.sessionId !== sessionId) ||
+      (claim.threadId && threadId && claim.threadId !== threadId)
+    ) {
+      throw new ApiError(
+        400,
+        "OpenAPPA cannot bind contradictory Codex trajectory metadata",
+      );
+    }
+    sessionId ??= claim.sessionId;
+    threadId ??= claim.threadId;
+  }
+  return {
+    ...(sessionId ? { sessionId } : {}),
+    ...(threadId ? { threadId } : {}),
+  };
+}
+
 function turnMetadataClaims(
   value: unknown,
 ): { sessionId?: string; threadId?: string } | undefined {

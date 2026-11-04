@@ -19,7 +19,7 @@ import {
   verifySubagentBinding,
 } from "@/openappa/subagent-binding";
 import { stampedSessions } from "@/openappa/trajectory-stamp";
-import { startedUnenforced } from "@/openappa/unenforced";
+import { isUnenforcedSession, startedUnenforced } from "@/openappa/unenforced";
 import {
   type AppaSessionIdentity,
   type AppaWireFamily,
@@ -29,6 +29,7 @@ import {
 import type { OpenappaIngress } from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
 import {
   APPA_CLIENT_ADAPTERS,
+  appaReviewedSessions,
   appaTrajectory,
   extractAppaSessionIdentity,
   nativeSpawnParentId,
@@ -519,28 +520,43 @@ export async function admitOpenappaRequest(params: {
         "OpenAPPA bound a fallback root because the client reported no session",
       );
     }
-    if (
-      await startedUnenforced(
-        appaTrajectory({
-          adapters: APPA_CLIENT_ADAPTERS,
-          headers,
-          requestBody: params.originalRequest,
-          trustedContext: {
-            session,
-            profileId: agent.id,
-            toolIdentity: params.toolIdentity,
-            request: lineageRequest(identity),
-            ...facts,
-          },
-        }).session,
-      )
-    ) {
+    const trajectory = appaTrajectory({
+      adapters: APPA_CLIENT_ADAPTERS,
+      headers,
+      requestBody: params.originalRequest,
+      trustedContext: {
+        session,
+        profileId: agent.id,
+        toolIdentity: params.toolIdentity,
+        request: lineageRequest(identity),
+        ...facts,
+      },
+    });
+    if (await startedUnenforced(trajectory.session)) {
       // The session started while enforcement was off, or a person
       // superyelled it. OpenAPPA never governs it: the request goes on as
       // if enforcement were off.
       logger.info(
         { sessionId: session.session_id },
         "OpenAPPA ignores a session that started while Guardrails enforcement was off or was superyelled",
+      );
+      return { kind: "ungoverned" };
+    }
+    // A side review, such as a Codex auto-review, copies the history of the
+    // session it reviews into a thread of its own. When that session is out
+    // of OpenAPPA, its review is too: governed, it would be refused for what
+    // it copied, and the session could not continue.
+    const reviewed = appaReviewedSessions(trajectory);
+    if (
+      reviewed.length > 0 &&
+      (await Promise.all(reviewed.map(isUnenforcedSession))).some(Boolean)
+    ) {
+      logger.info(
+        {
+          sessionId: session.session_id,
+          reviewedSessionIds: reviewed.map((entry) => entry.session_id),
+        },
+        "OpenAPPA ignores a side review of a session that started while Guardrails enforcement was off or was superyelled",
       );
       return { kind: "ungoverned" };
     }

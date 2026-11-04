@@ -99,6 +99,15 @@ export type AppaChildTrajectory = {
 };
 
 /**
+ * A session that a side review could be reviewing, by native id: a root, or
+ * a child with the native id of its parent. The proxy adds the caller scope.
+ */
+export type AppaReviewedSession = {
+  sessionId: string;
+  parentId?: string;
+};
+
+/**
  * The argument of a spawn call that carries the child's opening prompt, and
  * how a delegation marker joins it: appended to the text, or pushed onto the
  * item list as a text item of its own.
@@ -244,6 +253,16 @@ export type AppaClientAdapter = {
     context: AppaMatchContext,
     sessionId: string,
   ): string | undefined;
+  /**
+   * For a side review, the sessions it could be reviewing, by native id. A
+   * side review is a model call that the client makes by itself to assess
+   * another session's action, such as an approval review. It runs in a thread
+   * of its own and copies that session's history. It is not a child, so it
+   * has no parent. Returns undefined for any other request.
+   */
+  reviewedSessions?(
+    context: AppaMatchContext,
+  ): readonly AppaReviewedSession[] | undefined;
   /** True when this local tool starts a delegated child run. */
   isSpawnTool(name: string, namespace?: string): boolean;
   /**

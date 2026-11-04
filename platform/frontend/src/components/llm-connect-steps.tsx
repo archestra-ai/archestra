@@ -27,10 +27,6 @@ import {
   CreateVirtualKeyDialogWithData,
   type VirtualKeyType,
 } from "@/components/create-virtual-key-dialog";
-import {
-  poolAccess,
-  resolvedProviderKeyIds,
-} from "@/components/credential-billing/model-pool-access";
 import { primaryKeyMappings } from "@/components/credential-billing/provider-key-data";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
@@ -176,49 +172,58 @@ export function LlmConnectSteps({
     credential.providerApiKeys.some((mapping) =>
       servesTarget(mapping.provider),
     );
-  const callsPool = (
-    key: NonNullable<typeof virtualKeys>["data"][number],
-    target: ModelPool,
-  ) =>
-    poolAccess(
-      target,
-      resolvedProviderKeyIds({
-        mappings: key.providerApiKeys,
-        includeFutureProviders: key.includeFutureProviders,
-        providerApiKeys,
-      }),
-      target.virtualApiKeyIds.includes(key.id),
-    ).kind !== "none";
+  // A virtual key calls a pool only once the pool was added to it.
+  const callsPool = (key: { id: string }, target: ModelPool) =>
+    target.virtualApiKeyIds.includes(key.id);
   const keyOptions = (virtualKeys?.data ?? []).filter((key) =>
     pool ? callsPool(key, pool) : auth === "passthrough" || reaches(key),
   );
   const clientOptions = oauthClients.filter(reaches);
 
-  // Pools are asked for by name on the Unified Model API. A key calls one it
-  // was added to, or one with a member on its own provider keys.
+  // Pools are asked for by name on the Unified Model API.
   const poolsEnabled = useFeature("llmModelPoolsEnabled") === true;
   const { data: canReadPools } = useHasPermissions({ llmModel: ["read"] });
   const offersPools =
-    poolsEnabled && canReadPools === true && auth === "standard" && isRouter;
+    poolsEnabled &&
+    canReadPools === true &&
+    (auth === "standard" || auth === "oauth") &&
+    isRouter;
   const { data: pools = [] } = useModelPools({
     enabled: offersPools,
     toastOnError: false,
   });
   const poolsOf = (key: (typeof keyOptions)[number]) =>
     offersPools ? pools.filter((candidate) => callsPool(key, candidate)) : [];
-  const keySummary = (key: (typeof keyOptions)[number]) => {
-    if (!offersPools) return undefined;
+  // Only a client calling as the app takes pools, and only those added to it.
+  const takesPools = (client: LlmOauthClient) =>
+    client.grantType === "client_credentials";
+  const clientPoolsOf = (client: LlmOauthClient) =>
+    offersPools && takesPools(client)
+      ? pools.filter((candidate) => client.modelPoolIds.includes(candidate.id))
+      : [];
+  const credentialSummary = (
+    credential: { providerApiKeys: ProviderApiKeyMappings },
+    poolCount: number,
+    allProviders = false,
+  ) => {
     const providers = new Set(
-      key.providerApiKeys.map((mapping) => mapping.provider),
+      credential.providerApiKeys.map((mapping) => mapping.provider),
     ).size;
-    const poolCount = poolsOf(key).length;
     return [
-      key.includeFutureProviders
+      allProviders
         ? "All providers"
         : `${providers} ${providers === 1 ? "provider" : "providers"}`,
       `${poolCount} ${poolCount === 1 ? "pool" : "pools"}`,
     ].join(" · ");
   };
+  const keySummary = (key: (typeof keyOptions)[number]) =>
+    offersPools
+      ? credentialSummary(key, poolsOf(key).length, key.includeFutureProviders)
+      : undefined;
+  const clientSummary = (client: LlmOauthClient) =>
+    offersPools && takesPools(client)
+      ? credentialSummary(client, clientPoolsOf(client).length)
+      : undefined;
   const allOptions =
     auth === "oauth"
       ? clientOptions.map((client) => ({
@@ -227,6 +232,7 @@ export function LlmConnectSteps({
           tokenStart: null,
           name: client.name,
           label: client.name,
+          description: clientSummary(client),
           mappings: client.providerApiKeys,
           oauth: { clientId: client.clientId, grantType: client.grantType },
         }))
@@ -352,18 +358,31 @@ export function LlmConnectSteps({
     auth === "standard"
       ? keyOptions.find((key) => key.id === picked?.id)
       : undefined;
-  const pickedPools = pickedKey ? poolsOf(pickedKey) : [];
-  // Step 4 offers only the pools the picked key can call.
+  const pickedClient =
+    auth === "oauth"
+      ? clientOptions.find((client) => client.id === picked?.id)
+      : undefined;
+  const pickedPools = pickedKey
+    ? poolsOf(pickedKey)
+    : pickedClient
+      ? clientPoolsOf(pickedClient)
+      : [];
+  // Step 4 offers only the pools the picked key or client can call.
   const requestPools = pickedPools.map((entry) => ({
     name: entry.name,
     description: <PoolProviders pool={entry} />,
   }));
-  // The pools the picked key can call, read-only: set up on the Model Pools
-  // page or in the key's own dialog.
-  const poolSection = showKeyPools &&
+  // The pools the picked key or client can call, read-only: set up on the
+  // Model Pools page or in the credential's own dialog.
+  const poolSection =
+    showKeyPools &&
     offersPools &&
     hasProviderKey &&
-    pickedKey && <KeyPools key={pickedKey.id} pools={pickedPools} />;
+    (pickedKey ? (
+      <KeyPools key={pickedKey.id} pools={pickedPools} noun="key" />
+    ) : pickedClient && takesPools(pickedClient) ? (
+      <KeyPools key={pickedClient.id} pools={pickedPools} noun="client" />
+    ) : null);
 
   let credentialSteps: RailRow[];
   let credential: RequestCredential;
@@ -474,8 +493,16 @@ export function LlmConnectSteps({
             onChange={pickKey}
           />
         ),
-        children: picked?.oauth && (
-          <OauthTokenRequest {...picked.oauth} scope={LLM_PROXY_OAUTH_SCOPE} />
+        children: (picked?.oauth || poolSection) && (
+          <div className="space-y-4">
+            {picked?.oauth && (
+              <OauthTokenRequest
+                {...picked.oauth}
+                scope={LLM_PROXY_OAUTH_SCOPE}
+              />
+            )}
+            {poolSection}
+          </div>
         ),
       },
     ];
@@ -1033,7 +1060,14 @@ function OauthClientCreateFlow({
  * The pools a virtual key can call, folded under one row so a long list
  * doesn't push the request down. Read-only: pools are managed elsewhere.
  */
-function KeyPools({ pools }: { pools: ModelPool[] }) {
+function KeyPools({
+  pools,
+  noun,
+}: {
+  pools: ModelPool[];
+  /** What the pools were added to. */
+  noun: "key" | "client";
+}) {
   const [open, setOpen] = useState(false);
   return (
     <div className="space-y-2">
@@ -1057,7 +1091,7 @@ function KeyPools({ pools }: { pools: ModelPool[] }) {
       {pools.length === 0 ? (
         <div className="flex items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
           <Layers className="size-4 shrink-0" aria-hidden="true" />
-          <span>No pools on this key</span>
+          <span>No pools on this {noun}</span>
         </div>
       ) : (
         <Collapsible
@@ -1072,8 +1106,8 @@ function KeyPools({ pools }: { pools: ModelPool[] }) {
                 aria-hidden="true"
               />
               <span className="flex-1">
-                {pools.length} {pools.length === 1 ? "pool" : "pools"} on this
-                key
+                {pools.length} {pools.length === 1 ? "pool" : "pools"} on this{" "}
+                {noun}
               </span>
               <ChevronDown
                 className={cn(

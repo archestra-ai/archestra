@@ -403951,6 +403951,13 @@
                               "additionalProperties": false
                             }
                           },
+                          "modelPoolIds": {
+                            "default": [],
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -404034,6 +404041,7 @@
                           "authorName",
                           "createdBy",
                           "labels",
+                          "modelPoolIds",
                           "createdAt",
                           "updatedAt",
                           "billingTeam",
@@ -404786,6 +404794,13 @@
                         "additionalProperties": false
                       }
                     },
+                    "modelPoolIds": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -404872,6 +404887,7 @@
                     "authorName",
                     "createdBy",
                     "labels",
+                    "modelPoolIds",
                     "createdAt",
                     "updatedAt",
                     "billingTeam",
@@ -405458,6 +405474,13 @@
                         "additionalProperties": false
                       }
                     },
+                    "modelPoolIds": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -405541,6 +405564,7 @@
                     "authorName",
                     "createdBy",
                     "labels",
+                    "modelPoolIds",
                     "createdAt",
                     "updatedAt",
                     "billingTeam",
@@ -406244,6 +406268,13 @@
                         "additionalProperties": false
                       }
                     },
+                    "modelPoolIds": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -406330,6 +406361,7 @@
                     "authorName",
                     "createdBy",
                     "labels",
+                    "modelPoolIds",
                     "createdAt",
                     "updatedAt",
                     "billingTeam",
@@ -446030,6 +446062,14 @@
                               "additionalProperties": false
                             }
                           },
+                          "modelPoolIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            }
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -446119,14 +446159,6 @@
                           },
                           "includeFutureProviders": {
                             "type": "boolean"
-                          },
-                          "modelPoolIds": {
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "format": "uuid",
-                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                            }
                           }
                         },
                         "required": [
@@ -446143,14 +446175,14 @@
                           "authorName",
                           "createdBy",
                           "labels",
+                          "modelPoolIds",
                           "createdAt",
                           "updatedAt",
                           "billingTeam",
                           "spendCap",
                           "scopes",
                           "allowedGatewayIds",
-                          "includeFutureProviders",
-                          "modelPoolIds"
+                          "includeFutureProviders"
                         ],
                         "additionalProperties": false
                       }
@@ -446935,6 +446967,14 @@
                         "additionalProperties": false
                       }
                     },
+                    "modelPoolIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -447025,14 +447065,6 @@
                     "includeFutureProviders": {
                       "type": "boolean"
                     },
-                    "modelPoolIds": {
-                      "type": "array",
-                      "items": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      }
-                    },
                     "clientSecret": {
                       "type": "string"
                     }
@@ -447051,6 +447083,7 @@
                     "authorName",
                     "createdBy",
                     "labels",
+                    "modelPoolIds",
                     "createdAt",
                     "updatedAt",
                     "billingTeam",
@@ -447058,7 +447091,6 @@
                     "scopes",
                     "allowedGatewayIds",
                     "includeFutureProviders",
-                    "modelPoolIds",
                     "clientSecret"
                   ],
                   "additionalProperties": false
@@ -447677,6 +447709,14 @@
                         "additionalProperties": false
                       }
                     },
+                    "modelPoolIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -447766,14 +447806,6 @@
                     },
                     "includeFutureProviders": {
                       "type": "boolean"
-                    },
-                    "modelPoolIds": {
-                      "type": "array",
-                      "items": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      }
                     }
                   },
                   "required": [
@@ -447790,14 +447822,14 @@
                     "authorName",
                     "createdBy",
                     "labels",
+                    "modelPoolIds",
                     "createdAt",
                     "updatedAt",
                     "billingTeam",
                     "spendCap",
                     "scopes",
                     "allowedGatewayIds",
-                    "includeFutureProviders",
-                    "modelPoolIds"
+                    "includeFutureProviders"
                   ],
                   "additionalProperties": false
                 }
@@ -448497,6 +448529,14 @@
                         "additionalProperties": false
                       }
                     },
+                    "modelPoolIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -448587,14 +448627,6 @@
                     "includeFutureProviders": {
                       "type": "boolean"
                     },
-                    "modelPoolIds": {
-                      "type": "array",
-                      "items": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      }
-                    },
                     "clientSecret": {
                       "type": "string"
                     }
@@ -448613,6 +448645,7 @@
                     "authorName",
                     "createdBy",
                     "labels",
+                    "modelPoolIds",
                     "createdAt",
                     "updatedAt",
                     "billingTeam",
@@ -448620,7 +448653,6 @@
                     "scopes",
                     "allowedGatewayIds",
                     "includeFutureProviders",
-                    "modelPoolIds",
                     "clientSecret"
                   ],
                   "additionalProperties": false

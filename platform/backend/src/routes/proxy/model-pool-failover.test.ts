@@ -226,21 +226,24 @@ describe("planModelPool", () => {
         grantedPoolId,
       });
 
-    // A virtual key gets in by a grant, or by mapping a member's key, as a
-    // Connect key does.
+    // A virtual key gets in only when the pool was added to it: mapping a
+    // member's key is not enough.
     expect(
       await plan({ virtualKeyId: granted.id, providerApiKeyIds: [openai.id] }),
     ).not.toBeNull();
     expect(
       await plan({ virtualKeyId: mapsMember.id, providerApiKeyIds: [zai.id] }),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       await plan({ virtualKeyId: neither.id, providerApiKeyIds: [openai.id] }),
     ).toBeNull();
-    // An OAuth client gets in by a grant kept on the client.
+    // An OAuth client calling as the app gets in only by a pool added to it.
     expect(
       await plan({ providerApiKeyIds: [openai.id], modelPoolIds: [pool.id] }),
     ).not.toBeNull();
+    expect(
+      await plan({ providerApiKeyIds: [zai.id], modelPoolIds: [] }),
+    ).toBeNull();
     // Any other caller must already use a member's key.
     expect(await plan({ providerApiKeyIds: [zai.id] })).not.toBeNull();
     expect(await plan({ providerApiKeyIds: [openai.id] })).toBeNull();

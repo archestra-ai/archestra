@@ -37,7 +37,7 @@ const poolTest = test.extend<{
     token: string;
     /** A virtual key in the same org that maps no member key and has no grant. */
     ungrantedToken: string;
-    /** A virtual key that maps a member's key, as a Connect key does. */
+    /** A virtual key that maps a member's key but wasn't given the pool. */
     memberKeyToken: string;
     poolId: string;
     zaiKeyId: string;
@@ -186,7 +186,7 @@ poolTest(
 );
 
 poolTest(
-  "serves the pool to a virtual key that maps a member's key",
+  "keeps the pool from a virtual key that only maps a member's key",
   async ({ router }) => {
     server.use(
       http.post(`${zaiOrigin}/chat/completions`, () =>
@@ -211,10 +211,12 @@ poolTest(
       url: `/v1/model-router/${router.agentId}/models`,
       headers: { authorization: `Bearer ${router.memberKeyToken}` },
     });
-    expect(models.json().data[0]).toMatchObject({
-      id: "glm-5",
-      owned_by: "model-pool",
-    });
+    expect(models.statusCode, models.body).toBe(200);
+    expect(
+      models
+        .json()
+        .data.filter((m: { owned_by: string }) => m.owned_by === "model-pool"),
+    ).toEqual([]);
 
     const response = await router.app.inject({
       method: "POST",
@@ -225,8 +227,7 @@ poolTest(
         messages: [{ role: "user", content: "hello" }],
       },
     });
-    expect(response.statusCode, response.body).toBe(200);
-    expect(response.headers["x-archestra-pool"]).toBe("glm-5");
+    expect(response.headers["x-archestra-pool"]).toBeUndefined();
   },
 );
 

@@ -104,6 +104,10 @@ export default defineConfig({
     // concurrent suite can't pile jsdom work into one worker; worker count is
     // capped separately by maxWorkers above.
     maxConcurrency: 2,
+    // Keeps transformed modules on disk between local runs (keyed by file
+    // content and config), so a rerun transforms only what changed. CI starts
+    // from an empty cache, so it gains nothing there.
+    experimental: { fsModuleCache: !isCI },
     projects: [
       {
         extends: true,
@@ -124,14 +128,38 @@ export default defineConfig({
           include: testFiles.jsdom,
         },
       },
+      {
+        // Files without module mocks share each worker's modules and jsdom
+        // window: re-importing React, Testing Library and the app's modules
+        // for every file was most of this suite's CPU. vitest-setup.ts puts
+        // the DOM, globals, timers and storage back between files.
+        extends: true,
+        test: {
+          name: "jsdom-shared",
+          include: testFiles.jsdomShared,
+          isolate: false,
+          env: { ARCHESTRA_VITEST_SHARED_WINDOW: "true" },
+        },
+      },
     ],
   },
 });
 
-function partitionTestFiles(): { node: string[]; jsdom: string[] } {
+/**
+ * Node-environment files share a worker (they may not use module mocks);
+ * jsdom files share one unless they mock modules, since a module mock only
+ * holds in a worker that re-imports the mocked graph for each file.
+ */
+function partitionTestFiles(): {
+  node: string[];
+  jsdom: string[];
+  jsdomShared: string[];
+} {
   const node: string[] = [];
   const jsdom: string[] = [];
+  const jsdomShared: string[] = [];
   const root = path.resolve(__dirname, "src");
+  const moduleMock = /\bvi\.(mock|doMock|unmock|doUnmock|hoisted)\s*\(/;
 
   for (const entry of readdirSync(root, {
     recursive: true,
@@ -143,16 +171,18 @@ function partitionTestFiles(): { node: string[]; jsdom: string[] } {
     const relative = `./${path.relative(__dirname, absolute)}`;
     const source = readFileSync(absolute, "utf8");
     if (source.startsWith("// @vitest-environment node")) {
-      if (/\bvi\.(mock|doMock|unmock|doUnmock|hoisted)\s*\(/.test(source)) {
+      if (moduleMock.test(source)) {
         throw new Error(
           `${relative} cannot use module mocks in the shared-worker Node project`,
         );
       }
       node.push(relative);
-    } else {
+    } else if (moduleMock.test(source)) {
       jsdom.push(relative);
+    } else {
+      jsdomShared.push(relative);
     }
   }
 
-  return { node, jsdom };
+  return { node, jsdom, jsdomShared };
 }

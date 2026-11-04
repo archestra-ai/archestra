@@ -1,6 +1,7 @@
 "use client";
 
-import { addDays, format } from "date-fns";
+import { addDays } from "date-fns/addDays";
+import { format } from "date-fns/format";
 import { CalendarIcon, GripVertical } from "lucide-react";
 import {
   type KeyboardEvent,

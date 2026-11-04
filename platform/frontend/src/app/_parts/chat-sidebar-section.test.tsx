@@ -5,7 +5,8 @@ import {
 } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { format, subDays } from "date-fns";
+import { format } from "date-fns/format";
+import { subDays } from "date-fns/subDays";
 import {
   afterEach,
   beforeAll,

@@ -23,6 +23,16 @@ browser-free. This opt-in uses a shared worker module cache, so do not use
 module mocks in this project. Keep UI, storage, canvas, and browser binary API
 tests on jsdom.
 
+A jsdom file without module mocks (`vi.mock`, `vi.doMock`, `vi.hoisted`) also
+runs in a shared worker, the `jsdom-shared` project: it keeps the modules and
+the jsdom window of the files before it. `vitest-setup.ts` cleans the DOM after
+each test and, after each file, restores globals, DOM prototypes, timers, spies,
+storage, cookies and the URL. Module-level state is not restored, so a module
+cache or singleton that a test fills must be reset by the test. Define globals
+with `configurable: true` (or `vi.stubGlobal`); the reset fails a file that
+leaves one it cannot remove. A file that needs a fresh module graph uses a
+module mock and runs isolated.
+
 ## The one rule
 
 **A test earns its place by being able to fail for a reason you'd want to hear about.**

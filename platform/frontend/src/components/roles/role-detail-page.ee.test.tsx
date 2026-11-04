@@ -181,9 +181,12 @@ describe("RoleDetailPage", () => {
       }),
     );
     renderPage("role-1");
-    const users = await screen.findByRole("region", { name: "Users" });
+    // No team or service account holds it, so the Users tile opens by itself.
+    const users = await screen.findByRole("tab", { name: /Users/ });
+    await waitFor(() => expect(users).toHaveAttribute("aria-selected", "true"));
+    const panel = screen.getByRole("tabpanel");
     await waitFor(() =>
-      expect(within(users).getByText("Ada Lovelace")).toBeVisible(),
+      expect(within(panel).getByText("Ada Lovelace")).toBeVisible(),
     );
     // The API filters by the role's identifier, not its display name.
     expect(roleFilter).toBe("reviewer");

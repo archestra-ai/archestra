@@ -309,7 +309,7 @@ describe("OrganizationCostsPage", () => {
       "Model",
       "Person",
       "App",
-      "Virtual key",
+      "Credential",
     ])
       expect(await screen.findByRole("menuitem", { name })).toBeVisible();
     expect(screen.queryByTestId("my-usage-summary")).not.toBeInTheDocument();
@@ -721,7 +721,7 @@ describe("OrganizationCostsPage", () => {
     await waitFor(() =>
       expect(screen.getByRole("table")).toHaveTextContent("Example person"),
     );
-    await group("Virtual key");
+    await group("Credential");
     await waitFor(() =>
       expect(screen.getByRole("table")).toHaveTextContent("Pipeline key"),
     );

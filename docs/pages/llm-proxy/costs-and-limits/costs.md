@@ -1,6 +1,6 @@
 ---
 title: Costs
-description: Break down organization-wide API spend, subscription usage, tokens, and requests by virtual key, team, agent, model, person, app, skill, or label
+description: Break down organization-wide API spend, subscription usage, tokens, and requests by credential, team, agent, model, person, app, skill, or label
 order: 1
 lastUpdated: 2026-11-04
 ---
@@ -40,7 +40,7 @@ Savings compare cached input with full input pricing after cache-write surcharge
 Below the headline cards, use the cost explorer to break down usage by any dimension or start from a preset **View**:
 
 1. Choose **Show** to pick the metric: **Billed spend**, **Subscription estimate**, **Requests**, **Tokens**, **Cache reads**, **Cache writes**, **Net cache savings**, **Tool calls**, **App runs**, or **Skill activations**.
-2. Choose **by** to group rows by **Virtual key**, **Team**, **Agent**, **Model**, **Provider**, **Person**, **App**, **Skill**, **MCP server**, **MCP tool**, or **Label**.
+2. Choose **by** to group rows by **Credential** (virtual key, OAuth client, or other sign-in), **Team**, **Agent**, **Model**, **Provider**, **Person**, **App**, **Skill**, **MCP server**, **MCP tool**, or **Label**.
 3. Optionally choose **split by** to break each row down by a second dimension, such as **Team** split by **Model** or **Label** split by **Team**.
 
 Switch between **Summary** (ranked totals, share of total, and period-over-period trend) and **Pivot** (a heat-shaded matrix with time buckets or split values as columns). Click any row to isolate it in the chart, click **Copy as CSV** to export the current table, or click **Show ... limits** in the toolbar to jump to [Limits](/docs/llm-proxy/costs-and-limits/limits) filtered to the selected scope or row.
@@ -63,7 +63,7 @@ In **Costs & Limits → Costs**, set **by** to **Label** and pick a label key (d
 
 <span id="my-usage"></span>
 
-Anyone signed in to Archestra can open **My Usage** in the sidebar to see their own personal spend, subscription estimate, requests, and tokens without needing [`llmCost:read`](/docs/reference/permissions#llmCost:read). It offers the same date range picker, chart, and explorer controls—grouped by **Agent**, **Model**, **Provider**, **Virtual key**, **Access method**, **App**, or **Skill**—scoped to calls attributed to your account.
+Anyone signed in to Archestra can open **My Usage** in the sidebar to see their own personal spend, subscription estimate, requests, and tokens without needing [`llmCost:read`](/docs/reference/permissions#llmCost:read). It offers the same date range picker, chart, and explorer controls—grouped by **Agent**, **Model**, **Provider**, **Credential**, **Access method**, **App**, or **Skill**—scoped to calls attributed to your account.
 
 ![My Usage showing personal spend, tokens, requests, and usage breakdown](/docs/automated_screenshots/llm-proxy_my-usage.webp)
 

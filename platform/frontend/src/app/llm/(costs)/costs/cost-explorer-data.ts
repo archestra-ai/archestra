@@ -147,7 +147,7 @@ export const DIMS: Record<DimId, { label: string; plural: string }> = {
   server: { label: "MCP server", plural: "servers" },
   tool: { label: "Tool", plural: "tools" },
   method: { label: "Access method", plural: "access methods" },
-  key: { label: "Virtual key", plural: "virtual keys" },
+  key: { label: "Credential", plural: "credentials" },
   providerKey: { label: "Provider key", plural: "provider keys" },
   pool: { label: "Model pool", plural: "model pools" },
   label: { label: "Label", plural: "label values" },
@@ -264,7 +264,7 @@ export const SAVED_VIEWS: { id: string; label: string; q: PivotQuery }[] = [
   },
   {
     id: "keys",
-    label: "Virtual keys by spend",
+    label: "Credentials by spend",
     q: { metric: "billed", group: "key", split: "none", chart: "table" },
   },
   {
@@ -1314,7 +1314,7 @@ function proxyItemsFor(
       label: c.credentialName ?? method,
       sub: c.credentialId
         ? `ID ${c.credentialId}`
-        : "No individual key identifier recorded",
+        : "No individual credential identifier recorded",
       tag: method,
       totals: c,
       filter,

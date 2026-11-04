@@ -17,7 +17,7 @@ import { PermissionList } from "./permission-list.ee";
 
 /** What a role grants, as both the edit form and the role's page explain it. */
 export const ROLE_PERMISSIONS_INTRO =
-  'Role permissions control feature access across all objects of a resource type. Grant access to an individual object in its "Who can use it" section.';
+  "A role grants permissions for every object of a type, such as all agents. Access to one specific object is set on that object itself.";
 
 export type RoleFormValues = {
   name: string;

@@ -7682,6 +7682,112 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     }
   }
 
+  // A request the platform bound to a runtime workspace cannot leave it by
+  // claiming to review another session: a Codex auto-review in the workspace
+  // is bound to the workspace session, and follows that session alone.
+  test("a runtime-bound request that claims to be a Codex auto-review stays in its workspace session", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    config.openappa.offerSigningSecret = "runtime-binding-test-secret";
+    const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+    const providerKey = await makeLlmProviderApiKey(
+      agent.organizationId,
+      secret.id,
+      { provider: "anthropic" },
+    );
+    const { value: key, virtualKey } = await VirtualApiKeyModel.create({
+      organizationId: agent.organizationId,
+      name: "runtime-review",
+      scope: "org",
+      authorId: null,
+      providerApiKeys: [
+        { provider: providerKey.provider, providerApiKeyId: providerKey.id },
+      ],
+    });
+    const context = await A2AContextModel.create({
+      actorKind: "organization",
+      actorId: agent.organizationId,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    const workloadName = `runtime-review-${task.id.slice(0, 8)}`;
+    const workspace = await AgentWorkspaceModel.create({
+      organizationId: agent.organizationId,
+      agentId: agent.id,
+      actorKind: "organization",
+      actorId: agent.organizationId,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      workloadName,
+      state: "active",
+      activeTaskId: task.id,
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    await AgentRunModel.create({
+      organizationId: agent.organizationId,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "organization",
+      actorId: agent.organizationId,
+      actorUserId: null,
+      workloadName,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      virtualApiKeyId: virtualKey.id,
+    });
+    const binding = issueRuntimeBinding({
+      secret: config.openappa.offerSigningSecret,
+      organizationId: agent.organizationId,
+      workspaceId: workspace.id,
+      workloadName,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "organization",
+      actorId: agent.organizationId,
+      expiresAt: Date.now() + 600_000,
+    });
+    if (!binding) throw new Error("The fixture has no signed binding");
+    // Another session in the workspace's scope, out of OpenAPPA.
+    await superyellSession({
+      organization_id: agent.organizationId,
+      session_id: `agent-workspace:${workspace.id}|elsewhere`,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "203.0.113.20",
+      headers: {
+        authorization: `Bearer ${key}`,
+        "anthropic-version": "2023-06-01",
+        "x-appa-session-id": workloadName,
+        "x-archestra-runtime-binding": binding,
+        "user-agent": "codex_cli_rs/0.164.0",
+        "x-openai-subagent": "guardian",
+        "x-codex-turn-metadata": JSON.stringify({
+          session_id: "elsewhere",
+          thread_id: "review-thread",
+          parent_thread_id: "elsewhere",
+          turn_trigger: "guardian_review",
+        }),
+      },
+      payload: payload(false) as Record<string, unknown>,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    // Governed: OpenAPPA saw the workspace session's turn.
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        session_id: `agent-workspace:${workspace.id}|${workloadName}`,
+      }),
+    );
+  });
+
   test("refuses a Chat request that names no user, instead of binding it unchecked", async () => {
     await allowUnauthenticatedCallers();
     const { "x-archestra-user-id": _user, ...noUser } =

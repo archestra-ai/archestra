@@ -356,12 +356,6 @@ function isNativeCodexNamespace(namespace: string | undefined): boolean {
 }
 
 /**
- * Reads the identity pair out of one turn-metadata claim. The blob arrives as
- * a JSON string on the compat header and as an object or JSON string under
- * `client_metadata`; any other shape is the client's own reserved key misused,
- * which is refused rather than guessed at.
- */
-/**
  * The session and thread ids that a request's turn metadata claims, across
  * its body and header fields. Contradictory claims are rejected.
  */
@@ -407,6 +401,12 @@ function turnIds(context: AppaMatchContext): {
   };
 }
 
+/**
+ * Reads the identity pair out of one turn-metadata claim. The blob arrives as
+ * a JSON string on the compat header and as an object or JSON string under
+ * `client_metadata`; any other shape is the client's own reserved key misused,
+ * which is refused rather than guessed at.
+ */
 function turnMetadataClaims(
   value: unknown,
 ): { sessionId?: string; threadId?: string } | undefined {

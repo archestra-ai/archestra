@@ -545,12 +545,15 @@ export async function admitOpenappaRequest(params: {
     // A side review, such as a Codex auto-review, copies the history of the
     // session it reviews into a thread of its own. When that session is out
     // of OpenAPPA, its review is too: governed, it would be refused for what
-    // it copied, and the session could not continue.
-    const reviewed = appaReviewedSessions(trajectory);
-    if (
-      reviewed.length > 0 &&
-      (await Promise.all(reviewed.map(isUnenforcedSession))).some(Boolean)
-    ) {
+    // it copied, and the session could not continue. The reviewed ids are in
+    // the caller's own scope, and the caller can already name any of them as
+    // its session or its parent, so the claim takes nothing out of OpenAPPA
+    // that the caller could not take out before. A session the platform
+    // bound, a runtime workspace or a delegated run, is not the caller's to
+    // name, and its review is bound to that same session.
+    const reviewed =
+      runtimeSession || subagentBinding ? [] : appaReviewedSessions(trajectory);
+    if ((await Promise.all(reviewed.map(isUnenforcedSession))).some(Boolean)) {
       logger.info(
         {
           sessionId: session.session_id,

@@ -1,17 +1,48 @@
 {
-  "extends": ["//"],
+  "extends": [
+    "//"
+  ],
   "tasks": {
     "type-check": {
-      "dependsOn": ["@archestra/shared#type-check", "@archestra/drizzle-migration-linter#type-check"],
-      "outputs": [".tsbuild/**"]
+      "dependsOn": [
+        "@archestra/shared#type-check",
+        "@archestra/drizzle-migration-linter#type-check"
+      ],
+      "outputs": [
+        ".tsbuild/**"
+      ]
     },
     "check:commit": {
-      "dependsOn": ["@archestra/shared#type-check", "@archestra/drizzle-migration-linter#type-check"],
-      "outputs": [".tsbuild/**"]
+      "dependsOn": [
+        "@archestra/shared#type-check",
+        "@archestra/drizzle-migration-linter#type-check"
+      ],
+      "outputs": [
+        ".tsbuild/**"
+      ],
+      "inputs": [
+        "$TURBO_EXTENDS$",
+        "$TURBO_ROOT$/docker_images/sandbox_base/Dockerfile",
+        "$TURBO_ROOT$/docker_images/sandbox_base/pyproject.toml",
+        "$TURBO_ROOT$/archestra-rs/sandbox-core/src/backends/dagger.rs"
+      ]
     },
     "check:ci": {
-      "dependsOn": ["@archestra/shared#type-check", "@archestra/drizzle-migration-linter#type-check", "@archestra/app-runtime-rs#build", "@archestra/sandbox-rs#build"],
-      "outputs": [".tsbuild/**"]
+      "dependsOn": [
+        "@archestra/shared#type-check",
+        "@archestra/drizzle-migration-linter#type-check",
+        "@archestra/app-runtime-rs#build",
+        "@archestra/sandbox-rs#build"
+      ],
+      "outputs": [
+        ".tsbuild/**"
+      ],
+      "inputs": [
+        "$TURBO_EXTENDS$",
+        "$TURBO_ROOT$/docker_images/sandbox_base/Dockerfile",
+        "$TURBO_ROOT$/docker_images/sandbox_base/pyproject.toml",
+        "$TURBO_ROOT$/archestra-rs/sandbox-core/src/backends/dagger.rs"
+      ]
     }
   }
 }

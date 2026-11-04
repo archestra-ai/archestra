@@ -35,12 +35,27 @@ build_backend() {
       echo "backend build failed; the previous build keeps running until the next successful build" >&2
       exit 1
     fi
+    # Builds share dist/, so the swap runs one at a time. A build killed
+    # mid-swap leaves the lock behind; after 30 s it counts as stale.
+    lock=.dist-swap.lock
+    waited=0
+    until mkdir "$lock" 2>/dev/null; do
+      if [ "$waited" -ge 150 ]; then
+        rm -rf "$lock"
+        waited=0
+        continue
+      fi
+      waited=$((waited + 1))
+      sleep 0.2
+    done
+    trap 'rmdir "$lock" 2>/dev/null' EXIT
     if [ -d dist ] && ! mv dist "$old"; then
       rm -rf "$next"
       echo "backend build: could not move the previous dist/ aside; keeping it" >&2
       exit 1
     fi
-    if ! mv "$next" dist; then
+    # mv into an existing directory would nest the build inside it.
+    if [ -e dist ] || ! mv "$next" dist; then
       [ -d "$old" ] && mv "$old" dist
       rm -rf "$next"
       echo "backend build: could not install the new dist/; restored the previous one" >&2

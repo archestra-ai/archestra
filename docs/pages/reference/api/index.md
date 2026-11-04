@@ -1,25 +1,25 @@
 ---
 title: "API Reference"
-description: "Authenticate scripts and CI with an API key, then browse every platform endpoint"
+description: "Find Archestra API endpoints by task, with request and response fields alongside each operation"
 order: 3
 lastUpdated: 2026-11-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Automate anything the web app does from scripts and CI: create agents, install MCP servers, change policies, and export costs and logs. The web app runs on this same API, and every endpoint checks the same [permissions](/docs/reference/permissions).
+Automate management tasks from scripts and CI: create agents, install MCP servers, change policies, and export costs and logs. Management endpoints check the same [permissions](/docs/reference/permissions) as the web app.
 
-This API manages Archestra. To send model requests or call MCP tools, use the [LLM Proxy](/docs/llm-proxy/authentication) or an [MCP Gateway](/docs/mcp/authentication) instead.
+These topic pages also include the [LLM Proxy](/docs/reference/api/llm-proxy) and [MCP Gateway](/docs/reference/api/mcp-gateway) transport endpoints. Their authentication differs from management requests; check each operation before calling it.
 
 ## Authentication
 
-Send an API key in the `Authorization` header, without a `Bearer` prefix:
+For management requests, send an API key in the `Authorization` header, without a `Bearer` prefix:
 
 ```bash
 curl -H "Authorization: arch_..." https://archestra.example.com/api/agents
 ```
 
-A request without a valid key returns `401`. A key whose role lacks the endpoint's permission returns `403`.
+A management request without a valid key returns `401`. A key whose role lacks the endpoint's permission returns `403`.
 
 Use one of two kinds of key:
 
@@ -41,7 +41,6 @@ Click your name in the sidebar, go to **API Keys**, and click **Create API Key**
 - To rotate a key, create a new one, move your clients to it, and delete the old one. Disabling or deleting the account stops all its keys.
 
 <span id="leave-out-agent-tools"></span>
-## Endpoints
+## Explore the API
 
-:::swagger-ui
-:::
+Choose a topic below to find the endpoints, parameters, permissions, and response fields for your task. The [OpenAPI document](https://raw.githubusercontent.com/archestra-ai/archestra/main/docs/openapi.json) remains available for code generation.

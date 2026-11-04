@@ -35,8 +35,6 @@ import {
 } from "@/types/auto-routing-api";
 
 const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  const usageFieldGuide =
-    "In the response, `inputTokens` and `outputTokens` are recorded token counts; `inputTokensEstimated` identifies a locally estimated input count. `cacheReadTokens` and `cacheWriteTokens` describe provider cache usage. For these counts, `null` means unavailable or not applicable, while `0` is a recorded zero. Counts can be partial if a stream ends early. Open the response's **Schema** tab for field descriptions.";
   const legacyRoutes: Array<Parameters<typeof fastify.route>[0]> = [];
   fastify.addHook("onRoute", (route) => {
     if (route.method === "GET" && route.url.startsWith("/api/llm-proxy-logs")) {
@@ -50,8 +48,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetLlmProxyLogs,
         description:
-          "List LLM Proxy request logs in the active organization with pagination and sorting. `log:read` returns the caller's rows; `log:admin` includes every row in the organization.\n\n" +
-          usageFieldGuide,
+          "List LLM Proxy request logs in the active organization with pagination and sorting. `log:read` returns the caller's rows; `log:admin` includes every row in the organization.",
         tags: ["LLM Proxy Logs"],
         querystring: z
           .object({
@@ -183,8 +180,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetLlmProxyLogSummaries,
         description:
-          "List LLM Proxy request log metadata without request and response payloads. `log:read` returns the caller's rows; `log:admin` includes every row in the organization.\n\n" +
-          usageFieldGuide,
+          "List LLM Proxy request log metadata without request and response payloads. `log:read` returns the caller's rows; `log:admin` includes every row in the organization.",
         tags: ["LLM Proxy Logs"],
         querystring: z
           .object({
@@ -549,8 +545,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetLlmProxyLog,
         description:
-          "Get an LLM Proxy request log by ID. `log:read` permits a row attributed to the caller; `log:admin` permits any row in the organization.\n\n" +
-          usageFieldGuide,
+          "Get an LLM Proxy request log by ID. `log:read` permits a row attributed to the caller; `log:admin` permits any row in the organization.",
         tags: ["LLM Proxy Logs"],
         params: z.object({
           logId: UuidIdSchema,

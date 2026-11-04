@@ -46,6 +46,7 @@ export function enrichOpenApiWithRbac<T extends OpenApiDocument>(spec: T): T {
   }
 
   brandSpecTextInPlace(clonedSpec);
+  linkPermissionReferencesInPlace(clonedSpec);
   return clonedSpec;
 }
 
@@ -70,6 +71,27 @@ export function enrichOpenApiWithRbac<T extends OpenApiDocument>(spec: T): T {
  * copying transform would only churn allocations on every /openapi.json hit.
  */
 const BRANDABLE_SPEC_KEYS = new Set(["description", "summary"]);
+
+function linkPermissionReferencesInPlace(node: unknown): void {
+  if (Array.isArray(node)) {
+    for (const item of node) linkPermissionReferencesInPlace(item);
+    return;
+  }
+  if (!node || typeof node !== "object") return;
+  for (const [key, child] of Object.entries(node)) {
+    if (key === "description" && typeof child === "string") {
+      (node as Record<string, unknown>)[key] = child.replace(
+        /(?<!\[)`([A-Za-z][A-Za-z0-9]*:[A-Za-z-]+)`(?!\]\()/g,
+        (match, permission: string) =>
+          Object.hasOwn(permissionDescriptions, permission)
+            ? `[${match}](/docs/reference/permissions#${permission})`
+            : match,
+      );
+    } else {
+      linkPermissionReferencesInPlace(child);
+    }
+  }
+}
 
 function brandSpecTextInPlace(node: unknown): void {
   if (Array.isArray(node)) {

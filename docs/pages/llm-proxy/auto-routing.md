@@ -67,7 +67,7 @@ The session keeps that fallback until it ends. An agent or chat on the organizat
 
 ## Inspect a Recorded Decision
 
-Use [`GET /api/llm-proxy-logs/{logId}/auto-routing`](/docs/reference/api#/LLM%20Proxy%20Logs/getLlmProxyLogAutoRouting) to inspect the decision linked to a request you can view in LLM Logs. It returns the chosen model and tier, routing reason, scorer features and version, plan identifier, selection probability, budget multiplier and expected cost. It does not call the scorer again.
+Use [`GET /api/llm-proxy-logs/{logId}/auto-routing`](/docs/reference/api/llm-proxy/logs#tag/llm-proxy-logs/GET/api/llm-proxy-logs/{logId}/auto-routing) to inspect the decision linked to a request you can view in LLM Logs. It returns the chosen model and tier, routing reason, scorer features and version, plan identifier, selection probability, budget multiplier and expected cost. It does not call the scorer again.
 
 A `null` decision means there is no retained decision linked to that request; the request may not have been auto routed, or its decision may have expired. It is not a reconstructed explanation or proof that routing was disabled.
 

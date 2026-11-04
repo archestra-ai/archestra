@@ -69,5 +69,5 @@ Anyone signed in to Archestra can open **My Usage** in the sidebar to see their 
 
 ## What to Know
 
-- **Query the same data via API:** the footer of the cost explorer shows the exact [`GET /api/statistics/costs`](/docs/reference/api#/Statistics/getCostStatistics) or [`GET /api/statistics/llm-proxy`](/docs/reference/api#/Statistics/getProxyCostStatistics) request behind the current view so you can copy it for scripts or internal billing pipelines.
+- **Query the same data via API:** the footer of the cost explorer shows the exact [`GET /api/statistics/costs`](/docs/reference/api/operations#tag/statistics/GET/api/statistics/costs) or [`GET /api/statistics/llm-proxy`](/docs/reference/api/operations#tag/statistics/GET/api/statistics/llm-proxy) request behind the current view so you can copy it for scripts or internal billing pipelines.
 - **Export to Prometheus and Grafana:** for real-time scraping and alerting, use the LLM cost and token counters in [Prometheus Metrics](/docs/admin/observability/metrics/llm).

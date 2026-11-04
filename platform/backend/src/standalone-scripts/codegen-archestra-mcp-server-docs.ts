@@ -165,7 +165,7 @@ async function main() {
 
   const docsFilePath = path.join(
     __dirname,
-    "../../../../docs/pages/reference/archestra-mcp-server.md",
+    "../../../../docs/pages/reference/archestra-mcp-server/index.md",
   );
 
   const docsDir = path.dirname(docsFilePath);
@@ -179,7 +179,11 @@ async function main() {
   }
 
   const markdownContent = generateMarkdownContent(existingContent);
-  fs.writeFileSync(docsFilePath, `${markdownContent.trimEnd()}\n`);
+  const { index, pages } = splitToolReference(markdownContent);
+  fs.writeFileSync(docsFilePath, `${index.trimEnd()}\n`);
+  for (const [slug, body] of Object.entries(pages)) {
+    fs.writeFileSync(path.join(docsDir, `${slug}.md`), `${body.trimEnd()}\n`);
+  }
 
   // App-runtime-only built-ins are not part of the agent-facing surface this
   // page documents (they are covered on the Apps page).
@@ -194,13 +198,6 @@ async function main() {
   logger.info(`Generated tables for:`);
   logger.info(`   - ${tools.length} tools`);
   logger.info(`   - ${groupCount} groups`);
-}
-
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch((error) => {
-    logger.error({ error }, "Error generating documentation");
-    process.exit(1);
-  });
 }
 
 // === Internal helpers ===
@@ -294,7 +291,7 @@ function generateMarkdownBody(): string {
       const permissionCell = tool.accessNote
         ? `${tool.requiredPermission} †`
         : tool.requiredPermission;
-      section += `| \`${tool.shortName}\` | ${escapeTableCell(tool.description)} | ${escapeTableCell(permissionCell)} |\n`;
+      section += `| [\`${tool.shortName}\`](#${tool.shortName}) | ${escapeTableCell(tool.description)} | ${escapeTableCell(permissionCell)} |\n`;
     }
 
     if (groupTools.some((tool) => tool.accessNote)) {
@@ -383,6 +380,105 @@ function generateMarkdownContent(existingContent: string | null): string {
   }
 
   return `${generateFrontmatter(lastUpdated)}${newBody}`;
+}
+
+const toolPageGroups: Record<string, { slug: string; title: string }> = {
+  Identity: {
+    slug: "getting-started",
+    title: "Identity, Chat, and Tool Discovery",
+  },
+  Chat: {
+    slug: "getting-started",
+    title: "Identity, Chat, and Tool Discovery",
+  },
+  "Tool Discovery": {
+    slug: "getting-started",
+    title: "Identity, Chat, and Tool Discovery",
+  },
+  Skills: { slug: "skills-and-files", title: "Skills, Files, and Sandbox" },
+  Files: { slug: "skills-and-files", title: "Skills, Files, and Sandbox" },
+  "Code Sandbox": {
+    slug: "skills-and-files",
+    title: "Skills, Files, and Sandbox",
+  },
+  Apps: { slug: "apps-and-projects", title: "Apps and Projects" },
+  Projects: { slug: "apps-and-projects", title: "Apps and Projects" },
+  "Agent Runtime": { slug: "agents", title: "Agents and Runtime" },
+  Agents: { slug: "agents", title: "Agents and Runtime" },
+  "Knowledge Management": {
+    slug: "knowledge-and-mcp",
+    title: "Knowledge and MCP",
+  },
+  "MCP Servers": { slug: "knowledge-and-mcp", title: "Knowledge and MCP" },
+  "MCP Gateways": { slug: "knowledge-and-mcp", title: "Knowledge and MCP" },
+  "Tool Assignment": { slug: "knowledge-and-mcp", title: "Knowledge and MCP" },
+  Guardrails: { slug: "guardrails", title: "Guardrails" },
+  Limits: { slug: "organization", title: "Organization" },
+  Teams: { slug: "organization", title: "Organization" },
+  Plugins: { slug: "organization", title: "Organization" },
+};
+
+function splitToolReference(markdown: string): {
+  index: string;
+  pages: Record<string, string>;
+} {
+  const marker = "## Tools Reference\n\n";
+  const splitAt = markdown.indexOf(marker);
+  if (splitAt === -1)
+    throw new Error("Generated MCP reference has no Tools Reference section");
+  const intro = markdown.slice(0, splitAt);
+  const reference = markdown.slice(splitAt + marker.length);
+  const sections = reference.split(/(?=^### )/m).filter(Boolean);
+  const pages = new Map<string, { title: string; sections: string[] }>();
+  const groups: { heading: string; slug: string; tools: string[] }[] = [];
+  const toolDestination = new Map<string, string>();
+
+  for (const section of sections) {
+    const heading = section.match(/^### ([^\n]+)/)?.[1];
+    if (!heading || !toolPageGroups[heading])
+      throw new Error(`Unmapped MCP tool group: ${heading}`);
+    const { slug, title } = toolPageGroups[heading];
+    const page = pages.get(slug) ?? { title, sections: [] };
+    page.sections.push(section.trim());
+    pages.set(slug, page);
+    const tools = [...section.matchAll(/^#### ([a-z0-9_]+)$/gm)].map(
+      (match) => match[1],
+    );
+    groups.push({ heading, slug, tools });
+    for (const tool of tools) toolDestination.set(tool, slug);
+  }
+
+  const toolUrl = (tool: string) =>
+    `/docs/reference/archestra-mcp-server/${toolDestination.get(tool)}#${tool}`;
+  const linkedIntro = intro.replace(
+    /\]\(#([a-z0-9_]+)\)/g,
+    (match, tool: string) =>
+      toolDestination.has(tool) ? `](${toolUrl(tool)})` : match,
+  );
+  const indexSections = groups.map(({ heading, slug, tools }) => {
+    const groupAnchor = heading
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/-$/, "");
+    return `<span id="${groupAnchor}"></span>\n\n### [${heading}](/docs/reference/archestra-mcp-server/${slug})\n\n${tools.map((tool) => `- <span id="${tool}"></span>[\`${tool}\`](${toolUrl(tool)})`).join("\n")}`;
+  });
+  const index = `${linkedIntro}\n## Tools Reference\n\nBrowse a topic, or follow a tool name directly to its inputs, output, and access requirements.\n\n${indexSections.join("\n\n")}`;
+
+  const frontmatterDate =
+    markdown.match(/lastUpdated:\s*(\d{4}-\d{2}-\d{2})/)?.[1] ??
+    new Date().toISOString().slice(0, 10);
+  const output: Record<string, string> = {};
+  for (const [slug, { title, sections: pageSections }] of pages) {
+    const content = pageSections
+      .join("\n\n")
+      .replace(
+        /\]\(#code-sandbox\)/g,
+        "](/docs/reference/archestra-mcp-server/skills-and-files#code-sandbox)",
+      );
+    output[slug] =
+      `---\ntitle: "${title}"\ndescription: "Archestra MCP Server tools for ${title.toLowerCase()}"\norder: ${[...pages.keys()].indexOf(slug) + 1}\nlastUpdated: ${frontmatterDate}\n---\n<!-- Auto-generated by pnpm codegen:archestra-mcp-server-docs. Do not edit manually. -->\n\nTools in this topic are provided by the [Archestra MCP Server](/docs/reference/archestra-mcp-server). Each entry lists its RBAC permission, input, and output.\n\n${content}`;
+  }
+  return { index, pages: output };
 }
 
 /**
@@ -801,4 +897,11 @@ function linkPermissionMentions(markdown: string): string {
         ? `[${mention}](/docs/reference/permissions#${resource}:${action})`
         : mention,
   );
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    logger.error({ error }, "Error generating documentation");
+    process.exit(1);
+  });
 }

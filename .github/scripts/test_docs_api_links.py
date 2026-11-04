@@ -25,6 +25,9 @@ class ApiLinkTest(unittest.TestCase):
         self.root = Path(temp.name)
         (self.root / "docs/pages").mkdir(parents=True)
         (self.root / "docs/openapi.json").write_text(json.dumps(SPEC))
+        (self.root / "docs/api-reference-groups.json").write_text(
+            json.dumps({"operations": ["Statistics"], "knowledge": ["Knowledge Files"], "organization": ["Permissions"]})
+        )
         previous = os.getcwd()
         os.chdir(self.root)
         self.addCleanup(os.chdir, previous)
@@ -47,9 +50,9 @@ class ApiLinkTest(unittest.TestCase):
         self.assertEqual(self.run_check().returncode, 1)
         self.assertEqual(self.run_check("--fix").returncode, 0)
         text = page.read_text()
-        self.assertIn("(/docs/reference/api#/Statistics/getUserStatistics)", text)
-        self.assertIn("(/docs/reference/api#/Knowledge%20Files/upsertKnowledgeFile)", text)
-        self.assertIn("(/docs/reference/api#/Permissions/getResourcePermissions)", text)
+        self.assertIn("(/docs/reference/api/operations#tag/statistics/GET/api/statistics/users)", text)
+        self.assertIn("(/docs/reference/api/knowledge#tag/knowledge-files/PUT/api/knowledge-files/{fileId}/content)", text)
+        self.assertIn("(/docs/reference/api/organization#tag/permissions/GET/api/resource-permissions/{resource}/{scope})", text)
         self.assertEqual(self.run_check().returncode, 0)
 
     def test_reports_unknown_routes_and_operations_without_an_id(self):
@@ -60,10 +63,16 @@ class ApiLinkTest(unittest.TestCase):
         self.assertIn("`GET /api/untagged` is not a documented API operation", result.stderr)
 
     def test_reports_deep_links_to_missing_operations(self):
-        self.write("[x](/docs/reference/api#/Statistics/getGone)\n")
+        self.write("[x](/docs/reference/api/operations#tag/statistics/GET/api/statistics/gone)\n")
         result = self.run_check()
         self.assertEqual(result.returncode, 1)
-        self.assertIn("no API operation for /docs/reference/api#/Statistics/getGone", result.stderr)
+        self.assertIn("no API operation for /docs/reference/api/operations#tag/statistics/GET/api/statistics/gone", result.stderr)
+
+    def test_fixes_linked_mentions_that_still_point_to_a_topic_overview(self):
+        page = self.write("[`GET /api/statistics/users`](/docs/reference/api/operations)\n")
+        self.assertEqual(self.run_check().returncode, 1)
+        self.assertEqual(self.run_check("--fix").returncode, 0)
+        self.assertIn("(/docs/reference/api/operations#tag/statistics/GET/api/statistics/users)", page.read_text())
 
     def test_skips_code_blocks_headings_and_comments(self):
         self.write("```bash\n`GET /api/nope`\n```\n\n## `GET /api/nope`\n\n<!-- `GET /api/nope` -->\n")

@@ -493,7 +493,8 @@ export async function handleCreateResource<
         ? await assignToolAssignments(created.id, args.toolAssignments ?? [])
         : [];
     const subAgentResults =
-      targetAgentType === "agent" && (args.subAgentIds?.length ?? 0) > 0
+      (targetAgentType === "agent" || targetAgentType === "mcp_gateway") &&
+      (args.subAgentIds?.length ?? 0) > 0
         ? await assignSubAgentDelegations(created.id, args.subAgentIds ?? [])
         : [];
 
@@ -840,7 +841,8 @@ export async function handleEditResource<
         ? await assignToolAssignments(args.id, args.toolAssignments ?? [])
         : [];
     const subAgentResults =
-      expectedType === "agent" && (args.subAgentIds?.length ?? 0) > 0
+      (expectedType === "agent" || expectedType === "mcp_gateway") &&
+      (args.subAgentIds?.length ?? 0) > 0
         ? await assignSubAgentDelegations(args.id, args.subAgentIds ?? [])
         : [];
 

@@ -354,7 +354,9 @@ class AgentModel {
   static async findBasicByOrganizationIdAndIds(params: {
     organizationId: string;
     agentIds: string[];
-  }): Promise<Array<Pick<Agent, "id" | "name" | "agentType">>> {
+  }): Promise<
+    Array<Pick<Agent, "id" | "name" | "agentType" | "environmentId">>
+  > {
     const { organizationId, agentIds } = params;
 
     if (agentIds.length === 0) {
@@ -366,6 +368,7 @@ class AgentModel {
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
         agentType: schema.agentsTable.agentType,
+        environmentId: schema.agentsTable.environmentId,
       })
       .from(schema.agentsTable)
       .where(

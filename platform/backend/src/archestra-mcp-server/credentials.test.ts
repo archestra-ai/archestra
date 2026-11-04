@@ -3,7 +3,7 @@ import {
   redactCatalogToolArguments,
   TOOL_TRANSFER_CREDENTIAL_FULL_NAME,
 } from "@archestra/shared";
-import { AgentModel } from "@/models";
+import { AgentExcludedSubagentModel, AgentModel } from "@/models";
 import { preflightAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import { beforeEach, expect, test } from "@/test";
@@ -50,7 +50,11 @@ beforeEach(
     const actor = await makeUser();
     actorId = actor.id;
     await makeMember(actorId, organizationId, { role: "admin" });
-    const callingAgent = await makeAgent({ organizationId, authorId: actorId });
+    const callingAgent = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      accessAllSubagents: true,
+    });
     await seedAndAssignArchestraTools(callingAgent.id);
     context = {
       agent: { id: callingAgent.id, name: callingAgent.name },
@@ -355,6 +359,32 @@ test("reports an Agent with no runtime rather than storing a value", async ({
 
   expect(result.isError).toBe(true);
   expect(textOf(result)).toContain("no Agent Runtime configured");
+});
+
+test("refuses to transfer a credential to an excluded or non-allowlisted subagent", async ({
+  makeAgent,
+}) => {
+  const target = await makeRuntimeAgent(makeAgent, runtimeConfig());
+  await AgentExcludedSubagentModel.replaceForAgent(context.agent.id, [
+    target.id,
+  ]);
+
+  const excludedResult = await declare(target.id);
+
+  expect(excludedResult.isError).toBe(true);
+  expect(textOf(excludedResult)).toContain(
+    `Agent "${target.name}" is not an allowed subagent of "${context.agent.name}".`,
+  );
+
+  await AgentExcludedSubagentModel.replaceForAgent(context.agent.id, []);
+  await AgentModel.update(context.agent.id, { accessAllSubagents: false });
+
+  const nonAllowlistedResult = await declare(target.id);
+
+  expect(nonAllowlistedResult.isError).toBe(true);
+  expect(textOf(nonAllowlistedResult)).toContain(
+    `Agent "${target.name}" is not an allowed subagent of "${context.agent.name}".`,
+  );
 });
 
 test("its argument shape is redacted before a tool call is logged", () => {

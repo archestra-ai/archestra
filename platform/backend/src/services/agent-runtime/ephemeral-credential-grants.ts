@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { TimeInMs } from "@archestra/shared";
-import { LRUCacheManager } from "@/cache-manager";
+import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 
 const DEFAULT_EPHEMERAL_GRANT_TTL_SECONDS = 300;
 const MIN_EPHEMERAL_GRANT_TTL_SECONDS = 30;
@@ -14,28 +14,92 @@ export interface EphemeralCredentialGrant {
   allowedAgentIds: string[];
   key: string;
   value: string;
+  ttlMs?: number;
+}
+
+export function ephemeralCredentialGrantCacheKey(
+  grantId: string,
+): AllowedCacheKey {
+  return `${CacheKey.EphemeralCredentialGrant}-${grantId}`;
+}
+
+function callerLockKey(callerAgentId: string): AllowedCacheKey {
+  return `${CacheKey.EphemeralCredentialGrant}-caller:${callerAgentId}`;
+}
+
+function validateGrant(
+  grantId: string,
+  grant: EphemeralCredentialGrant | undefined,
+  params: {
+    organizationId: string;
+    userId: string;
+    callerAgentId: string;
+    candidateAgentIds: string[];
+  },
+): string | null {
+  if (!grant) {
+    return `Credential grant "${grantId}" is expired, already consumed, or invalid. Call transfer_credential with ephemeral: true to mint a fresh grant before start_agent_run.`;
+  }
+  if (
+    grant.organizationId !== params.organizationId ||
+    grant.userId !== params.userId ||
+    grant.callerAgentId !== params.callerAgentId
+  ) {
+    return `Credential grant "${grantId}" does not belong to this caller or user.`;
+  }
+  const candidateSet = new Set(params.candidateAgentIds);
+  const matchesAnyCandidate = grant.allowedAgentIds.some((id) =>
+    candidateSet.has(id),
+  );
+  if (!matchesAnyCandidate) {
+    return `Credential grant "${grantId}" is not scoped to the requested subagent(s).`;
+  }
+  return null;
+}
+
+function buildGrantResolution(resolvedGrants: EphemeralCredentialGrant[]): {
+  ok: true;
+  grants: EphemeralCredentialGrant[];
+  env: Record<string, string>;
+  envForAgent: (agentId: string) => Record<string, string>;
+} {
+  const env: Record<string, string> = {};
+  for (const grant of resolvedGrants) {
+    env[grant.key] = grant.value;
+  }
+  return {
+    ok: true,
+    grants: resolvedGrants,
+    env,
+    envForAgent: (agentId: string) => {
+      const scopedEnv: Record<string, string> = {};
+      for (const grant of resolvedGrants) {
+        if (grant.allowedAgentIds.includes(agentId)) {
+          scopedEnv[grant.key] = grant.value;
+        }
+      }
+      return scopedEnv;
+    },
+  };
 }
 
 /**
- * In-memory manager for short-lived, one-time credential grants minted by
+ * Shared-cache manager for short-lived, one-time credential grants minted by
  * `transfer_credential({ ephemeral: true })` and redeemed by `start_agent_run`.
  *
- * Keeps ephemeral secrets out of `user_credentials` and avoids mutating subagent
- * declarations in the database when a caller (such as a CI workflow) wants to
- * bind a per-invocation token strictly to the single winning subagent pod.
+ * The tool call that mints a grant and the `start_agent_run` call that redeems
+ * it reach whichever replica the load balancer picks, so grants live in the
+ * shared cache and this class keeps no state of its own.
  */
-class EphemeralCredentialGrantManager {
-  private readonly grants = new LRUCacheManager<EphemeralCredentialGrant>({
-    maxSize: 2_000,
-    defaultTtl: 5 * TimeInMs.Minute,
-  });
-
-  createGrant(
-    params: Omit<EphemeralCredentialGrant, "id"> & { ttlSeconds?: number },
-  ): {
+export class EphemeralCredentialGrantManager {
+  async createGrant(
+    params: Omit<EphemeralCredentialGrant, "id" | "ttlMs"> & {
+      ttlSeconds?: number;
+    },
+  ): Promise<{
     grantId: string;
     expiresInSeconds: number;
-  } {
+  }> {
     const requestedTtl =
       params.ttlSeconds ?? DEFAULT_EPHEMERAL_GRANT_TTL_SECONDS;
     const expiresInSeconds = Math.max(
@@ -43,8 +107,9 @@ class EphemeralCredentialGrantManager {
       Math.min(MAX_EPHEMERAL_GRANT_TTL_SECONDS, Math.floor(requestedTtl)),
     );
     const grantId = crypto.randomUUID();
-    this.grants.set(
-      grantId,
+    const ttlMs = expiresInSeconds * TimeInMs.Second;
+    await cacheManager.set<EphemeralCredentialGrant>(
+      ephemeralCredentialGrantCacheKey(grantId),
       {
         id: grantId,
         organizationId: params.organizationId,
@@ -53,99 +118,129 @@ class EphemeralCredentialGrantManager {
         allowedAgentIds: [...new Set(params.allowedAgentIds)],
         key: params.key,
         value: params.value,
+        ttlMs,
       },
-      expiresInSeconds * TimeInMs.Second,
+      ttlMs,
     );
     return { grantId, expiresInSeconds };
   }
 
   /**
-   * Atomically validate and consume one or more ephemeral credential grants for
-   * a `start_agent_run` call. If any grant ID is expired, unknown, owned by a
-   * different user/caller, or does not cover the candidate subagent pool, no
-   * grants are consumed and an error is returned.
+   * Validate and resolve one or more ephemeral credential grants without
+   * deleting them yet, so a launch that is refused before a pod is started
+   * does not spend the caller's grant.
    */
-  consumeGrants(params: {
+  async resolveGrants(params: {
     grantIds: string[];
     organizationId: string;
     userId: string;
     callerAgentId: string;
     candidateAgentIds: string[];
-  }):
+  }): Promise<
     | {
         ok: true;
+        grants: EphemeralCredentialGrant[];
         env: Record<string, string>;
         envForAgent: (agentId: string) => Record<string, string>;
       }
-    | { ok: false; message: string } {
+    | { ok: false; message: string }
+  > {
     const uniqueGrantIds = [...new Set(params.grantIds)];
     if (uniqueGrantIds.length === 0) {
       return {
         ok: true,
+        grants: [],
         env: {},
         envForAgent: () => ({}),
       };
     }
 
     const resolvedGrants: EphemeralCredentialGrant[] = [];
-    const candidateSet = new Set(params.candidateAgentIds);
-
     for (const grantId of uniqueGrantIds) {
-      const grant = this.grants.get(grantId);
-      if (!grant) {
-        return {
-          ok: false,
-          message: `Credential grant "${grantId}" is expired, already consumed, or invalid. Call transfer_credential with ephemeral: true to mint a fresh grant before start_agent_run.`,
-        };
-      }
-      if (
-        grant.organizationId !== params.organizationId ||
-        grant.userId !== params.userId ||
-        grant.callerAgentId !== params.callerAgentId
-      ) {
-        return {
-          ok: false,
-          message: `Credential grant "${grantId}" does not belong to this caller or user.`,
-        };
-      }
-      const matchesAnyCandidate = grant.allowedAgentIds.some((id) =>
-        candidateSet.has(id),
+      const grant = await cacheManager.get<EphemeralCredentialGrant>(
+        ephemeralCredentialGrantCacheKey(grantId),
+        { throwOnError: true },
       );
-      if (!matchesAnyCandidate) {
-        return {
-          ok: false,
-          message: `Credential grant "${grantId}" is not scoped to the requested subagent(s).`,
-        };
+      const validationError = validateGrant(grantId, grant, params);
+      if (validationError) {
+        return { ok: false, message: validationError };
       }
-      resolvedGrants.push(grant);
+      if (grant) {
+        resolvedGrants.push(grant);
+      }
     }
 
-    for (const grantId of uniqueGrantIds) {
-      this.grants.delete(grantId);
-    }
-
-    const env: Record<string, string> = {};
-    for (const grant of resolvedGrants) {
-      env[grant.key] = grant.value;
-    }
-
-    return {
-      ok: true,
-      env,
-      envForAgent: (agentId: string) => {
-        const scopedEnv: Record<string, string> = {};
-        for (const grant of resolvedGrants) {
-          if (grant.allowedAgentIds.includes(agentId)) {
-            scopedEnv[grant.key] = grant.value;
-          }
-        }
-        return scopedEnv;
-      },
-    };
+    return buildGrantResolution(resolvedGrants);
   }
 
-  clear(): void {
-    this.grants.clear();
+  /**
+   * Atomically validate and consume one or more ephemeral credential grants
+   * once the winning launch has passed preflight and is ready to start.
+   */
+  async consumeGrants(params: {
+    grantIds: string[];
+    organizationId: string;
+    userId: string;
+    callerAgentId: string;
+    candidateAgentIds: string[];
+  }): Promise<
+    | {
+        ok: true;
+        grants: EphemeralCredentialGrant[];
+        env: Record<string, string>;
+        envForAgent: (agentId: string) => Record<string, string>;
+        restore: () => Promise<void>;
+      }
+    | { ok: false; message: string }
+  > {
+    const uniqueGrantIds = [...new Set(params.grantIds)];
+    if (uniqueGrantIds.length === 0) {
+      return {
+        ok: true,
+        grants: [],
+        env: {},
+        envForAgent: () => ({}),
+        restore: async () => {},
+      };
+    }
+
+    return cacheManager.withLock(
+      callerLockKey(params.callerAgentId),
+      async (cache) => {
+        const resolvedGrants: EphemeralCredentialGrant[] = [];
+        for (const grantId of uniqueGrantIds) {
+          const grant = await cache.get<EphemeralCredentialGrant>(
+            ephemeralCredentialGrantCacheKey(grantId),
+          );
+          const validationError = validateGrant(grantId, grant, params);
+          if (validationError) {
+            return { ok: false, message: validationError };
+          }
+          if (grant) {
+            resolvedGrants.push(grant);
+          }
+        }
+
+        for (const grantId of uniqueGrantIds) {
+          await cache.delete(ephemeralCredentialGrantCacheKey(grantId));
+        }
+
+        const resolution = buildGrantResolution(resolvedGrants);
+        return {
+          ...resolution,
+          restore: async () => {
+            for (const grant of resolvedGrants) {
+              await cacheManager.set(
+                ephemeralCredentialGrantCacheKey(grant.id),
+                grant,
+                grant.ttlMs ??
+                  DEFAULT_EPHEMERAL_GRANT_TTL_SECONDS * TimeInMs.Second,
+              );
+            }
+          },
+        };
+      },
+    );
   }
 }
 

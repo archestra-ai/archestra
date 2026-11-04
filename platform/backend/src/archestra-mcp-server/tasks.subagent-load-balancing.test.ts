@@ -33,11 +33,14 @@ import {
 } from "@/services/agent-runtime/run-failure";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import { type Agent, type AgentRuntime, SelectAgentSchema } from "@/types";
 import { AgentConfigSnapshotSchema } from "@/types/agent-version";
 import { drainBackgroundWork } from "@/utils/background-work";
 import { type ArchestraContext, executeArchestraTool } from ".";
+
+setupTestCacheManager();
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
 useMswServer(
@@ -316,6 +319,19 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     expect(typeof grantId).toBe("string");
 
     const sendSpy = await mockDetachedTaskStart();
+
+    // A launch refused before a pod is started must NOT spend the grant.
+    const refusedStart = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      {
+        message: "Refused launch with invalid tier",
+        credential_grant_ids: [grantId],
+        limits: { tier: "NONEXISTENT_TIER" },
+      },
+      context,
+    );
+    expect(refusedStart.isError).toBe(true);
+    expect(sendSpy).not.toHaveBeenCalled();
 
     const firstStart = await executeArchestraTool(
       TOOL_START_AGENT_RUN_FULL_NAME,

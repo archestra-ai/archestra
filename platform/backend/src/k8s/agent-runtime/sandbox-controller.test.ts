@@ -1,6 +1,8 @@
 import { KubeConfig } from "@kubernetes/client-node";
 import { HttpResponse, http } from "msw";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import config from "@/config";
+import { classifyAgentRunFailure } from "@/services/agent-runtime/run-failure";
 import { useMswServer } from "@/test/msw";
 import manager from "./manager";
 import { agentSandboxApi } from "./sandbox-api";
@@ -207,6 +209,108 @@ test("launch on retry waits for a Sandbox whose first read has no deletionTimest
   expect(sandboxReads).toBe(3);
   expect(cacheControlHeaders).toEqual(["no-cache", "no-cache", "no-cache"]);
   expect(createdSandboxName).toBe("workspace");
+});
+
+test("clears the terminating-sandbox marker when deletion wait times out so later launches decide from a fresh read", async () => {
+  serveController({ installed: true });
+  await expect(manager.assertSandboxApiInstalled()).resolves.toBeUndefined();
+
+  const originalTimeout = config.agentRuntime.podStartTimeoutSeconds;
+  config.agentRuntime.podStartTimeoutSeconds = 0;
+
+  let sandboxReads = 0;
+  let sandboxCreateCount = 0;
+  const cacheControlHeaders: Array<string | null> = [];
+
+  try {
+    server.use(
+      http.get(
+        `${origin}/apis/rbac.authorization.k8s.io/v1/namespaces/test/roles/archestra-agent-runtime`,
+        () => HttpResponse.json({ code: 404 }, { status: 404 }),
+      ),
+      http.delete(
+        `${origin}/apis/agents.x-k8s.io/v1beta1/namespaces/test/sandboxes/workspace`,
+        () => HttpResponse.json({}, { status: 200 }),
+      ),
+      http.delete(
+        ({ request }) => request.url.startsWith(origin),
+        () => HttpResponse.json({ code: 404 }, { status: 404 }),
+      ),
+      http.get(
+        `${origin}/apis/agents.x-k8s.io/v1beta1/namespaces/test/sandboxes/workspace`,
+        ({ request }) => {
+          sandboxReads += 1;
+          cacheControlHeaders.push(request.headers.get("cache-control"));
+          return HttpResponse.json({
+            apiVersion: "agents.x-k8s.io/v1beta1",
+            kind: "Sandbox",
+            metadata: {
+              name: "workspace",
+              namespace: "test",
+            },
+            spec: {},
+          });
+        },
+      ),
+      http.get(
+        `${origin}/apis/extensions.agents.x-k8s.io/v1beta1/namespaces/test/sandboxclaims/workspace`,
+        () => HttpResponse.json({ code: 404 }, { status: 404 }),
+      ),
+      http.post(
+        `${origin}/apis/agents.x-k8s.io/v1beta1/namespaces/test/sandboxes`,
+        async ({ request }) => {
+          sandboxCreateCount += 1;
+          const body = await request.json();
+          return HttpResponse.json(body, { status: 201 });
+        },
+      ),
+    );
+
+    await manager.deleteWorkspace({
+      id: "run-1",
+      runtimeScope: "test",
+      workloadName: "workspace",
+    });
+
+    const launchSpec = {
+      taskId: "task-timeout",
+      agentRuntimeId: "agent-1",
+      frozenName: "workspace",
+      runtimeScope: "test",
+      image: "runtime:v1",
+      command: ["echo", "hello"],
+      privileged: false,
+      resources: { cpuRequest: "500m", memoryRequest: "1Gi" },
+      tier: null,
+      warmTiers: [],
+      env: {},
+      secretEnv: {},
+      inputFileCount: 0,
+      activeDeadlineSeconds: 600,
+      nodeSelector: {},
+      imagePullSecrets: [],
+      effectiveNetworkPolicy: { source: "built_in" as const, policy: null },
+    };
+
+    let timedOutError: unknown;
+    try {
+      await manager.launch(launchSpec);
+    } catch (error) {
+      timedOutError = error;
+    }
+    expect(classifyAgentRunFailure(timedOutError)?.code).toBe(
+      "launch.capacity_timeout",
+    );
+
+    // Next fresh launch (not marked replacePriorAttempt) decides from a fresh read
+    // rather than staying trapped in terminatingSandboxes.
+    await expect(manager.launch(launchSpec)).resolves.toBeUndefined();
+    expect(sandboxReads).toBe(2);
+    expect(cacheControlHeaders).toEqual(["no-cache", "no-cache"]);
+    expect(sandboxCreateCount).toBe(0);
+  } finally {
+    config.agentRuntime.podStartTimeoutSeconds = originalTimeout;
+  }
 });
 
 // === Internal helpers ===

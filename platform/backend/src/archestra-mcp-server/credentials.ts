@@ -480,7 +480,7 @@ const registry = defineArchestraTools([
             });
           }
           const { grantId, expiresInSeconds } =
-            ephemeralCredentialGrantManager.createGrant({
+            await ephemeralCredentialGrantManager.createGrant({
               organizationId: actor.organizationId,
               userId: actor.id,
               callerAgentId: context.agent.id,

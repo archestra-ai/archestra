@@ -208,7 +208,7 @@ class AgentRuntimeManager {
         name: names.sandbox,
         namespace: withOwner.namespace,
         includeDeletingClaim: true,
-        bypassCache: awaitingPriorDeletion,
+        bypassCache: true,
       }).catch((error) => {
         if (isK8sNotFoundError(error)) return null;
         throw error;
@@ -228,6 +228,7 @@ class AgentRuntimeManager {
         return;
       }
       if (Date.now() >= startupDeadline) {
+        this.terminatingSandboxes.delete(sandboxKey);
         throw tagAgentRunFailure(
           new Error(
             `Timed out waiting for previous Agent Sandbox ${names.sandbox} deletion to finish`,

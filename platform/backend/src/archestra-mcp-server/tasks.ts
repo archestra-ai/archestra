@@ -250,22 +250,22 @@ export async function startDelegatedTask(params: {
         if (outcome) await recordRuntimeLaunch(params.context, outcome);
         return result;
       }
-      const consumed = ephemeralCredentialGrantManager.consumeGrants({
+      const resolved = await ephemeralCredentialGrantManager.resolveGrants({
         grantIds: params.credentialGrantIds,
         organizationId: actor.organizationId,
         userId: actor.id,
         callerAgentId: params.context.agent.id,
         candidateAgentIds: [explicitAgentId],
       });
-      if (!consumed.ok) {
+      if (!resolved.ok) {
         const { result, outcome } = failedLaunch(
           "refused",
-          errorResult(consumed.message),
+          errorResult(resolved.message),
         );
         if (outcome) await recordRuntimeLaunch(params.context, outcome);
         return result;
       }
-      ephemeralCredentials = consumed.envForAgent(explicitAgentId);
+      ephemeralCredentials = resolved.envForAgent(explicitAgentId);
     }
 
     const callerAgent = params.context.agent?.id
@@ -277,6 +277,7 @@ export async function startDelegatedTask(params: {
     const { result, outcome } = await launchDelegatedTask({
       ...params,
       agentId: explicitAgentId,
+      credentialGrantIds: params.credentialGrantIds,
       ephemeralCredentials,
       ...(retries > 0
         ? {
@@ -380,23 +381,23 @@ export async function startDelegatedTask(params: {
       if (outcome) await recordRuntimeLaunch(params.context, outcome);
       return result;
     }
-    const consumed = ephemeralCredentialGrantManager.consumeGrants({
+    const resolved = await ephemeralCredentialGrantManager.resolveGrants({
       grantIds: params.credentialGrantIds,
       organizationId: actor.organizationId,
       userId: actor.id,
       callerAgentId: callerAgent.id,
       candidateAgentIds: activeCandidates,
     });
-    if (!consumed.ok) {
+    if (!resolved.ok) {
       const { result, outcome } = failedLaunch(
         "refused",
-        errorResult(consumed.message),
+        errorResult(resolved.message),
       );
       if (outcome) await recordRuntimeLaunch(params.context, outcome);
       return result;
     }
     ephemeralCredentialsByAgentId = Object.fromEntries(
-      activeCandidates.map((id) => [id, consumed.envForAgent(id)]),
+      activeCandidates.map((id) => [id, resolved.envForAgent(id)]),
     );
   }
 
@@ -412,6 +413,7 @@ export async function startDelegatedTask(params: {
     const attempt = await launchDelegatedTask({
       ...params,
       agentId: candidateId,
+      credentialGrantIds: params.credentialGrantIds,
       ephemeralCredentials: ephemeralCredentialsByAgentId?.[candidateId],
       subagentExecutionPolicy: {
         retries,
@@ -448,6 +450,7 @@ async function launchDelegatedTask(params: {
   message: string;
   attachments?: A2AAttachment[];
   limits?: AgentRunLimitsRequest;
+  credentialGrantIds?: string[];
   ephemeralCredentials?: Record<string, string>;
   subagentExecutionPolicy?: SubagentExecutionPolicy;
   context: ArchestraContext;
@@ -464,6 +467,7 @@ async function launchDelegatedTask(params: {
       ),
     );
   }
+  let restoreConsumedGrants: (() => Promise<void>) | undefined;
   try {
     const actor = requireActor(context);
     const agent = await AgentModel.findById(agentId);
@@ -575,6 +579,23 @@ async function launchDelegatedTask(params: {
       );
     }
 
+    if (params.credentialGrantIds && params.credentialGrantIds.length > 0) {
+      const consumed = await ephemeralCredentialGrantManager.consumeGrants({
+        grantIds: params.credentialGrantIds,
+        organizationId: actor.organizationId,
+        userId: actor.id,
+        callerAgentId: context.agent.id,
+        candidateAgentIds: [
+          agent.id,
+          ...(params.subagentExecutionPolicy?.fallbackAgentIds ?? []),
+        ],
+      });
+      if (!consumed.ok) {
+        return failedLaunch("refused", errorResult(consumed.message));
+      }
+      restoreConsumedGrants = consumed.restore;
+    }
+
     const completionTarget =
       context.chatOpsBindingId && context.chatOpsThreadId
         ? {
@@ -644,6 +665,7 @@ async function launchDelegatedTask(params: {
       },
     };
   } catch (error) {
+    await restoreConsumedGrants?.();
     const needed = missingCredentialsFrom(error);
     if (needed) {
       return credentialsNeededLaunch(needed.agentId, needed.missing);

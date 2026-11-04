@@ -3,12 +3,20 @@ import {
   redactCatalogToolArguments,
   TOOL_TRANSFER_CREDENTIAL_FULL_NAME,
 } from "@archestra/shared";
+import { cacheManager } from "@/cache-manager";
 import { AgentExcludedSubagentModel, AgentModel } from "@/models";
 import { preflightAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
+import {
+  EphemeralCredentialGrantManager,
+  ephemeralCredentialGrantCacheKey,
+} from "@/services/agent-runtime/ephemeral-credential-grants";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import { beforeEach, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import type { Agent, AgentRuntime } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
+
+setupTestCacheManager();
 
 const SECRET_VALUE = "sk-transfer-PLAINTEXT-must-not-escape";
 
@@ -446,12 +454,45 @@ test("mints a one-time ephemeral credential_grant_id without writing to the data
   const storedB = await AgentModel.findById(targetB.id);
   expect(storedA?.runtime?.credentials ?? []).toEqual([]);
   expect(storedB?.runtime?.credentials ?? []).toEqual([]);
+  const runtimeA = storedA ? resolveAgentRuntime(storedA) : null;
+  if (!runtimeA) throw new Error("Expected runtimeA");
   const preflightA = await preflightAgentRuntimeCredentials({
-    runtime: resolveAgentRuntime(storedA!)!,
+    runtime: runtimeA,
     organizationId,
     userId: actorId,
   });
   expect(preflightA.configured).not.toContain("GH_TOKEN");
+
+  // Stored in the shared cache so a separate replica instance can resolve and consume it.
+  const grantId = structured.credential_grant_id ?? "";
+  expect(grantId).not.toBe("");
+  const cached = await cacheManager.get(
+    ephemeralCredentialGrantCacheKey(grantId),
+  );
+  expect(cached).toMatchObject({
+    id: grantId,
+    organizationId,
+    userId: actorId,
+    callerAgentId: context.agent.id,
+    key: "GH_TOKEN",
+  });
+  const secondReplicaManager = new EphemeralCredentialGrantManager();
+  const consumed = await secondReplicaManager.consumeGrants({
+    grantIds: [grantId],
+    organizationId,
+    userId: actorId,
+    callerAgentId: context.agent.id,
+    candidateAgentIds: [targetA.id],
+  });
+  expect(consumed.ok).toBe(true);
+  if (consumed.ok) {
+    expect(consumed.envForAgent(targetA.id)).toEqual({
+      GH_TOKEN: SECRET_VALUE,
+    });
+  }
+  await expect(
+    cacheManager.get(ephemeralCredentialGrantCacheKey(grantId)),
+  ).resolves.toBeUndefined();
 });
 
 test("lists all target subagent names and setup URLs when agent_id is omitted", async ({

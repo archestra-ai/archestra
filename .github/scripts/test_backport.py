@@ -264,7 +264,7 @@ assert.equal(allowed('pull_request', {label:'not-backport release/1.3'}), false)
             "platform-rust-checks",
             "openappa-native-tests",
             "ai-labs-rust-checks",
-            "backend-test-inputs",
+            "changed-inputs",
             "backend-unit-tests",
             "backend-unit-tests-gate",
             "frontend-integration-tests",
@@ -279,7 +279,7 @@ assert.equal(allowed('pull_request', {label:'not-backport release/1.3'}), false)
             condition = next((line.split("if: ", 1)[1] for line in lines[start:end]
                               if line.startswith("    if: ")), None)
             self.assertIsNotNone(condition, job)
-            conditions[job] = condition
+            conditions[job] = re.sub(r"^\$\{\{ (.*) \}\}$", r"\1", condition)
         program = r"""
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
@@ -295,14 +295,27 @@ for (const [job, condition] of Object.entries(conditions)) {
     ['openappa-archestra-updater[bot]', 'other/change', 'archestra-ai/archestra', false],
   ]) {
     const context = {github: {event_name: 'pull_request', repository: 'archestra-ai/archestra', event: {pull_request: {user: {login}, head: {ref, repo: {full_name: headRepo}}}}},
-      startsWith: (value, prefix) => value.startsWith(prefix), always: () => true};
+      startsWith: (value, prefix) => value.startsWith(prefix), always: () => true, cancelled: () => false};
     assert.equal(vm.runInNewContext(condition, context), expected, job);
   }
-  // Backend shards additionally wait on the input check reporting a backend
-  // change. Job ids contain hyphens, so rewrite needs.<id> as an index for JS.
-  const needs = {'backend-test-inputs': {outputs: {run: 'true'}}};
+  // Queue jobs additionally wait on the input check reporting a change for
+  // their family. Job ids contain hyphens, so rewrite needs.<id> as an index.
   const mergeGroupCondition = condition.replace(/needs\.([\w-]+)/g, "needs['$1']");
-  assert.equal(vm.runInNewContext(mergeGroupCondition, {github: {event_name:'merge_group'}, needs, always: () => true}), true, job);
+  const evaluate = (inputs) => vm.runInNewContext(mergeGroupCondition, {
+    github: {event_name: 'merge_group'}, always: () => true, cancelled: () => false,
+    needs: {'changed-inputs': inputs, 'dagger-sdk-integration': {result: 'success'}, 'supply-chain-policy': {result: 'success'}},
+  });
+  const changed = {result: 'success', outputs: {backend: 'true', frontend: 'true', platform_rust: 'true', ai_labs: 'true'}};
+  const unchanged = {result: 'success', outputs: {backend: 'false', frontend: 'false', platform_rust: 'false', ai_labs: 'false'}};
+  assert.equal(evaluate(changed), true, job);
+  if (mergeGroupCondition.includes("needs['changed-inputs']")) {
+    assert.equal(evaluate(unchanged), false, `${job} skips without its inputs`);
+    for (const result of ['failure', 'cancelled', 'skipped']) {
+      // Shards skip on a failed classification; their gate turns it red.
+      const expected = !['backend-test-dependencies', 'backend-unit-tests'].includes(job);
+      assert.equal(evaluate({result, outputs: {}}), expected, `${job} with ${result} classification`);
+    }
+  }
 }
 """
         subprocess.run(["node", "-e", program, json.dumps(conditions)], check=True)

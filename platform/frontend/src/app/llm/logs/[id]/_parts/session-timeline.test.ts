@@ -93,6 +93,20 @@ describe("buildTimeline", () => {
     ]);
   });
 
+  it("labels sub-second ticks in milliseconds", () => {
+    const timeline = buildTimeline({
+      requests: [row({ id: "a", createdAt: at(500), durationMs: 500 })],
+    });
+
+    expect(timeline?.ticks.map((tick) => tick.label)).toEqual([
+      "0s",
+      "+125ms",
+      "+250ms",
+      "+375ms",
+      "+500ms",
+    ]);
+  });
+
   it("interleaves each tool call after the request that issued it", () => {
     const timeline = buildTimeline({
       requests: [

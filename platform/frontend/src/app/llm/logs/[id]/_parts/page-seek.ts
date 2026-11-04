@@ -41,14 +41,18 @@ export function usePageSeek({
   const mine = seek !== null && seek.id === id ? seek : null;
 
   useEffect(() => {
-    if (id === null || !ready || here === undefined) return;
+    if (id === null || !ready) return;
     if (mine?.endedAt != null) return;
-    // Waiting for the move to land.
-    if (mine && mine.pending !== pageIndex) return;
-    if (here === 0) {
-      setSeek({ id, visited: [], pending: null, endedAt: pageIndex });
+    if (mine && mine.pending !== pageIndex) {
+      // Still on the page the move left: waiting for it to land.
+      if (pageIndex === mine.visited[mine.visited.length - 1]) return;
+      // The viewer went to another page mid-walk: where they went is the
+      // answer, so the walk ends there.
+      setSeek({ ...mine, pending: null, endedAt: pageIndex });
       return;
     }
+    // The counted guess comes first: it needs nothing from this page, which
+    // may be empty or past the end.
     if (!mine) {
       if (guess === undefined) return;
       const first = Math.min(lastPageIndex, Math.max(0, guess));
@@ -57,6 +61,11 @@ export function usePageSeek({
         onLocatePage(first);
         return;
       }
+    }
+    if (here === undefined) return;
+    if (here === 0) {
+      setSeek({ id, visited: [], pending: null, endedAt: pageIndex });
+      return;
     }
     const visited = mine?.visited ?? [];
     const next = pageIndex + here;
@@ -82,7 +91,7 @@ export function usePageSeek({
 
 type Seek = {
   id: string;
-  /** Pages already landed on, oldest first. */
+  /** Pages already landed on, oldest first; the last is the one a move left. */
   visited: number[];
   /** The page a move is on its way to. */
   pending: number | null;

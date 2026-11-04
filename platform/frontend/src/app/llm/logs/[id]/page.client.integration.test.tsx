@@ -502,6 +502,63 @@ it("finds a linked tool call that a long request's start puts on the next page",
   ).toHaveAttribute("aria-current", "true");
 });
 
+it("finds a linked tool call from a page past the session's end", async () => {
+  serveLinkedCall({ requests: 60, callAt: "2026-01-01T00:00:30.000Z" });
+  let search = new URLSearchParams("toolCall=linked-call&page=3&pageSize=50");
+  vi.mocked(useSearchParams).mockImplementation(
+    () => search as ReturnType<typeof useSearchParams>,
+  );
+  push.mockImplementation((url: string) => {
+    search = new URLSearchParams(url.split("?")[1]);
+  });
+
+  const { rerender } = await renderPage();
+  await waitFor(() =>
+    expect(push).toHaveBeenLastCalledWith(
+      "/llm/logs/test-session?toolCall=linked-call&page=1&pageSize=50",
+      { scroll: false },
+    ),
+  );
+  await rerender();
+
+  const requests = await screen.findByRole("list", { name: "Requests" });
+  expect(
+    await within(requests).findByRole("button", {
+      name: /^Tool call search on github,/,
+    }),
+  ).toHaveAttribute("aria-current", "true");
+});
+
+it("stops looking for a linked tool call when the viewer pages elsewhere", async () => {
+  serveLinkedCall({ requests: 120, callAt: "2026-01-01T00:00:30.000Z" });
+  let search = new URLSearchParams("toolCall=linked-call&page=3&pageSize=50");
+  vi.mocked(useSearchParams).mockImplementation(
+    () => search as ReturnType<typeof useSearchParams>,
+  );
+
+  const { rerender } = await renderPage();
+  // The walk heads for page one; the viewer picks page two before it lands.
+  await waitFor(() =>
+    expect(push).toHaveBeenCalledWith(
+      "/llm/logs/test-session?toolCall=linked-call&page=1&pageSize=50",
+      { scroll: false },
+    ),
+  );
+  search = new URLSearchParams("toolCall=linked-call&page=2&pageSize=50");
+  await rerender();
+
+  expect(
+    await screen.findByText(
+      "The linked tool call isn't among this page's records.",
+    ),
+  ).toBeVisible();
+  expect(
+    within(screen.getByRole("list", { name: "Requests" })).getByRole("button", {
+      name: /^Test Agent, Model 50,/,
+    }),
+  ).toBeVisible();
+});
+
 it("keeps a page's tool-call window closed when the next page's boundary fails to load", async () => {
   const rows = Array.from({ length: 60 }, (_, i) =>
     summary({
@@ -1269,4 +1326,51 @@ function serveOffPageCause() {
   );
   vi.mocked(useFeature).mockImplementation(((flag: string) =>
     flag === "openappaEnabled" ? true : undefined) as typeof useFeature);
+}
+
+/** A session of `requests` half-second requests, one a second, and a linked tool call. */
+function serveLinkedCall({
+  requests,
+  callAt,
+}: {
+  requests: number;
+  callAt: string;
+}) {
+  serveSession({
+    rows: Array.from({ length: requests }, (_, i) =>
+      summary({
+        id: `request-${String(i).padStart(3, "0")}`,
+        model: `model-${i}`,
+        createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+        durationMs: 500,
+      }),
+    ),
+  });
+  const call = {
+    id: "linked-call",
+    agentId: "agent-1",
+    ownerType: "agent",
+    mcpServerName: "github",
+    method: "tools/call",
+    sessionId: "test-session",
+    createdAt: callAt,
+    toolCall: { id: "c1", name: "github__search", arguments: {} },
+    toolResult: { isError: false, content: [] },
+  };
+  server.use(
+    http.get(`${origin}/api/mcp-tool-calls/linked-call`, () =>
+      HttpResponse.json(call),
+    ),
+    http.get(`${origin}/api/mcp-tool-calls`, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      const start = params.get("startDate") ?? "";
+      const end = params.get("endDate");
+      const inWindow =
+        call.createdAt >= start && (!end || call.createdAt <= end);
+      return HttpResponse.json({
+        data: inWindow ? [call] : [],
+        pagination: { hasNext: false },
+      });
+    }),
+  );
 }

@@ -200,7 +200,7 @@ export function buildTimeline({
       : origin;
   const offsetLabel = (t: number) => {
     const ms = t - elapsedFrom;
-    return ms < 1000 ? "0s" : `+${formatElapsed(ms)}`;
+    return Math.round(ms) <= 0 ? "0s" : `+${formatElapsed(ms)}`;
   };
   const ticks = single
     ? [{ x: 0, label: offsetLabel(origin) }]

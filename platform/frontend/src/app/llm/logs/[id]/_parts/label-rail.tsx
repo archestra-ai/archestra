@@ -106,7 +106,7 @@ export function LabelLegend({
             agent's output may reach.
           </p>
           <p className="mt-1 opacity-70">
-            Every session starts Trusted and Public. A shield or lock on the
+            Sessions normally start Trusted and Public. A shield or lock on the
             strip marks where the label changed. Hover it to see why.
           </p>
         </TooltipContent>

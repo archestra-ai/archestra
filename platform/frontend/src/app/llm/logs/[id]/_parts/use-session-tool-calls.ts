@@ -110,13 +110,20 @@ export function useSessionToolCalls({
         ? undefined
         : Math.floor(Math.max(0, olderCount - 1) / pageSize),
     here:
-      targetAt === null || windowStart === null
+      targetAt === null
         ? undefined
-        : targetAt < windowStart
-          ? -1
-          : windowEnd !== null && targetAt > windowEnd
-            ? 1
-            : 0,
+        : windowStart === null
+          ? // An empty page lies past the session's end.
+            requestsReady && requests.length === 0
+            ? pageIndex > 0
+              ? -1
+              : 0
+            : undefined
+          : targetAt < windowStart
+            ? -1
+            : windowEnd !== null && targetAt > windowEnd
+              ? 1
+              : 0,
     onLocatePage,
   });
 

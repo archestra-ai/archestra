@@ -71,9 +71,12 @@ class AgentImagePrefetcher {
       ].sort();
       const names = new Set<string>();
       // One DaemonSet per image: an unavailable image must not block its peers.
-      for (const image of new Set(
-        Object.values(config.agentRuntime.catalogImages),
-      )) {
+      // Disabled, nothing is desired, so the loop below removes the
+      // DaemonSets an earlier run created.
+      const images = config.agentRuntime.imagePrefetchEnabled
+        ? new Set(Object.values(config.agentRuntime.catalogImages))
+        : new Set<string>();
+      for (const image of images) {
         const name = `${release.slice(0, 30).replace(/-$/, "")}-agent-image-${hash(`${release}:${image}`).slice(0, 12)}`;
         names.add(name);
         const desired = buildPrepullDaemonSet({

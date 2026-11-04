@@ -1029,6 +1029,9 @@ Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox con
 - **`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS`** - Maximum number of warm pools. Agents outside them start containers on demand.
   - Default: `4`
 
+- **`ARCHESTRA_AGENT_RUNTIME_IMAGE_PREFETCH_ENABLED`** - Pulls every catalog Agent image onto each runtime node at startup and after each upgrade, so the first run of an Agent does not wait for its image. Turn it off when node disk or registry bandwidth is tight; each run then pulls only its own image.
+  - Default: `true`
+
 - **`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`** - Schedules runtime pods onto a dedicated node pool.
   - Default: unset (scheduled like any other pod)
   - Values: comma-separated `key=value` pairs, for example `archestra-agent-runtime=true`. Each pair also adds a matching `NoSchedule` toleration.

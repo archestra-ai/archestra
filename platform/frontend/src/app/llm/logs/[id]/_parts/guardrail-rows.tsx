@@ -1,16 +1,6 @@
 "use client";
 
-import {
-  ChevronLeft,
-  ChevronRight,
-  Lock,
-  RotateCcw,
-  Send,
-  Shield,
-  ShieldAlert,
-  ShieldX,
-} from "lucide-react";
-import { type MouseEvent, type PointerEvent, useState } from "react";
+import { ChevronRight, Shield, ShieldAlert, ShieldX } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -31,6 +21,7 @@ import {
   trustTone,
 } from "./guardrails";
 import { DecisionIcon, DecisionTerm, RoleTerm } from "./guardrails-context";
+import { LabelChangeNote, LabelLegend, LabelRail } from "./label-rail";
 import type { TimelineSpan } from "./session-timeline";
 import { GRIDS, type Layout, WIDE_ONLY } from "./waterfall-grid";
 import { YellStepper } from "./yell-markers";
@@ -259,199 +250,14 @@ export function GuardrailsBar({
           onSelect={onSelectYell}
         />
       ) : null}
-      <GutterKey />
-      {label ? (
-        <span
-          className="hidden min-w-0 items-center gap-1.5 xl:ml-auto xl:inline-flex"
-          title={`Label at ${labelName}`}
-        >
-          <span>Here</span>
-          <GutterSwatch label={label} />
-          <span className={cn("font-medium", trustTone(label.trust).text)}>
-            {trustTone(label.trust).label}
-          </span>
-          <span aria-hidden="true" className="text-muted-foreground/50">
-            ·
-          </span>
-          <span
-            className={cn("font-medium", audienceTone(label.audience).text)}
-          >
-            {audienceTone(label.audience).label}
-          </span>
-        </span>
-      ) : null}
-      {changes.length > 0 ? (
-        <ChangeStepper
-          changes={changes}
-          active={activeChange}
-          onActivate={onActivateChange}
-        />
-      ) : null}
-    </div>
-  );
-}
-
-/** "‹ 2/3 changes ›": steps through the label changes, selecting each cause. */
-function ChangeStepper({
-  changes,
-  active,
-  onActivate,
-}: {
-  changes: LabelChange[];
-  active: number;
-  onActivate: (change: LabelChange) => void;
-}) {
-  const step = (delta: number) => {
-    const from = active < 0 ? (delta > 0 ? -1 : 0) : active;
-    onActivate(changes[(from + delta + changes.length) % changes.length]);
-  };
-  const arrow =
-    "flex w-7 shrink-0 cursor-pointer items-center justify-center outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset lg:w-6";
-  return (
-    <span className="ml-auto inline-flex h-7 shrink-0 items-stretch overflow-hidden rounded-md border bg-card text-foreground/85 xl:ml-0 lg:h-6">
-      <UnstyledButton
-        aria-label="Previous label change"
-        onClick={() => step(-1)}
-        className={arrow}
-      >
-        <ChevronLeft className="size-3.5" aria-hidden="true" />
-      </UnstyledButton>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <UnstyledButton
-            onClick={() => onActivate(changes[Math.max(0, active)])}
-            aria-label={`${changes.length} label ${changes.length === 1 ? "change" : "changes"}${active >= 0 ? `, ${active + 1} selected: ${changeWords(changes[active])}` : ""}. Select its cause.`}
-            className="inline-flex cursor-pointer items-center gap-1 border-x px-1.5 font-medium whitespace-nowrap tabular-nums outline-none transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset"
-          >
-            <span
-              aria-hidden="true"
-              className={cn(
-                "size-1.5 shrink-0 rounded-full",
-                active >= 0 ? "bg-primary" : "bg-foreground/40",
-              )}
-            />
-            <span>
-              {active >= 0 ? (
-                <>
-                  {active + 1}
-                  <span className="text-muted-foreground">
-                    /{changes.length}
-                  </span>
-                </>
-              ) : (
-                changes.length
-              )}{" "}
-              <span className="max-lg:hidden">label </span>
-              <span className="max-sm:hidden">
-                {changes.length === 1 ? "change" : "changes"}
-              </span>
-            </span>
-          </UnstyledButton>
-        </TooltipTrigger>
-        <TooltipContent side="bottom" align="end" className="max-w-xs">
-          <ol className="space-y-0.5">
-            {changes.map((change, index) => (
-              <li
-                key={change.key}
-                className={cn(index === active ? "font-medium" : "opacity-80")}
-              >
-                {index + 1}. {changeWords(change)}{" "}
-                <span className="opacity-70">· {causeShort(change)}</span>
-              </li>
-            ))}
-          </ol>
-          <p className="mt-1 opacity-70">
-            Each is a dot in the left gutter. Step to select what caused it.
-          </p>
-        </TooltipContent>
-      </Tooltip>
-      <UnstyledButton
-        aria-label="Next label change"
-        onClick={() => step(1)}
-        className={arrow}
-      >
-        <ChevronRight className="size-3.5" aria-hidden="true" />
-      </UnstyledButton>
-    </span>
-  );
-}
-
-/** The gutter's key, in three words; the tooltip says the rest. */
-function GutterKey() {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <ul
-          aria-label="Label gutter key: colour is trust, stripes mean the audience is narrowed"
-          className="flex h-6 cursor-default items-center gap-x-2.5 whitespace-nowrap max-sm:hidden max-md:order-last max-md:basis-full"
-        >
-          <li className="text-muted-foreground/80">Left rail:</li>
-          <li className="inline-flex items-center gap-1">
-            <GutterSwatch label={{ trust: "trusted", audience: "public" }} />
-            Trusted
-          </li>
-          <li className="inline-flex items-center gap-1">
-            <GutterSwatch label={{ trust: "suspicious", audience: "public" }} />
-            Suspicious
-          </li>
-          {/* Stripes lie over either trust colour, so the key shows them on
-              the one a narrowed session most often has. */}
-          <li className="inline-flex items-center gap-1">
-            <GutterSwatch
-              label={{ trust: "suspicious", audience: "internal" }}
-            />
-            Striped: narrowed audience
-          </li>
-          <li className="hidden items-center gap-1 xl:inline-flex">
-            <span
-              aria-hidden="true"
-              className="size-2 rounded-full bg-foreground/60 ring-2 ring-card"
-            />
-            Change
-          </li>
-        </ul>
-      </TooltipTrigger>
-      <TooltipContent side="bottom" className="max-w-xs">
-        The left gutter is the session label at each row. Its colour is trust;
-        stripes mean the audience is narrower than public (internal, a team, or
-        self). A dot marks where it changed: hover it for why.
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-function GutterSwatch({ label }: { label: LabelState | null }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="relative h-3.5 w-2 shrink-0 overflow-hidden rounded-[2px] bg-card ring-1 ring-border/60"
-    >
-      <span
-        className={cn(
-          "absolute inset-0",
-          label ? GUTTER_FILL[label.trust] : "bg-muted",
-        )}
+      <LabelLegend
+        label={label}
+        labelName={labelName}
+        changes={changes}
+        activeChange={activeChange}
+        onActivateChange={onActivateChange}
       />
-      {!label || label.audience !== "public" ? <Stripes /> : null}
-    </span>
-  );
-}
-
-/**
- * Narrowed-audience stripes. One 8px tile anchored so every row's stripes
- * meet the next row's: lg rows are 40/32px (multiples of 8), phone rows
- * 44/36px, so every other phone row shifts the tile by half.
- */
-function Stripes({ odd = false }: { odd?: boolean }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "absolute inset-0 [--stripe:rgb(15_23_42/0.42)] dark:[--stripe:rgb(241_245_249/0.5)]",
-        odd && "max-lg:[background-position:0_-4px]",
-      )}
-      style={STRIPE_STYLE}
-    />
+    </div>
   );
 }
 
@@ -464,172 +270,6 @@ export type GutterProps = {
   isChangeActive: (change: LabelChange) => boolean;
   onActivateChange: (change: LabelChange) => void;
 };
-
-/**
- * The row's 8px label gutter: filled by trust, striped when the audience is
- * narrowed, with a 16px hover/tap target for its tooltip and a dot on the
- * edge where the label changed.
- */
-export function LabelGutter({
-  label,
-  odd,
-  nodes,
-  isChangeActive,
-  onActivateChange,
-  onSelectRow,
-}: GutterProps & { onSelectRow: () => void }) {
-  const [open, setOpen] = useState(false);
-  const narrowed = label.audience !== "public";
-  return (
-    <>
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-2 bg-card"
-      >
-        <span className={cn("absolute inset-0", GUTTER_FILL[label.trust])} />
-        {narrowed ? <Stripes odd={odd} /> : null}
-      </span>
-      <Tooltip open={open} onOpenChange={setOpen}>
-        <TooltipTrigger asChild>
-          <span
-            aria-hidden="true"
-            // A tap selects the row and keeps the tooltip open: touch has no
-            // hover, and the trigger would close it on click and on leave.
-            onClick={(event: MouseEvent<HTMLSpanElement>) => {
-              event.preventDefault();
-              onSelectRow();
-              setOpen(true);
-            }}
-            onPointerLeave={(event: PointerEvent<HTMLSpanElement>) => {
-              if (event.pointerType === "touch") event.preventDefault();
-            }}
-            className="absolute inset-y-0 left-0 z-[2] w-4 cursor-pointer"
-          />
-        </TooltipTrigger>
-        <TooltipContent side="right" className="max-w-xs">
-          <p>
-            <span className="font-medium">Label</span>{" "}
-            {trustTone(label.trust).label} ·{" "}
-            {audienceTone(label.audience).label}
-          </p>
-          <p className="opacity-70">
-            {narrowed
-              ? `Striped: audience narrowed to ${audienceTone(label.audience).label.toLowerCase()}`
-              : "Plain: audience is public"}
-          </p>
-        </TooltipContent>
-      </Tooltip>
-      {nodes && nodes.top.length > 0 ? (
-        <ChangeNode
-          at="top"
-          changes={nodes.top}
-          active={nodes.top.some(isChangeActive)}
-          onActivate={onActivateChange}
-        />
-      ) : null}
-      {nodes && nodes.bottom.length > 0 ? (
-        <ChangeNode
-          at="bottom"
-          changes={nodes.bottom}
-          active={nodes.bottom.some(isChangeActive)}
-          onActivate={onActivateChange}
-        />
-      ) : null}
-    </>
-  );
-}
-
-/**
- * A label change: a dot on the gutter where the colour or stripes switch.
- * Solid in the new trust colour when trust moved (or the label reset),
- * hollow when only the audience did. Clicking selects the cause.
- */
-function ChangeNode({
-  at,
-  changes,
-  active,
-  onActivate,
-}: {
-  at: "top" | "bottom";
-  changes: LabelChange[];
-  active: boolean;
-  onActivate: (change: LabelChange) => void;
-}) {
-  const last = changes[changes.length - 1];
-  const solid = changes.some((c) => c.trustChanged);
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <UnstyledButton
-          tabIndex={-1}
-          onClick={() => onActivate(last)}
-          aria-label={`Label changed: ${changes.map(changeWords).join("; ")}. Select its cause.`}
-          className={cn(
-            "group/node absolute left-0 z-[4] flex size-4 cursor-pointer items-center outline-none",
-            at === "top"
-              ? "top-0 -translate-y-1/2"
-              : "bottom-0 translate-y-1/2",
-          )}
-        >
-          <span
-            aria-hidden="true"
-            className={cn(
-              "size-2.5 rounded-full ring-2 ring-card transition-transform group-hover/node:scale-125",
-              solid
-                ? trustTone(last.segment.trust).bar
-                : "bg-card shadow-[inset_0_0_0_2px_var(--color-foreground)] opacity-90",
-              active && "outline-2 outline-offset-1 outline-primary",
-            )}
-          />
-        </UnstyledButton>
-      </TooltipTrigger>
-      <TooltipContent side="right" className="max-w-xs">
-        {changes.map((change) => (
-          <div key={change.key}>
-            <p className="font-medium">{changeWords(change)}</p>
-            <p className="opacity-80">{change.cause.summary}</p>
-          </div>
-        ))}
-        <p className="mt-0.5 opacity-70">Click to select its cause</p>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-/** "· 🔒 Audience → Internal" on the cause row's detail line. */
-export function ChangeNote({ changes }: { changes: LabelChange[] }) {
-  return (
-    <span className="inline-flex min-w-0 shrink items-center gap-1 overflow-hidden whitespace-nowrap">
-      <span aria-hidden="true" className="shrink-0 text-muted-foreground/40">
-        ·
-      </span>
-      {changes.map((change) => {
-        const Icon = CHANGE_ICON[change.cause.kind];
-        return (
-          <span
-            key={change.key}
-            className="inline-flex shrink-0 items-center gap-1 text-muted-foreground"
-          >
-            <Icon className="size-3 shrink-0 opacity-80" aria-hidden="true" />
-            {change.parts.map((part, index) => (
-              <span key={part.field} className="inline-flex items-center gap-1">
-                {index > 0 ? <span className="opacity-50">,</span> : null}
-                {/* Phones keep the new value; the icon says which kind. */}
-                <span className="max-lg:hidden">{part.field}</span>
-                <span aria-hidden="true" className="opacity-60">
-                  →
-                </span>
-                <span className={cn("font-medium opacity-90", part.tone)}>
-                  {part.to}
-                </span>
-              </span>
-            ))}
-          </span>
-        );
-      })}
-    </span>
-  );
-}
 
 /** The row's label in words, and what it changed, for its accessible name. */
 export function gutterWords(
@@ -678,7 +318,7 @@ export function ConsultRow({
   const tools = layout === "tools";
   return (
     <li className="relative">
-      {gutter ? <LabelGutter {...gutter} onSelectRow={onSelect} /> : null}
+      {gutter ? <LabelRail {...gutter} onSelectRow={onSelect} /> : null}
       <UnstyledButton
         ref={buttonRef}
         tabIndex={selected ? 0 : -1}
@@ -768,7 +408,9 @@ export function ConsultRow({
                 </span>
                 <span className="tabular-nums">{duration}</span>
               </span>
-              {note && note.length > 0 ? <ChangeNote changes={note} /> : null}
+              {note && note.length > 0 ? (
+                <LabelChangeNote changes={note} />
+              ) : null}
             </span>
           </span>
           <ChevronRight
@@ -943,33 +585,7 @@ function changeWords(change: LabelChange): string {
   return change.parts.map((p) => `${p.field} → ${p.to}`).join(", ");
 }
 
-function causeShort(change: LabelChange): string {
-  const { cause } = change;
-  if (!cause.toolName) return "reset";
-  return cause.kind === "reset"
-    ? `reset by ${cause.toolName}`
-    : `after ${cause.toolName}`;
-}
-
 export const SELECTED_EDGE = "shadow-[inset_2px_0_0_var(--color-primary)]";
 /** The selection's edge just right of the 8px gutter, which covers 0–8px. */
 export const SELECTED_PAST_GUTTER =
   "shadow-[inset_10px_0_0_var(--color-primary)]";
-const GUTTER_FILL: Record<LabelState["trust"], string> = {
-  trusted: "bg-emerald-500/40 dark:bg-emerald-400/35",
-  suspicious: "bg-rose-500/70 dark:bg-rose-400/65",
-};
-const STRIPE_STYLE = {
-  backgroundImage:
-    "linear-gradient(135deg, var(--stripe) 25%, transparent 25%, transparent 50%, var(--stripe) 50%, var(--stripe) 75%, transparent 75%, transparent)",
-  backgroundSize: "8px 8px",
-};
-const CHANGE_ICON: Record<
-  NonNullable<LabelSegment["cause"]>["kind"],
-  typeof ShieldAlert
-> = {
-  admitted: ShieldAlert,
-  narrowed: Lock,
-  released: Send,
-  reset: RotateCcw,
-};

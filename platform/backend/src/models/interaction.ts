@@ -1055,6 +1055,9 @@ class InteractionModel {
           responseToolNames: preview.success
             ? (preview.data.responseToolNames ?? null)
             : null,
+          responseToolCalls: preview.success
+            ? (preview.data.responseToolCalls ?? null)
+            : null,
           responseTextPreview: preview.success
             ? (preview.data.responseTextPreview ?? null)
             : null,
@@ -4264,7 +4267,11 @@ function buildSessionPreview(
       ? extractClaudeCodeTitle(data.response)
       : null,
     ...(contentNotStored
-      ? { responseToolNames: [], responseTextPreview: null }
+      ? {
+          responseToolNames: [],
+          responseToolCalls: [],
+          responseTextPreview: null,
+        }
       : buildResponsePreview(data)),
   };
 }
@@ -4532,7 +4539,7 @@ function buildResponsePreview(
   data: InsertInteraction,
 ): Pick<
   InteractionSessionPreview,
-  "responseToolNames" | "responseTextPreview"
+  "responseToolNames" | "responseToolCalls" | "responseTextPreview"
 > {
   try {
     const interaction = new DynamicInteraction({
@@ -4543,13 +4550,18 @@ function buildResponsePreview(
     const responseToolNames = interaction.getToolNamesRequested();
     return {
       responseToolNames,
+      responseToolCalls: interaction.getToolCallsRequested(),
       responseTextPreview:
         responseToolNames.length > 0
           ? null
           : truncatePreview(interaction.getLastAssistantResponse()),
     };
   } catch {
-    return { responseToolNames: [], responseTextPreview: null };
+    return {
+      responseToolNames: [],
+      responseToolCalls: [],
+      responseTextPreview: null,
+    };
   }
 }
 

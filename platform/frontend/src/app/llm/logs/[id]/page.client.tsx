@@ -77,16 +77,16 @@ export default function SessionDetailPage({
   const targetToolCallId = searchParams.get(LLM_LOG_FOCUS_PARAM.toolCall);
   const targetRequestId = searchParams.get(LLM_LOG_FOCUS_PARAM.request);
 
-  // Past page one, the read also takes the previous page's newest row: it
-  // bounds this page's tool-call window, and a second read would delay them.
-  const hasNewerPage = offset > 0;
+  // Requests run oldest first, so page one is where the session began. Each
+  // read also takes the next page's oldest row: it bounds this page's
+  // tool-call window, and a second read would delay them.
   const { data: interactionsResponse, isLoading: interactionsLoading } =
     useInteractionSummaries({
       sessionId: sessionId,
-      limit: hasNewerPage ? pageSize + 1 : pageSize,
-      offset: hasNewerPage ? offset - 1 : offset,
+      limit: pageSize + 1,
+      offset,
       sortBy: "createdAt",
-      sortDirection: "desc",
+      sortDirection: "asc",
     });
 
   // Fetch session metadata (profile name, user names, etc.)
@@ -100,11 +100,26 @@ export default function SessionDetailPage({
     toastOnError: false,
   });
 
+  // Past page one, the session's first request: the axis counts from it.
+  const { data: firstPageHead } = useInteractionSummaries({
+    sessionId,
+    limit: 1,
+    offset: 0,
+    sortBy: "createdAt",
+    sortDirection: "asc",
+    enabled: offset > 0,
+  });
+  const firstRow = offset > 0 ? (firstPageHead?.data[0] ?? null) : null;
+  const sessionStart = firstRow
+    ? new Date(firstRow.createdAt).getTime() -
+      Math.max(0, firstRow.durationMs ?? 0)
+    : null;
+
   const pageRows = interactionsResponse?.data ?? [];
-  const newerRequest = hasNewerPage ? (pageRows[0] ?? null) : null;
+  const nextRequest = pageRows[pageSize] ?? null;
   const interactions = useMemo(
-    () => (hasNewerPage ? pageRows.slice(1) : pageRows),
-    [hasNewerPage, pageRows],
+    () => pageRows.slice(0, pageSize),
+    [pageRows, pageSize],
   );
   const paginationMeta = interactionsResponse?.pagination;
   const sessionData = sessionResponse?.data?.[0];
@@ -156,7 +171,7 @@ export default function SessionDetailPage({
   const sessionToolCalls = useSessionToolCalls({
     sessionId,
     requests: interactions,
-    newerRequest,
+    nextRequest,
     requestsReady: interactionsResponse !== undefined && !interactionsLoading,
     pageIndex,
     pageSize,
@@ -198,8 +213,8 @@ export default function SessionDetailPage({
   );
 
   const timeline = useMemo(
-    () => buildTimeline({ requests: interactions, toolCalls }),
-    [interactions, toolCalls],
+    () => buildTimeline({ requests: interactions, toolCalls, sessionStart }),
+    [interactions, toolCalls, sessionStart],
   );
   const spans = timeline?.spans ?? [];
   const [pickedKey, setPickedKey] = useState<string | null>(null);
@@ -287,15 +302,16 @@ export default function SessionDetailPage({
     setPickedKey(spans[next].key);
   };
 
-  // Requests are listed newest first, so the latest one lives on page one.
+  // Requests run oldest first, so the latest one lives on the last page.
+  const lastPageIndex = Math.max(0, Math.ceil(totalRequests / pageSize) - 1);
   const jumpToConversation =
     latestHasConversation && conversationRowId
       ? conversationOnPage
         ? () => setPickedKey(conversationKey)
-        : pageIndex > 0
+        : pageIndex !== lastPageIndex
           ? () => {
               setPickedKey(conversationKey);
-              goToPage(0);
+              goToPage(lastPageIndex);
             }
           : null
       : null;

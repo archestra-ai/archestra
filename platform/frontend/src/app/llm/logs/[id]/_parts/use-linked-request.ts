@@ -10,8 +10,8 @@ import { useSettledOnce } from "./use-session-tool-calls";
 
 /**
  * When the URL names one request (`?request=`), the page of the session it
- * lives on. Requests are listed newest first, so the requests created at or
- * after it — itself included — are its position plus one.
+ * lives on. Requests run oldest first, so the requests created at or before
+ * it — itself included — are its position plus one.
  */
 export function useLinkedRequest({
   sessionId,
@@ -62,21 +62,21 @@ export function useLinkedRequest({
     requestsReady &&
     !targetOnPage &&
     located?.id !== target.id;
-  const atOrAfterTarget = useInteractionSummaries({
+  const atOrBeforeTarget = useInteractionSummaries({
     sessionId,
-    startDate: target?.createdAt,
+    endDate: target?.createdAt,
     limit: 1,
     enabled: shouldLocate,
   });
-  const atOrAfterCount = shouldLocate
-    ? atOrAfterTarget.data?.pagination.total
+  const atOrBeforeCount = shouldLocate
+    ? atOrBeforeTarget.data?.pagination.total
     : undefined;
   useEffect(() => {
-    if (!target || atOrAfterCount === undefined) return;
-    const page = Math.floor(Math.max(0, atOrAfterCount - 1) / pageSize);
+    if (!target || atOrBeforeCount === undefined) return;
+    const page = Math.floor(Math.max(0, atOrBeforeCount - 1) / pageSize);
     setLocated({ id: target.id, page });
     if (page !== pageIndex) onLocatePage(page);
-  }, [target, atOrAfterCount, pageSize, pageIndex, onLocatePage]);
+  }, [target, atOrBeforeCount, pageSize, pageIndex, onLocatePage]);
 
   const targetResolved =
     targetRequestId === null ||

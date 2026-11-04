@@ -286337,6 +286337,26 @@
                               "type": "string"
                             }
                           },
+                          "responseToolCalls": {
+                            "nullable": true,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
                           "responseTextPreview": {
                             "nullable": true,
                             "type": "string"

@@ -37,20 +37,19 @@ import { formatElapsed, formatLatency } from "@/lib/utils/format-duration";
 import { cn } from "@/lib/utils/tailwind";
 import {
   buildEntries,
-  ChangeNote,
   ConsultRow,
   type Entry,
   GuardrailsBar,
   type GutterProps,
   gutterWords,
   type LabelChange,
-  LabelGutter,
   pageChanges,
   pageConsults,
   SELECTED_EDGE,
   SELECTED_PAST_GUTTER,
 } from "./guardrail-rows";
 import type { GuardrailsData, TraceYell } from "./guardrails";
+import { LabelChangeNote, LabelRail } from "./label-rail";
 import {
   type InteractionSummary,
   type RequestSpan,
@@ -333,13 +332,20 @@ export function RequestWaterfall({
     moveTo(Math.min(steppable.length - 1, Math.max(0, targets[event.key])));
   };
 
-  // Keep tick labels clear of the idle-break pills in the axis.
-  const ticks = (timeline?.ticks ?? []).filter(
-    (tick) =>
-      !(timeline?.breaks ?? []).some(
-        (b) => Math.abs(tick.x - (b.x + b.w / 2)) < 0.075,
-      ),
-  );
+  // Keep tick labels clear of the idle-break pills in the axis. The first
+  // and last labels hang off one side of their tick, the rest are centred.
+  const ticks = (timeline?.ticks ?? []).filter((tick) => {
+    const [from, to] =
+      tick.x === 0
+        ? [0, TICK_LABEL_SHARE]
+        : tick.x === 1
+          ? [1 - TICK_LABEL_SHARE, 1]
+          : [tick.x - TICK_LABEL_SHARE / 2, tick.x + TICK_LABEL_SHARE / 2];
+    return !(timeline?.breaks ?? []).some((b) => {
+      const pill = b.x + b.w / 2;
+      return pill > from - IDLE_PILL_SHARE && pill < to + IDLE_PILL_SHARE;
+    });
+  });
 
   return (
     <div>
@@ -518,7 +524,10 @@ export function RequestWaterfall({
                     <span
                       key={`fold-${b.x}`}
                       className="absolute inset-y-0 border-x border-dashed border-border bg-[repeating-linear-gradient(135deg,transparent_0_4px,var(--color-border)_4px_5px)] opacity-60"
-                      style={{ left: `${b.x * 100}%`, width: `${b.w * 100}%` }}
+                      style={{
+                        left: `${b.x * 100}%`,
+                        width: `${b.w * 100}%`,
+                      }}
                     />
                   ))}
                   {edges ? (
@@ -670,6 +679,10 @@ export function McpCallChip({ method }: { method: string }) {
 
 /** The sticky column header, which a row scrolled to the top must clear. */
 const COLUMN_HEADER_PX = 32;
+/** A tick label's width, as a share of the track (about 60px of 600). */
+const TICK_LABEL_SHARE = 0.1;
+/** Half an idle pill ("2m 19s idle"), as a share of the track. */
+const IDLE_PILL_SHARE = 0.05;
 
 function scrollWithin(scroller: HTMLElement, row: HTMLElement) {
   const box = scroller.getBoundingClientRect();
@@ -877,7 +890,7 @@ function RowShell({
           onSelectRow={onSelect}
         />
       ) : null}
-      {gutter ? <LabelGutter {...gutter} onSelectRow={onSelect} /> : null}
+      {gutter ? <LabelRail {...gutter} onSelectRow={onSelect} /> : null}
       <UnstyledButton
         ref={buttonRef}
         tabIndex={selected ? 0 : -1}
@@ -941,7 +954,9 @@ function RowShell({
               <span className="shrink-0 lg:hidden">
                 {tools ? time : (latency?.text ?? "—")}
               </span>
-              {note && note.length > 0 ? <ChangeNote changes={note} /> : null}
+              {note && note.length > 0 ? (
+                <LabelChangeNote changes={note} />
+              ) : null}
             </span>
           </span>
         </span>

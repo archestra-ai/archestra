@@ -47,7 +47,7 @@ export type TimelineSpan = RequestSpan | ToolCallSpan;
 export type Timeline = {
   /** Oldest first. */
   spans: TimelineSpan[];
-  /** Epoch ms of the earliest start: what "+12s" offsets count from. */
+  /** Epoch ms of the earliest start on this page. */
   origin: number;
   ticks: { x: number; label: string }[];
   /** Idle stretches drawn at a fixed width instead of to scale. */
@@ -68,9 +68,15 @@ export type Timeline = {
 export function buildTimeline({
   requests,
   toolCalls = [],
+  sessionStart,
 }: {
   requests: InteractionSummary[];
   toolCalls?: SessionToolCall[];
+  /**
+   * Epoch ms the session began, when this is a later page: the axis then
+   * counts on from it instead of starting over at 0s.
+   */
+  sessionStart?: number | null;
 }): Timeline | null {
   type Placed = Omit<RequestSpan, "x" | "w"> | Omit<ToolCallSpan, "x" | "w">;
   const timing = (record: { createdAt: string; durationMs: number | null }) => {
@@ -185,17 +191,24 @@ export function buildTimeline({
     return { x, w: toX(gap.end) - x, gapMs: gap.end - gap.start };
   });
 
-  // Five evenly spaced ticks, skipping any that land inside a fold.
+  // Five evenly spaced ticks, skipping any that land inside a fold. Offsets
+  // count from the session's start, so a later page carries on from the
+  // pages before it.
+  const elapsedFrom =
+    sessionStart != null && Number.isFinite(sessionStart)
+      ? Math.min(sessionStart, origin)
+      : origin;
+  const offsetLabel = (t: number) => {
+    const ms = t - elapsedFrom;
+    return ms < 1000 ? "0s" : `+${formatElapsed(ms)}`;
+  };
   const ticks = single
-    ? [{ x: 0, label: "0s" }]
+    ? [{ x: 0, label: offsetLabel(origin) }]
     : [0, 0.25, 0.5, 0.75, 1]
         .filter(
           (x) => !breaks.some((b) => x > b.x + 0.005 && x < b.x + b.w - 0.005),
         )
-        .map((x) => ({
-          x,
-          label: x === 0 ? "0s" : `+${formatElapsed(fromX(x) - origin)}`,
-        }));
+        .map((x) => ({ x, label: offsetLabel(fromX(x)) }));
 
   return { spans, origin, ticks, breaks, realSpanMs };
 }

@@ -174,14 +174,35 @@ it("leads each request's tokens with its output, labels the input, and gives exa
   expect(tooltip).not.toHaveTextContent("Cache write");
 });
 
-it("opens the request a link names, moving to the page that holds it", async () => {
-  // Sixty requests, newest first: the linked one is the 56th newest, so it
-  // sits on page two of fifty.
+it("starts page one at the session's first request", async () => {
   const rows = Array.from({ length: 60 }, (_, i) =>
     summary({
       id: `request-${i}`,
       model: `model-${i}`,
-      createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, 60 - i)).toISOString(),
+      createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+    }),
+  );
+  serveSession({ rows });
+
+  await renderPage();
+
+  const requests = await screen.findByRole("list", { name: "Requests" });
+  const names = within(requests)
+    .getAllByRole("button", { name: /^Test Agent, Model \d+,/ })
+    .map((row) => row.getAttribute("aria-label")?.match(/Model (\d+)/)?.[1]);
+  expect(names[0]).toBe("0");
+  expect(names).toHaveLength(50);
+  expect(names).not.toContain("59");
+});
+
+it("opens the request a link names, moving to the page that holds it", async () => {
+  // Sixty requests, oldest first: the linked one is the 56th, so it sits on
+  // page two of fifty.
+  const rows = Array.from({ length: 60 }, (_, i) =>
+    summary({
+      id: `request-${i}`,
+      model: `model-${i}`,
+      createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
     }),
   );
   serveSession({ rows });
@@ -220,7 +241,7 @@ it("opens a linked tool call on its page without drawing another page first", as
     summary({
       id: `request-${i}`,
       model: `model-${i}`,
-      createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, 60 - i)).toISOString(),
+      createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
     }),
   );
   serveSession({ rows });
@@ -232,7 +253,7 @@ it("opens a linked tool call on its page without drawing another page first", as
     mcpServerName: "github",
     method: "tools/call",
     sessionId: "test-session",
-    createdAt: "2026-01-01T00:00:07.500Z",
+    createdAt: "2026-01-01T00:00:52.500Z",
     toolCall: { id: "c1", name: "github__search", arguments: {} },
     toolResult: { isError: false, content: [] },
   };
@@ -563,12 +584,13 @@ function qa(id: string, question: string, answer: string) {
 }
 
 /**
- * Serves one session the way the API pages it: newest first by `offset` and
- * `limit`, and with `startDate` counting the requests at or after it.
+ * Serves one session the way the API pages it: by `offset` and `limit` in
+ * `sortDirection` order (newest first by default), with `startDate` and
+ * `endDate` bounding which requests count.
  */
 function serveSession({
   rows,
-  lastInteractionId = rows[0]?.id ?? null,
+  lastInteractionId,
   records = {},
 }: {
   rows: Summary[];
@@ -578,6 +600,7 @@ function serveSession({
   const sorted = [...rows].sort((a, b) =>
     b.createdAt.localeCompare(a.createdAt),
   );
+  const latestId = lastInteractionId ?? sorted[0]?.id ?? null;
   server.use(
     http.get(sessionsUrl, () =>
       HttpResponse.json(
@@ -585,7 +608,7 @@ function serveSession({
           makeSessionSummary({
             sessionId: "test-session",
             requestCount: rows.length,
-            lastInteractionId,
+            lastInteractionId: latestId,
           }),
         ]),
       ),
@@ -593,9 +616,14 @@ function serveSession({
     http.get(`${origin}/api/interactions/summaries`, ({ request }) => {
       const params = new URL(request.url).searchParams;
       const startDate = params.get("startDate");
-      const matching = startDate
-        ? sorted.filter((row) => row.createdAt >= startDate)
-        : sorted;
+      const endDate = params.get("endDate");
+      const ordered =
+        params.get("sortDirection") === "asc" ? [...sorted].reverse() : sorted;
+      const matching = ordered.filter(
+        (row) =>
+          (!startDate || row.createdAt >= startDate) &&
+          (!endDate || row.createdAt <= endDate),
+      );
       const offset = Number(params.get("offset") ?? 0);
       const limit = Number(params.get("limit") ?? 10);
       return HttpResponse.json(

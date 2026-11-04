@@ -13,14 +13,13 @@ import type { InteractionSummary } from "./session-timeline";
  * and, when the URL names one tool call, the page it lives on.
  *
  * A call runs after the request that asked for it, so a page owns the calls
- * from its oldest request's start up to the start of the next newer request
- * (the newest row of the previous page). Page one is open-ended: nothing
- * newer exists yet.
+ * from its oldest request's start up to the start of the next page's oldest
+ * request. The last page is open-ended: nothing newer exists yet.
  */
 export function useSessionToolCalls({
   sessionId,
   requests,
-  newerRequest,
+  nextRequest,
   requestsReady,
   pageIndex,
   pageSize,
@@ -30,9 +29,9 @@ export function useSessionToolCalls({
   sessionId: string;
   /** This page's requests. */
   requests: InteractionSummary[];
-  /** The newest row of the previous page; null on page one. */
-  newerRequest: InteractionSummary | null;
-  /** Whether `requests` and `newerRequest` are the settled answer for this page. */
+  /** The oldest row of the next page; null on the last page. */
+  nextRequest: InteractionSummary | null;
+  /** Whether `requests` and `nextRequest` are the settled answer for this page. */
   requestsReady: boolean;
   pageIndex: number;
   pageSize: number;
@@ -52,9 +51,9 @@ export function useSessionToolCalls({
         )
       : null;
 
-  const windowEnd = newerRequest
-    ? new Date(newerRequest.createdAt).getTime() -
-      Math.max(0, newerRequest.durationMs ?? 0)
+  const windowEnd = nextRequest
+    ? new Date(nextRequest.createdAt).getTime() -
+      Math.max(0, nextRequest.durationMs ?? 0)
     : null;
 
   const windowReady = requestsReady && windowStart !== null;
@@ -66,8 +65,8 @@ export function useSessionToolCalls({
   });
   const toolCalls = windowReady ? (toolCallsQuery.data?.data ?? []) : [];
 
-  // Finding the linked call's page: every request created after it sits
-  // before it in the newest-first list, so their count is its position.
+  // Finding the linked call's page: requests run oldest first, and the call
+  // sits on the page of the last request created before it.
   const targetQuery = useMcpToolCall({
     mcpToolCallId: targetToolCallId ?? "",
     enabled: targetToolCallId !== null,
@@ -85,14 +84,14 @@ export function useSessionToolCalls({
     null,
   );
   const shouldLocate = target !== null && located?.id !== target.id;
-  const newerThanTarget = useInteractionSummaries({
+  const olderThanTarget = useInteractionSummaries({
     sessionId,
-    startDate: target?.createdAt,
+    endDate: target?.createdAt,
     limit: 1,
     enabled: shouldLocate,
   });
-  const newerThanTargetCount = shouldLocate
-    ? newerThanTarget.data?.pagination.total
+  const olderThanTargetCount = shouldLocate
+    ? olderThanTarget.data?.pagination.total
     : undefined;
   // The page's window is the same bound the tool-call read applies, so a call
   // inside it is this page's without waiting for the calls themselves.
@@ -108,8 +107,8 @@ export function useSessionToolCalls({
       setLocated({ id: target.id, page: pageIndex });
       return;
     }
-    if (newerThanTargetCount === undefined) return;
-    const page = Math.floor(newerThanTargetCount / pageSize);
+    if (olderThanTargetCount === undefined) return;
+    const page = Math.floor(Math.max(0, olderThanTargetCount - 1) / pageSize);
     setLocated({ id: target.id, page });
     if (page !== pageIndex) onLocatePage(page);
   }, [
@@ -117,7 +116,7 @@ export function useSessionToolCalls({
     located,
     requestsReady,
     targetInWindow,
-    newerThanTargetCount,
+    olderThanTargetCount,
     pageSize,
     pageIndex,
     onLocatePage,

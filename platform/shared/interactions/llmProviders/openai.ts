@@ -1,6 +1,10 @@
 import type * as archestraApiTypes from "../../hey-api/clients/api/types.gen";
 import type { PartialUIMessage } from "../types";
-import type { Interaction, InteractionUtils } from "./common";
+import type {
+  Interaction,
+  InteractionUtils,
+  RequestedToolCall,
+} from "./common";
 import { tryParseJson } from "./json";
 import {
   audioMediaType,
@@ -61,6 +65,16 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
       }
     }
     return Array.from(toolsUsed);
+  }
+
+  getToolCallsRequested(): RequestedToolCall[] {
+    return this.response.choices.flatMap((choice) =>
+      (choice.message.tool_calls ?? []).flatMap((toolCall) =>
+        "function" in toolCall && toolCall.id
+          ? [{ id: toolCall.id, name: toolCall.function.name }]
+          : [],
+      ),
+    );
   }
 
   getToolNamesRequested(): string[] {

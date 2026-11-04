@@ -80,6 +80,43 @@ describe("buildGuardrails", () => {
     expect(guardrails?.labelAt(BASE + 8_000)?.trust).toBe("suspicious");
   });
 
+  it("blames the request that asked for a client-run tool when no tool call was logged", () => {
+    // A coding agent's shell runs on the client: only the request whose
+    // response asked for it knows the call id.
+    const result = buildTimeline({
+      requests: [
+        row({
+          id: "asks",
+          createdAt: at(5_000),
+          durationMs: 5_000,
+          responseToolNames: ["exec_command"],
+          responseToolCalls: [{ id: "call_shell", name: "exec_command" }],
+        }),
+        row({ id: "next", createdAt: at(20_000), durationMs: 5_000 }),
+      ],
+    });
+    if (!result) throw new Error("no timeline");
+
+    const guardrails = buildGuardrails({
+      timeline: result,
+      consults: [],
+      labelChanges: [
+        change({ event: "session_start", at: 0 }),
+        change({
+          event: "tool_result",
+          at: 16_000,
+          callId: "call:call_shell",
+          trustAfter: "suspicious",
+        }),
+      ],
+    });
+
+    const cause = guardrails?.labels[1]?.cause;
+    expect(cause?.toolName).toBe("exec_command");
+    expect(cause?.toolCallKey).toBe("request:asks");
+    expect(cause?.summary).toBe("exec_command returned");
+  });
+
   it("places yells on their calls and turns guardrails off at the first superyell", () => {
     const guardrails = buildGuardrails({
       timeline: timeline(),

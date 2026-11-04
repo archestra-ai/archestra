@@ -72,6 +72,10 @@ export type LabelSegment = LabelState & {
     kind: "admitted" | "narrowed" | "reset" | "released";
     /** Tool whose result or call moved the label. */
     toolName: string | null;
+    /**
+     * The row to point at: the logged tool call, else the request whose
+     * response asked for it (a client-run tool has no logged call).
+     */
     toolCallKey: string | null;
     consultKey: string | null;
     summary: string;
@@ -337,6 +341,15 @@ function toSegments({
   timeToX: (ms: number) => number;
 }): LabelSegment[] {
   if (changes.length === 0) return [];
+  // Tools the client ran (a coding agent's shell, say) log no tool call; the
+  // request whose response asked for one is the row to blame instead.
+  const requestByCallId = new Map<string, { key: string; name: string }>();
+  for (const span of timeline.spans) {
+    if (span.type !== "request") continue;
+    for (const call of span.row.responseToolCalls ?? []) {
+      requestByCallId.set(call.id, { key: span.key, name: call.name });
+    }
+  }
   const first = Math.min(...timeline.spans.map((span) => span.start));
   const last = Math.max(...timeline.spans.map((span) => span.end));
   const segments: LabelSegment[] = [];
@@ -361,11 +374,14 @@ function toSegments({
       change.audienceBefore === change.audienceAfter
     )
       continue;
-    const tool = change.callId
-      ? toolByCallId.get(change.callId.replace(/^call:/, ""))
-      : undefined;
+    const callId = change.callId
+      ? modelCallId(change.callId.replace(/^call:/, ""))
+      : null;
+    const tool = callId ? toolByCallId.get(callId) : undefined;
+    const asked = callId && !tool ? requestByCallId.get(callId) : undefined;
     const toolName =
       (tool ? readMcpToolCall(tool.call).toolName : null) ??
+      asked?.name ??
       change.tool ??
       null;
     // The check that labeled the result, when one ran on this call.
@@ -381,7 +397,7 @@ function toSegments({
       {
         kind: CHANGE_KIND[change.event],
         toolName,
-        toolCallKey: tool?.key ?? null,
+        toolCallKey: tool?.key ?? asked?.key ?? null,
         consultKey: consult?.key ?? null,
         summary: changeSummary({ change, toolName }),
         explanation: changeExplanation({ change, toolName }),

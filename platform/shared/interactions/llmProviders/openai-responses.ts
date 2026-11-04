@@ -1,6 +1,10 @@
 import type { WithoutEncryptedChatUnavailable } from "../../encrypted-chat-content";
 import type { PartialUIMessage } from "../types";
-import type { Interaction, InteractionUtils } from "./common";
+import type {
+  Interaction,
+  InteractionUtils,
+  RequestedToolCall,
+} from "./common";
 import { tryParseJson } from "./json";
 
 type OpenAiResponsesArm = Extract<
@@ -64,6 +68,12 @@ class OpenAiResponsesInteraction implements InteractionUtils {
     return this.getInputItems()
       .filter(isFunctionCallOutputItem)
       .flatMap((item) => requestedToolNamesByCallId.get(item.call_id) ?? []);
+  }
+
+  getToolCallsRequested(): RequestedToolCall[] {
+    return this.interaction.response.output
+      .filter(isResponseFunctionCall)
+      .map((item) => ({ id: item.call_id, name: item.name }));
   }
 
   getToolNamesRequested(): string[] {

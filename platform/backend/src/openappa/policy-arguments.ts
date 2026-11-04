@@ -4,17 +4,15 @@ import {
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { gateAppToolCall } from "@/services/apps/app-tool-runtime-gate";
-import { normalizeToolArgumentsForPolicy } from "./command-normalization";
+import {
+  normalizeToolArgumentsForPolicy,
+  withDerivedArgument,
+} from "./command-normalization";
 
 /**
- * The arguments OpenAPPA rules a call on. No selector reads an array of
- * objects, so an Archestra tool that takes one also gets a string array
- * derived from it: `initialGrantPrincipals` (`<type>:<id>`, or
- * `organization`) for `initialGrants`, and `transferModes` (`value` or
- * `link`) for a credential transfer's `environment`. A value the model sent
- * under a derived name is replaced. A malformed source derives `null`, which
- * the battery's parameter schema refuses. Execution keeps the call's own
- * arguments.
+ * The arguments OpenAPPA rules a call on: a tool that shares a resource or
+ * transfers a credential also gets the string array `withDerivedArgument`
+ * derives. Execution keeps the call's own arguments.
  */
 export function policyArguments(toolName: string, args: unknown): unknown {
   return normalizeToolArgumentsForPolicy(
@@ -86,53 +84,10 @@ function withDerivedArguments(
 ): unknown {
   if (!isRecord(args)) return args;
   if (GRANTING_TOOLS.has(shortName))
-    return derived(
-      args,
-      "initialGrantPrincipals",
-      args.initialGrants,
-      (grant) =>
-        isRecord(grant) && isRecord(grant.subject)
-          ? principal(grant.subject)
-          : null,
-    );
+    return withDerivedArgument(args, "initialGrantPrincipals");
   if (shortName === "transfer_credential")
-    return derived(args, "transferModes", args.environment, (entry) =>
-      isRecord(entry) ? (entry.value === undefined ? "link" : "value") : null,
-    );
+    return withDerivedArgument(args, "transferModes");
   return args;
-}
-
-/** `args` with `key` derived from `source`, one entry per element; absent for none. */
-function derived(
-  args: Record<string, unknown>,
-  key: string,
-  source: unknown,
-  entry: (element: unknown) => string | null,
-): Record<string, unknown> {
-  const { [key]: _sent, ...rest } = args;
-  if (source === undefined || (Array.isArray(source) && source.length === 0))
-    return rest;
-  const entries = Array.isArray(source) ? source.map(entry) : [null];
-  return {
-    ...rest,
-    [key]: entries.every((value) => value !== null) ? entries : null,
-  };
-}
-
-function principal(subject: Record<string, unknown>): string | null {
-  const { type, id } = subject;
-  if (typeof id !== "string" || id.length === 0) return null;
-  switch (type) {
-    case "organization":
-      return id === "*" ? "organization" : null;
-    case "user":
-    case "team":
-    case "serviceAccount":
-    case "role":
-      return `${type}:${id}`;
-    default:
-      return null;
-  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

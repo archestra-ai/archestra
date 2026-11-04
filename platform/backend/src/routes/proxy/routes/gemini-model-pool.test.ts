@@ -1047,6 +1047,56 @@ poolTest(
   },
 );
 
+for (const name of [
+  "frontend_pool",
+  "Pool / notes: 50% #1",
+  "資料".repeat(256),
+]) {
+  for (const stream of [false, true]) {
+    poolTest(
+      `native Gemini resolves an external pool name (${name.slice(0, 30)}, stream=${stream})`,
+      async ({ pool }) => {
+        await ModelPoolModel.update({
+          organizationId: pool.organizationId,
+          id: pool.poolId,
+          input: {
+            name,
+            members: [
+              {
+                providerApiKeyId: pool.keyId,
+                modelId: "gemini-2.5-flash",
+                priority: 1,
+                weight: 1,
+                enabled: true,
+              },
+            ],
+          },
+        });
+        const hits: string[] = [];
+        server.use(
+          http.post(`${origin}/v1beta/models/:model`, ({ params }) => {
+            hits.push(String(params.model));
+            return stream ? sse([answer()]) : HttpResponse.json(answer());
+          }),
+        );
+        const operation = stream ? "streamGenerateContent" : "generateContent";
+        const response = await pool.app.inject({
+          method: "POST",
+          url: `/v1/gemini/${pool.agentId}/v1beta/models/${encodeURIComponent(name)}:${operation}`,
+          headers: { "x-goog-api-key": pool.token },
+          payload: { contents: [{ role: "user", parts: [{ text: "Hello" }] }] },
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(hits).toEqual([`gemini-2.5-flash:${operation}`]);
+        expect(response.headers["x-archestra-pool"]).toBe(
+          encodeURIComponent(name),
+        );
+        expect(response.headers["x-archestra-provider-key"]).toBe(pool.keyId);
+      },
+    );
+  }
+}
+
 for (const vertex of [false, true]) {
   for (const usePool of [false, true]) {
     for (const mixed of [false, true]) {
@@ -1137,32 +1187,46 @@ for (const vertex of [false, true]) {
               { provider: "gemini", providerApiKeyId: pool.keyId },
             ],
           });
+          await ModelPoolModel.update({
+            organizationId: pool.organizationId,
+            id: pool.poolId,
+            input: {
+              name: "gemini-pool",
+              members: ["gemini-3.8-flash", "gemini-2.5-flash"].map(
+                (modelId, index) => ({
+                  providerApiKeyId: pool.keyId,
+                  modelId,
+                  priority: index + 1,
+                  weight: 1,
+                  enabled: true,
+                }),
+              ),
+            },
+          });
           const contents = [
             {
               role: "user",
-              parts: [{ text: "Look up the synthetic lighthouse status." }],
+              parts: [{ text: "What is the synthetic lighthouse status?" }],
             },
             {
               role: "model",
               parts: [
                 {
-                  thought: true,
-                  text: "Inspect the synthetic records.",
-                  thoughtSignature: "synthetic-thought-signature",
+                  thoughtSignature: "synthetic-signature",
+                  functionCall: {
+                    id: "load",
+                    name: "archestra__load_skill",
+                    args: { name: "lighthouse" },
+                  },
                 },
                 {
                   functionCall: {
                     id: "lookup",
-                    name: "query_knowledge_sources",
-                    args: { query: "status" },
-                  },
-                  thoughtSignature: "synthetic-signature",
-                },
-                {
-                  functionCall: {
-                    id: "lookup-weather",
-                    name: "query_knowledge_sources",
-                    args: { query: "weather" },
+                    name: "archestra__run_tool",
+                    args: {
+                      tool_name: "archestra__query_knowledge_sources",
+                      tool_args: { query: "lighthouse status" },
+                    },
                   },
                 },
               ],
@@ -1172,16 +1236,22 @@ for (const vertex of [false, true]) {
               parts: [
                 {
                   functionResponse: {
-                    id: "lookup",
-                    name: "query_knowledge_sources",
-                    response: { content: "GREEN" },
+                    id: "load",
+                    name: "archestra__load_skill",
+                    response: {
+                      name: "archestra__load_skill",
+                      content: "Summarize the synthetic lighthouse status.",
+                    },
                   },
                 },
                 {
                   functionResponse: {
-                    id: "lookup-weather",
-                    name: "query_knowledge_sources",
-                    response: { content: "CLEAR" },
+                    id: "lookup",
+                    name: "archestra__run_tool",
+                    response: {
+                      name: "archestra__run_tool",
+                      content: "The synthetic lighthouse status is GREEN.",
+                    },
                   },
                 },
                 {
@@ -1190,17 +1260,51 @@ for (const vertex of [false, true]) {
                     data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
                   },
                 },
-                { text: "Synthetic status image" },
                 {
-                  inlineData: {
-                    mimeType: "image/png",
-                    data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
-                  },
+                  text: "Tool executed successfully and returned this image as a response",
                 },
-                { text: "Synthetic weather image" },
               ],
             },
           ];
+          const payload = {
+            contents,
+            generationConfig: {
+              maxOutputTokens: 32768,
+              thinkingConfig: { includeThoughts: true },
+            },
+            systemInstruction: {
+              parts: [{ text: "Summarize only the synthetic tool results." }],
+            },
+            toolConfig: { functionCallingConfig: { mode: "AUTO" } },
+            tools: [
+              {
+                functionDeclarations: [
+                  {
+                    name: "archestra__load_skill",
+                    description: "Load the synthetic lighthouse instructions.",
+                    parameters: {
+                      type: "OBJECT",
+                      properties: { name: { type: "STRING" } },
+                    },
+                  },
+                  {
+                    name: "archestra__run_tool",
+                    description: "Look up synthetic records.",
+                    parameters: {
+                      type: "OBJECT",
+                      properties: {
+                        tool_name: { type: "STRING" },
+                        tool_args: {
+                          type: "OBJECT",
+                          properties: { query: { type: "STRING" } },
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+          };
           const hits: string[] = [];
           const endpoints = vertex
             ? ["global", "us-central1"].map((location) => {
@@ -1231,9 +1335,7 @@ for (const vertex of [false, true]) {
                 }
                 const body = (await request.json()) as Record<string, unknown>;
                 expect(body.contents).toEqual(contents);
-                expect(body.generationConfig).toMatchObject({
-                  maxOutputTokens: 32,
-                });
+                expect(body).toMatchObject(payload);
                 if (hits.length === 1)
                   return HttpResponse.json(
                     {
@@ -1257,17 +1359,17 @@ for (const vertex of [false, true]) {
             : "generateContent";
           const response = await pool.app.inject({
             method: "POST",
-            url: `/v1/gemini/${pool.agentId}/v1beta/models/gemini-3.1-flash-lite:${operation}`,
+            url: `/v1/gemini/${pool.agentId}/v1beta/models/gemini-3.8-flash:${operation}`,
             headers: {
               "x-goog-api-key": credential.value,
               ...internalCallHeader(),
               [MODEL_POOL_ID_HEADER]: pool.poolId,
             },
-            payload: { contents, generationConfig: { maxOutputTokens: 32 } },
+            payload,
           });
           if (failureStatus === 400) {
             expect(response.statusCode, response.body).toBe(400);
-            expect(hits).toEqual([`gemini-3.1-flash-lite:${operation}`]);
+            expect(hits).toEqual([`gemini-3.8-flash:${operation}`]);
             const rows = await db
               .select()
               .from(schema.interactionsTable)
@@ -1285,7 +1387,7 @@ for (const vertex of [false, true]) {
           expect(response.statusCode, response.body).toBe(200);
           expect(response.body).toContain("Status is GREEN.");
           expect(hits).toEqual([
-            `gemini-3.1-flash-lite:${operation}`,
+            `gemini-3.8-flash:${operation}`,
             `gemini-2.5-flash:${operation}`,
           ]);
           expect(response.headers["x-archestra-provider-key"]).toBe(pool.keyId);
@@ -1297,7 +1399,7 @@ for (const vertex of [false, true]) {
           expect(rows).toEqual(
             expect.arrayContaining([
               expect.objectContaining({
-                model: "gemini-3.1-flash-lite",
+                model: "gemini-3.8-flash",
                 attemptOutcome: "failed_over",
                 failureReason:
                   failureStatus === 429

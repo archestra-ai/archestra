@@ -2361,7 +2361,10 @@ async function handleObservedLLMProxy<
             },
             setResponseHeaders: (attempt) => {
               if (reply.raw.headersSent) return;
-              reply.raw.setHeader("x-archestra-pool", modelPoolPlan.poolName);
+              reply.raw.setHeader(
+                "x-archestra-pool",
+                encodeURIComponent(modelPoolPlan.poolName),
+              );
               reply.raw.setHeader(
                 "x-archestra-attempts",
                 String(attempt.attempt ?? 1),

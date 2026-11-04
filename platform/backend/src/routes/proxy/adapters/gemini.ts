@@ -521,10 +521,8 @@ class GeminiResponseAdapter implements LLMResponseAdapter<GeminiResponse> {
   }
 
   getToolCalls(): CommonToolCall[] {
-    const candidate = this.response.candidates?.[0];
-    if (!candidate?.content?.parts) return [];
-
-    return candidate.content.parts
+    return (this.response.candidates ?? [])
+      .flatMap((candidate) => candidate.content?.parts ?? [])
       .filter((part) => "functionCall" in part && part.functionCall)
       .map((part) => {
         const functionCall = (
@@ -546,11 +544,10 @@ class GeminiResponseAdapter implements LLMResponseAdapter<GeminiResponse> {
   }
 
   hasToolCalls(): boolean {
-    const candidate = this.response.candidates?.[0];
-    if (!candidate?.content?.parts) return false;
-
-    return candidate.content.parts.some(
-      (part) => "functionCall" in part && part.functionCall,
+    return (this.response.candidates ?? []).some((candidate) =>
+      candidate.content?.parts?.some(
+        (part) => "functionCall" in part && part.functionCall,
+      ),
     );
   }
 
@@ -588,28 +585,26 @@ class GeminiResponseAdapter implements LLMResponseAdapter<GeminiResponse> {
   ): GeminiResponse {
     // Positional: one rewritten entry per call this response carries, in
     // order, so ids the client correlates by are untouched.
-    const candidate = this.response.candidates?.[0];
-    if (!candidate?.content?.parts) return this.response;
     let next = 0;
-    const parts = candidate.content.parts.map((part) => {
-      if (!("functionCall" in part) || !part.functionCall) return part;
-      const rewritten = toolCalls[next++];
-      if (!rewritten) return part;
-      return {
-        ...part,
-        functionCall: {
-          ...part.functionCall,
-          name: rewritten.name,
-          args: parseArgs(rewritten.arguments),
-        },
-      };
-    });
     return {
       ...this.response,
-      candidates: [
-        { ...candidate, content: { ...candidate.content, parts } },
-        ...(this.response.candidates?.slice(1) ?? []),
-      ],
+      candidates: this.response.candidates?.map((candidate) => {
+        if (!candidate.content?.parts) return candidate;
+        const parts = candidate.content.parts.map((part) => {
+          if (!("functionCall" in part) || !part.functionCall) return part;
+          const rewritten = toolCalls[next++];
+          if (!rewritten) return part;
+          return {
+            ...part,
+            functionCall: {
+              ...part.functionCall,
+              name: rewritten.name,
+              args: parseArgs(rewritten.arguments),
+            },
+          };
+        });
+        return { ...candidate, content: { ...candidate.content, parts } };
+      }),
     };
   }
 
@@ -717,8 +712,8 @@ class GeminiStreamAdapter
       };
     }
 
-    const candidate = chunk.candidates?.[0];
-    if (!candidate) {
+    const candidates = chunk.candidates ?? [];
+    if (candidates.length === 0) {
       const hasProtocolMetadata = Boolean(
         chunk.promptFeedback || chunk.usageMetadata,
       );
@@ -731,8 +726,11 @@ class GeminiStreamAdapter
       };
     }
 
-    // Process parts
-    for (const part of candidate.content?.parts ?? []) {
+    // Every candidate must participate in policy evaluation before its calls
+    // can reach the client.
+    for (const part of candidates.flatMap(
+      (candidate) => candidate.content?.parts ?? [],
+    )) {
       // Handle text content
       if (part.text) {
         // Track thought vs output text separately for proper signature preservation.
@@ -786,41 +784,57 @@ class GeminiStreamAdapter
 
     if (isToolCallChunk) {
       sseData = null;
-      const parts = candidate.content?.parts ?? [];
-      const withParts = (parts: Part[]) =>
-        ({
+      // Split every candidate, preserving its index and signed parts. A frame
+      // is held once regardless of how many calls or candidates it contains.
+      const heldCandidates = candidates.flatMap((candidate) => {
+        const parts =
+          candidate.content?.parts?.filter((part) => part.functionCall) ?? [];
+        return parts.length
+          ? [{ ...candidate, content: { ...candidate.content, parts } }]
+          : [];
+      });
+      this.state.rawToolCallEvents.push({
+        ...chunk,
+        candidates: heldCandidates,
+      });
+      const visibleCandidates = candidates.flatMap((candidate) => {
+        const parts =
+          candidate.content?.parts?.filter((part) => !part.functionCall) ?? [];
+        const hasCalls = candidate.content?.parts?.some(
+          (part) => part.functionCall,
+        );
+        if (!hasCalls) return [candidate];
+        return parts.length
+          ? [
+              {
+                ...candidate,
+                content: { ...candidate.content, parts },
+                finishReason: undefined,
+              },
+            ]
+          : [];
+      });
+      if (visibleCandidates.length > 0) {
+        const visibleChunk = {
           ...chunk,
-          candidates: [
-            { ...candidate, content: { ...candidate.content, parts } },
-          ],
-        }) as GeminiStreamChunk;
-      // Hold the calls once per chunk until policy allows them. Mixed chunks
-      // can stream their other parts now without leaking or replaying calls.
-      const heldChunk = withParts(parts.filter((part) => part.functionCall));
-      heldChunk.candidates?.push(...(chunk.candidates?.slice(1) ?? []));
-      this.state.rawToolCallEvents.push(heldChunk);
-      const visibleParts = parts.filter((part) => !part.functionCall);
-      if (visibleParts.length > 0) {
-        const visibleChunk = withParts(visibleParts);
-        const visibleCandidate = visibleChunk.candidates?.[0];
-        if (visibleCandidate) visibleCandidate.finishReason = undefined;
+          candidates: visibleCandidates,
+        } as GeminiStreamChunk;
         sseData = `data: ${JSON.stringify(sdkResponseToRestResponse(visibleChunk, this.model))}\n\n`;
       }
     }
 
-    // Check finish reason
-    if (
-      candidate.finishReason &&
-      candidate.finishReason !== "FINISH_REASON_UNSPECIFIED"
-    ) {
-      this.state.stopReason = candidate.finishReason;
-      isFinal = true;
-
-      // Gemini can send terminal metadata without a renderable content part.
-      if (!sseData && !isToolCallChunk) {
-        const restChunk = sdkResponseToRestResponse(chunk, this.model);
-        sseData = `data: ${JSON.stringify(restChunk)}\n\n`;
+    for (const candidate of candidates) {
+      if (
+        candidate.finishReason &&
+        candidate.finishReason !== "FINISH_REASON_UNSPECIFIED"
+      ) {
+        this.state.stopReason = candidate.finishReason;
+        isFinal = true;
       }
+    }
+    // Gemini can send terminal metadata without a renderable content part.
+    if (isFinal && !sseData && !isToolCallChunk) {
+      sseData = `data: ${JSON.stringify(sdkResponseToRestResponse(chunk, this.model))}\n\n`;
     }
 
     return { sseData, isToolCallChunk, isFinal };

@@ -88,39 +88,32 @@ test.beforeEach(async ({ mswControl, page, request }) => {
   }
 });
 
-test("editing across categories saves the complete role", async ({
+test("editing across areas saves the complete role", async ({
   page,
   mswControl,
 }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto(`/settings/roles?edit=${customRole.id}`);
-  const dialog = page.getByRole("dialog", { name: "Edit role", exact: true });
+  await page.goto(`/settings/roles/${customRole.id}/edit`);
   await expect(
-    dialog.getByRole("checkbox", { name: "Agents Read", exact: true }),
+    page.getByRole("checkbox", { name: "View agents", exact: true }),
   ).toBeChecked();
   await capture(page, "role-edit-desktop");
 
-  await dialog.getByRole("button", { name: "Other", exact: true }).click();
-  await dialog
-    .getByRole("checkbox", { name: "Knowledge Sources Read", exact: true })
+  // Granting in one area and revoking in another both survive the area
+  // chips: the list only filters what is shown, never what is held.
+  await page.getByRole("button", { name: "Other", exact: true }).click();
+  await page
+    .getByRole("checkbox", { name: "View knowledge sources", exact: true })
     .check();
-  await dialog.getByRole("button", { name: "Agents", exact: true }).click();
-  await dialog
-    .getByRole("checkbox", { name: "Agents Delete", exact: true })
+  await page.getByRole("button", { name: "Agents", exact: true }).click();
+  await page
+    .getByRole("checkbox", { name: "Delete agents", exact: true })
     .uncheck();
-  await dialog.getByRole("button", { name: "Other", exact: true }).click();
+  await page.getByRole("button", { name: "Other", exact: true }).click();
   await expect(
-    dialog.getByRole("checkbox", {
-      name: "Knowledge Sources Read",
-      exact: true,
-    }),
+    page.getByRole("checkbox", { name: "View knowledge sources", exact: true }),
   ).toBeChecked();
-  await expect(
-    dialog.getByPlaceholder("Find a resource or action…"),
-  ).toHaveCount(0);
-  await expect(dialog.getByRole("button", { name: /^Selected/ })).toHaveCount(
-    0,
-  );
+  await expect(page.getByText("3 permissions selected")).toBeVisible();
 
   const updated = {
     ...customRole,
@@ -139,26 +132,26 @@ test("editing across categories saves the complete role", async ({
       request.method() === "PUT" &&
       request.url().endsWith(`/api/roles/${customRole.id}`),
   );
-  await dialog
-    .getByRole("button", { name: "Save Changes", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
   expect((await savedRequest).postDataJSON()).toMatchObject({
     permission: updated.permission,
   });
-  await expect(dialog).toBeHidden();
+  // Saving lands on the role's own page.
+  await expect(page).toHaveURL(new RegExp(`/settings/roles/${customRole.id}$`));
 });
 
 test("read-only roles and personal access expose permissions and keyboard sources", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto("/settings/roles?view=admin");
-  const dialog = page.getByRole("dialog", { name: "Admin", exact: true });
+  await page.goto("/settings/roles/admin");
+  const agents = page.getByRole("region", { name: "Agents", exact: true });
+  await expect(agents.getByText("View agents", { exact: true })).toBeVisible();
+  // A built-in role is shown, never edited.
+  await expect(page.getByRole("checkbox")).toHaveCount(0);
   await expect(
-    dialog.getByRole("button", { name: "Agents Read granted", exact: true }),
-  ).toBeVisible();
-  await expect(dialog.getByText("Read-only", { exact: true })).toBeVisible();
-  await expect(dialog.getByRole("checkbox")).toHaveCount(0);
+    page.getByRole("button", { name: "Edit", exact: true }),
+  ).toBeDisabled();
   await capture(page, "role-view-desktop");
 
   const personal = await openAccountPermissions(page);
@@ -198,38 +191,43 @@ for (const viewport of [
     page,
   }) => {
     await page.setViewportSize(viewport);
-    await page.goto(`/settings/roles?edit=${customRole.id}`);
-    const edit = page.getByRole("dialog", { name: "Edit role", exact: true });
+    await page.goto(`/settings/roles/${customRole.id}/edit`);
+    const form = page.locator("form");
     await expect(
-      edit.getByRole("checkbox", { name: "Agents Read", exact: true }),
+      form.getByRole("checkbox", { name: "View agents", exact: true }),
     ).toBeChecked();
-    await insideViewport(page, edit);
-    await insideViewport(
-      page,
-      edit.getByRole("button", { name: "Save Changes", exact: true }),
-    );
-    await expectNoOverflow(edit);
-    await edit
-      .getByRole("checkbox", { name: "Agents Delete", exact: true })
+    const save = page.getByRole("button", {
+      name: "Save changes",
+      exact: true,
+    });
+    await save.scrollIntoViewIfNeeded();
+    await insideViewport(page, save);
+    await expectNoOverflow(form);
+    await form
+      .getByRole("checkbox", { name: "Delete agents", exact: true })
       .uncheck();
     await expect(
-      edit.getByRole("checkbox", { name: "Agents Delete", exact: true }),
+      form.getByRole("checkbox", { name: "Delete agents", exact: true }),
     ).not.toBeChecked();
     await capture(page, `role-edit-${viewport.width}`);
-    await edit.getByRole("button", { name: "Cancel", exact: true }).click();
-    await expect(edit).toBeHidden();
-
-    await page.goto("/settings/roles?view=admin");
-    const view = page.getByRole("dialog", { name: "Admin", exact: true });
-    await expect(
-      view.getByRole("button", { name: "Agents Read granted", exact: true }),
-    ).toBeVisible();
-    await insideViewport(page, view);
-    await insideViewport(
-      page,
-      view.getByRole("button", { name: "Close", exact: true }).first(),
+    // Leaving a dirty form asks first.
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Discard changes", exact: true })
+      .click();
+    await expect(page).toHaveURL(
+      new RegExp(`/settings/roles/${customRole.id}$`),
     );
-    await expectNoOverflow(view);
+
+    await page.goto("/settings/roles/admin");
+    const agents = page.getByRole("region", { name: "Agents", exact: true });
+    await expect(
+      agents.getByText("View agents", { exact: true }),
+    ).toBeVisible();
+    // A resource card can be taller than a landscape phone; it must still fit
+    // the width.
+    await insideViewportWidth(page, agents);
+    await expectNoOverflow(agents);
     await capture(page, `role-view-${viewport.width}`);
 
     const personal = await openAccountPermissions(page);
@@ -276,6 +274,22 @@ async function insideViewport(page: Page, element: Locator) {
         box.y >= 0 &&
         box.x + box.width <= viewport.width + 1 &&
         box.y + box.height <= viewport.height + 1
+      );
+    })
+    .toBe(true);
+}
+
+async function insideViewportWidth(page: Page, element: Locator) {
+  await expect(element).toBeVisible();
+  await expect
+    .poll(async () => {
+      const box = await element.boundingBox();
+      const viewport = page.viewportSize();
+      return (
+        !!box &&
+        !!viewport &&
+        box.x >= 0 &&
+        box.x + box.width <= viewport.width + 1
       );
     })
     .toBe(true);

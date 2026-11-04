@@ -92,7 +92,11 @@ export function RolePermissionsSection({
   grantable: Permissions;
 }) {
   return (
-    <SettingsSection title="Permissions" description={ROLE_PERMISSIONS_INTRO}>
+    <SettingsSection
+      title="Permissions"
+      description={ROLE_PERMISSIONS_INTRO}
+      stickyLabel
+    >
       <FormField
         control={form.control}
         name="permission"

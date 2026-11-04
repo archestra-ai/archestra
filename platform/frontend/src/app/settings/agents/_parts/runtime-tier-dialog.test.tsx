@@ -288,6 +288,13 @@ describe("RuntimeTierDialog", () => {
       "The default limit in GiB is max(2x memory request, 2x CPU request, 2x CPU limit).",
     );
     await user.hover(within(dialog).getByLabelText("Disk (GiB)"));
+    await user.keyboard("{Escape}");
+    await user.click(within(dialog).getByLabelText("Memory limit (GiB)"));
+    await user.tab();
+    expect(memoryHint).toHaveFocus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "The default limit in GiB is max(2x memory request, 2x CPU request, 2x CPU limit).",
+    );
     // The disk field shows the deployment's default.
     expect(within(dialog).getByLabelText("Disk (GiB)")).toHaveAttribute(
       "placeholder",

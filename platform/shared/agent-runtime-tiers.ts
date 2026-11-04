@@ -266,12 +266,10 @@ const TierNameSchema = z
     AGENT_RUNTIME_TIER_NAME_MAX_LENGTH,
     `A tier name has at most ${AGENT_RUNTIME_TIER_NAME_MAX_LENGTH} characters`,
   );
-const CpuRequestSchema = z
+// Stored tiers can predate the 0.1-CPU write minimum. Keep their sizes readable.
+const StoredCpuRequestSchema = z
   .number()
-  .min(
-    AGENT_RUNTIME_TIER_MIN_CPU,
-    `The CPU request is at least ${AGENT_RUNTIME_TIER_MIN_CPU}`,
-  )
+  .positive()
   .max(
     AGENT_RUNTIME_TIER_MAX_CPU_REQUEST,
     `The CPU request is at most ${AGENT_RUNTIME_TIER_MAX_CPU_REQUEST}`,
@@ -280,12 +278,9 @@ const CpuRequestSchema = z
     (cpus) => cpus === Math.round(cpus * CPU_DECIMALS) / CPU_DECIMALS,
     "A CPU amount has at most three decimals",
   );
-const CpuLimitSchema = z
+const StoredCpuLimitSchema = z
   .number()
-  .min(
-    AGENT_RUNTIME_TIER_MIN_CPU,
-    `The CPU limit is at least ${AGENT_RUNTIME_TIER_MIN_CPU}`,
-  )
+  .positive()
   .max(
     AGENT_RUNTIME_TIER_MAX_CPU_LIMIT,
     `The CPU limit is at most ${AGENT_RUNTIME_TIER_MAX_CPU_LIMIT}`,
@@ -294,6 +289,14 @@ const CpuLimitSchema = z
     (cpus) => cpus === Math.round(cpus * CPU_DECIMALS) / CPU_DECIMALS,
     "A CPU amount has at most three decimals",
   );
+const CpuRequestSchema = StoredCpuRequestSchema.min(
+  AGENT_RUNTIME_TIER_MIN_CPU,
+  `The CPU request is at least ${AGENT_RUNTIME_TIER_MIN_CPU}`,
+);
+const CpuLimitSchema = StoredCpuLimitSchema.min(
+  AGENT_RUNTIME_TIER_MIN_CPU,
+  `The CPU limit is at least ${AGENT_RUNTIME_TIER_MIN_CPU}`,
+);
 /**
  * A tier's workspace volume size: positive whole GiB. The API schema, save
  * check and settings form all use this rule.
@@ -439,9 +442,11 @@ function readTier(entry: unknown): AgentRuntimeTierDefinition | null {
   if (!entry || typeof entry !== "object") return null;
   const value = entry as Record<string, unknown>;
   const name = TierNameSchema.safeParse(value.name);
-  const cpuRequest = CpuRequestSchema.safeParse(value.cpuRequest);
+  const cpuRequest = StoredCpuRequestSchema.safeParse(value.cpuRequest);
   if (!name.success || !cpuRequest.success) return null;
-  const cpuLimit = CpuLimitSchema.nullable().safeParse(value.cpuLimit ?? null);
+  const cpuLimit = StoredCpuLimitSchema.nullable().safeParse(
+    value.cpuLimit ?? null,
+  );
   const warmSpares = StoredWarmSparesSchema.nullable().safeParse(
     value.warmSpares ?? null,
   );
@@ -507,7 +512,7 @@ function legacyToSettings(
     const warmSpares = StoredWarmSparesSchema.safeParse(value.warmPoolSize);
     const request =
       cpuRequest !== null &&
-      cpuRequest >= AGENT_RUNTIME_TIER_MIN_CPU &&
+      cpuRequest > 0 &&
       cpuRequest <= AGENT_RUNTIME_TIER_MAX_CPU_REQUEST
         ? cpuRequest
         : tier.cpuRequest;

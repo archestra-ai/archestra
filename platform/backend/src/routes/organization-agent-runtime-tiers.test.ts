@@ -7,7 +7,10 @@ import AgentModel from "@/models/agent";
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import AuditLogModel from "@/models/audit-log";
 import OrganizationModel from "@/models/organization";
-import { organizationAgentRuntimeTiers } from "@/services/agent-runtime/runtime-tiers";
+import {
+  organizationAgentRuntimeTiers,
+  resolveRunResources,
+} from "@/services/agent-runtime/runtime-tiers";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { registerRoutePermissions } from "@/test/route-permissions";
 import type { User } from "@/types";
@@ -76,6 +79,40 @@ describe("Agent Runtime tiers: GET /api/organization/agent-runtime-tiers and PAT
     ttlHours: null,
     maxCostUsd: null,
     idleTimeoutMinutes: null,
+  });
+
+  test("keeps previously saved small CPU tiers readable and runnable while rejecting new writes below 0.1", async () => {
+    const tiny = tier("Tiny", 0.05, { cpuLimit: 0.075 });
+    // Simulate settings persisted by a version that accepted smaller CPU values.
+    await OrganizationModel.patch(organizationId, {
+      agentRuntimeTiers: { tiers: [tiny], defaultTier: "Tiny" },
+    });
+    expect(await read()).toMatchObject({
+      defaultTier: "Tiny",
+      tiers: [
+        expect.objectContaining({
+          name: "Tiny",
+          cpuRequest: 0.05,
+          cpuLimit: 0.075,
+        }),
+      ],
+    });
+    const sizes = await organizationAgentRuntimeTiers(organizationId);
+    expect(resolveRunResources("Tiny", sizes)).toEqual({
+      cpuRequest: "50m",
+      cpuLimit: "75m",
+      memoryRequest: "102Mi",
+      memoryLimit: "204Mi",
+    });
+    const rejected = await patch({
+      agentRuntimeTiers: { tiers: [tiny], defaultTier: "Tiny" },
+    });
+    expect(rejected.statusCode, rejected.body).toBe(400);
+    expect((await read()).tiers[0]).toMatchObject({
+      name: "Tiny",
+      cpuRequest: 0.05,
+      cpuLimit: 0.075,
+    });
   });
 
   test("saves independent memory, preserves overrides for older clients and renames, and resets them explicitly", async () => {

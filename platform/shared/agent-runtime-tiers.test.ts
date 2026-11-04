@@ -15,6 +15,44 @@ import {
 const DEPLOYMENT = { defaultWarmSpares: 1 };
 
 describe("resolveAgentRuntimeTiers", () => {
+  test.each([
+    { cpuRequest: 0.001, cpuLimit: 0.05 },
+    { cpuRequest: 0.05, cpuLimit: 0.075 },
+    { cpuRequest: 0.05, cpuLimit: null },
+  ])("preserves saved CPU sizes below the new write minimum: %j", (cpu) => {
+    const resolved = resolveAgentRuntimeTiers(
+      { tiers: [{ name: "Tiny", ...cpu }], defaultTier: "Tiny" },
+      DEPLOYMENT,
+    );
+    expect(resolved.defaultTier).toBe("Tiny");
+    expect(resolved.tiers).toEqual([
+      expect.objectContaining({
+        name: "Tiny",
+        ...cpu,
+        ...agentRuntimeTierMemory(cpu),
+      }),
+    ]);
+    expect(
+      AgentRuntimeTierSettingsSchema.safeParse({
+        tiers: [{ name: "Tiny", ...cpu, pooled: false }],
+        defaultTier: "Tiny",
+      }).success,
+    ).toBe(false);
+  });
+
+  test("preserves CPU sizes below the new minimum in legacy quantity settings", () => {
+    const resolved = resolveAgentRuntimeTiers(
+      { S: { cpuRequest: "50m", cpuLimit: "75m" } },
+      DEPLOYMENT,
+    );
+    expect(resolved.tiers.find((tier) => tier.name === "S")).toMatchObject({
+      cpuRequest: 0.05,
+      cpuLimit: 0.075,
+      memoryRequestMiB: 102,
+      memoryLimitMiB: 204,
+    });
+  });
+
   test("resolves independent memory overrides and keeps CPU-derived defaults for omitted fields", () => {
     const resolved = resolveAgentRuntimeTiers(
       {

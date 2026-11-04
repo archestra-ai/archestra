@@ -34,6 +34,8 @@ export async function getGuardrailsDeployment() {
     enabled,
     unsupportedClientAction,
     breakTheGlassEnabled,
+    humanApprovalMode,
+    unapprovableBlockMode,
     annotatorModelId,
     annotatorLlmApiKeyId,
   } = await GuardrailsDeploymentModel.get();
@@ -41,6 +43,8 @@ export async function getGuardrailsDeployment() {
     enabled,
     unsupportedClientAction,
     breakTheGlassEnabled,
+    humanApprovalMode,
+    unapprovableBlockMode,
     annotatorModelId,
     annotatorLlmApiKeyId,
     featureEnabled: enterpriseTier.isOpenappaActive(),
@@ -122,6 +126,8 @@ function deploymentSettings(
     active: deployment.active,
     unsupportedClientAction: deployment.unsupportedClientAction,
     breakTheGlassEnabled: deployment.breakTheGlassEnabled,
+    humanApprovalMode: deployment.humanApprovalMode,
+    unapprovableBlockMode: deployment.unapprovableBlockMode,
     annotatorModelId: deployment.annotatorModelId,
     annotatorLlmApiKeyId: deployment.annotatorLlmApiKeyId,
   };

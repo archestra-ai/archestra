@@ -59,6 +59,8 @@ export const CacheKey = {
   OpenAppaNativeQuestion: "openappa-native-question",
   /** The proxy session behind a yell call it allowed, for the gateway that runs it (consume-once) */
   OpenAppaYellSession: "openappa-yell-session",
+  /** Sessions the proxy admitted as unattended, for the gateway's Break the glass review waiver */
+  OpenAppaUnattendedSession: "openappa-unattended-session",
   OpenAppaYellResult: "openappa-yell-result",
   /** OpenAPPA reviews waiting for a native client question */
   OpenAppaHitlReview: "openappa-hitl-review",

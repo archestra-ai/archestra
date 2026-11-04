@@ -17,6 +17,7 @@ import appConfig from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
+  OpenAppaBreakTheGlassSettings,
   OpenAppaClientCoverageSetting,
   OpenAppaEnforcementSetting,
 } from "./openappa-settings-sections";
@@ -30,6 +31,11 @@ const server = setupServer();
 let enabled: boolean;
 let featureEnabled: boolean;
 let clientAction: "bypass" | "block";
+let breakTheGlass: {
+  humanApprovalMode: "block" | "unattended" | "everywhere";
+  unapprovableBlockMode: "refuse" | "allow";
+  breakTheGlassEnabled: boolean;
+};
 let revision: number;
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
@@ -49,6 +55,11 @@ beforeEach(() => {
   enabled = false;
   featureEnabled = true;
   clientAction = "bypass";
+  breakTheGlass = {
+    humanApprovalMode: "unattended",
+    unapprovableBlockMode: "refuse",
+    breakTheGlassEnabled: true,
+  };
   revision = 1;
   server.use(
     http.get(`${api}/guardrails-deployment`, () =>
@@ -57,6 +68,7 @@ beforeEach(() => {
         featureEnabled,
         active: enabled,
         unsupportedClientAction: clientAction,
+        ...breakTheGlass,
       }),
     ),
     http.get(`${api}/guardrails-policy`, () =>
@@ -209,6 +221,85 @@ test.each([
     await screen.findByRole("combobox", {
       name: "Requests from other clients",
     }),
+  ).toBeDisabled();
+});
+
+test("an administrator changes the Yell tool, and the environment sets Human approval and Other blocked calls", async () => {
+  const updates: unknown[] = [];
+  server.use(
+    http.put(`${api}/guardrails-deployment`, async ({ request }) => {
+      const body = (await request.json()) as Partial<typeof breakTheGlass>;
+      updates.push(body);
+      breakTheGlass = { ...breakTheGlass, ...body };
+      return HttpResponse.json({
+        enabled,
+        featureEnabled,
+        active: enabled,
+        unsupportedClientAction: clientAction,
+        ...breakTheGlass,
+      });
+    }),
+  );
+  show(<OpenAppaBreakTheGlassSettings />);
+  const change = async (
+    name: string,
+    from: string,
+    option: RegExp,
+    to: string,
+  ) => {
+    const selector = await screen.findByRole("combobox", { name });
+    expect(selector).toHaveTextContent(from);
+    fireEvent.click(selector);
+    fireEvent.click(screen.getByRole("option", { name: option }));
+    await waitFor(() => expect(selector).toHaveTextContent(to));
+  };
+  // Release 1.4: the environment sets these two; the page shows them only.
+  expect(await screen.findByText("Waive in unattended sessions")).toBeVisible();
+  const variable = (name: string) =>
+    screen.getByText(
+      (_, element) =>
+        element?.tagName === "CODE" && element.textContent === name,
+    );
+  expect(variable("ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE")).toBeVisible();
+  expect(screen.getByText("Keep the block")).toBeVisible();
+  expect(variable("ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE")).toBeVisible();
+  expect(
+    screen.queryByRole("combobox", { name: "Human approval" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("combobox", { name: "Other blocked calls" }),
+  ).not.toBeInTheDocument();
+  // The Yell tool row maps its two choices onto the stored boolean.
+  await change(
+    "Yell tool",
+    "Record and turn Guardrails off",
+    /Record only/,
+    "Record only",
+  );
+  expect(updates).toEqual([{ breakTheGlassEnabled: false }]);
+});
+
+test("describes Other blocked calls and says an explicit block never waives", async () => {
+  show(<OpenAppaBreakTheGlassSettings />);
+  expect(
+    await screen.findByText(/How to handle denials that can't be approved\./),
+  ).toBeVisible();
+  expect(screen.getByText("blocked", { selector: "code" })).toBeVisible();
+});
+
+test.each([
+  ["members who cannot manage them", readOnly],
+  [
+    "without the feature flag",
+    () => {
+      featureEnabled = false;
+    },
+  ],
+])("the Break the glass settings are disabled for %s", async (_name, arrange) => {
+  arrange();
+  show(<OpenAppaBreakTheGlassSettings />);
+  expect(
+    await screen.findByRole("combobox", { name: "Yell tool" }),
   ).toBeDisabled();
 });
 

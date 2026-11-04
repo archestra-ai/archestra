@@ -414,6 +414,8 @@ export async function executeA2AMessage(
         externalAgentId: delegationChain,
         agentLlmApiKeyId: llmApiKeyId,
         appaSubagentToken: params.appaSubagent?.token,
+        // A Scheduled task run has no person to answer approvals.
+        unattended: scheduleTriggerRunId !== undefined,
       });
 
     // Which attachment mime types this model can read. A missing model row

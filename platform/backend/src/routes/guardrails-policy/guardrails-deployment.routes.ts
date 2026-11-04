@@ -6,12 +6,18 @@ import {
   setGuardrailsDeployment,
 } from "@/services/guardrails-deployment";
 import { constructResponseSchema } from "@/types";
-import { UnsupportedAppaClientActionSchema } from "@/types/guardrails-policy";
+import {
+  HumanApprovalModeSchema,
+  UnapprovableBlockModeSchema,
+  UnsupportedAppaClientActionSchema,
+} from "@/types/guardrails-policy";
 
 const status = z.object({
   enabled: z.boolean(),
   unsupportedClientAction: UnsupportedAppaClientActionSchema,
   breakTheGlassEnabled: z.boolean(),
+  humanApprovalMode: HumanApprovalModeSchema,
+  unapprovableBlockMode: UnapprovableBlockModeSchema,
   annotatorModelId: z.string().uuid().nullable(),
   annotatorLlmApiKeyId: z.string().uuid().nullable(),
   featureEnabled: z.boolean(),

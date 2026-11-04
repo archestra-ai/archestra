@@ -313,6 +313,7 @@ export async function admitOpenappaRequest(params: {
   const facts: AdmissionFacts = {
     claims,
     ...(runtimeSessionId ? { runtimeSessionId, runtimeTaskId } : {}),
+    ...(runtimeSession ? { agentRuntimeRun: true as const } : {}),
     ...(chatSource ? { chatSource } : {}),
   };
   // Enforcement rejects conflicts above; observing and setup-bypass paths
@@ -633,7 +634,11 @@ export type OpenappaAdmission =
 /** What every trusted context of the request says about its lineage. */
 type AdmissionFacts = Pick<
   AppaTrustedContext,
-  "claims" | "runtimeSessionId" | "runtimeTaskId" | "chatSource"
+  | "claims"
+  | "runtimeSessionId"
+  | "runtimeTaskId"
+  | "agentRuntimeRun"
+  | "chatSource"
 >;
 
 type OpenappaPrincipal = {

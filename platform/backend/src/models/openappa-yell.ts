@@ -12,7 +12,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { z } from "zod";
-import db from "@/database";
+import db, { type Transaction } from "@/database";
 import conversationsTable, {
   notDeletedConversation,
 } from "@/database/schemas/conversation";
@@ -23,6 +23,7 @@ import {
 } from "@/database/utils/pagination";
 import type {
   InsertOpenAppaYell,
+  OpenAppaYellKind,
   OpenAppaYellQuery,
 } from "@/types/openappa-yell";
 import { normalizeByteaField } from "@/utils/normalize-bytea";
@@ -55,6 +56,57 @@ export default class OpenAppaYellModel {
       );
     if (!existing) throw new Error("Could not record OpenAPPA yell");
     return existing;
+  }
+
+  /**
+   * Records calls the platform let through under the Break the glass
+   * settings. Repeats of the same tool and kind in a session add to one
+   * unresolved yell, so a looping agent does not flood the Yells tab; once
+   * resolved, the next repeat raises it again as a new yell. Release 1.4 keeps
+   * no count: `calls` is accepted for the callers' sake and not stored.
+   */
+  static async recordWaiver(
+    input: {
+      organizationId: string;
+      callerId: string;
+      sessionId: string;
+      kind: Exclude<OpenAppaYellKind, "agent">;
+      tool: string;
+      message: string;
+      superyell: boolean;
+      calls?: number;
+    },
+    executor: typeof db | Transaction = db,
+  ) {
+    await executor
+      .insert(table)
+      .values({
+        organizationId: input.organizationId,
+        callerId: input.callerId,
+        sessionId: input.sessionId,
+        // Not a call id: the key repeats merge under.
+        toolCallId: `${input.kind}:${input.tool}`,
+        message: input.message,
+        withTrajectory: false,
+        superyell: input.superyell,
+      })
+      .onConflictDoUpdate({
+        target: [
+          table.organizationId,
+          table.callerId,
+          table.sessionId,
+          table.toolCallId,
+        ],
+        // A resolved yell is raised again as a new one: its count and age
+        // start over, so the Yells tab lists it as new.
+        set: {
+          createdAt: sql`case when ${table.resolvedAt} is null then ${table.createdAt} else now() end`,
+          message: input.message,
+          superyell: input.superyell,
+          resolvedAt: null,
+          resolvedBy: null,
+        },
+      });
   }
 
   static async storeArchive(params: {
@@ -270,5 +322,13 @@ export default class OpenAppaYellModel {
 
 function metadataColumns() {
   const { archive, conversationId, ...columns } = getTableColumns(table);
-  return { ...columns, hasArchive: sql<boolean>`${archive} IS NOT NULL` };
+  return {
+    ...columns,
+    hasArchive: sql<boolean>`${archive} IS NOT NULL`,
+    // Release 1.4 has no kind column: a platform yell's merge key starts with
+    // its kind (`recordWaiver`), an agent's own yell carries a real call id.
+    kind: sql<OpenAppaYellKind>`case when ${columns.toolCallId} like 'approval\_waived:%' then 'approval_waived' when ${columns.toolCallId} like 'block\_waived:%' then 'block_waived' else 'agent' end`,
+    // Nor a count column: each yell stands for one record on 1.4.
+    count: sql<number>`1`.mapWith(Number),
+  };
 }

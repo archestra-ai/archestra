@@ -85,12 +85,21 @@ export function useUpdateUnsupportedClientAction() {
   });
 }
 
-export function useUpdateBreakTheGlassEnabled() {
+/**
+ * The Break the glass setting the page can save. Release 1.4 sets Human
+ * approval and Other blocked calls in the environment.
+ */
+export function useUpdateBreakTheGlass() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: async (breakTheGlassEnabled: boolean) => {
+    mutationFn: async (
+      body: Pick<
+        NonNullable<archestraApiTypes.UpdateGuardrailsDeploymentData["body"]>,
+        "breakTheGlassEnabled"
+      >,
+    ) => {
       const { data, error } = await archestraApiSdk.updateGuardrailsDeployment({
-        body: { breakTheGlassEnabled },
+        body,
       });
       if (error) {
         handleApiError(error);

@@ -53516,6 +53516,8 @@ export type GetGuardrailsDeploymentResponses = {
         enabled: boolean;
         unsupportedClientAction: 'bypass' | 'block';
         breakTheGlassEnabled: boolean;
+        humanApprovalMode: 'block' | 'unattended' | 'everywhere';
+        unapprovableBlockMode: 'refuse' | 'allow';
         annotatorModelId: string | null;
         annotatorLlmApiKeyId: string | null;
         featureEnabled: boolean;
@@ -53614,6 +53616,8 @@ export type UpdateGuardrailsDeploymentResponses = {
         enabled: boolean;
         unsupportedClientAction: 'bypass' | 'block';
         breakTheGlassEnabled: boolean;
+        humanApprovalMode: 'block' | 'unattended' | 'everywhere';
+        unapprovableBlockMode: 'refuse' | 'allow';
         annotatorModelId: string | null;
         annotatorLlmApiKeyId: string | null;
         featureEnabled: boolean;
@@ -102831,6 +102835,8 @@ export type GetOpenAppaYellsResponses = {
             reportFailed: boolean;
             resolvedAt: string | null;
             resolvedBy: string | null;
+            kind: 'agent' | 'approval_waived' | 'block_waived';
+            count: number;
             hasArchive: boolean;
             caller: {
                 id: string;
@@ -103044,6 +103050,8 @@ export type GetOpenAppaYellResponses = {
         reportFailed: boolean;
         resolvedAt: string | null;
         resolvedBy: string | null;
+        kind: 'agent' | 'approval_waived' | 'block_waived';
+        count: number;
         hasArchive: boolean;
         caller: {
             id: string;
@@ -103166,6 +103174,8 @@ export type UpdateOpenAppaYellResponses = {
         reportFailed: boolean;
         resolvedAt: string | null;
         resolvedBy: string | null;
+        kind: 'agent' | 'approval_waived' | 'block_waived';
+        count: number;
         hasArchive: boolean;
         caller: {
             id: string;

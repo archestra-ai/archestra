@@ -71,6 +71,8 @@ describe("Deployment-wide Guardrails v2 switch", () => {
           enabled,
           unsupportedClientAction: "bypass",
           breakTheGlassEnabled: true,
+          humanApprovalMode: "block",
+          unapprovableBlockMode: "refuse",
           annotatorModelId: null,
           annotatorLlmApiKeyId: null,
           featureEnabled,
@@ -134,6 +136,45 @@ describe("Deployment-wide Guardrails v2 switch", () => {
     expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(true);
     await set(false);
     expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(false);
+  });
+
+  test("the environment sets Human approval and Other blocked calls, and the API cannot change them", async () => {
+    await set(true);
+    const previous = {
+      humanApprovalMode: config.openappa.humanApprovalMode,
+      softBlockMode: config.openappa.softBlockMode,
+    };
+    config.openappa.humanApprovalMode = "everywhere";
+    config.openappa.softBlockMode = "allow";
+    try {
+      const read = await app.inject({
+        method: "GET",
+        url: "/api/guardrails-deployment",
+      });
+      expect(read.statusCode, read.body).toBe(200);
+      expect(read.json()).toMatchObject({
+        humanApprovalMode: "everywhere",
+        unapprovableBlockMode: "allow",
+      });
+      for (const payload of [
+        { humanApprovalMode: "block" },
+        { unapprovableBlockMode: "refuse" },
+      ]) {
+        const refused = await app.inject({
+          method: "PUT",
+          url: "/api/guardrails-deployment",
+          payload,
+        });
+        expect(refused.statusCode).toBe(400);
+      }
+      expect(await getGuardrailsDeployment()).toMatchObject({
+        humanApprovalMode: "everywhere",
+        unapprovableBlockMode: "allow",
+      });
+    } finally {
+      config.openappa.humanApprovalMode = previous.humanApprovalMode;
+      config.openappa.softBlockMode = previous.softBlockMode;
+    }
   });
 
   test("a write that names the removed setting for new sessions is refused and changes nothing", async () => {

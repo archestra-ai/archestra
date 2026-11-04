@@ -46,6 +46,11 @@ export type AppaTrustedContext = {
   runtimeSessionId?: string;
   /** Current task from the authenticated runtime credential, not a request header. */
   runtimeTaskId?: string;
+  /**
+   * The request is an Agent Runtime run's, proven by its runtime credential
+   * and binding whatever image it runs. Not set for an in-process subagent.
+   */
+  agentRuntimeRun?: true;
   /** Present only for the proxy's loopback Chat call path. */
   chatSource?: AppaChatSource;
   /**

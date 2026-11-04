@@ -197416,6 +197416,21 @@
                     "breakTheGlassEnabled": {
                       "type": "boolean"
                     },
+                    "humanApprovalMode": {
+                      "type": "string",
+                      "enum": [
+                        "block",
+                        "unattended",
+                        "everywhere"
+                      ]
+                    },
+                    "unapprovableBlockMode": {
+                      "type": "string",
+                      "enum": [
+                        "refuse",
+                        "allow"
+                      ]
+                    },
                     "annotatorModelId": {
                       "nullable": true,
                       "type": "string",
@@ -197439,6 +197454,8 @@
                     "enabled",
                     "unsupportedClientAction",
                     "breakTheGlassEnabled",
+                    "humanApprovalMode",
+                    "unapprovableBlockMode",
                     "annotatorModelId",
                     "annotatorLlmApiKeyId",
                     "featureEnabled",
@@ -197753,6 +197770,21 @@
                     "breakTheGlassEnabled": {
                       "type": "boolean"
                     },
+                    "humanApprovalMode": {
+                      "type": "string",
+                      "enum": [
+                        "block",
+                        "unattended",
+                        "everywhere"
+                      ]
+                    },
+                    "unapprovableBlockMode": {
+                      "type": "string",
+                      "enum": [
+                        "refuse",
+                        "allow"
+                      ]
+                    },
                     "annotatorModelId": {
                       "nullable": true,
                       "type": "string",
@@ -197776,6 +197808,8 @@
                     "enabled",
                     "unsupportedClientAction",
                     "breakTheGlassEnabled",
+                    "humanApprovalMode",
+                    "unapprovableBlockMode",
                     "annotatorModelId",
                     "annotatorLlmApiKeyId",
                     "featureEnabled",
@@ -398955,6 +398989,19 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "agent",
+                              "approval_waived",
+                              "block_waived"
+                            ]
+                          },
+                          "count": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "hasArchive": {
                             "type": "boolean"
                           },
@@ -399065,6 +399112,8 @@
                           "reportFailed",
                           "resolvedAt",
                           "resolvedBy",
+                          "kind",
+                          "count",
                           "hasArchive",
                           "caller",
                           "callerApp",
@@ -399694,6 +399743,19 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "agent",
+                        "approval_waived",
+                        "block_waived"
+                      ]
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
                     "hasArchive": {
                       "type": "boolean"
                     },
@@ -399804,6 +399866,8 @@
                     "reportFailed",
                     "resolvedAt",
                     "resolvedBy",
+                    "kind",
+                    "count",
                     "hasArchive",
                     "caller",
                     "callerApp",
@@ -400146,6 +400210,19 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "agent",
+                        "approval_waived",
+                        "block_waived"
+                      ]
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
                     "hasArchive": {
                       "type": "boolean"
                     },
@@ -400256,6 +400333,8 @@
                     "reportFailed",
                     "resolvedAt",
                     "resolvedBy",
+                    "kind",
+                    "count",
                     "hasArchive",
                     "caller",
                     "callerApp",

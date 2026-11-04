@@ -147,11 +147,14 @@ export function bindMintedChildTrajectory(params: {
     childNativeId,
     expectedParentId: delegated?.parentId,
   });
+  // A client that mints children from the spawn call names no native child
+  // id; the signed spawn call id identifies the child instead.
+  const childIdentity = childNativeId ?? delegated?.spawnCallId;
   const anchor = workspaceAnchor({
     context: params.context,
     claimedSession: claims.sessionId,
     parentNativeId,
-    childNativeId,
+    childIdentity,
   });
   const nested = runtimeNest({
     context: params.context,
@@ -160,8 +163,8 @@ export function bindMintedChildTrajectory(params: {
     delegated,
     recorded,
   });
-  if (anchor && childNativeId && !nested) {
-    const mintedChild = childSessionId(anchor, childNativeId);
+  if (anchor && childIdentity && !nested) {
+    const mintedChild = childSessionId(anchor, childIdentity);
     if (
       (delegated && delegated.parentId !== anchor) ||
       (recorded &&
@@ -456,6 +459,7 @@ function runtimeNest(params: {
   childNativeId: string | undefined;
   delegated?: {
     parentId: string;
+    spawnCallId?: string;
     runtimeSessionId?: string;
   };
   recorded?: {
@@ -472,10 +476,13 @@ function runtimeNest(params: {
   const trusted = params.context.trustedContext;
   const runtimeRoot = trusted?.runtimeSessionId;
   const session = trusted?.session;
+  // A client that mints children from the spawn call names no native child
+  // id; the signed spawn call id identifies the child, as it does outside a nest.
+  const childKey = params.childNativeId ?? params.delegated?.spawnCallId;
   if (
     !runtimeRoot ||
     !session ||
-    !params.childNativeId ||
+    !childKey ||
     (markerAnchor && markerAnchor !== runtimeRoot) ||
     (receiptAnchor && receiptAnchor !== runtimeRoot) ||
     (params.delegated &&
@@ -499,7 +506,7 @@ function runtimeNest(params: {
   }
   const parentId = params.delegated?.parentId ?? params.recorded?.parentId;
   if (!parentId || parentId === runtimeClaim) return undefined;
-  const minted = childSessionId(parentId, params.childNativeId);
+  const minted = childSessionId(parentId, childKey);
   if (params.recorded && params.recorded.childId !== minted) {
     throw correlationError(
       "OpenAPPA signed child lineage does not match the authenticated session root",
@@ -514,29 +521,31 @@ function runtimeNest(params: {
 
 /**
  * The already-bound trusted session, when the client header names that same
- * root and native metadata names a child of it. An explicit child-session
- * claim, a parent header for a different trajectory, or a client with no
- * native child id is not an anchor.
+ * root and native metadata or a signed spawn call names a child of it. An
+ * explicit child-session claim, a parent header for a different trajectory,
+ * or a child with neither a native id nor a signed spawn call id is not an
+ * anchor.
  */
 function workspaceAnchor(params: {
   context: AppaMatchContext;
   claimedSession: string | undefined;
   parentNativeId: string;
-  childNativeId: string | undefined;
+  /** The native child id, or the signed spawn call id of a minted child. */
+  childIdentity: string | undefined;
 }): string | undefined {
   const session = params.context.trustedContext?.session;
-  if (!session || !params.claimedSession || !params.childNativeId) {
+  if (!session || !params.claimedSession || !params.childIdentity) {
     return undefined;
   }
   const root = withoutCallerScope(session, session.session_id);
   if (
     !root ||
     root !== params.claimedSession ||
-    root === params.childNativeId
+    root === params.childIdentity
   ) {
     return undefined;
   }
-  if (root === childSessionId(params.parentNativeId, params.childNativeId)) {
+  if (root === childSessionId(params.parentNativeId, params.childIdentity)) {
     return undefined;
   }
   const claimedParent = claimedIds(params.context).parentId;

@@ -2,7 +2,7 @@
 
 import { DocsPage, getDocsUrl, providerSupportsChat } from "@archestra/shared";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { useOpenAppaSetupState } from "@/app/openappa/_parts/use-openappa-setup-state";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
@@ -22,7 +22,7 @@ import { getVisibleDocsUrl } from "@/lib/docs/docs";
 import {
   useGuardrailsDeployment,
   useUpdateAnnotatorModel,
-  useUpdateBreakTheGlassEnabled,
+  useUpdateBreakTheGlass,
   useUpdateGuardrailsDeployment,
   useUpdateUnsupportedClientAction,
 } from "@/lib/guardrails-deployment.query";
@@ -85,40 +85,75 @@ export function OpenAppaEnforcementSetting() {
 }
 
 /**
- * Whether a yell also turns OpenAPPA off for the session that sends it, so a
- * stuck agent can get unblocked.
+ * Break the glass: what happens to a call waiting for human approval, to a
+ * call no remedy can lift (a soft block), and to a session whose agent calls
+ * `yell`. One group, since together they say how much Guardrails let through.
  */
-export function OpenAppaBreakTheGlassSetting() {
+export function OpenAppaBreakTheGlassSettings() {
   const deployment = useGuardrailsDeployment({ poll: true });
-  const update = useUpdateBreakTheGlassEnabled();
+  const update = useUpdateBreakTheGlass();
   const { data: canManage } = useHasPermissions({
     organizationSettings: ["update"],
   });
-  const enabled = Boolean(deployment.data?.breakTheGlassEnabled);
+  const data = deployment.data;
+  const disabled = !canManage || !data?.featureEnabled || update.isPending;
   return (
     <SettingsBlock
       id="break-the-glass"
       title="Break the glass"
-      description={
-        enabled
-          ? "A yell will disable guardrails for the session, unblocking your stuck agents."
-          : "A yell only sends a report. Guardrails stay on for the session."
-      }
-      control={
-        deployment.data ? (
-          <Switch
-            aria-label="Break the glass"
-            checked={enabled}
-            disabled={
-              !canManage || !deployment.data.featureEnabled || update.isPending
-            }
-            onCheckedChange={(checked) => update.mutate(checked)}
-          />
-        ) : (
-          <Skeleton className="h-5 w-9 rounded-full" />
-        )
-      }
-    />
+      description="Let blocked calls through and record a yell instead of stopping the agent. Use it to see what the policy would block without blocking it."
+      contentClassName="divide-y rounded-lg border"
+    >
+      <BreakTheGlassRow
+        title="Yell tool"
+        description="What a yell does to its session: the agent's own, or one for a waived call."
+        value={
+          data ? (data.breakTheGlassEnabled ? "off" : "record") : undefined
+        }
+        disabled={disabled}
+        options={[
+          { value: "record", label: "Record only" },
+          { value: "off", label: "Record and turn Guardrails off" },
+        ]}
+        onChange={(value) =>
+          update.mutate({ breakTheGlassEnabled: value === "off" })
+        }
+      />
+      <BreakTheGlassRow
+        title="Human approval"
+        description="Calls and remedy plans waiting for human approval."
+        value={data?.humanApprovalMode}
+        disabled={disabled}
+        environmentVariable="ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE"
+        options={[
+          { value: "block", label: "Block until approved" },
+          {
+            value: "unattended",
+            label: "Waive in unattended sessions",
+            description:
+              "Agent Runtimes, Scheduled tasks, and clients sending X-Archestra-Unattended: 1. A workload's remedy plans count too.",
+          },
+          { value: "everywhere", label: "Waive everywhere" },
+        ]}
+      />
+      <BreakTheGlassRow
+        title="Other blocked calls"
+        description={
+          <>
+            How to handle denials that can't be approved. Calls explicitly set
+            to <code className="font-mono text-xs">blocked</code> in the policy
+            will never waive.
+          </>
+        }
+        value={data?.unapprovableBlockMode}
+        disabled={disabled}
+        environmentVariable="ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE"
+        options={[
+          { value: "refuse", label: "Keep the block" },
+          { value: "allow", label: "Waive the block" },
+        ]}
+      />
+    </SettingsBlock>
   );
 }
 
@@ -348,5 +383,79 @@ function ClientsDocsLink({
     >
       {children}
     </ExternalDocsLink>
+  );
+}
+
+// ===
+
+function BreakTheGlassRow<T extends string>(props: {
+  title: string;
+  description: ReactNode;
+  value: T | undefined;
+  disabled: boolean;
+  options: { value: T; label: string; description?: string }[];
+  /** Release 1.4: the deployment sets this one; the page only shows it. */
+  environmentVariable?: string;
+  onChange?: (value: T) => void;
+}) {
+  const current = props.options.find((option) => option.value === props.value);
+  return (
+    <div className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)] lg:items-center lg:gap-8">
+      <div className="min-w-0 space-y-1">
+        <h3 className="text-sm font-medium leading-5">{props.title}</h3>
+        <div className="text-sm leading-5 text-muted-foreground">
+          {props.description}
+        </div>
+      </div>
+      {props.value && props.environmentVariable ? (
+        <div className="min-w-0 space-y-1 lg:text-right">
+          <p className="text-sm font-medium leading-5">
+            {current?.label ?? props.value}
+          </p>
+          <p className="text-xs leading-4 text-muted-foreground">
+            Set with{" "}
+            <code className="font-mono">
+              {/* Wrap a long name only after an underscore. */}
+              {props.environmentVariable.split("_").map((part, index) => (
+                <span key={part}>
+                  {index > 0 ? (
+                    <>
+                      _<wbr />
+                    </>
+                  ) : null}
+                  {part}
+                </span>
+              ))}
+            </code>
+          </p>
+        </div>
+      ) : props.value ? (
+        <Select
+          value={props.value}
+          disabled={props.disabled}
+          onValueChange={(value) => {
+            const option = props.options.find((each) => each.value === value);
+            if (option) props.onChange?.(option.value);
+          }}
+        >
+          <SelectTrigger aria-label={props.title} className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" align="end">
+            {props.options.map((option) => (
+              <SelectItem
+                key={option.value}
+                value={option.value}
+                description={option.description}
+              >
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : (
+        <Skeleton className="h-9 w-full" />
+      )}
+    </div>
   );
 }

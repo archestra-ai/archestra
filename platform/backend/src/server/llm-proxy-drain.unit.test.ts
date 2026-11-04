@@ -224,6 +224,7 @@ test.each([
   for (const path of paths) app.post(path, async () => ({ completed: true }));
   await app.ready();
   drain.beginShutdown();
+  // Change civil time only; the elapsed-time deadline must stay unchanged.
   const now = vi.spyOn(Date, "now").mockReturnValue(Date.now() + clockShiftMs);
   try {
     await withDrainScope(async () => {
@@ -234,7 +235,10 @@ test.each([
           url: path,
           headers: internalCallHeader(),
         });
-        expect(response.statusCode).toBe(expectedStatus);
+        expect(
+          response.statusCode,
+          "Wall-clock corrections must not move the elapsed admission deadline",
+        ).toBe(expectedStatus);
       }
     });
   } finally {
@@ -256,6 +260,7 @@ test("a backward wall-clock correction cannot extend the drain wait", async () =
   const request = app.inject("/v1/openai/pending");
   await started.promise;
   drain.beginShutdown();
+  // Roll back wall time before drain() calculates its remaining timeout.
   const now = vi.spyOn(Date, "now").mockReturnValue(Date.now() - 3_600_000);
   let watchdog: NodeJS.Timeout | undefined;
   try {
@@ -265,7 +270,10 @@ test("a backward wall-clock correction cannot extend the drain wait", async () =
         watchdog = setTimeout(() => resolve(false), 200);
       }),
     ]);
-    expect(completed).toBe(true);
+    expect(
+      completed,
+      "A wall-clock rollback must not extend the elapsed drain budget",
+    ).toBe(true);
   } finally {
     clearTimeout(watchdog);
     now.mockRestore();

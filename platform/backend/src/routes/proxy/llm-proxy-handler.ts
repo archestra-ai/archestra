@@ -2082,8 +2082,10 @@ async function handleStreaming<
         processedRequest: request as InteractionRequest,
         response: response as InteractionResponse,
         model: actualModel,
-        inputTokens: 0,
-        outputTokens: 0,
+        // No usage reached the adapter. Keep unknown distinct from a provider
+        // that explicitly reported zero tokens.
+        inputTokens: null,
+        outputTokens: null,
         toolCallBlock,
       };
       await persistProxyInteraction({ record, encryptedChat, streamTiming });

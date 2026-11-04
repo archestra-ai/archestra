@@ -116,6 +116,7 @@ async function startAgentRunSession(params: {
   runtimeCrossing?: RuntimeCrossing;
   ephemeralCredentials?: Record<string, string>;
   settleTaskOnFailure?: boolean;
+  shouldSettleLaunchFailure?: (failure: unknown) => boolean;
   boundContract?: { resolved: boolean; contract?: string };
 }): Promise<AgentRunRecord> {
   const backend = await prepareAgentRuntimeBackendDriver(
@@ -382,10 +383,13 @@ async function startAgentRunSession(params: {
     }
   } catch (error) {
     const launchFailure = describeLaunchFailure(error);
+    const shouldSettle = params.shouldSettleLaunchFailure
+      ? params.shouldSettleLaunchFailure(launchFailure)
+      : params.settleTaskOnFailure !== false;
     // Settle the task before cleanup is visible: the reconciler cancels any
     // unfinished task whose workspace is being deleted, which would otherwise
     // replace this launch error with a generic reason.
-    if (params.settleTaskOnFailure !== false) {
+    if (shouldSettle) {
       await recordLaunchFailure({
         taskId: params.taskId,
         failure: launchFailure,
@@ -615,7 +619,15 @@ export async function runTaskInAgentRuntime(params: {
           modelId: currentModelId,
           llmApiKeyId: currentLlmApiKeyId,
           ephemeralCredentials: candidateEphemeralCredentials,
-          settleTaskOnFailure: false,
+          shouldSettleLaunchFailure: (launchFailure) => {
+            if (params.abortSignal?.aborted) return true;
+            const classified = classifyAgentRunFailure(launchFailure);
+            const willRetryCurrent =
+              classified?.retriable === true && retryCount < maxRetries;
+            const hasFallbackCandidate =
+              candidateIndex + 1 < candidateAgentIds.length;
+            return !willRetryCurrent && !hasFallbackCandidate;
+          },
           boundContract,
         });
         return await followAgentRun({

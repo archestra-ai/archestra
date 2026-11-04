@@ -96,7 +96,9 @@ export function SettingsSection({
         <div
           className={cn(
             "space-y-1.5",
-            stickyLabel && !stacked && "md:sticky md:top-6 md:self-start",
+            stickyLabel &&
+              !stacked &&
+              "md:sticky md:top-[calc(var(--page-header-height,0px)+1.5rem)] md:self-start",
           )}
         >
           {/* `h3` throughout: these sit under the page's `h1`, and every

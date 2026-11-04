@@ -12,6 +12,7 @@ import {
   InlineNoticeBody,
   InlineNoticeText,
 } from "@/components/ui/inline-notice";
+import { InlineNoticeDetails } from "@/components/ui/inline-notice-details";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkifiedText } from "@/components/ui/linkified-text";
@@ -106,7 +107,6 @@ export function RemoteServerInstallDialog({
 }: RemoteServerInstallDialogProps) {
   const [configValues, setConfigValues] = useState<Record<string, string>>({});
   const [installError, setInstallError] = useState<string | null>(null);
-  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   // Team selection state
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
@@ -151,7 +151,6 @@ export function RemoteServerInstallDialog({
       }
 
       setInstallError(null);
-      setShowDiagnostics(false);
       const errorMessage = await onConfirm(catalogItem, {
         catalogId: catalogItem.id,
         metadata,
@@ -173,7 +172,6 @@ export function RemoteServerInstallDialog({
 
   const resetForm = () => {
     setInstallError(null);
-    setShowDiagnostics(false);
     setConfigValues({});
     setSelectedTeamId(null);
     setScope(orgOnly ? "org" : "personal");
@@ -311,30 +309,18 @@ export function RemoteServerInstallDialog({
       }
     >
       {installError && (
-        <InlineNotice variant="error" className="items-start p-3 text-sm">
-          <AlertTriangle aria-hidden className="mt-0.5" />
-          <InlineNoticeBody className="gap-1">
+        <InlineNotice variant="error">
+          <AlertTriangle aria-hidden />
+          <InlineNoticeBody>
             <span className="font-medium">Connection failed</span>
             <InlineNoticeText>
               Check the server credentials and provider configuration, then try
               again.
             </InlineNoticeText>
-            <Button
-              type="button"
-              variant="link"
-              size="sm"
-              aria-expanded={showDiagnostics}
-              onClick={() => setShowDiagnostics((visible) => !visible)}
-              className="h-auto self-start p-0 text-xs text-muted-foreground hover:text-foreground"
-            >
-              {showDiagnostics ? "Hide diagnostics" : "Show diagnostics"}
-            </Button>
-            {showDiagnostics && (
-              <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border bg-background/70 p-2 font-mono text-xs text-muted-foreground">
-                {installError}
-              </pre>
-            )}
           </InlineNoticeBody>
+          <InlineNoticeDetails label="diagnostics">
+            {installError}
+          </InlineNoticeDetails>
         </InlineNotice>
       )}
 

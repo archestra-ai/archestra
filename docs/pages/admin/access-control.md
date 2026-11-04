@@ -2,7 +2,7 @@
 title: Access Control
 description: Share resources and assign organization roles
 order: 2
-lastUpdated: 2026-10-30
+lastUpdated: 2026-11-04
 ---
 
 Give people **Can use** on an agent to let them run it without changing it. Give them **Can update** when they need to edit it.
@@ -105,7 +105,9 @@ An account gets the permissions of every role assigned to it directly, plus the 
 
 ## Team Member and Admin Roles
 
-Within each team, a person is a **member** or an **admin**. Members receive the team's grants but cannot manage its limits just by being members. Admins manage that team's members and settings, and its [limits](/docs/llm-proxy/costs-and-limits/limits#team-limits-and-spend) and their usage. Team admin status does not pass to descendant teams.
+Within each team, a person is a **member** or an **admin**. Members receive the team's grants but cannot manage its limits just by being members. Admins manage only that team's members and settings.
+
+Team admins can manage [child-team allocations and member key caps](/docs/llm-proxy/costs-and-limits/limits#team-limits-and-spend) across their team hierarchy. Their own team's ceiling stays protected unless they also administer a parent team.
 
 <span id="delegation-and-concurrent-edits"></span>
 

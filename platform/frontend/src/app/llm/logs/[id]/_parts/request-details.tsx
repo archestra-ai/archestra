@@ -405,14 +405,16 @@ function RequestOverview({
         >
           {allUsageUnknown ? (
             <p className="text-xs text-muted-foreground">
-              The provider did not report a token count for this request.
+              No token count was received for this request. This can happen when
+              a stream ends early or the provider does not include token counts.
             </p>
           ) : (
             <>
               {usageUnknown ? (
                 <p className="text-xs text-muted-foreground">
-                  The provider did not report every token count for this
-                  request.
+                  Not all token counts were received for this request. This can
+                  happen when a stream ends early or the provider returns only
+                  some counts.
                 </p>
               ) : null}
               {tokenTotal !== null ? (

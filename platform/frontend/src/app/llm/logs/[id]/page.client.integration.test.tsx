@@ -191,7 +191,7 @@ it("shows unknown usage when a request has no provider token count", async () =>
   expect(within(requests).getByText("Unknown")).toBeVisible();
   expect(
     await screen.findByText(
-      "The provider did not report a token count for this request.",
+      "No token count was received for this request. This can happen when a stream ends early or the provider does not include token counts.",
     ),
   ).toBeVisible();
 });
@@ -211,7 +211,7 @@ it("keeps a missing output count unknown when input usage is reported", async ()
 
   expect(
     await screen.findByText(
-      "The provider did not report every token count for this request.",
+      "Not all token counts were received for this request. This can happen when a stream ends early or the provider returns only some counts.",
     ),
   ).toBeVisible();
   const tokens = screen.getByText("Output").closest("li");

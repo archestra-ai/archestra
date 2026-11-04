@@ -1,4 +1,3 @@
-import { waiveSoftBlock } from "@/openappa/soft-block";
 import { APPA_SESSION_HEADER } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
 import config from "@/config";
@@ -16,6 +15,7 @@ import {
   type OpenAppaSession,
   sessionFromHeaders,
 } from "@/openappa/service";
+import { waiveSoftBlock } from "@/openappa/soft-block";
 import {
   APPA_SUBAGENT_BINDING_HEADER,
   verifySubagentBinding,
@@ -128,24 +128,44 @@ export async function resolveInstallerSetupBypass(params: {
  * enforced deployment. Fills the APPA session headers in `request.headers`
  * that the plugin and the provider-bound request read.
  */
-export async function admitOpenappaRequest(params: Parameters<typeof governedAdmission>[0]): Promise<OpenappaAdmission> {
+export async function admitOpenappaRequest(
+  params: Parameters<typeof governedAdmission>[0],
+): Promise<OpenappaAdmission> {
   try {
     return await governedAdmission(params);
   } catch (error) {
     const principal = params.principal;
     // The proxy's platform credential and Chat ownership checks remain mandatory.
     // Expired/missing APPA lineage is an integration refusal, not platform auth.
-    if (!(error instanceof ApiError) || error.statusCode === 401 ||
-        error.message.startsWith("OpenAPPA Chat session") || !params.deployment.active) throw error;
-    const caller = principal.authenticatedUserId ? `user:${principal.authenticatedUserId}`
-      : principal.authenticatedApp ? `app:${principal.authenticatedApp.id}`
-      : principal.virtualKeyId ? `virtual-key:${principal.virtualKeyId}`
-      : params.inProcessRequest && principal.userId ? `user:${principal.userId}` : undefined;
+    if (
+      !(error instanceof ApiError) ||
+      error.statusCode === 401 ||
+      error.message.startsWith("OpenAPPA Chat session") ||
+      !params.deployment.active
+    )
+      throw error;
+    const caller = principal.authenticatedUserId
+      ? `user:${principal.authenticatedUserId}`
+      : principal.authenticatedApp
+        ? `app:${principal.authenticatedApp.id}`
+        : principal.virtualKeyId
+          ? `virtual-key:${principal.virtualKeyId}`
+          : params.inProcessRequest && principal.userId
+            ? `user:${principal.userId}`
+            : undefined;
     if (!caller) throw error;
     const raw = params.request.headers[APPA_SESSION_HEADER.toLowerCase()];
-    const id = typeof raw === "string" && isWellFormedAppaId(raw) ? raw : params.agent.id;
-    const session = { organization_id: params.agent.organizationId, caller_id: caller, session_id: scopedSessionId(caller, id) };
-    if (!(await waiveSoftBlock(session, "session_admission", error.message))) throw error;
+    const id =
+      typeof raw === "string" && isWellFormedAppaId(raw)
+        ? raw
+        : params.agent.id;
+    const session = {
+      organization_id: params.agent.organizationId,
+      caller_id: caller,
+      session_id: scopedSessionId(caller, id),
+    };
+    if (!(await waiveSoftBlock(session, "session_admission", error.message)))
+      throw error;
     return { kind: "ungoverned" };
   }
 }

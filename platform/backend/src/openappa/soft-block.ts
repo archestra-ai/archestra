@@ -1,9 +1,9 @@
+import { TimeInMs } from "@archestra/shared";
+import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
-import { registerProcessLocalCache } from "@/process-local-cache-registry";
-import { LRUCacheManager } from "@/cache-manager";
-import { TimeInMs } from "@archestra/shared";
 import OpenAppaYellModel from "@/models/openappa-yell";
+import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import type { OpenAppaSession } from "./service";
 import { isUnenforcedSession, superyellSession } from "./unenforced";
 
@@ -12,7 +12,7 @@ import { isUnenforcedSession, superyellSession } from "./unenforced";
  * Never manufacture an engine admission: after recording the waiver the host
  * releases those bytes outside enforcement instead.
  */
-export class SoftBlockRefusal extends Error {}
+class SoftBlockRefusal extends Error {}
 
 export function softBlocksAllowed(): boolean {
   return config.openappa.softBlockMode === "allow";
@@ -43,7 +43,10 @@ export async function waiveSoftBlock(
   try {
     await superyellSession(session);
   } catch (error) {
-    logger.warn({ err: error }, "Could not persist the soft-block session bypass; the current request remains waived");
+    logger.warn(
+      { err: error },
+      "Could not persist the soft-block session bypass; the current request remains waived",
+    );
   }
   if (config.openappa.yellEnabled) {
     try {
@@ -57,7 +60,10 @@ export async function waiveSoftBlock(
         superyell: true,
       });
     } catch (error) {
-      logger.warn({ err: error }, "Could not record the soft-block waiver yell; enforcement remains off");
+      logger.warn(
+        { err: error },
+        "Could not record the soft-block waiver yell; enforcement remains off",
+      );
     }
   }
   return true;
@@ -71,7 +77,16 @@ export function refuseSoftBlock(reason: string): void {
 
 /** Process-local fallback when the durable bypass store is unavailable. */
 export function softBlockWaivedLocally(session: OpenAppaSession): boolean {
-  return softBlocksAllowed() && waived.get(`${session.organization_id}:${session.session_id}`) === true;
+  return (
+    softBlocksAllowed() &&
+    [session.session_id, session.parent_id, session.fork_of].some(
+      (id) =>
+        id !== undefined &&
+        waived.get(`${session.organization_id}:${id}`) === true,
+    )
+  );
 }
 
-const waived = registerProcessLocalCache(new LRUCacheManager<boolean>({ maxSize: 10000, defaultTtl: TimeInMs.Day }));
+const waived = registerProcessLocalCache(
+  new LRUCacheManager<boolean>({ maxSize: 10000, defaultTtl: TimeInMs.Day }),
+);

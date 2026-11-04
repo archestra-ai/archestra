@@ -26,6 +26,41 @@ const table = schema.openappaSessionsTable;
  * attach a new session to an existing history.
  */
 class OpenAppaSessionModel {
+  /** Reads retained bytes only for their authenticated recipient after enforcement is waived. */
+  static async waivedPeerBody(params: {
+    organizationId: string;
+    callerId: string;
+    sessionId: string;
+    parentId?: string;
+    messageId: string;
+  }): Promise<string | null> {
+    const peer = schema.openappaEmbeddedPeerMessagesTable;
+    const [row] = await db
+      .select({ body: peer.body })
+      .from(peer)
+      .innerJoin(
+        table,
+        and(
+          eq(table.root, peer.root),
+          sql`${peer.recipient} = CASE WHEN ${table.parentId} IS NULL THEN ${table.root} ELSE ${table.actor} END`,
+        ),
+      )
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          eq(table.callerId, params.callerId),
+          eq(table.sessionId, params.sessionId),
+          params.parentId
+            ? eq(table.parentId, params.parentId)
+            : isNull(table.parentId),
+          eq(peer.id, params.messageId),
+          sql`${peer.expiresAt} > ${Math.floor(Date.now() / 1000)}`,
+        ),
+      )
+      .limit(1);
+    return row?.body ?? null;
+  }
+
   static async hasAncestor(params: {
     organizationId: string;
     callerId: string;

@@ -1,4 +1,3 @@
-import { isHardBlock, refuseSoftBlock, softBlocksAllowed, SoftBlockRefusal, waiveSoftBlock } from "@/openappa/soft-block";
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import { isDeepStrictEqual } from "node:util";
@@ -124,6 +123,12 @@ import {
   withCapturedGuardrailsActivation,
 } from "@/openappa/service";
 import {
+  isHardBlock,
+  refuseSoftBlock,
+  softBlocksAllowed,
+  waiveSoftBlock,
+} from "@/openappa/soft-block";
+import {
   subagentChildSession,
   subagentReturnPrefix,
 } from "@/openappa/subagent-binding";
@@ -133,6 +138,7 @@ import {
 } from "@/openappa/trajectory-stamp";
 import {
   findUnenforcedCalls,
+  isUnenforcedSession,
   observeUnenforcedSession,
   recordUnenforcedCalls,
   startedUnenforced,
@@ -295,7 +301,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
 
   constructor(private readonly clientAdapters: readonly AppaClientAdapter[]) {}
 
-  private async guardedonSessionInit(context: LlmProxyRequestContext): Promise<void> {
+  private async guardedSessionInit(
+    context: LlmProxyRequestContext,
+  ): Promise<void> {
     this.bindings.delete(context.resources);
     this.observers.delete(context.resources);
     const trustedContext = getTrustedContext(context.resources);
@@ -362,7 +370,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     this.bindings.set(context.resources, binding);
   }
 
-  private async guardedonToolResults(
+  private async guardedToolResults(
     context: LlmProxyToolResultsContext,
   ): Promise<LlmProxyToolResultsOutcome | undefined> {
     const binding = this.bindings.get(context.resources);
@@ -763,7 +771,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     };
   }
 
-  private async guardedonBeforeModel(context: LlmProxyBeforeModelContext): Promise<void> {
+  private async guardedBeforeModel(
+    context: LlmProxyBeforeModelContext,
+  ): Promise<void> {
     const binding = this.bindings.get(context.resources);
     if (binding) enterCapturedGuardrailsActivation("active");
     binding?.adapter?.stripCarrierMetadata(context.request);
@@ -918,7 +928,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     );
   }
 
-  async onPrepareToolCalls(
+  private async guardedPrepareToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
     const binding = this.bindings.get(context.resources);
@@ -1179,7 +1189,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     return this.bindings.get(context.resources)?.request.tools !== undefined;
   }
 
-  private async guardedonHostedToolCalls(
+  private async guardedHostedToolCalls(
     context: LlmProxyHostedToolCallsContext,
   ): Promise<LlmProxyHostedToolCallsOutcome | undefined> {
     const binding = this.bindings.get(context.resources);
@@ -1234,7 +1244,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     };
   }
 
-  private async guardedonToolCalls(
+  private async guardedToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
     const observer = this.observers.get(context.resources);
@@ -1512,8 +1522,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       }
     }
 
-    const refusals = [...decisionById.values()].flatMap((decision) => decision.kind === "deny" ? [decision.feedback] : []);
-    if (refusals.length && !refusals.some(isHardBlock)) refuseSoftBlock(refusals.join("\n"));
+    const refusals = [...decisionById.values()].flatMap((decision) =>
+      decision.kind === "deny" ? [decision.feedback] : [],
+    );
+    if (refusals.length && !refusals.some(isHardBlock))
+      refuseSoftBlock(refusals.join("\n"));
     const notice = binding.request.tools?.notice;
     // Only the ordinary calls the runtime ruled on here can be waived.
     const evaluatedIds = new Set(rest.map((call) => call.id));
@@ -1866,7 +1879,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     };
   }
 
-  async onModelResponse(
+  private async guardedModelResponse(
     context: LlmProxyModelResponseContext,
   ): Promise<undefined> {
     const binding = this.bindings.get(context.resources);
@@ -1892,7 +1905,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     );
   }
 
-  private async guardedonBufferedModelResponse(
+  private async guardedBufferedModelResponse(
     context: LlmProxyBufferedModelResponseContext,
   ): Promise<LlmProxyBufferedModelResponseOutcome | undefined> {
     const binding = this.bindings.get(context.resources);
@@ -1987,6 +2000,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         ? { decision: "release" }
         : { decision: "replace", responseText: admitted };
     }
+    // A waived return has no engine crossing to attest. Its parent waives at
+    // its own admission boundary instead of trusting a fabricated receipt.
+    if (softBlocksAllowed() && (await isUnenforcedSession(binding.session)))
+      return { decision: "release" };
     const marker = mintChildReturnMarker({
       organizationId: binding.session.organization_id,
       callerId: binding.session.caller_id,
@@ -2004,52 +2021,135 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   }
 
   async onSessionInit(context: LlmProxyRequestContext): Promise<void> {
-    return this.withSoftBlockWaiver(context, "onSessionInit", async () => {
-      const result = await this.guardedonSessionInit(context);
-      
-      return result;
-    }, () => undefined);
+    return this.withSoftBlockWaiver(
+      context,
+      "onSessionInit",
+      async () => {
+        const result = await this.guardedSessionInit(context);
+
+        return result;
+      },
+      () => undefined,
+    );
   }
 
-  async onToolResults(context: LlmProxyToolResultsContext): Promise<LlmProxyToolResultsOutcome | undefined> {
-    return this.withSoftBlockWaiver(context, "onToolResults", async () => {
-      const result = await this.guardedonToolResults(context);
-      
-      return result;
-    }, () => undefined);
+  async onToolResults(
+    context: LlmProxyToolResultsContext,
+  ): Promise<LlmProxyToolResultsOutcome | undefined> {
+    return this.withSoftBlockWaiver(
+      context,
+      "onToolResults",
+      async () => {
+        const result = await this.guardedToolResults(context);
+
+        return result;
+      },
+      () => undefined,
+    );
   }
 
   async onBeforeModel(context: LlmProxyBeforeModelContext): Promise<void> {
-    return this.withSoftBlockWaiver(context, "onBeforeModel", async () => {
-      const result = await this.guardedonBeforeModel(context);
-      
-      return result;
-    }, () => undefined);
+    return this.withSoftBlockWaiver(
+      context,
+      "onBeforeModel",
+      async () => {
+        const result = await this.guardedBeforeModel(context);
+
+        return result;
+      },
+      () => undefined,
+    );
   }
 
-  async onToolCalls(context: LlmProxyToolCallsContext): Promise<LlmProxyToolCallsOutcome | undefined> {
-    return this.withSoftBlockWaiver(context, "onToolCalls", async () => {
-      const result = await this.guardedonToolCalls(context);
-      if (result?.decision === "refuse") refuseSoftBlock(result.refusal.reason);
-        if (result?.decision === "allow" && result.blocked?.length && !result.blocked.some((block) => isHardBlock(block.reason))) refuseSoftBlock(result.blocked.map((block) => block.reason).join("\n"));
-      return result;
-    }, () => ({ decision: "allow", toolCalls: context.toolCalls }));
+  async onToolCalls(
+    context: LlmProxyToolCallsContext,
+  ): Promise<LlmProxyToolCallsOutcome | undefined> {
+    return this.withSoftBlockWaiver(
+      context,
+      "onToolCalls",
+      async () => {
+        const result = await this.guardedToolCalls(context);
+        if (result?.decision === "refuse")
+          refuseSoftBlock(result.refusal.reason);
+        if (
+          result?.decision === "allow" &&
+          result.blocked?.length &&
+          !result.blocked.some((block) => isHardBlock(block.reason))
+        )
+          refuseSoftBlock(
+            result.blocked.map((block) => block.reason).join("\n"),
+          );
+        return result;
+      },
+      () => ({ decision: "allow", toolCalls: context.toolCalls }),
+    );
   }
 
-  async onHostedToolCalls(context: LlmProxyHostedToolCallsContext): Promise<LlmProxyHostedToolCallsOutcome | undefined> {
-    return this.withSoftBlockWaiver(context, "onHostedToolCalls", async () => {
-      const result = await this.guardedonHostedToolCalls(context);
-      if (result?.decision === "hold" && !result.blocked.some((block) => isHardBlock(block.reason))) refuseSoftBlock(result.blocked.map((block) => block.reason).join("\n"));
-      return result;
-    }, () => ({ decision: "release" }));
+  async onHostedToolCalls(
+    context: LlmProxyHostedToolCallsContext,
+  ): Promise<LlmProxyHostedToolCallsOutcome | undefined> {
+    return this.withSoftBlockWaiver(
+      context,
+      "onHostedToolCalls",
+      async () => {
+        const result = await this.guardedHostedToolCalls(context);
+        if (
+          result?.decision === "hold" &&
+          !result.blocked.some((block) => isHardBlock(block.reason))
+        )
+          refuseSoftBlock(
+            result.blocked.map((block) => block.reason).join("\n"),
+          );
+        return result;
+      },
+      () => ({ decision: "release" }),
+    );
   }
 
-  async onBufferedModelResponse(context: LlmProxyBufferedModelResponseContext): Promise<LlmProxyBufferedModelResponseOutcome | undefined> {
-    return this.withSoftBlockWaiver(context, "onBufferedModelResponse", async () => {
-      const result = await this.guardedonBufferedModelResponse(context);
-      
-      return result;
-    }, () => ({ decision: "release" }));
+  async onBufferedModelResponse(
+    context: LlmProxyBufferedModelResponseContext,
+  ): Promise<LlmProxyBufferedModelResponseOutcome | undefined> {
+    return this.withSoftBlockWaiver(
+      context,
+      "onBufferedModelResponse",
+      async () => {
+        const result = await this.guardedBufferedModelResponse(context);
+
+        return result;
+      },
+      () => ({ decision: "release" }),
+    );
+  }
+
+  async onPrepareToolCalls(
+    context: LlmProxyToolCallsContext,
+  ): Promise<LlmProxyToolCallsOutcome | undefined> {
+    return this.withSoftBlockWaiver(
+      context,
+      "onPrepareToolCalls",
+      async () => {
+        const result = await this.guardedPrepareToolCalls(context);
+        if (result?.decision === "refuse")
+          refuseSoftBlock(result.refusal.reason);
+        return result;
+      },
+      () => ({ decision: "allow", toolCalls: context.toolCalls }),
+    );
+  }
+
+  async onModelResponse(
+    context: LlmProxyModelResponseContext,
+  ): Promise<undefined> {
+    return this.withSoftBlockWaiver(
+      context,
+      "onModelResponse",
+      async () => {
+        const result = await this.guardedModelResponse(context);
+
+        return result;
+      },
+      () => undefined,
+    );
   }
 
   async onCleanup(context: LlmProxyRequestContext): Promise<void> {
@@ -2072,13 +2172,25 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     } catch (error) {
       // Authentication failures are never policy waivers. The host still owns
       // the unmodified provider bytes here; no client tool has been executed.
-      if (!(error instanceof SoftBlockRefusal) &&
-          !(error instanceof ApiError && ![401, 403].includes(error.statusCode))) throw error;
+      if (
+        !(error instanceof Error) ||
+        (error instanceof ApiError && error.statusCode === 401)
+      )
+        throw error;
       const trusted = getTrustedContext(context.resources);
-      const session = this.bindings.get(context.resources)?.session ?? trusted?.session;
-      if (!session || !(await waiveSoftBlock(session, boundary, error.message))) throw error;
+      const session =
+        this.bindings.get(context.resources)?.session ?? trusted?.session;
+      if (!session || !(await waiveSoftBlock(session, boundary, error.message)))
+        throw error;
       restoreSoftBlockRequest(context.requestBody, originalBody);
       restoreSoftBlockRequest(providerRequest, originalRequest);
+      if (providerRequest) {
+        this.bindings
+          .get(context.resources)
+          ?.adapter?.stripCarrierMetadata(providerRequest);
+        stripPeerProofs(providerRequest);
+        stripRuntimeToolProofs(providerRequest);
+      }
       this.bindings.delete(context.resources);
       this.observers.delete(context.resources);
       enterCapturedGuardrailsActivation("inactive");
@@ -3327,6 +3439,7 @@ async function admitRelayArrivals(params: {
       continue;
     }
     if (arrival.kind === "session" || arrival.peer === "malformed") {
+      refuseSoftBlock("OpenAPPA withheld a peer arrival");
       arrival.replace(WITHHELD_RELAY);
       continue;
     }
@@ -3360,7 +3473,9 @@ async function admitRelayArrivals(params: {
     });
     const { withheld } = arrival.admit(records);
     if (withheld) {
-      refuseSoftBlock("OpenAPPA withheld a peer message without a crossing record");
+      refuseSoftBlock(
+        "OpenAPPA withheld a peer message without a crossing record",
+      );
       logger.info(
         { sessionId: session.session_id, kind: arrival.kind },
         "OpenAPPA withheld a message with no record of crossing from its sender",
@@ -3973,6 +4088,7 @@ async function admitPeerArrival(params: {
 }): Promise<void> {
   const trailer = params.arrival.peer;
   if (!trailer || trailer === "malformed") {
+    refuseSoftBlock("OpenAPPA withheld a peer arrival");
     params.arrival.replace(WITHHELD_RELAY);
     return;
   }
@@ -3982,6 +4098,7 @@ async function admitPeerArrival(params: {
     arrival: params.arrival,
   });
   if (!senderSessionId) {
+    refuseSoftBlock("OpenAPPA withheld a peer arrival");
     params.arrival.replace(WITHHELD_RELAY);
     return;
   }
@@ -4003,6 +4120,7 @@ async function admitPeerArrival(params: {
     params.arrival.replace(heldPeerNotice(admitted.notices, params.tools));
     return;
   }
+  refuseSoftBlock("OpenAPPA withheld a peer arrival");
   params.arrival.replace(WITHHELD_RELAY);
 }
 
@@ -4200,7 +4318,9 @@ async function admitStructuredRelay(params: {
   if (arrival.recorded?.(records)) {
     const { withheld } = arrival.admit(records);
     if (withheld) {
-      refuseSoftBlock("OpenAPPA withheld a peer message without a crossing record");
+      refuseSoftBlock(
+        "OpenAPPA withheld a peer message without a crossing record",
+      );
       logger.info(
         { sessionId: params.session.session_id, kind: arrival.kind },
         "OpenAPPA withheld a message with no record of crossing from its sender",
@@ -4208,6 +4328,7 @@ async function admitStructuredRelay(params: {
     }
     return;
   }
+  refuseSoftBlock("OpenAPPA withheld a peer message pending inbox discovery");
   arrival.replace(
     inboxDiscoveryNotice(params.tools, protocolRequestId(arrival.body)),
   );
@@ -4218,6 +4339,7 @@ function heldPeerNotice(
   tools: { list?: string; read?: string },
   requestId?: string,
 ): string {
+  refuseSoftBlock("OpenAPPA held a peer message");
   const ids = notices.map((notice) => notice.messageId).join(", ");
   const expiry = notices
     .map((notice) => notice.expiresAt)
@@ -6995,7 +7117,15 @@ function tracesLineage(session: OpenAppaSession, chat: boolean): boolean {
 
 /** Restore in place: adapters retain references to the provider request. */
 function restoreSoftBlockRequest(target: unknown, original: unknown): void {
-  if (!target || typeof target !== "object" || !original || typeof original !== "object") return;
-  for (const key of Object.keys(target)) delete (target as Record<string, unknown>)[key];
+  if (
+    !target ||
+    typeof target !== "object" ||
+    !original ||
+    typeof original !== "object"
+  )
+    return;
+  for (const key of Object.keys(target))
+    delete (target as Record<string, unknown>)[key];
+  if (Array.isArray(target)) target.length = 0;
   Object.assign(target, original);
 }

@@ -1489,7 +1489,7 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - With the default **Yell tool** setting, each waiver's yell also turns Guardrails off for the rest of that session.
   - Later releases make this an editable setting with the same default. While this variable is set they use it instead and lock the setting, so keep it set when you upgrade to keep the same behaviour.
 
-- **`ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE`** - Whether a blocked call without an approval option runs anyway, with a yell. A call the policy blocks explicitly (the `blocked` mark) always stays blocked. Shown read-only as **Other blocked calls** under [Break the glass](/docs/agents/guardrails/policies#yells) in **Settings → Guardrails**.
+- **`ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE`** - Emergency override for soft refusals, including tool calls and results, child returns, runtime exports, peer messages, failed helpers, and fork or compaction admission. `allow` releases the original operation and turns Guardrails off for that session, even at its first refusal and even if yell reporting is disabled or fails. Explicit policy `blocked` marks and platform authentication and access checks remain enforced. Shown read-only as **Other blocked calls** under [Break the glass](/docs/agents/guardrails/policies#yells) in **Settings → Guardrails**.
   - Default: `refuse`
   - Values: `refuse` (keep the block), `allow` (waive it). Other values stop startup.
   - Later releases make this an editable setting with the same default. While this variable is set they use it instead and lock the setting, so keep it set when you upgrade to keep the same behaviour.
@@ -1497,7 +1497,7 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 - **`ARCHESTRA_OPENAPPA_YELL_ENABLED`** - Lets agents report confusing blocks with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. Reports are stored locally.
   - Default: `true`
   - Values: `true`, `false`
-  - With reports off, the [Break the glass](/docs/agents/guardrails/policies#yells) settings still let calls through, but no yell is recorded and no session is turned off.
+  - With reports off, no yell is recorded. `ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE=allow` still waives soft refusals and turns session enforcement off.
 
 - **`ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED`** - Forwards agent reports to the shared OpenAPPA reporting service, independently of [`ARCHESTRA_ANALYTICS`](/docs/reference/configuration#ARCHESTRA_ANALYTICS). Requires [`ARCHESTRA_OPENAPPA_YELL_ENABLED`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_YELL_ENABLED).
   - Default: `false`, including after upgrades. Values: `true`, `false`; unset or empty means off, and invalid values stop startup.

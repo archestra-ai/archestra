@@ -1,4 +1,3 @@
-import { softBlockWaivedLocally } from "./soft-block";
 import { TimeInMs } from "@archestra/shared/consts";
 import { LRUCacheManager } from "@/cache-manager";
 import type db from "@/database";
@@ -14,6 +13,7 @@ import type {
   UnenforcedCallReason,
   UnenforcedSessionReason,
 } from "@/types/openappa-unenforced";
+import { softBlockWaivedLocally } from "./soft-block";
 
 /**
  * What OpenAPPA did not see while Guardrails enforcement was off.
@@ -90,7 +90,10 @@ export async function startedUnenforced(
 export async function isUnenforcedSession(
   session: OpenAppaSession,
 ): Promise<boolean> {
-  return softBlockWaivedLocally(session) || (await decideUnenforced(session)).unenforced;
+  return (
+    softBlockWaivedLocally(session) ||
+    (await decideUnenforced(session)).unenforced
+  );
 }
 
 /**

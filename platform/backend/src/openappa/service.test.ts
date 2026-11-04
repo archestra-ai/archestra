@@ -4522,3 +4522,60 @@ describe("remedy by offer", () => {
     ).resolves.toEqual({ kind: "denied", feedback: "the label narrows" });
   });
 });
+
+describe("soft-block return waiver", () => {
+  for (const reason of [
+    "your parent takes no return",
+    "return below floor",
+    "return shape mismatch",
+    "sanitizer unavailable",
+    "child still busy",
+  ]) {
+    test(`returns the original bytes when the first boundary refuses: ${reason}`, async () => {
+      config.openappa.softBlockMode = "allow";
+      config.openappa.yellEnabled = false;
+      native.dispatchHook.mockResolvedValue(
+        JSON.stringify({ decision: "block", feedback: reason }),
+      );
+      const child = {
+        ...session,
+        session_id: `child-${reason}`,
+        parent_id: session.session_id,
+      };
+      expect(
+        await returnRuntimeValue({
+          session: child,
+          operationId: "first-return",
+          value: "original file or final answer",
+        }),
+      ).toEqual({ kind: "admitted", value: "original file or final answer" });
+      expect(await startedUnenforced(child)).toBe(true);
+      native.dispatchHook.mockClear();
+      expect(
+        await returnRuntimeValue({
+          session: child,
+          operationId: "next-return",
+          value: "next value",
+        }),
+      ).toEqual({ kind: "admitted", value: "next value" });
+      expect(native.dispatchHook).not.toHaveBeenCalled();
+    });
+  }
+  test("a failed return helper still waives without a previous tool call", async () => {
+    config.openappa.softBlockMode = "allow";
+    native.dispatchHook.mockRejectedValue(new Error("helper unavailable"));
+    const child = {
+      ...session,
+      session_id: "child-helper-failed",
+      parent_id: session.session_id,
+    };
+    expect(
+      await returnRuntimeValue({
+        session: child,
+        operationId: "first-return",
+        value: "original",
+      }),
+    ).toEqual({ kind: "admitted", value: "original" });
+    expect(await startedUnenforced(child)).toBe(true);
+  });
+});

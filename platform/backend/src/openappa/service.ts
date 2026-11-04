@@ -1,5 +1,3 @@
-import { waiveSoftBlock } from "./soft-block";
-import { isUnenforcedSession } from "./unenforced";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { DispatchPolicy } from "@archestra/openappa-rs";
 import {
@@ -26,6 +24,7 @@ import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
 import MemberModel from "@/models/member";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
+import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import {
   observeOpenappaDispatch,
@@ -65,7 +64,9 @@ import {
 } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
 import { policyView } from "./result-view";
+import { waiveSoftBlock } from "./soft-block";
 import { toolCallArgumentsText } from "./tool-call-arguments";
+import { isUnenforcedSession } from "./unenforced";
 import type { DeclaredToolSpelling } from "./wire";
 
 export { APPA_PARENT_HEADER, APPA_SESSION_HEADER };
@@ -871,7 +872,14 @@ export async function addressRuntimeChild(params: {
     spawned_id: params.childSessionId,
     output: "",
   });
-  if (decision.decision !== "ack" && !(await waiveSoftBlock(params.session, "child_address", decisionMessage(decision)))) {
+  if (
+    decision.decision !== "ack" &&
+    !(await waiveSoftBlock(
+      params.session,
+      "child_address",
+      decisionMessage(decision),
+    ))
+  ) {
     throw new ApiError(409, decisionMessage(decision));
   }
 }
@@ -2090,6 +2098,49 @@ export async function readPeerMessage(params: {
   toolCallId: string;
   args: { message_id: string };
 }): Promise<CallToolResult> {
+  let result: CallToolResult;
+  try {
+    result = await governedReadPeerMessage(params);
+    if (!result.isError) return result;
+  } catch (error) {
+    if (
+      !(await waiveSoftBlock(
+        params.session,
+        "peer_read",
+        error instanceof Error ? error.message : String(error),
+      ))
+    )
+      throw error;
+    result = {
+      isError: true,
+      content: [{ type: "text", text: "Peer message unavailable" }],
+    };
+  }
+  const reason = result.content
+    .filter((item) => item.type === "text")
+    .map((item) => item.text)
+    .join("\n");
+  if (
+    params.session.caller_id &&
+    (await waiveSoftBlock(params.session, "peer_read", reason))
+  ) {
+    const body = await OpenAppaSessionModel.waivedPeerBody({
+      organizationId: params.session.organization_id,
+      callerId: params.session.caller_id,
+      sessionId: params.session.session_id,
+      parentId: params.session.parent_id,
+      messageId: params.args.message_id,
+    });
+    if (body !== null) return { content: [{ type: "text", text: body }] };
+  }
+  return result;
+}
+
+async function governedReadPeerMessage(params: {
+  session: OpenAppaSession;
+  toolCallId: string;
+  args: { message_id: string };
+}): Promise<CallToolResult> {
   const decision = await withRuntime(
     params.session.organization_id,
     (module, policy) =>
@@ -2189,15 +2240,25 @@ function validateReturnContract(text: string): void {
   }
 }
 
-async function crossChildValue(params: Parameters<typeof governedCrossChildValue>[0]): Promise<ChildEndOutcome> {
+async function crossChildValue(
+  params: Parameters<typeof governedCrossChildValue>[0],
+): Promise<ChildEndOutcome> {
   try {
-    if (await isUnenforcedSession(params.session)) return { decision: "release", crossed: true };
+    if (await isUnenforcedSession(params.session))
+      return { decision: "release", crossed: true };
     const result = await governedCrossChildValue(params);
-    if (!result.crossed && await waiveSoftBlock(params.session, params.event, result.content))
+    if (
+      !result.crossed &&
+      (await waiveSoftBlock(params.session, params.event, result.content))
+    )
       return { decision: "release", crossed: true };
     return result;
   } catch (error) {
-    if (!(error instanceof Error) || !(await waiveSoftBlock(params.session, params.event, error.message))) throw error;
+    if (
+      !(error instanceof Error) ||
+      !(await waiveSoftBlock(params.session, params.event, error.message))
+    )
+      throw error;
     return { decision: "release", crossed: true };
   }
 }

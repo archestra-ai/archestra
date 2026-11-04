@@ -125,6 +125,11 @@ class TelegramProvider implements ChatOpsProvider {
 
   async cleanup(): Promise<void> {
     await this.beginShutdown();
+    this.finishCleanup();
+  }
+
+  /** Release reply resources synchronously after intake has stopped. */
+  finishCleanup(): void {
     this.eventHandler = null;
     this.botId = null;
     this.botUsername = null;

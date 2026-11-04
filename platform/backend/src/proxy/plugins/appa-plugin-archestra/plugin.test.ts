@@ -12332,6 +12332,53 @@ describe("soft-block emergency override", () => {
     return { context, trusted, plugin };
   }
 
+  test("waives a cached child contract before the provider sees empty-answer instructions", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const { context, trusted, plugin } = await setup(organizationId, "parent");
+    const contract = "[appa] Your final message must be empty.";
+    const process = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({
+        toolResultUpdates: {},
+        returnContract: contract,
+      });
+    const request = {
+      system: "Base",
+      messages: [
+        { role: "user", content: "Explain the result with useful details." },
+      ],
+    };
+    try {
+      await plugin.onToolResults({ ...context, toolResults: [] });
+      await plugin.onBeforeModel({
+        ...context,
+        interactionType: "anthropic:messages",
+        request,
+      });
+      expect(JSON.stringify(request)).not.toContain(contract);
+      expect(JSON.stringify(request)).toContain(
+        "Explain the result with useful details.",
+      );
+      expect(
+        await OpenAppaUnenforcedModel.findSessions({
+          organizationId,
+          sessionIds: [trusted.session.session_id],
+        }),
+      ).toHaveLength(1);
+      expect(
+        await plugin.onBufferedModelResponse({
+          ...context,
+          response: {},
+          responseText: "The useful result is ready.",
+        }),
+      ).toBeUndefined();
+    } finally {
+      process.mockRestore();
+    }
+  });
+
   for (const tool of [
     "read_file",
     "archestra__start_run",

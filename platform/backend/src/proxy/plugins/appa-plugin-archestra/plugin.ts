@@ -806,6 +806,21 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         binding.returnContract = started.contract ?? binding.returnContract;
         binding.sessionInitialized = true;
       }
+      if (
+        softBlocksAllowed() &&
+        ((await isUnenforcedSession(binding.session)) ||
+          (binding.returnContract &&
+            (await waiveSoftBlock(
+              binding.session,
+              "child_return_contract",
+              binding.returnContract,
+            ))))
+      ) {
+        this.bindings.delete(context.resources);
+        this.observers.delete(context.resources);
+        enterCapturedGuardrailsActivation("inactive");
+        return;
+      }
       if (binding.returnContract && !binding.threadContinue) {
         deliverReturnContract({
           request: context.request,

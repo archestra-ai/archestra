@@ -64,7 +64,7 @@ import {
 } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
 import { policyView } from "./result-view";
-import { waiveSoftBlock } from "./soft-block";
+import { softBlocksAllowed, waiveSoftBlock } from "./soft-block";
 import { toolCallArgumentsText } from "./tool-call-arguments";
 import { isUnenforcedSession } from "./unenforced";
 import type { DeclaredToolSpelling } from "./wire";
@@ -827,6 +827,10 @@ async function startSession(params: {
       typeof text === "string" &&
       text.trim().length > 0
     ) {
+      // Apply the operator's waiver before these instructions can make the
+      // child suppress its answer (for example, a void return contract).
+      if (await waiveSoftBlock(params.session, "child_return_contract", text))
+        return undefined;
       validateReturnContract(text);
       params.deliverReturnContract?.(text);
       return text;
@@ -856,6 +860,14 @@ export async function startRuntimeChild(params: {
   });
   if (decision.decision === "ack") return {};
   if (decision.decision === "context" && decision.text?.trim()) {
+    if (
+      await waiveSoftBlock(
+        params.session,
+        "child_return_contract",
+        decision.text,
+      )
+    )
+      return {};
     validateReturnContract(decision.text);
     return { contract: decision.text };
   }
@@ -1104,6 +1116,9 @@ export async function processProxyResults(params: {
     principal,
   });
   const updates: Record<string, ProcessedToolResult> = {};
+  if (softBlocksAllowed() && (await isUnenforcedSession(params.session))) {
+    return { toolResultUpdates: updates };
+  }
   for (const result of params.results) {
     const reportingName = archestraMcpBranding.getToolShortName(
       params.canonicalize(result.name, result.namespace),

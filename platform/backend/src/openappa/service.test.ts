@@ -13,6 +13,7 @@ import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import MemberModel from "@/models/member";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
+import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { initializeOpenappaMetrics } from "@/observability/metrics/openappa";
 import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/codex";
@@ -2189,6 +2190,64 @@ describe("APPA feature boundary", () => {
       "bound parent",
     );
     expect(native.dispatchHook).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    "launch",
+    "proxy",
+  ] as const)("waives a child contract before %s delivery can suppress the answer", async (entry) => {
+    config.openappa.softBlockMode = "allow";
+    config.openappa.yellEnabled = true;
+    const child = {
+      ...session,
+      session_id: `${session.session_id}:void-child`,
+      parent_id: session.session_id,
+    };
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({
+        decision: "context",
+        text: "[appa] Your final message must be empty.",
+      }),
+    );
+    const deliver = vi.fn();
+    if (entry === "launch") {
+      await expect(startRuntimeChild({ session: child })).resolves.toEqual({});
+    } else {
+      await expect(
+        processProxyResults({
+          session: child,
+          canonicalize: (name) => name,
+          results: [
+            {
+              id: "read",
+              name: "read_file",
+              content: "useful data",
+              isError: false,
+            },
+          ],
+          deliverReturnContract: deliver,
+        }),
+      ).resolves.toEqual({ toolResultUpdates: {} });
+    }
+    expect(deliver).not.toHaveBeenCalled();
+    expect(native.dispatchHook).toHaveBeenCalledOnce();
+    expect(
+      await OpenAppaUnenforcedModel.findSessions({
+        organizationId,
+        sessionIds: [child.session_id],
+      }),
+    ).toHaveLength(1);
+    expect(
+      (
+        await OpenAppaYellModel.list({
+          organizationId,
+          status: "all",
+          limit: 20,
+        })
+      ).data,
+    ).toEqual([
+      expect.objectContaining({ sessionId: child.session_id, superyell: true }),
+    ]);
   });
 
   test("refuses new steer or file bytes when the native parent-child address is refused", async () => {

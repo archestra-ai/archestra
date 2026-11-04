@@ -1,10 +1,12 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import { MODEL_POOL_ID_HEADER } from "@archestra/shared/consts";
 import { eq } from "drizzle-orm";
 import type { LightMyRequestResponse } from "fastify";
 import { GoogleAuth, OAuth2Client } from "google-auth-library";
 import { HttpResponse, http, passthrough } from "msw";
 import { onTestFinished, vi } from "vitest";
+import { internalCallHeader } from "@/clients/internal-call";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -15,6 +17,7 @@ import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import anthropicRoutes from "./anthropic";
 import azureRoutes from "./azure";
+import geminiRoutes from "./gemini";
 import groqRoutes from "./groq";
 import mistralRoutes from "./mistral";
 import modelRouterRoutes from "./model-router";
@@ -138,6 +141,7 @@ const poolTest = test.extend<{
     });
     const app = createFastifyInstance();
     await app.register(modelRouterRoutes);
+    await app.register(geminiRoutes);
     await app.register(anthropicRoutes);
     await app.register(azureRoutes);
     await app.register(openrouterRoutes);
@@ -1038,3 +1042,145 @@ poolTest(
     expect(hits).toBe(0);
   },
 );
+
+for (const failureStatus of [400, 429, 503]) {
+  for (const stream of [false, true]) {
+    poolTest(
+      `native Gemini chat honors its pool and preserves image tool results (status=${failureStatus}, stream=${stream})`,
+      async ({ pool }) => {
+        const credential = await VirtualApiKeyModel.create({
+          organizationId: pool.organizationId,
+          name: "Native Gemini chat",
+          ...accessGrants("org"),
+          providerApiKeys: [
+            { provider: "gemini", providerApiKeyId: pool.keyId },
+          ],
+        });
+        const contents = [
+          {
+            role: "user",
+            parts: [{ text: "Look up the synthetic lighthouse status." }],
+          },
+          {
+            role: "model",
+            parts: [
+              {
+                functionCall: {
+                  id: "lookup",
+                  name: "query_knowledge_sources",
+                  args: { query: "status" },
+                },
+                thoughtSignature: "synthetic-signature",
+              },
+            ],
+          },
+          {
+            role: "user",
+            parts: [
+              {
+                functionResponse: {
+                  id: "lookup",
+                  name: "query_knowledge_sources",
+                  response: { content: "GREEN" },
+                },
+              },
+              {
+                inlineData: {
+                  mimeType: "image/png",
+                  data: "c3ludGhldGljLWltYWdl",
+                },
+              },
+              { text: "Synthetic status image" },
+            ],
+          },
+        ];
+        const hits: string[] = [];
+        server.use(
+          http.post(
+            `${origin}/v1beta/models/:model`,
+            async ({ request, params }) => {
+              hits.push(String(params.model));
+              expect(await request.json()).toMatchObject({
+                contents,
+                generationConfig: { maxOutputTokens: 32 },
+              });
+              if (hits.length === 1)
+                return HttpResponse.json(
+                  {
+                    error: {
+                      code: failureStatus,
+                      message:
+                        failureStatus === 400
+                          ? "Requests ending with a model turn are not supported."
+                          : "Temporarily unavailable",
+                    },
+                  },
+                  { status: failureStatus },
+                );
+              return stream
+                ? sse([answer([{ text: "Status is GREEN." }])])
+                : HttpResponse.json(answer([{ text: "Status is GREEN." }]));
+            },
+          ),
+        );
+        const operation = stream ? "streamGenerateContent" : "generateContent";
+        const response = await pool.app.inject({
+          method: "POST",
+          url: `/v1/gemini/${pool.agentId}/v1beta/models/gemini-3.1-flash-lite:${operation}`,
+          headers: {
+            "x-goog-api-key": credential.value,
+            ...internalCallHeader(),
+            [MODEL_POOL_ID_HEADER]: pool.poolId,
+          },
+          payload: { contents, generationConfig: { maxOutputTokens: 32 } },
+        });
+        if (failureStatus === 400) {
+          expect(response.statusCode, response.body).toBe(400);
+          expect(hits).toEqual([`gemini-3.1-flash-lite:${operation}`]);
+          const rows = await db
+            .select()
+            .from(schema.interactionsTable)
+            .where(eq(schema.interactionsTable.modelPoolId, pool.poolId));
+          expect(rows).toHaveLength(1);
+          expect(rows[0]).toMatchObject({
+            attemptOutcome: "failed",
+            failureReason: "error",
+          });
+          expect(rows[0].response).toMatchObject({
+            error: "Requests ending with a model turn are not supported.",
+          });
+          return;
+        }
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.body).toContain("Status is GREEN.");
+        expect(hits).toEqual([
+          `gemini-3.1-flash-lite:${operation}`,
+          `gemini-2.5-flash:${operation}`,
+        ]);
+        expect(response.headers["x-archestra-provider-key"]).toBe(pool.keyId);
+        const rows = await db
+          .select()
+          .from(schema.interactionsTable)
+          .where(eq(schema.interactionsTable.modelPoolId, pool.poolId));
+        expect(rows).toHaveLength(2);
+        expect(rows).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              model: "gemini-3.1-flash-lite",
+              attemptOutcome: "failed_over",
+              failureReason:
+                failureStatus === 429
+                  ? "rate_limited (429)"
+                  : "server_error (503)",
+            }),
+            expect.objectContaining({
+              model: "gemini-2.5-flash",
+              attemptOutcome: "answered",
+              failureReason: null,
+            }),
+          ]),
+        );
+      },
+    );
+  }
+}

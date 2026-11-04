@@ -30,6 +30,9 @@ describe("the output a request allows", () => {
     expect(
       requestedMaxOutputTokens({ inferenceConfig: { maxTokens: 512 } }),
     ).toBe(512);
+    expect(
+      requestedMaxOutputTokens({ generationConfig: { maxOutputTokens: 2048 } }),
+    ).toBe(2048);
   });
 
   test("is undefined when the request sets no limit", () => {
@@ -48,6 +51,9 @@ describe("which members a client's wire reaches", () => {
     expect(canReachMember("openai-chat", "gemini")).toBe(true);
     expect(canReachMember("anthropic", "gemini")).toBe(true);
     expect(canReachMember("bedrock-converse", "gemini")).toBe(false);
+    expect(canReachMember("gemini", "gemini")).toBe(true);
+    expect(canReachMember("gemini", "openai")).toBe(false);
+    expect(canReachMember("gemini", "anthropic")).toBe(false);
   });
 });
 

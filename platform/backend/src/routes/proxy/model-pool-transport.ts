@@ -64,7 +64,11 @@ import {
 import { withOpenAiChatToolCallIds } from "./utils/tool-call-ids";
 
 /** The request formats a pool can carry a request in. */
-export type PoolWire = "openai-chat" | "anthropic" | "bedrock-converse";
+export type PoolWire =
+  | "openai-chat"
+  | "anthropic"
+  | "bedrock-converse"
+  | "gemini";
 
 /** Sends a request in the client's shapes to one member, and answers in them. */
 export interface MemberTransport {
@@ -89,6 +93,7 @@ export function inboundPoolWire(
 ): PoolWire | null {
   if (interactionType === "anthropic:messages") return "anthropic";
   if (interactionType === "bedrock:converse") return "bedrock-converse";
+  if (interactionType === "gemini:generateContent") return "gemini";
   const [provider, surface] = interactionType.split(":");
   if (
     surface === "chatCompletions" &&
@@ -139,6 +144,8 @@ export function memberTransport(params: {
     const withModel = (request: unknown) => {
       if (target === "bedrock-converse")
         return { ...(request as object), modelId };
+      if (target === "gemini")
+        return { ...(request as object), _model: modelId };
       const body = request as OpenAi.Types.ChatCompletionsRequest &
         Anthropic.Types.MessagesRequest;
       return {
@@ -353,11 +360,13 @@ export function requestedMaxOutputTokens(request: unknown): number | undefined {
     max_completion_tokens?: unknown;
     max_tokens?: unknown;
     inferenceConfig?: { maxTokens?: unknown };
+    generationConfig?: { maxOutputTokens?: unknown };
   } | null;
   const limit =
     body?.max_completion_tokens ??
     body?.max_tokens ??
-    body?.inferenceConfig?.maxTokens;
+    body?.inferenceConfig?.maxTokens ??
+    body?.generationConfig?.maxOutputTokens;
   return typeof limit === "number" && Number.isFinite(limit) && limit > 0
     ? limit
     : undefined;
@@ -409,7 +418,7 @@ const TRANSLATED = new Set([
   "anthropic>gemini",
 ]);
 
-function wireOf(provider: SupportedProvider): PoolWire | "gemini" | null {
+function wireOf(provider: SupportedProvider): PoolWire | null {
   if (!isModelPoolProvider(provider)) return null;
   if (provider === "anthropic") return "anthropic";
   if (provider === "bedrock") return "bedrock-converse";

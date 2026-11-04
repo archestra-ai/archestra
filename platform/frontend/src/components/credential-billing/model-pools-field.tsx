@@ -55,9 +55,11 @@ export function ModelPoolsField({
 }) {
   const id = useId();
   const { data: pools = [] } = useModelPools();
-  // A deleted pool can stay in `value` on an OAuth client until it is saved.
+  // A deleted pool can stay in `value` on an OAuth client; the first change
+  // drops it, since saving an unknown pool fails.
   const listed = pools.filter((pool) => value.includes(pool.id));
   const addable = pools.filter((pool) => !value.includes(pool.id));
+  const listedIds = listed.map((pool) => pool.id);
 
   return (
     <div className="space-y-2">
@@ -85,7 +87,7 @@ export function ModelPoolsField({
               key={pool.id}
               pool={pool}
               onRemove={() =>
-                onChange(value.filter((poolId) => poolId !== pool.id))
+                onChange(listedIds.filter((poolId) => poolId !== pool.id))
               }
             />
           ))}
@@ -95,7 +97,7 @@ export function ModelPoolsField({
         id={id}
         ariaLabel="Add a model pool"
         value=""
-        onValueChange={(poolId) => onChange([...value, poolId])}
+        onValueChange={(poolId) => onChange([...listedIds, poolId])}
         placeholder="Add a pool…"
         searchPlaceholder="Search pools..."
         emptyMessage={

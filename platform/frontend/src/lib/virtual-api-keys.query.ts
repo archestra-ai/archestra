@@ -87,6 +87,8 @@ export function useCreateVirtualApiKey() {
       queryClient.invalidateQueries({
         queryKey: ["virtual-api-keys"],
       });
+      // A key's pools are read from each pool's list of keys.
+      queryClient.invalidateQueries({ queryKey: ["model-pools"] });
     },
   });
 }

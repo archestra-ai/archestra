@@ -27,6 +27,7 @@ import {
   CreateVirtualKeyDialogWithData,
   type VirtualKeyType,
 } from "@/components/create-virtual-key-dialog";
+import { poolAnswers } from "@/components/credential-billing/model-pool-access";
 import { primaryKeyMappings } from "@/components/credential-billing/provider-key-data";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
@@ -367,8 +368,9 @@ export function LlmConnectSteps({
     : pickedClient
       ? clientPoolsOf(pickedClient)
       : [];
-  // Step 4 offers only the pools the picked key or client can call.
-  const requestPools = pickedPools.map((entry) => ({
+  // Step 4 offers only the pools the picked key or client can call, and only
+  // those with a member that can answer.
+  const requestPools = pickedPools.filter(poolAnswers).map((entry) => ({
     name: entry.name,
     description: <PoolProviders pool={entry} />,
   }));

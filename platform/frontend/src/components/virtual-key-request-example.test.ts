@@ -176,6 +176,19 @@ describe("buildCurlExample", () => {
     expect(example).toContain('"input": "Hello!"');
   });
 
+  it("asks for a pool on chat completions even when its name looks like a Responses model", () => {
+    const example = buildCurlExample({
+      connectionBaseUrl: base,
+      target: { kind: "model-router" },
+      keyType: "standard",
+      keyValue: key,
+      model: "openai:gpt-5.4-codex",
+      isPool: true,
+    });
+    expect(example).toContain(`curl "${base}/unified-model/chat/completions"`);
+    expect(example).toContain('"model": "openai:gpt-5.4-codex"');
+  });
+
   it("uses the Perplexity Agent API for vendor-prefixed models", () => {
     const example = buildCurlExample({
       connectionBaseUrl: base,

@@ -555,6 +555,7 @@ export function RequestExample({
       value: fixedModel,
       supportedEndpoints: null,
       isImage: false,
+      pool: fixedModel,
     });
   } else if (!isPending && modelOptions.length === 0 && defaultModel) {
     modelOptions.push({
@@ -598,6 +599,7 @@ export function RequestExample({
       keyType,
       keyValue: secret ? MASKED_KEY : (keyValue ?? `$${credentialEnvVar}`),
       model: selectedModel?.pool ?? model,
+      isPool: !!selectedModel?.pool,
       supportedEndpoints: selectedModel?.supportedEndpoints,
       imageOperation: selectedImageOperation,
     });

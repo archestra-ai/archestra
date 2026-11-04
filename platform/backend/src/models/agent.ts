@@ -1124,9 +1124,12 @@ class AgentModel {
     // Only object-local read grants determine scope. Classify their scopes as
     // one set instead of probing each agent's policy to discard other authors'
     // personal agents; the base query still enforces all read permissions.
-    const nonPersonalReaders = ["organization", "role", "team"].map(
-      (type) =>
-        sql`${JSON.stringify([{ subject: { type }, actions: ["read"] }])}`,
+    const nonPersonalReaders = [
+      ...["organization", "role", "team"].map((type) => ({ type })),
+      { type: "user", id: params.userId },
+    ].map(
+      (subject) =>
+        sql`${JSON.stringify([{ subject, actions: ["read"] }])}`,
     );
     const nonPersonalAudience = sql<boolean>`(${table.organizationId}, ${table.id}::text) IN (
       SELECT chat_policy.organization_id, chat_policy.scope
@@ -5978,11 +5981,11 @@ class AgentModel {
     // shared agents are read once, from the policies, and every phase reads
     // that set. Only a canonical uuid scope can equal an id's text, so the
     // set holds ids that drive the agents primary key.
-    const readers = (types: string[]) =>
+    const readers = (subjects: Array<{ type: string; id?: string }>) =>
       sql`ARRAY[${sql.join(
-        types.map(
-          (type) =>
-            sql`${JSON.stringify([{ subject: { type }, actions: ["read"] }])}`,
+        subjects.map(
+          (subject) =>
+            sql`${JSON.stringify([{ subject, actions: ["read"] }])}`,
         ),
         sql`, `,
       )}]::jsonb[]`;
@@ -5995,8 +5998,12 @@ class AgentModel {
         .select({
           id: sql<string>`${policy.scope}::uuid`.as("id"),
           organizationShared:
-            sql<boolean>`${policy.grants} @> ANY(${readers(["organization", "role"])})`.as(
+            sql<boolean>`${policy.grants} @> ANY(${readers([{ type: "organization" }, { type: "role" }])})`.as(
               "organization_shared",
+            ),
+          teamShared:
+            sql<boolean>`${policy.grants} @> ANY(${readers([{ type: "team" }])})`.as(
+              "team_shared",
             ),
         })
         .from(policy)
@@ -6005,16 +6012,20 @@ class AgentModel {
             eq(policy.organizationId, params.organizationId),
             eq(policy.resource, "agent"),
             sql`${policy.scope} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'`,
-            sql`${policy.grants} @> ANY(${readers(["organization", "role", "team"])})`,
+            sql`${policy.grants} @> ANY(${readers([{ type: "organization" }, { type: "role" }, { type: "team" }, { type: "user", id: params.userId }])})`,
           ),
         ),
     );
     const ranks = [
       and(
-        or(eq(table.authorId, params.userId), eq(table.builtIn, true)),
-        sql`NOT (${table.id} = ANY(ARRAY(SELECT id FROM chat_shared)))`,
+        or(
+          eq(table.authorId, params.userId),
+          eq(table.builtIn, true),
+          sql`${table.id} = ANY(ARRAY(SELECT id FROM chat_shared))`,
+        ),
+        sql`NOT (${table.id} = ANY(ARRAY(SELECT id FROM chat_shared WHERE organization_shared OR team_shared)))`,
       ),
-      sql`${table.id} = ANY(ARRAY(SELECT id FROM chat_shared WHERE NOT organization_shared))`,
+      sql`${table.id} = ANY(ARRAY(SELECT id FROM chat_shared WHERE team_shared AND NOT organization_shared))`,
       sql`${table.id} = ANY(ARRAY(SELECT id FROM chat_shared WHERE organization_shared))`,
     ];
     const limit = params.pagination.limit + 1;

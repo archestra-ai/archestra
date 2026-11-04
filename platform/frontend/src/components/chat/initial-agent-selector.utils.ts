@@ -33,15 +33,6 @@ export function filterAndSortInitialAgents<
       agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG
     )
       return false;
-    if (agent.scope === "personal") {
-      return (
-        agent.authorId === userId ||
-        (agent.builtIn &&
-          (agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.SRE ||
-            agent.builtInAgentConfig?.name ===
-              BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG))
-      );
-    }
     return true;
   });
 

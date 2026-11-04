@@ -136,6 +136,7 @@ describe("bounded chat roster", () => {
       } while (cursor);
       expect(rows.map((row) => row.id)).toEqual([
         own.id,
+        shared.id,
         teamAgent.id,
         organization.id,
         system.id,
@@ -145,7 +146,7 @@ describe("bounded chat roster", () => {
         (
           await get("/api/agents/chat-roster/page?search=Needle%20match")
         ).data.map((row: { id: string }) => row.id),
-      ).toEqual([own.id]);
+      ).toEqual([own.id, shared.id]);
       const oversized = await ctx.app.inject({
         method: "GET",
         url: `/api/agents/chat-roster?ids=${Array.from({ length: 101 }, () => own.id).join(",")}`,
@@ -335,15 +336,11 @@ describe("bounded chat roster", () => {
       },
       {
         name: "Foreign scope policy",
-        grants: [
-          { subject: { type: "user", id: ctx.user.id }, actions: ["read"] },
-        ],
+        grants: [],
       },
       {
         name: "Other resource policy",
-        grants: [
-          { subject: { type: "user", id: ctx.user.id }, actions: ["read"] },
-        ],
+        grants: [],
       },
     ];
     for (const action of ResourcePermissionActionSchema.options.filter(
@@ -395,6 +392,7 @@ describe("bounded chat roster", () => {
           revision: 0,
           grants: [
             { subject: { type: "organization", id: "*" }, actions: ["read"] },
+            { subject: { type: "user", id: ctx.user.id }, actions: ["read"] },
           ],
         });
       }
@@ -403,9 +401,13 @@ describe("bounded chat roster", () => {
           "Organization read",
           "Role read",
           "Team read",
+          "Named user read",
+          "Role use with named reader",
+          "Team update with named reader",
           "Mixed organization and team read",
           "Duplicate team read",
         ].includes(item.name) ||
+        item.name.endsWith(" with named reader") ||
         (role === "admin" &&
           ["Unrelated role read", "Unrelated team read"].includes(item.name))
       )
@@ -446,7 +448,8 @@ describe("bounded chat roster", () => {
         (!agent.builtIn || agent.id === builtin.id) &&
         (agent.scope !== "personal" ||
           agent.authorId === ctx.user.id ||
-          agent.id === builtin.id),
+          agent.id === builtin.id ||
+          expectedShared.has(agent.id)),
     );
     expected.sort(
       (

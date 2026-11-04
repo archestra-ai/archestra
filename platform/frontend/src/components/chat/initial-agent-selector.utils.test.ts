@@ -88,19 +88,19 @@ describe("filterAndSortInitialAgents", () => {
       }),
     ).toEqual([agents[0]]);
   });
-  it("shows only the current user's personal agents", () => {
+  it("keeps personal agents shared by other users and sorts the current user's personal agents first", () => {
     const agents = [
       makeAgent({
-        id: "mine",
-        name: "My Personal Agent",
-        scope: "personal",
-        authorId: userId,
-      }),
-      makeAgent({
         id: "other",
-        name: "Other Personal Agent",
+        name: "Alpha Shared Personal Agent",
         scope: "personal",
         authorId: "user-2",
+      }),
+      makeAgent({
+        id: "mine",
+        name: "Zulu My Personal Agent",
+        scope: "personal",
+        authorId: userId,
       }),
       makeAgent({ id: "shared", name: "Shared Agent", scope: "org" }),
     ];
@@ -112,7 +112,11 @@ describe("filterAndSortInitialAgents", () => {
       userId,
     });
 
-    expect(result.map((agent) => agent.id)).toEqual(["mine", "shared"]);
+    expect(result.map((agent) => agent.id)).toEqual([
+      "mine",
+      "other",
+      "shared",
+    ]);
   });
 
   it("keeps an authorized personal-scoped system assistant without an author", () => {
@@ -264,10 +268,18 @@ describe("filterAndSortInitialAgents", () => {
 describe("groupInitialAgents", () => {
   it("splits the user's own agents from shared ones, keeping the sort order", () => {
     const mine = makeAgent({ id: "mine", scope: "personal", authorId: userId });
+    const sharedPersonal = makeAgent({
+      id: "shared-personal",
+      scope: "personal",
+      authorId: "user-2",
+    });
     const team = makeAgent({ id: "team", scope: "team" });
     const org = makeAgent({ id: "org", scope: "org" });
 
-    const groups = groupInitialAgents({ agents: [team, mine, org], userId });
+    const groups = groupInitialAgents({
+      agents: [sharedPersonal, team, mine, org],
+      userId,
+    });
 
     expect(
       groups.map((group) => ({
@@ -276,7 +288,7 @@ describe("groupInitialAgents", () => {
       })),
     ).toEqual([
       { label: "Yours", ids: ["mine"] },
-      { label: "Shared with you", ids: ["team", "org"] },
+      { label: "Shared with you", ids: ["shared-personal", "team", "org"] },
     ]);
   });
 

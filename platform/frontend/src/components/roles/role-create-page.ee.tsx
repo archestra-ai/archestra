@@ -6,7 +6,7 @@ import {
   type PredefinedRoleName,
   roleDescriptions,
 } from "@archestra/shared";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, Plus } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -277,9 +277,15 @@ function StartFrom({
         <UnstyledButton
           type="button"
           onClick={() => setShowAll(true)}
-          className="flex min-h-16 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+          className="flex min-h-16 flex-col items-center justify-center gap-1.5 rounded-lg border bg-muted/30 p-3 text-sm transition-colors hover:border-primary/40 hover:bg-muted/60"
         >
-          <span>+{hidden} more</span>
+          <span className="flex size-7 items-center justify-center rounded-full border bg-background">
+            <Plus className="size-3.5" />
+          </span>
+          <span className="font-medium">
+            {hidden} more {hidden === 1 ? "role" : "roles"}
+          </span>
+          <span className="text-[11px] text-muted-foreground">Show all</span>
         </UnstyledButton>
       )}
     </RadioGroup>
@@ -310,7 +316,7 @@ function StartCard({
       )}
     >
       <RadioGroupItem value={option.id} className="mt-0.5" />
-      <span className="min-w-0 flex-1">
+      <span className="flex min-w-0 flex-1 flex-col self-stretch">
         <span className="flex items-center gap-1.5 text-sm font-medium">
           {option.predefined !== null && (
             <RoleTypeIcon
@@ -321,14 +327,14 @@ function StartCard({
           )}
           <span className="min-w-0 truncate capitalize">{option.name}</span>
         </span>
-        {option.count !== null && (
-          <span className="block text-[11px] text-muted-foreground tabular-nums">
-            {option.count} {option.count === 1 ? "permission" : "permissions"}
-          </span>
-        )}
         {option.description && (
           <span className="block text-xs text-muted-foreground">
             {option.description}
+          </span>
+        )}
+        {option.count !== null && (
+          <span className="mt-auto block pt-2 text-[11px] text-muted-foreground/80 tabular-nums">
+            {option.count} {option.count === 1 ? "permission" : "permissions"}
           </span>
         )}
       </span>

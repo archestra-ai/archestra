@@ -206,7 +206,9 @@ describe("RoleCreatePage", () => {
     expect(
       within(startFrom).queryByRole("radio", { name: /Custom 7/ }),
     ).toBeNull();
-    fireEvent.click(within(startFrom).getByRole("button", { name: "+6 more" }));
+    fireEvent.click(
+      within(startFrom).getByRole("button", { name: /6 more roles/ }),
+    );
     expect(within(startFrom).getAllByRole("radio")).toHaveLength(11);
     expect(
       within(startFrom).getByRole("radio", { name: /Custom 7/ }),

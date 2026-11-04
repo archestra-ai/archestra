@@ -44,10 +44,8 @@ export function RoleTypeIcon({
   return (
     <Tooltip>
       <TooltipTrigger asChild>{icon}</TooltipTrigger>
-      <TooltipContent className="max-w-64 text-wrap">
-        {predefined
-          ? "Built-in role. It can't be changed, but a new role can start from it."
-          : "Custom role, made in this organization."}
+      <TooltipContent>
+        {predefined ? "Built-in role" : "Custom role"}
       </TooltipContent>
     </Tooltip>
   );

@@ -277,7 +277,12 @@ const registry = defineArchestraTools([
       "An administrator can stop an Agent accepting a transferred value in its Agent Runtime settings. Declaring stays available, because it carries no secret. " +
       "A stored value reaches the workspace on the Agent's NEXT turn, not one already running.",
     schema: z.object({
-      agent_id: z.string().describe("The Agent to give the credential to."),
+      agent_id: z
+        .string()
+        .optional()
+        .describe(
+          "The Agent to give the credential to. Omit when calling through an MCP gateway to transfer the credential to all runtime subagents assigned to the gateway.",
+        ),
       environment: z
         .array(TransferCredentialEnvVarSchema)
         .min(1)
@@ -297,80 +302,130 @@ const registry = defineArchestraTools([
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
-        const agent = await AgentModel.findById(args.agent_id);
-        if (!agent || agent.organizationId !== actor.organizationId) {
-          return errorResult("Agent not found");
-        }
-        // SPDX-SnippetBegin
-        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        if (
-          !(await ResourcePermissions.allows({
-            organizationId: actor.organizationId,
-            userId: actor.id,
-            resource: "agent",
-            scope: agent.id,
-            action: "read",
-          }))
-        ) {
-          return errorResult("Agent not found");
-        }
-        // SPDX-SnippetEnd
-        const subagentAccess = await checkCallerSubagentAccess(
-          context.agent.id,
-          agent,
-        );
-        if (!subagentAccess.allowed) {
+        const explicitAgentId = args.agent_id?.trim();
+        const callerAgent =
+          !explicitAgentId && context.agent?.id
+            ? await AgentModel.findById(context.agent.id)
+            : null;
+        const candidateAgentIds = explicitAgentId
+          ? [explicitAgentId]
+          : callerAgent
+            ? await AgentModel.findAssignedRuntimeSubagentIds(
+                callerAgent.id,
+                callerAgent.environmentId,
+              )
+            : [];
+        if (!explicitAgentId && candidateAgentIds.length === 0) {
           return errorResult(
-            subagentAccess.reason === "agent_not_found"
-              ? "Agent not found"
-              : subagentAccess.message,
+            callerAgent
+              ? "No runtime subagents are assigned to this gateway."
+              : "agent_id is required.",
           );
         }
 
-        const runtime = resolveAgentRuntime(agent);
-        if (!runtime) {
-          return errorResult(
-            "This Agent has no Agent Runtime configured, so it has no workspace to receive a credential.",
+        const targets: {
+          agent: NonNullable<Awaited<ReturnType<typeof AgentModel.findById>>>;
+          runtime: NonNullable<ReturnType<typeof resolveAgentRuntime>>;
+        }[] = [];
+
+        for (const candidateId of candidateAgentIds) {
+          const agent = await AgentModel.findById(candidateId);
+          if (!agent || agent.organizationId !== actor.organizationId) {
+            if (explicitAgentId) return errorResult("Agent not found");
+            continue;
+          }
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          if (
+            !(await ResourcePermissions.allows({
+              organizationId: actor.organizationId,
+              userId: actor.id,
+              resource: "agent",
+              scope: agent.id,
+              action: "read",
+            }))
+          ) {
+            if (explicitAgentId) return errorResult("Agent not found");
+            continue;
+          }
+          // SPDX-SnippetEnd
+          const subagentAccess = await checkCallerSubagentAccess(
+            context.agent.id,
+            agent,
           );
+          if (!subagentAccess.allowed) {
+            if (explicitAgentId) {
+              return errorResult(
+                subagentAccess.reason === "agent_not_found"
+                  ? "Agent not found"
+                  : subagentAccess.message,
+              );
+            }
+            continue;
+          }
+
+          const runtime = resolveAgentRuntime(agent);
+          if (!runtime) {
+            if (explicitAgentId) {
+              return errorResult(
+                "This Agent has no Agent Runtime configured, so it has no workspace to receive a credential.",
+              );
+            }
+            continue;
+          }
+          targets.push({ agent, runtime });
         }
+
+        if (targets.length === 0) {
+          return errorResult("Agent not found");
+        }
+
         const [entry] = args.environment;
 
-        // The gate governs storing a client-supplied secret. Declaring carries
-        // none, so it stays available on an Agent where storing is turned off —
-        // that Agent is exactly where the person should paste the value instead.
-        // Only an explicit `false` refuses: an Agent stored before this field
-        // existed has no value at all, and those must keep working.
-        if (
-          entry.value !== undefined &&
-          runtime.allowAgentSuppliedCredentialValues === false
-        ) {
-          return errorResult(
-            `"${agent.name}" does not accept credential values from a connected client. An administrator turned that off for this Agent in its Agent Runtime settings. Call this tool again without \`value\` to declare "${entry.key}" and get a link the person can paste it into.`,
+        for (const { agent, runtime } of targets) {
+          // The gate governs storing a client-supplied secret. Declaring carries
+          // none, so it stays available on an Agent where storing is turned off —
+          // that Agent is exactly where the person should paste the value instead.
+          // Only an explicit `false` refuses: an Agent stored before this field
+          // existed has no value at all, and those must keep working.
+          if (
+            entry.value !== undefined &&
+            runtime.allowAgentSuppliedCredentialValues === false
+          ) {
+            return errorResult(
+              `"${agent.name}" does not accept credential values from a connected client. An administrator turned that off for this Agent in its Agent Runtime settings. Call this tool again without \`value\` to declare "${entry.key}" and get a link the person can paste it into.`,
+            );
+          }
+
+          // Checked here as well as in the service so the caller gets the real
+          // reason: `catchError` deliberately flattens thrown errors to a generic
+          // message, which would hide why the transfer was refused.
+          const declared = runtime.credentials?.find(
+            ({ key }) => key === entry.key,
           );
+          if (declared?.scope === "shared") {
+            return errorResult(
+              `"${entry.key}" is declared as a shared credential on "${agent.name}". A shared value applies to every user's runs of this Agent, so it is set in Settings rather than transferred from a client.`,
+            );
+          }
         }
 
-        // Checked here as well as in the service so the caller gets the real
-        // reason: `catchError` deliberately flattens thrown errors to a generic
-        // message, which would hide why the transfer was refused.
-        const declared = runtime.credentials?.find(
-          ({ key }) => key === entry.key,
-        );
-        if (declared?.scope === "shared") {
-          return errorResult(
-            `"${entry.key}" is declared as a shared credential on "${agent.name}". A shared value applies to every user's runs of this Agent, so it is set in Settings rather than transferred from a client.`,
-          );
-        }
-
+        const primaryTarget = targets[0];
         if (entry.value === undefined) {
-          const { declarationCreated } = await declarePersonalRuntimeCredential(
-            {
-              runtime,
-              key: entry.key,
-              label: args.label,
-            },
-          );
-          const url = agentCredentialSetupUrl(agent.id, [entry.key]);
+          let anyDeclarationCreated = false;
+          for (const { runtime } of targets) {
+            const { declarationCreated } =
+              await declarePersonalRuntimeCredential({
+                runtime,
+                key: entry.key,
+                label: args.label,
+              });
+            if (declarationCreated) anyDeclarationCreated = true;
+          }
+          const url = agentCredentialSetupUrl(primaryTarget.agent.id, [
+            entry.key,
+          ]);
           const availability =
             "Nothing is stored yet. A run can read it once the person saves a value, from that Agent's next turn onward.";
           // Question forms show a link as plain text, so the model must hand
@@ -383,14 +438,14 @@ const registry = defineArchestraTools([
             {
               key: entry.key,
               scope: "personal" as const,
-              declarationCreated,
+              declarationCreated: anyDeclarationCreated,
               valueStored: false,
               url,
               availability,
               next_step: nextStep,
             },
             [
-              `Declared ${entry.key} on "${agent.name}". No value is stored.`,
+              `Declared ${entry.key} on "${primaryTarget.agent.name}". No value is stored.`,
               `Put this link in your reply text, never inside a question form, so the person can paste it: ${url}`,
               "Scope: personal — whatever they save applies to every run they start on this Agent, and to no one else's runs.",
               availability,
@@ -398,14 +453,19 @@ const registry = defineArchestraTools([
           );
         }
 
-        const { declarationCreated } = await transferPersonalRuntimeCredential({
-          runtime,
-          organizationId: actor.organizationId,
-          userId: actor.id,
-          key: entry.key,
-          value: entry.value,
-          label: args.label,
-        });
+        let anyDeclarationCreated = false;
+        for (const { runtime } of targets) {
+          const { declarationCreated } =
+            await transferPersonalRuntimeCredential({
+              runtime,
+              organizationId: actor.organizationId,
+              userId: actor.id,
+              key: entry.key,
+              value: entry.value,
+              label: args.label,
+            });
+          if (declarationCreated) anyDeclarationCreated = true;
+        }
 
         const availability =
           "Available to the next turn of this Agent. A run already in progress keeps the environment it started with, so steer or continue the run to use it.";
@@ -414,13 +474,13 @@ const registry = defineArchestraTools([
           {
             key: entry.key,
             scope: "personal" as const,
-            declarationCreated,
+            declarationCreated: anyDeclarationCreated,
             valueStored: true,
             url: null,
             availability,
           },
           [
-            `Stored ${entry.key} for you on "${agent.name}".`,
+            `Stored ${entry.key} for you on "${primaryTarget.agent.name}".`,
             "Scope: personal — it applies to every run you start on this Agent, and to no one else's runs.",
             availability,
           ].join("\n"),

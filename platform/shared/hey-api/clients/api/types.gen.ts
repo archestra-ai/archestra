@@ -57748,17 +57748,6 @@ export type ExchangeGitHubActionsTokenResponses = {
         github_token_expires_at: string;
         github_login: string;
         user_id: string;
-        agent_ids: Array<string>;
-        subagent_load_balancing: {
-            enabled: boolean;
-            algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
-            weights?: {
-                [key: string]: number;
-            };
-            retries: number;
-            fallbackEnabled: boolean;
-            maxFallbacks?: number | null;
-        } | null;
     };
 };
 

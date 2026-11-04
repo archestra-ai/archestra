@@ -1650,6 +1650,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `agent_id` | `string` | No | The agent to do the work. Omit when calling through an MCP gateway to select an assigned runtime subagent using the gateway's load-balancing policy. |
+| `exclude_agent_ids` | `string[]` | No | Runtime subagents that already failed on a previous attempt for this request, to skip when selecting a fallback on an MCP gateway. |
 | `message` | `string` | Yes | What the agent should do, including handoff context and acceptance criteria. |
 | `attachments` | `object[]` | No | Input files staged before the first turn. For repository work, include a patch for uncommitted changes and identify the base commit in message. Never include credentials. |
 | `attachments[].name` | `string` | Yes |  |
@@ -1836,7 +1837,7 @@ Required RBAC permission: [`credential:create`](/docs/reference/permissions#cred
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `agent_id` | `string` | Yes | The Agent to give the credential to. |
+| `agent_id` | `string` | No | The Agent to give the credential to. Omit when calling through an MCP gateway to transfer the credential to all runtime subagents assigned to the gateway. |
 | `environment` | `object[]` | Yes | Exactly one credential to transfer. Never include more than the task needs. |
 | `environment[].key` | `string` | Yes | Environment variable name, e.g. AWS_SECRET_ACCESS_KEY. |
 | `environment[].type` | `"secret"` | Yes | Always 'secret'. Marks the value for redaction in logs. |

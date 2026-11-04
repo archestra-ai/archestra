@@ -172,6 +172,7 @@ export async function checkCallerSubagentAccess(
  */
 export async function startDelegatedTask(params: {
   agentId?: string;
+  excludeAgentIds?: string[];
   message: string;
   attachments?: A2AAttachment[];
   limits?: AgentRunLimitsRequest;
@@ -213,26 +214,53 @@ export async function startDelegatedTask(params: {
   }
 
   const lbConfig = callerAgent.subagentLoadBalancing ?? null;
+  const fallbackEnabled = lbConfig?.fallbackEnabled ?? true;
+  const maxFallbacks =
+    lbConfig?.maxFallbacks != null
+      ? Math.max(0, lbConfig.maxFallbacks)
+      : Math.max(0, assignedIds.length - 1);
+  const excludedSet = new Set(params.excludeAgentIds ?? []);
+  if (
+    excludedSet.size > 0 &&
+    (!fallbackEnabled || excludedSet.size > maxFallbacks)
+  ) {
+    const { result, outcome } = failedLaunch(
+      "refused",
+      errorResult(
+        "No remaining fallback subagents are available on this gateway.",
+      ),
+    );
+    if (outcome) await recordRuntimeLaunch(params.context, outcome);
+    return result;
+  }
+
   const orderedIds = orderSubagentsByLoadBalancing(assignedIds, lbConfig, {
     seed:
       lbConfig?.enabled && lbConfig.algorithm === "round_robin"
         ? nextGatewayRoundRobinSeed(callerAgent.id)
         : undefined,
   });
-  const fallbackEnabled = lbConfig?.fallbackEnabled ?? true;
-  const maxFallbacks =
-    lbConfig?.maxFallbacks != null
-      ? Math.max(0, lbConfig.maxFallbacks)
-      : orderedIds.length - 1;
-  const maxCandidates = fallbackEnabled
-    ? Math.min(orderedIds.length, 1 + maxFallbacks)
-    : 1;
+  const candidateIds = orderedIds.filter((id) => !excludedSet.has(id));
+  if (candidateIds.length === 0) {
+    const { result, outcome } = failedLaunch(
+      "refused",
+      errorResult(
+        "No remaining fallback subagents are available on this gateway.",
+      ),
+    );
+    if (outcome) await recordRuntimeLaunch(params.context, outcome);
+    return result;
+  }
+  const remainingFallbacks = fallbackEnabled
+    ? Math.max(0, maxFallbacks - excludedSet.size)
+    : 0;
+  const maxCandidates = Math.min(candidateIds.length, 1 + remainingFallbacks);
 
   let lastAttempt: {
     result: CallToolResult;
     outcome?: RuntimeLaunchOutcome;
   } | null = null;
-  for (const candidateId of orderedIds.slice(0, maxCandidates)) {
+  for (const candidateId of candidateIds.slice(0, maxCandidates)) {
     const attempt = await launchDelegatedTask({
       ...params,
       agentId: candidateId,
@@ -976,6 +1004,13 @@ const registry = defineArchestraTools([
         .describe(
           "The agent to do the work. Omit when calling through an MCP gateway to select an assigned runtime subagent using the gateway's load-balancing policy.",
         ),
+      exclude_agent_ids: z
+        .array(z.string().uuid())
+        .max(100)
+        .optional()
+        .describe(
+          "Runtime subagents that already failed on a previous attempt for this request, to skip when selecting a fallback on an MCP gateway.",
+        ),
       message: z
         .string()
         .trim()
@@ -1016,6 +1051,7 @@ const registry = defineArchestraTools([
     handler: ({ args, context }) =>
       startDelegatedTask({
         agentId: args.agent_id,
+        excludeAgentIds: args.exclude_agent_ids,
         message: args.message,
         attachments: args.attachments,
         ...(args.limits

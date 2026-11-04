@@ -18,6 +18,7 @@ import {
   RESOURCE_ACCESS_RELATIONS,
   type ResourcePermissionGrant,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+  SubagentLoadBalancingConfigSchema,
   type SupportedProvider,
   TimeInMs,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
@@ -865,6 +866,9 @@ class AgentModel {
         networkPolicy: agent.networkPolicy
           ? NetworkPolicyInputSchema.parse(agent.networkPolicy)
           : agent.networkPolicy,
+        subagentLoadBalancing: agent.subagentLoadBalancing
+          ? SubagentLoadBalancingConfigSchema.parse(agent.subagentLoadBalancing)
+          : agent.subagentLoadBalancing,
         organizationId,
         ...(slug && { slug }),
         ...(authorId && { authorId }),
@@ -3606,15 +3610,7 @@ class AgentModel {
   static async findGitHubActionsGateway(
     id: string,
   ): Promise<
-    | (AgentAccessContext &
-        Pick<
-          Agent,
-          | "name"
-          | "githubActionsAccess"
-          | "environmentId"
-          | "subagentLoadBalancing"
-        >)
-    | null
+    (AgentAccessContext & Pick<Agent, "name" | "githubActionsAccess">) | null
   > {
     const [agent] = await db
       .select({
@@ -3626,8 +3622,6 @@ class AgentModel {
         agentType: schema.agentsTable.agentType,
         name: schema.agentsTable.name,
         githubActionsAccess: schema.agentsTable.githubActionsAccess,
-        environmentId: schema.agentsTable.environmentId,
-        subagentLoadBalancing: schema.agentsTable.subagentLoadBalancing,
       })
       .from(schema.agentsTable)
       .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))

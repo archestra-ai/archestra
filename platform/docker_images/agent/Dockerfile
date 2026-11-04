@@ -212,7 +212,7 @@ RUN --network=none \
 
 FROM agent-base AS agent-codex
 USER root
-RUN pnpm add --global @openai/codex@0.164.0 \
+RUN pnpm add --global @openai/codex@0.165.0 \
  && codex --version \
  && chown -R 1000:1000 /home/node
 USER 1000:1000
@@ -227,7 +227,7 @@ RUN --network=none \
 
 FROM agent-base AS agent-opencode
 USER root
-RUN pnpm add --global opencode-ai@1.19.4 \
+RUN pnpm add --global opencode-ai@1.19.5 \
  && OPENCODE_PACKAGE_DIR="$(pnpm list --global --json opencode-ai | jq -r '.[0].dependencies["opencode-ai"].path')" \
  && node "${OPENCODE_PACKAGE_DIR}/postinstall.mjs" \
  && opencode --version \
@@ -403,13 +403,13 @@ FROM agent-base AS agent-copilot
 USER root
 ENV COPILOT_AUTO_UPDATE=false
 RUN case "$TARGETARCH" in \
-      amd64) copilot_arch=x64; copilot_checksum=1c6c53024c2b973200a10450db9b96a0a4e8ba31f398ed6c282d2a18fff2413bfc5215ae7c76061ca9078f8b2311b1e146ac177d9bdc53328bf6dfef52d92516 ;; \
-      arm64) copilot_arch=arm64; copilot_checksum=ac9e1fd83822fa36ece097ffb7ff689a660a852d5eefccf1331ecd2ae39890bb9b9e3c33a8bfdc59e1be519578b3197cb93686d41ea99dcd47af93ae79c43ccc ;; \
+      amd64) copilot_arch=x64; copilot_checksum=dedae5ca2b104009e5372dc2bd85510d5582fd62bed027c321dedd0f035bc53149f4880cddaa023f283e41b18f0547ae60db38b2382d4ea167e65e727f21d50e ;; \
+      arm64) copilot_arch=arm64; copilot_checksum=2fbff84aad626de51d0fc684fbe72e6c18ebda859f00519ed322a3b98e687b41c3670f101d800fad9841da9efd36483694807cf1112772c7fea96b9554354f8c ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /opt/copilot \
  && cd /tmp \
- && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.104)" copilot.tgz \
+ && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.105)" copilot.tgz \
  && echo "$copilot_checksum  copilot.tgz" | sha512sum -c - \
  && tar -xzf copilot.tgz --strip-components=1 -C /opt/copilot \
  && test -s /opt/copilot/LICENSE.md \

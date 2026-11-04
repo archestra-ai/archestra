@@ -49,6 +49,13 @@ const scenarios = [
     expected: "completed",
   },
   {
+    name: "socket-turn",
+    kind: "socket",
+    durationMs: 100,
+    drainSeconds: 2,
+    expected: "completed",
+  },
+  {
     name: "past-budget",
     kind: "stream",
     durationMs: 1800,
@@ -142,16 +149,31 @@ async function run(opts) {
           method: opts.kind === "audit" ? "POST" : "GET",
           headers: { Connection: "close" },
         };
-  const request = fetch(ready.url + path, requestOptions)
+  const request = (opts.kind === "socket"
+    ? (async () => {
+        child.send("socket-turn");
+        const result = await waitEvent((e) => e.event === "socket-completed");
+        assert.equal(result.dependencyClosed, false);
+        return { status: result.status, body: result.body, outcome: "completed" };
+      })()
+    : fetch(ready.url + path, requestOptions)
     .then(
-      async (r) => ({
-        status: r.status,
-        body: await r.text(),
-        outcome: "completed",
-      }),
+      async (r) => {
+        const body = await r.text();
+        return {
+          status: r.status,
+          body,
+          // A forced close may arrive as EOF rather than a fetch rejection.
+          // Only a stream carrying its final event has completed.
+          outcome:
+            opts.kind === "stream" && !body.includes("data: done")
+              ? "terminated"
+              : "completed",
+        };
+      },
       (e) => ({ outcome: "terminated", error: e.message }),
     )
-    .catch((e) => ({ outcome: "terminated", error: e.message }));
+    .catch((e) => ({ outcome: "terminated", error: e.message })));
   await waitEvent((e) => e.event === "admitted");
   let competing;
   if (opts.competingLlm) {
@@ -160,6 +182,12 @@ async function run(opts) {
   }
   const signalAt = Date.now();
   child.kill("SIGTERM");
+  await waitEvent((e) => e.event === "signal");
+  if (opts.kind === "socket") {
+    child.send("socket-turn");
+    await waitEvent((e) => e.event === "socket-declined");
+    assert.equal(events.filter((e) => e.event === "admitted" && e.route === "socket").length, 1);
+  }
   const watchdog = setTimeout(
     () => child.kill("SIGKILL"),
     (opts.drainSeconds + 15) * 1000,
@@ -188,6 +216,11 @@ async function run(opts) {
     );
   }
   assert.equal(exit.code, 0, opts.name);
+  assert.ok(
+    events.findIndex((e) => e.event === "chatops-stopped") <
+      events.findIndex((e) => e.event === "dependency-closed"),
+    opts.name,
+  );
   assert.ok(
     events.findIndex((e) => e.event === "mcp-disconnected") >
       events.findIndex((e) => e.event === "dependency-closed"),

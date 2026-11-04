@@ -64,6 +64,7 @@ import {
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
+import { drainScopeHeaders } from "@/utils/drain-scope";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
 
 /**
@@ -120,7 +121,12 @@ const loopbackGatewayFetch: FetchLike = (url, init) => {
       new Response(null, { status: 405, statusText: "Method Not Allowed" }),
     );
   }
-  return fetch(url, init);
+  const headers = new Headers(init?.headers);
+  // The transport can outlive the turn that created it.
+  headers.delete("x-archestra-drain-scope");
+  for (const [name, value] of Object.entries(drainScopeHeaders()))
+    headers.set(name, value);
+  return fetch(url, { ...init, headers });
 };
 
 /**

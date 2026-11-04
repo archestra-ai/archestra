@@ -2,12 +2,14 @@
 title: Logs and Auditing
 description: Investigate model requests, tool calls, and admin changes
 order: 7
-lastUpdated: 2026-10-30
+lastUpdated: 2026-11-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Know what every agent did, as whom, and what it cost. Archestra logs every model request, tool call, and admin change, from Chat, messaging channels, and connected clients. You do not turn anything on.
+
+To forward events from the **Audit** tab to your SIEM, configure [audit log export](/docs/admin/observability/audit-logs).
 
 ![An incident investigation with model requests and parallel MCP tool calls on a shared waterfall timeline, including timing, tokens, cost, and conversation details](/docs/automated_screenshots/admin-logs_session-waterfall.webp)
 

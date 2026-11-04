@@ -1,5 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
@@ -118,6 +119,7 @@ export function useCreateRole() {
       return response.data;
     },
     onSuccess: () => {
+      toast.success("Role created");
       queryClient.invalidateQueries({ queryKey: ["auth"] });
       queryClient.invalidateQueries({ queryKey: roleKeys.lists() });
     },
@@ -148,6 +150,7 @@ export function useUpdateRole() {
       return response.data;
     },
     onSuccess: (_data, variables) => {
+      toast.success("Role updated");
       queryClient.invalidateQueries({ queryKey: ["auth"] });
       queryClient.invalidateQueries({ queryKey: roleKeys.lists() });
       queryClient.invalidateQueries({
@@ -209,6 +212,7 @@ export function useDeleteRole() {
     },
     onSuccess: (data) => {
       if (!data) return;
+      toast.success("Role deleted");
       queryClient.invalidateQueries({ queryKey: ["auth"] });
       queryClient.invalidateQueries({ queryKey: roleKeys.lists() });
     },

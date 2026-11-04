@@ -147,34 +147,19 @@ export function appaTrajectory(params: {
 }
 
 /**
- * The runtime sessions that a side review could be reviewing, scoped like the
- * review's own session. Empty for a request that is not a side review.
+ * The session a side review assesses: the root of its tree, scoped like the
+ * review's own session, and the native id of the agent that asked for the
+ * review. Undefined for a request that is not a side review.
  */
-export function appaReviewedSessions(params: {
+export function appaReviewedSession(params: {
   adapter: AppaClientAdapter | undefined;
   matchContext: AppaMatchContext;
   session: OpenAppaSession;
-}): OpenAppaSession[] {
-  const { session } = params;
-  const reviewed = params.adapter?.reviewedSessions?.(params.matchContext);
-  return (reviewed ?? []).flatMap((entry) => {
-    const sessionId = withCallerScope(session, entry.sessionId);
-    const parentId =
-      entry.parentId === undefined
-        ? undefined
-        : withCallerScope(session, entry.parentId);
-    if (
-      !isWellFormedAppaId(sessionId) ||
-      (parentId !== undefined && !isWellFormedAppaId(parentId))
-    )
-      return [];
-    return [
-      {
-        organization_id: session.organization_id,
-        ...(session.caller_id ? { caller_id: session.caller_id } : {}),
-        session_id: sessionId,
-        ...(parentId ? { parent_id: parentId } : {}),
-      },
-    ];
-  });
+}): { rootSessionId: string; requesterId: string } | undefined {
+  const reviewed = params.adapter?.reviewedSession?.(params.matchContext);
+  if (!reviewed) return undefined;
+  const rootSessionId = withCallerScope(params.session, reviewed.rootId);
+  return isWellFormedAppaId(rootSessionId)
+    ? { rootSessionId, requesterId: reviewed.requesterId }
+    : undefined;
 }

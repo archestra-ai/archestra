@@ -13747,48 +13747,66 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       {
         state: "the requester was superyelled",
         requester: "root-thread",
-        out: "superyelled requester",
+        setup: "superyell root",
         passes: true,
       },
       {
         state: "the requester started while enforcement was off",
         requester: "root-thread",
-        out: "requester started while enforcement was off",
+        setup: "root starts while enforcement is off",
         passes: true,
       },
       {
         state: "the root of the subagent requester was superyelled",
         requester: "worker-thread",
-        out: "superyelled root",
+        setup: "superyell root, then the subagent runs",
         passes: true,
       },
       {
         state: "the subagent requester was superyelled",
         requester: "worker-thread",
-        out: "superyelled requester",
+        setup: "superyell subagent",
+        passes: true,
+      },
+      {
+        state: "a nested subagent requester was superyelled",
+        requester: "helper-thread",
+        setup: "superyell nested subagent",
         passes: true,
       },
       {
         state: "OpenAPPA governs the requester",
         requester: "root-thread",
-        out: "nothing",
+        setup: "governed root",
         passes: false,
       },
       {
         state: "another user superyelled a session with the requester's id",
         requester: "root-thread",
-        out: "another user's session",
+        setup: "superyell another user's root",
+        passes: false,
+      },
+      {
+        state: "two sessions under the root end with the requester's id",
+        requester: "helper-thread",
+        setup: "superyell two sessions with the requester's id",
+        passes: false,
+      },
+      {
+        state: "the requester is recorded under another root",
+        requester: "worker-thread",
+        setup: "superyell a subagent of another root",
         passes: false,
       },
       {
         state: "a thread that is not a review shares the superyelled root",
         requester: undefined,
-        out: "superyelled root",
+        setup: "superyell root",
         passes: false,
       },
     ] as const)("a Codex auto-review is out of OpenAPPA only while the session it reviews is: $state", async ({
       requester,
-      out,
+      setup,
       passes,
     }) => {
       await ModelModel.upsert({
@@ -13863,44 +13881,69 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       const scoped = (id: string) => `user:${userId}|${id}`;
       const root = { session_id: "root-thread", thread_id: "root-thread" };
 
-      if (out === "superyelled requester" && requester === "root-thread")
-        await superyellSession({
+      const superyell = (id: string, parent?: string) =>
+        superyellSession({
           organization_id: agent.organizationId,
-          session_id: scoped("root-thread"),
+          session_id: scoped(id),
+          ...(parent ? { parent_id: scoped(parent) } : {}),
         });
-      if (out === "superyelled requester" && requester === "worker-thread")
-        await superyellSession({
-          organization_id: agent.organizationId,
-          session_id: scoped("root-thread:worker-thread"),
-          parent_id: scoped("root-thread"),
-        });
-      if (out === "superyelled root")
-        await superyellSession({
-          organization_id: agent.organizationId,
-          session_id: scoped("root-thread"),
-        });
-      if (out === "another user's session")
-        await superyellSession({
-          organization_id: agent.organizationId,
-          session_id: `user:${crypto.randomUUID()}|root-thread`,
-        });
-      if (out === "requester started while enforcement was off") {
-        await GuardrailsDeploymentModel.setEnabled(false);
-        const first = await send(
-          root,
-          [{ role: "user", content: "Go" }],
-          false,
-        );
-        expect(first.statusCode, first.body).toBe(200);
-        await GuardrailsDeploymentModel.setEnabled(true);
-      }
-      if (out === "nothing") {
-        const first = await send(
-          root,
-          [{ role: "user", content: "Go" }],
-          false,
-        );
-        expect(first.statusCode, first.body).toBe(200);
+      const opened = [{ role: "user", content: "Go" }];
+      switch (setup) {
+        case "superyell root":
+          await superyell("root-thread");
+          break;
+        case "root starts while enforcement is off": {
+          await GuardrailsDeploymentModel.setEnabled(false);
+          const first = await send(root, opened, false);
+          expect(first.statusCode, first.body).toBe(200);
+          await GuardrailsDeploymentModel.setEnabled(true);
+          break;
+        }
+        case "superyell root, then the subagent runs": {
+          // The subagent's own request records it under the root it follows.
+          await superyell("root-thread");
+          const worker = await send(
+            {
+              session_id: "root-thread",
+              thread_id: "worker-thread",
+              parent_thread_id: "root-thread",
+            },
+            opened,
+            false,
+          );
+          expect(worker.statusCode, worker.body).toBe(200);
+          break;
+        }
+        case "superyell subagent":
+          await superyell("root-thread:worker-thread", "root-thread");
+          break;
+        case "superyell nested subagent":
+          await superyell(
+            "root-thread:worker-thread:helper-thread",
+            "root-thread:worker-thread",
+          );
+          break;
+        case "governed root": {
+          const first = await send(root, opened, false);
+          expect(first.statusCode, first.body).toBe(200);
+          break;
+        }
+        case "superyell another user's root":
+          await superyellSession({
+            organization_id: agent.organizationId,
+            session_id: `user:${crypto.randomUUID()}|root-thread`,
+          });
+          break;
+        case "superyell two sessions with the requester's id":
+          await superyell("root-thread:helper-thread", "root-thread");
+          await superyell(
+            "root-thread:worker-thread:helper-thread",
+            "root-thread:worker-thread",
+          );
+          break;
+        case "superyell a subagent of another root":
+          await superyell("other-root:worker-thread", "other-root");
+          break;
       }
       providerRequests.length = 0;
 

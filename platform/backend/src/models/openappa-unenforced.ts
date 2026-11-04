@@ -40,6 +40,39 @@ class OpenAppaUnenforcedModel {
   }
 
   /** The sessions among `sessionIds` that OpenAPPA leaves alone. */
+  /**
+   * The recorded children of a root, at any depth, whose own client-native
+   * id, the last segment of a child's id, is `nativeId`.
+   */
+  static async findFamilyMembers(params: {
+    organizationId: string;
+    rootSessionId: string;
+    nativeId: string;
+  }): Promise<
+    Array<{
+      sessionId: string;
+      parentId: string | null;
+      reason: UnenforcedSessionReason;
+    }>
+  > {
+    const suffix = `:${params.nativeId}`;
+    return db
+      .select({
+        sessionId: sessions.sessionId,
+        parentId: sessions.parentId,
+        reason: sessions.reason,
+      })
+      .from(sessions)
+      .where(
+        and(
+          eq(sessions.organizationId, params.organizationId),
+          sql`starts_with(${sessions.sessionId}, ${`${params.rootSessionId}:`})`,
+          sql`right(${sessions.sessionId}, ${suffix.length}) = ${suffix}`,
+        ),
+      )
+      .limit(2);
+  }
+
   static async findSessions(params: {
     organizationId: string;
     sessionIds: readonly string[];

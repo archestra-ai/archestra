@@ -1602,7 +1602,7 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
     ).toBeUndefined();
   });
 
-  test("names the sessions a Codex auto-review assesses", () => {
+  test("names the session a Codex auto-review assesses", () => {
     const review = (turn: Record<string, string>) => ({
       headers: {
         "user-agent": "codex_cli_rs/0.164.0",
@@ -1613,31 +1613,27 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
     });
     // The root thread asked for the review.
     expect(
-      codex.reviewedSessions(
+      codex.reviewedSession(
         review({
           session_id: "t0",
           thread_id: "review",
           parent_thread_id: "t0",
         }),
       ),
-    ).toEqual([{ sessionId: "t0" }]);
-    // A subagent asked: a root, a direct child of the root, or a deeper one.
+    ).toEqual({ rootId: "t0", requesterId: "t0" });
+    // A subagent asked: the proxy finds it under the root as recorded.
     expect(
-      codex.reviewedSessions(
+      codex.reviewedSession(
         review({
           session_id: "t0",
           thread_id: "review",
-          parent_thread_id: "t1",
+          parent_thread_id: "t2",
         }),
       ),
-    ).toEqual([
-      { sessionId: "t1" },
-      { sessionId: "t0:t1", parentId: "t0" },
-      { sessionId: "t0" },
-    ]);
-    // Body metadata alone also names the requester.
+    ).toEqual({ rootId: "t0", requesterId: "t2" });
+    // Body metadata alone also names the requester, taken for a root.
     expect(
-      codex.reviewedSessions({
+      codex.reviewedSession({
         headers: { "user-agent": "codex_cli_rs/0.164.0" },
         requestBody: {
           model: "codex-auto-review",
@@ -1647,16 +1643,19 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
           },
         },
       }),
-    ).toEqual([{ sessionId: "t0" }]);
-    // A review never stands for itself.
-    expect(
-      codex.reviewedSessions(
-        review({ session_id: "review", thread_id: "review" }),
-      ),
-    ).toEqual([]);
+    ).toEqual({ rootId: "t0", requesterId: "t0" });
+    // A review never stands for itself, and an id is one thread, not a path.
+    for (const turn of [
+      { session_id: "review", thread_id: "review", parent_thread_id: "" },
+      { session_id: "t0", thread_id: "review", parent_thread_id: "review" },
+      { session_id: "t0", thread_id: "review", parent_thread_id: "t1:t2" },
+      { session_id: "t0|x", thread_id: "review", parent_thread_id: "t2" },
+    ]) {
+      expect(codex.reviewedSession(review(turn))).toBeUndefined();
+    }
     // A request that is not a review, such as a subagent's, names none.
     expect(
-      codex.reviewedSessions({
+      codex.reviewedSession({
         headers: {
           "user-agent": "codex_cli_rs/0.164.0",
           "x-codex-turn-metadata": JSON.stringify({

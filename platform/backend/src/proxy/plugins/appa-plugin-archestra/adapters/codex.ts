@@ -3,7 +3,6 @@ import {
   codexClientMetadataSessionId,
   isCodexClientMetadata,
 } from "@archestra/shared";
-import { childSessionId } from "@/openappa/actor";
 import type { AppaSessionIdentity } from "@/openappa/wire";
 import { ApiError } from "@/types";
 import type { CommonToolResult } from "@/types/common-llm-format";
@@ -40,6 +39,8 @@ const CODEX_CHILD_CARRIER_FIELDS = [
 ] as const;
 const LAUNCH_AGENT_ID = /^[A-Za-z0-9_.:-]{1,512}$/;
 const LAUNCH_TASK_NAME = /^[A-Za-z0-9_.:@/-]{1,512}$/;
+/** A Codex thread id: one segment of a session id, never a path of them. */
+const THREAD_ID = /^[A-Za-z0-9_.@-]{1,256}$/;
 
 /** Identifies Codex Responses requests and normalizes local tool names. */
 export class AppaCodexAdapter implements AppaClientAdapter {
@@ -132,29 +133,21 @@ export class AppaCodexAdapter implements AppaClientAdapter {
   /**
    * An auto-review assesses the action of the thread that asked for it, the
    * requester. Codex names the requester as `parent_thread_id`, and the root
-   * thread of the requester's tree as `session_id`. The requester can be that
-   * root, or a subagent: a direct child of the root, or a deeper one.
+   * thread of the requester's tree as `session_id`. Without a root, the
+   * requester is taken for one.
    */
-  reviewedSessions(
-    context: AppaMatchContext,
-  ): readonly AppaReviewedSession[] | undefined {
+  reviewedSession(context: AppaMatchContext): AppaReviewedSession | undefined {
     if (!isGuardianReview(context)) return undefined;
     const { sessionId: root, threadId: review } = turnIds(context);
     const requester = parentThreadId(context);
-    const reviewed: AppaReviewedSession[] = [];
-    if (requester && requester !== review) {
-      reviewed.push({ sessionId: requester });
-      if (root && root !== requester)
-        reviewed.push({
-          sessionId: childSessionId(root, requester),
-          parentId: root,
-        });
-    }
-    // A subagent deeper in the tree has an id this request does not name.
-    // A root that is out of OpenAPPA takes its whole tree out with it.
-    if (root && root !== review && root !== requester)
-      reviewed.push({ sessionId: root });
-    return reviewed;
+    if (
+      !requester ||
+      requester === review ||
+      !THREAD_ID.test(requester) ||
+      (root !== undefined && (root === review || !THREAD_ID.test(root)))
+    )
+      return undefined;
+    return { rootId: root ?? requester, requesterId: requester };
   }
 
   isSpawnTool(name: string, namespace?: string): boolean {

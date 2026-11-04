@@ -99,12 +99,13 @@ export type AppaChildTrajectory = {
 };
 
 /**
- * A session that a side review could be reviewing, by native id: a root, or
- * a child with the native id of its parent. The proxy adds the caller scope.
+ * The session a side review assesses, by native id: the agent that asked for
+ * the review, and the root of that agent's tree. The proxy adds the caller
+ * scope and finds the session the runtime recorded under that root.
  */
 export type AppaReviewedSession = {
-  sessionId: string;
-  parentId?: string;
+  rootId: string;
+  requesterId: string;
 };
 
 /**
@@ -254,15 +255,13 @@ export type AppaClientAdapter = {
     sessionId: string,
   ): string | undefined;
   /**
-   * For a side review, the sessions it could be reviewing, by native id. A
-   * side review is a model call that the client makes by itself to assess
-   * another session's action, such as an approval review. It runs in a thread
-   * of its own and copies that session's history. It is not a child, so it
-   * has no parent. Returns undefined for any other request.
+   * For a side review, the session it assesses. A side review is a model call
+   * that the client makes by itself to assess another session's action, such
+   * as an approval review. It runs in a thread of its own and copies that
+   * session's history. It is not a child, so it has no parent. Returns
+   * undefined for any other request.
    */
-  reviewedSessions?(
-    context: AppaMatchContext,
-  ): readonly AppaReviewedSession[] | undefined;
+  reviewedSession?(context: AppaMatchContext): AppaReviewedSession | undefined;
   /** True when this local tool starts a delegated child run. */
   isSpawnTool(name: string, namespace?: string): boolean;
   /**

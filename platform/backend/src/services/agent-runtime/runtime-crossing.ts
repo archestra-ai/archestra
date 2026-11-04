@@ -1,3 +1,4 @@
+import { softBlocksAllowed, waiveSoftBlock } from "@/openappa/soft-block";
 import type { ArchestraContext } from "@/archestra-mcp-server/types";
 import config from "@/config";
 import logger from "@/logging";
@@ -85,9 +86,12 @@ export async function guardRuntimeCrossing(
 > {
   if (!(await isGuardrailsV2Active())) return { kind: "inactive" };
   const crossing = crossingFromContext(context);
-  if (crossing) return { kind: "proof", crossing };
+  if (crossing) {
+    if (await isUnenforcedSession(crossing.source)) return { kind: "inactive" };
+    return { kind: "proof", crossing };
+  }
   const { unsupportedClientAction } = await getGuardrailsDeployment();
-  if (unsupportedClientAction === "block") {
+  if (unsupportedClientAction === "block" && !softBlocksAllowed()) {
     return {
       kind: "refused",
       reason: reportCrossingRefusal({
@@ -132,6 +136,7 @@ export async function refuseUnrecognizedCaller(params: {
   }
   if (!resolved.session.parent_id) return undefined;
   if (await isUnenforcedSession(resolved.session)) return undefined;
+  if (await waiveSoftBlock(resolved.session, "runtime_access", "OpenAPPA requires a parent crossing proof")) return undefined;
   return reportCrossingRefusal({
     reason: "proof_missing",
     message: UNPROVEN_CALLER_ON_BOUND_RUNTIME,
@@ -327,6 +332,7 @@ export async function crossRuntimeOutput(params: {
   const relation = await classifyRuntimeCaller(params);
   if (relation.kind === "refused") return relation;
   if (relation.kind === "producer") return { kind: "producer" };
+  if (await isUnenforcedSession(relation.child)) return { kind: "producer" };
   const prefix = `runtime-return:${params.taskId}:`;
   const records = await loadChildReturns({
     organizationId: params.organizationId,
@@ -351,6 +357,7 @@ export async function crossRuntimeOutput(params: {
     }),
   });
   if (!last) {
+    if (await waiveSoftBlock(params.crossing.source, "runtime_output", "No admitted runtime result")) return { kind: "producer" };
     return withheld(
       "This turn has no admitted result yet. The raw output was not returned.",
     );

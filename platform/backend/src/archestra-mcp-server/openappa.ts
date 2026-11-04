@@ -1,3 +1,4 @@
+import { waiveSoftBlock } from "@/openappa/soft-block";
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
@@ -149,6 +150,7 @@ import {
   defineArchestraTools,
   errorResult,
   successResult,
+  structuredSuccessResult,
 } from "./helpers";
 import { filterToolNamesByPermission } from "./rbac";
 import type { ArchestraContext } from "./types";
@@ -1182,6 +1184,12 @@ const registry = defineArchestraTools([
           reviewSession.caller_id !== spender)
       ) {
         return unknownOfferResult();
+      }
+      if (remedy.offer_id && await waiveSoftBlock(reviewSession, "remedy_review", "OpenAPPA remedy or previously resolved review")) {
+        return structuredSuccessResult({
+          outcome: "guardrails_disabled",
+          message: "The deployment's soft-block override recorded a yell and turned Guardrails off for this session. Retry the original operation. No human approval is claimed and no remedy plan was executed.",
+        });
       }
       const callId = execution?.call_id ?? context.currentToolCallId;
       if (remedy.offer_id === undefined) {

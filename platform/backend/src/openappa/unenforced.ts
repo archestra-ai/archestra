@@ -1,3 +1,4 @@
+import { softBlockWaivedLocally } from "./soft-block";
 import { TimeInMs } from "@archestra/shared/consts";
 import { LRUCacheManager } from "@/cache-manager";
 import type db from "@/database";
@@ -67,6 +68,7 @@ export async function observeUnenforcedSession(
 export async function startedUnenforced(
   session: OpenAppaSession,
 ): Promise<boolean> {
+  if (softBlockWaivedLocally(session)) return true;
   const decision = await decideUnenforced(session);
   if (decision.record) {
     await OpenAppaUnenforcedModel.recordSession({
@@ -88,7 +90,7 @@ export async function startedUnenforced(
 export async function isUnenforcedSession(
   session: OpenAppaSession,
 ): Promise<boolean> {
-  return (await decideUnenforced(session)).unenforced;
+  return softBlockWaivedLocally(session) || (await decideUnenforced(session)).unenforced;
 }
 
 /**

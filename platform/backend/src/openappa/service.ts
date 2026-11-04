@@ -1,3 +1,5 @@
+import { waiveSoftBlock } from "./soft-block";
+import { isUnenforcedSession } from "./unenforced";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { DispatchPolicy } from "@archestra/openappa-rs";
 import {
@@ -869,7 +871,7 @@ export async function addressRuntimeChild(params: {
     spawned_id: params.childSessionId,
     output: "",
   });
-  if (decision.decision !== "ack") {
+  if (decision.decision !== "ack" && !(await waiveSoftBlock(params.session, "child_address", decisionMessage(decision)))) {
     throw new ApiError(409, decisionMessage(decision));
   }
 }
@@ -2187,7 +2189,20 @@ function validateReturnContract(text: string): void {
   }
 }
 
-async function crossChildValue(params: {
+async function crossChildValue(params: Parameters<typeof governedCrossChildValue>[0]): Promise<ChildEndOutcome> {
+  try {
+    if (await isUnenforcedSession(params.session)) return { decision: "release", crossed: true };
+    const result = await governedCrossChildValue(params);
+    if (!result.crossed && await waiveSoftBlock(params.session, params.event, result.content))
+      return { decision: "release", crossed: true };
+    return result;
+  } catch (error) {
+    if (!(error instanceof Error) || !(await waiveSoftBlock(params.session, params.event, error.message))) throw error;
+    return { decision: "release", crossed: true };
+  }
+}
+
+async function governedCrossChildValue(params: {
   session: OpenAppaSession;
   operationId: string;
   output: string;

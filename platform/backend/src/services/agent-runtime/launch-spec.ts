@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import {
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
   isDefaultBrandedAppName,
@@ -24,6 +25,8 @@ import {
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  OAuthAccessTokenModel,
+  OAuthClientModel,
   VirtualApiKeyModel,
 } from "@/models";
 import ServiceAccountModel from "@/models/service-account";
@@ -32,6 +35,7 @@ import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-a
 import { runtimeOpenAppaSession } from "@/services/agent-runtime/runtime-identity";
 import { archestraMarkWithText } from "@/services/archestra-mark";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import { modelSyncService } from "@/services/model-sync";
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
@@ -50,7 +54,9 @@ import {
   preflightAgentRuntimeModelCompatibility,
 } from "./model-compatibility";
 import {
+  AGENT_RUNTIME_OAUTH_CLIENT_ID,
   AGENT_RUNTIME_STEER_FIFO,
+  agentRunGatewayTokenId,
   constructStableRunName,
 } from "./runtime-contract";
 
@@ -201,7 +207,8 @@ export async function buildAgentRunLaunchSpec(params: {
   });
   const isClaudeCodeBedrock = claudeCodeCloudProvider === "bedrock";
   const isClaudeCodeRuntime =
-    params.runtime.command?.[0] === "archestra-claude-code";
+    params.runtime.command?.[0] === "archestra-claude-code" ||
+    params.runtime.command?.[0] === "archestra-claude-code-runtime";
   const isCodexRuntime = params.runtime.command?.[0] === "archestra-codex";
   if (credentials.env.CLAUDE_CODE_OAUTH_TOKEN) {
     throw new ApiError(
@@ -385,9 +392,16 @@ export async function buildAgentRunLaunchSpec(params: {
         actor: params.actor,
         agentId: params.agentId,
         organizationId: params.organizationId,
+        runId: params.runId,
+        expiresIn: deadline,
       }));
   } catch (error) {
     if (virtualKey) await VirtualApiKeyModel.delete(virtualKey.virtualKey.id);
+    if (params.actor.kind === "user") {
+      await OAuthAccessTokenModel.deleteById(
+        agentRunGatewayTokenId(params.runId),
+      );
+    }
     throw error;
   }
   const secretEnv: Record<string, string> = {
@@ -659,13 +673,34 @@ async function resolveGatewayToken(params: {
   actor: A2AActor;
   agentId: string;
   organizationId: string;
+  runId: string;
+  expiresIn: number;
 }): Promise<string> {
+  if (params.actor.kind === "user") {
+    await OAuthClientModel.ensurePlatformIssuedClient({
+      id: AGENT_RUNTIME_OAUTH_CLIENT_ID,
+      clientId: AGENT_RUNTIME_OAUTH_CLIENT_ID,
+      name: "Agent Runtime",
+    });
+    const value = randomBytes(32).toString("base64url");
+    const tokenHash = OAuthAccessTokenModel.hashTokenForLookup(value);
+    await OAuthAccessTokenModel.create({
+      id: agentRunGatewayTokenId(params.runId),
+      tokenHash,
+      clientId: AGENT_RUNTIME_OAUTH_CLIENT_ID,
+      userId: params.actor.id,
+      expiresAt: new Date(Date.now() + params.expiresIn * 1000),
+      scopes: ["mcp"],
+      referenceId: `${MCP_RESOURCE_REFERENCE_PREFIX}${params.agentId}`,
+    });
+    return value;
+  }
   // Team tokens are retired, so a team actor (only left on runs started
   // before then) has nothing to act with.
   if (params.actor.kind !== "team") {
     const selected = await selectMCPGatewayToken(
       params.agentId,
-      params.actor.kind === "user" ? params.actor.id : "system",
+      "system",
       params.organizationId,
     );
     if (selected?.tokenValue) return selected.tokenValue;

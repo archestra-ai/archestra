@@ -28,6 +28,12 @@ const CreateMcpGatewayToolArgsSchema = CreateBaseToolArgsSchema.extend({
   toolExposureMode: ToolExposureModeSchema.optional().describe(
     "How tools should be loaded for MCP clients and models.",
   ),
+  subAgentIds: z
+    .array(UuidIdSchema)
+    .optional()
+    .describe(
+      "Optional list of agent IDs that this MCP gateway can delegate to as subagents.",
+    ),
 }).strict();
 
 const GetMcpGatewayToolArgsSchema = GetResourceToolArgsSchema.extend({
@@ -62,6 +68,7 @@ const EditMcpGatewayToolArgsSchema = z
     toolExposureMode: ToolExposureModeSchema.optional().describe(
       "How tools should be loaded for MCP clients and models.",
     ),
+    accessAllSubagents: CreateBaseToolArgsSchema.shape.accessAllSubagents,
     knowledgeBaseIds: UpdateAgentSchemaBase.shape.knowledgeBaseIds
       .describe(
         "Replace the MCP gateway's assigned knowledge bases with this set.",
@@ -72,6 +79,12 @@ const EditMcpGatewayToolArgsSchema = z
         "Replace the MCP gateway's directly assigned knowledge connectors with this set.",
       )
       .optional(),
+    subAgentIds: z
+      .array(UuidIdSchema)
+      .optional()
+      .describe(
+        "Optional list of agent IDs that this MCP gateway can delegate to as subagents.",
+      ),
   })
   .strict();
 

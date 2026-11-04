@@ -11,10 +11,12 @@ import {
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  OAuthAccessTokenModel,
   SkillModel,
   TeamTokenModel,
   ToolModel,
   UserCredentialModel,
+  UserTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
@@ -39,6 +41,7 @@ import {
 } from "@/types";
 import { preflightAgentRuntimeCredentials } from "./credentials";
 import { buildAgentRunLaunchSpec } from "./launch-spec";
+import { agentRunGatewayTokenId } from "./runtime-contract";
 
 const agentRunUrl = (runId: string) =>
   `${config.frontendBaseUrl}/chat/runs/${runId}`;
@@ -140,6 +143,102 @@ describe("buildAgentRunLaunchSpec", () => {
       disabled: true,
     });
     await expect(launch()).rejects.toMatchObject({ statusCode: 401 });
+  });
+
+  test("a user run receives an expiring, agent-scoped gateway token instead of the personal user token", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "openai",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    const otherAgent = await makeAgent({
+      organizationId: setup.agent.organizationId,
+      authorId: setup.user.id,
+      agentType: "agent",
+    });
+    const personalToken = await UserTokenModel.ensureUserToken(
+      setup.user.id,
+      setup.agent.organizationId,
+    );
+    const personalTokenValue = await UserTokenModel.getTokenValue(
+      personalToken.id,
+    );
+
+    const runId = crypto.randomUUID();
+    const launchedAt = Date.now();
+    const result = await buildAgentRunLaunchSpec({
+      runtime: { ...runtime(setup.agent, "openai_chat"), ttlHours: 1 },
+      taskId: crypto.randomUUID(),
+      runId,
+      agentId: setup.agent.id,
+      actor: {
+        kind: "user",
+        id: setup.user.id,
+        organizationId: setup.agent.organizationId,
+      },
+      organizationId: setup.agent.organizationId,
+      runtimeScope: "agent-tests",
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      appName: "Archestra",
+      runMode: "one_shot",
+    });
+
+    const token = result.spec.secretEnv.ARCHESTRA_MCP_GATEWAY_TOKEN;
+    expect(token).not.toBe(personalTokenValue);
+    expect(token).not.toMatch(/^arch_/);
+
+    const tokenHash = OAuthAccessTokenModel.hashTokenForLookup(token);
+    const stored = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
+    expect(stored).toMatchObject({
+      id: agentRunGatewayTokenId(runId),
+      userId: setup.user.id,
+      referenceId: `mcp-resource:${setup.agent.id}`,
+      scopes: ["mcp"],
+    });
+    expect(stored?.expiresAt.getTime()).toBeGreaterThanOrEqual(
+      launchedAt + 3600000,
+    );
+    expect(stored?.expiresAt.getTime()).toBeLessThan(Date.now() + 3600001);
+
+    const validated = await validateMCPGatewayToken(setup.agent.id, token);
+    expect(validated).toEqual({
+      tokenId: agentRunGatewayTokenId(runId),
+      teamId: null,
+      isOrganizationToken: false,
+      organizationId: setup.agent.organizationId,
+      isUserToken: true,
+      userId: setup.user.id,
+    });
+
+    // Cannot be used on any other Agent or MCP Gateway in the organization
+    expect(await validateMCPGatewayToken(otherAgent.id, token)).toBeNull();
+
+    // Expired token is rejected
+    await OAuthAccessTokenModel.updateExpiresAtByTokenHash({
+      tokenHash,
+      expiresAt: new Date(Date.now() - 1),
+    });
+    expect(await validateMCPGatewayToken(setup.agent.id, token)).toBeNull();
+
+    // Revoked token is deleted by runId
+    await OAuthAccessTokenModel.updateExpiresAtByTokenHash({
+      tokenHash,
+      expiresAt: new Date(Date.now() + 3600000),
+    });
+    expect(await validateMCPGatewayToken(setup.agent.id, token)).not.toBeNull();
+    await OAuthAccessTokenModel.deleteById(agentRunGatewayTokenId(runId));
+    expect(await validateMCPGatewayToken(setup.agent.id, token)).toBeNull();
   });
 
   test("tells the client when Guardrails v2 governs the run", async ({

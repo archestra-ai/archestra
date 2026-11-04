@@ -30,11 +30,16 @@ import {
   A2AContextModel,
   A2AMessageModel,
   A2ATaskModel,
+  AgentExcludedSubagentModel,
+  AgentModel,
   AgentRunModel,
   AgentTeamModel,
+  AgentToolModel,
   AgentWorkspaceModel,
   ChatOpsChannelBindingModel,
+  EnvironmentModel,
   MemberModel,
+  ToolModel,
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { RouteCategory } from "@/observability/tracing";
@@ -71,6 +76,7 @@ describe("run tools", () => {
         organizationId,
         authorId: actorId,
         agentType: "agent",
+        accessAllSubagents: true,
       });
       await seedAndAssignArchestraTools(callingAgent.id);
       context = {
@@ -105,6 +111,257 @@ describe("run tools", () => {
 
     expect(result.isError).toBe(true);
     expect((result.content[0] as { text: string }).text).toContain(
+      "Agent not found",
+    );
+  });
+
+  test("enforces subagent restrictions and environment isolation on start_run", async ({
+    makeAgent,
+    seedAndAssignArchestraTools,
+  }) => {
+    const allowedTarget = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      runtime: {
+        image: "example.com/coding-agent:latest",
+        command: null,
+        inferenceProtocol: "openai_responses",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        resources: null,
+        environment: null,
+        credentials: [
+          {
+            key: "GITHUB_TOKEN",
+            label: "GitHub token",
+            scope: "per_user",
+            required: true,
+          },
+        ],
+        ttlHours: null,
+        maxCostUsd: null,
+        idleTimeoutMinutes: null,
+      },
+    });
+    const otherTarget = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+    });
+
+    // 1. Excluded subagent is refused
+    await AgentExcludedSubagentModel.replaceForAgent(callingAgent.id, [
+      otherTarget.id,
+    ]);
+    const excludedResult = await executeArchestraTool(
+      TOOL_START_RUN_FULL_NAME,
+      { agent_id: otherTarget.id, message: "Run excluded target" },
+      context,
+    );
+    expect(excludedResult.isError).toBe(true);
+    expect((excludedResult.content[0] as { text: string }).text).toContain(
+      `Agent "${otherTarget.name}" is not an allowed subagent of "${callingAgent.name}".`,
+    );
+    await AgentExcludedSubagentModel.replaceForAgent(callingAgent.id, []);
+
+    // 2. Ordinary agent and non-GitHub MCP Gateway with accessAllSubagents=false and zero delegations refuse targets
+    const customAgent = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      accessAllSubagents: false,
+    });
+    await seedAndAssignArchestraTools(customAgent.id);
+    const customAgentResult = await executeArchestraTool(
+      TOOL_START_RUN_FULL_NAME,
+      { agent_id: otherTarget.id, message: "Run from empty-allowlist agent" },
+      {
+        ...context,
+        agent: { id: customAgent.id, name: customAgent.name },
+        agentId: customAgent.id,
+      },
+    );
+    expect(customAgentResult.isError).toBe(true);
+    expect((customAgentResult.content[0] as { text: string }).text).toContain(
+      `Agent "${otherTarget.name}" is not an allowed subagent of "${customAgent.name}".`,
+    );
+
+    const customGateway = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "mcp_gateway",
+      accessAllSubagents: false,
+    });
+    await seedAndAssignArchestraTools(customGateway.id);
+    const customGatewayResult = await executeArchestraTool(
+      TOOL_START_RUN_FULL_NAME,
+      { agent_id: otherTarget.id, message: "Run from empty-allowlist gateway" },
+      {
+        ...context,
+        agent: { id: customGateway.id, name: customGateway.name },
+        agentId: customGateway.id,
+      },
+    );
+    expect(customGatewayResult.isError).toBe(true);
+    expect((customGatewayResult.content[0] as { text: string }).text).toContain(
+      `Agent "${otherTarget.name}" is not an allowed subagent of "${customGateway.name}".`,
+    );
+
+    // 3. MCP Gateway with accessAllSubagents=false refuses undelegated target
+    const githubGateway = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "mcp_gateway",
+      accessAllSubagents: false,
+    });
+    await seedAndAssignArchestraTools(githubGateway.id);
+    const gatewayContext: ArchestraContext = {
+      ...context,
+      agent: { id: githubGateway.id, name: githubGateway.name },
+      agentId: githubGateway.id,
+    };
+    const undelegatedGatewayResult = await executeArchestraTool(
+      TOOL_START_RUN_FULL_NAME,
+      { agent_id: otherTarget.id, message: "Run undelegated target" },
+      gatewayContext,
+    );
+    expect(undelegatedGatewayResult.isError).toBe(true);
+    expect(
+      (undelegatedGatewayResult.content[0] as { text: string }).text,
+    ).toContain(
+      `Agent "${otherTarget.name}" is not an allowed subagent of "${githubGateway.name}".`,
+    );
+
+    // 4. Explicit subagent delegation allows allowedTarget while still refusing otherTarget
+    const delegationTool = await ToolModel.findOrCreateDelegationTool(
+      allowedTarget.id,
+    );
+    await AgentToolModel.create(githubGateway.id, delegationTool.id);
+    const stillRefusedResult = await executeArchestraTool(
+      TOOL_START_RUN_FULL_NAME,
+      { agent_id: otherTarget.id, message: "Run non-allowlisted target" },
+      gatewayContext,
+    );
+    expect(stillRefusedResult.isError).toBe(true);
+    expect((stillRefusedResult.content[0] as { text: string }).text).toContain(
+      `Agent "${otherTarget.name}" is not an allowed subagent of "${githubGateway.name}".`,
+    );
+
+    // allowedTarget passes the subagent check (and hits the runtime credential preflight check)
+    const allowedResult = await executeArchestraTool(
+      TOOL_START_RUN_FULL_NAME,
+      { agent_id: allowedTarget.id, message: "Run allowlisted target" },
+      gatewayContext,
+    );
+    expect((allowedResult.content[0] as { text: string }).text).toContain(
+      "GITHUB_TOKEN",
+    );
+
+    // Removing the last delegation assignment refuses allowedTarget again instead of broadening access
+    await AgentToolModel.delete({
+      agentId: githubGateway.id,
+      toolId: delegationTool.id,
+    });
+    const afterRemovalResult = await executeArchestraTool(
+      TOOL_START_RUN_FULL_NAME,
+      { agent_id: allowedTarget.id, message: "Run after removing delegation" },
+      gatewayContext,
+    );
+    expect(afterRemovalResult.isError).toBe(true);
+    expect((afterRemovalResult.content[0] as { text: string }).text).toContain(
+      `Agent "${allowedTarget.name}" is not an allowed subagent of "${githubGateway.name}".`,
+    );
+    await AgentToolModel.create(githubGateway.id, delegationTool.id);
+
+    // 5. Non-allowlisted target's run, workspace, and credentials are also refused
+    const a2aContext = await A2AContextModel.create({
+      actorKind: "user",
+      actorId,
+    });
+    const otherTask = await A2ATaskModel.create({
+      contextId: a2aContext.id,
+      agentId: otherTarget.id,
+      state: "TASK_STATE_WORKING",
+    });
+    await AgentRunModel.create({
+      organizationId,
+      taskId: otherTask.id,
+      agentId: otherTarget.id,
+      actorKind: "user",
+      actorId,
+      actorUserId: actorId,
+      workloadName: `other-${otherTask.id.slice(0, 8)}`,
+      backend: "kubernetes",
+      runtimeScope: "test",
+    });
+    const getOtherRunResult = await executeArchestraTool(
+      TOOL_GET_RUN_FULL_NAME,
+      { task_id: otherTask.id },
+      gatewayContext,
+    );
+    expect(getOtherRunResult.isError).toBe(true);
+    expect((getOtherRunResult.content[0] as { text: string }).text).toContain(
+      "Run not found",
+    );
+
+    const deleteOtherWorkspaceResult = await executeArchestraTool(
+      "archestra__delete_workspace",
+      { task_id: otherTask.id, confirm_delete: true },
+      gatewayContext,
+    );
+    expect(deleteOtherWorkspaceResult.isError).toBe(true);
+    expect(
+      (deleteOtherWorkspaceResult.content[0] as { text: string }).text,
+    ).toContain("Saved run not found");
+
+    const readOtherWorkspaceResult = await executeArchestraTool(
+      "archestra__read_workspace_file",
+      { task_id: otherTask.id, path: "notes.md" },
+      gatewayContext,
+    );
+    expect(readOtherWorkspaceResult.isError).toBe(true);
+    expect(
+      (readOtherWorkspaceResult.content[0] as { text: string }).text,
+    ).toContain("Saved run not found");
+
+    const listOtherRunsResult = await executeArchestraTool(
+      TOOL_LIST_AGENT_RUNS_FULL_NAME,
+      { agent_ids: [otherTarget.id] },
+      gatewayContext,
+    );
+    expect(listOtherRunsResult.isError).toBe(true);
+    expect((listOtherRunsResult.content[0] as { text: string }).text).toContain(
+      `Agent "${otherTarget.name}" is not an allowed subagent of "${githubGateway.name}".`,
+    );
+
+    // 6. Cross-environment target is refused with Agent not found on both start_run and list_runs (even with accessAllSubagents=true)
+    const environment = await EnvironmentModel.create({
+      organizationId,
+      name: "Isolated Env",
+      namespace: "isolated-ns",
+    });
+    await AgentModel.update(allowedTarget.id, {
+      environmentId: environment.id,
+    });
+    const crossEnvResult = await executeArchestraTool(
+      TOOL_START_RUN_FULL_NAME,
+      { agent_id: allowedTarget.id, message: "Run cross-env target" },
+      gatewayContext,
+    );
+    expect(crossEnvResult.isError).toBe(true);
+    expect((crossEnvResult.content[0] as { text: string }).text).toContain(
+      "Agent not found",
+    );
+
+    const crossEnvListResult = await executeArchestraTool(
+      TOOL_LIST_AGENT_RUNS_FULL_NAME,
+      { agent_ids: [allowedTarget.id] },
+      context,
+    );
+    expect(crossEnvListResult.isError).toBe(true);
+    expect((crossEnvListResult.content[0] as { text: string }).text).toContain(
       "Agent not found",
     );
   });

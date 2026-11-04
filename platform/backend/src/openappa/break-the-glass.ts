@@ -27,11 +27,7 @@ import {
 export type WaiverKind = Exclude<OpenAppaYellKind, "agent">;
 
 /** How a review the platform answered went; see `recordWaivedReview`. */
-type WaivedReviewRecord =
-  | "recorded"
-  | "reports_off"
-  | "refused"
-  | "failed";
+type WaivedReviewRecord = "recorded" | "reports_off" | "refused" | "failed";
 
 type BreakTheGlassSettings = {
   active: boolean;

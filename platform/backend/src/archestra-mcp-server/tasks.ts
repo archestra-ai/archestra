@@ -624,8 +624,18 @@ async function launchDelegatedTask(params: {
         ...(params.ephemeralCredentials
           ? { ephemeralCredentials: params.ephemeralCredentials }
           : {}),
-        ...(params.subagentExecutionPolicy
-          ? { subagentExecutionPolicy: params.subagentExecutionPolicy }
+        ...(restoreConsumedGrants
+          ? { onRuntimeLaunchFailed: restoreConsumedGrants }
+          : {}),
+        ...(params.subagentExecutionPolicy || restoreConsumedGrants
+          ? {
+              subagentExecutionPolicy: {
+                ...params.subagentExecutionPolicy,
+                ...(restoreConsumedGrants
+                  ? { onLaunchFailed: restoreConsumedGrants }
+                  : {}),
+              },
+            }
           : {}),
       },
     });

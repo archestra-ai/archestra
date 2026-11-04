@@ -52,7 +52,10 @@ useMswServer(
   ),
 );
 
-afterEach(drainBackgroundWork);
+afterEach(async () => {
+  await drainBackgroundWork();
+  vi.restoreAllMocks();
+});
 
 function runtimeConfig(overrides: Partial<AgentRuntime> = {}): AgentRuntime {
   return {
@@ -370,6 +373,128 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     );
     expect(secondStart.isError).toBe(true);
     expect((secondStart.content[0] as { text: string }).text).toContain(
+      "expired, already consumed, or invalid",
+    );
+  });
+
+  test("restores a consumed ephemeral grant with its remaining lifetime when a detached launch fails after returning its task handle", async ({
+    makeAgent,
+  }) => {
+    const subagentA = await createRuntimeSubagent(makeAgent, "Subagent A");
+    await AgentModel.update(gateway.id, {
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "ordered",
+        retries: 0,
+        fallbackEnabled: false,
+        maxFallbacks: 0,
+      },
+    });
+
+    const mintResult = await executeArchestraTool(
+      TOOL_TRANSFER_CREDENTIAL_FULL_NAME,
+      {
+        ephemeral: true,
+        ttl_seconds: 60,
+        environment: [
+          {
+            key: "GH_TOKEN",
+            type: "secret",
+            value: "ghs_detached_failure_token",
+          },
+        ],
+      },
+      context,
+    );
+    expect(mintResult.isError).toBeFalsy();
+    const grantId = (
+      mintResult.structuredContent as { credential_grant_id: string }
+    ).credential_grant_id;
+
+    let shouldFailLaunch = true;
+    const launchedSecretEnvs: Array<Record<string, string>> = [];
+    vi.spyOn(backend, "launch").mockImplementation(
+      async (spec: AgentRunLaunchSpec) => {
+        if (shouldFailLaunch) {
+          throw new Error("Cluster unreachable before pod creation");
+        }
+        launchedSecretEnvs.push(spec.secretEnv);
+      },
+    );
+    vi.spyOn(backend, "waitUntilRunning").mockResolvedValue();
+    vi.spyOn(backend, "streamOutput").mockImplementation(
+      async ({ destination }) => {
+        destination.end();
+      },
+    );
+    vi.spyOn(backend, "snapshotOutput").mockImplementation(
+      async ({ destination }) => {
+        destination.end("===ARCHESTRA-FINAL-ANSWER===\nDone");
+      },
+    );
+    vi.spyOn(backend, "waitForCompletion").mockResolvedValue({
+      outcome: "succeeded",
+    });
+    vi.spyOn(backend, "teardown").mockResolvedValue();
+    vi.spyOn(backend, "releaseRun").mockResolvedValue();
+    vi.spyOn(backend, "stopRun").mockResolvedValue(undefined);
+
+    // First detached start returns the task handle, then fails in backend.launch.
+    const firstStart = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      {
+        agent_id: subagentA.id,
+        message: "Run that fails to start a pod",
+        credential_grant_ids: [grantId],
+      },
+      context,
+    );
+    expect(firstStart.isError).toBeFalsy();
+    const firstTaskId = (
+      firstStart.structuredContent as { run: { run_id: string } }
+    ).run.run_id;
+
+    // Wait for the detached background launch to settle to FAILED and restore the grant.
+    await vi.waitFor(async () => {
+      const task = await A2ATaskModel.findById(firstTaskId);
+      expect(task?.state).toBe("TASK_STATE_FAILED");
+    });
+
+    // The grant was restored to the shared cache so a retry of start_agent_run succeeds.
+    shouldFailLaunch = false;
+    const retryStart = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      {
+        agent_id: subagentA.id,
+        message: "Retry after detached launch failure",
+        credential_grant_ids: [grantId],
+      },
+      context,
+    );
+    expect(retryStart.isError).toBeFalsy();
+    const retryTaskId = (
+      retryStart.structuredContent as { run: { run_id: string } }
+    ).run.run_id;
+
+    await vi.waitFor(async () => {
+      const task = await A2ATaskModel.findById(retryTaskId);
+      expect(task?.state).toBe("TASK_STATE_COMPLETED");
+    });
+    expect(launchedSecretEnvs).toHaveLength(1);
+    expect(launchedSecretEnvs[0]?.GH_TOKEN).toBe("ghs_detached_failure_token");
+
+    // Once a pod actually started, the grant remains spent.
+    const replayAfterSuccess = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      {
+        agent_id: subagentA.id,
+        message: "Replay after pod started",
+        credential_grant_ids: [grantId],
+      },
+      context,
+    );
+    expect(replayAfterSuccess.isError).toBe(true);
+    expect((replayAfterSuccess.content[0] as { text: string }).text).toContain(
       "expired, already consumed, or invalid",
     );
   });

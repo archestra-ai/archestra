@@ -81,6 +81,8 @@ export interface SubagentExecutionPolicy {
   requestedLimits?: AgentRunLimitsRequest;
   /** Ephemeral credentials scoped per subagent ID. */
   ephemeralCredentialsByAgentId?: Record<string, Record<string, string>>;
+  /** Called if all launch attempts fail without starting a runtime session. */
+  onLaunchFailed?: () => Promise<void>;
 }
 
 /**
@@ -560,13 +562,26 @@ export async function runTaskInAgentRuntime(params: {
   runtimeCrossing?: RuntimeCrossing;
   ephemeralCredentials?: Record<string, string>;
   subagentExecutionPolicy?: SubagentExecutionPolicy;
+  onLaunchFailed?: () => Promise<void>;
   onTextDelta?: (delta: string) => void;
   abortSignal?: AbortSignal;
 }): Promise<A2AExecuteResult> {
+  const notifyLaunchFailed = async () => {
+    const callback =
+      params.onLaunchFailed ?? params.subagentExecutionPolicy?.onLaunchFailed;
+    await callback?.().catch((error) => {
+      logger.warn(
+        { error, taskId: params.taskId },
+        "Failed to run onLaunchFailed callback after Agent Runtime launch failure",
+      );
+    });
+  };
   if (params.resumeFromTaskId) {
     const launchedAt = Date.now();
+    let sessionLaunched = false;
     try {
       const session = await startAgentRunSession(params);
+      sessionLaunched = true;
       return await followAgentRun({
         session,
         launchedAt,
@@ -574,6 +589,9 @@ export async function runTaskInAgentRuntime(params: {
         abortSignal: params.abortSignal,
       });
     } catch (error) {
+      if (!sessionLaunched) {
+        await notifyLaunchFailed();
+      }
       await recordRunFailure({
         taskId: params.taskId,
         failure: error,
@@ -647,6 +665,7 @@ export async function runTaskInAgentRuntime(params: {
   };
   let lastError: unknown;
   let hasPriorAttempt = false;
+  let anySessionLaunched = false;
 
   while (currentCandidate) {
     const candidateAgentId = currentCandidate.agentId;
@@ -718,6 +737,7 @@ export async function runTaskInAgentRuntime(params: {
           },
           boundContract,
         });
+        anySessionLaunched = true;
         return await followAgentRun({
           session,
           launchedAt,
@@ -727,6 +747,9 @@ export async function runTaskInAgentRuntime(params: {
       } catch (error) {
         lastError = error;
         if (params.abortSignal?.aborted) {
+          if (!anySessionLaunched) {
+            await notifyLaunchFailed();
+          }
           await recordRunFailure({
             taskId: params.taskId,
             failure: error,
@@ -766,6 +789,9 @@ export async function runTaskInAgentRuntime(params: {
     await A2ATaskModel.updateAgentId(params.taskId, currentCandidate.agentId);
   }
 
+  if (!anySessionLaunched) {
+    await notifyLaunchFailed();
+  }
   await recordRunFailure({
     taskId: params.taskId,
     failure: lastError,

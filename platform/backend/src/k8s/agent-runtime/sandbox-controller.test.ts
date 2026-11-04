@@ -211,7 +211,7 @@ test("launch on retry waits for a Sandbox whose first read has no deletionTimest
   expect(createdSandboxName).toBe("workspace");
 });
 
-test("clears the terminating-sandbox marker when deletion wait times out so later launches decide from a fresh read", async () => {
+test("keeps the terminating-sandbox marker after a deletion timeout so a later launch never adopts the timed-out Sandbox and only creates once it is gone", async () => {
   serveController({ installed: true });
   await expect(manager.assertSandboxApiInstalled()).resolves.toBeUndefined();
 
@@ -219,6 +219,7 @@ test("clears the terminating-sandbox marker when deletion wait times out so late
   config.agentRuntime.podStartTimeoutSeconds = 0;
 
   let sandboxReads = 0;
+  let sandboxDeletedInCluster = false;
   let sandboxCreateCount = 0;
   const cacheControlHeaders: Array<string | null> = [];
 
@@ -232,8 +233,15 @@ test("clears the terminating-sandbox marker when deletion wait times out so late
         `${origin}/apis/agents.x-k8s.io/v1beta1/namespaces/test/sandboxes/workspace`,
         () => HttpResponse.json({}, { status: 200 }),
       ),
+      http.delete(`${origin}/api/v1/namespaces/test/secrets/:name`, () =>
+        HttpResponse.json({ code: 404 }, { status: 404 }),
+      ),
       http.delete(
-        ({ request }) => request.url.startsWith(origin),
+        `${origin}/apis/networking.k8s.io/v1/namespaces/test/networkpolicies/:name`,
+        () => HttpResponse.json({ code: 404 }, { status: 404 }),
+      ),
+      http.delete(
+        `${origin}/apis/:group/:version/namespaces/test/:plural/:name`,
         () => HttpResponse.json({ code: 404 }, { status: 404 }),
       ),
       http.get(
@@ -241,6 +249,9 @@ test("clears the terminating-sandbox marker when deletion wait times out so late
         ({ request }) => {
           sandboxReads += 1;
           cacheControlHeaders.push(request.headers.get("cache-control"));
+          if (sandboxDeletedInCluster) {
+            return HttpResponse.json({ code: 404 }, { status: 404 });
+          }
           return HttpResponse.json({
             apiVersion: "agents.x-k8s.io/v1beta1",
             kind: "Sandbox",
@@ -255,6 +266,35 @@ test("clears the terminating-sandbox marker when deletion wait times out so late
       http.get(
         `${origin}/apis/extensions.agents.x-k8s.io/v1beta1/namespaces/test/sandboxclaims/workspace`,
         () => HttpResponse.json({ code: 404 }, { status: 404 }),
+      ),
+      http.post(
+        `${origin}/api/v1/namespaces/test/secrets`,
+        async ({ request }) => {
+          const body = await request.json();
+          return HttpResponse.json(body, { status: 201 });
+        },
+      ),
+      http.get(
+        `${origin}/api/v1/namespaces/kube-system/services/kube-dns`,
+        () =>
+          HttpResponse.json({
+            spec: { clusterIP: "10.96.0.10", clusterIPs: ["10.96.0.10"] },
+          }),
+      ),
+      http.get(`${origin}/apis/networking.k8s.io/v1`, () =>
+        HttpResponse.json({
+          kind: "APIResourceList",
+          apiVersion: "v1",
+          groupVersion: "networking.k8s.io/v1",
+          resources: [{ name: "networkpolicies", kind: "NetworkPolicy" }],
+        }),
+      ),
+      http.post(
+        `${origin}/apis/networking.k8s.io/v1/namespaces/test/networkpolicies`,
+        async ({ request }) => {
+          const body = await request.json();
+          return HttpResponse.json(body, { status: 201 });
+        },
       ),
       http.post(
         `${origin}/apis/agents.x-k8s.io/v1beta1/namespaces/test/sandboxes`,
@@ -292,22 +332,36 @@ test("clears the terminating-sandbox marker when deletion wait times out so late
       effectiveNetworkPolicy: { source: "built_in" as const, policy: null },
     };
 
-    let timedOutError: unknown;
+    let firstTimedOutError: unknown;
     try {
       await manager.launch(launchSpec);
     } catch (error) {
-      timedOutError = error;
+      firstTimedOutError = error;
     }
-    expect(classifyAgentRunFailure(timedOutError)?.code).toBe(
+    expect(classifyAgentRunFailure(firstTimedOutError)?.code).toBe(
       "launch.capacity_timeout",
     );
 
-    // Next fresh launch (not marked replacePriorAttempt) decides from a fresh read
-    // rather than staying trapped in terminatingSandboxes.
-    await expect(manager.launch(launchSpec)).resolves.toBeUndefined();
-    expect(sandboxReads).toBe(2);
-    expect(cacheControlHeaders).toEqual(["no-cache", "no-cache"]);
+    // While the previous Sandbox is still present (even without deletionTimestamp
+    // and without replacePriorAttempt), a second launch must NOT adopt it.
+    let secondTimedOutError: unknown;
+    try {
+      await manager.launch(launchSpec);
+    } catch (error) {
+      secondTimedOutError = error;
+    }
+    expect(classifyAgentRunFailure(secondTimedOutError)?.code).toBe(
+      "launch.capacity_timeout",
+    );
     expect(sandboxCreateCount).toBe(0);
+
+    // Once the old Sandbox finishes deleting and returns NotFound, the next launch
+    // clears the marker and creates a fresh Sandbox.
+    sandboxDeletedInCluster = true;
+    await expect(manager.launch(launchSpec)).resolves.toBeUndefined();
+    expect(sandboxReads).toBe(3);
+    expect(cacheControlHeaders).toEqual(["no-cache", "no-cache", "no-cache"]);
+    expect(sandboxCreateCount).toBe(1);
   } finally {
     config.agentRuntime.podStartTimeoutSeconds = originalTimeout;
   }

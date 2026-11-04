@@ -14,7 +14,7 @@ export interface EphemeralCredentialGrant {
   allowedAgentIds: string[];
   key: string;
   value: string;
-  ttlMs?: number;
+  expiresAt: number;
 }
 
 export function ephemeralCredentialGrantCacheKey(
@@ -37,7 +37,7 @@ function validateGrant(
     candidateAgentIds: string[];
   },
 ): string | null {
-  if (!grant) {
+  if (!grant || grant.expiresAt <= Date.now()) {
     return `Credential grant "${grantId}" is expired, already consumed, or invalid. Call transfer_credential with ephemeral: true to mint a fresh grant before start_agent_run.`;
   }
   if (
@@ -93,7 +93,7 @@ function buildGrantResolution(resolvedGrants: EphemeralCredentialGrant[]): {
  */
 export class EphemeralCredentialGrantManager {
   async createGrant(
-    params: Omit<EphemeralCredentialGrant, "id" | "ttlMs"> & {
+    params: Omit<EphemeralCredentialGrant, "id" | "expiresAt"> & {
       ttlSeconds?: number;
     },
   ): Promise<{
@@ -108,6 +108,7 @@ export class EphemeralCredentialGrantManager {
     );
     const grantId = crypto.randomUUID();
     const ttlMs = expiresInSeconds * TimeInMs.Second;
+    const expiresAt = Date.now() + ttlMs;
     await cacheManager.set<EphemeralCredentialGrant>(
       ephemeralCredentialGrantCacheKey(grantId),
       {
@@ -118,11 +119,30 @@ export class EphemeralCredentialGrantManager {
         allowedAgentIds: [...new Set(params.allowedAgentIds)],
         key: params.key,
         value: params.value,
-        ttlMs,
+        expiresAt,
       },
       ttlMs,
     );
     return { grantId, expiresInSeconds };
+  }
+
+  /**
+   * Restore previously consumed grants for the remainder of their original
+   * lifetime, skipping any grant whose `expiresAt` has already passed.
+   */
+  async restoreGrants(grants: EphemeralCredentialGrant[]): Promise<void> {
+    const now = Date.now();
+    for (const grant of grants) {
+      const remainingTtlMs = grant.expiresAt - now;
+      if (remainingTtlMs <= 0) {
+        continue;
+      }
+      await cacheManager.set(
+        ephemeralCredentialGrantCacheKey(grant.id),
+        grant,
+        remainingTtlMs,
+      );
+    }
   }
 
   /**
@@ -225,18 +245,14 @@ export class EphemeralCredentialGrantManager {
           await cache.delete(ephemeralCredentialGrantCacheKey(grantId));
         }
 
+        let restored = false;
         const resolution = buildGrantResolution(resolvedGrants);
         return {
           ...resolution,
           restore: async () => {
-            for (const grant of resolvedGrants) {
-              await cacheManager.set(
-                ephemeralCredentialGrantCacheKey(grant.id),
-                grant,
-                grant.ttlMs ??
-                  DEFAULT_EPHEMERAL_GRANT_TTL_SECONDS * TimeInMs.Second,
-              );
-            }
+            if (restored) return;
+            restored = true;
+            await this.restoreGrants(resolvedGrants);
           },
         };
       },

@@ -227,8 +227,8 @@ class AgentRuntimeManager {
         );
         return;
       }
+      this.terminatingSandboxes.add(sandboxKey);
       if (Date.now() >= startupDeadline) {
-        this.terminatingSandboxes.delete(sandboxKey);
         throw tagAgentRunFailure(
           new Error(
             `Timed out waiting for previous Agent Sandbox ${names.sandbox} deletion to finish`,

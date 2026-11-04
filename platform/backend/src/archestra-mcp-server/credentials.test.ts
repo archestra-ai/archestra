@@ -3,6 +3,7 @@ import {
   redactCatalogToolArguments,
   TOOL_TRANSFER_CREDENTIAL_FULL_NAME,
 } from "@archestra/shared";
+import { vi } from "vitest";
 import { cacheManager } from "@/cache-manager";
 import { AgentExcludedSubagentModel, AgentModel } from "@/models";
 import { preflightAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
@@ -485,14 +486,49 @@ test("mints a one-time ephemeral credential_grant_id without writing to the data
     candidateAgentIds: [targetA.id],
   });
   expect(consumed.ok).toBe(true);
-  if (consumed.ok) {
-    expect(consumed.envForAgent(targetA.id)).toEqual({
-      GH_TOKEN: SECRET_VALUE,
-    });
-  }
+  if (!consumed.ok) throw new Error("Expected grant consumption to succeed");
+  expect(consumed.envForAgent(targetA.id)).toEqual({
+    GH_TOKEN: SECRET_VALUE,
+  });
   await expect(
     cacheManager.get(ephemeralCredentialGrantCacheKey(grantId)),
   ).resolves.toBeUndefined();
+
+  // Restoring writes only the remaining lifetime, and restoring after expiresAt writes nothing.
+  const setSpy = vi.spyOn(cacheManager, "set");
+  const originalExpiresAt = consumed.grants[0]?.expiresAt ?? 0;
+  const nowSpy = vi
+    .spyOn(Date, "now")
+    .mockReturnValue(originalExpiresAt - 12_500);
+  await consumed.restore();
+  expect(setSpy).toHaveBeenCalledWith(
+    ephemeralCredentialGrantCacheKey(grantId),
+    expect.objectContaining({ id: grantId, expiresAt: originalExpiresAt }),
+    12_500,
+  );
+  await expect(
+    cacheManager.get(ephemeralCredentialGrantCacheKey(grantId)),
+  ).resolves.toMatchObject({ id: grantId, expiresAt: originalExpiresAt });
+
+  // Consume again and restore after original expiry has passed: nothing is restored.
+  const reconsumed = await secondReplicaManager.consumeGrants({
+    grantIds: [grantId],
+    organizationId,
+    userId: actorId,
+    callerAgentId: context.agent.id,
+    candidateAgentIds: [targetA.id],
+  });
+  expect(reconsumed.ok).toBe(true);
+  if (!reconsumed.ok) throw new Error("Expected second consume to succeed");
+  setSpy.mockClear();
+  nowSpy.mockReturnValue(originalExpiresAt + 1_000);
+  await reconsumed.restore();
+  expect(setSpy).not.toHaveBeenCalled();
+  await expect(
+    cacheManager.get(ephemeralCredentialGrantCacheKey(grantId)),
+  ).resolves.toBeUndefined();
+  nowSpy.mockRestore();
+  setSpy.mockRestore();
 });
 
 test("lists all target subagent names and setup URLs when agent_id is omitted", async ({

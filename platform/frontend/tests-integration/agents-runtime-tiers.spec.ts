@@ -82,19 +82,19 @@ test("an administrator edits a runtime tier in its dialog: a bad CPU request is 
   const dialog = page.getByRole("dialog", { name: "Edit tier" });
   const cpu = dialog.getByLabel("CPU request");
   await expect(cpu).toHaveValue("8");
-  await expect(dialog.getByLabel("Name")).toHaveAttribute("placeholder", "XL");
-  await expect(cpu).toHaveAttribute("placeholder", "4");
+  await expect(dialog.getByLabel("Name")).not.toHaveAttribute("placeholder");
+  await expect(cpu).toHaveAttribute("placeholder", "8");
   await expect(dialog.getByLabel("CPU limit")).toHaveAttribute(
     "placeholder",
     "No limit",
   );
-  await expect(dialog.getByLabel("Workspace (GiB)")).toHaveAttribute(
+  await expect(dialog.getByLabel("Disk (GiB)")).toHaveAttribute(
     "placeholder",
     "20",
   );
-  await cpu.fill("9");
+  await cpu.fill("257");
   await dialog.getByLabel("Name").focus();
-  await expect(dialog).toContainText("Enter a number from 0.1 to 8");
+  await expect(dialog).toContainText("Enter a number from 0.1 to 256");
   await dialog.screenshot({
     path: testInfo.outputPath("runtime-tier-dialog-problem.png"),
   });
@@ -104,8 +104,13 @@ test("an administrator edits a runtime tier in its dialog: a bad CPU request is 
   // A valid size: the memory follows while typing; the save sends the whole
   // list with the default tier.
   await cpu.fill("6");
-  await expect(dialog.getByTestId("tier-memory")).toHaveText(
-    "Memory: 12 GiB, 24 GiB limit",
+  await expect(dialog.getByLabel("Memory request (GiB)")).toHaveAttribute(
+    "placeholder",
+    "12",
+  );
+  await expect(dialog.getByLabel("Memory limit (GiB)")).toHaveAttribute(
+    "placeholder",
+    "24",
   );
   // The Pooled switch explains itself on request, from the keyboard too: the
   // hint's link is in the Tab order and Escape hands focus back to the icon.
@@ -123,7 +128,7 @@ test("an administrator edits a runtime tier in its dialog: a bad CPU request is 
   await expect(hint).toBeHidden();
   await expect(about).toBeFocused();
   await dialog.getByRole("switch", { name: "Pooled" }).click();
-  await dialog.getByLabel("Workspace (GiB)").fill("60");
+  await dialog.getByLabel("Disk (GiB)").fill("60");
   const saved = {
     tiers: [
       {
@@ -144,6 +149,8 @@ test("an administrator edits a runtime tier in its dialog: a bad CPU request is 
         name: "L",
         cpuRequest: 6,
         cpuLimit: null,
+        memoryRequestMiB: null,
+        memoryLimitMiB: null,
         pooled: true,
         workspaceGiB: 60,
       },

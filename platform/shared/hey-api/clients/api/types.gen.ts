@@ -124569,6 +124569,14 @@ export type GetAgentRuntimeTiersResponses = {
             memoryRequestMiB: number;
             memoryLimitMiB: number;
             /**
+             * Explicit memory request in MiB; absent when the request follows CPU
+             */
+            memoryRequestMiBOverride?: number;
+            /**
+             * Explicit memory limit in MiB; absent when the limit follows CPU
+             */
+            memoryLimitMiBOverride?: number;
+            /**
              * Size of a run's workspace volume in GiB; null means the deployment's default
              */
             workspaceGiB: number | null;
@@ -124590,6 +124598,8 @@ export type UpdateAgentSettingsData = {
                 name: string;
                 cpuRequest: number;
                 cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
                 pooled: boolean;
                 workspaceGiB?: number | null;
                 previousName?: string;

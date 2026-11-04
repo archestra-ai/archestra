@@ -948,6 +948,7 @@ class OrganizationModel {
         org.allowUnauthenticatedLlmProxyRequests,
       keepMediaInLogs: org.keepMediaInLogs,
       allowToolAutoAssignment: org.allowToolAutoAssignment,
+      agentRuntimeTiers: org.agentRuntimeTiers,
       embeddingModel: org.embeddingModel ?? null,
       kbContextualRetrievalMode: org.kbContextualRetrievalMode ?? null,
       defaultModel: defaultModelRows[0]?.externalId ?? null,

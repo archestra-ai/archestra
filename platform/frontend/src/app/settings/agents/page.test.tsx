@@ -458,10 +458,10 @@ describe("Runtime tiers", () => {
     expect(cpu).toHaveValue(8);
 
     await user.clear(cpu);
-    await user.type(cpu, "9");
+    await user.type(cpu, "257");
     await user.tab();
     expect(
-      within(dialog).getByText("Enter a number from 0.1 to 8"),
+      within(dialog).getByText("Enter a number from 0.1 to 256"),
     ).toBeVisible();
     expect(cpu).toHaveAttribute("aria-invalid", "true");
     await user.click(
@@ -471,8 +471,12 @@ describe("Runtime tiers", () => {
 
     await user.clear(cpu);
     await user.type(cpu, "6");
-    expect(within(dialog).getByTestId("tier-memory")).toHaveTextContent(
-      "Memory: 12 GiB, 24 GiB limit",
+    expect(
+      within(dialog).getByLabelText("Memory request (GiB)"),
+    ).toHaveAttribute("placeholder", "12");
+    expect(within(dialog).getByLabelText("Memory limit (GiB)")).toHaveAttribute(
+      "placeholder",
+      "24",
     );
     const limit = within(dialog).getByLabelText("CPU limit");
     await user.type(limit, "2");
@@ -482,10 +486,11 @@ describe("Runtime tiers", () => {
     ).toBeVisible();
     await user.clear(limit);
     await user.type(limit, "7");
-    expect(within(dialog).getByTestId("tier-memory")).toHaveTextContent(
-      "Memory: 12 GiB, 14 GiB limit",
+    expect(within(dialog).getByLabelText("Memory limit (GiB)")).toHaveAttribute(
+      "placeholder",
+      "24",
     );
-    await user.type(within(dialog).getByLabelText("Workspace (GiB)"), "60");
+    await user.type(within(dialog).getByLabelText("Disk (GiB)"), "60");
     await user.click(within(dialog).getByRole("switch", { name: "Pooled" }));
     await user.click(
       within(dialog).getByRole("button", { name: "Save changes" }),
@@ -499,6 +504,8 @@ describe("Runtime tiers", () => {
           name: "L",
           cpuRequest: 6,
           cpuLimit: 7,
+          memoryRequestMiB: null,
+          memoryLimitMiB: null,
           pooled: true,
           workspaceGiB: 60,
         },
@@ -534,11 +541,54 @@ describe("Runtime tiers", () => {
     expect(saveTiers).toHaveBeenCalledWith({
       tiers: [
         seedInput.S,
-        { ...seedInput.M, name: "Medium", previousName: "M" },
+        {
+          ...seedInput.M,
+          name: "Medium",
+          previousName: "M",
+          memoryRequestMiB: null,
+          memoryLimitMiB: null,
+        },
         seedInput.L,
       ],
       defaultTier: "Medium",
     });
+  });
+
+  it("keeps edit validation stable during the dialog exit animation", async () => {
+    // jsdom has no live computed styles. Model the browser's exit animation
+    // so Radix keeps the real dialog mounted after its open state changes.
+    const computedStyle = window.getComputedStyle.bind(window);
+    const styles = vi
+      .spyOn(window, "getComputedStyle")
+      .mockImplementation((element, pseudo) => {
+        const result = computedStyle(element, pseudo);
+        if (element.getAttribute("role") === "dialog")
+          Object.defineProperty(result, "animationName", {
+            get: () =>
+              element.getAttribute("data-state") === "closed"
+                ? "dialog-exit"
+                : "none",
+          });
+        return result;
+      });
+    try {
+      enableRuntime();
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(screen.getByRole("button", { name: "Edit L" }));
+      const dialog = screen.getByRole("dialog", { name: "Edit tier" });
+      const name = within(dialog).getByLabelText("Name");
+      await user.click(name);
+      await user.tab();
+      await user.keyboard("{Escape}");
+      expect(dialog).toBeInTheDocument();
+      expect(dialog).toHaveAttribute("data-state", "closed");
+      expect(within(dialog).getByText("Edit tier")).toBeInTheDocument();
+      expect(name).not.toHaveAttribute("aria-invalid", "true");
+      expect(dialog).not.toHaveTextContent("Another tier is named");
+    } finally {
+      styles.mockRestore();
+    }
   });
 
   it("creates a tier from the toolbar, as the default when asked", async () => {
@@ -551,12 +601,14 @@ describe("Runtime tiers", () => {
       within(block()).getByRole("button", { name: "Create tier" }),
     );
     const dialog = screen.getByRole("dialog", { name: "Create tier" });
+    await user.type(within(dialog).getByLabelText("CPU request"), "0");
     await user.click(
       within(dialog).getByRole("button", { name: "Create tier" }),
     );
-    expect(within(dialog).getByText("Enter a name")).toBeVisible();
+    expect(within(dialog).queryByText("Enter a name")).not.toBeInTheDocument();
     expect(saveTiers).not.toHaveBeenCalled();
     await user.type(within(dialog).getByLabelText("Name"), "XL");
+    await user.clear(within(dialog).getByLabelText("CPU request"));
     await user.type(within(dialog).getByLabelText("CPU request"), "8");
     await user.click(
       within(dialog).getByRole("checkbox", { name: "Default tier" }),
@@ -574,6 +626,8 @@ describe("Runtime tiers", () => {
           name: "XL",
           cpuRequest: 8,
           cpuLimit: null,
+          memoryRequestMiB: null,
+          memoryLimitMiB: null,
           pooled: true,
           workspaceGiB: null,
         },

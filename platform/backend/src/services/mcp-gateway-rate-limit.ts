@@ -18,10 +18,21 @@ const MAX_PER_CREDENTIAL = 10;
 const MAX_TRACKED_CREDENTIALS_PER_IP = 100;
 const MAX_AUTHENTICATION_OPERATIONS_PER_POOL = 16;
 const MAX_VERIFIED_OPERATIONS_PER_CREDENTIAL = 4;
+// A verified credential's burst queues for its reserved slots. The wait stays
+// well under MCP clients' request timeouts; the bounds cap queued requests.
+const AUTHENTICATION_WAIT_MS = 5_000;
+const MAX_WAITING_OPERATIONS_PER_CREDENTIAL = 128;
+const MAX_WAITING_OPERATIONS = 512;
 type AuthenticationPool = "unverified" | "verified";
 type AuthenticationAdmission =
   | { pool: "unverified" }
   | { pool: "verified"; credential: string };
+type Permit = { pool: AuthenticationPool; credentialKey?: string };
+type Waiter = {
+  credentialKey: string;
+  admit: (permit: Permit) => void;
+  timer: ReturnType<typeof setTimeout>;
+};
 
 export class McpGatewayAuthenticationBusyError extends Error {}
 
@@ -32,50 +43,107 @@ class McpGatewayAuthenticationCapacity {
   };
 
   // Live permits, not a cache: never expire or evict work that is still running.
-  // The total pool bounds this map to 16 entries; finally removes idle entries.
+  // The total pool bounds this map to 16 entries; release removes idle entries.
   private readonly verifiedActive = new Map<string, number>();
+
+  // Verified operations waiting for a reserved slot, oldest first.
+  private readonly waiting: Waiter[] = [];
 
   async run<T>(
     operation: () => Promise<T>,
     admission: AuthenticationAdmission,
   ): Promise<T> {
-    let { pool } = admission;
-    let credentialKey =
+    const credentialKey =
       admission.pool === "verified"
         ? fingerprint(admission.credential)
         : undefined;
-    const credentialActive = credentialKey
-      ? (this.verifiedActive.get(credentialKey) ?? 0)
-      : 0;
-    if (
-      pool === "verified" &&
-      (this.active.verified >= MAX_AUTHENTICATION_OPERATIONS_PER_POOL ||
-        credentialActive >= MAX_VERIFIED_OPERATIONS_PER_CREDENTIAL)
-    ) {
-      // Shared credentials may burst into spare unverified capacity without
-      // taking the reserved slots that keep other verified callers working.
-      pool = "unverified";
-      credentialKey = undefined;
+    // Shared credentials may burst into spare unverified capacity without
+    // taking the reserved slots that keep other verified callers working.
+    let permit = credentialKey ? this.reserve(credentialKey) : null;
+    permit ??= this.takeUnverified();
+    if (!permit) {
+      // Unknown callers fail at once. A verified credential waits for its
+      // reserved slots, so parallel calls with one token are not refused.
+      if (!credentialKey) throw busy();
+      permit = await this.wait(credentialKey);
     }
-    if (this.active[pool] >= MAX_AUTHENTICATION_OPERATIONS_PER_POOL) {
-      throw new McpGatewayAuthenticationBusyError(
-        "Gateway authentication capacity is exhausted",
-      );
-    }
-    this.active[pool] += 1;
-    if (credentialKey)
-      this.verifiedActive.set(credentialKey, credentialActive + 1);
     try {
       return await operation();
     } finally {
-      this.active[pool] -= 1;
-      if (credentialKey) {
-        const remaining = (this.verifiedActive.get(credentialKey) ?? 1) - 1;
-        if (remaining === 0) this.verifiedActive.delete(credentialKey);
-        else this.verifiedActive.set(credentialKey, remaining);
-      }
+      this.release(permit);
     }
   }
+
+  private reserve(credentialKey: string): Permit | null {
+    const credentialActive = this.verifiedActive.get(credentialKey) ?? 0;
+    if (
+      this.active.verified >= MAX_AUTHENTICATION_OPERATIONS_PER_POOL ||
+      credentialActive >= MAX_VERIFIED_OPERATIONS_PER_CREDENTIAL
+    ) {
+      return null;
+    }
+    this.active.verified += 1;
+    this.verifiedActive.set(credentialKey, credentialActive + 1);
+    return { pool: "verified", credentialKey };
+  }
+
+  private takeUnverified(): Permit | null {
+    if (this.active.unverified >= MAX_AUTHENTICATION_OPERATIONS_PER_POOL) {
+      return null;
+    }
+    this.active.unverified += 1;
+    return { pool: "unverified" };
+  }
+
+  private wait(credentialKey: string): Promise<Permit> {
+    const queued = this.waiting.filter(
+      (waiter) => waiter.credentialKey === credentialKey,
+    ).length;
+    if (
+      this.waiting.length >= MAX_WAITING_OPERATIONS ||
+      queued >= MAX_WAITING_OPERATIONS_PER_CREDENTIAL
+    ) {
+      return Promise.reject(busy());
+    }
+    return new Promise<Permit>((resolve, reject) => {
+      const waiter: Waiter = {
+        credentialKey,
+        admit: resolve,
+        timer: setTimeout(() => {
+          const index = this.waiting.indexOf(waiter);
+          if (index !== -1) this.waiting.splice(index, 1);
+          reject(busy());
+        }, AUTHENTICATION_WAIT_MS),
+      };
+      this.waiting.push(waiter);
+    });
+  }
+
+  private release(permit: Permit): void {
+    this.active[permit.pool] -= 1;
+    const { credentialKey } = permit;
+    if (!credentialKey) return;
+    const remaining = (this.verifiedActive.get(credentialKey) ?? 1) - 1;
+    if (remaining === 0) this.verifiedActive.delete(credentialKey);
+    else this.verifiedActive.set(credentialKey, remaining);
+    // The freed reserved slot goes to the oldest waiter that may use it.
+    // Waiters take only reserved slots: freed shared slots stay available
+    // to unknown callers.
+    for (const [index, waiter] of this.waiting.entries()) {
+      const next = this.reserve(waiter.credentialKey);
+      if (!next) continue;
+      this.waiting.splice(index, 1);
+      clearTimeout(waiter.timer);
+      waiter.admit(next);
+      return;
+    }
+  }
+}
+
+function busy(): McpGatewayAuthenticationBusyError {
+  return new McpGatewayAuthenticationBusyError(
+    "Gateway authentication capacity is exhausted",
+  );
 }
 
 const authenticationCapacity = new McpGatewayAuthenticationCapacity();

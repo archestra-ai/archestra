@@ -96,6 +96,7 @@ describe("gateway attempt budgets", () => {
       withMcpGatewayAuthenticationCapacity(() => pendingWork),
     );
     let verified: Promise<void>[] = [];
+    let queued: Promise<boolean> | undefined;
     try {
       for (const limiter of [
         new McpGatewayRateLimiter(),
@@ -118,16 +119,17 @@ describe("gateway attempt budgets", () => {
           credential: randomUUID(),
         }),
       );
-      await expect(
-        withMcpGatewayAuthenticationCapacity(async () => true, {
-          pool: "verified",
-          credential: randomUUID(),
-        }),
-      ).rejects.toBeInstanceOf(McpGatewayAuthenticationBusyError);
+      // With both pools full, a verified caller waits for a reserved slot.
+      queued = withMcpGatewayAuthenticationCapacity(async () => true, {
+        pool: "verified",
+        credential: randomUUID(),
+      });
+      expect(await isPending(queued)).toBe(true);
     } finally {
       release();
       await Promise.all([...pending, ...verified]);
     }
+    await expect(queued).resolves.toBe(true);
     for (const pool of ["unverified", "verified"] as const) {
       await expect(
         withMcpGatewayAuthenticationCapacity(
@@ -166,30 +168,40 @@ describe("gateway attempt budgets", () => {
     );
     const settled = Promise.allSettled(pending);
     let otherCallers: Promise<void>[] = [];
+    const queued: Promise<boolean>[] = [];
     try {
-      await expect(
+      queued.push(
         withMcpGatewayAuthenticationCapacity(async () => true, admission),
-      ).rejects.toBeInstanceOf(McpGatewayAuthenticationBusyError);
+      );
+      expect(await isPending(queued[0])).toBe(true);
       await expect(
         withMcpGatewayAuthenticationCapacity(async () => true),
       ).rejects.toBeInstanceOf(McpGatewayAuthenticationBusyError);
+      let othersStarted = 0;
       otherCallers = Array.from({ length: 12 }, () =>
-        withMcpGatewayAuthenticationCapacity(() => held, {
-          pool: "verified",
-          credential: randomUUID(),
-        }),
+        withMcpGatewayAuthenticationCapacity(
+          async () => {
+            othersStarted += 1;
+            await held;
+          },
+          { pool: "verified", credential: randomUUID() },
+        ),
       );
-      await expect(
+      // Other verified callers get the remaining reserved slots at once.
+      expect(othersStarted).toBe(12);
+      queued.push(
         withMcpGatewayAuthenticationCapacity(async () => true, {
           pool: "verified",
           credential: randomUUID(),
         }),
-      ).rejects.toBeInstanceOf(McpGatewayAuthenticationBusyError);
+      );
+      expect(await isPending(queued[1])).toBe(true);
     } finally {
       release();
       await settled;
       await Promise.all(otherCallers);
     }
+    await expect(Promise.all(queued)).resolves.toEqual([true, true]);
     expect(
       (await settled).filter((result) => result.status === "rejected"),
     ).toHaveLength(2);
@@ -197,6 +209,82 @@ describe("gateway attempt budgets", () => {
       withMcpGatewayAuthenticationCapacity(async () => true, admission),
     );
     await expect(Promise.all(resumed)).resolves.toHaveLength(20);
+  });
+
+  test("admits fifty parallel calls with one verified credential without exceeding the pools", async () => {
+    const admission = { pool: "verified" as const, credential: randomUUID() };
+    let active = 0;
+    let peak = 0;
+    const calls = Array.from({ length: 50 }, () =>
+      withMcpGatewayAuthenticationCapacity(async () => {
+        active += 1;
+        peak = Math.max(peak, active);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        active -= 1;
+        return true;
+      }, admission),
+    );
+    await expect(Promise.all(calls)).resolves.toHaveLength(50);
+    // Four reserved slots plus the sixteen shared with unknown callers.
+    expect(peak).toBe(20);
+  });
+
+  test("refuses verified callers when the wait ends or the queue is full", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const holding = [
+      ...Array.from({ length: 16 }, () =>
+        withMcpGatewayAuthenticationCapacity(() => held, {
+          pool: "verified",
+          credential: randomUUID(),
+        }),
+      ),
+      ...Array.from({ length: 16 }, () =>
+        withMcpGatewayAuthenticationCapacity(() => held),
+      ),
+    ];
+    const queue = (credential: string) =>
+      withMcpGatewayAuthenticationCapacity(async () => true, {
+        pool: "verified",
+        credential,
+      });
+    try {
+      const credentials = Array.from({ length: 4 }, () => randomUUID());
+      const waiting = Promise.allSettled(
+        credentials.flatMap((credential) =>
+          Array.from({ length: 128 }, () => queue(credential)),
+        ),
+      );
+      // 128 waiting calls per credential, 512 in total.
+      await expect(queue(credentials[0])).rejects.toBeInstanceOf(
+        McpGatewayAuthenticationBusyError,
+      );
+      await expect(queue(randomUUID())).rejects.toBeInstanceOf(
+        McpGatewayAuthenticationBusyError,
+      );
+      await vi.advanceTimersByTimeAsync(5_000);
+      const results = await waiting;
+      expect(results).toHaveLength(512);
+      for (const result of results) {
+        expect(result.status).toBe("rejected");
+        if (result.status === "rejected")
+          expect(result.reason).toBeInstanceOf(
+            McpGatewayAuthenticationBusyError,
+          );
+      }
+      // Expired waiters leave the queue.
+      const next = queue(credentials[0]);
+      expect(await isPending(next)).toBe(true);
+      release();
+      await expect(next).resolves.toBe(true);
+    } finally {
+      release();
+      await Promise.all(holding);
+      vi.useRealTimers();
+    }
   });
 
   test("uses spare unverified slots when the verified pool is full", async () => {
@@ -297,3 +385,17 @@ describe("gateway attempt budgets", () => {
     }
   });
 });
+
+async function isPending(promise: Promise<unknown>): Promise<boolean> {
+  let settled = false;
+  promise.then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    },
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  return !settled;
+}

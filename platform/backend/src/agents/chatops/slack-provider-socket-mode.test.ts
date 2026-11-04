@@ -229,6 +229,84 @@ describe("Slack startup cancellation", () => {
     }
   });
 
+  test("shutdown during settings cleanup preserves an acknowledged turn's reply", async () => {
+    const fixture = await createSlackSocketFixture();
+    const manager = new ChatOpsManager();
+    let proceed = () => {};
+    const turnGate = new Promise<void>((resolve) => {
+      proceed = resolve;
+    });
+    let finish = (_error?: unknown) => {};
+    const turnOutcome = new Promise<unknown>((resolve) => {
+      finish = resolve;
+    });
+    let accepted = false;
+    let reloading: Promise<void> | undefined;
+    let stopping: Promise<void> | undefined;
+    try {
+      await ChatOpsConfigModel.saveSlackConfig(slackConfig);
+      await manager.initialize();
+      const provider = manager.getSlackProvider();
+      if (!provider) throw new Error("Missing Slack provider");
+      provider.setEventHandler({
+        handleIncomingMessage: async () => {
+          accepted = true;
+          await turnGate;
+          try {
+            await provider.sendReply({
+              originalMessage: {
+                messageId: "1.000001",
+                channelId: "C_TEST",
+                workspaceId: "T_TEST",
+                threadId: "1.000001",
+                senderId: "U_TEST",
+                senderName: "Test",
+                text: "hello",
+                rawText: "hello",
+                timestamp: new Date(),
+                isThreadReply: false,
+              },
+              text: "completed",
+            });
+            finish();
+          } catch (error) {
+            finish(error);
+          }
+        },
+        handleInteractiveApprovalDecision: vi.fn(),
+        handleInteractiveSelection: vi.fn(),
+        getAccessibleChatopsAgents: vi.fn(),
+      });
+      fixture.sendEvent("before-reload", {
+        type: "message",
+        ts: "1.000001",
+      });
+      await vi.waitFor(() => {
+        expect(fixture.acknowledgements).toContain("before-reload");
+        expect(accepted).toBe(true);
+      });
+      reloading = manager.reinitialize();
+      // Enter the queued reload before close-handshake IO can settle cleanup.
+      await Promise.resolve();
+      stopping = manager.beginShutdown();
+      await Promise.all([reloading, stopping]);
+      proceed();
+      expect(await turnOutcome).toBeUndefined();
+      expect(fixture.calls).toContain("chat.postMessage");
+      expect(manager.getSlackProvider()).toBe(provider);
+      expect(fixture.connections).toBe(1);
+      await manager.cleanup();
+      expect(manager.getSlackProvider()).toBeNull();
+      expect(provider.getBotUserId()).toBeNull();
+    } finally {
+      proceed();
+      await Promise.allSettled([reloading, stopping]);
+      if (accepted) await turnOutcome;
+      await manager.cleanup();
+      await fixture.close();
+    }
+  });
+
   test("concurrent settings saves cannot orphan a socket outside the shutdown snapshot", async () => {
     const fixture = await createSlackSocketFixture();
     const manager = new ChatOpsManager();

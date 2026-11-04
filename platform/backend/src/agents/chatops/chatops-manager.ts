@@ -755,7 +755,7 @@ export class ChatOpsManager {
     if (this.stopping) return;
     const reinitializing = this.reinitializing.then(async () => {
       if (this.stopping) return;
-      await this.cleanup();
+      await this.cleanupProviders("reload");
       await this.initialize();
     });
     // Serialize settings saves so every opened provider remains owned by this
@@ -767,31 +767,11 @@ export class ChatOpsManager {
   /** Disconnect event sources before HTTP drain; admitted handlers still reply. */
   async beginShutdown(): Promise<void> {
     this.stopping = true;
-    await Promise.all([
-      ...this.getSlackProviders().map((provider) => provider.beginShutdown()),
-      this.telegramProvider?.beginShutdown(),
-    ]);
+    await this.stopProviderIntake();
   }
 
   async cleanup(): Promise<void> {
-    if (this.msTeamsProvider) {
-      await this.msTeamsProvider.cleanup();
-      this.msTeamsProvider = null;
-    }
-    if (this.slackProvider) {
-      await this.slackProvider.cleanup();
-      this.slackProvider = null;
-    }
-    for (const bot of this.slackAgentBots.values()) {
-      await bot.cleanup();
-    }
-    this.slackAgentBots.clear();
-    this.jiraAgentBots.clear();
-    if (this.telegramProvider) {
-      await this.telegramProvider.cleanup();
-      this.telegramProvider = null;
-    }
-    this.stopCleanupInterval();
+    await this.cleanupProviders("final");
   }
 
   stopCleanupInterval(): void {
@@ -4402,6 +4382,35 @@ export class ChatOpsManager {
       provider,
       sendReply: true,
     });
+  }
+
+  private async stopProviderIntake(): Promise<void> {
+    await Promise.all([
+      ...this.getSlackProviders().map((provider) => provider.beginShutdown()),
+      this.telegramProvider?.beginShutdown(),
+    ]);
+  }
+
+  private async cleanupProviders(mode: "reload" | "final"): Promise<void> {
+    if (this.msTeamsProvider) {
+      await this.msTeamsProvider.cleanup();
+      if (mode === "reload" && this.stopping) return;
+      this.msTeamsProvider = null;
+    }
+    await this.stopProviderIntake();
+    if (mode === "reload" && this.stopping) return;
+
+    // No await from here: shutdown cannot interleave with releasing replies.
+    this.slackProvider?.finishCleanup();
+    this.slackProvider = null;
+    for (const bot of this.slackAgentBots.values()) {
+      bot.finishCleanup();
+    }
+    this.slackAgentBots.clear();
+    this.jiraAgentBots.clear();
+    this.telegramProvider?.finishCleanup();
+    this.telegramProvider = null;
+    this.stopCleanupInterval();
   }
 }
 

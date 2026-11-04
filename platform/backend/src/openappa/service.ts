@@ -34,7 +34,6 @@ import { getActiveSessionId } from "@/observability/request-context";
 import { traceOpenappaDispatch } from "@/observability/tracing/openappa";
 import { clientSessionId } from "@/openappa/actor";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import { normalizeToolArgumentsForPolicy } from "@/openappa/command-normalization";
 import { compositionView } from "@/openappa/composition-view";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import { openappaDeclarations } from "@/openappa/declarations";
@@ -67,6 +66,7 @@ import {
 } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
 import type { OpenAppaSession } from "@/types/openappa-session";
+import { policyArguments, previewAppToolTarget } from "./policy-arguments";
 import { policyView } from "./result-view";
 import { toolCallArgumentsText } from "./tool-call-arguments";
 import type { DeclaredToolSpelling } from "./wire";
@@ -1308,7 +1308,6 @@ export async function evaluateToolCalls(
             "The tool call arguments are not valid JSON, possibly incomplete. Reissue the call with complete arguments.",
         };
       }
-      const target = normalized[index];
       // Direct remedy control calls bypass evaluation and execute via gateway.
       // Only the declared control tool itself, in its own namespace: a
       // same-named tool elsewhere is someone else's and is evaluated.
@@ -1332,6 +1331,9 @@ export async function evaluateToolCalls(
       ) {
         return { kind: "allow" as const };
       }
+      const target = await previewAppToolTarget(normalized[index]);
+      if ("refusal" in target)
+        return { kind: "deny" as const, feedback: target.refusal };
       const shortName = archestraMcpBranding.getToolShortName(
         target.toolCallName,
       );
@@ -1378,10 +1380,7 @@ export async function evaluateToolCalls(
           options.control?.name,
           options.supportsDelegation,
         ),
-        arguments: normalizeToolArgumentsForPolicy(
-          tool,
-          JSON.parse(target.toolCallArgs),
-        ),
+        arguments: policyArguments(tool, JSON.parse(target.toolCallArgs)),
         spawn,
         ...(options.lineage?.spawnCallId
           ? { spawn_call_id: options.lineage.spawnCallId }

@@ -55,7 +55,6 @@ import {
   verifyChildTrajectoryReceipt,
 } from "@/openappa/child-trajectory-receipt";
 import { recordOpenAppaClientFailure } from "@/openappa/client-failure-report";
-import { normalizeToolArgumentsForPolicy } from "@/openappa/command-normalization";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import {
   delegationEnabled,
@@ -95,6 +94,7 @@ import {
   signPeerProof,
   stripPeerProofs,
 } from "@/openappa/peer-claims";
+import { policyArguments } from "@/openappa/policy-arguments";
 import {
   isObservedRead,
   RUNTIME_TOOL_PROOF_ARGUMENT,
@@ -1131,7 +1131,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           if (!entry.reviewedArguments) return true;
           try {
             return isDeepStrictEqual(
-              normalizeToolArgumentsForPolicy(
+              policyArguments(
                 target.toolCallName,
                 JSON.parse(target.toolCallArgs),
               ),

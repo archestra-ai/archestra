@@ -247,6 +247,49 @@ describe("MCP Gateway authorization failures", () => {
     );
   });
 
+  test("rejects warmed user tokens immediately after deletion or rotation", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    for (const access of ["org", "personal"] as const) {
+      const gateway = await makeAgent({
+        organizationId: org.id,
+        authorId: owner.id,
+        agentType: "mcp_gateway",
+        access,
+      });
+      for (const action of ["delete", "rotate"] as const) {
+        const user = await makeUser();
+        await makeMember(user.id, org.id, { role: "member" });
+        const token = await UserTokenModel.create(user.id, org.id);
+        const request = (value: string) =>
+          app.inject({
+            method: "GET",
+            url: `/v1/mcp/${gateway.id}`,
+            headers: { authorization: `Bearer ${value}` },
+          });
+        const expected = access === "org" ? 405 : 403;
+        expect((await request(token.value)).statusCode).toBe(expected);
+        if (action === "delete") await UserTokenModel.delete(token.token.id);
+        else {
+          const rotated = await UserTokenModel.rotate(token.token.id);
+          expect(rotated).not.toBeNull();
+          if (!rotated) throw new Error("Expected rotated token");
+          expect((await request(rotated.value)).statusCode).toBe(expected);
+        }
+        const revoked = await request(token.value);
+        expect(revoked.statusCode, `${access}/${action}`).toBe(401);
+        expect(revoked.headers["www-authenticate"]).toContain(
+          "resource_metadata",
+        );
+      }
+    }
+  });
+
   test("returns 403 when an application token loses its gateway grant", async ({
     makeOrganization,
     makeAgent,

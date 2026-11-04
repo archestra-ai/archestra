@@ -274,7 +274,6 @@ export type AgentInfo = {
 type TokenHashes = {
   cacheKey: string;
   oauthTokenHash: string;
-  rawTokenHash: string;
 };
 
 type ResolvedArchestraToken =
@@ -295,11 +294,6 @@ const tokenAuthCache = new LRUCacheManager<TokenAuthResult | null>({
   maxSize: TOKEN_AUTH_CACHE_MAX_ENTRIES,
   defaultTtl: TOKEN_AUTH_CACHE_TTL_MS,
 });
-const rawArchestraTokenCache =
-  new LRUCacheManager<ResolvedArchestraToken | null>({
-    maxSize: TOKEN_AUTH_CACHE_MAX_ENTRIES,
-    defaultTtl: TOKEN_AUTH_CACHE_TTL_MS,
-  });
 
 /** Runtime tools are advertised only while Guardrails v2 is active. */
 const APPA_IMPLICIT_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
@@ -2207,8 +2201,7 @@ export async function resolveTokenOrganizationId(
     return null;
   }
 
-  const rawTokenHash = createHash("sha256").update(tokenValue).digest("hex");
-  const resolved = await resolveArchestraToken(tokenValue, rawTokenHash);
+  const resolved = await resolveArchestraToken(tokenValue);
   return resolved?.type === "serviceAccount"
     ? resolved.serviceAccount.organizationId
     : (resolved?.token.organizationId ?? null);
@@ -2277,10 +2270,7 @@ async function authenticateUngated(
   }
 
   if (hasArchestraTokenPrefix(tokenValue)) {
-    const resolvedToken = await resolveArchestraToken(
-      tokenValue,
-      tokenHashes.rawTokenHash,
-    );
+    const resolvedToken = await resolveArchestraToken(tokenValue);
     // Establish a valid principal in this organization before distinguishing
     // a missing gateway grant from an invalid credential.
     if (!resolvedToken) return { result: null, reason: "invalid_token" };
@@ -2579,18 +2569,12 @@ function getCachedTokenAuthResult(
   return tokenAuthCache.get(cacheKey);
 }
 
-function getCachedRawArchestraToken(
-  rawTokenHash: string,
-): ResolvedArchestraToken | null | undefined {
-  return rawArchestraTokenCache.get(rawTokenHash);
-}
-
 function cacheTokenAuthResult(
   cacheKey: string,
   result: TokenAuthResult | null,
 ): void {
-  // Identity lookup may be cached separately, but a user's authorization must
-  // reflect resource grants and team/role membership on every request.
+  // A user's credential and authorization must reflect revocation, resource
+  // grants and team/role membership on every request.
   // Application credentials likewise recheck expiry, revocation and the
   // client's current gateway allowlist instead of retaining stale access.
   if (result?.userId || result?.oauthClientId || result?.serviceAccountId)
@@ -2619,26 +2603,12 @@ function cacheTokenAuthResult(
   tokenAuthCache.set(cacheKey, result, TOKEN_AUTH_CACHE_TTL_MS);
 }
 
-function cacheRawArchestraToken(
-  rawTokenHash: string,
-  result: ResolvedArchestraToken | null,
-): void {
-  // Same rationale as cacheTokenAuthResult: don't cache failures, to
-  // avoid the negative-cache treadmill that turns a transient creation
-  // race into a sticky 5-second window of 401s.
-  if (result === null) {
-    return;
-  }
-  rawArchestraTokenCache.set(rawTokenHash, result, TOKEN_AUTH_CACHE_TTL_MS);
-}
-
 function buildTokenHashes(profileId: string, tokenValue: string): TokenHashes {
   // codeql[js/insufficient-password-hash] Cache/lookup fingerprints of high-entropy bearer tokens, not password storage. Rejected arbitrary input never creates a credential.
   const digest = createHash("sha256").update(tokenValue).digest();
   return {
     cacheKey: `${profileId}:${digest.toString("hex")}`,
     oauthTokenHash: digest.toString("base64url"),
-    rawTokenHash: digest.toString("hex"),
   };
 }
 
@@ -2648,28 +2618,14 @@ function buildOAuthTokenHash(tokenValue: string): string {
 
 async function resolveArchestraToken(
   tokenValue: string,
-  rawTokenHash: string,
 ): Promise<ResolvedArchestraToken | null> {
-  const cached = getCachedRawArchestraToken(rawTokenHash);
-  if (cached !== undefined) {
-    return cached;
-  }
-
+  // Resolve live credentials so rotation or deletion takes effect immediately,
+  // including when the caller no longer has a gateway grant.
   const userToken = await UserTokenModel.validateToken(tokenValue);
-  if (userToken) {
-    const result: ResolvedArchestraToken = {
-      type: "user",
-      token: userToken,
-    };
-    cacheRawArchestraToken(rawTokenHash, result);
-    return result;
-  }
+  if (userToken) return { type: "user", token: userToken };
 
   const accountToken = await ServiceAccountModel.verifyToken(tokenValue);
-  if (accountToken) return { type: "serviceAccount", ...accountToken };
-
-  cacheRawArchestraToken(rawTokenHash, null);
-  return null;
+  return accountToken ? { type: "serviceAccount", ...accountToken } : null;
 }
 
 /**

@@ -208,7 +208,7 @@ export default function CostExplorer() {
       : q.group === "app" && ["billed", "requests", "tokens"].includes(q.metric)
         ? "Inference attributed to app sessions. This does not mean every app itself runs a model."
         : q.group === "key" && !q.model
-          ? "Key names and recorded IDs are shown in full. Calls without an individual key ID cannot be distinguished further."
+          ? "Virtual key names and recorded IDs are shown in full. Calls without an individual virtual key ID cannot be distinguished further."
           : q.group === "providerKey" || q.group === "pool"
             ? "A request a model pool failed over counts once per attempt. A failed attempt is free unless a timeout cut it off, which bills an estimate of the input it read. Pick Requests to see how many there were."
             : null;

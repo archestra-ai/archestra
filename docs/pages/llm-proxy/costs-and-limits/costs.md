@@ -1,8 +1,8 @@
 ---
 title: Costs
-description: Break down organization-wide API spend, subscription usage, tokens, and requests by key, team, agent, model, person, app, skill, or label
+description: Break down organization-wide API spend, subscription usage, tokens, and requests by virtual key, team, agent, model, person, app, skill, or label
 order: 1
-lastUpdated: 2026-10-28
+lastUpdated: 2026-11-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

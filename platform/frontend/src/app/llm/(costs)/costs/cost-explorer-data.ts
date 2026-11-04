@@ -147,7 +147,7 @@ export const DIMS: Record<DimId, { label: string; plural: string }> = {
   server: { label: "MCP server", plural: "servers" },
   tool: { label: "Tool", plural: "tools" },
   method: { label: "Access method", plural: "access methods" },
-  key: { label: "Key", plural: "keys" },
+  key: { label: "Virtual key", plural: "virtual keys" },
   providerKey: { label: "Provider key", plural: "provider keys" },
   pool: { label: "Model pool", plural: "model pools" },
   label: { label: "Label", plural: "label values" },
@@ -264,7 +264,7 @@ export const SAVED_VIEWS: { id: string; label: string; q: PivotQuery }[] = [
   },
   {
     id: "keys",
-    label: "Keys by spend",
+    label: "Virtual keys by spend",
     q: { metric: "billed", group: "key", split: "none", chart: "table" },
   },
   {

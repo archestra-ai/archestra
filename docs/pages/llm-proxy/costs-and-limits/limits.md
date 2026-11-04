@@ -47,7 +47,7 @@ Open **Limits** in the sidebar to view usage for teams you administer and their 
 
 You can create, edit, delete, and reset child-team limits, including allocations set by your organization. Your own team's ceiling stays read-only unless you also administer one of its parent teams. A child with allowance left is still blocked when a parent reaches its limit.
 
-In **Virtual Keys**, you can create [keys](/docs/llm-proxy/authentication#standard-virtual-keys) and manage spend caps for members of your team and its child teams. Choose a billing team under **Who pays for this key?**, then select an eligible **Key owner**. Personal keys stay under their owners' control, and only the owner can copy a key created for them.
+In **Virtual Keys**, you can create [keys](/docs/llm-proxy/authentication#standard-virtual-keys) and manage spend caps for members of your team and its child teams. Choose a billing team under **Who pays for this key?**, then select an eligible **Key owner**. Team admins cannot manage members' keys without a billing team, and only the owner can copy a key created for them.
 
 Other limit scopes still require the organization permissions above. Organization-wide spend requires [`llmCost:read`](/docs/reference/permissions#llmCost:read).
 

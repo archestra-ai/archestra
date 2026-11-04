@@ -149,7 +149,7 @@ describe("RoleDetailPage", () => {
     expect(lastHeader().description).toMatch(/Full access/);
   });
 
-  it("lists the users holding the role directly, under the permissions", async () => {
+  it("lists the users holding the role directly, above the permissions", async () => {
     let roleFilter: string | null = null;
     server.use(
       http.get(`${API_ORIGIN}/api/members`, ({ request }) => {
@@ -198,5 +198,34 @@ describe("RoleDetailPage", () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(screen.getByRole("region", { name: "Agents" })).toBeVisible();
+  });
+
+  it("keeps the permissions readable for a viewer who may not list people", async () => {
+    // Only the people lists need their own read permissions; the role page
+    // itself does not, so it must not ask for them on the viewer's behalf.
+    vi.mocked(useHasPermissions).mockImplementation(((permissions: object) => ({
+      data: !(
+        "team" in permissions ||
+        "member" in permissions ||
+        "serviceAccount" in permissions
+      ),
+    })) as never);
+    const asked: string[] = [];
+    server.events.on("request:start", ({ request }) => {
+      asked.push(new URL(request.url).pathname);
+    });
+
+    renderPage("role-1");
+
+    expect(
+      await screen.findByText(
+        "You don't have permission to see who holds this role.",
+      ),
+    ).toBeVisible();
+    expect(await screen.findByRole("region", { name: "Agents" })).toBeVisible();
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(asked).not.toContain("/api/teams");
+    expect(asked).not.toContain("/api/members");
+    expect(asked).not.toContain("/api/service-accounts");
   });
 });

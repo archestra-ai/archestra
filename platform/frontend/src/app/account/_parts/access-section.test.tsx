@@ -213,6 +213,58 @@ describe("AccessSection", () => {
     ).toBeVisible();
   });
 
+  it("waits for the team-granted roles before saying there are none", () => {
+    mockRole("");
+    vi.mocked(usePermissionSources).mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isLoadingError: false,
+    } as unknown as ReturnType<typeof usePermissionSources>);
+
+    render(<AccessSection />);
+
+    const roleRow = screen.getByText("Roles").closest("li") as HTMLElement;
+    expect(within(roleRow).queryByText("None")).toBeNull();
+  });
+
+  it("offers a retry when the team-granted roles fail to load", async () => {
+    mockRole("");
+    const refetch = vi.fn();
+    vi.mocked(usePermissionSources).mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isLoadingError: true,
+      refetch,
+    } as unknown as ReturnType<typeof usePermissionSources>);
+
+    render(<AccessSection />);
+
+    const roleRow = screen.getByText("Roles").closest("li") as HTMLElement;
+    expect(within(roleRow).queryByText("None")).toBeNull();
+    await userEvent.click(
+      within(roleRow).getByRole("button", { name: /retry/i }),
+    );
+    expect(refetch).toHaveBeenCalledOnce();
+  });
+
+  it("offers a retry when the permissions fail to load", async () => {
+    const refetch = vi.fn();
+    vi.mocked(useAllPermissions).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch,
+    } as unknown as ReturnType<typeof useAllPermissions>);
+
+    render(<AccessSection />);
+
+    const row = screen.getByText("Permissions").closest("li") as HTMLElement;
+    await userEvent.click(
+      await within(row).findByRole("button", { name: /retry/i }),
+    );
+    expect(refetch).toHaveBeenCalledOnce();
+  });
+
   it("hides the toggle when nothing is granted", async () => {
     vi.mocked(useAllPermissions).mockReturnValue({
       data: {},

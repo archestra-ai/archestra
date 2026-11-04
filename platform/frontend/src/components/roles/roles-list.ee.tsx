@@ -13,6 +13,10 @@ import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { useSetSettingsAction } from "@/app/settings/layout";
+import {
+  openRowOnPlainClick,
+  RowClickShield,
+} from "@/components/agent-pages/row-click-shield";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   CollectionFilters,
@@ -171,12 +175,14 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
         const description = role.description || predefinedDescription;
         return (
           <div>
-            <Link
-              href={`/settings/roles/${role.id}`}
-              className="font-medium capitalize"
-            >
-              {role.name}
-            </Link>
+            <RowClickShield className="contents">
+              <Link
+                href={`/settings/roles/${role.id}`}
+                className="font-medium capitalize"
+              >
+                {role.name}
+              </Link>
+            </RowClickShield>
             {description && (
               <div className="text-xs text-muted-foreground">{description}</div>
             )}
@@ -281,7 +287,11 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
             <DataTable
               columns={columns}
               data={allRoles}
-              onRowClick={(role) => router.push(`/settings/roles/${role.id}`)}
+              onRowClick={(role, event) =>
+                openRowOnPlainClick(event, () =>
+                  router.push(`/settings/roles/${role.id}`),
+                )
+              }
               getRowId={(row) => row.id}
               rowSelection={effectiveRowSelection}
               onRowSelectionChange={onRowSelectionChange}

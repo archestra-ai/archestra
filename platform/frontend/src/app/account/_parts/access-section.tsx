@@ -81,12 +81,21 @@ function RolesValue() {
   const { data: session, isPending: isSessionPending } = useSession();
   const hasActiveOrganization = !!session?.session?.activeOrganizationId;
   const { data: role, isPending: isRolePending } = useActiveMemberRole();
-  const { data: sources } = usePermissionSources();
+  const {
+    data: sources,
+    isPending: isSourcesPending,
+    isLoadingError: isSourcesError,
+    refetch: refetchSources,
+  } = usePermissionSources();
 
   // The role query stays pending forever for a user with no active
   // organization (it never enables), so its wait only counts when the session
-  // says there is an organization to have a role in.
-  if (isSessionPending || (hasActiveOrganization && isRolePending)) {
+  // says there is an organization to have a role in. The team-granted roles
+  // come from the sources query, so "None" waits for that one too.
+  if (
+    isSessionPending ||
+    (hasActiveOrganization && (isRolePending || isSourcesPending))
+  ) {
     return <Skeleton className="h-5 w-24" />;
   }
 
@@ -98,23 +107,34 @@ function RolesValue() {
     (source) => source.team && !direct.includes(source.role),
   );
 
-  if (direct.length === 0 && viaTeam.length === 0) {
+  if (direct.length === 0 && viaTeam.length === 0 && !isSourcesError) {
     return <AccountRowMuted>None</AccountRowMuted>;
   }
 
   return (
-    <ul aria-label="Assigned roles" className="flex flex-wrap gap-1.5">
-      {direct.map((value) => (
-        <li key={value}>
-          <RoleBadge role={value} />
-        </li>
-      ))}
-      {viaTeam.map((source) => (
-        <li key={`${source.role}:${source.team?.id}`}>
-          <RoleBadge role={source.role} via={source.team?.name} />
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-2">
+      {(direct.length > 0 || viaTeam.length > 0) && (
+        <ul aria-label="Assigned roles" className="flex flex-wrap gap-1.5">
+          {direct.map((value) => (
+            <li key={value}>
+              <RoleBadge role={value} />
+            </li>
+          ))}
+          {viaTeam.map((source) => (
+            <li key={`${source.role}:${source.team?.id}`}>
+              <RoleBadge role={source.role} via={source.team?.name} />
+            </li>
+          ))}
+        </ul>
+      )}
+      {isSourcesError && (
+        <QueryLoadError
+          className="py-1"
+          title="Couldn't load the roles your teams grant"
+          onRetry={() => refetchSources()}
+        />
+      )}
+    </div>
   );
 }
 

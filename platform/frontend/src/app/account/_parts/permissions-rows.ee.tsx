@@ -9,6 +9,7 @@ import {
 import { ChevronDown } from "lucide-react";
 import { Fragment, type ReactNode, useId, useMemo, useState } from "react";
 import { AccountRow, AccountRowMuted } from "@/app/account/_parts/account-rows";
+import { QueryLoadError } from "@/components/query-load-error";
 import { RoleTypeIcon } from "@/components/role-type-icon";
 import { PermissionList } from "@/components/roles/permission-list.ee";
 import {
@@ -31,7 +32,12 @@ import { cn } from "@/lib/utils/tailwind";
 export function PermissionsRows() {
   const [open, setOpen] = useState(false);
   const panelId = useId();
-  const { data: permissions, isLoading, isError } = useAllPermissions();
+  const {
+    data: permissions,
+    isLoading,
+    isError,
+    refetch,
+  } = useAllPermissions();
   const granted = countGranted(permissions ?? {}, allPermissionRows);
   return (
     <>
@@ -59,7 +65,11 @@ export function PermissionsRows() {
         {isLoading ? (
           <Skeleton className="h-5 w-32" />
         ) : isError ? (
-          <AccountRowMuted>Couldn't load</AccountRowMuted>
+          <QueryLoadError
+            className="py-1"
+            title="Couldn't load your permissions"
+            onRetry={() => refetch()}
+          />
         ) : granted === 0 ? (
           <AccountRowMuted>None</AccountRowMuted>
         ) : (

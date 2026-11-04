@@ -11,13 +11,14 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useMembersPaginated } from "@/lib/member.query";
 import { useServiceAccounts } from "@/lib/service-account.query";
 import { useTeams } from "@/lib/teams/team.query";
@@ -44,15 +45,32 @@ export function RoleUsage({ role }: { role: Role }) {
   });
   const baseId = useId();
 
-  // Until the reader picks a tile, land on the first kind that has holders.
-  const kind: Kind =
-    picked ??
-    ORDER.find(
-      (candidate) => !data[candidate].pending && data[candidate].total > 0,
-    ) ??
-    "teams";
+  // Only the kinds the viewer may list; a role page is readable with far
+  // fewer permissions than the people lists behind it.
+  const kinds = ORDER.filter((candidate) => data[candidate].readable);
+  // Until the reader picks a tile, land on the first kind that has holders,
+  // and stay there: a later search that matches nobody must not switch tiles.
+  const settled = kinds.every((candidate) => data[candidate].loaded);
+  useEffect(() => {
+    if (picked !== null || !settled || kinds.length === 0) return;
+    setPicked(kinds.find((candidate) => data[candidate].total > 0) ?? kinds[0]);
+  }, [picked, settled, kinds, data]);
+  const kind: Kind = picked ?? kinds[0] ?? "teams";
   const view = useListView({ data, kind, local });
   const meta = KINDS[kind];
+
+  const moveSelection = (event: React.KeyboardEvent, step: number) => {
+    const index = kinds.indexOf(kind);
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? kinds.length - 1
+          : (index + step + kinds.length) % kinds.length;
+    event.preventDefault();
+    setPicked(kinds[next]);
+    document.getElementById(`${baseId}-tab-${kinds[next]}`)?.focus();
+  };
 
   const setQuery = (query: string) => {
     if (kind === "users") {
@@ -69,14 +87,34 @@ export function RoleUsage({ role }: { role: Role }) {
     setLocal((prev) => ({ ...prev, [kind]: { ...prev[kind], page } }));
   };
 
+  if (kinds.length === 0) {
+    return (
+      <p className="rounded-lg border px-3 py-6 text-center text-[13px] text-muted-foreground">
+        You don't have permission to see who holds this role.
+      </p>
+    );
+  }
+
   return (
     <div className="space-y-3">
       <div
         role="tablist"
         aria-label="Role holders"
-        className="grid grid-cols-3 gap-2"
+        className="grid gap-2"
+        style={{
+          gridTemplateColumns: `repeat(${kinds.length}, minmax(0, 1fr))`,
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+            moveSelection(event, 1);
+          } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+            moveSelection(event, -1);
+          } else if (event.key === "Home" || event.key === "End") {
+            moveSelection(event, 0);
+          }
+        }}
       >
-        {ORDER.map((candidate) => {
+        {kinds.map((candidate) => {
           const { label, icon: Icon } = KINDS[candidate];
           const bucket = data[candidate];
           const selected = candidate === kind;
@@ -87,6 +125,7 @@ export function RoleUsage({ role }: { role: Role }) {
               id={`${baseId}-tab-${candidate}`}
               aria-selected={selected}
               aria-controls={`${baseId}-panel`}
+              tabIndex={selected ? 0 : -1}
               onClick={() => setPicked(candidate)}
               className={cn(
                 "flex min-w-0 flex-col gap-1 rounded-lg border bg-card px-3 py-2.5 text-left transition-colors",
@@ -100,7 +139,7 @@ export function RoleUsage({ role }: { role: Role }) {
                 <Icon className="size-3.5 shrink-0" aria-hidden="true" />
                 <span className="truncate">{label}</span>
               </span>
-              {bucket.pending ? (
+              {!bucket.loaded ? (
                 <Skeleton className="h-6 w-10" />
               ) : (
                 <span
@@ -123,9 +162,9 @@ export function RoleUsage({ role }: { role: Role }) {
         aria-labelledby={`${baseId}-tab-${kind}`}
         className="overflow-hidden rounded-lg border bg-card text-[13px]"
       >
-        {view.pending ? (
+        {!view.loaded ? (
           <ListSkeleton />
-        ) : view.total === 0 && !view.query ? (
+        ) : view.total === 0 && !view.query && !view.pending ? (
           <p className="px-3 py-6 text-center text-muted-foreground">
             {meta.empty}
           </p>
@@ -152,7 +191,9 @@ export function RoleUsage({ role }: { role: Role }) {
               </span>
             </div>
 
-            {view.rows.length === 0 ? (
+            {view.pending ? (
+              <RowsSkeleton />
+            ) : view.rows.length === 0 ? (
               <p className="px-3 py-6 text-center text-muted-foreground">
                 No {meta.singular} matches &ldquo;{view.query}&rdquo;.
               </p>
@@ -166,7 +207,7 @@ export function RoleUsage({ role }: { role: Role }) {
               </ul>
             )}
 
-            {view.pageCount > 1 && (
+            {!view.pending && view.pageCount > 1 && (
               <div className="flex items-center justify-between gap-3 border-t bg-muted/30 px-3 py-1 text-xs text-muted-foreground">
                 <span className="tabular-nums">
                   {view.page * PAGE_SIZE + 1}–
@@ -225,14 +266,24 @@ type Holder = {
   href: string;
 };
 
+type Bucket = {
+  items: Holder[];
+  total: number;
+  /** A request is in flight: the first one, or a new search or page. */
+  pending: boolean;
+  /** The first request has answered, so the count and list mean something. */
+  loaded: boolean;
+  /** The viewer may list this kind at all. */
+  readable: boolean;
+};
+
 type UsageData = {
   /** Every team that passes the role on. The whole list. */
-  teams: { items: Holder[]; total: number; pending: boolean };
+  teams: Bucket;
   /** Users holding the role directly, a server page at a time. */
-  users: {
-    items: Holder[];
-    total: number;
-    pending: boolean;
+  users: Bucket & {
+    /** Users matching the current query; `total` is the count without it. */
+    matching: number;
     page: number;
     pageCount: number;
     setPage: (page: number) => void;
@@ -240,13 +291,14 @@ type UsageData = {
     setQuery: (query: string) => void;
   };
   /** Every service account acting with the role. The whole list. */
-  accounts: { items: Holder[]; total: number; pending: boolean };
+  accounts: Bucket;
 };
 
 type LocalState = Record<"teams" | "accounts", { query: string; page: number }>;
 
 type ListView = {
   pending: boolean;
+  loaded: boolean;
   rows: Holder[];
   /** Holders matching the current query. */
   total: number;
@@ -296,16 +348,37 @@ const KINDS: Record<
 function useUsageData(role: Role): UsageData {
   const [page, setPage] = useState(0);
   const [query, setQuery] = useState("");
+  // Each list has its own read permission; a role page needs none of them.
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
+  const { data: canReadMembers } = useHasPermissions({ member: ["read"] });
+  const { data: canReadAccounts } = useHasPermissions({
+    serviceAccount: ["read"],
+  });
   const { data: teams, isPending: teamsPending } = useTeams({
     includeRelations: false,
+    all: true,
+    enabled: canReadTeams === true,
   });
   const { data: accounts, isPending: accountsPending } = useServiceAccounts();
-  const { data: members, isPending: membersPending } = useMembersPaginated({
-    limit: PAGE_SIZE,
-    offset: page * PAGE_SIZE,
-    role: role.role,
-    name: query || undefined,
-  });
+  const { data: members, isPending: membersPending } = useMembersPaginated(
+    {
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
+      role: role.role,
+      name: query || undefined,
+    },
+    { enabled: canReadMembers === true },
+  );
+  // Once a list has answered it stays on screen while a search or a page
+  // reloads it, so the reader's focus never falls out of the search box.
+  const loaded = useRef({ teams: false, users: false, accounts: false });
+  if (canReadTeams && !teamsPending) loaded.current.teams = true;
+  if (canReadMembers && !membersPending) loaded.current.users = true;
+  if (canReadAccounts && !accountsPending) loaded.current.accounts = true;
+  // The server only counts users matching the query; the tile shows the
+  // count without one, remembered from the last unfiltered answer.
+  const allUsers = useRef(0);
+  if (!query && members) allUsers.current = members.pagination.total;
   const holdingTeams = (teams ?? [])
     .filter((team) => team.roles?.includes(role.role))
     .map((team) => ({
@@ -327,6 +400,8 @@ function useUsageData(role: Role): UsageData {
       items: holdingTeams,
       total: holdingTeams.length,
       pending: teamsPending,
+      loaded: loaded.current.teams,
+      readable: canReadTeams === true,
     },
     users: {
       items: (members?.data ?? []).map((member) => ({
@@ -336,8 +411,11 @@ function useUsageData(role: Role): UsageData {
         image: member.image,
         href: `/settings/users?name=${encodeURIComponent(member.email)}`,
       })),
-      total: members?.pagination.total ?? 0,
+      total: allUsers.current,
+      matching: members?.pagination.total ?? 0,
       pending: membersPending,
+      loaded: loaded.current.users,
+      readable: canReadMembers === true,
       page,
       pageCount: members?.pagination.totalPages ?? 0,
       setPage,
@@ -351,6 +429,8 @@ function useUsageData(role: Role): UsageData {
       items: holdingAccounts,
       total: holdingAccounts.length,
       pending: accountsPending,
+      loaded: loaded.current.accounts,
+      readable: canReadAccounts === true,
     },
   };
 }
@@ -370,10 +450,10 @@ function useListView({
       const { users } = data;
       return {
         pending: users.pending,
+        loaded: users.loaded,
         rows: users.items,
-        total: users.total,
-        // The server reports only the total matching the query.
-        unfilteredTotal: null,
+        total: users.matching,
+        unfilteredTotal: users.total,
         query: users.query,
         page: users.page,
         pageCount: users.pageCount,
@@ -393,6 +473,7 @@ function useListView({
     const safePage = Math.min(page, Math.max(pageCount - 1, 0));
     return {
       pending: bucket.pending,
+      loaded: bucket.loaded,
       rows: matches.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE),
       total: matches.length,
       unfilteredTotal: bucket.total,
@@ -446,6 +527,14 @@ function ListSkeleton() {
       <div className="border-b bg-muted/30 px-2 py-1.5">
         <Skeleton className="h-7 w-full sm:max-w-xs" />
       </div>
+      <RowsSkeleton />
+    </div>
+  );
+}
+
+function RowsSkeleton() {
+  return (
+    <div aria-busy="true">
       <ul className="divide-y divide-border/60">
         {SKELETON_ROWS.map(([key, name, detail]) => (
           <li

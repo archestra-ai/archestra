@@ -6,7 +6,11 @@ import AzureResponsesInteraction from "./llmProviders/azure-responses";
 import BedrockConverseInteraction from "./llmProviders/bedrock";
 import CerebrasChatCompletionInteraction from "./llmProviders/cerebras";
 import CohereChatInteraction from "./llmProviders/cohere";
-import type { Interaction, InteractionUtils } from "./llmProviders/common";
+import type {
+  Interaction,
+  InteractionUtils,
+  RequestedToolCall,
+} from "./llmProviders/common";
 import DeepSeekChatCompletionInteraction from "./llmProviders/deepseek";
 import GeminiGenerateContentInteraction from "./llmProviders/gemini";
 import GithubCopilotChatCompletionInteraction from "./llmProviders/github-copilot";
@@ -234,6 +238,13 @@ export class DynamicInteraction implements InteractionUtils {
       return [];
     }
     return this.interactionClass.getToolNamesRequested();
+  }
+
+  /** The requested tool calls with their provider ids; [] where the wire has none. */
+  getToolCallsRequested(): RequestedToolCall[] {
+    if (this.contentUnavailable) return [];
+    if (this.getErrorResponseText() !== null) return [];
+    return this.interactionClass.getToolCallsRequested?.() ?? [];
   }
 
   getToolNamesUsed(): string[] {

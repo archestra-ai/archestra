@@ -182,6 +182,9 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ),
             startDate: z.string().datetime().optional(),
             endDate: z.string().datetime().optional(),
+            beforeId: UuidIdSchema.optional().describe(
+              "Only rows created before this interaction, ordered by creation time then ID at the stored precision. Its total is the interaction's zero-based position.",
+            ),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -207,6 +210,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sessionId,
           startDate,
           endDate,
+          beforeId,
           limit,
           offset,
           sortBy,
@@ -235,6 +239,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
             sessionId,
             startDate: startDate ? new Date(startDate) : undefined,
             endDate: endDate ? new Date(endDate) : undefined,
+            beforeId,
           },
         }),
       );

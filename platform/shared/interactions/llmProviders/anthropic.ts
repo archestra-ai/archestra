@@ -1,6 +1,10 @@
 import type { archestraApiTypes } from "../../index";
 import type { PartialUIMessage } from "../types";
-import type { Interaction, InteractionUtils } from "./common";
+import type {
+  Interaction,
+  InteractionUtils,
+  RequestedToolCall,
+} from "./common";
 
 class AnthropicMessagesInteraction implements InteractionUtils {
   private request: archestraApiTypes.AnthropicMessagesRequest;
@@ -69,6 +73,15 @@ class AnthropicMessagesInteraction implements InteractionUtils {
     }
 
     return Array.from(toolsUsed);
+  }
+
+  getToolCallsRequested(): RequestedToolCall[] {
+    if (!Array.isArray(this.response.content)) return [];
+    return this.response.content.flatMap((block) =>
+      block.type === "tool_use" && "name" in block && "id" in block
+        ? [{ id: block.id, name: block.name }]
+        : [],
+    );
   }
 
   getToolNamesRequested(): string[] {

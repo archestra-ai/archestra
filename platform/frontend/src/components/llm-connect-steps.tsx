@@ -8,15 +8,7 @@ import {
   type SupportedProvider,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
-import {
-  Check,
-  ChevronDown,
-  Eye,
-  EyeOff,
-  Info,
-  Layers,
-  Loader2,
-} from "lucide-react";
+import { Check, ChevronDown, Eye, EyeOff, Layers, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { Fragment, type ReactNode, useId, useState } from "react";
 import type { ProxyEndpointProvider } from "@/app/connection/connection-flow.utils";
@@ -36,11 +28,9 @@ import {
   type VirtualKeyType,
 } from "@/components/create-virtual-key-dialog";
 import {
-  addedPoolIds,
   poolAccess,
   resolvedProviderKeyIds,
 } from "@/components/credential-billing/model-pool-access";
-import { useCanSetModelPools } from "@/components/credential-billing/model-pools-field";
 import { primaryKeyMappings } from "@/components/credential-billing/provider-key-data";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
@@ -61,7 +51,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -92,7 +81,6 @@ import { useCreateOauthClient } from "@/lib/oauth-clients.query";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
 import {
-  useAddModelPoolToVirtualKey,
   useAllVirtualApiKeys,
   useFetchVirtualApiKeyValue,
 } from "@/lib/virtual-api-keys.query";
@@ -116,7 +104,6 @@ export function LlmConnectSteps({
   selected,
   auth,
   targetLabel,
-  initialModel,
   showKeyPools = false,
   pool,
 }: {
@@ -126,8 +113,6 @@ export function LlmConnectSteps({
   selected: "model-router" | ProxyEndpointProvider;
   auth: LlmAuthMethod;
   targetLabel: string;
-  /** The model or pool picked at first in the request, such as one linked to. */
-  initialModel?: string;
   /** List the pools the picked virtual key can call under its key step. */
   showKeyPools?: boolean;
   /**
@@ -219,8 +204,6 @@ export function LlmConnectSteps({
     enabled: offersPools,
     toastOnError: false,
   });
-  const canSetModelPools = useCanSetModelPools();
-  const addPool = useAddModelPoolToVirtualKey();
   const poolsOf = (key: (typeof keyOptions)[number]) =>
     offersPools ? pools.filter((candidate) => callsPool(key, candidate)) : [];
   const keySummary = (key: (typeof keyOptions)[number]) => {
@@ -370,64 +353,11 @@ export function LlmConnectSteps({
       ? keyOptions.find((key) => key.id === picked?.id)
       : undefined;
   const pickedPools = pickedKey ? poolsOf(pickedKey) : [];
-  // Step 4 offers only the pools the picked key can call. A pool named by
-  // `initialModel` (a `?model=` link) stays, with "Add to key" under it.
-  const requestPools = offersPools
-    ? pools.flatMap((pool) => {
-        const onKey = pickedPools.some((entry) => entry.id === pool.id);
-        if (!onKey && pool.name !== initialModel) return [];
-        return [
-          {
-            name: pool.name,
-            description: onKey ? (
-              <PoolProviders pool={pool} />
-            ) : (
-              <span className="flex items-center gap-1.5">
-                <PoolProviders pool={pool} />
-                <span aria-hidden="true">·</span>
-                <span>Not on this key</span>
-              </span>
-            ),
-          },
-        ];
-      })
-    : [];
-  const poolNotice = (poolName: string) => {
-    const pool = pools.find((candidate) => candidate.name === poolName);
-    if (!pool || !pickedKey) return null;
-    if (pickedPools.some((entry) => entry.id === pool.id)) return null;
-    return (
-      <InlineNotice variant="info">
-        <Info />
-        <span className="font-medium">
-          {pickedKey.name} can&apos;t call {pool.name} yet
-        </span>
-        <InlineNoticeText>
-          {canSetModelPools
-            ? "Add the pool to this key. Requests for it use the pool's own provider keys."
-            : "Ask an admin to add the pool to this key."}
-        </InlineNoticeText>
-        {canSetModelPools && (
-          <Button
-            size="xs"
-            variant="outline"
-            className="ml-auto"
-            disabled={addPool.isPending}
-            onClick={() =>
-              addPool.mutate({
-                key: pickedKey,
-                pool,
-                addedPoolIds: addedPoolIds(pools, pickedKey.id),
-              })
-            }
-          >
-            {addPool.isPending && <Loader2 className="animate-spin" />}
-            <span>Add to key</span>
-          </Button>
-        )}
-      </InlineNotice>
-    );
-  };
+  // Step 4 offers only the pools the picked key can call.
+  const requestPools = pickedPools.map((entry) => ({
+    name: entry.name,
+    description: <PoolProviders pool={entry} />,
+  }));
   // The pools the picked key can call, read-only: set up on the Model Pools
   // page or in the key's own dialog.
   const poolSection = showKeyPools &&
@@ -592,9 +522,8 @@ export function LlmConnectSteps({
       mappedProviderKeys={mappedProviderKeys}
       fixedModel={pool?.name}
       pools={pool ? [] : requestPools}
-      initialModel={pickedModel ?? initialModel}
+      initialModel={pickedModel}
       onModelChange={setPickedModel}
-      poolNotice={pool ? undefined : poolNotice}
     />
   );
 

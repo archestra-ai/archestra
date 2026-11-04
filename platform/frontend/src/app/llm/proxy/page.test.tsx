@@ -4,7 +4,6 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { useSearchParams } from "next/navigation";
 import {
   afterAll,
   afterEach,
@@ -35,13 +34,6 @@ Element.prototype.releasePointerCapture = vi.fn();
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/config/config.query");
-vi.mock("next/navigation");
-
-beforeEach(() => {
-  vi.mocked(useSearchParams).mockReturnValue(
-    new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
-  );
-});
 
 const server = setupServer(
   http.get(`${API_ORIGIN}/api/llm-proxy`, () =>

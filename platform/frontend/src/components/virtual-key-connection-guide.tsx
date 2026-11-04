@@ -418,7 +418,6 @@ export function RequestExample({
   pools = [],
   initialModel,
   onModelChange,
-  poolNotice,
   fixedModel,
 }: {
   connectionBaseUrl: string;
@@ -446,12 +445,10 @@ export function RequestExample({
    * on chat completions.
    */
   pools?: Array<{ name: string; description: React.ReactNode }>;
-  /** The model or pool name picked at first, such as one linked to. */
+  /** The option picked at first, such as the one picked before a remount. */
   initialModel?: string;
   /** Told the picked option's value, so a remount can start from it. */
   onModelChange?: (value: string) => void;
-  /** Shown under the picker while a pool is picked. */
-  poolNotice?: (poolName: string) => React.ReactNode;
   /**
    * The one model the request asks for, such as a pool's name, with no
    * picker. It has no listed endpoints, so the request uses chat completions.
@@ -575,12 +572,9 @@ export function RequestExample({
     pool: pool.name,
   }));
   const allOptions = [...poolOptions, ...modelOptions];
-  const initialOption = initialModel
-    ? allOptions.find(
-        (option) =>
-          option.value === initialModel || option.pool === initialModel,
-      )?.value
-    : undefined;
+  const initialOption = allOptions.find(
+    (option) => option.value === initialModel,
+  )?.value;
   const [pickedModel, setPickedModel] = useState<string | null>(null);
   const model =
     pickedModel && allOptions.some((option) => option.value === pickedModel)
@@ -755,7 +749,6 @@ export function RequestExample({
           )}
         </div>
       )}
-      {selectedModel?.pool && poolNotice?.(selectedModel.pool)}
       {selectedImageOperation === "edit" && (
         <p className="text-xs text-muted-foreground">
           Save your input image as <InlineCode>edit.png</InlineCode> in the

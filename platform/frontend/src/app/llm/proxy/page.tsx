@@ -1,8 +1,7 @@
 "use client";
 
 import { Waypoints } from "lucide-react";
-import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   getProxyEndpointProviders,
   type ProxyEndpointProvider,
@@ -35,13 +34,9 @@ import { cn } from "@/lib/utils/tailwind";
  * how requests authenticate, then follow the steps for that pair. Each step
  * shows what already exists — provider keys, virtual keys, OAuth clients — so
  * the request at the end is the one this deployment can actually serve.
- * `?model=<name>` picks that model or pool in the request, as the model pools
- * page links here.
  */
 export default function LlmProxyPage() {
   const { baseUrl, organization } = useConnectionBaseUrl();
-  const initialModel = useSearchParams().get("model") ?? undefined;
-  useScrollToModelPicker(initialModel);
   const providerCatalog = useModelProviderCatalog({ fresh: true });
   const [selected, setSelected] = useState<
     "model-router" | ProxyEndpointProvider
@@ -95,7 +90,6 @@ export default function LlmProxyPage() {
         auth={effectiveAuth}
         targetLabel={targetLabel}
         showKeyPools
-        initialModel={initialModel}
       />
     </ol>
   );
@@ -295,27 +289,6 @@ const PASSTHROUGH_ROUTER_REASON =
 // =========================================================================
 // Internal helpers
 // =========================================================================
-
-/**
- * Arriving with a model to use, such as from a pool's page, brings the
- * request's model picker into view once the steps above it have loaded.
- */
-function useScrollToModelPicker(model: string | undefined) {
-  useEffect(() => {
-    if (!model) return;
-    const poll = setInterval(() => {
-      const picker = document.getElementById("virtual-key-example-model");
-      if (!picker) return;
-      clearInterval(poll);
-      picker.scrollIntoView({ block: "center", behavior: "smooth" });
-    }, 200);
-    const giveUp = setTimeout(() => clearInterval(poll), 5000);
-    return () => {
-      clearInterval(poll);
-      clearTimeout(giveUp);
-    };
-  }, [model]);
-}
 
 /** Same base-URL resolution as the /connection page. */
 function useConnectionBaseUrl() {

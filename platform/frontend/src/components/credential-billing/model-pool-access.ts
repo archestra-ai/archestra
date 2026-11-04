@@ -72,10 +72,3 @@ export function poolServes(pool: ModelPool): {
     otherModels: Math.max(0, names.size - 1),
   };
 }
-
-/** The pools a virtual key was added to by name. */
-export function addedPoolIds(pools: ModelPool[], virtualKeyId: string) {
-  return pools
-    .filter((pool) => pool.virtualApiKeyIds.includes(virtualKeyId))
-    .map((pool) => pool.id);
-}

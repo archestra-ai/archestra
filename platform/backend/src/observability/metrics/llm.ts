@@ -23,6 +23,11 @@ import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { responsesUsageTokens } from "@/routes/proxy/adapters/responses-usage";
 import type { GatewayAgent, InteractionAuthMethod } from "@/types";
 import {
+  type LlmCallerLabelOptions,
+  type LlmMetricsCaller,
+  llmMetricsCallerScope,
+} from "./llm-caller";
+import {
   anthropicUsageTokens,
   cohereUsageTokens,
   geminiUsageTokens,
@@ -138,6 +143,7 @@ const FIRST_BYTE_BUCKETS = [
 // LLM-specific metrics matching fastify-metrics format for consistency.
 // You can monitor request count, duration and error rate with these.
 let llmRequestDuration: client.Histogram<string>;
+let llmRequestsCounter: client.Counter<string>;
 let llmTokensCounter: client.Counter<string>;
 let llmCacheTokensCounter: client.Counter<string>;
 let llmBlockedToolCounter: client.Counter<string>;
@@ -151,21 +157,42 @@ let llmTokenUsage: client.Histogram<string>;
 
 // Store current label keys for comparison
 let currentLabelKeys: string[] = [];
+// Opt-in caller labels on the counters; empty unless enabled.
+let currentCallerLabelNames: string[] = [];
 
 /**
  * Initialize LLM metrics with dynamic agent label keys
  * @param labelKeys Array of agent label keys to include as metric labels
+ * @param options.callerLabels Opt-in per-user and per-virtual-key labels on
+ *   the counters. Off unless given: each adds one series per caller.
  */
-export function initializeMetrics(labelKeys: string[]): void {
+export function initializeMetrics(
+  labelKeys: string[],
+  options?: { callerLabels?: LlmCallerLabelOptions },
+): void {
+  const nextCallerLabelNames = callerLabelNamesFor(options?.callerLabels);
   // Prometheus labels have naming restrictions. Dashes are not allowed, for example.
-  const nextLabelKeys = labelKeys.map(sanitizeLabelKey).sort();
+  const sanitizedLabelKeys = labelKeys.map(sanitizeLabelKey).sort();
+  // A metric cannot declare one label twice; the caller label keeps its name.
+  const nextLabelKeys = sanitizedLabelKeys.filter(
+    (key) => !nextCallerLabelNames.includes(key),
+  );
+  if (nextLabelKeys.length < sanitizedLabelKeys.length) {
+    logger.warn(
+      { callerLabels: nextCallerLabelNames },
+      "Agent label keys that match an LLM caller label are left off the LLM metrics",
+    );
+  }
   // Check if label keys have changed
   const labelKeysChanged =
-    JSON.stringify(nextLabelKeys) !== JSON.stringify(currentLabelKeys);
+    JSON.stringify(nextLabelKeys) !== JSON.stringify(currentLabelKeys) ||
+    JSON.stringify(nextCallerLabelNames) !==
+      JSON.stringify(currentCallerLabelNames);
 
   if (
     !labelKeysChanged &&
     llmRequestDuration &&
+    llmRequestsCounter &&
     llmTokensCounter &&
     llmCacheTokensCounter &&
     llmBlockedToolCounter &&
@@ -184,11 +211,15 @@ export function initializeMetrics(labelKeys: string[]): void {
   }
 
   currentLabelKeys = nextLabelKeys;
+  currentCallerLabelNames = nextCallerLabelNames;
 
   // Unregister old metrics if they exist
   try {
     if (llmRequestDuration) {
       client.register.removeSingleMetric("llm_request_duration_seconds");
+    }
+    if (llmRequestsCounter) {
+      client.register.removeSingleMetric("llm_requests_total");
     }
     if (llmTokensCounter) {
       client.register.removeSingleMetric("llm_tokens_total");
@@ -248,10 +279,29 @@ export function initializeMetrics(labelKeys: string[]): void {
     enableExemplars: true,
   });
 
+  // The histogram's _count, as a counter: the per-caller labels can go here
+  // without multiplying every caller by the histogram's buckets.
+  llmRequestsCounter = new client.Counter({
+    name: "llm_requests_total",
+    help: "Total upstream LLM requests",
+    labelNames: [
+      ...baseLabelNames,
+      "status_code",
+      ...nextCallerLabelNames,
+      ...nextLabelKeys,
+    ],
+    enableExemplars: true,
+  });
+
   llmTokensCounter = new client.Counter({
     name: "llm_tokens_total",
     help: "Total tokens used",
-    labelNames: [...baseLabelNames, "type", ...nextLabelKeys], // type: input|output
+    labelNames: [
+      ...baseLabelNames,
+      "type", // type: input|output
+      ...nextCallerLabelNames,
+      ...nextLabelKeys,
+    ],
     enableExemplars: true,
   });
 
@@ -260,14 +310,19 @@ export function initializeMetrics(labelKeys: string[]): void {
   llmCacheTokensCounter = new client.Counter({
     name: "llm_cache_tokens_total",
     help: "Total prompt-cache tokens (read = reused prefix, write = newly cached)",
-    labelNames: [...baseLabelNames, "cache_type", ...nextLabelKeys], // cache_type: read|write
+    labelNames: [
+      ...baseLabelNames,
+      "cache_type", // cache_type: read|write
+      ...nextCallerLabelNames,
+      ...nextLabelKeys,
+    ],
     enableExemplars: true,
   });
 
   llmBlockedToolCounter = new client.Counter({
     name: "llm_blocked_tools_total",
     help: "Blocked tool count",
-    labelNames: [...baseLabelNames, ...nextLabelKeys],
+    labelNames: [...baseLabelNames, ...nextCallerLabelNames, ...nextLabelKeys],
     enableExemplars: true,
   });
 
@@ -281,6 +336,7 @@ export function initializeMetrics(labelKeys: string[]): void {
       ...baseLabelNames,
       "billing_mode",
       "auth_method",
+      ...nextCallerLabelNames,
       ...nextLabelKeys,
     ],
     enableExemplars: true,
@@ -292,7 +348,7 @@ export function initializeMetrics(labelKeys: string[]): void {
   llmCacheCostTotal = new client.Counter({
     name: "llm_cache_cost_total",
     help: "Estimated cost in USD attributable to prompt-cache tokens (read + write)",
-    labelNames: [...baseLabelNames, ...nextLabelKeys],
+    labelNames: [...baseLabelNames, ...nextCallerLabelNames, ...nextLabelKeys],
     enableExemplars: true,
   });
 
@@ -303,7 +359,7 @@ export function initializeMetrics(labelKeys: string[]): void {
   llmCacheSavingsTotal = new client.Counter({
     name: "llm_cache_savings_total",
     help: "Gross estimated USD saved by cache reads (discounted vs full input price)",
-    labelNames: [...baseLabelNames, ...nextLabelKeys],
+    labelNames: [...baseLabelNames, ...nextCallerLabelNames, ...nextLabelKeys],
     enableExemplars: true,
   });
 
@@ -420,19 +476,21 @@ export function reportLLMTokens(
 
   const exemplarLabels = getExemplarLabels();
   // Built once and shared across the up-to-5 emissions below; per-metric
-  // extras (type/cache_type) are spread on top.
+  // extras (type/cache_type) are spread on top. The histogram takes no
+  // caller labels.
   const baseLabels = buildMetricLabels(profile, { provider }, model, source);
+  const counterLabels = { ...baseLabels, ...callerLabels() };
 
   if (usage.input && usage.input > 0) {
     llmTokensCounter.inc({
-      labels: { ...baseLabels, type: "input" },
+      labels: { ...counterLabels, type: "input" },
       value: usage.input,
       exemplarLabels,
     });
   }
   if (usage.output && usage.output > 0) {
     llmTokensCounter.inc({
-      labels: { ...baseLabels, type: "output" },
+      labels: { ...counterLabels, type: "output" },
       value: usage.output,
       exemplarLabels,
     });
@@ -440,14 +498,14 @@ export function reportLLMTokens(
 
   if (usage.cacheRead && usage.cacheRead > 0) {
     llmCacheTokensCounter.inc({
-      labels: { ...baseLabels, cache_type: "read" },
+      labels: { ...counterLabels, cache_type: "read" },
       value: usage.cacheRead,
       exemplarLabels,
     });
   }
   if (usage.cacheWrite && usage.cacheWrite > 0) {
     llmCacheTokensCounter.inc({
-      labels: { ...baseLabels, cache_type: "write" },
+      labels: { ...counterLabels, cache_type: "write" },
       value: usage.cacheWrite,
       exemplarLabels,
     });
@@ -487,7 +545,10 @@ export function reportBlockedTools(
     return;
   }
   llmBlockedToolCounter.inc({
-    labels: buildMetricLabels(profile, { provider }, model, source),
+    labels: {
+      ...buildMetricLabels(profile, { provider }, model, source),
+      ...callerLabels(),
+    },
     value: count,
     exemplarLabels: getExemplarLabels(),
   });
@@ -532,12 +593,15 @@ export function reportLLMCost({
     return;
   }
   llmCostTotal.inc({
-    labels: buildMetricLabels(
-      profile,
-      { provider, billing_mode: billingMode, auth_method: authMethod },
-      model,
-      source,
-    ),
+    labels: {
+      ...buildMetricLabels(
+        profile,
+        { provider, billing_mode: billingMode, auth_method: authMethod },
+        model,
+        source,
+      ),
+      ...callerLabels(),
+    },
     value: cost,
     exemplarLabels: getExemplarLabels(),
   });
@@ -566,7 +630,10 @@ export function reportLLMCacheCost(
     return;
   }
 
-  const labels = buildMetricLabels(profile, { provider }, model, source);
+  const labels = {
+    ...buildMetricLabels(profile, { provider }, model, source),
+    ...callerLabels(),
+  };
   const exemplarLabels = getExemplarLabels();
 
   if (cache.cacheCost && cache.cacheCost > 0) {
@@ -704,16 +771,15 @@ export function reportRequestDuration(
     logger.warn("LLM metrics not initialized, skipping duration reporting");
     return;
   }
-  llmRequestDuration.observe({
-    labels: buildMetricLabels(
+  observeRequest(
+    buildMetricLabels(
       profile,
       { provider, status_code: statusCode },
       model,
       source,
     ),
-    value: durationSeconds,
-    exemplarLabels: getExemplarLabels(),
-  });
+    durationSeconds,
+  );
 }
 
 /**
@@ -767,29 +833,27 @@ export function getObservableFetch(
       const duration = (Date.now() - startTime) / 1000;
       const status = response.status.toString();
 
-      llmRequestDuration.observe({
-        labels: buildMetricLabels(
+      observeRequest(
+        buildMetricLabels(
           profile,
           { provider, status_code: status },
           model,
           source,
         ),
-        value: duration,
-        exemplarLabels: getExemplarLabels(),
-      });
+        duration,
+      );
     } catch (error) {
       // Network errors only: fetch does not throw on 4xx or 5xx.
       const duration = (Date.now() - startTime) / 1000;
-      llmRequestDuration.observe({
-        labels: buildMetricLabels(
+      observeRequest(
+        buildMetricLabels(
           profile,
           { provider, status_code: "0" },
           model,
           source,
         ),
-        value: duration,
-        exemplarLabels: getExemplarLabels(),
-      });
+        duration,
+      );
       throw error;
     }
 
@@ -912,16 +976,15 @@ export function getObservableGenAI(
       const duration = (Date.now() - startTime) / 1000;
 
       // Assuming 200 status code. Gemini doesn't expose HTTP status, but unlike fetch, throws on 4xx & 5xx.
-      llmRequestDuration.observe({
-        labels: buildMetricLabels(
+      observeRequest(
+        buildMetricLabels(
           profile,
           { provider, status_code: "200" },
           model,
           source,
         ),
-        value: duration,
-        exemplarLabels: getExemplarLabels(),
-      });
+        duration,
+      );
 
       // Record token metrics
       const usage = result.usageMetadata;
@@ -963,16 +1026,15 @@ export function getObservableGenAI(
       // streaming requests — fetch() resolves on response headers, not stream completion.
       const duration = (Date.now() - startTime) / 1000;
 
-      llmRequestDuration.observe({
-        labels: buildMetricLabels(
+      observeRequest(
+        buildMetricLabels(
           profile,
           { provider, status_code: "200" },
           model,
           source,
         ),
-        value: duration,
-        exemplarLabels: getExemplarLabels(),
-      });
+        duration,
+      );
 
       return result;
     } catch (error) {
@@ -1013,11 +1075,13 @@ export function reportKbLlmCall(params: {
   for (const key of currentLabelKeys) {
     labels[key] = "";
   }
+  // Knowledge-base calls run for the system, not for a user or virtual key.
+  const counterLabels = { ...labels, ...callerLabels(null) };
   // Knowledge-base calls use a real (metered) provider key. `billing_mode` is a
   // required label on llm_cost_total; the token/duration metrics ignore extra
   // labels, so setting it here is safe for all of them.
   const costLabels = {
-    ...labels,
+    ...counterLabels,
     billing_mode: "metered",
     auth_method: "internal",
   };
@@ -1031,18 +1095,22 @@ export function reportKbLlmCall(params: {
       exemplarLabels,
     });
   }
+  llmRequestsCounter?.inc({
+    labels: { ...counterLabels, status_code: "200" },
+    exemplarLabels,
+  });
 
   if (llmTokensCounter) {
     if (params.inputTokens > 0) {
       llmTokensCounter.inc({
-        labels: { ...labels, type: "input" },
+        labels: { ...counterLabels, type: "input" },
         value: params.inputTokens,
         exemplarLabels,
       });
     }
     if (params.outputTokens > 0) {
       llmTokensCounter.inc({
-        labels: { ...labels, type: "output" },
+        labels: { ...counterLabels, type: "output" },
         value: params.outputTokens,
         exemplarLabels,
       });
@@ -1052,14 +1120,14 @@ export function reportKbLlmCall(params: {
   if (llmCacheTokensCounter) {
     if (params.cacheReadTokens && params.cacheReadTokens > 0) {
       llmCacheTokensCounter.inc({
-        labels: { ...labels, cache_type: "read" },
+        labels: { ...counterLabels, cache_type: "read" },
         value: params.cacheReadTokens,
         exemplarLabels,
       });
     }
     if (params.cacheWriteTokens && params.cacheWriteTokens > 0) {
       llmCacheTokensCounter.inc({
-        labels: { ...labels, cache_type: "write" },
+        labels: { ...counterLabels, cache_type: "write" },
         value: params.cacheWriteTokens,
         exemplarLabels,
       });
@@ -1137,17 +1205,68 @@ function observeGeminiError(
       ? error.status.toString()
       : "0";
 
-  llmRequestDuration.observe({
-    labels: buildMetricLabels(
+  observeRequest(
+    buildMetricLabels(
       profile,
       { provider: "gemini", status_code: statusCode },
       model,
       source,
     ),
-    value: duration,
-    exemplarLabels: getExemplarLabels(),
+    duration,
+  );
+}
+
+/**
+ * Records one upstream request: its duration on the histogram, and the count
+ * on `llm_requests_total`, which alone carries the caller labels.
+ */
+function observeRequest(
+  labels: Record<string, string>,
+  durationSeconds: number,
+): void {
+  const exemplarLabels = getExemplarLabels();
+  llmRequestDuration.observe({
+    labels,
+    value: durationSeconds,
+    exemplarLabels,
+  });
+  llmRequestsCounter?.inc({
+    labels: { ...labels, ...callerLabels() },
+    exemplarLabels,
   });
 }
+
+/**
+ * Values for the caller labels the counters were registered with: the caller
+ * of the request being served unless one is given, and empty for any part the
+ * request did not identify.
+ */
+function callerLabels(
+  caller: LlmMetricsCaller | null | undefined = llmMetricsCallerScope.current(),
+): Record<string, string> {
+  const labels: Record<string, string> = {};
+  for (const name of currentCallerLabelNames) {
+    labels[name] = CALLER_LABEL_VALUES[name]?.(caller ?? {}) ?? "";
+  }
+  return labels;
+}
+
+function callerLabelNamesFor(options?: LlmCallerLabelOptions): string[] {
+  return [
+    ...(options?.user ? ["user_id", "user_email"] : []),
+    ...(options?.virtualKey ? ["virtual_key_id", "virtual_key_name"] : []),
+  ];
+}
+
+const CALLER_LABEL_VALUES: Record<
+  string,
+  (caller: LlmMetricsCaller) => string | undefined
+> = {
+  user_id: (caller) => caller.user?.id,
+  user_email: (caller) => caller.user?.email,
+  virtual_key_id: (caller) => caller.virtualKey?.id,
+  virtual_key_name: (caller) => caller.virtualKey?.name,
+};
 
 const unpricedModelsWarned = registerProcessLocalCache(
   new LRUCacheManager<true>({ maxSize: 1_000, defaultTtl: 60 * 60 * 1000 }),

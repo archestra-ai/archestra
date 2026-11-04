@@ -27,6 +27,7 @@ import {
 import { vi } from "vitest";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { internalCallHeader } from "@/clients/internal-call";
+import config from "@/config";
 import db, { schema } from "@/database";
 import {
   InteractionModel,
@@ -563,6 +564,61 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       expect(interaction.passthroughVirtualKeyId).toBe(virtualKey.id);
       expect(interaction.virtualKeyId).toBeNull();
       expect(interaction.authMethod).toBe("passthrough_virtual_key");
+    });
+
+    test("labels LLM counters with the caller when caller labels are on", async ({
+      makeUser,
+      makeMember,
+    }) => {
+      const owner = await makeUser();
+      await makeMember(owner.id, testAgent.organizationId);
+      const { value: passthroughToken, virtualKey } =
+        await VirtualApiKeyModel.create({
+          organizationId: testAgent.organizationId,
+          name: "metrics-caller",
+          keyType: "passthrough",
+          scope: "personal",
+          authorId: owner.id,
+        });
+      const callerLabels = { user: true, virtualKey: true };
+      const previous = config.observability.metrics.llmCallerLabels;
+      config.observability.metrics.llmCallerLabels = callerLabels;
+      metrics.llm.initializeMetrics([], { callerLabels });
+
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: `/v1/openai/${testAgent.id}/chat/completions`,
+          remoteAddress: "203.0.113.5",
+          headers: {
+            "content-type": "application/json",
+            authorization: "Bearer test-key",
+            "x-archestra-virtual-key": passthroughToken,
+          },
+          payload: {
+            model: "gpt-4o",
+            messages: [{ role: "user", content: "Hello!" }],
+            stream: true,
+          },
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      } finally {
+        config.observability.metrics.llmCallerLabels = previous;
+      }
+
+      expect(counterInc).toHaveBeenCalledWith(
+        expect.objectContaining({
+          labels: expect.objectContaining({
+            type: "input",
+            user_id: owner.id,
+            user_email: owner.email,
+            virtual_key_id: virtualKey.id,
+            virtual_key_name: "metrics-caller",
+          }),
+          value: 12,
+        }),
+      );
     });
 
     test("personal standard virtual key attributes the interaction to its owner", async ({

@@ -2,7 +2,7 @@
 title: Metrics
 description: Configure Prometheus scraping and explore Archestra's metric references.
 order: 1
-lastUpdated: 2026-10-30
+lastUpdated: 2026-11-04
 ---
 
 Scrape Archestra's Prometheus metrics to track model spend, tool calls, guardrails, agent runs, and platform health. Choose a reference below to look up metric names, labels, and aggregation behavior.
@@ -74,10 +74,10 @@ Go to an agent's **Advanced** tab and add a key and value under **Labels**. Each
 
 LLM and MCP request metrics do not carry user, skill, app, or client-supplied identity labels, except where noted below. [Limit metrics](/docs/admin/observability/metrics/limits) separately identify the configured budget target. Use these sources for request attribution:
 
-- **Users:** [per-user statistics](/docs/llm-proxy/costs-and-limits/costs#per-user-usage), or the `archestra.user.*` [span attributes](/docs/admin/observability/tracing#identity-attributes).
+- **Users:** the opt-in [per-user labels](/docs/admin/observability/metrics/llm#per-user-and-per-key-labels) on the LLM counters, [per-user statistics](/docs/llm-proxy/costs-and-limits/costs#per-user-usage), or the `archestra.user.*` [span attributes](/docs/admin/observability/tracing#identity-attributes).
 - **Skills and apps:** [per-skill](/docs/llm-proxy/costs-and-limits/costs#per-skill-cost) and [per-app](/docs/llm-proxy/costs-and-limits/costs#per-app-cost) statistics. App LLM spend shows in the LLM metrics as `source="app:llm_complete"`.
 - **Client-supplied agent IDs** from the [`X-Archestra-Agent-Id`](/docs/llm-proxy#custom-headers) header: the `archestra.external_agent_id` span attribute. Only [`agent_runs_total`](/docs/admin/observability/metrics/llm#agent_runs_total) carries it as a label.
-- **Credentials:** the `archestra.virtual_key.id` span attribute.
+- **Credentials:** the opt-in [per-key labels](/docs/admin/observability/metrics/llm#per-user-and-per-key-labels) on the LLM counters, or the `archestra.virtual_key.id` span attribute.
 
 <!-- Preserve published fragments beside the automatic Explore cards. -->
 <span id="example-queries"></span>

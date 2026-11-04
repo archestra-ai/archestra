@@ -4700,3 +4700,148 @@ describe("soft-block return waiver", () => {
     expect(await startedUnenforced(child)).toBe(true);
   });
 });
+
+describe("batch helper failures under soft-block waiver", () => {
+  for (const failureFirst of [false, true]) {
+    test(`retains hard call denials when a sibling helper rejects (failureFirst=${failureFirst})`, async () => {
+      config.openappa.softBlockMode = "allow";
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw);
+        if (event.event !== "tool_call")
+          return JSON.stringify({ decision: "ack" });
+        if (event.operation_id === "call:failed")
+          throw new Error("helper unavailable");
+        return JSON.stringify(
+          event.operation_id === "call:hard"
+            ? { decision: "deny_call", feedback: "requires attention: blocked" }
+            : { decision: "allow_call" },
+        );
+      });
+      const ids = failureFirst
+        ? ["failed", "hard", "allowed"]
+        : ["hard", "allowed", "failed"];
+      const decisions = await evaluateToolCalls(
+        session,
+        ids.map((id) => ({ id, name: "read_file", arguments: {} })),
+        { canonicalize: (name) => name },
+      );
+      expect(decisions[ids.indexOf("hard")]).toMatchObject({
+        kind: "deny",
+        feedback: "requires attention: blocked",
+      });
+      expect(decisions[ids.indexOf("failed")]).toMatchObject({
+        kind: "deny",
+        unanswered: true,
+      });
+      expect(decisions[ids.indexOf("allowed")]).toEqual({ kind: "allow" });
+      expect(
+        native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).event),
+      ).not.toContain("cancel_call");
+    });
+
+    test(`retains hard and authoritative results when a sibling helper rejects (failureFirst=${failureFirst})`, async () => {
+      config.openappa.softBlockMode = "allow";
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw);
+        if (event.event !== "tool_result")
+          return JSON.stringify({ decision: "ack" });
+        if (event.tool_call_id === "failed")
+          throw new Error("helper unavailable");
+        return JSON.stringify(
+          event.tool_call_id === "hard"
+            ? {
+                decision: "block",
+                approved_output: "requires attention: blocked",
+                output_source: "runtime",
+              }
+            : {
+                decision: "mcp_result",
+                approved_output: "retained peer body",
+                output_source: "runtime",
+                result: {
+                  isError: false,
+                  content: [{ type: "text", text: "retained peer body" }],
+                },
+              },
+        );
+      });
+      const ids = failureFirst
+        ? ["failed", "hard", "peer"]
+        : ["hard", "peer", "failed"];
+      const result = await processProxyResults({
+        session,
+        canonicalize: (name) => name,
+        results: ids.map((id) => ({
+          id,
+          name: id === "peer" ? "archestra__read_peer_message" : "read_file",
+          content: "CLIENT BYTES",
+          isError: false,
+        })),
+      });
+      expect(result.toolResultUpdates.hard).toMatchObject({
+        content: "requires attention: blocked",
+        refused: true,
+      });
+      expect(result.toolResultUpdates.failed).toMatchObject({
+        outputSource: "runtime",
+        refused: true,
+      });
+      expect(result.toolResultUpdates.peer).toEqual({
+        content: "retained peer body",
+        outputSource: "runtime",
+      });
+    });
+  }
+
+  for (const failureFirst of [false, true]) {
+    test(`retains hosted hard results when a sibling helper rejects (failureFirst=${failureFirst})`, async () => {
+      config.openappa.softBlockMode = "allow";
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw);
+        if (event.event === "tool_call")
+          return JSON.stringify({ decision: "allow_call" });
+        if (event.event === "tool_result" && event.tool_call_id === "failed")
+          throw new Error("helper unavailable");
+        return JSON.stringify({
+          decision: "block",
+          approved_output: "requires attention: blocked",
+          output_source: "runtime",
+        });
+      });
+      const ids = failureFirst ? ["failed", "hard"] : ["hard", "failed"];
+      const decisions = await evaluateHostedToolCalls(
+        session,
+        ids.map((id) => ({
+          id,
+          name: "web_search",
+          arguments: {},
+          output: "raw provider output",
+        })),
+        { canonicalize: (name) => name },
+      );
+      expect(decisions[ids.indexOf("hard")]).toEqual({
+        kind: "hold",
+        feedback: "requires attention: blocked",
+      });
+      expect(decisions[ids.indexOf("failed")]).toMatchObject({ kind: "hold" });
+    });
+  }
+
+  test("refuse mode still rejects a failed result helper", async () => {
+    config.openappa.softBlockMode = "refuse";
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      if (JSON.parse(raw).event === "tool_result")
+        throw new Error("helper unavailable");
+      return JSON.stringify({ decision: "ack" });
+    });
+    await expect(
+      processProxyResults({
+        session,
+        canonicalize: (name) => name,
+        results: [
+          { id: "failed", name: "read_file", content: "raw", isError: false },
+        ],
+      }),
+    ).rejects.toThrow();
+  });
+});

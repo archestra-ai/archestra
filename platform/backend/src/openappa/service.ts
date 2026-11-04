@@ -1120,54 +1120,65 @@ export async function processProxyResults(params: {
     return { toolResultUpdates: updates };
   }
   for (const result of params.results) {
-    const reportingName = archestraMcpBranding.getToolShortName(
-      params.canonicalize(result.name, result.namespace),
-    );
-    const reportingResult = ["yell", "run_tool"].some(
-      (name) => name === reportingName,
-    )
-      ? await readYellResult(params.session, result.id)
-      : undefined;
-    if (reportingResult !== undefined) {
-      updates[result.id] = {
-        content: reportingResult,
-        outputSource: "runtime",
-      };
-      continue;
-    }
-    if (params.trustedChat && isSeededAppRenderToolResult(result.content))
-      continue;
-    // The runtime released no question call, so it would withhold the answer.
-    if (params.isUserQuestion?.(result) === true) continue;
-    const spawn = params.classifySpawnResult?.(result);
-    if (spawn === "pending") continue;
-    const error =
-      extractMcpToolError(result) ?? extractMcpToolError(result.content);
-    const outcome: ExecutionOutcome =
-      error?.type === "cancelled"
-        ? "unknown"
-        : spawn === "failed" || result.isError
-          ? "failure"
-          : "success";
-    const approved = await approveToolResult({
-      session: params.session,
-      toolCallId: result.id,
-      output: resultOutput(result),
-      outcome,
-      controlToolName: params.controlToolName,
-      policy,
-      principal,
-    });
-    const pendingReview =
-      approved.code === UNRELEASED_CALL_CODE
-        ? await params.pendingReviewResult?.(result)
+    try {
+      const reportingName = archestraMcpBranding.getToolShortName(
+        params.canonicalize(result.name, result.namespace),
+      );
+      const reportingResult = ["yell", "run_tool"].some(
+        (name) => name === reportingName,
+      )
+        ? await readYellResult(params.session, result.id)
         : undefined;
-    updates[result.id] = pendingReview
-      ? { content: pendingReview, outputSource: "runtime" }
-      : approved.code === UNRELEASED_CALL_CODE &&
-          params.isControlResult?.(result) === true
-        ? unexecutedControlResult(result.content)
-        : approved;
+      if (reportingResult !== undefined) {
+        updates[result.id] = {
+          content: reportingResult,
+          outputSource: "runtime",
+        };
+        continue;
+      }
+      if (params.trustedChat && isSeededAppRenderToolResult(result.content))
+        continue;
+      // The runtime released no question call, so it would withhold the answer.
+      if (params.isUserQuestion?.(result) === true) continue;
+      const spawn = params.classifySpawnResult?.(result);
+      if (spawn === "pending") continue;
+      const error =
+        extractMcpToolError(result) ?? extractMcpToolError(result.content);
+      const outcome: ExecutionOutcome =
+        error?.type === "cancelled"
+          ? "unknown"
+          : spawn === "failed" || result.isError
+            ? "failure"
+            : "success";
+      const approved = await approveToolResult({
+        session: params.session,
+        toolCallId: result.id,
+        output: resultOutput(result),
+        outcome,
+        controlToolName: params.controlToolName,
+        policy,
+        principal,
+      });
+      const pendingReview =
+        approved.code === UNRELEASED_CALL_CODE
+          ? await params.pendingReviewResult?.(result)
+          : undefined;
+      updates[result.id] = pendingReview
+        ? { content: pendingReview, outputSource: "runtime" }
+        : approved.code === UNRELEASED_CALL_CODE &&
+            params.isControlResult?.(result) === true
+          ? unexecutedControlResult(result.content)
+          : approved;
+    } catch (error) {
+      // Preserve every sibling decision, including hard refusals and retained
+      // native results. The proxy decides whether this entire batch can waive.
+      if (!canRetainBatchFailure(error)) throw error;
+      updates[result.id] = {
+        content: error.message,
+        outputSource: "runtime",
+        refused: true,
+      };
+    }
   }
   return {
     toolResultUpdates: updates,
@@ -1175,6 +1186,15 @@ export async function processProxyResults(params: {
   };
 }
 // SPDX-SnippetEnd
+
+/** Authentication failures remain fatal; only policy/helper failures can waive. */
+function canRetainBatchFailure(error: unknown): error is Error {
+  return (
+    softBlocksAllowed() &&
+    error instanceof Error &&
+    !(error instanceof ApiError && error.statusCode === 401)
+  );
+}
 
 /** Decision for a proposed tool call. */
 type AppaCallDecision =
@@ -1421,6 +1441,25 @@ export async function evaluateToolCalls(
   const firstFailure = results.find(
     (result): result is PromiseRejectedResult => result.status === "rejected",
   );
+  if (
+    firstFailure &&
+    results.every(
+      (result) =>
+        result.status === "fulfilled" || canRetainBatchFailure(result.reason),
+    )
+  ) {
+    // Do not discard a sibling hard denial when one native helper fails. Keep
+    // successful admissions open; the proxy handles the complete batch.
+    return results.map((result) =>
+      result.status === "fulfilled"
+        ? result.value
+        : {
+            kind: "deny",
+            feedback: (result.reason as Error).message,
+            unanswered: true,
+          },
+    );
+  }
   if (firstFailure) {
     if (admitted.length > 0) {
       // Cancel admitted calls from this batch if evaluation failed mid-batch.
@@ -1511,20 +1550,25 @@ export async function evaluateHostedToolCalls(
   const principal = await sessionPrincipal(session);
   const verdicts: AppaHostedCallDecision[] = [];
   for (const call of calls) {
-    const approved = await approveToolResult({
-      session,
-      toolCallId: call.id,
-      output: call.output,
-      outcome: "success",
-      controlToolName: options.control?.name,
-      policy: await policy(),
-      principal,
-    });
-    verdicts.push(
-      approved.outputSource === "tool" && approved.content === call.output
-        ? { kind: "release" }
-        : { kind: "hold", feedback: approved.content },
-    );
+    try {
+      const approved = await approveToolResult({
+        session,
+        toolCallId: call.id,
+        output: call.output,
+        outcome: "success",
+        controlToolName: options.control?.name,
+        policy: await policy(),
+        principal,
+      });
+      verdicts.push(
+        approved.outputSource === "tool" && approved.content === call.output
+          ? { kind: "release" }
+          : { kind: "hold", feedback: approved.content },
+      );
+    } catch (error) {
+      if (!canRetainBatchFailure(error)) throw error;
+      verdicts.push({ kind: "hold", feedback: error.message });
+    }
   }
   return verdicts;
 }

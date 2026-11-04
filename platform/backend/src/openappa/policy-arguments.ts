@@ -50,7 +50,11 @@ export async function previewAppToolTarget(
     !isRecord(toolArgs)
   )
     return { refusal: "preview_app_tool needs an appId, a toolName and args." };
-  const decision = await gateAppToolCall({ appId, toolName });
+  // An app id the database cannot read (not a UUID) resolves no tool.
+  const decision = await gateAppToolCall({ appId, toolName }).catch(() => ({
+    allowed: false as const,
+    reason: `App "${appId}" not found.`,
+  }));
   if (!decision.allowed) return { refusal: decision.reason };
   const resolved =
     decision.kind === "upstream" ? decision.resolvedToolName : toolName;

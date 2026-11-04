@@ -365,6 +365,12 @@ delta = { trust = "suspicious" }
     expect(
       await previewAppToolTarget(preview("served__delete_items")),
     ).toHaveProperty("refusal");
+    expect(
+      await previewAppToolTarget({
+        ...preview(tool.name),
+        toolCallArgs: JSON.stringify({ appId: "a", toolName: tool.name }),
+      }),
+    ).toEqual({ refusal: 'App "a" not found.' });
   });
 
   test("with Git sync, a policy change needs the repository's readers over the organization's own rule", async ({

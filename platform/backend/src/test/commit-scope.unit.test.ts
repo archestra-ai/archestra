@@ -75,3 +75,15 @@ test("a migration linter change also checks the backend that runs it", () => {
     },
   );
 });
+
+test("an image the backend checks selects the backend", () => {
+  for (const path of [
+    "platform/docker_images/sandbox_base/pyproject.toml",
+    "platform/docker_images/sandbox_base/Dockerfile",
+  ]) {
+    expect(scope(path)).toEqual({ kind: "packages", names: ["@backend"] });
+  }
+  expect(scope("platform/mcp_server_docker_image/Dockerfile")).toEqual({
+    kind: "none",
+  });
+});

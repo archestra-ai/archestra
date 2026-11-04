@@ -42,6 +42,11 @@ export function commitScope(params: {
       }
       continue;
     }
+    const reader = OUTSIDE_INPUTS.find(({ dir }) => relative.startsWith(dir));
+    if (reader) {
+      names.add(reader.name);
+      continue;
+    }
     if (isUnchecked(relative)) continue;
     return { kind: "all" };
   }
@@ -62,6 +67,15 @@ const UNDECLARED_CONSUMERS: Readonly<Record<string, readonly string[]>> = {
 };
 
 /**
+ * Directories outside every package that one package's checks read: the
+ * backend checks the sandbox base image against the Rust runtime's Python
+ * requirements, and tests the agent images' Dockerfiles.
+ */
+const OUTSIDE_INPUTS: readonly { dir: string; name: string }[] = [
+  { dir: "docker_images/", name: "@backend" },
+];
+
+/**
  * Areas under platform/ that no `check:commit` task reads: Tilt and
  * deployment files, images, and prose. Anything not listed here counts as
  * check configuration and runs every package's checks.
@@ -70,7 +84,6 @@ const UNCHECKED_DIRS = [
   "dev/",
   "helm/",
   "docker/",
-  "docker_images/",
   "agent_images/",
   "mcp_server_docker_image/",
 ];

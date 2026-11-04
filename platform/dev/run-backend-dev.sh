@@ -17,7 +17,7 @@ backend_watch_mode() {
   echo "$mode"
 }
 
-# One build into backend/.dist-next, moved over backend/dist only once it
+# One build into a backend/.dist-next.* directory, moved over backend/dist only once it
 # succeeds. A failed build therefore leaves the previous dist/ in place, and
 # Tilt, which runs this as the resource's update command, keeps the previous
 # server running. The staging directory sits next to dist/ so the relative
@@ -25,16 +25,28 @@ backend_watch_mode() {
 build_backend() {
   (
     cd backend || exit 1
-    rm -rf .dist-next
-    if ! ./node_modules/.bin/tsdown --out-dir .dist-next; then
-      rm -rf .dist-next
+    # Per-build names, so a manual build and a Tilt build cannot remove each
+    # other's staging directory.
+    next=".dist-next.$$"
+    old=".dist-old.$$"
+    rm -rf "$next" "$old"
+    if ! ./node_modules/.bin/tsdown --out-dir "$next"; then
+      rm -rf "$next"
       echo "backend build failed; the previous build keeps running until the next successful build" >&2
       exit 1
     fi
-    rm -rf .dist-old
-    if [ -d dist ]; then mv dist .dist-old; fi
-    mv .dist-next dist
-    rm -rf .dist-old
+    if [ -d dist ] && ! mv dist "$old"; then
+      rm -rf "$next"
+      echo "backend build: could not move the previous dist/ aside; keeping it" >&2
+      exit 1
+    fi
+    if ! mv "$next" dist; then
+      [ -d "$old" ] && mv "$old" dist
+      rm -rf "$next"
+      echo "backend build: could not install the new dist/; restored the previous one" >&2
+      exit 1
+    fi
+    rm -rf "$old"
   )
 }
 
@@ -43,6 +55,20 @@ if [ "${1:-}" = "build" ]; then
   build_backend
   exit $?
 fi
+
+# A Tilt killed outright never stops this script, which would keep the server
+# and its ports. Once the Tilt that started it ($PPID; Tiltfile.dev execs this
+# script) is gone, TERM ourselves so the trap below stops the server. It is
+# armed before any setup, which can take minutes (the Dagger CLI download), so
+# the parent it watches is still Tilt. The watchdog exits once this script has.
+tilt_pid=$PPID
+(
+  while kill -0 "$tilt_pid" 2>/dev/null; do
+    sleep 5
+    kill -0 $$ 2>/dev/null || exit 0
+  done
+  kill -TERM $$ 2>/dev/null
+) &
 
 backend_pid=""
 backend_ports="$(node --env-file-if-exists=.env -e 'let port = "9000"; try { port = new URL(process.env.ARCHESTRA_INTERNAL_API_BASE_URL).port || port; } catch {} process.stdout.write(port + " " + (process.env.ARCHESTRA_METRICS_PORT || "9050"));')"
@@ -153,7 +179,11 @@ cleanup() {
   stop_backend
 }
 
-trap cleanup EXIT INT TERM
+# A signal ends the script: cleanup alone would fall through to
+# start_backend during setup. EXIT runs cleanup again, which is harmless.
+trap cleanup EXIT
+trap 'cleanup; exit 143' TERM
+trap 'cleanup; exit 130' INT
 
 if [ "${ARCHESTRA_CODE_RUNTIME_ENABLED:-}" = "true" ]; then
   # Without an explicit runner host, the backend provisions per-organization
@@ -213,19 +243,6 @@ if [ "${ARCHESTRA_CODE_RUNTIME_ENABLED:-}" = "true" ]; then
     export ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN="$DAGGER_BIN"
   fi
 fi
-
-# A Tilt killed outright never stops this script, which would keep the server
-# and its ports. Once the Tilt that started it ($PPID; Tiltfile.dev execs this
-# script) is gone, TERM ourselves so the trap above stops the server. The
-# watchdog also exits once this script has.
-tilt_pid=$PPID
-(
-  while kill -0 "$tilt_pid" 2>/dev/null; do
-    sleep 5
-    kill -0 $$ 2>/dev/null || exit 0
-  done
-  kill -TERM $$ 2>/dev/null
-) &
 
 start_backend
 

@@ -1,12 +1,12 @@
 /**
- * What each Archestra tool adds to a session and requires of it under the
- * default policy, composed with the bundled batteries and the host's own
- * rules, decided by the runtime's replay. Each call is ruled with the
- * arguments the proxy evaluates it with. Four files probe a call: followed by
- * a probe needing public readers, followed by one needing trusted data, after
- * a suspicious read, and after a read only the requester may see. No audience
- * source answers here, so a call that needs `internal` after that read stops
- * on the unanswered `archestra` source.
+ * Archestra's side of the Archestra tools' rules: the composed default policy
+ * names every tool, the proxy's derived arguments reach the battery's rules,
+ * and a preview is ruled as the app tool it runs. Calls are decided by the
+ * runtime's replay, with the arguments the proxy evaluates them with. Four
+ * files probe a call: followed by a probe needing public readers, followed by
+ * one needing trusted data, after a suspicious read, and after a read only the
+ * requester may see. No audience source answers here, so a call that needs
+ * `internal` after that read stops on the unanswered `archestra` source.
  */
 import {
   ADMIN_ROLE_NAME,
@@ -23,204 +23,27 @@ import {
 } from "@/services/guardrails-policy";
 import { describe, expect, test } from "@/test";
 import { openappaBatteriesService } from "./batteries";
-import { withHostToolRules } from "./host-tool-rules";
 import { policyArguments, previewAppToolTarget } from "./policy-arguments";
+import { toolEntries } from "./policy-text";
+import { approvalPromptCall } from "./review-display";
 
-/** `<adds>/<needs>`: `narrows` the readers or adds `suspicious`; needs `trusted` or `internal`. */
-const CONTRACTS: Record<string, ArchestraToolShortName[]> = {
-  "-/-": [
-    "whoami",
-    "resolve_openappa_yell",
-    "validate_guardrails_policy",
-    "request_runtime_credential_setup",
-    "request_battery_credentials",
-    "create_mcp_gateway",
-    "reload_mcp_server_tools",
-    "update_knowledge_connector",
-    "todo_write",
-    "ask_user",
-    "create_project_from_conversation",
-    "link_app_to_project",
-    "unlink_app_from_project",
-    "search_tools",
-    "load_skill",
-    "cancel_agent_run",
-    "upload_file",
-    "search_files",
-    "scaffold_app",
-    "set_app_labels",
-    "validate_app",
-  ],
-  "narrows/-": [
-    "get_guardrails_policy",
-    "get_openappa_policy_tests",
-    "run_openappa_policy_tests",
-    "preview_guardrails_validation_change",
-    "get_openappa_yell",
-    "list_openappa_yells",
-    "list_openappa_consults",
-    "list_guardrails_battery_fits",
-    "inspect_guardrails_server",
-    "preview_guardrails_policy_change",
-    "get_guardrails_policy_change_status",
-    "list_runtime_credentials",
-    "get_runtime_credential",
-    "get_agent",
-    "list_agents",
-    "list_llm_models",
-    "get_agent_skill_policy",
-    "list_hooks",
-    "get_mcp_gateway",
-    "search_private_mcp_registry",
-    "get_mcp_servers",
-    "get_mcp_server_tools",
-    "list_mcp_server_deployments",
-    "get_mcp_server_logs",
-    "get_team",
-    "list_teams",
-    "list_team_members",
-    "list_team_external_groups",
-    "get_limits",
-    "get_agent_token_usage",
-    "get_llm_proxy_token_usage",
-    "get_knowledge_bases",
-    "get_knowledge_base",
-    "get_knowledge_connectors",
-    "get_knowledge_connector",
-    "list_projects",
-    "get_project",
-    "list_schedule_triggers",
-    "get_schedule_trigger",
-    "list_schedule_trigger_runs",
-    "get_schedule_trigger_run",
-    "list_skills",
-    "list_plugins",
-    "get_plugin",
-    "get_agent_run",
-    "list_agent_runs",
-    "read_workspace_file",
-    "read_file",
-    "read_file_raw",
-    "list_apps",
-    "list_app_versions",
-    "render_app",
-    "read_app",
-    "get_app_diagnostics",
-  ],
-  "narrows+suspicious/-": [
-    "query_knowledge_sources",
-    "get_schedule_trigger_run_transcript",
-  ],
-  "-/trusted": [
-    "update_guardrails_validation",
-    "update_guardrails_policy",
-    "bind_guardrails_credential",
-    "create_runtime_credential",
-    "update_runtime_credential",
-    "delete_runtime_credential",
-    "create_guardrails_repository",
-    "connect_guardrails_repository",
-    "sync_guardrails_repository",
-    "create_agent",
-    "patch_agent_skill_policy",
-    "delete_hook",
-    "edit_mcp_description",
-    "edit_mcp_config",
-    "create_mcp_server",
-    "deploy_mcp_server",
-    "create_team",
-    "edit_team",
-    "delete_team",
-    "update_team_member_role",
-    "remove_team_member",
-    "remove_team_external_group",
-    "create_limit",
-    "update_limit",
-    "delete_limit",
-    "bulk_assign_tools_to_agents",
-    "bulk_remove_tools_from_agents",
-    "bulk_assign_tools_to_mcp_gateways",
-    "create_knowledge_base",
-    "delete_knowledge_base",
-    "delete_knowledge_connector",
-    "assign_knowledge_connector_to_knowledge_base",
-    "unassign_knowledge_connector_from_knowledge_base",
-    "assign_knowledge_base_to_agent",
-    "unassign_knowledge_base_from_agent",
-    "assign_knowledge_connector_to_agent",
-    "unassign_knowledge_connector_from_agent",
-    "delete_schedule_trigger",
-    "enable_schedule_trigger",
-    "disable_schedule_trigger",
-    "run_schedule_trigger_now",
-    "create_plugin",
-    "delete_plugin",
-    "delete_workspace",
-    "delete_file",
-    "set_app_lock",
-    "delete_app",
-  ],
-  "-/trusted+internal": [
-    "edit_agent",
-    "create_hook",
-    "update_hook",
-    "edit_mcp_gateway",
-    "add_team_external_group",
-    "update_knowledge_base",
-    "create_knowledge_connector",
-    "create_schedule_trigger",
-    "update_schedule_trigger",
-    "create_skill",
-    "update_skill",
-    "edit_skill",
-    "update_plugin",
-    "edit_plugin",
-    "post_agent_run_file",
-    "post_agent_run_message",
-    "transfer_credential",
-    "download_file",
-    "save_file",
-    "edit_file",
-    "copy_file",
-    "refine_app",
-    "restore_app_version",
-    "edit_app",
-    "set_app_tools",
-    "publish_app",
-  ],
-  "-/internal": ["start_agent_run", "steer_agent_run", "write_workspace_file"],
-  "narrows/internal": ["transfer_workspace_file"],
-  // The battery declares the tool's arguments; a call without them is refused.
-  refused: ["add_team_member"],
-  // The default root labels each sandbox command with the annotator model.
-  "annotator archestra.run-command": ["run_command"],
-  // Dispatched only by a rendered app, which no agent lists.
-  "catch-all": [
-    "app_data_get",
-    "app_data_set",
-    "app_data_list",
-    "app_data_delete",
-    "llm_complete",
-  ],
-};
-
-/** Ruled by the host, not the battery. */
-const HOST_RULED: ArchestraToolShortName[] = [
+/** Tools no rule names, and why. */
+const UNNAMED: ArchestraToolShortName[] = [
+  // Released by the host, or ruled as the call they dispatch.
   "run_tool",
   "execute_remedy_plan",
   "get_remedy_plans",
   "list_peer_messages",
-  "read_peer_message",
-  "yell",
   "preview_app_tool",
+  // Ruled as `mcp/appa/yell` under any server name.
+  "yell",
+  // Dispatched only by a rendered app, which no agent lists.
+  "app_data_get",
+  "app_data_set",
+  "app_data_list",
+  "app_data_delete",
+  "llm_complete",
 ];
-
-/** Arguments a tool's unselected rule needs, where `{}` selects no rule. */
-const ARGUMENTS: Partial<
-  Record<ArchestraToolShortName, Record<string, unknown>>
-> = {
-  publish_app: { appId: "a", scope: "org" },
-};
 
 const ORGANIZATION_GRANT = {
   subject: { type: "organization", id: "*" },
@@ -230,38 +53,24 @@ const TEAM_GRANT = { subject: { type: "team", id: "t1" }, actions: ["use"] };
 const SECRET = { key: "TOKEN", type: "secret" };
 
 describe("Archestra tools under the composed default policy", () => {
-  test("every tool has its contract, or the host rules it", async ({
+  test("a rule names every tool but the unnamed ones", async ({
     makeOrganization,
     makeAdmin,
     makeMember,
   }) => {
-    const { organizationId } = await setUp({
+    const { content } = await setUp({
       makeOrganization,
       makeAdmin,
       makeMember,
     });
-    const tabled = Object.values(CONTRACTS).flat();
-    expect(
-      ARCHESTRA_TOOL_SHORT_NAMES.filter(
-        (name) => !tabled.includes(name) && !HOST_RULED.includes(name),
-      ),
-    ).toEqual([]);
-
-    const actual = await contracts(
-      organizationId,
-      tabled.map((name) => evaluated(name, ARGUMENTS[name] ?? {})),
+    const named = new Set(
+      toolEntries(content).map(({ name }) => ruledShortName(name)),
     );
 
     expect(
-      Object.fromEntries(tabled.map((name, index) => [name, actual[index]])),
-    ).toEqual(
-      Object.fromEntries(
-        Object.entries(CONTRACTS).flatMap(([contract, names]) =>
-          names.map((name) => [name, contract]),
-        ),
-      ),
-    );
-  }, 180_000);
+      ARCHESTRA_TOOL_SHORT_NAMES.filter((name) => !named.has(name)).sort(),
+    ).toEqual([...UNNAMED].sort());
+  });
 
   test("a share and a credential transfer are ruled by what they send", async ({
     makeOrganization,
@@ -276,16 +85,16 @@ describe("Archestra tools under the composed default policy", () => {
     const cases: Array<[ArchestraToolShortName, Record<string, unknown>]> = [
       ["create_agent", { initialGrants: [ORGANIZATION_GRANT] }],
       ["create_agent", { initialGrants: [TEAM_GRANT, ORGANIZATION_GRANT] }],
+      ["create_agent", { initialGrants: [TEAM_GRANT] }],
       ["create_agent", { initialGrants: [] }],
+      ["create_agent", {}],
       ["create_agent", { initialGrants: "everyone" }],
       [
         "create_agent",
         { initialGrants: [{ subject: { type: "organization", id: "t1" } }] },
       ],
-      ["create_mcp_gateway", { initialGrants: [ORGANIZATION_GRANT] }],
       // A derived name the model sends is replaced by what the call shares.
       ["create_mcp_gateway", { initialGrantPrincipals: ["organization"] }],
-      ["scaffold_app", { initialGrants: [TEAM_GRANT] }],
       ["transfer_credential", { environment: [{ ...SECRET, value: "v" }] }],
       ["transfer_credential", { environment: [SECRET] }],
       ["transfer_credential", {}],
@@ -300,17 +109,51 @@ describe("Archestra tools under the composed default policy", () => {
     ).toEqual([
       "-/trusted+internal",
       "-/trusted+internal",
+      "-/trusted+internal",
+      "-/trusted",
       "-/trusted",
       "refused",
       "refused",
-      "-/trusted+internal",
       "-/-",
-      "-/trusted+internal",
       "-/trusted+internal",
       "-/-",
       "-/trusted+internal",
       "-/trusted+internal",
     ]);
+  });
+
+  test("an approval prompt shows the call without the derived arguments", () => {
+    const shown = (
+      shortName: ArchestraToolShortName,
+      args: Record<string, unknown>,
+    ) => {
+      const call = evaluated(shortName, args);
+      return approvalPromptCall({
+        toolName: archestraMcpBranding.getToolName("execute_remedy_plan"),
+        review: {
+          text: "Approve this call?",
+          tool: call.name,
+          arguments: JSON.stringify(call.args),
+        },
+      }).toolArgs;
+    };
+    const share = {
+      name: "a",
+      initialGrants: [TEAM_GRANT, ORGANIZATION_GRANT],
+    };
+    const malformed = { name: "a", initialGrants: "everyone" };
+    const transfer = { agent_id: "a", environment: [SECRET] };
+
+    expect(evaluated("create_agent", share).args).toHaveProperty(
+      "initialGrantPrincipals",
+    );
+    expect(shown("create_agent", share)).toEqual(share);
+    expect(shown("create_agent", malformed)).toEqual(malformed);
+    expect(shown("transfer_credential", transfer)).toEqual(transfer);
+    // A tool that derives nothing keeps what the model sent under that name.
+    expect(
+      shown("get_agent", { id: "a", initialGrantPrincipals: ["x"] }),
+    ).toEqual({ id: "a", initialGrantPrincipals: ["x"] });
   });
 
   test("a preview is ruled as the exact app tool it runs", async ({
@@ -371,45 +214,6 @@ delta = { trust = "suspicious" }
         toolCallArgs: JSON.stringify({ appId: "a", toolName: tool.name }),
       }),
     ).toEqual({ refusal: 'App "a" not found.' });
-  });
-
-  test("with Git sync, a policy change needs the repository's readers over the organization's own rule", async ({
-    makeOrganization,
-    makeAdmin,
-    makeMember,
-  }) => {
-    const { organizationId, content } = await setUp({
-      makeOrganization,
-      makeAdmin,
-      makeMember,
-      root: `
-[[policy.tool]]
-name = "mcp/archestra/update_guardrails_policy"
-delta = {}
-`,
-    });
-    const native = await import("@archestra/openappa-rs");
-    const synced = (gitSyncAudience: "internal" | "public") =>
-      withHostToolRules({
-        composed: content,
-        host: { serverName: archestraMcpBranding.serverName, gitSyncAudience },
-        validate: (text) => native.validateHostedOpenappaPolicy(text),
-      });
-    const calls = [
-      evaluated("update_guardrails_policy", {}),
-      evaluated("update_guardrails_validation", {}),
-    ];
-
-    expect(await contracts(organizationId, calls, content)).toEqual([
-      "-/-",
-      "-/trusted",
-    ]);
-    expect(
-      await contracts(organizationId, calls, await synced("internal")),
-    ).toEqual(["-/trusted+internal", "-/trusted+internal"]);
-    expect(
-      await contracts(organizationId, calls, await synced("public")),
-    ).toEqual(["-/trusted+public", "-/trusted+public"]);
   });
 
   test("the host's own tools are ruled under the white-labeled server name", async ({
@@ -491,7 +295,16 @@ async function setUp(
   });
   const composed = await openappaBatteriesService.recompile(organizationId);
   expect(composed.lastError).toBeNull();
-  return { organizationId, content: composed.content };
+  return { organizationId, content: composed.content ?? "" };
+}
+
+/** The Archestra tool a rule names, spelled canonically or as called, selectors aside. */
+function ruledShortName(ruleName: string): ArchestraToolShortName | null {
+  const name = ruleName.replace(/\(.*$/, "");
+  const canonical = /^mcp\/([^/]+)\/([^/]+)$/.exec(name);
+  return archestraMcpBranding.getToolShortName(
+    canonical ? `${canonical[1]}__${canonical[2]}` : name,
+  );
 }
 
 function evaluated(
@@ -519,15 +332,14 @@ function step(name: string, args: unknown = {}): string {
 
 type Step = { status: string; actual: string | null; error?: string };
 
-/** Each call's contract, or what decided the call alone instead. */
+/** Each call's contract, `<adds>/<needs>`, or what decided the call alone instead. */
 async function contracts(
   organizationId: string,
   calls: Call[],
-  content?: string,
 ): Promise<string[]> {
-  const policy =
-    content ??
-    (await openappaBatteriesService.getEffectivePolicy(organizationId)).content;
+  const policy = (
+    await openappaBatteriesService.getEffectivePolicy(organizationId)
+  ).content;
   const files = calls.flatMap(({ name, args }) => {
     const call = step(name, args);
     return [

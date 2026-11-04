@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { type HostToolContext, withHostToolRules } from "./host-tool-rules";
+import { withHostToolRules } from "./host-tool-rules";
 import { toolEntries } from "./policy-text";
 
 const ANNOTATED_CATCH_ALL = `[policy]
@@ -20,11 +20,6 @@ annotator = "tool-call"
 
 const accept = async () => [];
 
-const HOST: HostToolContext = {
-  serverName: "archestra",
-  gitSyncAudience: null,
-};
-
 const emptyRule = (name: string) =>
   expect.objectContaining({
     name,
@@ -37,7 +32,7 @@ describe("withHostToolRules", () => {
   test("gives yell and the peer read empty rules ahead of an annotated catch-all", async () => {
     const text = await withHostToolRules({
       composed: ANNOTATED_CATCH_ALL,
-      host: HOST,
+      serverName: "archestra",
       validate: accept,
     });
 
@@ -51,12 +46,12 @@ describe("withHostToolRules", () => {
   test("composes the same bytes from the same document", async () => {
     const first = await withHostToolRules({
       composed: ANNOTATED_CATCH_ALL,
-      host: HOST,
+      serverName: "archestra",
       validate: accept,
     });
     const second = await withHostToolRules({
       composed: ANNOTATED_CATCH_ALL,
-      host: HOST,
+      serverName: "archestra",
       validate: accept,
     });
 
@@ -64,7 +59,7 @@ describe("withHostToolRules", () => {
     expect(
       await withHostToolRules({
         composed: first,
-        host: HOST,
+        serverName: "archestra",
         validate: accept,
       }),
     ).toBe(first);
@@ -82,14 +77,18 @@ annotator = "tool-call"
 `;
 
     expect(
-      await withHostToolRules({ composed: own, host: HOST, validate: accept }),
+      await withHostToolRules({
+        composed: own,
+        serverName: "archestra",
+        validate: accept,
+      }),
     ).toBe(own);
   });
 
   test("keeps the composition when the runtime refuses the rules", async () => {
     const text = await withHostToolRules({
       composed: ANNOTATED_CATCH_ALL,
-      host: HOST,
+      serverName: "archestra",
       validate: async () => ["refused"],
     });
 
@@ -99,7 +98,7 @@ annotator = "tool-call"
   test("a refused peer read rule does not cost yell its rule", async () => {
     const text = await withHostToolRules({
       composed: ANNOTATED_CATCH_ALL,
-      host: HOST,
+      serverName: "archestra",
       validate: async (candidate) =>
         toolEntries(candidate).some(
           (tool) => tool.name === "mcp/archestra/read_peer_message",
@@ -117,7 +116,7 @@ annotator = "tool-call"
   test("rules the peer read under the white-labeled server name", async () => {
     const text = await withHostToolRules({
       composed: ANNOTATED_CATCH_ALL,
-      host: { ...HOST, serverName: "acme" },
+      serverName: "acme",
       validate: accept,
     });
 
@@ -125,37 +124,6 @@ annotator = "tool-call"
       "mcp/appa/yell",
       "mcp/acme/read_peer_message",
       "*",
-    ]);
-  });
-
-  test("a Git-synced policy change requires the repository's audience over the organization's rules", async () => {
-    const own = `${ANNOTATED_CATCH_ALL}
-[[policy.tool]]
-name = "mcp/archestra/update_guardrails_policy"
-delta = {}
-
-[[policy.tool]]
-name = "mcp/archestra/update_guardrails_validation(content:*)"
-delta = {}
-`;
-    const text = await withHostToolRules({
-      composed: own,
-      host: { ...HOST, gitSyncAudience: "public" },
-      validate: accept,
-    });
-
-    const requires = { trust: "trusted", audience: { contains: ["public"] } };
-    expect(
-      toolEntries(text).filter((tool) => tool.name.includes("update_")),
-    ).toEqual([
-      expect.objectContaining({
-        name: "mcp/archestra/update_guardrails_validation",
-        requires,
-      }),
-      expect.objectContaining({
-        name: "mcp/archestra/update_guardrails_policy",
-        requires,
-      }),
     ]);
   });
 });

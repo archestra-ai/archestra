@@ -604,7 +604,6 @@ const layerTable = [
       "src/openappa/failure.ts",
       "src/openappa/helper-bridge.ts",
       "src/openappa/helper-slots.ts",
-      "src/openappa/host-tool-context.ts",
       "src/openappa/host-tool-rules.ts",
       "src/openappa/policy-moved.ts",
       "src/openappa/policy-text.ts",

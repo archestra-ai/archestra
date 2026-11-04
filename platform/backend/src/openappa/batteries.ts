@@ -5,6 +5,7 @@ import type {
   PolicyEditInput,
 } from "@archestra/openappa-rs";
 import { matchBatteries, parseFullToolName } from "@archestra/shared";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
@@ -82,8 +83,7 @@ import {
   packageContentHash,
   uploadedEntry,
 } from "./declarations";
-import { hostToolContext } from "./host-tool-context";
-import { type HostToolContext, withHostToolRules } from "./host-tool-rules";
+import { withHostToolRules } from "./host-tool-rules";
 
 /** A battery after a write, and the derived row that write stands for. */
 type BatteryWriteResult = {
@@ -1120,7 +1120,7 @@ class OpenAppaBatteriesService {
       const values = await this.compose({
         root: planned.root,
         roster: planned.roster,
-        host: planned.host,
+        serverName: planned.serverName,
         planned: planned.batteries,
         composed,
         installFingerprint,
@@ -1222,7 +1222,7 @@ class OpenAppaBatteriesService {
   private async compose(params: {
     root: GuardrailsPolicy;
     roster: HostMemberRoster;
-    host: HostToolContext;
+    serverName: string;
     planned: readonly PlannedBattery[];
     composed: ComposeBatteryInput[];
     installFingerprint: string;
@@ -1233,8 +1233,14 @@ class OpenAppaBatteriesService {
     /** When this composition is stored; its record says it was composed then. */
     now: Date;
   }): Promise<EffectivePolicyValues> {
-    const { root, planned, composed, installFingerprint, expected, host } =
-      params;
+    const {
+      root,
+      planned,
+      composed,
+      installFingerprint,
+      expected,
+      serverName,
+    } = params;
     const native = await loadNative();
     const result = await native.composeOpenappaPolicy({
       root: root.content,
@@ -1251,7 +1257,7 @@ class OpenAppaBatteriesService {
         ? null
         : await withHostToolRules({
             composed: composedContent,
-            host,
+            serverName,
             validate: (text) => native.validateHostedOpenappaPolicy(text),
           });
     const values = (
@@ -1286,7 +1292,7 @@ class OpenAppaBatteriesService {
         ? values(
             await withHostToolRules({
               composed: expected.content,
-              host,
+              serverName,
               validate: (text) => native.validateHostedOpenappaPolicy(text),
             }),
             error,
@@ -1493,7 +1499,7 @@ class OpenAppaBatteriesService {
       resolution,
       deployed,
       roster,
-      host: hostToolContext(),
+      serverName: archestraMcpBranding.serverName,
       batteries,
       rows: [...rows.values()],
       unusedAliases: resolution.aliases.filter(
@@ -2047,7 +2053,7 @@ type PlannedComposition = {
   resolution: PolicyResolution;
   deployed: DeployedEntries;
   roster: HostMemberRoster;
-  host: HostToolContext;
+  serverName: string;
   batteries: PlannedBattery[];
   rows: BatteryInstallRow[];
   unusedAliases: PolicyDeclarationsView["unusedAliases"];
@@ -2161,8 +2167,7 @@ function heldBackRemedy(battery: HeldBackBattery): string {
 // name live opening policies bound differently (v10), rows that keep
 // retired annotators for conversations opened under earlier policies (v11),
 // rows without the empty peer read rule (v12), and rows that rule the peer
-// read under the default server name or leave Git-synced policy changes
-// without an audience (v13).
+// read under the default server name on a white-labeled deployment (v13).
 const COMPOSITION_VERSION = "v13:";
 
 /**
@@ -2183,7 +2188,7 @@ function compositionFingerprint(params: {
         batteries,
         credentials: planned.resolution.credentials,
         roster: [...planned.roster].sort(([a], [b]) => a - b),
-        host: planned.host,
+        serverName: planned.serverName,
         // A base composes while its target waits on a credential; the rows still move.
         statuses: planned.batteries.map(({ name, status }) => [name, status]),
         ...(held.length > 0 ? { held } : {}),

@@ -8,6 +8,7 @@ import type {
   PolicyDeclarations,
   TokenEnvReader,
 } from "@archestra/openappa-rs";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
@@ -28,7 +29,6 @@ import type {
 import { mapWithConcurrency } from "@/utils/concurrency";
 import { archestraAudience } from "./archestra-audience";
 import { type DeployedBattery, declaredCredentials } from "./battery-target";
-import { hostToolContext } from "./host-tool-context";
 import { withHostToolRules } from "./host-tool-rules";
 
 /** How each resolved entry deploys here, by its `include` spelling. */
@@ -463,7 +463,7 @@ class OpenAppaDeclarations {
           ...composed,
           content: await withHostToolRules({
             composed: content,
-            host: hostToolContext(),
+            serverName: archestraMcpBranding.serverName,
             validate: (text) => native.validateHostedOpenappaPolicy(text),
           }),
         };

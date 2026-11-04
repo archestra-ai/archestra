@@ -287,6 +287,38 @@ test.describe("Model pool Connect tab", () => {
   });
 });
 
+test("adding a provider key from the Connect tab doesn't save the pool", async ({
+  page,
+  mswControl,
+  request,
+}) => {
+  await mockPool({ mswControl, request });
+  await mswControl.use({
+    method: "get",
+    url: "/api/llm-provider-api-keys",
+    body: [],
+  });
+  const poolUpdates: string[] = [];
+  page.on("request", (sent) => {
+    if (sent.method() === "PUT" && sent.url().includes("/api/model-pools/")) {
+      poolUpdates.push(sent.url());
+    }
+  });
+  const dialog = await openConnectTab(page);
+
+  await dialog.getByRole("button", { name: "Add provider key" }).click();
+  const keyDialog = page.getByRole("dialog", { name: "Add provider key" });
+  await expect(keyDialog).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(keyDialog).toHaveCount(0);
+
+  await expect(dialog).toBeVisible();
+  await expect(
+    dialog.getByRole("heading", { name: "Provider key" }),
+  ).toBeVisible();
+  expect(poolUpdates).toEqual([]);
+});
+
 test.describe("LLM Proxy pool discovery", () => {
   for (const { label, granted, ungranted, noun } of [
     {

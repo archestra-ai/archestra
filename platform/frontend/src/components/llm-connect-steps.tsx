@@ -320,7 +320,11 @@ export function LlmConnectSteps({
           title: `${isRouter ? "Provider" : targetLabel} key`,
           detail: `No ${isRouter ? "provider" : targetLabel} key yet. The proxy needs one to call the provider.`,
           actions: (
-            <Button size="sm" onClick={() => setAddProviderKeyOpen(true)}>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setAddProviderKeyOpen(true)}
+            >
               Add {isRouter ? "provider" : targetLabel} key
             </Button>
           ),

@@ -45,6 +45,38 @@ const CUSTOM = resolveAgentRuntimeTiers(
 );
 
 describe("runtime tiers", () => {
+  test("rejects a larger CPU pool when only its memory limit is too small", () => {
+    const tiers = resolveAgentRuntimeTiers(
+      {
+        tiers: [
+          {
+            name: "Requested",
+            cpuRequest: 1,
+            memoryRequestMiB: 1024,
+            memoryLimitMiB: 4096,
+          },
+          {
+            name: "LowLimit",
+            cpuRequest: 2,
+            memoryRequestMiB: 1024,
+            memoryLimitMiB: 2048,
+          },
+          {
+            name: "Enough",
+            cpuRequest: 3,
+            memoryRequestMiB: 1024,
+            memoryLimitMiB: 8192,
+          },
+        ],
+        defaultTier: "Requested",
+      },
+      { defaultWarmSpares: 1 },
+    );
+    expect(
+      warmTierCandidates("Requested", "Enough", tiers).map((tier) => tier.name),
+    ).toEqual(["Requested", "Enough"]);
+  });
+
   test("allocates independent memory with fractional CPU and keeps memory-heavy runs out of smaller pools", () => {
     const tiers = resolveAgentRuntimeTiers(
       {

@@ -277,7 +277,17 @@ describe("RuntimeTierDialog", () => {
     ).toHaveAccessibleDescription("2x CPU by default");
     expect(
       within(dialog).getByLabelText("Memory limit (GiB)"),
-    ).toHaveAccessibleDescription("2x memory request by default");
+    ).toHaveAccessibleDescription(
+      "2x memory request by default The default limit in GiB is max(2x memory request, 2x CPU request, 2x CPU limit).",
+    );
+    const memoryHint = within(dialog).getByRole("button", {
+      name: "2x memory request by default",
+    });
+    await user.hover(memoryHint);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "The default limit in GiB is max(2x memory request, 2x CPU request, 2x CPU limit).",
+    );
+    await user.hover(within(dialog).getByLabelText("Disk (GiB)"));
     // The disk field shows the deployment's default.
     expect(within(dialog).getByLabelText("Disk (GiB)")).toHaveAttribute(
       "placeholder",

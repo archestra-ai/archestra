@@ -12,6 +12,12 @@ import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
 import { PooledHint } from "./pooled-hint";
 import {
@@ -25,6 +31,9 @@ import {
   suggestRuntimeTierName,
   validateRuntimeTierForm,
 } from "./runtime-tier-form";
+
+const MEMORY_LIMIT_DEFAULT_HINT =
+  "The default limit in GiB is max(2x memory request, 2x CPU request, 2x CPU limit).";
 
 /**
  * Create a tier or edit one. The whole list is saved with the change in it;
@@ -252,9 +261,26 @@ export function RuntimeTierDialog({
                   id={`${id}-${field}-hint`}
                   className="text-sm text-muted-foreground"
                 >
-                  {field === "memoryRequestGiB"
-                    ? "2x CPU by default"
-                    : "2x memory request by default"}
+                  {field === "memoryRequestGiB" ? (
+                    <span>2x CPU by default</span>
+                  ) : (
+                    <>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <UnstyledButton className="cursor-help text-left underline decoration-dotted underline-offset-4">
+                            2x memory request by default
+                          </UnstyledButton>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          {MEMORY_LIMIT_DEFAULT_HINT}
+                        </TooltipContent>
+                      </Tooltip>
+                      <span className="sr-only">
+                        {" "}
+                        {MEMORY_LIMIT_DEFAULT_HINT}
+                      </span>
+                    </>
+                  )}
                 </p>
               </Field>
             ))}

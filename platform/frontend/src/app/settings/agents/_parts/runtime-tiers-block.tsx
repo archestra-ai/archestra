@@ -96,7 +96,7 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
     {
       id: "workspace",
       accessorFn: (row) => row.workspaceGiB ?? defaultWorkspaceGiB ?? 0,
-      header: "Workspace",
+      header: "Disk",
       size: 110,
       cell: ({ row }) =>
         row.original.workspaceGiB === null ? (

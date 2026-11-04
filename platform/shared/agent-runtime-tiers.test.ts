@@ -234,6 +234,32 @@ describe("resolveAgentRuntimeTiers", () => {
 });
 
 describe("sizes and order", () => {
+  test("orders and upgrades tiers that differ only by their memory limit", () => {
+    const tiers = resolveAgentRuntimeTiers(
+      {
+        tiers: [
+          {
+            name: "Higher",
+            cpuRequest: 1,
+            memoryRequestMiB: 1024,
+            memoryLimitMiB: 4096,
+          },
+          {
+            name: "Lower",
+            cpuRequest: 1,
+            memoryRequestMiB: 1024,
+            memoryLimitMiB: 2048,
+          },
+        ],
+        defaultTier: "Lower",
+      },
+      DEPLOYMENT,
+    ).tiers;
+    expect(tiers.map((tier) => tier.name)).toEqual(["Lower", "Higher"]);
+    expect(nextLargerAgentRuntimeTier(tiers, "Lower")?.name).toBe("Higher");
+    expect(nextLargerAgentRuntimeTier(tiers, "Higher")).toBeUndefined();
+  });
+
   test("orders memory-only sizes and never upgrades to less memory or CPU", () => {
     const tiers = resolveAgentRuntimeTiers(
       {

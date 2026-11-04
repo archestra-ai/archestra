@@ -265,6 +265,8 @@ class StatisticsModel {
       organizationId: string;
       limit: number;
       offset: number;
+      /** Only this person's usage. */
+      userId?: string;
     },
   ): Promise<ProxyCostStatistics> {
     const { timeframe, organizationId, limit, offset } = params;
@@ -286,6 +288,7 @@ class StatisticsModel {
       ...StatisticsModel.timeframeConditions(timeframe),
       eq(a.organizationId, organizationId),
       inArray(a.agentType, ["llm_proxy", "profile"]),
+      params.userId ? eq(i.userId, params.userId) : undefined,
       params.authMethod ? eq(method, params.authMethod) : undefined,
       params.credentialId ? eq(credential, params.credentialId) : undefined,
       params.providerApiKeyId
@@ -944,8 +947,10 @@ class StatisticsModel {
   static async getAgentStatistics(params: {
     timeframe: StatisticsTimeFrame;
     organizationId: string;
+    /** Only this person's usage of each agent. */
+    userId?: string;
   }): Promise<AgentStatistics[]> {
-    const { timeframe, organizationId } = params;
+    const { timeframe, organizationId, userId } = params;
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
 
     const teamAssignments = AgentTeamModel.readAssignments(organizationId);
@@ -989,6 +994,7 @@ class StatisticsModel {
         and(
           ...StatisticsModel.timeframeConditions(timeframe),
           eq(schema.agentsTable.organizationId, organizationId),
+          userId ? eq(schema.interactionsTable.userId, userId) : undefined,
         ),
       )
       .groupBy(
@@ -1979,11 +1985,17 @@ class StatisticsModel {
   static async getOverviewStatistics(params: {
     timeframe: StatisticsTimeFrame;
     organizationId: string;
+    /** Pick the top agent from only this person's usage. */
+    agentUserId?: string;
   }): Promise<OverviewStatistics> {
-    const { timeframe, organizationId } = params;
+    const { timeframe, organizationId, agentUserId } = params;
     const [teamStats, agentStats, modelStats] = await Promise.all([
       StatisticsModel.getTeamStatistics({ timeframe, organizationId }),
-      StatisticsModel.getAgentStatistics({ timeframe, organizationId }),
+      StatisticsModel.getAgentStatistics({
+        timeframe,
+        organizationId,
+        userId: agentUserId,
+      }),
       StatisticsModel.getModelStatistics({ timeframe, organizationId }),
     ]);
 

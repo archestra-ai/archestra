@@ -24,7 +24,8 @@ describe("RemoteServerInstallDialog", () => {
   it("keeps a failed install open and reveals diagnostics on request", async () => {
     vi.mocked(useTeamsWithVaultFolders).mockReturnValue({
       data: [],
-    } as ReturnType<typeof useTeamsWithVaultFolders>);
+      isLoading: false,
+    });
     const user = userEvent.setup();
     const onClose = vi.fn();
     const onConfirm = vi

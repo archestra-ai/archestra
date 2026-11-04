@@ -30,7 +30,7 @@ export function PoolConnectSection({ pool }: { pool: ModelPool }) {
         selected="model-router"
         auth="standard"
         targetLabel="Unified Model API"
-        initialModel={pool.name}
+        pool={pool}
       />
     </ol>
   );

@@ -118,6 +118,7 @@ export function LlmConnectSteps({
   targetLabel,
   initialModel,
   showKeyPools = false,
+  pool,
 }: {
   /** The rail's number for the first of these steps. */
   firstNumber: number;
@@ -129,6 +130,11 @@ export function LlmConnectSteps({
   initialModel?: string;
   /** List the pools the picked virtual key can call under its key step. */
   showKeyPools?: boolean;
+  /**
+   * Connect to this one pool, as its own dialog's Connect tab does: only the
+   * keys that can call it, no key created here, and the request asks for it.
+   */
+  pool?: ModelPool;
 }) {
   const providerCatalog = useModelProviderCatalog({ fresh: true });
   const isRouter = selected === "model-router";
@@ -185,8 +191,21 @@ export function LlmConnectSteps({
     credential.providerApiKeys.some((mapping) =>
       servesTarget(mapping.provider),
     );
-  const keyOptions = (virtualKeys?.data ?? []).filter(
-    (key) => auth === "passthrough" || reaches(key),
+  const callsPool = (
+    key: NonNullable<typeof virtualKeys>["data"][number],
+    target: ModelPool,
+  ) =>
+    poolAccess(
+      target,
+      resolvedProviderKeyIds({
+        mappings: key.providerApiKeys,
+        includeFutureProviders: key.includeFutureProviders,
+        providerApiKeys,
+      }),
+      target.virtualApiKeyIds.includes(key.id),
+    ).kind !== "none";
+  const keyOptions = (virtualKeys?.data ?? []).filter((key) =>
+    pool ? callsPool(key, pool) : auth === "passthrough" || reaches(key),
   );
   const clientOptions = oauthClients.filter(reaches);
 
@@ -202,22 +221,8 @@ export function LlmConnectSteps({
   });
   const canSetModelPools = useCanSetModelPools();
   const addPool = useAddModelPoolToVirtualKey();
-  const poolsOf = (key: (typeof keyOptions)[number]) => {
-    if (!offersPools) return [];
-    const keyIds = resolvedProviderKeyIds({
-      mappings: key.providerApiKeys,
-      includeFutureProviders: key.includeFutureProviders,
-      providerApiKeys,
-    });
-    return pools.flatMap((pool) => {
-      const access = poolAccess(
-        pool,
-        keyIds,
-        pool.virtualApiKeyIds.includes(key.id),
-      );
-      return access.kind === "none" ? [] : [{ pool, access }];
-    });
-  };
+  const poolsOf = (key: (typeof keyOptions)[number]) =>
+    offersPools ? pools.filter((candidate) => callsPool(key, candidate)) : [];
   const keySummary = (key: (typeof keyOptions)[number]) => {
     if (!offersPools) return undefined;
     const providers = new Set(
@@ -366,10 +371,10 @@ export function LlmConnectSteps({
       : undefined;
   const pickedPools = pickedKey ? poolsOf(pickedKey) : [];
   // Step 4 offers only the pools the picked key can call. A pool named by
-  // `initialModel` (its own Connect tab) stays, with "Add to key" under it.
+  // `initialModel` (a `?model=` link) stays, with "Add to key" under it.
   const requestPools = offersPools
     ? pools.flatMap((pool) => {
-        const onKey = pickedPools.some((entry) => entry.pool.id === pool.id);
+        const onKey = pickedPools.some((entry) => entry.id === pool.id);
         if (!onKey && pool.name !== initialModel) return [];
         return [
           {
@@ -390,7 +395,7 @@ export function LlmConnectSteps({
   const poolNotice = (poolName: string) => {
     const pool = pools.find((candidate) => candidate.name === poolName);
     if (!pool || !pickedKey) return null;
-    if (pickedPools.some((entry) => entry.pool.id === pool.id)) return null;
+    if (pickedPools.some((entry) => entry.id === pool.id)) return null;
     return (
       <InlineNotice variant="info">
         <Info />
@@ -428,12 +433,7 @@ export function LlmConnectSteps({
   const poolSection = showKeyPools &&
     offersPools &&
     hasProviderKey &&
-    pickedKey && (
-      <KeyPools
-        key={pickedKey.id}
-        pools={pickedPools.map(({ pool }) => pool)}
-      />
-    );
+    pickedKey && <KeyPools key={pickedKey.id} pools={pickedPools} />;
 
   let credentialSteps: RailRow[];
   let credential: RequestCredential;
@@ -452,23 +452,28 @@ export function LlmConnectSteps({
     credentialSteps = [
       {
         done: !!picked,
-        title: "Set up virtual key",
-        titleAction: hasProviderKey && options.length > 0 && canCreateKey && (
-          <CreateNewLink
-            label="Create new virtual key"
-            onCreate={() => setCreateKeyType("standard")}
-          />
-        ),
+        title: pool ? "Choose a virtual key" : "Set up virtual key",
+        titleAction: !pool &&
+          hasProviderKey &&
+          options.length > 0 &&
+          canCreateKey && (
+            <CreateNewLink
+              label="Create new virtual key"
+              onCreate={() => setCreateKeyType("standard")}
+            />
+          ),
         detail: !hasProviderKey
           ? blockedDetail
           : picked
             ? mappingChips(picked.mappings)
-            : emptyDetail,
+            : pool
+              ? `No virtual key can call ${pool.name} yet. Add the pool to a key from Virtual Keys.`
+              : emptyDetail,
         actions: hasProviderKey && (
           <CredentialSelect
             label="Virtual key"
             createLabel="Create new virtual key"
-            canCreate={!!canCreateKey}
+            canCreate={!pool && !!canCreateKey}
             onCreate={() => setCreateKeyType("standard")}
             options={options}
             value={picked?.id}
@@ -585,10 +590,11 @@ export function LlmConnectSteps({
               .filter(isModelRouterSupportedProvider)
       }
       mappedProviderKeys={mappedProviderKeys}
-      pools={requestPools}
+      fixedModel={pool?.name}
+      pools={pool ? [] : requestPools}
       initialModel={pickedModel ?? initialModel}
       onModelChange={setPickedModel}
-      poolNotice={poolNotice}
+      poolNotice={pool ? undefined : poolNotice}
     />
   );
 

@@ -164,7 +164,7 @@ const LLM_METRICS: MetricId[] = [
 
 const SUPPORT: Record<DimId, MetricId[]> = {
   time: [...LLM_METRICS, "cacheSavings"],
-  team: LLM_METRICS,
+  team: ["billed", "subscription", "requests", "tokens"],
   agent: [...LLM_METRICS, "toolCalls"],
   model: LLM_METRICS,
   person: METRIC_IDS.filter((metric) => metric !== "cacheSavings"),
@@ -184,6 +184,7 @@ export const supports = (group: DimId, metric: MetricId) =>
 
 export function splitOptions(metric: MetricId, group: DimId): DimId[] {
   if (group === "time") return [];
+  if (group === "team") return ["model", "person"];
   if (metric === "toolCalls" && group !== "app") {
     const all: DimId[] = ["server", "tool", "person", "agent"];
     return all.filter(
@@ -222,6 +223,11 @@ const PREFERRED_GROUP: Partial<Record<MetricId, DimId>> = {
 };
 
 export const SAVED_VIEWS: { id: string; label: string; q: PivotQuery }[] = [
+  {
+    id: "spend-team",
+    label: "Spend by team",
+    q: { metric: "billed", group: "team", split: "model", chart: "bars" },
+  },
   {
     id: "spend-model",
     label: "Spend by model",
@@ -1076,7 +1082,7 @@ function apiFor(src: Source, tf: string, q: PivotQuery) {
   }
 }
 
-type Fact = {
+export type Fact = {
   limitTarget?: CubeRow["limitTarget"];
   g: string;
   gLabel: string;
@@ -1147,7 +1153,7 @@ function toolDimValue(
   }
 }
 
-function assemble(
+export function assemble(
   facts: Fact[],
   opts: {
     totals?: Map<string, number>;

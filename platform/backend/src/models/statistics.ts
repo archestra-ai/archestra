@@ -3187,11 +3187,11 @@ type CostSavingsRow = {
 
 // Join receipts before expanding JSON so PostgreSQL can plan one set-based
 // receipt join rather than a correlated receipt lookup for every interaction.
-const billingReceiptJoin = and(
+export const billingReceiptJoin = and(
   eq(schema.interactionBillingTable.interactionId, schema.interactionsTable.id),
   sql`${schema.interactionBillingTable.usage}->>'mode' = 'enforce'`,
 );
-const billingModelFacts = sql`LATERAL (
+export const billingModelFacts = sql`LATERAL (
   SELECT component->>'model' AS model,
     bool_or(component->>'model' = COALESCE(
       jsonb_path_query_first(${schema.interactionBillingTable.usage}, '$.components[*] ? (@.kind == "message")')->>'model',
@@ -3215,19 +3215,19 @@ const billingModelFacts = sql`LATERAL (
   FROM jsonb_array_elements(${schema.interactionBillingTable.usage}->'components') AS component
   GROUP BY component->>'model'
 ) AS billing_model`;
-const billedModel = sql<string>`COALESCE(billing_model.model, ${schema.interactionsTable.model})`;
-const modelRequests = sql<number>`CAST(COUNT(*) FILTER (WHERE billing_model.model IS NULL OR billing_model.parent_request) AS INTEGER)`;
+export const billedModel = sql<string>`COALESCE(billing_model.model, ${schema.interactionsTable.model})`;
+export const modelRequests = sql<number>`CAST(COUNT(*) FILTER (WHERE billing_model.model IS NULL OR billing_model.parent_request) AS INTEGER)`;
 const modelInput = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.input_tokens, ${schema.interactionsTable.inputTokens})), 0) AS BIGINT)`;
 const modelOutput = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.output_tokens, ${schema.interactionsTable.outputTokens})), 0) AS BIGINT)`;
 const modelCacheRead = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.cache_read_tokens, ${schema.interactionsTable.cacheReadTokens})), 0) AS BIGINT)`;
 const modelCacheWrite = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.cache_write_tokens, ${schema.interactionsTable.cacheWriteTokens})), 0) AS BIGINT)`;
-const modelReportedTokens = sql<number>`CAST(
+export const modelReportedTokens = sql<number>`CAST(
   COALESCE(SUM(COALESCE(billing_model.input_tokens, CASE WHEN NOT ${schema.interactionsTable.inputTokensEstimated} THEN ${schema.interactionsTable.inputTokens} ELSE 0 END)), 0)
   + COALESCE(SUM(COALESCE(billing_model.output_tokens, ${schema.interactionsTable.outputTokens})), 0)
   + COALESCE(SUM(COALESCE(billing_model.cache_write_tokens, ${schema.interactionsTable.cacheWriteTokens})), 0)
   AS BIGINT)`;
-const modelBilledCost = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.cost, ${schema.interactionsTable.cost})) FILTER (WHERE ${schema.interactionsTable.billingMode} <> 'subscription'), 0) AS DOUBLE PRECISION)`;
+export const modelBilledCost = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.cost, ${schema.interactionsTable.cost})) FILTER (WHERE ${schema.interactionsTable.billingMode} <> 'subscription'), 0) AS DOUBLE PRECISION)`;
 
-const modelSubscriptionCost = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.cost, ${schema.interactionsTable.cost})) FILTER (WHERE ${schema.interactionsTable.billingMode} = 'subscription'), 0) AS DOUBLE PRECISION)`;
+export const modelSubscriptionCost = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.cost, ${schema.interactionsTable.cost})) FILTER (WHERE ${schema.interactionsTable.billingMode} = 'subscription'), 0) AS DOUBLE PRECISION)`;
 const modelBaselineCost = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.cost, ${schema.interactionsTable.baselineCost})) FILTER (WHERE ${schema.interactionsTable.billingMode} <> 'subscription'), 0) AS DOUBLE PRECISION)`;
 const modelCacheSavings = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.cache_savings, ${schema.interactionsTable.cacheSavings})) FILTER (WHERE ${schema.interactionsTable.billingMode} <> 'subscription'), 0) AS DOUBLE PRECISION)`;

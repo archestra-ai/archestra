@@ -140993,6 +140993,228 @@ export type RevokeSkillShareLinkResponses = {
 
 export type RevokeSkillShareLinkResponse = RevokeSkillShareLinkResponses[keyof RevokeSkillShareLinkResponses];
 
+export type GetTeamSpendAccessData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/statistics/team-spend/access';
+};
+
+export type GetTeamSpendAccessErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetTeamSpendAccessError = GetTeamSpendAccessErrors[keyof GetTeamSpendAccessErrors];
+
+export type GetTeamSpendAccessResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        administeredTeamIds: Array<string>;
+    };
+};
+
+export type GetTeamSpendAccessResponse = GetTeamSpendAccessResponses[keyof GetTeamSpendAccessResponses];
+
+export type GetTeamSpendData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        /**
+         * Include recorded user and service-account breakdowns. Restricts results to administered teams unless the caller has both organization cost-read and member-read permissions.
+         */
+        includePeople?: 'true' | 'false';
+    };
+    url: '/api/statistics/team-spend';
+};
+
+export type GetTeamSpendErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetTeamSpendError = GetTeamSpendErrors[keyof GetTeamSpendErrors];
+
+export type GetTeamSpendResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        teamId: string;
+        teamName: string;
+        parentId: string | null;
+        memberCount: number;
+        directSpend: number;
+        descendantSpend: number;
+        requests: number;
+        tokens: number;
+        subscriptionValue: number;
+        unpricedRequests: number;
+        models: Array<{
+            requests: number;
+            tokens: number;
+            billedSpend: number;
+            subscriptionValue: number;
+            unpricedRequests: number;
+            model: string;
+            provider: string;
+            timeSeries: Array<{
+                requests: number;
+                tokens: number;
+                billedSpend: number;
+                subscriptionValue: number;
+                unpricedRequests: number;
+                timestamp: string;
+            }>;
+        }>;
+        people?: Array<{
+            requests: number;
+            tokens: number;
+            billedSpend: number;
+            subscriptionValue: number;
+            unpricedRequests: number;
+            personId: string | null;
+            personName: string;
+            kind: 'person' | 'service_account' | 'unattributed';
+            timeSeries: Array<{
+                requests: number;
+                tokens: number;
+                billedSpend: number;
+                subscriptionValue: number;
+                unpricedRequests: number;
+                timestamp: string;
+            }>;
+        }>;
+    }>;
+};
+
+export type GetTeamSpendResponse = GetTeamSpendResponses[keyof GetTeamSpendResponses];
+
 export type GetProxyCostStatisticsData = {
     body?: never;
     path?: never;

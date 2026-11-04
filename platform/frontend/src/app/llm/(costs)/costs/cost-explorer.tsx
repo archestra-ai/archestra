@@ -1,4 +1,6 @@
 "use client";
+
+import { useTeamSpendAccess } from "@/lib/hooks/use-team-spend-access";
 // one result: headline, chart, sortable summary or heat-shaded pivot, CSV,
 // and the REST call that returns the same data.
 
@@ -20,6 +22,7 @@ import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useTeamLimitAccess } from "@/lib/limits-access";
 import { useProxyLabelKeys } from "@/lib/proxy-label-costs.query";
 import { cn } from "@/lib/utils/tailwind";
 import {
@@ -64,6 +67,9 @@ import {
   encodeCostExplorer,
 } from "./explorer-url-state";
 import { useModelUsageCube } from "./model-usage.query";
+import { TeamAllowances } from "./team-allowances";
+import { useTeamSpend } from "./team-spend.query";
+import { teamSpendCube, teamSpendKpis } from "./team-spend-data";
 import { useExplorerUrlState } from "./use-explorer-url-state";
 import { useResponsiveChart } from "./use-responsive-chart";
 
@@ -74,7 +80,14 @@ export default function CostExplorer() {
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
   const poolsEnabled = useFeature("llmModelPoolsEnabled") === true;
   const { data: canReadLimits } = useHasPermissions({ llmLimit: ["read"] });
+  const { data: canReadOrgCosts } = useHasPermissions({ llmCost: ["read"] });
+  const { data: canReadMembers } = useHasPermissions({ member: ["read"] });
+  const teamAccess = useTeamLimitAccess();
+  const spendAccess = useTeamSpendAccess();
+  const canReadTeamPeople =
+    !!(canReadOrgCosts && canReadMembers) || spendAccess.isTeamAdmin;
   const canGroup = (group: DimId) =>
+    (canReadOrgCosts || group === "team") &&
     (group !== "app" || canReadApps) &&
     (group !== "skill" || canReadSkills) &&
     (group !== "pool" || poolsEnabled);
@@ -84,7 +97,28 @@ export default function CostExplorer() {
     encode: encodeCostExplorer,
     timeframe,
   });
-  const { query, focus, view, pivotCols } = explorer;
+  const { view, pivotCols } = explorer;
+  // URL controls never authorize organization data. Non-global readers are
+  // always bound to the server-scoped team source, including hand-edited URLs.
+  const query = canReadOrgCosts
+    ? explorer.query
+    : {
+        ...explorer.query,
+        group: "team" as const,
+        model: undefined,
+        metric: (["billed", "subscription", "requests", "tokens"].includes(
+          explorer.query.metric,
+        )
+          ? explorer.query.metric
+          : "billed") as PivotQuery["metric"],
+        split: (explorer.query.group !== "team"
+          ? "model"
+          : ["none", "person"].includes(explorer.query.split)
+            ? explorer.query.split
+            : "model") as PivotQuery["split"],
+      };
+  const isTeamView = query.group === "team" && !query.model;
+  const focus = isTeamView ? new Set<string>() : explorer.focus;
   const setQ = useCallback(
     (value: SetStateAction<PivotQuery>) => setExplorer("query", value),
     [setExplorer],
@@ -129,15 +163,54 @@ export default function CostExplorer() {
     setQ,
     setFocus,
   ]);
-  const kpis = useKpis({ timeframe, enabled });
-  const allModelsCube = usePivotCube(q, timeframe, enabled && !q.model);
+  const organizationKpis = useKpis({
+    timeframe,
+    enabled: enabled && !!canReadOrgCosts && !isTeamView,
+  });
+  const teamsQuery = useTeamSpend(
+    timeframe,
+    enabled && isTeamView,
+    q.split === "person",
+  );
+  const teams = teamsQuery.data ?? [];
+  const kpis = isTeamView
+    ? teamSpendKpis(teams, teamsQuery.isPending)
+    : organizationKpis;
+  const allModelsCube = usePivotCube(
+    q,
+    timeframe,
+    enabled && !!canReadOrgCosts && !isTeamView && !q.model,
+  );
   const modelCube = useModelUsageCube({
-    model: q.model,
+    model: canReadOrgCosts && !isTeamView ? q.model : undefined,
     group: q.group === "key" || q.group === "agent" ? q.group : "person",
     metric: q.metric,
     timeframe,
   });
-  const cube = q.model ? modelCube : allModelsCube;
+  const scopedCube = useMemo(
+    () => teamSpendCube(teams, q.metric, timeframe, q.split === "person"),
+    [teams, q.metric, timeframe, q.split],
+  );
+  const cube = isTeamView
+    ? {
+        ...scopedCube,
+        isLoading: teamsQuery.isPending,
+        error: teamsQuery.error,
+        retry: () => {
+          void teamsQuery.refetch();
+        },
+      }
+    : q.model
+      ? modelCube
+      : allModelsCube;
+  // Teams remain in the table even without usage, so row count is not
+  // evidence that there is a chart to draw. Zero-priced requests are activity.
+  const noTeamUsage = isTeamView && !teams.some((team) => team.requests > 0);
+  const noTeamChartValues =
+    isTeamView &&
+    !cube.rows.some(
+      (row) => row.total !== 0 || row.series.some((value) => value !== 0),
+    );
   const drilldown = (model: string) => {
     setQ((previous) => ({
       ...previous,
@@ -151,7 +224,11 @@ export default function CostExplorer() {
 
   const statistics = useCostStatistics({
     timeframe,
-    enabled: enabled && (q.metric === "billed" || q.metric === "subscription"),
+    enabled:
+      enabled &&
+      !!canReadOrgCosts &&
+      !isTeamView &&
+      (q.metric === "billed" || q.metric === "subscription"),
   });
 
   const contentRef = useRef<HTMLDivElement>(null);
@@ -173,7 +250,7 @@ export default function CostExplorer() {
   }, [isLoading]);
 
   const update = (patch: Partial<PivotQuery>) => {
-    setQ((prev) => normalize({ ...prev, ...patch }));
+    setQ((prev) => normalize({ ...(canReadOrgCosts ? prev : q), ...patch }));
     setFocus(new Set());
   };
   const toggleFocus = (key: string) =>
@@ -189,7 +266,11 @@ export default function CostExplorer() {
       ? { label: q.labelKey ?? "Label", plural: "label values" }
       : DIMS[q.group];
   const splits = (q.model ? [] : splitOptions(q.metric, q.group)).filter(
-    (d) => d !== "method" && canGroup(d) && d !== q.group,
+    (d) =>
+      d !== "method" &&
+      (isTeamView || canGroup(d)) &&
+      d !== q.group &&
+      !(isTeamView && d === "person" && !canReadTeamPeople),
   );
   const hasSplit = q.split !== "none";
   const activeView = SAVED_VIEWS.find(
@@ -240,12 +321,25 @@ export default function CostExplorer() {
     .map((r) => r.label);
   const pivotBySplit = hasSplit && pivotCols === "split";
   const focusedRows = cube.rows.filter((row) => focus.has(row.key));
-  const limitsLink = canReadLimits
-    ? getCostLimitsLink(
-        q,
-        focusedRows.length === 1 ? focusedRows[0] : undefined,
-      )
-    : null;
+  const teamDetails = (row: { key: string }) => {
+    const team = teams.find((t) => t.teamId === row.key);
+    if (!team) return null;
+    return teamAccess.globalRead ||
+      spendAccess.administeredTeamIds.includes(team.teamId) ? (
+      <TeamAllowances teamId={team.teamId} teamName={team.teamName} />
+    ) : (
+      <p className="p-4 text-xs text-muted-foreground">
+        Current allowances require limit-read access for this team.
+      </p>
+    );
+  };
+  const limitsLink =
+    canReadLimits || (isTeamView && teamAccess.canRead)
+      ? getCostLimitsLink(
+          q,
+          focusedRows.length === 1 ? focusedRows[0] : undefined,
+        )
+      : null;
   const limitsLabel = getCostLimitsLabel(
     q,
     focusedRows.length === 1 ? focusedRows[0] : undefined,
@@ -286,6 +380,8 @@ export default function CostExplorer() {
         tone={metric.caution ? "caution" : undefined}
         options={METRIC_IDS.filter(
           (m) =>
+            (!isTeamView ||
+              ["billed", "subscription", "requests", "tokens"].includes(m)) &&
             (!q.model ||
               [
                 "billed",
@@ -368,7 +464,11 @@ export default function CostExplorer() {
         <KpiTile
           label="API spend"
           value={fmtMetric("billed", kpis.billed.value)}
-          caption="Metered API-key charges"
+          caption={
+            isTeamView
+              ? "Direct payer charges · visible teams"
+              : "Metered API-key charges"
+          }
           series={kpis.billed.series}
           pending={kpis.isCostPending}
         />
@@ -392,15 +492,23 @@ export default function CostExplorer() {
         <KpiTile
           label="Tokens"
           value={formatCompact(kpis.tokens.value)}
-          caption="Input, output and cache"
+          caption={
+            isTeamView
+              ? "Reported tokens · visible teams"
+              : "Input, output and cache"
+          }
           series={kpis.tokens.series}
           pending={kpis.isUsagePending}
           colorClass="text-chart-3"
         />
         <KpiTile
-          label="Active people"
+          label={isTeamView ? "Teams" : "Active people"}
           value={String(kpis.people.value)}
-          caption={`Using ${appName} in selected period`}
+          caption={
+            isTeamView
+              ? "Teams you can access, including zero spend"
+              : `Using ${appName} in selected period`
+          }
           pending={kpis.isPeoplePending}
         />
       </div>
@@ -451,13 +559,13 @@ export default function CostExplorer() {
               </div>
               {cube.isLoading ? (
                 <Skeleton className="mt-1 h-9 w-36" />
-              ) : (
+              ) : noTeamUsage ? null : (
                 <div className="font-semibold text-3xl tabular-nums tracking-tight">
                   {formatValue(q.metric, cube.total)}
                 </div>
               )}
             </div>
-            {!cube.isLoading && headline.top && (
+            {!cube.isLoading && !noTeamChartValues && headline.top && (
               <dl className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
                 {q.group !== "time" && (
                   <>
@@ -504,6 +612,7 @@ export default function CostExplorer() {
             note={metricNote}
             extra={
               !q.model &&
+              !isTeamView &&
               q.metric === "billed" &&
               statistics.data?.costSavings.totalSubscriptionCost ? (
                 <UnstyledButton
@@ -519,7 +628,10 @@ export default function CostExplorer() {
                     <ArrowRight className="ml-1 inline size-3 align-[-2px]" />
                   </span>
                 </UnstyledButton>
-              ) : !q.model && q.metric === "subscription" && statistics.data ? (
+              ) : !isTeamView &&
+                !q.model &&
+                q.metric === "subscription" &&
+                statistics.data ? (
                 <span>
                   Actually billed in this range:{" "}
                   <UnstyledButton
@@ -547,12 +659,14 @@ export default function CostExplorer() {
             chart !== "table" &&
             (cube.isLoading || isLoadingLabels ? (
               <Skeleton className="h-[260px] w-full" />
-            ) : cube.rows.length === 0 ? (
+            ) : cube.rows.length === 0 || noTeamChartValues ? (
               <Empty
                 text={
-                  q.group === "label" && !q.labelKey
-                    ? "No labels captured on requests in this time range."
-                    : `No ${metric.label.toLowerCase()} in this range.`
+                  noTeamUsage
+                    ? "No team usage in this time range."
+                    : q.group === "label" && !q.labelKey
+                      ? "No labels captured on requests in this time range."
+                      : `No ${metric.label.toLowerCase()} in this range.`
                 }
               />
             ) : (
@@ -606,6 +720,7 @@ export default function CostExplorer() {
                 </UnstyledButton>
               </span>
             ) : (
+              !isTeamView &&
               chart !== "table" && (
                 <span className="hidden text-muted-foreground text-xs md:inline">
                   {q.group === "model"
@@ -655,6 +770,8 @@ export default function CostExplorer() {
                 splitLabel={hasSplit ? DIMS[q.split as DimId].label : null}
                 focus={focus}
                 onToggle={toggleFocus}
+                expandOnClick={isTeamView}
+                rowDetails={isTeamView ? teamDetails : undefined}
                 onDrilldown={q.group === "model" ? drilldown : undefined}
               />
             ) : (
@@ -663,6 +780,7 @@ export default function CostExplorer() {
                 metric={q.metric}
                 dimLabel={q.group === "time" ? "Scope" : dim.label}
                 bySplit={pivotBySplit}
+                rowDetails={isTeamView ? teamDetails : undefined}
                 focus={focus}
                 onToggle={toggleFocus}
               />

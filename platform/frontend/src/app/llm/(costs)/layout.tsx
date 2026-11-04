@@ -8,6 +8,7 @@ import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
 import { usePermissionMap } from "@/lib/auth/auth.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useTeamSpendAccess } from "@/lib/hooks/use-team-spend-access";
 import { useTeamLimitAccess } from "@/lib/limits-access";
 
 const TABS = [
@@ -23,8 +24,8 @@ const PAGE_CONFIG: Record<
     title: "Costs",
     description: (
       <>
-        Track spend, token usage and requests across your organization. View and
-        edit model token prices in{" "}
+        Track spend, token usage and requests for the teams you can access. View
+        and edit model token prices in{" "}
         <Link href="/llm/models" className="text-primary hover:underline">
           Model Settings
         </Link>
@@ -32,6 +33,7 @@ const PAGE_CONFIG: Record<
       </>
     ),
   },
+
   "/llm/limits": {
     title: "Limits",
     description: "Set spend and rate limits for LLM traffic.",
@@ -59,9 +61,11 @@ export default function CostsLayout({
   const [actionButton, setActionButton] = useState<React.ReactNode>(null);
   const pageMap = usePermissionMap(requiredPagePermissionsMap);
   const limitsAccess = useTeamLimitAccess();
+  const spendAccess = useTeamSpendAccess();
   const permissionMap: Record<string, boolean> | null = pageMap
     ? {
         ...pageMap,
+        "/llm/costs": pageMap["/llm/costs"] || spendAccess.isTeamAdmin,
         "/llm/limits": pageMap["/llm/limits"] || limitsAccess.canRead,
       }
     : null;

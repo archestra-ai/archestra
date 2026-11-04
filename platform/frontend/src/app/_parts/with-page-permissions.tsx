@@ -11,6 +11,7 @@ import {
 import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import { ClientRedirect } from "@/components/client-redirect";
 import { useHasPagePermissions } from "@/lib/auth/auth.query";
+import { useTeamSpendAccess } from "@/lib/hooks/use-team-spend-access";
 import { useTeamLimitAccess } from "@/lib/limits-access";
 
 export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
@@ -18,6 +19,7 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
 }) => {
   const pathname = usePathname();
   const limitsAccess = useTeamLimitAccess();
+  const spendAccess = useTeamSpendAccess();
 
   // Get required permissions for current page
   const requiredPermissions = resolvePagePermissions(pathname);
@@ -37,7 +39,10 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   // almost everyone may use it, so it renders while the check runs and gives
   // way to the Forbidden page only if the answer is "no chat:read".
   if (
-    (isPending || (pathname === "/llm/limits" && limitsAccess.isPending)) &&
+    (isPending ||
+      (!hasRequiredPermissions &&
+        ((pathname === "/llm/limits" && limitsAccess.isPending) ||
+          (pathname === "/llm/costs" && spendAccess.isPending)))) &&
     requiredPermissions
   ) {
     return isOptimisticChatPath(pathname) ? <>{children}</> : null;
@@ -65,7 +70,8 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   if (
     requiredPermissions &&
     !hasRequiredPermissions &&
-    !(pathname === "/llm/limits" && limitsAccess.canRead)
+    !(pathname === "/llm/limits" && limitsAccess.canRead) &&
+    !(pathname === "/llm/costs" && spendAccess.isTeamAdmin)
   ) {
     return <ForbiddenPage />;
   }

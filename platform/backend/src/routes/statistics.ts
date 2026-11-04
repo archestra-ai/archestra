@@ -16,6 +16,8 @@ import {
   StatisticsModel,
   UsageStatisticsModel,
 } from "@/models";
+import TeamModel from "@/models/team";
+import TeamSpendModel from "@/models/team-spend";
 import { callerIsAppAdmin } from "@/services/apps/app-authorization";
 import {
   AgentStatisticsSchema,
@@ -47,6 +49,7 @@ import {
   USER_STATISTICS_SORT_BY,
   UserStatisticsSchema,
 } from "@/types";
+import { TeamSpendSchema } from "@/types/team-spend";
 
 const StatisticsQuerySchema = z.object({
   timeframe: StatisticsTimeFrameSchema.optional().default("24h"),
@@ -96,6 +99,96 @@ const UserStatisticsQuerySchema = StatisticsQuerySchema.extend({
 const TOP_SESSION_LIMIT = 8;
 
 const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.get(
+    "/api/statistics/team-spend/access",
+    {
+      schema: {
+        operationId: RouteId.GetTeamSpendAccess,
+        description:
+          "The signed-in actor's administered team IDs for Costs discovery. Does not grant access to the team directory or authorize spend requests.",
+        tags: ["Statistics"],
+        response: constructResponseSchema(
+          z.object({ administeredTeamIds: z.array(z.string()) }),
+        ),
+      },
+    },
+    async (request) => ({
+      administeredTeamIds:
+        request.authMethod === "session"
+          ? await TeamModel.getAdministeredTeamIds(
+              request.user.id,
+              request.organizationId,
+            )
+          : [],
+    }),
+  );
+  fastify.get(
+    "/api/statistics/team-spend",
+    {
+      schema: {
+        operationId: RouteId.GetTeamSpend,
+        description:
+          "Recorded payer spend for visible teams. Organization cost readers see all teams; session-authenticated team admins see only teams they administer and descendants. Membership and sharing never attribute spend. Descendant spend uses the current hierarchy, not historical budget counters. Covers retained interactions with an identifiable organization; subscription value is not billed spend.",
+        tags: ["Statistics"],
+        querystring: StatisticsQuerySchema.extend({
+          includePeople: z
+            .enum(["true", "false"])
+            .optional()
+            .describe(
+              "Include recorded user and service-account breakdowns. Restricts results to administered teams unless the caller has both organization cost-read and member-read permissions.",
+            ),
+        }),
+        response: constructResponseSchema(z.array(TeamSpendSchema)),
+      },
+    },
+    async (request) => {
+      const permission = await hasPermission(
+        { llmCost: ["read"] },
+        request.headers,
+        request.serviceAccount,
+        {
+          userId: request.user.id,
+          organizationId: request.organizationId,
+        },
+      );
+      let teamIds: string[] | undefined;
+      const includePeople = request.query.includePeople === "true";
+      const canReadPeople =
+        includePeople && permission.success
+          ? await hasPermission(
+              { member: ["read"] },
+              request.headers,
+              request.serviceAccount,
+              {
+                userId: request.user.id,
+                organizationId: request.organizationId,
+              },
+            )
+          : { success: false };
+      if (!permission.success || (includePeople && !canReadPeople.success)) {
+        if (request.authMethod !== "session")
+          throw new ApiError(
+            403,
+            "Team spend requires a signed-in team admin.",
+          );
+        teamIds = await TeamModel.getAdministeredTeamIds(
+          request.user.id,
+          request.organizationId,
+        );
+        if (!teamIds.length)
+          throw new ApiError(
+            403,
+            "You can only view spend for teams you administer.",
+          );
+      }
+      return TeamSpendModel.get({
+        organizationId: request.organizationId,
+        teamIds,
+        timeframe: request.query.timeframe,
+        includePeople,
+      });
+    },
+  );
   fastify.get(
     "/api/statistics/llm-proxy",
     {

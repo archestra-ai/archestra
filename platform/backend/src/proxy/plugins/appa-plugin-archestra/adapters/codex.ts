@@ -10,12 +10,21 @@ import { asRecord } from "@/utils/as-record";
 import type {
   AppaClientAdapter,
   AppaMatchContext,
+  AppaRelayArrival,
+  AppaRelayMessage,
   AppaReviewedSession,
   AppaSpawnPromptField,
   AskUserArguments,
   NativeQuestionResult,
 } from "../types";
 import { questionHeader, readHeader } from "../utils";
+import {
+  admitCodexRelayReport,
+  codexRelayArrivals,
+  codexRelayMessage,
+  isCodexRelayReceipt,
+  isCodexRelayTool,
+} from "./codex-relay";
 import { structuredQuestionRuling } from "./native-question-ruling";
 import {
   bindMintedChildTrajectory,
@@ -148,6 +157,36 @@ export class AppaCodexAdapter implements AppaClientAdapter {
     )
       return undefined;
     return { rootId: root ?? requester, requesterId: requester };
+  }
+
+  relayMessage(
+    call: { name: string; arguments: unknown; namespace?: string },
+    requestBody?: unknown,
+  ): AppaRelayMessage | undefined {
+    return codexRelayMessage(call, requestBody);
+  }
+
+  isRelayTool(name: string, namespace?: string): boolean {
+    return isCodexRelayTool(name, namespace);
+  }
+
+  isRelayReceipt(content: unknown): boolean {
+    return isCodexRelayReceipt(content);
+  }
+
+  // Codex reports a failed send in text the proxy cannot tell apart from a
+  // report that carries another agent's output.
+  readonly admitsFailedRelayReports = true as const;
+
+  admitRelayReport(
+    content: unknown,
+    records: readonly string[],
+  ): { content: unknown; withheld: boolean } {
+    return admitCodexRelayReport(content, records);
+  }
+
+  relayArrivals(requestBody: unknown): AppaRelayArrival[] {
+    return codexRelayArrivals(requestBody);
   }
 
   isSpawnTool(name: string, namespace?: string): boolean {

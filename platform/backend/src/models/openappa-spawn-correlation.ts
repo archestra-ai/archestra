@@ -246,6 +246,40 @@ class OpenAppaSpawnCorrelationModel {
   }
 
   /**
+   * Which of `childSessionIds`, the children a parent started, each of
+   * `spawnCallIds` started, by the signed spawn binding each child's own
+   * events store. One query, on the operations key.
+   */
+  static async childrenOfSpawns(params: {
+    organizationId: string;
+    callerId: string | undefined;
+    childSessionIds: readonly string[];
+    spawnCallIds: readonly string[];
+  }): Promise<Array<{ spawnCallId: string; childSessionId: string }>> {
+    if (params.childSessionIds.length === 0 || params.spawnCallIds.length === 0)
+      return [];
+    const storedCallId = sql<string>`COALESCE(${operations.input}->'semantic'->>'spawn_call_id', ${operations.input}->>'spawn_call_id')`;
+    return db
+      .selectDistinct({
+        spawnCallId: storedCallId,
+        childSessionId: operations.sessionId,
+      })
+      .from(operations)
+      .where(
+        and(
+          eq(operations.organizationId, params.organizationId),
+          inArray(operations.sessionId, [...params.childSessionIds]),
+          eq(operations.status, "complete"),
+          params.callerId
+            ? eq(operations.callerId, params.callerId)
+            : isNull(operations.callerId),
+          sql`COALESCE(${operations.input}->'semantic'->>'event', ${operations.input}->>'event') IN ('session_start', 'prompt', 'tool_call', 'child_end')`,
+          inArray(storedCallId, [...params.spawnCallIds]),
+        ),
+      );
+  }
+
+  /**
    * Names a parent is on record for giving the agents it was allowed to
    * start. Request history can drop these after compaction; the spawn
    * operation's semantic arguments do not.
@@ -344,7 +378,8 @@ function aliasFromArguments(value: unknown): {
         ? value
         : undefined;
   if (!record) return {};
-  const name = stringField(record.name);
+  // Codex names the agent it starts `task_name`.
+  const name = stringField(record.name) ?? stringField(record.task_name);
   const description = stringField(record.description);
   return {
     ...(name ? { name } : {}),

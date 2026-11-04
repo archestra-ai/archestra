@@ -1213,6 +1213,7 @@ function WaterfallSkeleton({ layout }: { layout: Layout }) {
  * counts and the cache split are on hover.
  */
 function TokensStack({ row }: { row: InteractionSummary }) {
+  const usageUnknown = row.inputTokens === null && row.outputTokens === null;
   const lines = [
     { label: "Output", value: row.outputTokens },
     { label: "Input", value: row.inputTokens },
@@ -1223,13 +1224,23 @@ function TokensStack({ row }: { row: InteractionSummary }) {
     <Tooltip>
       <TooltipTrigger asChild>
         <span className="flex flex-col items-end leading-tight tabular-nums">
-          <span className="text-[13px] text-foreground/90">
-            {formatCompactNumber(row.outputTokens ?? 0)}
-          </span>
-          <span className="flex items-baseline gap-1 text-[10px] text-muted-foreground/70">
-            <span className="text-[9px] tracking-wide uppercase">in</span>
-            {formatCompactNumber(row.inputTokens ?? 0)}
-          </span>
+          {usageUnknown ? (
+            <span className="text-[13px] text-muted-foreground">Unknown</span>
+          ) : (
+            <>
+              <span className="text-[13px] text-foreground/90">
+                {row.outputTokens === null
+                  ? "Unknown"
+                  : formatCompactNumber(row.outputTokens)}
+              </span>
+              <span className="flex items-baseline gap-1 text-[10px] text-muted-foreground/70">
+                <span className="text-[9px] tracking-wide uppercase">in</span>
+                {row.inputTokens === null
+                  ? "Unknown"
+                  : formatCompactNumber(row.inputTokens)}
+              </span>
+            </>
+          )}
         </span>
       </TooltipTrigger>
       <TooltipContent side="left" className="tabular-nums">
@@ -1241,7 +1252,7 @@ function TokensStack({ row }: { row: InteractionSummary }) {
             >
               <dt>{line.label}</dt>
               <dd className="text-right">
-                {(line.value ?? 0).toLocaleString()}
+                {line.value === null ? "Unknown" : line.value.toLocaleString()}
               </dd>
             </div>
           ))}

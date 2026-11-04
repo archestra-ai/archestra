@@ -69,7 +69,7 @@ import {
   type OpenAppaSession,
   readPeerMessage,
 } from "@/openappa/service";
-import { waiveSoftBlock } from "@/openappa/soft-block";
+import { softBlocksAllowed, waiveSoftBlock } from "@/openappa/soft-block";
 import { superyellSession } from "@/openappa/unenforced";
 import {
   recallYellSession,
@@ -1196,7 +1196,7 @@ const registry = defineArchestraTools([
         return structuredSuccessResult({
           outcome: "guardrails_disabled",
           message:
-            "The deployment's soft-block override recorded a yell and turned Guardrails off for this session. Retry the original operation. No human approval is claimed and no remedy plan was executed.",
+            "The deployment's soft-block override turned Guardrails off for this session. Retry the original operation. No human approval is claimed and no remedy plan was executed.",
         });
       }
       const callId = execution?.call_id ?? context.currentToolCallId;
@@ -2068,6 +2068,21 @@ function peerExecution(params: {
     throw new ApiError(401, "Organization context is required");
   }
   if (params.proof === undefined) {
+    const session =
+      context.openappaSubagent?.session ?? context.openappaSession;
+    const callerId = authenticatedRuntimeSpender({
+      userId: context.userId,
+      callerId: context.openappaSession?.caller_id,
+    });
+    if (
+      softBlocksAllowed() &&
+      session &&
+      callerId &&
+      session.organization_id === context.organizationId &&
+      session.caller_id === callerId
+    ) {
+      return { session, toolCallId: context.currentToolCallId ?? randomUUID() };
+    }
     throw new ApiError(
       400,
       "Peer messages require a signed execution proof from the protected proxy",

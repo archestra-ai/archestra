@@ -1,11 +1,18 @@
 import { eq } from "drizzle-orm";
-import { vi } from "vitest";
+import { afterEach, vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { expect, test } from "@/test";
 import { waiveSoftBlock } from "./soft-block";
 import { isUnenforcedSession } from "./unenforced";
+
+const initialMode = config.openappa.softBlockMode;
+const initialYell = config.openappa.yellEnabled;
+afterEach(() => {
+  config.openappa.softBlockMode = initialMode;
+  config.openappa.yellEnabled = initialYell;
+});
 
 for (const reports of [true, false]) {
   test(`first-boundary waiver persists independently of yell reporting (${reports})`, async ({

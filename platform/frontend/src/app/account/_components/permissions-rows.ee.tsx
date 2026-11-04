@@ -8,7 +8,10 @@ import {
 } from "@archestra/shared";
 import { ChevronDown } from "lucide-react";
 import { Fragment, type ReactNode, useId, useMemo, useState } from "react";
-import { AccountRow, AccountRowMuted } from "@/app/account/_components/account-rows";
+import {
+  AccountRow,
+  AccountRowMuted,
+} from "@/app/account/_components/account-rows";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RoleTypeIcon } from "@/components/role-type-icon";
 import { PermissionList } from "@/components/roles/permission-list.ee";

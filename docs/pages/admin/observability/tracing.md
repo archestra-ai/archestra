@@ -141,3 +141,11 @@ LLM spans, MCP spans, and agent run root spans carry who made the request:
 | `gen_ai.conversation.id` | The session ID |
 
 The LLM Proxy has no labels or teams. Filter its traffic by the `archestra.user.team.*`, `archestra.external_agent_id`, or `archestra.app.name` attributes.
+
+## Proxy Rejection Log Events
+
+Authentication, authorization, and validation failures rejected before an LLM Proxy route handler emit `archestra.llm_proxy.rejected` with `WARN` severity. Search logger `archestra-llm-proxy` for this event. The backend application log carries the same fields and message `LLM proxy request rejected before handler`.
+
+The event includes `archestra.proxy.denial_kind` (`authentication`, `authorization`, or `validation`), `archestra.proxy.request_id`, `http.request.method`, `http.route`, `http.response.status_code`, and `client.address`. It excludes credentials, request bodies, query strings, and path parameters. Export is best-effort and independent of trace sampling.
+
+These events do not appear in the Audit table. Credential checks inside an inference handler are outside this event's scope; consult backend application logs for those failures. Use ingress access logs for traffic blocked before reaching Archestra.

@@ -28,6 +28,7 @@ import type {
 import { mapWithConcurrency } from "@/utils/concurrency";
 import { archestraAudience } from "./archestra-audience";
 import { type DeployedBattery, declaredCredentials } from "./battery-target";
+import { hostToolContext } from "./host-tool-context";
 import { withHostToolRules } from "./host-tool-rules";
 
 /** How each resolved entry deploys here, by its `include` spelling. */
@@ -462,6 +463,7 @@ class OpenAppaDeclarations {
           ...composed,
           content: await withHostToolRules({
             composed: content,
+            host: hostToolContext(),
             validate: (text) => native.validateHostedOpenappaPolicy(text),
           }),
         };

@@ -1,7 +1,10 @@
 import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { HttpResponse, http } from "msw";
 import type OpenAI from "openai";
 import { vi } from "vitest";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
+import { internalCallHeader } from "@/clients/internal-call";
 import config from "@/config";
 import db, { __setTestDb, getDb, schema } from "@/database";
 import {
@@ -12,6 +15,7 @@ import {
 import AgentModel from "@/models/agent";
 import AgentTeamModel from "@/models/agent-team";
 import TeamModel from "@/models/team";
+import { useMswServer } from "@/test/msw";
 
 /**
  * Integration tests for end-to-end LLM proxy limit enforcement.
@@ -156,7 +160,8 @@ describe("LLM proxy limit enforcement (integration)", () => {
     }
   }
 
-  describe("personal standard key attribution", () => {
+  describe("standard key attribution", () => {
+    const upstream = useMswServer();
     setupTestCacheManager();
     let organizationId: string;
     let agentId: string;
@@ -212,7 +217,20 @@ describe("LLM proxy limit enforcement (integration)", () => {
           customPricePerMillionInput: "2.50",
           customPricePerMillionOutput: "10.00",
         });
-        harness = await setupRoute();
+        app = createFastifyApp();
+        harness = createOpenAiHarness();
+        upstream.use(
+          http.post(
+            "https://provider.example/v1/chat/completions",
+            async ({ request }) =>
+              HttpResponse.json(
+                await harness.client.chat.completions.create(
+                  (await request.json()) as OpenAI.Chat.Completions.ChatCompletionCreateParams,
+                ),
+              ),
+          ),
+        );
+        await app.register(openAiProxyRoutes);
       },
     );
 
@@ -348,25 +366,243 @@ describe("LLM proxy limit enforcement (integration)", () => {
       expect(spend.get(other.id)).toBeUndefined();
     });
 
-    test("an org key still accepts integration attribution hints", async () => {
+    for (const kind of ["shared", "ownerless"] as const) {
+      const createKey = () =>
+        VirtualApiKeyModel.create({
+          organizationId,
+          name: `${kind} integration key`,
+          ...(kind === "shared"
+            ? {
+                authorId: owner.id,
+                initialPermissionGrants: [
+                  {
+                    subject: { type: "user" as const, id: other.id },
+                    actions: ["read" as const, "use" as const],
+                  },
+                ],
+              }
+            : { scope: "org" as const }),
+          providerApiKeys: [
+            { provider: "openai", providerApiKeyId: providerKeyId },
+          ],
+        });
+
+      test(`${kind} key cannot assign spend using external identity hints`, async () => {
+        const key = await createKey();
+        for (const headers of [{}, ...hints()]) {
+          const response = await call(headers, key.value);
+          expect(response.statusCode, response.body).toBe(200);
+        }
+        await drainBackgroundWork();
+        const rows = await db
+          .select()
+          .from(schema.interactionsTable)
+          .where(eq(schema.interactionsTable.profileId, agentId));
+        expect(rows).toHaveLength(3);
+        for (const row of rows) {
+          expect(row.userId).toBeNull();
+          expect(row.virtualKeyId).toBe(key.virtualKey.id);
+          expect(Number(row.cost)).toBeCloseTo(0.00045, 8);
+        }
+      });
+
+      for (const source of ["custom", "default"] as const) {
+        test(`${kind} key requires verified identity under ${source} user limits`, async ({
+          makeInteraction,
+        }) => {
+          const key = await createKey();
+          if (source === "custom") {
+            await LimitModel.create({
+              entityType: "user",
+              entityId: owner.id,
+              limitType: "token_cost",
+              limitValue: 1,
+            });
+          } else {
+            await EnvironmentDefaultUserLimitModel.create({
+              organizationId,
+              limitValue: 1,
+            });
+          }
+          for (const headers of [
+            {},
+            ...hints(),
+            {
+              "x-archestra-user-id": "missing-user",
+              "x-archestra-internal-call": "forged-proof",
+            },
+          ]) {
+            const response = await call(headers, key.value);
+            expect(response.statusCode, response.body).toBe(401);
+            expect(response.json().error.message).toContain("user credential");
+          }
+          expect(harness.client.chat.completions.create).not.toHaveBeenCalled();
+          // Supplying an independent user credential makes the same shared key usable.
+          const personal = await makePassthroughCredential({
+            organizationId,
+            ownerId: owner.id,
+          });
+          const control = await call(
+            {
+              "x-archestra-virtual-key": personal,
+              "x-archestra-user-id": other.id,
+            },
+            key.value,
+          );
+          expect(control.statusCode, control.body).toBe(200);
+          await drainBackgroundWork();
+          const [row] = await db
+            .select()
+            .from(schema.interactionsTable)
+            .where(eq(schema.interactionsTable.profileId, agentId));
+          expect(row.userId).toBe(owner.id);
+          expect(harness.client.chat.completions.create).toHaveBeenCalledTimes(
+            1,
+          );
+          if (source === "custom") {
+            await LimitModel.updateTokenLimitUsage(
+              "user",
+              owner.id,
+              "gpt-4o",
+              1_000_000,
+              1_000_000,
+            );
+          } else {
+            await makeInteraction(agentId, {
+              userId: owner.id,
+              model: "gpt-4o",
+              cost: "2",
+            });
+          }
+          const blocked = await call(
+            {
+              "x-archestra-virtual-key": personal,
+              "x-openwebui-user-email": other.email,
+            },
+            key.value,
+          );
+          expect(blocked.statusCode, blocked.body).toBe(402);
+          expect(blocked.json().error.usage_limit.entity_type).toBe("user");
+          expect(harness.client.chat.completions.create).toHaveBeenCalledTimes(
+            1,
+          );
+        });
+      }
+    }
+
+    test("team billing keeps its own cap and cannot be redirected by a user hint", async ({
+      makeTeam,
+    }) => {
+      const team = await makeTeam(organizationId, owner.id);
       const key = await VirtualApiKeyModel.create({
         organizationId,
-        name: "Integration key",
-        scope: "org",
+        name: "Team billed key",
+        billingTeamId: team.id,
         providerApiKeys: [
           { provider: "openai", providerApiKeyId: providerKeyId },
         ],
       });
-      const response = await call(
-        { "x-openwebui-user-email": other.email },
-        key.value,
-      );
-      expect(response.statusCode, response.body).toBe(200);
+      await EnvironmentDefaultUserLimitModel.create({
+        organizationId,
+        limitValue: 0,
+      });
+      const allowed = await call(hints()[0], key.value);
+      expect(allowed.statusCode, allowed.body).toBe(200);
+      await drainBackgroundWork();
       const [row] = await db
         .select()
         .from(schema.interactionsTable)
         .where(eq(schema.interactionsTable.profileId, agentId));
-      expect(row.userId).toBe(other.id);
+      expect(row.userId).toBeNull();
+      expect(row.billingTeamId).toBe(team.id);
+      await LimitModel.create({
+        entityType: "team",
+        entityId: team.id,
+        limitType: "token_cost",
+        limitValue: 0,
+      });
+      const blocked = await call(hints()[1], key.value);
+      expect(blocked.statusCode, blocked.body).toBe(402);
+      expect(blocked.json().error.usage_limit.entity_type).toBe("team");
+      expect(harness.client.chat.completions.create).toHaveBeenCalledTimes(1);
+    });
+
+    test("soft and other-organization limits do not require a user credential", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const elsewhere = await makeOrganization();
+      const outsider = await makeUser();
+      await makeMember(outsider.id, elsewhere.id);
+      await LimitModel.create({
+        entityType: "user",
+        entityId: outsider.id,
+        limitType: "token_cost",
+        limitValue: 0,
+      });
+      const soft = await LimitModel.create({
+        entityType: "user",
+        entityId: owner.id,
+        limitType: "token_cost",
+        limitValue: 1,
+        behavior: "soft",
+      });
+      const key = await VirtualApiKeyModel.create({
+        organizationId,
+        name: "Unattributed integration",
+        providerApiKeys: [
+          { provider: "openai", providerApiKeyId: providerKeyId },
+        ],
+      });
+      const allowed = await call(hints()[0], key.value);
+      expect(allowed.statusCode, allowed.body).toBe(200);
+      await LimitModel.patch(soft.id, { behavior: "hard" });
+      const blocked = await call({}, key.value);
+      expect(blocked.statusCode, blocked.body).toBe(401);
+      expect(harness.client.chat.completions.create).toHaveBeenCalledTimes(1);
+    });
+
+    test("a verified service account keeps its own attribution under user limits", async ({
+      makeServiceAccount,
+    }) => {
+      const account = await makeServiceAccount(organizationId);
+      const key = await VirtualApiKeyModel.create({
+        organizationId,
+        name: "Worker key",
+        authorId: serviceAccountUserId(account.id),
+        providerApiKeys: [
+          { provider: "openai", providerApiKeyId: providerKeyId },
+        ],
+      });
+      await EnvironmentDefaultUserLimitModel.create({
+        organizationId,
+        limitValue: 0,
+      });
+      const response = await call(hints()[0], key.value);
+      expect(response.statusCode, response.body).toBe(200);
+      await drainBackgroundWork();
+      const [row] = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, agentId));
+      expect(row.userId).toBeNull();
+      expect(row.serviceAccountId).toBe(account.id);
+    });
+
+    test("internal proof preserves server-supplied attribution and enforces the user's cap", async () => {
+      await LimitModel.create({
+        entityType: "user",
+        entityId: other.id,
+        limitType: "token_cost",
+        limitValue: 0,
+      });
+      const response = await call(
+        { ...internalCallHeader(), "x-archestra-user-id": other.id },
+        "synthetic-provider-credential",
+      );
+      expect(response.statusCode, response.body).toBe(402);
+      expect(harness.client.chat.completions.create).not.toHaveBeenCalled();
     });
   });
 

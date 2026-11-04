@@ -21,7 +21,7 @@ describe("breakTheGlassSummary", () => {
       }),
     ).toEqual([
       { label: "Human approval:", value: "waived in unattended sessions" },
-      { label: "Soft block:", value: "waived" },
+      { label: "Other blocked calls:", value: "waived" },
     ]);
     expect(
       breakTheGlassSummary({
@@ -30,8 +30,9 @@ describe("breakTheGlassSummary", () => {
         breakTheGlassEnabled: true,
       }),
     ).toEqual([
-      { label: "Human approval:", value: "waived everywhere" },
+      // Same order as Settings: the Yell tool first.
       { label: "Yell:", value: "turns Guardrails off for the session" },
+      { label: "Human approval:", value: "waived everywhere" },
     ]);
   });
 });

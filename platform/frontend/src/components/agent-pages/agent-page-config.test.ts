@@ -30,11 +30,10 @@ describe("getAgentSetupSteps", () => {
   });
 
   it("leaves a built-in agent with configuration and tools — it has no advanced step", () => {
-    expect(
-      getAgentSetupSteps({ agentType: "agent", builtIn: true }).map(
-        (s) => s.id,
-      ),
-    ).toEqual(["configuration", "tools"]);
+    expect(getAgentSetupSteps({ agentType: "agent", builtIn: true })).toEqual([
+      expect.objectContaining({ id: "configuration", title: "Configuration" }),
+      expect.objectContaining({ id: "tools", title: "Tools" }),
+    ]);
   });
 });
 

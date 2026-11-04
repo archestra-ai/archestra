@@ -110,6 +110,7 @@ import {
 import { openappaEnabled, openappaYellEnabled } from "@/openappa/service";
 import { sanitizeGeminiToolSchema } from "@/routes/proxy/adapters/gemini-schema";
 import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
+import { AGENT_RUNTIME_OAUTH_CLIENT_ID } from "@/services/agent-runtime/runtime-contract";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
 import {
   agentToolExclusionsService,
@@ -209,9 +210,11 @@ export interface TokenAuthResult {
  * Why gateway authentication failed, so a caller can act on the answer instead
  * of guessing at a blanket "invalid token".
  *
- * What is safe to disclose turns on whether the JWT's signature was verified
- * first. `no_email_claim`, `unknown_user`, `not_org_member` and
- * `no_gateway_access` are only ever reached by a caller holding a token this
+ * OAuth reports `no_gateway_access` only after token validity, expiry,
+ * revocation, audience and scope checks succeed.
+ * For external JWTs, disclosure depends on signature verification first:
+ * `no_email_claim`, `unknown_user`, `not_org_member` and
+ * `no_gateway_access` are reached only by a caller holding a token this
  * organization's own IdP signed — already inside the trust boundary — so naming
  * the configuration problem tells them nothing they could not already learn.
  * `idp_not_linked` / `idp_misconfigured` are decided before any signature check
@@ -254,7 +257,7 @@ export function describeGatewayAuthFailure(
     case "not_org_member":
       return "Token validated, but its user is not a member of this gateway's organization.";
     case "no_gateway_access":
-      return "Token validated, but its user does not have access to this gateway. Grant access via a shared team.";
+      return "Token validated, but the caller does not have access to this gateway. Ask an administrator to grant gateway access.";
     case "invalid_token":
       return "Invalid token for this profile";
   }
@@ -271,7 +274,6 @@ export type AgentInfo = {
 type TokenHashes = {
   cacheKey: string;
   oauthTokenHash: string;
-  rawTokenHash: string;
 };
 
 type ResolvedArchestraToken =
@@ -292,11 +294,6 @@ const tokenAuthCache = new LRUCacheManager<TokenAuthResult | null>({
   maxSize: TOKEN_AUTH_CACHE_MAX_ENTRIES,
   defaultTtl: TOKEN_AUTH_CACHE_TTL_MS,
 });
-const rawArchestraTokenCache =
-  new LRUCacheManager<ResolvedArchestraToken | null>({
-    maxSize: TOKEN_AUTH_CACHE_MAX_ENTRIES,
-    defaultTtl: TOKEN_AUTH_CACHE_TTL_MS,
-  });
 
 /** Runtime tools are advertised only while Guardrails v2 is active. */
 const APPA_IMPLICIT_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
@@ -1817,19 +1814,29 @@ export async function validateOAuthToken(
   return validateOAuthTokenByHash({ profileId, oauthTokenHash });
 }
 
-async function validateOAuthTokenByHash(params: {
+type OAuthTokenValidationParams = {
   profileId: string;
   oauthTokenHash: string;
   agentAccessContext?: AgentAccessContext | null;
   lookups?: RequestLookups;
   requiredOAuthScope?: "mcp" | "a2a";
-}): Promise<TokenAuthResult | null> {
+};
+
+async function validateOAuthTokenByHash(
+  params: OAuthTokenValidationParams,
+): Promise<TokenAuthResult | null> {
+  return (await authenticateOAuthTokenByHash(params)).result;
+}
+
+async function authenticateOAuthTokenByHash(
+  params: OAuthTokenValidationParams,
+): Promise<GatewayAuthOutcome> {
   try {
     const agent =
       params.agentAccessContext ??
       (await findAgentAccessContextById(params.profileId));
     if (!agent) {
-      return null;
+      return { result: null, reason: "invalid_token" };
     }
 
     // Look up the hashed token via the model
@@ -1838,7 +1845,7 @@ async function validateOAuthTokenByHash(params: {
     );
 
     if (!accessToken) {
-      return null;
+      return { result: null, reason: "invalid_token" };
     }
 
     // Check if associated refresh token has been revoked
@@ -1847,7 +1854,7 @@ async function validateOAuthTokenByHash(params: {
         { profileId: params.profileId },
         "validateOAuthToken: associated refresh token is revoked",
       );
-      return null;
+      return { result: null, reason: "invalid_token" };
     }
 
     // Check token expiry
@@ -1856,7 +1863,7 @@ async function validateOAuthTokenByHash(params: {
         { profileId: params.profileId },
         "validateOAuthToken: token expired",
       );
-      return null;
+      return { result: null, reason: "invalid_token" };
     }
 
     if (
@@ -1871,7 +1878,7 @@ async function validateOAuthTokenByHash(params: {
         },
         "validateOAuthToken: token is bound to a different MCP resource",
       );
-      return null;
+      return { result: null, reason: "invalid_token" };
     }
 
     // A token audience-bound to a shareable-App connector is valid only at that
@@ -1882,7 +1889,7 @@ async function validateOAuthTokenByHash(params: {
         { profileId: params.profileId },
         "validateOAuthToken: rejecting an app-connector-bound token at the MCP gateway",
       );
-      return null;
+      return { result: null, reason: "invalid_token" };
     }
 
     // Application (client_credentials) tokens minted for an MCP OAuth client
@@ -1910,14 +1917,18 @@ async function validateOAuthTokenByHash(params: {
         !managedClient.scopes.includes(requiredScope) ||
         !accessToken.scopes?.includes(requiredScope))
     )
-      return null;
+      return { result: null, reason: "invalid_token" };
     if (!managedClient && !accessToken.scopes?.includes(requiredScope))
-      return null;
+      return { result: null, reason: "invalid_token" };
     const userId = accessToken.userId;
     if (!userId) {
-      return null;
+      return { result: null, reason: "invalid_token" };
     }
     const organizationId = agent.organizationId;
+    const member = params.lookups
+      ? await params.lookups.membership({ userId, organizationId })
+      : await MemberModel.getByUserId(userId, organizationId);
+    if (!member) return { result: null, reason: "invalid_token" };
 
     // Check if user has MCP gateway admin permission (can access all gateways)
     const isGatewayAdmin = await ResourcePermissions.allows({
@@ -1957,17 +1968,26 @@ async function validateOAuthTokenByHash(params: {
         { profileId: params.profileId, userId },
         "validateOAuthToken: profile not accessible via OAuth token (no RBAC access and no client grant)",
       );
-      return null;
+      return { result: null, reason: "no_gateway_access" };
     }
 
+    const isAgentRuntimeRunToken =
+      accessToken.clientId === AGENT_RUNTIME_OAUTH_CLIENT_ID;
     return {
-      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
-      teamId: null,
-      isOrganizationToken: false,
-      organizationId,
-      isUserToken: true,
-      userId,
-      oauthClientId: accessToken.clientId,
+      reason: null,
+      result: {
+        tokenId: isAgentRuntimeRunToken
+          ? accessToken.id
+          : `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId,
+        isUserToken: true,
+        userId,
+        ...(isAgentRuntimeRunToken
+          ? {}
+          : { oauthClientId: accessToken.clientId }),
+      },
     };
   } catch (error) {
     logger.debug(
@@ -1977,7 +1997,7 @@ async function validateOAuthTokenByHash(params: {
       },
       "validateOAuthToken: token validation failed",
     );
-    return null;
+    return { result: null, reason: "invalid_token" };
   }
 }
 
@@ -2035,7 +2055,7 @@ async function validateMcpClientAccessToken(params: {
   profileId: string;
   organizationId: string;
   requiredScope: "mcp" | "a2a";
-}): Promise<TokenAuthResult | null> {
+}): Promise<GatewayAuthOutcome> {
   const { accessToken, profileId, organizationId, requiredScope } = params;
 
   // Require the mcp scope (parallels the llm:proxy scope check on the LLM path).
@@ -2044,10 +2064,10 @@ async function validateMcpClientAccessToken(params: {
     accessToken.referenceId?.startsWith(MCP_OAUTH_CLIENT_REFERENCE_PREFIX) &&
     accessToken.scopes?.includes(MCP_GATEWAY_OAUTH_SCOPE);
   if (!accessToken.scopes?.includes(requiredScope) && !legacyA2a) {
-    return null;
+    return { result: null, reason: "invalid_token" };
   }
   if (!accessToken.clientId) {
-    return null;
+    return { result: null, reason: "invalid_token" };
   }
 
   // findByClientId returns null when the client was deleted or disabled.
@@ -2059,7 +2079,7 @@ async function validateMcpClientAccessToken(params: {
     oauthClient.disabled ||
     !oauthClient.scopes.includes(requiredScope)
   ) {
-    return null;
+    return { result: null, reason: "invalid_token" };
   }
 
   // Defense in depth: the token's referenceId must point at this exact client.
@@ -2069,21 +2089,12 @@ async function validateMcpClientAccessToken(params: {
     accessToken.referenceId !==
       `${OAUTH_CLIENT_REFERENCE_PREFIX}${oauthClient.id}`
   ) {
-    return null;
+    return { result: null, reason: "invalid_token" };
   }
 
   // Cross-org tokens are never valid for this gateway.
   if (oauthClient.organizationId !== organizationId) {
-    return null;
-  }
-
-  // The client must be explicitly scoped to the requested gateway.
-  if (!oauthClient.allowedGatewayIds.includes(profileId)) {
-    logger.warn(
-      { profileId, clientId: oauthClient.clientId },
-      "validateOAuthToken: MCP OAuth client not authorized for this gateway",
-    );
-    return null;
+    return { result: null, reason: "invalid_token" };
   }
 
   const account = oauthClient.serviceAccountId
@@ -2092,6 +2103,16 @@ async function validateMcpClientAccessToken(params: {
         organizationId,
       })
     : null;
+
+  // The client must be explicitly scoped to the requested gateway.
+  if (!oauthClient.allowedGatewayIds.includes(profileId)) {
+    logger.warn(
+      { profileId, clientId: oauthClient.clientId },
+      "validateOAuthToken: MCP OAuth client not authorized for this gateway",
+    );
+    return { result: null, reason: "no_gateway_access" };
+  }
+
   if (
     account &&
     !(await validateServiceAccountGatewayAccess({
@@ -2102,14 +2123,17 @@ async function validateMcpClientAccessToken(params: {
       tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
     }))
   )
-    return null;
+    return { result: null, reason: "no_gateway_access" };
   return {
-    ...(account ? { serviceAccountId: account.id } : {}),
-    tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
-    teamId: account?.teamId ?? null,
-    isOrganizationToken: false,
-    organizationId,
-    oauthClientId: accessToken.clientId,
+    reason: null,
+    result: {
+      ...(account ? { serviceAccountId: account.id } : {}),
+      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
+      teamId: account?.teamId ?? null,
+      isOrganizationToken: false,
+      organizationId,
+      oauthClientId: accessToken.clientId,
+    },
   };
 }
 
@@ -2177,8 +2201,7 @@ export async function resolveTokenOrganizationId(
     return null;
   }
 
-  const rawTokenHash = createHash("sha256").update(tokenValue).digest("hex");
-  const resolved = await resolveArchestraToken(tokenValue, rawTokenHash);
+  const resolved = await resolveArchestraToken(tokenValue);
   return resolved?.type === "serviceAccount"
     ? resolved.serviceAccount.organizationId
     : (resolved?.token.organizationId ?? null);
@@ -2186,7 +2209,7 @@ export async function resolveTokenOrganizationId(
 
 /**
  * Same as {@link validateMCPGatewayToken}, but also reports why authentication
- * failed so the gateway route can return an actionable 401 instead of a
+ * failed so the gateway route can distinguish 401 from 403 instead of a
  * catch-all. Failures are never cached (see `cacheTokenAuthResult`), so the
  * reason is always computed against fresh state.
  */
@@ -2206,7 +2229,7 @@ export async function authenticateMCPGatewayRequest(
   // account holds the permission: no grant or OAuth client stands in for it.
   return outcome.result &&
     !(await canUseAgent(profileId, callerOf(outcome.result)))
-    ? { result: null, reason: "invalid_token" }
+    ? { result: null, reason: "no_gateway_access" }
     : outcome;
 }
 
@@ -2247,11 +2270,19 @@ async function authenticateUngated(
   }
 
   if (hasArchestraTokenPrefix(tokenValue)) {
-    const resolvedToken = await resolveArchestraToken(
-      tokenValue,
-      tokenHashes.rawTokenHash,
-    );
-    if (resolvedToken?.type === "serviceAccount") {
+    const resolvedToken = await resolveArchestraToken(tokenValue);
+    // Establish a valid principal in this organization before distinguishing
+    // a missing gateway grant from an invalid credential.
+    if (!resolvedToken) return { result: null, reason: "invalid_token" };
+    const context = await getAgentAccessContext();
+    const organizationId =
+      resolvedToken.type === "serviceAccount"
+        ? resolvedToken.serviceAccount.organizationId
+        : resolvedToken.token.organizationId;
+    if (!context || context.organizationId !== organizationId) {
+      return { result: null, reason: "invalid_token" };
+    }
+    if (resolvedToken.type === "serviceAccount") {
       const result = await validateServiceAccountGatewayAccess({
         profileId,
         serviceAccountId: resolvedToken.serviceAccount.id,
@@ -2261,41 +2292,36 @@ async function authenticateUngated(
       });
       return result
         ? { result, reason: null }
-        : { result: null, reason: "invalid_token" };
+        : { result: null, reason: "no_gateway_access" };
     }
-    if (resolvedToken?.type === "user") {
-      const userTokenResult = await validateResolvedUserToken({
-        profileId,
-        token: resolvedToken.token,
-        agentAccessContext: await getAgentAccessContext(),
-        lookups,
-      });
-      if (userTokenResult) {
-        cacheTokenAuthResult(authCacheKey, userTokenResult);
-        return { result: userTokenResult, reason: null };
-      }
-    }
-
-    logger.warn(
-      { profileId, tokenPrefix: tokenValue.substring(0, 14) },
-      "validateMCPGatewayToken: token validation failed - not found in any token table or access denied",
-    );
-    cacheTokenAuthResult(authCacheKey, null);
-    return { result: null, reason: "invalid_token" };
+    const { userId } = resolvedToken.token;
+    const member = lookups
+      ? await lookups.membership({ userId, organizationId })
+      : await MemberModel.getByUserId(userId, organizationId);
+    if (!member) return { result: null, reason: "invalid_token" };
+    const userTokenResult = await validateResolvedUserToken({
+      profileId,
+      token: resolvedToken.token,
+      agentAccessContext: context,
+      lookups,
+    });
+    return userTokenResult
+      ? { result: userTokenResult, reason: null }
+      : { result: null, reason: "no_gateway_access" };
   }
 
   // Try OAuth token validation (for MCP clients like Open WebUI)
-  const accessTokenResult = await validateOAuthTokenByHash({
+  const validation = await authenticateOAuthTokenByHash({
     profileId,
     oauthTokenHash: tokenHashes.oauthTokenHash,
     agentAccessContext: await getAgentAccessContext(),
     lookups,
     requiredOAuthScope,
   });
-  if (accessTokenResult) {
+  if (validation.result || validation.reason === "no_gateway_access") {
     // OAuth scopes and target grants are live configuration. Recheck them on
     // every call so a capability removal cannot leave a cached authorization.
-    return { result: accessTokenResult, reason: null };
+    return validation;
   }
 
   logger.warn(
@@ -2543,18 +2569,12 @@ function getCachedTokenAuthResult(
   return tokenAuthCache.get(cacheKey);
 }
 
-function getCachedRawArchestraToken(
-  rawTokenHash: string,
-): ResolvedArchestraToken | null | undefined {
-  return rawArchestraTokenCache.get(rawTokenHash);
-}
-
 function cacheTokenAuthResult(
   cacheKey: string,
   result: TokenAuthResult | null,
 ): void {
-  // Identity lookup may be cached separately, but a user's authorization must
-  // reflect resource grants and team/role membership on every request.
+  // A user's credential and authorization must reflect revocation, resource
+  // grants and team/role membership on every request.
   // Application credentials likewise recheck expiry, revocation and the
   // client's current gateway allowlist instead of retaining stale access.
   if (result?.userId || result?.oauthClientId || result?.serviceAccountId)
@@ -2583,26 +2603,12 @@ function cacheTokenAuthResult(
   tokenAuthCache.set(cacheKey, result, TOKEN_AUTH_CACHE_TTL_MS);
 }
 
-function cacheRawArchestraToken(
-  rawTokenHash: string,
-  result: ResolvedArchestraToken | null,
-): void {
-  // Same rationale as cacheTokenAuthResult: don't cache failures, to
-  // avoid the negative-cache treadmill that turns a transient creation
-  // race into a sticky 5-second window of 401s.
-  if (result === null) {
-    return;
-  }
-  rawArchestraTokenCache.set(rawTokenHash, result, TOKEN_AUTH_CACHE_TTL_MS);
-}
-
 function buildTokenHashes(profileId: string, tokenValue: string): TokenHashes {
   // codeql[js/insufficient-password-hash] Cache/lookup fingerprints of high-entropy bearer tokens, not password storage. Rejected arbitrary input never creates a credential.
   const digest = createHash("sha256").update(tokenValue).digest();
   return {
     cacheKey: `${profileId}:${digest.toString("hex")}`,
     oauthTokenHash: digest.toString("base64url"),
-    rawTokenHash: digest.toString("hex"),
   };
 }
 
@@ -2612,28 +2618,14 @@ function buildOAuthTokenHash(tokenValue: string): string {
 
 async function resolveArchestraToken(
   tokenValue: string,
-  rawTokenHash: string,
 ): Promise<ResolvedArchestraToken | null> {
-  const cached = getCachedRawArchestraToken(rawTokenHash);
-  if (cached !== undefined) {
-    return cached;
-  }
-
+  // Resolve live credentials so rotation or deletion takes effect immediately,
+  // including when the caller no longer has a gateway grant.
   const userToken = await UserTokenModel.validateToken(tokenValue);
-  if (userToken) {
-    const result: ResolvedArchestraToken = {
-      type: "user",
-      token: userToken,
-    };
-    cacheRawArchestraToken(rawTokenHash, result);
-    return result;
-  }
+  if (userToken) return { type: "user", token: userToken };
 
   const accountToken = await ServiceAccountModel.verifyToken(tokenValue);
-  if (accountToken) return { type: "serviceAccount", ...accountToken };
-
-  cacheRawArchestraToken(rawTokenHash, null);
-  return null;
+  return accountToken ? { type: "serviceAccount", ...accountToken } : null;
 }
 
 /**

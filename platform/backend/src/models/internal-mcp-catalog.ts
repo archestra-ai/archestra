@@ -166,6 +166,8 @@ class InternalMcpCatalogModel {
       organizationId: string;
       authorId?: string;
       initialPermissionGrants?: ResourcePermissionGrant[];
+      /** A system-seeded catalog can retain its author without an individual grant. */
+      grantAuthor?: boolean;
       /** Publish to the whole organization; for system callers only. */
       publishToOrganization?: boolean;
     },
@@ -213,7 +215,7 @@ class InternalMcpCatalogModel {
           resource: "mcpRegistry",
           scope: row.id,
           grants: context?.initialPermissionGrants,
-          authorId: row.authorId,
+          authorId: context?.grantAuthor === false ? null : row.authorId,
           publishToOrganization: context?.publishToOrganization,
         });
         // SPDX-SnippetEnd

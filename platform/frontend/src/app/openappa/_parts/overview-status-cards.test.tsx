@@ -238,8 +238,8 @@ test("the Yells card lists the Break the glass settings that let calls through",
   expect(await screen.findByText("Human approval:")).toBeInTheDocument();
   expect(screen.getByText("waived in unattended sessions")).toBeInTheDocument();
   expect(screen.getByText("Yell:")).toBeInTheDocument();
-  // Soft block keeps the block by default, so it says nothing.
-  expect(screen.queryByText("Soft block:")).toBeNull();
+  // Other blocked calls keep the block by default, so it says nothing.
+  expect(screen.queryByText("Other blocked calls:")).toBeNull();
 });
 
 test("unavailable runs show cannot run without detailed errors or invented counts", async () => {

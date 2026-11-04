@@ -125,6 +125,7 @@ export function modelRouterLimitScope(
   agent: ModelRouterLimitAgent,
 ) {
   return {
+    allowUnattributed: !!auth.serviceAccountId,
     agentId: agent.id,
     agent,
     userId: modelRouterAuthenticatedUserId(auth),

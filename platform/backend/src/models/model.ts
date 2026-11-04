@@ -878,6 +878,136 @@ class ModelModel {
     });
   }
 
+  /** Remove an unconfigured proxy-discovered entry, retaining request history. */
+  static async deleteUnused(id: string) {
+    return withDbTransaction(async (tx) => {
+      // Serialize catalog writes first: refreshes write models before their
+      // policies, so taking the policy lock first can deadlock with a refresh.
+      // Name references and policy scopes have no model FK; keep their writers
+      // out until eligibility checks and this rare cleanup commit together.
+      await tx.execute(sql`LOCK TABLE ${schema.modelsTable},
+        ${schema.organizationsTable}, ${schema.modelPoolMembersTable}
+        IN SHARE ROW EXCLUSIVE MODE`);
+      const [model] = await tx
+        .select()
+        .from(schema.modelsTable)
+        .where(eq(schema.modelsTable.id, id))
+        .for("update");
+      if (!model) return { status: "not_found" } as const;
+      // Chats and agents acquire the model FK row lock before creating their
+      // policy. Let those transactions finish before locking the policy table.
+      await tx.execute(sql`LOCK TABLE ${schema.resourcePermissionPoliciesTable}
+        IN SHARE ROW EXCLUSIVE MODE`);
+
+      // Unknown prices are null, even when the UI displays a fallback. An explicit
+      // zero is still saved pricing and must survive this cleanup operation.
+      const configuredValues = [
+        model.promptPricePerToken,
+        model.completionPricePerToken,
+        model.cacheReadPricePerToken,
+        model.cacheWritePricePerToken,
+        model.customPricePerMillionInput,
+        model.customPricePerMillionOutput,
+        model.customPricePerMillionCacheRead,
+        model.customPricePerMillionCacheWrite,
+        model.longContextThreshold,
+        model.customContextLength,
+        model.customOutputLength,
+        model.configuredParameters,
+        model.inputModalities,
+        model.outputModalities,
+        model.embeddingDimensions,
+      ];
+      if (
+        !model.discoveredViaLlmProxy ||
+        model.ignored ||
+        configuredValues.some((value) => value !== null)
+      ) {
+        return { status: "ineligible" } as const;
+      }
+      const configuredLinks = await tx.execute(sql`
+        SELECT 1 FROM ${schema.llmProviderApiKeyModelsTable} WHERE model_id = ${id}
+        UNION ALL SELECT 1 FROM ${schema.modelLabelsTable} WHERE model_id = ${id}
+        UNION ALL SELECT 1 FROM ${schema.modelTeamsTable} WHERE model_id = ${id}
+        UNION ALL SELECT 1 FROM ${schema.modelUsersTable} WHERE model_id = ${id}
+      `);
+      if (configuredLinks.rows.length) return { status: "ineligible" } as const;
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Only untouched discovery defaults may be cleaned up with the row.
+      const editedPolicies = await tx.execute(sql`
+        SELECT 1 FROM ${schema.resourcePermissionPoliciesTable}
+        WHERE resource = 'llmModel' AND scope = ${id}
+          AND (revision <> 1 OR NOT legacy_sharing_migrated
+            OR legacy_organization_audience
+            OR grants <> '[{"subject":{"type":"organization","id":"*"},"actions":["read","use"]}]'::jsonb)
+      `);
+      if (editedPolicies.rows.length) return { status: "ineligible" } as const;
+      // SPDX-SnippetEnd
+
+      // The row lock also serializes new FK references (defaults/backfills)
+      // with deletion. Check all organizations: model metadata is global.
+      const references = await tx.execute<{ reason: string }>(sql`
+        SELECT 'a default model or knowledge setting' AS reason
+        WHERE EXISTS (
+          SELECT 1 FROM ${schema.organizationsTable} o
+          WHERE o.default_model_id = ${id} OR o.default_fast_model_id = ${id}
+            OR o.default_smart_model_id = ${id}
+            OR EXISTS (
+              SELECT 1 FROM ${schema.llmProviderApiKeysTable} k
+              WHERE k.provider = ${model.provider} AND (
+                (o.embedding_chat_api_key_id = k.id AND o.embedding_model = ${model.modelId})
+                OR (o.reranker_chat_api_key_id = k.id AND o.reranker_model = ${model.modelId})
+                OR (o.ocr_chat_api_key_id = k.id AND o.ocr_model = ${model.modelId})
+              )
+            )
+        )
+        UNION ALL SELECT 'a member default' WHERE EXISTS (
+          SELECT 1 FROM ${schema.membersTable} WHERE default_model_id = ${id}
+        )
+        UNION ALL SELECT 'an agent' WHERE EXISTS (
+          SELECT 1 FROM ${schema.agentsTable} WHERE model_id = ${id}
+        )
+        UNION ALL SELECT 'an existing chat' WHERE EXISTS (
+          SELECT 1 FROM ${schema.conversationsTable}
+          WHERE model_id = ${id}
+        )
+        UNION ALL SELECT 'a routing decision' WHERE EXISTS (
+          SELECT 1 FROM ${schema.routingDecisionsTable} WHERE model_id = ${id}
+        )
+        UNION ALL SELECT 'guardrails' WHERE EXISTS (
+          SELECT 1 FROM ${schema.guardrailsDeploymentTable} WHERE annotator_model_id = ${id}
+        )
+        UNION ALL SELECT 'a model pool' WHERE EXISTS (
+          SELECT 1 FROM ${schema.modelPoolMembersTable} m
+          JOIN ${schema.llmProviderApiKeysTable} k ON k.id = m.provider_api_key_id
+          WHERE m.model_id = ${model.modelId} AND k.provider = ${model.provider}
+        )
+        UNION ALL SELECT 'cost recompute history' WHERE EXISTS (
+          SELECT 1 FROM ${schema.modelCostBackfillsTable}
+          WHERE model_id = ${id}
+        )
+      `);
+      if (references.rows.length) {
+        return { status: "in_use", reason: references.rows[0].reason } as const;
+      }
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.deleteForTarget({
+        tx,
+        resources: ["llmModel"],
+        scope: id,
+      });
+      // SPDX-SnippetEnd
+      await tx.delete(schema.modelsTable).where(eq(schema.modelsTable.id, id));
+      return { status: "deleted" } as const;
+    });
+  }
+
   /**
    * Delete model by provider and model ID
    */

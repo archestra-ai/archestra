@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 6
-lastUpdated: 2026-11-03
+lastUpdated: 2026-11-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -197,10 +197,11 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Values: `0` or more. `0` treats every replay as reuse.
   - The window lets a client retry after a lost token response.
 
-- **`ARCHESTRA_AUTH_RATE_LIMIT_DISABLED`** - Turns off rate limiting on the sign-in and auth endpoints.
+- **`ARCHESTRA_AUTH_RATE_LIMIT_DISABLED`** - Turns off rate limiting on the sign-in, auth, and MCP gateway endpoints. Credentials and permissions are still checked.
   - Default: `false`
   - Values: `true`, `false`
   - The OAuth token endpoint allows 100 requests per minute per client IP, shared across grants and replicas. On HTTP `429`, wait for the `Retry-After` delay. IP resolution follows [`ARCHESTRA_TRUST_PROXY`](/docs/admin/deployment/configuration#ARCHESTRA_TRUST_PROXY).
+  - If the MCP gateway returns HTTP `429` or `503`, wait before retrying and follow `Retry-After` when provided.
   - Use it only for load tests or automated test runs.
 
 - **`ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL`** - Skips the sign-in page in development by signing in as the user with this email.
@@ -1495,6 +1496,16 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - Default: Helm generates one and keeps it across upgrades. Without Helm, it derives from [`ARCHESTRA_AUTH_SESSION_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_SESSION_SECRET).
   - Values: at least 32 characters, the same on every replica. A shorter value stops startup.
   - Set it to rotate this key separately from the session secret.
+
+- **`ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE`** - Sets **Human approval** under [Break the glass](/docs/agents/guardrails/policies#yells) for the whole deployment. While it is set, it overrides the value saved in **Settings → Guardrails**, and the setting cannot be edited there. Unset it to edit the setting again.
+  - Default: unset (the saved setting applies, `block` unless changed)
+  - Values: `block`, `unattended`, `everywhere`. Other values stop startup.
+  - Release 1.4 configures this setting only with this variable. Keep it set when you upgrade from 1.4 to keep the same behaviour.
+
+- **`ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE`** - Sets **Other blocked calls** under [Break the glass](/docs/agents/guardrails/policies#yells): whether a blocked call without an approval option runs anyway, with a yell. While it is set, it overrides the value saved in **Settings → Guardrails**, and the setting cannot be edited there. A call the policy blocks explicitly (the `blocked` mark) always stays blocked.
+  - Default: unset (the saved setting applies, `refuse` unless changed)
+  - Values: `refuse`, `allow`. Other values stop startup.
+  - Release 1.4 configures this setting only with this variable. Keep it set when you upgrade from 1.4 to keep the same behaviour.
 
 - **`ARCHESTRA_OPENAPPA_YELL_ENABLED`** - Lets agents report confusing blocks with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. Reports are stored locally.
   - Default: `true`

@@ -162,13 +162,25 @@ test("verified aliases settle canonical rows once and count toward default user 
   data.id = uuidv7();
   await InteractionModel.create(data);
   expect((await check())?.[2]).toMatchObject({ source: "default_user" });
-  expect(
-    await LimitValidationService.checkLimitsBeforeRequest({
+  // Unidentified callers must authenticate before any cap is evaluated.
+  await expect(
+    LimitValidationService.checkLimitsBeforeRequest({
       agentId: agent.id,
       model: canonical,
       modelAliases: [alias],
     }),
-  ).not.toBeNull();
+  ).rejects.toMatchObject({ statusCode: 401 });
+  // Trusted unattributed callers still enforce the explicit agent caps.
+  expect(
+    (
+      await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: agent.id,
+        model: canonical,
+        modelAliases: [alias],
+        allowUnattributed: true,
+      })
+    )?.[2],
+  ).toMatchObject({ source: "explicit", entityType: "agent" });
   // Alias-only inherited caps must count the stored canonical components too.
   const inherited = await EnvironmentDefaultUserLimitModel.findGlobal(org.id);
   if (!inherited) throw new Error("Missing default limit");

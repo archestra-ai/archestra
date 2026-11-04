@@ -105,6 +105,7 @@ import LlmProviderApiKeyModel from "./llm-provider-api-key";
 import { interactionBelongsToOrganization } from "./log-organization";
 import OrganizationModel from "./organization";
 import RoutingUsageModel from "./routing-usage";
+import TeamModel from "./team";
 import VirtualApiKeyModel from "./virtual-api-key";
 
 /**
@@ -896,6 +897,8 @@ class InteractionModel {
       sessionId?: string;
       startDate?: Date;
       endDate?: Date;
+      /** Rows before this interaction in (createdAt, id) order. */
+      beforeId?: string;
     };
   }): Promise<PaginatedResult<InteractionSummary>> {
     const { pagination, sorting, requestingUserId, isAgentAdmin, filters } =
@@ -939,6 +942,17 @@ class InteractionModel {
     }
     if (filters?.endDate) {
       conditions.push(lte(schema.interactionsTable.createdAt, filters.endDate));
+    }
+    if (filters?.beforeId) {
+      // At the stored precision: the API's timestamps stop at milliseconds,
+      // so only the database can rank rows that share one.
+      conditions.push(
+        sql`(${schema.interactionsTable.createdAt}, ${schema.interactionsTable.id}) < (
+          SELECT ${schema.interactionsTable.createdAt}, ${schema.interactionsTable.id}
+          FROM ${schema.interactionsTable}
+          WHERE ${schema.interactionsTable.id} = ${filters.beforeId}
+        )`,
+      );
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -1014,7 +1028,14 @@ class InteractionModel {
           ),
         )
         .where(whereClause)
-        .orderBy(InteractionModel.getOrderByClause(sorting))
+        // Ties on the sort column break by id, so offset pages never swap
+        // rows that share a timestamp and a row's rank is well defined.
+        .orderBy(
+          InteractionModel.getOrderByClause(sorting),
+          sorting?.sortDirection === "asc"
+            ? asc(schema.interactionsTable.id)
+            : desc(schema.interactionsTable.id),
+        )
         .limit(pagination.limit)
         .offset(pagination.offset),
       db
@@ -1054,6 +1075,9 @@ class InteractionModel {
             : null,
           responseToolNames: preview.success
             ? (preview.data.responseToolNames ?? null)
+            : null,
+          responseToolCalls: preview.success
+            ? (preview.data.responseToolCalls ?? null)
             : null,
           responseTextPreview: preview.success
             ? (preview.data.responseTextPreview ?? null)
@@ -1566,7 +1590,7 @@ class InteractionModel {
       // A credential's billing team takes the place of the agent's teams the
       // caller belongs to.
       const teamIds = interaction.billingTeamId
-        ? [interaction.billingTeamId]
+        ? await TeamModel.getBillingAncestorIds(interaction.billingTeamId)
         : await AgentTeamModel.getCallerTeamsForAgent({
             agentId: interaction.profileId,
             userId: interaction.userId,
@@ -4264,7 +4288,11 @@ function buildSessionPreview(
       ? extractClaudeCodeTitle(data.response)
       : null,
     ...(contentNotStored
-      ? { responseToolNames: [], responseTextPreview: null }
+      ? {
+          responseToolNames: [],
+          responseToolCalls: [],
+          responseTextPreview: null,
+        }
       : buildResponsePreview(data)),
   };
 }
@@ -4532,7 +4560,7 @@ function buildResponsePreview(
   data: InsertInteraction,
 ): Pick<
   InteractionSessionPreview,
-  "responseToolNames" | "responseTextPreview"
+  "responseToolNames" | "responseToolCalls" | "responseTextPreview"
 > {
   try {
     const interaction = new DynamicInteraction({
@@ -4543,13 +4571,18 @@ function buildResponsePreview(
     const responseToolNames = interaction.getToolNamesRequested();
     return {
       responseToolNames,
+      responseToolCalls: interaction.getToolCallsRequested(),
       responseTextPreview:
         responseToolNames.length > 0
           ? null
           : truncatePreview(interaction.getLastAssistantResponse()),
     };
   } catch {
-    return { responseToolNames: [], responseTextPreview: null };
+    return {
+      responseToolNames: [],
+      responseToolCalls: [],
+      responseTextPreview: null,
+    };
   }
 }
 

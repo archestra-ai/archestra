@@ -35,6 +35,10 @@ let breakTheGlass: {
   humanApprovalMode: "block" | "unattended" | "everywhere";
   unapprovableBlockMode: "refuse" | "allow";
   breakTheGlassEnabled: boolean;
+  environmentOverrides: {
+    setting: "humanApprovalMode" | "unapprovableBlockMode";
+    variable: string;
+  }[];
 };
 let revision: number;
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -59,6 +63,7 @@ beforeEach(() => {
     humanApprovalMode: "unattended",
     unapprovableBlockMode: "refuse",
     breakTheGlassEnabled: true,
+    environmentOverrides: [],
   };
   revision = 1;
   server.use(
@@ -260,7 +265,7 @@ test("an administrator changes the Break the glass settings one at a time", asyn
     "Waive everywhere",
   );
   await change(
-    "Soft block",
+    "Other blocked calls",
     "Keep the block",
     /Waive the block/,
     "Waive the block",
@@ -272,11 +277,49 @@ test("an administrator changes the Break the glass settings one at a time", asyn
     /Record only/,
     "Record only",
   );
+  // The Yell tool comes first of the three.
+  expect(
+    screen
+      .getAllByRole("combobox")
+      .map((box) => box.getAttribute("aria-label")),
+  ).toEqual(["Yell tool", "Human approval", "Other blocked calls"]);
   expect(updates).toEqual([
     { humanApprovalMode: "everywhere" },
     { unapprovableBlockMode: "allow" },
     { breakTheGlassEnabled: false },
   ]);
+});
+
+test("describes Other blocked calls and says an explicit block never waives", async () => {
+  show(<OpenAppaBreakTheGlassSettings />);
+  expect(
+    await screen.findByText(/How to handle denials that can't be approved\./),
+  ).toBeVisible();
+  expect(screen.getByText("blocked", { selector: "code" })).toBeVisible();
+});
+
+test("a setting an environment variable sets is shown, locked, with how to unlock it", async () => {
+  breakTheGlass.humanApprovalMode = "block";
+  breakTheGlass.environmentOverrides = [
+    {
+      setting: "humanApprovalMode",
+      variable: "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE",
+    },
+  ];
+  show(<OpenAppaBreakTheGlassSettings />);
+  const locked = await screen.findByRole("combobox", {
+    name: "Human approval",
+  });
+  expect(locked).toHaveTextContent("Block until approved");
+  expect(locked).toBeDisabled();
+  expect(locked).toHaveAccessibleDescription(
+    "Unset ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE to edit this setting.",
+  );
+  // The settings no variable sets stay editable.
+  expect(
+    screen.getByRole("combobox", { name: "Other blocked calls" }),
+  ).toBeEnabled();
+  expect(screen.getByRole("combobox", { name: "Yell tool" })).toBeEnabled();
 });
 
 test.each([
@@ -290,7 +333,7 @@ test.each([
 ])("the Break the glass settings are disabled for %s", async (_name, arrange) => {
   arrange();
   show(<OpenAppaBreakTheGlassSettings />);
-  for (const name of ["Human approval", "Soft block", "Yell tool"])
+  for (const name of ["Yell tool", "Human approval", "Other blocked calls"])
     expect(await screen.findByRole("combobox", { name })).toBeDisabled();
 });
 

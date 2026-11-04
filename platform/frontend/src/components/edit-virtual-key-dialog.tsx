@@ -35,6 +35,7 @@ import {
 } from "@/lib/auth/auth.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useModelPools } from "@/lib/model-pools.query";
+import { useMyTeams } from "@/lib/teams/team.query";
 import { useUpdateVirtualApiKey } from "@/lib/virtual-api-keys.query";
 
 export type EditableVirtualKey =
@@ -85,6 +86,17 @@ export function EditVirtualKeyDialog({
     hasUnsavedChanges(
       { ids: [...grantedPoolIds].sort() },
       { ids: [...modelPoolIds].sort() },
+    );
+  const { data: myTeams = [] } = useMyTeams({ includeDescendants: true });
+  const canManageTeamCap =
+    !!virtualKey?.billingTeamId &&
+    myTeams.some(
+      (team) =>
+        team.myRole === "admin" &&
+        (team.id === virtualKey.billingTeamId ||
+          team.descendantTeams?.some(
+            (child) => child.id === virtualKey.billingTeamId,
+          )),
     );
   const { data: canManageLimits } = useHasPermissions({
     llmLimit: ["update", "delete"],
@@ -299,7 +311,9 @@ export function EditVirtualKeyDialog({
             onBillingTeamIdChange={setBillingTeamId}
             spendCap={spendCap}
             onSpendCapChange={setSpendCap}
-            capLocked={!!virtualKey.spendCap && !canManageLimits}
+            capLocked={
+              !!virtualKey.spendCap && !canManageLimits && !canManageTeamCap
+            }
             currentUsage={virtualKey.spendCap?.currentUsage ?? null}
             estimatedUsage={virtualKey.spendCap?.estimatedUsage ?? false}
           />

@@ -71,8 +71,9 @@ describe("Deployment-wide Guardrails v2 switch", () => {
           enabled,
           unsupportedClientAction: "bypass",
           breakTheGlassEnabled: true,
-          humanApprovalMode: "unattended",
+          humanApprovalMode: "block",
           unapprovableBlockMode: "refuse",
+          environmentOverrides: [],
           annotatorModelId: null,
           annotatorLlmApiKeyId: null,
           featureEnabled,
@@ -163,7 +164,7 @@ describe("Deployment-wide Guardrails v2 switch", () => {
         expect.objectContaining({
           action: "organization.updated",
           before: expect.objectContaining({
-            humanApprovalMode: "unattended",
+            humanApprovalMode: "block",
             unapprovableBlockMode: "refuse",
           }),
           after: expect.objectContaining({
@@ -179,6 +180,58 @@ describe("Deployment-wide Guardrails v2 switch", () => {
       payload: { humanApprovalMode: "always" },
     });
     expect(refused.statusCode).toBe(400);
+  });
+
+  test("an environment variable overrides the stored Break the glass setting, and the API refuses to change it", async () => {
+    await set(true);
+    await GuardrailsDeploymentModel.set({ humanApprovalMode: "everywhere" });
+    const previous = config.openappa.breakTheGlassOverrides;
+    config.openappa.breakTheGlassOverrides = { humanApprovalMode: "block" };
+    try {
+      const read = await app.inject({
+        method: "GET",
+        url: "/api/guardrails-deployment",
+      });
+      expect(read.json()).toMatchObject({
+        humanApprovalMode: "block",
+        unapprovableBlockMode: "refuse",
+        environmentOverrides: [
+          {
+            setting: "humanApprovalMode",
+            variable: "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE",
+          },
+        ],
+      });
+      const refused = await app.inject({
+        method: "PUT",
+        url: "/api/guardrails-deployment",
+        payload: { humanApprovalMode: "unattended" },
+      });
+      expect(refused.statusCode).toBe(400);
+      expect(refused.body).toContain("Unset it to edit this setting");
+      // A setting no variable sets stays editable.
+      const other = await app.inject({
+        method: "PUT",
+        url: "/api/guardrails-deployment",
+        payload: { unapprovableBlockMode: "allow" },
+      });
+      expect(other.statusCode, other.body).toBe(200);
+      expect(other.json()).toMatchObject({
+        humanApprovalMode: "block",
+        unapprovableBlockMode: "allow",
+      });
+    } finally {
+      config.openappa.breakTheGlassOverrides = previous;
+    }
+    // Unset, the stored setting applies again.
+    const stored = await app.inject({
+      method: "GET",
+      url: "/api/guardrails-deployment",
+    });
+    expect(stored.json()).toMatchObject({
+      humanApprovalMode: "everywhere",
+      environmentOverrides: [],
+    });
   });
 
   test("a write that names the removed setting for new sessions is refused and changes nothing", async () => {

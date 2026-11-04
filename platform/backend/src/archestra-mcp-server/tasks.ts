@@ -24,6 +24,7 @@ import {
   A2AArtifactModel,
   A2AMessageModel,
   A2ATaskModel,
+  AgentExcludedSubagentModel,
   AgentModel,
   AgentRunModel,
   AgentTeamModel,
@@ -81,6 +82,7 @@ import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE,
+  type Agent,
   AgentRunAttentionStateSchema,
   type AgentRunLimits,
   type AgentRunLimitsRequest,
@@ -108,6 +110,58 @@ import {
   structuredSuccessResult,
 } from "./helpers";
 import type { ArchestraContext } from "./types";
+
+/**
+ * Verify that `callerAgentId` is permitted to target `targetAgent` as a
+ * subagent when `callerAgentId !== targetAgent.id`.
+ *
+ * Enforces environment isolation, explicit `agent_excluded_subagents` rows,
+ * and `accessAllSubagents: false` custom allowlists (`delegateToAgentId` tools).
+ */
+export async function checkCallerSubagentAccess(
+  callerAgentId: string,
+  targetAgent: Pick<Agent, "id" | "name" | "environmentId">,
+): Promise<
+  | { allowed: true }
+  | { allowed: false; reason: "agent_not_found" | "refused"; message: string }
+> {
+  if (callerAgentId === targetAgent.id) {
+    return { allowed: true };
+  }
+  const callerAgent = await AgentModel.findById(callerAgentId);
+  if (!callerAgent) {
+    return { allowed: true };
+  }
+  if (callerAgent.environmentId !== targetAgent.environmentId) {
+    return {
+      allowed: false,
+      reason: "agent_not_found",
+      message: "Agent not found",
+    };
+  }
+  const excludedSubagentIds =
+    await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(callerAgent.id);
+  if (excludedSubagentIds.includes(targetAgent.id)) {
+    return {
+      allowed: false,
+      reason: "refused",
+      message: `Agent "${targetAgent.name}" is not an allowed subagent of "${callerAgent.name}".`,
+    };
+  }
+  if (!callerAgent.accessAllSubagents) {
+    const delegatedAgentIds = callerAgent.tools
+      .map((tool) => tool.delegateToAgentId)
+      .filter((id): id is string => Boolean(id));
+    if (!delegatedAgentIds.includes(targetAgent.id)) {
+      return {
+        allowed: false,
+        reason: "refused",
+        message: `Agent "${targetAgent.name}" is not an allowed subagent of "${callerAgent.name}".`,
+      };
+    }
+  }
+  return { allowed: true };
+}
 
 /**
  * Start a durable delegated run through the same lifecycle used by the MCP
@@ -168,6 +222,16 @@ async function launchDelegatedTask(params: {
       }))
     ) {
       return failedLaunch("agent_not_found", errorResult("Agent not found"));
+    }
+    const subagentAccess = await checkCallerSubagentAccess(
+      context.agent.id,
+      agent,
+    );
+    if (!subagentAccess.allowed) {
+      return failedLaunch(
+        subagentAccess.reason,
+        errorResult(subagentAccess.message),
+      );
     }
 
     const runtime = resolveAgentRuntime(agent);
@@ -542,8 +606,22 @@ const registry = defineArchestraTools([
     }),
     handler: async ({ args, context }) => {
       try {
+        const actor = requireActor(context);
+        const session = await AgentRunModel.findByTaskId(args.run_id);
+        if (session?.agentId) {
+          const targetAgent = await AgentModel.findById(session.agentId);
+          if (targetAgent) {
+            const subagentAccess = await checkCallerSubagentAccess(
+              context.agent.id,
+              targetAgent,
+            );
+            if (!subagentAccess.allowed) {
+              return errorResult("Saved run not found");
+            }
+          }
+        }
         const result = await deleteAgentWorkspace({
-          actor: requireActor(context),
+          actor,
           taskId: args.run_id,
         });
         return structuredSuccessResult(
@@ -898,7 +976,11 @@ const registry = defineArchestraTools([
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
-        const run = await requireAccessibleRun({ runId: args.run_id, actor });
+        const run = await requireAccessibleRun({
+          runId: args.run_id,
+          actor,
+          callerAgentId: context.agent.id,
+        });
         if ("error" in run) return errorResult(run.error);
         const task = run.row;
 
@@ -1079,6 +1161,19 @@ const registry = defineArchestraTools([
         if (agents.length !== requestedAgentIds.length) {
           return errorResult("Agent not found");
         }
+        for (const agent of agents) {
+          const subagentAccess = await checkCallerSubagentAccess(
+            context.agent.id,
+            agent,
+          );
+          if (!subagentAccess.allowed) {
+            return errorResult(
+              subagentAccess.reason === "agent_not_found"
+                ? "Agent not found"
+                : subagentAccess.message,
+            );
+          }
+        }
 
         if (args.mine_only) {
           const { tasks, totalSize } = await A2ATaskModel.listForActor({
@@ -1216,7 +1311,11 @@ const registry = defineArchestraTools([
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
-        const run = await requireAccessibleRun({ runId: args.run_id, actor });
+        const run = await requireAccessibleRun({
+          runId: args.run_id,
+          actor,
+          callerAgentId: context.agent.id,
+        });
         if ("error" in run) return errorResult(run.error);
 
         const session = await AgentRunModel.findByTaskId(run.row.id);
@@ -1331,7 +1430,11 @@ const registry = defineArchestraTools([
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
-        const run = await requireAccessibleRun({ runId: args.run_id, actor });
+        const run = await requireAccessibleRun({
+          runId: args.run_id,
+          actor,
+          callerAgentId: context.agent.id,
+        });
         if ("error" in run) return errorResult(run.error);
         const task = run.row;
         if (!task.agentId) {
@@ -1398,6 +1501,7 @@ const registry = defineArchestraTools([
         const task = await requireAccessibleTask({
           taskId: args.task_id,
           actor,
+          callerAgentId: context.agent.id,
         });
         if ("error" in task) return errorResult(task.error);
 
@@ -1497,6 +1601,7 @@ const registry = defineArchestraTools([
         const task = await requireAccessibleTask({
           taskId: args.task_id,
           actor,
+          callerAgentId: context.agent.id,
         });
         if ("error" in task) return errorResult(task.error);
 
@@ -1839,13 +1944,18 @@ export function requireActor(context: ArchestraContext): A2AActor {
 async function requireAccessibleRun(params: {
   runId: string;
   actor: A2AActor;
+  callerAgentId?: string;
 }): ReturnType<typeof requireAccessibleTask> {
   const taskId = await AgentRunModel.findCurrentTurnTaskId({
     runId: params.runId,
     organizationId: params.actor.organizationId,
   });
   if (!taskId) return { error: "Run not found" };
-  return requireAccessibleTask({ taskId, actor: params.actor });
+  return requireAccessibleTask({
+    taskId,
+    actor: params.actor,
+    callerAgentId: params.callerAgentId,
+  });
 }
 
 /**
@@ -1856,9 +1966,11 @@ async function requireAccessibleRun(params: {
 async function requireAccessibleTask({
   taskId,
   actor,
+  callerAgentId,
 }: {
   taskId: string;
   actor: A2AActor;
+  callerAgentId?: string;
 }): Promise<
   | { row: Awaited<ReturnType<typeof A2ATaskModel.findById>> & object }
   | { error: string }
@@ -1873,6 +1985,15 @@ async function requireAccessibleTask({
     const agent = await AgentModel.findById(row.agentId);
     if (!agent || agent.organizationId !== actor.organizationId) {
       return notFound;
+    }
+    if (callerAgentId) {
+      const subagentAccess = await checkCallerSubagentAccess(
+        callerAgentId,
+        agent,
+      );
+      if (!subagentAccess.allowed) {
+        return notFound;
+      }
     }
   }
 
@@ -2021,7 +2142,7 @@ async function parentCrossing(params: {
 }
 
 async function protectedFileAccess(params: {
-  context: Parameters<typeof guardRuntimeCrossing>[0];
+  context: Pick<ArchestraContext, "agent" | "openappaRuntimeCall">;
   actor: A2AActor;
   taskId: string;
 }): Promise<
@@ -2036,6 +2157,18 @@ async function protectedFileAccess(params: {
   | { kind: "error"; result: ReturnType<typeof errorResult> }
 > {
   const session = await AgentRunModel.findByTaskId(params.taskId);
+  if (session?.agentId) {
+    const targetAgent = await AgentModel.findById(session.agentId);
+    if (targetAgent) {
+      const subagentAccess = await checkCallerSubagentAccess(
+        params.context.agent.id,
+        targetAgent,
+      );
+      if (!subagentAccess.allowed) {
+        return { kind: "error", result: errorResult("Saved run not found") };
+      }
+    }
+  }
   const workspace = session
     ? await AgentWorkspaceModel.findByWorkloadName(session.workloadName)
     : null;

@@ -85,9 +85,10 @@ export function OpenAppaEnforcementSetting() {
 }
 
 /**
- * Break the glass: what happens to a call waiting for human approval, to a
- * call no remedy can lift (a soft block), and to a session whose agent calls
- * `yell`. One group, since together they say how much Guardrails let through.
+ * Break the glass, in display order: what a yell does to its session (Yell
+ * tool), what happens to a call waiting for human approval (Human approval),
+ * and to a blocked call without an approval option (Other blocked calls).
+ * One group, since together they say how much Guardrails let through.
  */
 export function OpenAppaBreakTheGlassSettings() {
   const deployment = useGuardrailsDeployment({ poll: true });
@@ -97,6 +98,11 @@ export function OpenAppaBreakTheGlassSettings() {
   });
   const data = deployment.data;
   const disabled = !canManage || !data?.featureEnabled || update.isPending;
+  const overriddenBy = (
+    setting: "humanApprovalMode" | "unapprovableBlockMode",
+  ) =>
+    data?.environmentOverrides?.find((each) => each.setting === setting)
+      ?.variable;
   return (
     <SettingsBlock
       id="break-the-glass"
@@ -104,36 +110,6 @@ export function OpenAppaBreakTheGlassSettings() {
       description="Let blocked calls through and record a yell instead of stopping the agent. Use it to see what the policy would block without blocking it."
       contentClassName="divide-y rounded-lg border"
     >
-      <BreakTheGlassRow
-        title="Human approval"
-        description="Calls and remedy plans waiting for human approval."
-        value={data?.humanApprovalMode}
-        disabled={disabled}
-        options={[
-          { value: "block", label: "Block until approved" },
-          {
-            value: "unattended",
-            label: "Waive in unattended sessions",
-            description:
-              "Agent Runtimes, Scheduled tasks, and clients sending X-Archestra-Unattended: 1.",
-          },
-          { value: "everywhere", label: "Waive everywhere" },
-        ]}
-        onChange={(humanApprovalMode) => update.mutate({ humanApprovalMode })}
-      />
-      <BreakTheGlassRow
-        title="Soft block"
-        description="Blocks no approval can lift."
-        value={data?.unapprovableBlockMode}
-        disabled={disabled}
-        options={[
-          { value: "refuse", label: "Keep the block" },
-          { value: "allow", label: "Waive the block" },
-        ]}
-        onChange={(unapprovableBlockMode) =>
-          update.mutate({ unapprovableBlockMode })
-        }
-      />
       <BreakTheGlassRow
         title="Yell tool"
         description="What a yell does to its session: the agent's own, or one for a waived call."
@@ -147,6 +123,44 @@ export function OpenAppaBreakTheGlassSettings() {
         ]}
         onChange={(value) =>
           update.mutate({ breakTheGlassEnabled: value === "off" })
+        }
+      />
+      <BreakTheGlassRow
+        title="Human approval"
+        description="Calls and remedy plans waiting for human approval."
+        value={data?.humanApprovalMode}
+        environmentVariable={overriddenBy("humanApprovalMode")}
+        disabled={disabled}
+        options={[
+          { value: "block", label: "Block until approved" },
+          {
+            value: "unattended",
+            label: "Waive in unattended sessions",
+            description:
+              "Agent Runtimes, Scheduled tasks, and clients sending X-Archestra-Unattended: 1. A workload's remedy plans count too.",
+          },
+          { value: "everywhere", label: "Waive everywhere" },
+        ]}
+        onChange={(humanApprovalMode) => update.mutate({ humanApprovalMode })}
+      />
+      <BreakTheGlassRow
+        title="Other blocked calls"
+        description={
+          <>
+            How to handle denials that can't be approved. Calls explicitly set
+            to <code className="font-mono text-xs">blocked</code> in the policy
+            will never waive.
+          </>
+        }
+        value={data?.unapprovableBlockMode}
+        environmentVariable={overriddenBy("unapprovableBlockMode")}
+        disabled={disabled}
+        options={[
+          { value: "refuse", label: "Keep the block" },
+          { value: "allow", label: "Waive the block" },
+        ]}
+        onChange={(unapprovableBlockMode) =>
+          update.mutate({ unapprovableBlockMode })
         }
       />
     </SettingsBlock>
@@ -389,8 +403,11 @@ function BreakTheGlassRow<T extends string>(props: {
   value: T | undefined;
   disabled: boolean;
   options: { value: T; label: string; description?: string }[];
+  /** The environment variable that sets this setting, while one does. */
+  environmentVariable?: string;
   onChange: (value: T) => void;
 }) {
+  const noteId = `${props.title.replaceAll(" ", "-").toLowerCase()}-env-note`;
   return (
     <div className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)] lg:items-center lg:gap-8">
       <div className="min-w-0 space-y-1">
@@ -400,29 +417,54 @@ function BreakTheGlassRow<T extends string>(props: {
         </div>
       </div>
       {props.value ? (
-        <Select
-          value={props.value}
-          disabled={props.disabled}
-          onValueChange={(value) => {
-            const option = props.options.find((each) => each.value === value);
-            if (option) props.onChange(option.value);
-          }}
-        >
-          <SelectTrigger aria-label={props.title} className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent position="popper" align="end">
-            {props.options.map((option) => (
-              <SelectItem
-                key={option.value}
-                value={option.value}
-                description={option.description}
-              >
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="min-w-0 space-y-1.5">
+          <Select
+            value={props.value}
+            disabled={props.disabled || props.environmentVariable !== undefined}
+            onValueChange={(value) => {
+              const option = props.options.find((each) => each.value === value);
+              if (option) props.onChange(option.value);
+            }}
+          >
+            <SelectTrigger
+              aria-label={props.title}
+              aria-describedby={props.environmentVariable ? noteId : undefined}
+              className="w-full"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper" align="end">
+              {props.options.map((option) => (
+                <SelectItem
+                  key={option.value}
+                  value={option.value}
+                  description={option.description}
+                >
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {props.environmentVariable ? (
+            <p id={noteId} className="text-xs leading-4 text-muted-foreground">
+              Unset{" "}
+              <code className="font-mono">
+                {/* Wrap a long name only after an underscore. */}
+                {props.environmentVariable.split("_").map((part, index) => (
+                  <span key={part}>
+                    {index > 0 ? (
+                      <>
+                        _<wbr />
+                      </>
+                    ) : null}
+                    {part}
+                  </span>
+                ))}
+              </code>{" "}
+              to edit this setting.
+            </p>
+          ) : null}
+        </div>
       ) : (
         <Skeleton className="h-9 w-full" />
       )}

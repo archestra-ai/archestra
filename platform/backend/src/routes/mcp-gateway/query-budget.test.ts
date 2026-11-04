@@ -19,8 +19,11 @@ import {
   UserTokenModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { recordQueries } from "@/test/query-counter";
 import mcpGatewayRoutes from "./index";
+
+setupTestCacheManager();
 
 describe("MCP gateway tools/list query budget", () => {
   let app: FastifyInstance;
@@ -320,7 +323,17 @@ describe("MCP gateway tools/list query budget", () => {
     // One more: the constant check for tools whose installations describe
     // them differently (per-installation descriptions). Seven fewer since a
     // listing shares caller lookups between authentication and the listing.
-    expect(statements.length).toBeLessThanOrEqual(54);
+    // Live credential validation adds one token lookup and one conditional
+    // last-used update. Keep the original budget for the rest of the listing.
+    const credentialQueries = statements.filter(
+      (query) =>
+        query.includes('from "user_token"') ||
+        query.startsWith('update "user_token"'),
+    );
+    expect(credentialQueries).toHaveLength(2);
+    expect(statements.length - credentialQueries.length).toBeLessThanOrEqual(
+      54,
+    );
     // Listing several installations must batch catalog metadata and labels,
     // reuse caller teams, and avoid enriching each server with its users.
     expect(

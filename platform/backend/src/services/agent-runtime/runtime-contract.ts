@@ -115,3 +115,11 @@ export function constructStableRunName(
 export function agentRunLlmSessionId(run: { workloadName: string }): string {
   return run.workloadName;
 }
+
+/** Platform-issued OAuth client ID for per-run Agent Runtime gateway tokens. */
+export const AGENT_RUNTIME_OAUTH_CLIENT_ID = "archestra-agent-runtime";
+
+/** Deterministic OAuth access token row ID for an Agent Runtime run session. */
+export function agentRunGatewayTokenId(runId: string): string {
+  return `agent-run:${runId}`;
+}

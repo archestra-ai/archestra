@@ -35,7 +35,7 @@ import {
   errorResult,
   structuredSuccessResult,
 } from "./helpers";
-import { requireActor } from "./tasks";
+import { checkCallerSubagentAccess, requireActor } from "./tasks";
 
 /**
  * The secret-bearing argument reuses the catalog tools' `environment` shape on
@@ -316,6 +316,17 @@ const registry = defineArchestraTools([
           return errorResult("Agent not found");
         }
         // SPDX-SnippetEnd
+        const subagentAccess = await checkCallerSubagentAccess(
+          context.agent.id,
+          agent,
+        );
+        if (!subagentAccess.allowed) {
+          return errorResult(
+            subagentAccess.reason === "agent_not_found"
+              ? "Agent not found"
+              : subagentAccess.message,
+          );
+        }
 
         const runtime = resolveAgentRuntime(agent);
         if (!runtime) {

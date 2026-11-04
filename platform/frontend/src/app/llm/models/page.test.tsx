@@ -112,6 +112,9 @@ let modelRequests = 0;
 const routerPush = vi.fn();
 
 const server = setupServer(
+  http.get(`${API_ORIGIN}/api/resource-permissions/llmModel/:id/subjects`, () =>
+    HttpResponse.json([]),
+  ),
   http.get(`${API_ORIGIN}/api/llm-provider-models/labels/keys`, () =>
     HttpResponse.json([]),
   ),
@@ -204,6 +207,97 @@ afterAll(() => {
 });
 
 describe("ModelsPage", () => {
+  it("confirms deletion, refreshes the list, and leaves the model visible after a refusal", async () => {
+    keyCreated = true;
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as ReturnType<typeof useHasPermissions>);
+    let deleted = false;
+    let refuse = true;
+    let deletes = 0;
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-models`, () =>
+        HttpResponse.json(deleted ? [] : [model]),
+      ),
+      http.delete(`${API_ORIGIN}/api/llm-models/${model.id}`, () => {
+        deletes++;
+        if (refuse)
+          return HttpResponse.json(
+            {
+              error: {
+                message:
+                  "This model is used by a model pool. Remove that reference before deleting it.",
+                type: "api_conflict_error",
+              },
+            },
+            { status: 409 },
+          );
+        deleted = true;
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      await screen.findByRole(
+        "button",
+        {
+          name: `More actions ${model.modelId}`,
+        },
+        { timeout: 5000 },
+      ),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+    const dialog = screen.getByRole("dialog", { name: "Delete model" });
+    expect(dialog).toHaveTextContent("Recorded requests and spend will remain");
+    expect(dialog).toHaveTextContent(
+      "Only unconfigured entries observed in requests can be removed",
+    );
+    expect(deletes).toBe(0);
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.stringContaining("model pool"),
+        expect.any(Object),
+      ),
+    );
+    expect(screen.getByRole("dialog", { name: "Delete model" })).toBeVisible();
+    expect(toast.success).not.toHaveBeenCalled();
+    refuse = false;
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: `Edit ${model.modelId}` }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(toast.success).toHaveBeenCalledWith("Model deleted");
+  });
+
+  it("disables deletion without global model management permission", async () => {
+    keyCreated = true;
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      await screen.findByRole(
+        "button",
+        {
+          name: `More actions ${model.modelId}`,
+        },
+        { timeout: 5000 },
+      ),
+    );
+    const action = screen.getByRole("menuitem", { name: "Delete" });
+    expect(action).toHaveAttribute("aria-disabled", "true");
+    await user.click(action);
+    expect(
+      screen.queryByRole("dialog", { name: "Delete model" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("round-trips precise price defaults while setting and resetting unknown cache prices", async () => {
     keyCreated = true;
     vi.mocked(useHasPermissions).mockReturnValue({

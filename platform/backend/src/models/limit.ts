@@ -58,6 +58,7 @@ import {
 import LlmThroughputModel from "./llm-throughput";
 import ModelModel from "./model";
 import type { ProxyRequestState } from "./proxy-request-context";
+import TeamModel from "./team";
 
 type LimitsCleanupOptionsEntities = {
   [K in Exclude<LimitEntityType, "team" | "virtual_key">]?: string;
@@ -1532,6 +1533,27 @@ class LimitModel {
     }
   }
 
+  /** Whether missing user identity could evade any member's hard LLM limit. */
+  static async hasHardUserLimits(organizationId: string): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.limitsTable.id })
+      .from(schema.limitsTable)
+      .innerJoin(
+        schema.membersTable,
+        eq(schema.membersTable.userId, schema.limitsTable.entityId),
+      )
+      .where(
+        and(
+          eq(schema.limitsTable.entityType, "user"),
+          eq(schema.limitsTable.limitType, "token_cost"),
+          eq(schema.limitsTable.behavior, "hard"),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    return !!row;
+  }
+
   /**
    * A limit reached through several entity refs accrues once per ref. Rows are
    * written in limit id order so concurrent statements lock them in the same
@@ -1666,6 +1688,8 @@ export class LimitValidationService {
      * hard budget applies to it, whatever models the budget lists.
      */
     unmeteredOperation?: boolean;
+    /** Only proof-authenticated platform calls or verified service accounts. */
+    allowUnattributed?: boolean;
     agentId: string;
     userId?: string;
     virtualKeyId?: string;
@@ -1722,7 +1746,8 @@ export class LimitValidationService {
       // credential's billing team when it has one, otherwise the agent's teams
       // the caller belongs to.
       const agentTeamIds = params.billingTeamId
-        ? [params.billingTeamId]
+        ? (snapshot?.limitTeamIds ??
+          (await TeamModel.getBillingAncestorIds(params.billingTeamId)))
         : (snapshot?.limitTeamIds ??
           (await AgentTeamModel.getCallerTeamsForAgent({
             agentId,
@@ -1840,6 +1865,23 @@ export class LimitValidationService {
           organizationId,
           environmentId,
         }));
+      // An unidentified caller cannot safely select a member's cap. Require
+      // identity whenever hard user limits exist, including model-scoped caps:
+      // routing or changing models must not provide an anonymous escape hatch.
+      // Team-billed credentials have a server-selected payer of their own.
+      if (
+        !userId &&
+        !params.billingTeamId &&
+        !params.allowUnattributed &&
+        organizationId &&
+        (defaultUserLimit ||
+          (await LimitModel.hasHardUserLimits(organizationId)))
+      ) {
+        throw new ApiError(
+          401,
+          "A user credential is required because user limits are configured. Use a personal virtual key, user OAuth, or a passthrough virtual key; identity headers cannot authenticate a user.",
+        );
+      }
       if (scopedLimits.some((limit) => limit.cleanupDue)) {
         await LimitModel.cleanupLimitsIfNeeded({ entities });
         // Cleanup changes usage: validation must read its committed result.

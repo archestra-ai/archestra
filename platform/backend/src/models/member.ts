@@ -24,6 +24,7 @@ import {
 } from "@/database/utils/pagination";
 import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
 import logger from "@/logging";
+import TeamModel from "./team";
 
 class MemberModel {
   /**
@@ -265,25 +266,33 @@ class MemberModel {
       ? undefined
       : and(
           sql`${table.id} <> ${params.viewerId}`,
-          exists(
-            db
-              .select({ one: sql`1` })
-              .from(viewerMembership)
-              .innerJoin(
-                schema.teamMembersTable,
-                eq(viewerMembership.teamId, schema.teamMembersTable.teamId),
-              )
-              .innerJoin(
-                schema.teamsTable,
-                eq(schema.teamsTable.id, viewerMembership.teamId),
-              )
-              .where(
-                and(
-                  eq(viewerMembership.userId, params.viewerId),
-                  eq(schema.teamMembersTable.userId, table.id),
-                  eq(schema.teamsTable.organizationId, params.organizationId),
+          or(
+            sql`EXISTS (SELECT 1 FROM team_member lead_membership
+            INNER JOIN team lead_team ON lead_team.id = lead_membership.team_id
+            WHERE lead_membership.user_id = ${params.viewerId}
+              AND lead_membership.role = 'admin'
+              AND lead_team.organization_id = ${params.organizationId}
+              AND ${TeamModel.effectiveMembershipCondition({ userId: table.id, teamIdColumn: sql`lead_membership.team_id` })})`,
+            exists(
+              db
+                .select({ one: sql`1` })
+                .from(viewerMembership)
+                .innerJoin(
+                  schema.teamMembersTable,
+                  eq(viewerMembership.teamId, schema.teamMembersTable.teamId),
+                )
+                .innerJoin(
+                  schema.teamsTable,
+                  eq(schema.teamsTable.id, viewerMembership.teamId),
+                )
+                .where(
+                  and(
+                    eq(viewerMembership.userId, params.viewerId),
+                    eq(schema.teamMembersTable.userId, table.id),
+                    eq(schema.teamsTable.organizationId, params.organizationId),
+                  ),
                 ),
-              ),
+            ),
           ),
         );
     const rows = await db

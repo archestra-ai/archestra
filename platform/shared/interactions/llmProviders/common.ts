@@ -4,6 +4,9 @@ import type { PartialUIMessage } from "../types";
 export type Interaction =
   archestraApiTypes.GetInteractionsResponses["200"]["data"][number];
 
+/** A tool call a response asked for: the provider's id and the tool's name. */
+export type RequestedToolCall = { id: string; name: string };
+
 export interface InteractionUtils {
   modelName: string;
 
@@ -26,6 +29,13 @@ export interface InteractionUtils {
    * Get the names of the tools requested in the response (tool calls that LLM wants to execute)
    */
   getToolNamesRequested(): string[];
+
+  /**
+   * The tool calls the response requested, each with the id the provider gave
+   * it, in response order. Optional: wires that correlate by name alone (or
+   * request no tools) leave it out.
+   */
+  getToolCallsRequested?(): RequestedToolCall[];
 
   getLastUserMessage(): string;
   getLastAssistantResponse(): string;

@@ -47,7 +47,11 @@ import {
   mustExist,
   test,
 } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import mcpGatewayRoutes from "./index";
+
+setupTestCacheManager();
+
 import { MCP_SERVER_INFO_META_KEY } from "./protocol";
 
 /**

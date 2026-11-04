@@ -226,6 +226,14 @@ type AgentCatalogCandidatePage = {
 };
 
 class AgentModel {
+  /** SRE is built-in for ownership and grants but remains a user-facing agent. */
+  private static isRegularOrSreAgent(): SQL {
+    return or(
+      eq(schema.agentsTable.builtIn, false),
+      sql`${schema.agentsTable.builtInAgentConfig}->>'name' = ${BUILT_IN_AGENT_IDS.SRE}`,
+    ) as SQL;
+  }
+
   /**
    * Process-local cache for {@link AgentModel.resolveIdFromIdOrSlug}. The
    * lookup runs on every MCP-gateway request before auth, so under load it is
@@ -378,7 +386,9 @@ class AgentModel {
   static async findBasicByOrganizationIdAndIds(params: {
     organizationId: string;
     agentIds: string[];
-  }): Promise<Array<Pick<Agent, "id" | "name" | "agentType">>> {
+  }): Promise<
+    Array<Pick<Agent, "id" | "name" | "agentType" | "environmentId">>
+  > {
     const { organizationId, agentIds } = params;
 
     if (agentIds.length === 0) {
@@ -390,6 +400,7 @@ class AgentModel {
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
         agentType: schema.agentsTable.agentType,
+        environmentId: schema.agentsTable.environmentId,
       })
       .from(schema.agentsTable)
       .where(
@@ -794,6 +805,8 @@ class AgentModel {
        */
       skipExclusionPrefill?: boolean;
       initialPermissionGrants?: ResourcePermissionGrant[];
+      /** A system-seeded agent can retain its author without an individual grant. */
+      grantAuthor?: boolean;
       /** Publish to the whole organization; for system callers only. */
       publishToOrganization?: boolean;
       /**
@@ -858,6 +871,7 @@ class AgentModel {
       },
       {
         grants: options?.initialPermissionGrants,
+        grantAuthor: options?.grantAuthor,
         publishToOrganization: options?.publishToOrganization,
       },
     );
@@ -1124,7 +1138,6 @@ class AgentModel {
     // SPDX-SnippetEnd
     const where = and(
       base,
-      pattern ? undefined : eq(table.builtIn, false),
       or(
         eq(table.authorId, params.userId),
         nonPersonalAudience,
@@ -1140,7 +1153,6 @@ class AgentModel {
       return AgentModel.findChatOrderedRosterPage({
         where: and(
           base,
-          pattern ? undefined : eq(table.builtIn, false),
           pattern
             ? or(ilike(table.name, pattern), ilike(table.description, pattern))
             : undefined,
@@ -1612,7 +1624,7 @@ class AgentModel {
         and(
           eq(schema.agentsTable.organizationId, organizationId),
           eq(schema.agentsTable.agentType, "agent"),
-          eq(schema.agentsTable.builtIn, false),
+          AgentModel.isRegularOrSreAgent(),
           notDeleted(schema.agentsTable),
         ),
       );
@@ -1746,7 +1758,7 @@ class AgentModel {
   }
 
   /**
-   * Internal agents (not built-in) the user can use, for the agent picker in
+   * Internal agents and the SRE agent the user can use, for the agent picker in
    * Teams/Slack/etc. A channel is shared, so it leaves personal agents out. A
    * direct message is the user's own, so it keeps them.
    */
@@ -1767,7 +1779,7 @@ class AgentModel {
         and(
           eq(schema.agentsTable.organizationId, params.organizationId),
           eq(schema.agentsTable.agentType, "agent"),
-          eq(schema.agentsTable.builtIn, false),
+          AgentModel.isRegularOrSreAgent(),
           notDeleted(schema.agentsTable),
           ResourcePermissionPolicyModel.grantCondition({
             ...principal,
@@ -1809,7 +1821,7 @@ class AgentModel {
       .where(
         and(
           eq(schema.agentsTable.agentType, "agent"),
-          eq(schema.agentsTable.builtIn, false),
+          AgentModel.isRegularOrSreAgent(),
           not(agentAudienceIs("personal")),
           notDeleted(schema.agentsTable),
         ),
@@ -1838,7 +1850,7 @@ class AgentModel {
       .where(
         and(
           eq(schema.agentsTable.agentType, "agent"),
-          eq(schema.agentsTable.builtIn, false),
+          AgentModel.isRegularOrSreAgent(),
           or(
             not(agentAudienceIs("personal")),
             eq(schema.agentsTable.authorId, userId),
@@ -2514,23 +2526,23 @@ class AgentModel {
     ) {
       whereConditions.push(
         agentAudienceIs(filters.scope),
-        eq(schema.agentsTable.builtIn, false),
+        AgentModel.isRegularOrSreAgent(),
       );
     }
-    // Chat selection keeps the system assistant visible to every member; the
-    // platform's other built-in agents stay hidden. Non-admins get the same
-    // limit whatever scope they ask for.
+    // SRE stays in the user-facing catalog wherever its grants permit it.
+    // Chat selection also includes the system assistant when enabled; the
+    // platform's other built-in agents stay hidden.
     if (!isAgentAdmin || (!includeBuiltIn && !filters?.scope)) {
       whereConditions.push(
-        chatAssistant
-          ? (or(
-              eq(schema.agentsTable.builtIn, false),
-              eq(
+        or(
+          AgentModel.isRegularOrSreAgent(),
+          chatAssistant
+            ? eq(
                 sql<string>`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`,
                 BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
-              ),
-            ) as SQL)
-          : eq(schema.agentsTable.builtIn, false),
+              )
+            : undefined,
+        ) as SQL,
       );
     }
     if (filters?.teamIds?.length) {
@@ -3425,7 +3437,7 @@ class AgentModel {
    * {@link ToolModel.getMcpToolsAccessibleToUser} — the dynamic surface for
    * `agents.access_all_subagents`. Admins see every internal agent.
    *
-   * Built-in agents back platform machinery and are excluded.
+   * Built-in platform agents are excluded except for the user-facing SRE agent.
    */
   static async findAccessibleDelegationTargets(params: {
     userId: string;
@@ -3450,7 +3462,7 @@ class AgentModel {
     const baseConditions = [
       eq(schema.agentsTable.organizationId, organizationId),
       eq(schema.agentsTable.agentType, "agent"),
-      eq(schema.agentsTable.builtIn, false),
+      AgentModel.isRegularOrSreAgent(),
       ne(schema.agentsTable.id, excludeAgentId),
       environmentId === null
         ? isNull(schema.agentsTable.environmentId)
@@ -4123,7 +4135,7 @@ class AgentModel {
           eq(schema.agentsTable.id, params.id),
           eq(schema.agentsTable.organizationId, params.organizationId),
           eq(schema.agentsTable.agentType, "agent"),
-          eq(schema.agentsTable.builtIn, false),
+          AgentModel.isRegularOrSreAgent(),
           notDeleted(schema.agentsTable),
         ),
       )
@@ -5436,6 +5448,7 @@ class AgentModel {
     values: typeof schema.agentsTable.$inferInsert,
     permissions: {
       grants?: ResourcePermissionGrant[];
+      grantAuthor?: boolean;
       publishToOrganization?: boolean;
     },
   ) {
@@ -5475,7 +5488,7 @@ class AgentModel {
             resource: row.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
             scope: row.id,
             grants: permissions.grants,
-            authorId: row.authorId,
+            authorId: permissions.grantAuthor === false ? null : row.authorId,
             publishToOrganization: permissions.publishToOrganization,
           });
           // SPDX-SnippetEnd
@@ -5819,6 +5832,9 @@ class AgentModel {
     // platform subagents remain excluded from ordinary chat selection.
     if (options?.excludeBuiltIn || !isAgentAdmin || isChatView) {
       const visibleAgents = [eq(schema.agentsTable.builtIn, false)];
+      if (isChatView) {
+        visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.SRE));
+      }
       if (isChatView && enterpriseTier.isOpenappaActive()) {
         visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG));
       }
@@ -5903,6 +5919,9 @@ class AgentModel {
     if (options.excludeBuiltIn || !isAgentAdmin || isChatView) {
       const builtInName = sql<string>`coalesce(${table.builtInAgentConfig}->>'name', '')`;
       const visibleAgents = [eq(table.builtIn, false)];
+      if (isChatView) {
+        visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.SRE));
+      }
       if (isChatView && enterpriseTier.isOpenappaActive()) {
         visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG));
       }

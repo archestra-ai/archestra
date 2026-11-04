@@ -1,10 +1,12 @@
 "use client";
 
 import {
+  ADMIN_ROLE_NAME,
   getRoleDisplayName,
   PredefinedRoleNameSchema,
 } from "@archestra/shared";
-import { useState } from "react";
+import { ShieldCheck } from "lucide-react";
+import dynamic from "next/dynamic";
 import {
   AccountRow,
   AccountRowMuted,
@@ -12,15 +14,33 @@ import {
 } from "@/app/account/_components/account-rows";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RoleOptionLabel } from "@/components/role-type-icon";
-import { PermissionsCard } from "@/components/settings/permissions-card";
 import { SettingsSection } from "@/components/settings-section";
-import { StandardDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAllPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useSession } from "@/lib/auth/auth.query";
+import { usePermissionSources } from "@/lib/auth/permission-sources.query";
 import { useActiveMemberRole } from "@/lib/organization.query";
 import { useMyTeams } from "@/lib/teams/team.query";
+
+const PermissionsRows = dynamic(
+  () =>
+    // biome-ignore lint/style/noRestrictedImports: dual-licensed at request time
+    import("@/app/account/_components/permissions-rows.ee").then((m) => ({
+      default: m.PermissionsRows,
+    })),
+  {
+    loading: () => (
+      <AccountRow label="Permissions">
+        <Skeleton className="h-5 w-32" />
+      </AccountRow>
+    ),
+  },
+);
 
 /**
  * What you have in the organization: your roles, your teams, and what the two
@@ -30,85 +50,103 @@ import { useMyTeams } from "@/lib/teams/team.query";
  * settings aren't reachable to members, so this is the one place a member can
  * see which teams they're in.
  *
- * The full permission matrix is a reference you open on purpose, not something
- * to scroll past on every visit, so it lives behind View.
+ * The permissions are a reference you open on purpose, not something to
+ * scroll past on every visit, so the row shows the count and unfolds the
+ * list, the same one the roles pages draw, inside the box.
  */
 export function AccessSection() {
-  const [isPermissionsOpen, setIsPermissionsOpen] = useState(false);
-
   return (
     <SettingsSection
       title="Access"
-      description="Assigned by your organization admin."
+      description="Your roles and teams, and the permissions they add up to."
     >
       <AccountRows label="Access">
-        <AccountRow label="Role">
-          <RoleValue />
+        <AccountRow label="Roles">
+          <RolesValue />
         </AccountRow>
         <AccountRow label="Teams">
           <TeamsValue />
         </AccountRow>
-        <AccountRow
-          label="Permissions"
-          action={
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setIsPermissionsOpen(true)}
-            >
-              View
-            </Button>
-          }
-        >
-          <PermissionCountValue />
-        </AccountRow>
+        <PermissionsRows />
       </AccountRows>
-      <StandardDialog
-        open={isPermissionsOpen}
-        onOpenChange={setIsPermissionsOpen}
-        title="Your permissions"
-        description="What your roles and teams let you do. Pick a permission to see where it comes from."
-        size="medium"
-      >
-        <PermissionsCard />
-      </StandardDialog>
     </SettingsSection>
   );
 }
 
-function RoleValue() {
+/**
+ * The roles held directly, then the ones a team passes on. A role held both
+ * ways is listed once, as held directly.
+ */
+function RolesValue() {
   const { data: session, isPending: isSessionPending } = useSession();
   const hasActiveOrganization = !!session?.session?.activeOrganizationId;
   const { data: role, isPending: isRolePending } = useActiveMemberRole();
+  const {
+    data: sources,
+    isPending: isSourcesPending,
+    isLoadingError: isSourcesError,
+    refetch: refetchSources,
+  } = usePermissionSources();
 
   // The role query stays pending forever for a user with no active
   // organization (it never enables), so its wait only counts when the session
-  // says there is an organization to have a role in.
-  if (isSessionPending || (hasActiveOrganization && isRolePending)) {
+  // says there is an organization to have a role in. The team-granted roles
+  // come from the sources query, so "None" waits for that one too.
+  if (
+    isSessionPending ||
+    (hasActiveOrganization && (isRolePending || isSourcesPending))
+  ) {
     return <Skeleton className="h-5 w-24" />;
   }
 
-  const roles = (role ?? "")
+  const direct = (role ?? "")
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
+  const viaTeam = (sources ?? []).filter(
+    (source) => source.team && !direct.includes(source.role),
+  );
 
-  if (roles.length === 0) return <AccountRowMuted>None</AccountRowMuted>;
+  if (direct.length === 0 && viaTeam.length === 0 && !isSourcesError) {
+    return <AccountRowMuted>None</AccountRowMuted>;
+  }
 
   return (
-    <ul aria-label="Assigned roles" className="flex flex-wrap gap-1.5">
-      {roles.map((value) => (
-        <li key={value}>
-          <Badge variant="secondary" className="gap-1.5 font-normal">
-            <RoleOptionLabel
-              predefined={PredefinedRoleNameSchema.safeParse(value).success}
-              label={getRoleDisplayName(value)}
-            />
-          </Badge>
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-2">
+      {(direct.length > 0 || viaTeam.length > 0) && (
+        <ul aria-label="Assigned roles" className="flex flex-wrap gap-1.5">
+          {direct.map((value) => (
+            <li key={value}>
+              <RoleBadge role={value} />
+            </li>
+          ))}
+          {viaTeam.map((source) => (
+            <li key={`${source.role}:${source.team?.id}`}>
+              <RoleBadge role={source.role} via={source.team?.name} />
+            </li>
+          ))}
+        </ul>
+      )}
+      {isSourcesError && (
+        <QueryLoadError
+          className="py-1"
+          title="Couldn't load the roles your teams grant"
+          onRetry={() => refetchSources()}
+        />
+      )}
+    </div>
+  );
+}
+
+function RoleBadge({ role, via }: { role: string; via?: string }) {
+  return (
+    <Badge variant="secondary" className="gap-1.5 font-normal">
+      <RoleOptionLabel
+        predefined={PredefinedRoleNameSchema.safeParse(role).success}
+        label={getRoleDisplayName(role)}
+      />
+      {via && <span className="text-muted-foreground">via {via}</span>}
+    </Badge>
   );
 }
 
@@ -135,36 +173,24 @@ function TeamsValue() {
         <li key={team.id}>
           <Badge
             variant="secondary"
-            className="font-normal"
+            className="gap-1 font-normal"
             title={team.description ?? undefined}
           >
             {team.name}
-            {team.myRole && team.myRole !== "member" && (
-              <span className="text-muted-foreground capitalize">
-                · {team.myRole}
-              </span>
+            {team.myRole === ADMIN_ROLE_NAME && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex text-muted-foreground">
+                    <ShieldCheck className="size-3" aria-hidden="true" />
+                    <span className="sr-only">Team admin</span>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>You're an admin of this team</TooltipContent>
+              </Tooltip>
             )}
           </Badge>
         </li>
       ))}
     </ul>
-  );
-}
-
-function PermissionCountValue() {
-  const { data: permissions, isLoading, isError } = useAllPermissions();
-
-  if (isLoading) return <Skeleton className="h-5 w-32" />;
-  if (isError) return <AccountRowMuted>Couldn't load</AccountRowMuted>;
-
-  const granted = Object.values(permissions ?? {}).reduce(
-    (sum, actions) => sum + (actions?.length ?? 0),
-    0,
-  );
-  if (granted === 0) return <AccountRowMuted>None</AccountRowMuted>;
-  return (
-    <span>
-      <span className="font-mono tabular-nums">{granted}</span> granted
-    </span>
   );
 }

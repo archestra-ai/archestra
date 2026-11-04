@@ -149,10 +149,7 @@ describe("RoleDetailPage", () => {
     expect(lastHeader().description).toMatch(/Full access/);
   });
 
-  it("the usage tab lists the users holding the role directly", async () => {
-    vi.mocked(useSearchParams).mockReturnValue(
-      new URLSearchParams("tab=usage") as never,
-    );
+  it("lists the users holding the role directly, above the permissions", async () => {
     let roleFilter: string | null = null;
     server.use(
       http.get(`${API_ORIGIN}/api/members`, ({ request }) => {
@@ -184,15 +181,51 @@ describe("RoleDetailPage", () => {
       }),
     );
     renderPage("role-1");
-    const users = await screen.findByRole("region", { name: "Users" });
+    // No team or service account holds it, so the Users tile opens by itself.
+    const users = await screen.findByRole("tab", { name: /Users/ });
+    await waitFor(() => expect(users).toHaveAttribute("aria-selected", "true"));
+    const panel = screen.getByRole("tabpanel");
     await waitFor(() =>
-      expect(within(users).getByText("Ada Lovelace")).toBeVisible(),
+      expect(within(panel).getByText("Ada Lovelace")).toBeVisible(),
     );
     // The API filters by the role's identifier, not its display name.
     expect(roleFilter).toBe("reviewer");
-    expect(screen.queryByRole("region", { name: "Agents" })).toBeNull();
+    // Both sections share the page: usage first, then the permissions.
+    const usage = screen.getByRole("heading", { name: "Usage" });
+    const permissions = screen.getByRole("heading", { name: "Permissions" });
     expect(
-      lastHeader().tabs?.find((tab) => tab.label === "Usage")?.selected,
-    ).toBe(true);
+      usage.compareDocumentPosition(permissions) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Agents" })).toBeVisible();
+  });
+
+  it("keeps the permissions readable for a viewer who may not list people", async () => {
+    // Only the people lists need their own read permissions; the role page
+    // itself does not, so it must not ask for them on the viewer's behalf.
+    vi.mocked(useHasPermissions).mockImplementation(((permissions: object) => ({
+      data: !(
+        "team" in permissions ||
+        "member" in permissions ||
+        "serviceAccount" in permissions
+      ),
+    })) as never);
+    const asked: string[] = [];
+    server.events.on("request:start", ({ request }) => {
+      asked.push(new URL(request.url).pathname);
+    });
+
+    renderPage("role-1");
+
+    expect(
+      await screen.findByText(
+        "You don't have permission to see who holds this role.",
+      ),
+    ).toBeVisible();
+    expect(await screen.findByRole("region", { name: "Agents" })).toBeVisible();
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(asked).not.toContain("/api/teams");
+    expect(asked).not.toContain("/api/members");
+    expect(asked).not.toContain("/api/service-accounts");
   });
 });

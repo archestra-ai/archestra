@@ -292,6 +292,33 @@ async function startAgentRunSession(params: {
     replacePriorAttempt: params.replacePriorAttempt,
   });
 
+  if (params.title === undefined && !resumeWithoutPrompt) {
+    trackBackgroundWork(
+      generateAgentRunTitle({
+        taskId: params.taskId,
+        workloadName: spec.frozenName,
+        prompt: params.task ?? "Run",
+        organizationId: params.organizationId,
+        userId: params.titleUserId,
+        modelId: params.modelId,
+        llmApiKeyId: params.llmApiKeyId,
+      })
+        .then((title) =>
+          AgentRunModel.updateTitleIfCurrent({
+            taskId: params.taskId,
+            expectedTitle: placeholderTitle,
+            title,
+          }),
+        )
+        .catch((error) => {
+          logger.warn(
+            { error, taskId: params.taskId },
+            "Could not generate an Agent run title",
+          );
+        }),
+    );
+  }
+
   let claimedWorkspace = false;
   let createdWorkspace:
     | Awaited<ReturnType<typeof AgentWorkspaceModel.create>>
@@ -438,33 +465,6 @@ async function startAgentRunSession(params: {
       );
     }
     throw launchFailure;
-  }
-
-  if (params.title === undefined && !resumeWithoutPrompt) {
-    trackBackgroundWork(
-      generateAgentRunTitle({
-        taskId: params.taskId,
-        workloadName: spec.frozenName,
-        prompt: params.task ?? "Run",
-        organizationId: params.organizationId,
-        userId: params.titleUserId,
-        modelId: params.modelId,
-        llmApiKeyId: params.llmApiKeyId,
-      })
-        .then((title) =>
-          AgentRunModel.updateTitleIfCurrent({
-            taskId: params.taskId,
-            expectedTitle: placeholderTitle,
-            title,
-          }),
-        )
-        .catch((error) => {
-          logger.warn(
-            { error, taskId: params.taskId },
-            "Could not generate an Agent run title",
-          );
-        }),
-    );
   }
 
   return session;

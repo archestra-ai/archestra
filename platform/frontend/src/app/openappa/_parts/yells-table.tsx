@@ -478,8 +478,11 @@ function TimeCell({ yell }: { yell: OpenAppaYell }) {
       <Faded yell={yell} className="flex">
         <LogTime showTooltip={false} timestamp={yell.createdAt} />
       </Faded>
-      <BrokeTheGlassMark yell={yell} />
-      <WaivedCallMark yell={yell} />
+      {yell.kind === "agent" ? (
+        <BrokeTheGlassMark yell={yell} />
+      ) : (
+        <WaivedCallMark yell={yell} />
+      )}
     </div>
   );
 }

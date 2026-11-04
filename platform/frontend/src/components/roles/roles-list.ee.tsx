@@ -173,7 +173,7 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
           <div>
             <Link
               href={`/settings/roles/${role.id}`}
-              className="font-medium capitalize hover:underline"
+              className="font-medium capitalize"
             >
               {role.name}
             </Link>

@@ -2571,14 +2571,6 @@ const config = {
      * them can move the registry and pin the tag; the tag otherwise follows
      * the platform version.
      */
-    /**
-     * Pre-pull the whole catalog onto every runtime node at startup and on
-     * each platform version, so a cold-started Agent does not wait on a
-     * multi-GB pull. Off in local development (Tilt), where it would pull
-     * every image for every release onto a laptop.
-     */
-    imagePrefetchEnabled:
-      process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_PREFETCH_ENABLED !== "false",
     catalogImages: getAgentCatalogImages({
       registry:
         process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY?.trim() ||
@@ -2587,6 +2579,14 @@ const config = {
         process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG?.trim() ||
         getAgentCatalogImageTag(appVersion),
     }),
+    /**
+     * Pre-pull the whole catalog onto every runtime node at startup and on
+     * each platform version, so a cold-started Agent does not wait on a
+     * multi-GB pull. Off in local development (Tilt), where it would pull
+     * every image for every release onto a laptop.
+     */
+    imagePrefetchEnabled:
+      process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_PREFETCH_ENABLED !== "false",
     /** Fallback lifetime cap for Agent Runtime runs whose agent sets none. */
     defaultTtlHours: parsePositiveInt(
       process.env.ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS,

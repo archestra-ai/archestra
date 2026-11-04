@@ -396,4 +396,80 @@ describe("PATCH /api/llm-virtual-keys/:id", () => {
     expect(response.json().name).toBe("renamed-by-admin");
     expect(response.json().authorId).toBe(target.id);
   });
+
+  test("turns automatic rotation on, keeps its schedule across edits, and off", async () => {
+    const { virtualKey } = await VirtualApiKeyModel.create({
+      organizationId,
+      name: "Scheduled",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: user.id,
+    });
+    const patch = (body: Record<string, unknown>) =>
+      app.inject({
+        method: "PATCH",
+        url: `/api/llm-virtual-keys/${virtualKey.id}`,
+        payload: { name: "Scheduled", keyType: "passthrough", ...body },
+      });
+
+    const enabled = await patch({ rotationIntervalSeconds: 30 * DAY_SECONDS });
+    expect(enabled.statusCode, enabled.body).toBe(200);
+    expect(enabled.json()).toMatchObject({
+      rotationIntervalSeconds: 30 * DAY_SECONDS,
+      rotationGracePeriodSeconds: DAY_SECONDS,
+    });
+    const nextRotationAt = enabled.json().nextRotationAt;
+    expect(new Date(nextRotationAt).getTime()).toBeGreaterThan(
+      Date.now() + 29 * DAY_SECONDS * 1000,
+    );
+
+    // An edit that leaves the interval alone does not restart the schedule.
+    const renamed = await patch({
+      name: "Renamed",
+      rotationGracePeriodSeconds: 3600,
+    });
+    expect(renamed.json()).toMatchObject({
+      rotationGracePeriodSeconds: 3600,
+      nextRotationAt,
+    });
+    const untouched = await patch({});
+    expect(untouched.json()).toMatchObject({
+      rotationIntervalSeconds: 30 * DAY_SECONDS,
+      nextRotationAt,
+    });
+
+    const disabled = await patch({ rotationIntervalSeconds: null });
+    expect(disabled.json()).toMatchObject({
+      rotationIntervalSeconds: null,
+      rotationGracePeriodSeconds: null,
+      nextRotationAt: null,
+    });
+  });
+
+  test("rejects a rotation grace period that is not shorter than the interval", async () => {
+    const { virtualKey } = await VirtualApiKeyModel.create({
+      organizationId,
+      name: "Scheduled",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: user.id,
+    });
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-virtual-keys/${virtualKey.id}`,
+      payload: {
+        name: "Scheduled",
+        keyType: "passthrough",
+        rotationIntervalSeconds: DAY_SECONDS,
+        rotationGracePeriodSeconds: DAY_SECONDS,
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(
+      (await VirtualApiKeyModel.findById(virtualKey.id))
+        ?.rotationIntervalSeconds,
+    ).toBeNull();
+  });
 });
+
+const DAY_SECONDS = 24 * 60 * 60;

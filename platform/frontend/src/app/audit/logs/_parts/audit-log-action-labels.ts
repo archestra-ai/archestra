@@ -252,6 +252,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   // Virtual API key
   "virtualApiKey.created": "Virtual API key created",
   "virtualApiKey.deleted": "Virtual API key deleted",
+  "virtualApiKey.rotated": "Virtual API key rotated",
   "virtualApiKey.bulk_deleted": "Virtual API keys bulk deleted",
   // Auth surface
   "auth.impersonation_started": "Impersonation started",

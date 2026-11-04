@@ -1170,6 +1170,8 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.UpdateVirtualApiKey]: {},
   [RouteId.DeleteVirtualApiKey]: {},
+  // Authorized per key in the handler, like an update.
+  [RouteId.RotateVirtualApiKey]: {},
   [RouteId.BulkDeleteVirtualApiKeys]: {},
   // Which OAuth clients a caller reaches, and what they may do to each, is a
   // grant on the client. Creating one still takes the role action: there is

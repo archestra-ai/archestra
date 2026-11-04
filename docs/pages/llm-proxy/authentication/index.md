@@ -3,7 +3,7 @@ title: LLM Proxy Authentication
 sidebarTitle: Authentication
 description: How apps, agents, and people sign in to the LLM Proxy, and whose provider key each call uses
 order: 1
-lastUpdated: 2026-11-03
+lastUpdated: 2026-11-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -74,6 +74,25 @@ Use your own subscription or key, and still show up in costs and logs. Claude Co
 - The passthrough key only says who you are. It gives no access to Archestra's provider keys.
 - It belongs to one person.
 - <span id="direct-provider-api-key"></span>Without it, the call is rejected with `401`. A provider key alone is not accepted. See [Allow Requests Without a Virtual Key](#allow-requests-without-a-virtual-key).
+
+## Rotate a Virtual Key
+
+Replace a key's value and keep everything else: its name, providers, access, budget, and logs stay the same. Apps only swap the value they send.
+
+1. On the virtual keys list, open the key's actions and click **Rotate**.
+2. Under **Current value keeps working**, pick how long apps can still use the old value: stop immediately, 1 hour, 24 hours, or 7 days.
+3. Click **Rotate key** and copy the new value. Old and new values both work until the grace period ends.
+
+- Rotating takes the `update` action on the key, through [Granular Access Control](/docs/admin/access-control#granular-access-control). Only the key's creator sees the new value. Anyone else who rotates it sees no value, and the creator copies it from the list.
+- Rotating again while an old value still works stops that old value at once.
+- Each rotation appears in the audit log as **Virtual API key rotated**.
+
+### Rotate Automatically
+
+Set **Rotate automatically** to every 7, 30, or 90 days when you create or edit a key. After each rotation the old value keeps working for 24 hours, and the list shows when the next rotation is due.
+
+- An app must fetch the new value within that window. A script can read the current value with [`GET /api/llm-virtual-keys/<key-id>/value`](/docs/reference/api#/Virtual%20API%20Keys/getVirtualApiKeyValue), signed in as the key's creator. Create the key with the [service account](/docs/reference/api#service-accounts) that runs the job, so the job can read the value with its own token.
+- An expired key is not rotated.
 
 <span id="llm-oauth-clients"></span><span id="managing-oauth-clients"></span>
 

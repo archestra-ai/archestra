@@ -19,6 +19,29 @@ import { ResourceVisibilityScopeSchema } from "./visibility";
 export const VirtualApiKeyTypeSchema = z.enum(["standard", "passthrough"]);
 export type VirtualApiKeyType = z.infer<typeof VirtualApiKeyTypeSchema>;
 
+const DAY_SECONDS = 24 * 60 * 60;
+
+/**
+ * How long a rotated-out value keeps working, in seconds. Zero revokes it at
+ * once.
+ */
+export const VirtualApiKeyRotationGracePeriodSchema = z
+  .number()
+  .int()
+  .min(0)
+  .max(30 * DAY_SECONDS);
+
+/** How often automatic rotation replaces a key's value, in seconds. */
+export const VirtualApiKeyRotationIntervalSchema = z
+  .number()
+  .int()
+  .min(DAY_SECONDS)
+  .max(365 * DAY_SECONDS);
+
+/** Grace period an automatic rotation uses when none is set. */
+export const DEFAULT_VIRTUAL_API_KEY_ROTATION_GRACE_PERIOD_SECONDS =
+  DAY_SECONDS;
+
 const VirtualApiKeyTeamSchema = z.object({
   id: z.string(),
   name: z.string(),

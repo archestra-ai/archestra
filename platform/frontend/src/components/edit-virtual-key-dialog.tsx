@@ -30,6 +30,10 @@ import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import { useConnectionBaseUrl } from "@/components/virtual-key-connection-base-url";
 import { VirtualKeyConnectionGuide } from "@/components/virtual-key-connection-guide";
 import {
+  AutoRotationSelect,
+  describeRotation,
+} from "@/components/virtual-key-rotation";
+import {
   useHasPermissions,
   useScopedCapabilities,
 } from "@/lib/auth/auth.query";
@@ -67,6 +71,9 @@ export function EditVirtualKeyDialog({
     useState<ProviderApiKeyMappings>([]);
   const [billingTeamId, setBillingTeamId] = useState<string | null>(null);
   const [spendCap, setSpendCap] = useState<SpendCapValue>(null);
+  const [rotationIntervalSeconds, setRotationIntervalSeconds] = useState<
+    number | null
+  >(null);
   // Undefined until edited, so the pools this key already reaches show
   // through once they load.
   const [modelPoolIds, setModelPoolIds] = useState<string[]>();
@@ -134,6 +141,7 @@ export function EditVirtualKeyDialog({
     const initialSpendCap = toSpendCapValue(virtualKey.spendCap);
     setBillingTeamId(virtualKey.billingTeamId);
     setSpendCap(initialSpendCap);
+    setRotationIntervalSeconds(virtualKey.rotationIntervalSeconds);
     setModelPoolIds(undefined);
     initialSnapshotRef.current = {
       name: virtualKey.name,
@@ -143,6 +151,7 @@ export function EditVirtualKeyDialog({
       labels: virtualKey.labels,
       billingTeamId: virtualKey.billingTeamId,
       spendCap: initialSpendCap,
+      rotationIntervalSeconds: virtualKey.rotationIntervalSeconds,
     };
   }, [virtualKey]);
 
@@ -160,6 +169,10 @@ export function EditVirtualKeyDialog({
         { spendCap: initial?.spendCap ?? null },
         { spendCap },
       ) && { spendCap }),
+      // Sent only when changed, so an edit never restarts the schedule.
+      ...(rotationIntervalSeconds !== initial?.rotationIntervalSeconds && {
+        rotationIntervalSeconds,
+      }),
     };
     const result = await updateMutation.mutateAsync({
       id: virtualKey.id,
@@ -195,6 +208,7 @@ export function EditVirtualKeyDialog({
     virtualKey,
     billingTeamId,
     spendCap,
+    rotationIntervalSeconds,
     modelPoolIds,
     modelPoolsChanged,
   ]);
@@ -217,8 +231,14 @@ export function EditVirtualKeyDialog({
         labels,
         billingTeamId,
         spendCap,
+        rotationIntervalSeconds,
       }));
   const providerCount = providerApiKeyIds.length;
+  const rotationNote =
+    describeRotation(virtualKey) ??
+    (rotationIntervalSeconds !== null
+      ? "After each rotation the old value keeps working for 24 hours."
+      : null);
 
   return (
     <TabbedDialogShell
@@ -295,6 +315,21 @@ export function EditVirtualKeyDialog({
           noExpirationText="Key will never expire"
           formatExpiration={formatExpiration}
         />
+        <div className="space-y-2">
+          <Label htmlFor="edit-virtual-key-rotation">
+            Rotate automatically
+          </Label>
+          <AutoRotationSelect
+            id="edit-virtual-key-rotation"
+            value={rotationIntervalSeconds}
+            onChange={setRotationIntervalSeconds}
+          />
+          {rotationNote && (
+            <p className="text-xs text-muted-foreground">
+              <span>{rotationNote}</span>
+            </p>
+          )}
+        </div>
         {!isPassthrough && (
           <ResourceAccessSection
             resource="llmVirtualKey"

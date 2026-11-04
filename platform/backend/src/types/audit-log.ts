@@ -251,6 +251,7 @@ export const AuditEventNameSchema = z.enum([
   "userLimitUsage.reset",
   "virtualApiKey.created",
   "virtualApiKey.deleted",
+  "virtualApiKey.rotated",
   "virtualApiKey.bulk_deleted",
   // Auth surface
   "auth.impersonation_started",

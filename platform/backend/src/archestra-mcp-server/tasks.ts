@@ -1,6 +1,8 @@
 import path from "node:path";
 import {
   DEFAULT_APP_NAME,
+  nextGatewayRoundRobinSeed,
+  orderSubagentsByLoadBalancing,
   TOOL_CANCEL_AGENT_RUN_SHORT_NAME,
   TOOL_DELETE_WORKSPACE_SHORT_NAME,
   TOOL_GET_AGENT_RUN_SHORT_NAME,
@@ -169,15 +171,85 @@ export async function checkCallerSubagentAccess(
  * configured, so every delegation surface selects the same runtime.
  */
 export async function startDelegatedTask(params: {
-  agentId: string;
+  agentId?: string;
   message: string;
   attachments?: A2AAttachment[];
   limits?: AgentRunLimitsRequest;
   context: ArchestraContext;
 }) {
-  const { result, outcome } = await launchDelegatedTask(params);
-  if (outcome) await recordRuntimeLaunch(params.context, outcome);
-  return result;
+  const explicitAgentId = params.agentId?.trim();
+  if (explicitAgentId) {
+    const { result, outcome } = await launchDelegatedTask({
+      ...params,
+      agentId: explicitAgentId,
+    });
+    if (outcome) await recordRuntimeLaunch(params.context, outcome);
+    return result;
+  }
+
+  const callerAgent = params.context.agent?.id
+    ? await AgentModel.findById(params.context.agent.id)
+    : null;
+  if (!callerAgent) {
+    const { result, outcome } = failedLaunch(
+      "refused",
+      errorResult("agent_id is required."),
+    );
+    if (outcome) await recordRuntimeLaunch(params.context, outcome);
+    return result;
+  }
+
+  const assignedIds = await AgentModel.findAssignedRuntimeSubagentIds(
+    callerAgent.id,
+    callerAgent.environmentId,
+  );
+  if (assignedIds.length === 0) {
+    const { result, outcome } = failedLaunch(
+      "refused",
+      errorResult("No runtime subagents are assigned to this gateway."),
+    );
+    if (outcome) await recordRuntimeLaunch(params.context, outcome);
+    return result;
+  }
+
+  const lbConfig = callerAgent.subagentLoadBalancing ?? null;
+  const orderedIds = orderSubagentsByLoadBalancing(assignedIds, lbConfig, {
+    seed:
+      lbConfig?.enabled && lbConfig.algorithm === "round_robin"
+        ? nextGatewayRoundRobinSeed(callerAgent.id)
+        : undefined,
+  });
+  const fallbackEnabled = lbConfig?.fallbackEnabled ?? true;
+  const maxFallbacks =
+    lbConfig?.maxFallbacks != null
+      ? Math.max(0, lbConfig.maxFallbacks)
+      : orderedIds.length - 1;
+  const maxCandidates = fallbackEnabled
+    ? Math.min(orderedIds.length, 1 + maxFallbacks)
+    : 1;
+
+  let lastAttempt: {
+    result: CallToolResult;
+    outcome?: RuntimeLaunchOutcome;
+  } | null = null;
+  for (const candidateId of orderedIds.slice(0, maxCandidates)) {
+    const attempt = await launchDelegatedTask({
+      ...params,
+      agentId: candidateId,
+    });
+    lastAttempt = attempt;
+    if (attempt.outcome?.kind === "launched") {
+      await recordRuntimeLaunch(params.context, attempt.outcome);
+      return attempt.result;
+    }
+  }
+  if (lastAttempt?.outcome) {
+    await recordRuntimeLaunch(params.context, lastAttempt.outcome);
+  }
+  return (
+    lastAttempt?.result ??
+    errorResult("No runtime subagents are assigned to this gateway.")
+  );
 }
 
 async function launchDelegatedTask(params: {
@@ -898,7 +970,12 @@ const registry = defineArchestraTools([
       "For files sent after startup through transfer_workspace_file, instruct the Agent to prepare and stop before task work. Transfer the files, then continue with steer_agent_run. " +
       "Don't call get_agent_run in the turn that started the run.",
     schema: z.object({
-      agent_id: z.string().describe("The agent to do the work."),
+      agent_id: z
+        .string()
+        .optional()
+        .describe(
+          "The agent to do the work. Omit when calling through an MCP gateway to select an assigned runtime subagent using the gateway's load-balancing policy.",
+        ),
       message: z
         .string()
         .trim()

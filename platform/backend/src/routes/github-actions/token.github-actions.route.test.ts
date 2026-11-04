@@ -279,6 +279,14 @@ describe("POST /api/github-actions/token", () => {
     const runtimeConfig = AgentRuntimeSchema.parse({
       image: "ghcr.io/archestra-ai/agent-runtime-claude-code:latest",
       command: ["archestra-claude-code-runtime"],
+      inferenceProtocol: "anthropic",
+      backend: "kubernetes",
+      steerMode: "pipe",
+      privileged: false,
+      environment: null,
+      credentials: null,
+      ttlHours: null,
+      idleTimeoutMinutes: null,
     });
     const firstRuntimeAgent = await makeAgent({
       organizationId,
@@ -320,6 +328,71 @@ describe("POST /api/github-actions/token", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().agent_ids).toEqual([
+      secondRuntimeAgent.id,
+      firstRuntimeAgent.id,
+    ]);
+    expect(response.json().subagent_load_balancing).toBeNull();
+  });
+
+  test("rotates assigned runtime subagent IDs and returns policy when round-robin load balancing is enabled", async ({
+    makeAgent,
+  }) => {
+    const runtimeConfig = AgentRuntimeSchema.parse({
+      image: "ghcr.io/archestra-ai/agent-runtime-claude-code:latest",
+      command: ["archestra-claude-code-runtime"],
+      inferenceProtocol: "anthropic",
+      backend: "kubernetes",
+      steerMode: "pipe",
+      privileged: false,
+      environment: null,
+      credentials: null,
+      ttlHours: null,
+      idleTimeoutMinutes: null,
+    });
+    const firstRuntimeAgent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      name: "Reviewer One",
+    });
+    const secondRuntimeAgent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      name: "Reviewer Two",
+    });
+    await AgentModel.update(firstRuntimeAgent.id, { runtime: runtimeConfig });
+    await AgentModel.update(secondRuntimeAgent.id, { runtime: runtimeConfig });
+    await AgentToolModel.syncDelegations(gateway.id, [
+      firstRuntimeAgent.id,
+      secondRuntimeAgent.id,
+    ]);
+    const lbConfig = {
+      enabled: true,
+      algorithm: "round_robin" as const,
+      retries: 2,
+      fallbackEnabled: true,
+      maxFallbacks: 1,
+    };
+    await AgentModel.update(gateway.id, {
+      subagentLoadBalancing: lbConfig,
+    });
+
+    const firstResponse = await exchange({
+      token: await oidcToken({ claims: { jti: "jti-rr-1" } }),
+    });
+    const secondResponse = await exchange({
+      token: await oidcToken({ claims: { jti: "jti-rr-2" } }),
+    });
+
+    expect(firstResponse.statusCode).toBe(200);
+    expect(secondResponse.statusCode).toBe(200);
+    expect(firstResponse.json().subagent_load_balancing).toMatchObject(
+      lbConfig,
+    );
+    expect(firstResponse.json().agent_ids).toEqual([
+      firstRuntimeAgent.id,
+      secondRuntimeAgent.id,
+    ]);
+    expect(secondResponse.json().agent_ids).toEqual([
       secondRuntimeAgent.id,
       firstRuntimeAgent.id,
     ]);

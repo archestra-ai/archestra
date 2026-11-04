@@ -3607,7 +3607,13 @@ class AgentModel {
     id: string,
   ): Promise<
     | (AgentAccessContext &
-        Pick<Agent, "name" | "githubActionsAccess" | "environmentId">)
+        Pick<
+          Agent,
+          | "name"
+          | "githubActionsAccess"
+          | "environmentId"
+          | "subagentLoadBalancing"
+        >)
     | null
   > {
     const [agent] = await db
@@ -3621,6 +3627,7 @@ class AgentModel {
         name: schema.agentsTable.name,
         githubActionsAccess: schema.agentsTable.githubActionsAccess,
         environmentId: schema.agentsTable.environmentId,
+        subagentLoadBalancing: schema.agentsTable.subagentLoadBalancing,
       })
       .from(schema.agentsTable)
       .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
@@ -5752,6 +5759,7 @@ class AgentModel {
       identityProviderId: row.identityProviderId ?? null,
       // Names only: the App's key, repositories and workflow refs.
       githubActionsAccess: row.githubActionsAccess ?? null,
+      subagentLoadBalancing: row.subagentLoadBalancing ?? null,
       environmentId: row.environmentId ?? null,
       incomingEmailEnabled: row.incomingEmailEnabled,
       incomingEmailSecurityMode: row.incomingEmailSecurityMode,

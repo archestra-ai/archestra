@@ -1,4 +1,7 @@
-import { GitHubActionsTokenErrorCodeSchema } from "@archestra/shared";
+import {
+  GitHubActionsTokenErrorCodeSchema,
+  StoredSubagentLoadBalancingConfigSchema,
+} from "@archestra/shared";
 import { z } from "zod";
 
 export const GitHubActionsTokenRequestSchema = z.object({
@@ -27,9 +30,14 @@ export const GitHubActionsTokenResponseSchema = z.object({
   user_id: z.string(),
   /**
    * Runtime subagent IDs assigned to the gateway (`tools.delegateToAgentId`),
-   * in assignment order.
+   * ordered by the gateway's load-balancing policy when enabled.
    */
   agent_ids: z.array(z.string().uuid()),
+  /**
+   * The gateway's subagent load-balancing, retry, and fallback policy, or null
+   * when none is configured.
+   */
+  subagent_load_balancing: StoredSubagentLoadBalancingConfigSchema.nullable(),
 });
 export type GitHubActionsTokenResponse = z.infer<
   typeof GitHubActionsTokenResponseSchema

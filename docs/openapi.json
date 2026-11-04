@@ -63117,6 +63117,58 @@
                                   "accessAllSubagents": {
                                     "type": "boolean"
                                   },
+                                  "subagentLoadBalancing": {
+                                    "nullable": true,
+                                    "type": "object",
+                                    "properties": {
+                                      "enabled": {
+                                        "default": false,
+                                        "type": "boolean"
+                                      },
+                                      "algorithm": {
+                                        "default": "round_robin",
+                                        "type": "string",
+                                        "enum": [
+                                          "round_robin",
+                                          "weighted",
+                                          "random",
+                                          "ordered"
+                                        ]
+                                      },
+                                      "weights": {
+                                        "type": "object",
+                                        "additionalProperties": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 1000
+                                        }
+                                      },
+                                      "retries": {
+                                        "default": 1,
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 5
+                                      },
+                                      "fallbackEnabled": {
+                                        "default": true,
+                                        "type": "boolean"
+                                      },
+                                      "maxFallbacks": {
+                                        "default": null,
+                                        "nullable": true,
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 100
+                                      }
+                                    },
+                                    "required": [
+                                      "enabled",
+                                      "algorithm",
+                                      "retries",
+                                      "fallbackEnabled"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "builtInAgentConfig": {
                                     "nullable": true,
                                     "oneOf": [
@@ -64898,6 +64950,58 @@
                           "accessAllSubagents": {
                             "type": "boolean"
                           },
+                          "subagentLoadBalancing": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "enabled": {
+                                "default": false,
+                                "type": "boolean"
+                              },
+                              "algorithm": {
+                                "default": "round_robin",
+                                "type": "string",
+                                "enum": [
+                                  "round_robin",
+                                  "weighted",
+                                  "random",
+                                  "ordered"
+                                ]
+                              },
+                              "weights": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 1000
+                                }
+                              },
+                              "retries": {
+                                "default": 1,
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 5
+                              },
+                              "fallbackEnabled": {
+                                "default": true,
+                                "type": "boolean"
+                              },
+                              "maxFallbacks": {
+                                "default": null,
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 100
+                              }
+                            },
+                            "required": [
+                              "enabled",
+                              "algorithm",
+                              "retries",
+                              "fallbackEnabled"
+                            ],
+                            "additionalProperties": false
+                          },
                           "builtInAgentConfig": {
                             "nullable": true,
                             "oneOf": [
@@ -65974,6 +66078,50 @@
                   "accessAllSubagents": {
                     "type": "boolean"
                   },
+                  "subagentLoadBalancing": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "default": false,
+                        "type": "boolean"
+                      },
+                      "algorithm": {
+                        "default": "round_robin",
+                        "type": "string",
+                        "enum": [
+                          "round_robin",
+                          "weighted",
+                          "random",
+                          "ordered"
+                        ]
+                      },
+                      "weights": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 1000
+                        }
+                      },
+                      "retries": {
+                        "default": 1,
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 5
+                      },
+                      "fallbackEnabled": {
+                        "default": true,
+                        "type": "boolean"
+                      },
+                      "maxFallbacks": {
+                        "nullable": true,
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100
+                      }
+                    }
+                  },
                   "builtInAgentConfig": {
                     "nullable": true,
                     "oneOf": [
@@ -66878,6 +67026,58 @@
                     },
                     "accessAllSubagents": {
                       "type": "boolean"
+                    },
+                    "subagentLoadBalancing": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "default": false,
+                          "type": "boolean"
+                        },
+                        "algorithm": {
+                          "default": "round_robin",
+                          "type": "string",
+                          "enum": [
+                            "round_robin",
+                            "weighted",
+                            "random",
+                            "ordered"
+                          ]
+                        },
+                        "weights": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000
+                          }
+                        },
+                        "retries": {
+                          "default": 1,
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 5
+                        },
+                        "fallbackEnabled": {
+                          "default": true,
+                          "type": "boolean"
+                        },
+                        "maxFallbacks": {
+                          "default": null,
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "algorithm",
+                        "retries",
+                        "fallbackEnabled"
+                      ],
+                      "additionalProperties": false
                     },
                     "builtInAgentConfig": {
                       "nullable": true,
@@ -72186,6 +72386,58 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "subagentLoadBalancing": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "default": false,
+                          "type": "boolean"
+                        },
+                        "algorithm": {
+                          "default": "round_robin",
+                          "type": "string",
+                          "enum": [
+                            "round_robin",
+                            "weighted",
+                            "random",
+                            "ordered"
+                          ]
+                        },
+                        "weights": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000
+                          }
+                        },
+                        "retries": {
+                          "default": 1,
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 5
+                        },
+                        "fallbackEnabled": {
+                          "default": true,
+                          "type": "boolean"
+                        },
+                        "maxFallbacks": {
+                          "default": null,
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "algorithm",
+                        "retries",
+                        "fallbackEnabled"
+                      ],
+                      "additionalProperties": false
+                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -73656,6 +73908,58 @@
                         "accessAllSubagents": {
                           "type": "boolean"
                         },
+                        "subagentLoadBalancing": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "default": false,
+                              "type": "boolean"
+                            },
+                            "algorithm": {
+                              "default": "round_robin",
+                              "type": "string",
+                              "enum": [
+                                "round_robin",
+                                "weighted",
+                                "random",
+                                "ordered"
+                              ]
+                            },
+                            "weights": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1000
+                              }
+                            },
+                            "retries": {
+                              "default": 1,
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 5
+                            },
+                            "fallbackEnabled": {
+                              "default": true,
+                              "type": "boolean"
+                            },
+                            "maxFallbacks": {
+                              "default": null,
+                              "nullable": true,
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 100
+                            }
+                          },
+                          "required": [
+                            "enabled",
+                            "algorithm",
+                            "retries",
+                            "fallbackEnabled"
+                          ],
+                          "additionalProperties": false
+                        },
                         "builtInAgentConfig": {
                           "nullable": true,
                           "oneOf": [
@@ -74799,6 +75103,58 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "subagentLoadBalancing": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "default": false,
+                          "type": "boolean"
+                        },
+                        "algorithm": {
+                          "default": "round_robin",
+                          "type": "string",
+                          "enum": [
+                            "round_robin",
+                            "weighted",
+                            "random",
+                            "ordered"
+                          ]
+                        },
+                        "weights": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000
+                          }
+                        },
+                        "retries": {
+                          "default": 1,
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 5
+                        },
+                        "fallbackEnabled": {
+                          "default": true,
+                          "type": "boolean"
+                        },
+                        "maxFallbacks": {
+                          "default": null,
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "algorithm",
+                        "retries",
+                        "fallbackEnabled"
+                      ],
+                      "additionalProperties": false
+                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -75853,6 +76209,50 @@
                   "accessAllSubagents": {
                     "type": "boolean"
                   },
+                  "subagentLoadBalancing": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "default": false,
+                        "type": "boolean"
+                      },
+                      "algorithm": {
+                        "default": "round_robin",
+                        "type": "string",
+                        "enum": [
+                          "round_robin",
+                          "weighted",
+                          "random",
+                          "ordered"
+                        ]
+                      },
+                      "weights": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 1000
+                        }
+                      },
+                      "retries": {
+                        "default": 1,
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 5
+                      },
+                      "fallbackEnabled": {
+                        "default": true,
+                        "type": "boolean"
+                      },
+                      "maxFallbacks": {
+                        "nullable": true,
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100
+                      }
+                    }
+                  },
                   "builtInAgentConfig": {
                     "nullable": true,
                     "oneOf": [
@@ -76446,6 +76846,58 @@
                     },
                     "accessAllSubagents": {
                       "type": "boolean"
+                    },
+                    "subagentLoadBalancing": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "default": false,
+                          "type": "boolean"
+                        },
+                        "algorithm": {
+                          "default": "round_robin",
+                          "type": "string",
+                          "enum": [
+                            "round_robin",
+                            "weighted",
+                            "random",
+                            "ordered"
+                          ]
+                        },
+                        "weights": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000
+                          }
+                        },
+                        "retries": {
+                          "default": 1,
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 5
+                        },
+                        "fallbackEnabled": {
+                          "default": true,
+                          "type": "boolean"
+                        },
+                        "maxFallbacks": {
+                          "default": null,
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "algorithm",
+                        "retries",
+                        "fallbackEnabled"
+                      ],
+                      "additionalProperties": false
                     },
                     "builtInAgentConfig": {
                       "nullable": true,
@@ -79226,6 +79678,58 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "subagentLoadBalancing": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "default": false,
+                          "type": "boolean"
+                        },
+                        "algorithm": {
+                          "default": "round_robin",
+                          "type": "string",
+                          "enum": [
+                            "round_robin",
+                            "weighted",
+                            "random",
+                            "ordered"
+                          ]
+                        },
+                        "weights": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000
+                          }
+                        },
+                        "retries": {
+                          "default": 1,
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 5
+                        },
+                        "fallbackEnabled": {
+                          "default": true,
+                          "type": "boolean"
+                        },
+                        "maxFallbacks": {
+                          "default": null,
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "algorithm",
+                        "retries",
+                        "fallbackEnabled"
+                      ],
+                      "additionalProperties": false
+                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -80485,6 +80989,58 @@
                     },
                     "accessAllSubagents": {
                       "type": "boolean"
+                    },
+                    "subagentLoadBalancing": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "default": false,
+                          "type": "boolean"
+                        },
+                        "algorithm": {
+                          "default": "round_robin",
+                          "type": "string",
+                          "enum": [
+                            "round_robin",
+                            "weighted",
+                            "random",
+                            "ordered"
+                          ]
+                        },
+                        "weights": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000
+                          }
+                        },
+                        "retries": {
+                          "default": 1,
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 5
+                        },
+                        "fallbackEnabled": {
+                          "default": true,
+                          "type": "boolean"
+                        },
+                        "maxFallbacks": {
+                          "default": null,
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "algorithm",
+                        "retries",
+                        "fallbackEnabled"
+                      ],
+                      "additionalProperties": false
                     },
                     "builtInAgentConfig": {
                       "nullable": true,
@@ -88556,6 +89112,58 @@
                     },
                     "accessAllSubagents": {
                       "type": "boolean"
+                    },
+                    "subagentLoadBalancing": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "default": false,
+                          "type": "boolean"
+                        },
+                        "algorithm": {
+                          "default": "round_robin",
+                          "type": "string",
+                          "enum": [
+                            "round_robin",
+                            "weighted",
+                            "random",
+                            "ordered"
+                          ]
+                        },
+                        "weights": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000
+                          }
+                        },
+                        "retries": {
+                          "default": 1,
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 5
+                        },
+                        "fallbackEnabled": {
+                          "default": true,
+                          "type": "boolean"
+                        },
+                        "maxFallbacks": {
+                          "default": null,
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "algorithm",
+                        "retries",
+                        "fallbackEnabled"
+                      ],
+                      "additionalProperties": false
                     },
                     "builtInAgentConfig": {
                       "nullable": true,
@@ -160672,6 +161280,58 @@
                             "accessAllSubagents": {
                               "type": "boolean"
                             },
+                            "subagentLoadBalancing": {
+                              "nullable": true,
+                              "type": "object",
+                              "properties": {
+                                "enabled": {
+                                  "default": false,
+                                  "type": "boolean"
+                                },
+                                "algorithm": {
+                                  "default": "round_robin",
+                                  "type": "string",
+                                  "enum": [
+                                    "round_robin",
+                                    "weighted",
+                                    "random",
+                                    "ordered"
+                                  ]
+                                },
+                                "weights": {
+                                  "type": "object",
+                                  "additionalProperties": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 1000
+                                  }
+                                },
+                                "retries": {
+                                  "default": 1,
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 5
+                                },
+                                "fallbackEnabled": {
+                                  "default": true,
+                                  "type": "boolean"
+                                },
+                                "maxFallbacks": {
+                                  "default": null,
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 100
+                                }
+                              },
+                              "required": [
+                                "enabled",
+                                "algorithm",
+                                "retries",
+                                "fallbackEnabled"
+                              ],
+                              "additionalProperties": false
+                            },
                             "builtInAgentConfig": {
                               "nullable": true,
                               "oneOf": [
@@ -163938,6 +164598,58 @@
                                 },
                                 "accessAllSubagents": {
                                   "type": "boolean"
+                                },
+                                "subagentLoadBalancing": {
+                                  "nullable": true,
+                                  "type": "object",
+                                  "properties": {
+                                    "enabled": {
+                                      "default": false,
+                                      "type": "boolean"
+                                    },
+                                    "algorithm": {
+                                      "default": "round_robin",
+                                      "type": "string",
+                                      "enum": [
+                                        "round_robin",
+                                        "weighted",
+                                        "random",
+                                        "ordered"
+                                      ]
+                                    },
+                                    "weights": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 1000
+                                      }
+                                    },
+                                    "retries": {
+                                      "default": 1,
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 5
+                                    },
+                                    "fallbackEnabled": {
+                                      "default": true,
+                                      "type": "boolean"
+                                    },
+                                    "maxFallbacks": {
+                                      "default": null,
+                                      "nullable": true,
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 100
+                                    }
+                                  },
+                                  "required": [
+                                    "enabled",
+                                    "algorithm",
+                                    "retries",
+                                    "fallbackEnabled"
+                                  ],
+                                  "additionalProperties": false
                                 },
                                 "builtInAgentConfig": {
                                   "nullable": true,
@@ -214258,6 +214970,58 @@
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
+                    },
+                    "subagent_load_balancing": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "default": false,
+                          "type": "boolean"
+                        },
+                        "algorithm": {
+                          "default": "round_robin",
+                          "type": "string",
+                          "enum": [
+                            "round_robin",
+                            "weighted",
+                            "random",
+                            "ordered"
+                          ]
+                        },
+                        "weights": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000
+                          }
+                        },
+                        "retries": {
+                          "default": 1,
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 5
+                        },
+                        "fallbackEnabled": {
+                          "default": true,
+                          "type": "boolean"
+                        },
+                        "maxFallbacks": {
+                          "default": null,
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "algorithm",
+                        "retries",
+                        "fallbackEnabled"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -214268,7 +215032,8 @@
                     "github_token_expires_at",
                     "github_login",
                     "user_id",
-                    "agent_ids"
+                    "agent_ids",
+                    "subagent_load_balancing"
                   ],
                   "additionalProperties": false
                 }

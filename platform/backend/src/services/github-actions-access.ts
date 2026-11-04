@@ -5,6 +5,8 @@ import {
   type GitHubActionsTokenErrorCode,
   gitHubRepositoryMatches,
   isGitHubActionsAppCredential,
+  nextGatewayRoundRobinSeed,
+  orderSubagentsByLoadBalancing,
 } from "@archestra/shared";
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -285,6 +287,19 @@ export async function exchangeGitHubActionsToken(params: {
       "[github-actions] Issued an MCP gateway token for a GitHub Actions run",
     );
 
+    const subagentLoadBalancing = gateway.subagentLoadBalancing ?? null;
+    const orderedAgentIds = orderSubagentsByLoadBalancing(
+      agentIds,
+      subagentLoadBalancing,
+      {
+        seed:
+          subagentLoadBalancing?.enabled &&
+          subagentLoadBalancing.algorithm === "round_robin"
+            ? nextGatewayRoundRobinSeed(gatewayId)
+            : undefined,
+      },
+    );
+
     return {
       ok: true,
       body: {
@@ -295,7 +310,8 @@ export async function exchangeGitHubActionsToken(params: {
         github_token_expires_at: new Date(githubToken.expiresAt).toISOString(),
         github_login: login,
         user_id: userId,
-        agent_ids: agentIds,
+        agent_ids: orderedAgentIds,
+        subagent_load_balancing: subagentLoadBalancing,
       },
     };
   } catch (error) {

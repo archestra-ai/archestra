@@ -57,7 +57,12 @@ for (const provider of [
     let failure: unknown;
     let cleanups: number;
     let completions: number;
-    let mode: "headers" | "stream" | "tool-stream" | "complete";
+    let mode:
+      | "headers"
+      | "stream"
+      | "tool-stream"
+      | "terminal-tool-stream"
+      | "complete";
     const model =
       provider === "anthropic"
         ? "claude-3-5-sonnet-20241022"
@@ -108,10 +113,10 @@ for (const provider of [
     function sendHeldToolCall(response: ServerResponse) {
       if (provider === "gemini") {
         response.write(
-          `data: ${JSON.stringify({ candidates: [{ content: { role: "model", parts: [{ functionCall: { id: "held-call", name: "lookup", args: {} } }] } }], usageMetadata: { promptTokenCount: 12, candidatesTokenCount: 1, totalTokenCount: 13 } })}\n\n`,
+          `data: ${JSON.stringify({ candidates: [{ index: 0, content: { role: "model", parts: [{ functionCall: { id: "held-call", name: "lookup", args: {} } }] }, ...(mode === "terminal-tool-stream" ? { finishReason: "STOP" } : {}) }], usageMetadata: { promptTokenCount: 12, candidatesTokenCount: 1, totalTokenCount: 13 } })}\n\n`,
         );
         response.write(
-          `data: ${JSON.stringify({ candidates: [{ content: { role: "model", parts: [{ text: "After held call" }] } }] })}\n\n`,
+          `data: ${JSON.stringify({ candidates: [{ index: mode === "terminal-tool-stream" ? 1 : 0, content: { role: "model", parts: [{ text: "After held call" }] } }] })}\n\n`,
         );
       } else if (provider === "anthropic") {
         response.write(
@@ -220,7 +225,8 @@ for (const provider of [
             closed = true;
           });
           if (mode !== "headers") sendStart(response);
-          if (mode === "tool-stream") sendHeldToolCall(response);
+          if (mode === "tool-stream" || mode === "terminal-tool-stream")
+            sendHeldToolCall(response);
           if (mode === "complete") finish(response);
           received.resolve();
         });
@@ -521,50 +527,57 @@ for (const provider of [
       });
     });
 
-    test("discards unreleased tool calls on disconnect while preserving partial usage", async () => {
-      mode = "tool-stream";
-      const controller = new AbortController();
-      const response = await post(controller.signal);
-      expect(response.status).toBe(200);
-      const reader = response.body?.getReader();
-      expect(reader).toBeDefined();
-      const decoder = new TextDecoder();
-      let receivedText = "";
-      while (!receivedText.includes("After held call")) {
-        const chunk = await reader?.read();
-        expect(chunk?.done).toBe(false);
-        receivedText += decoder.decode(chunk?.value, { stream: true });
-      }
-      expect(receivedText).not.toContain("held-call");
-      controller.abort();
-      await vi.waitFor(() => expect(closed).toBe(true), { timeout: 1500 });
-      await vi.waitFor(() => expect(cleanups).toBe(1));
-      expect(failures).toBe(1);
-      expect(completions).toBe(0);
-      await vi.waitFor(async () => {
-        const rows =
-          await InteractionModel.getAllInteractionsForProfile(agentId);
-        expect(rows).toHaveLength(1);
-        expect(rows[0].inputTokens).toBe(provider === "openai" ? null : 12);
-        expect(rows[0].outputTokens).toBe(provider === "openai" ? null : 1);
-        expect(JSON.stringify(rows[0].response)).not.toContain("held-call");
-        expect(JSON.stringify(rows[0].response)).not.toContain("lookup");
-        if (provider === "responses") {
-          expect(rows[0].response).toMatchObject({
-            status: "incomplete",
-            error: {
-              code: "client_disconnected",
-              message: "Client disconnected during inference",
-            },
-          });
+    for (const earlyTerminal of provider === "gemini"
+      ? [false, true]
+      : [false]) {
+      test(`discards unreleased tool calls on disconnect while preserving partial usage (early terminal=${earlyTerminal})`, async () => {
+        mode = earlyTerminal ? "terminal-tool-stream" : "tool-stream";
+        const controller = new AbortController();
+        const response = await post(controller.signal);
+        expect(response.status).toBe(200);
+        const reader = response.body?.getReader();
+        expect(reader).toBeDefined();
+        const decoder = new TextDecoder();
+        let receivedText = "";
+        while (!receivedText.includes("After held call")) {
+          const chunk = await reader?.read();
+          expect(chunk?.done).toBe(false);
+          receivedText += decoder.decode(chunk?.value, { stream: true });
         }
-        if (provider !== "openai") {
-          const receipts = await InteractionBillingModel.findMany([rows[0].id]);
-          expect(receipts).toHaveLength(1);
-          expect(receipts[0].usage.issues).toContain("partial_stream");
-        }
+        expect(receivedText).not.toContain("held-call");
+        controller.abort();
+        await vi.waitFor(() => expect(closed).toBe(true), { timeout: 1500 });
+        await vi.waitFor(() => expect(cleanups).toBe(1));
+        expect(failures).toBe(1);
+        expect(completions).toBe(0);
+        await vi.waitFor(async () => {
+          const rows =
+            await InteractionModel.getAllInteractionsForProfile(agentId);
+          expect(rows).toHaveLength(1);
+          expect(rows[0].inputTokens).toBe(provider === "openai" ? null : 12);
+          expect(rows[0].outputTokens).toBe(provider === "openai" ? null : 1);
+          expect(JSON.stringify(rows[0].response)).not.toContain("held-call");
+          expect(JSON.stringify(rows[0].response)).not.toContain("lookup");
+          if (provider === "responses") {
+            expect(rows[0].response).toMatchObject({
+              status: "incomplete",
+              error: {
+                code: "client_disconnected",
+                message: "Client disconnected during inference",
+              },
+            });
+          }
+          if (provider !== "openai") {
+            const receipts = await InteractionBillingModel.findMany([
+              rows[0].id,
+            ]);
+            expect(receipts).toHaveLength(1);
+            expect(receipts[0].usage.status).toBe("incomplete");
+            expect(receipts[0].usage.issues).toContain("partial_stream");
+          }
+        });
       });
-    });
+    }
 
     test("preserves final usage when the client disconnects during proxy finalization", async () => {
       mode = "complete";

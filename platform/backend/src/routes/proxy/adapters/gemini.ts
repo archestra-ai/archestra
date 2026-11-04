@@ -685,6 +685,15 @@ class GeminiStreamAdapter
 
   processChunk(chunk: GeminiStreamChunk): ChunkProcessingResult {
     chunk = this.toolNameCodec.decodeResponse(chunk);
+    // Assign fallback indexes before splitting a chunk into visible/held
+    // subsets, so a candidate keeps its original position in both frames.
+    chunk = {
+      ...chunk,
+      candidates: chunk.candidates?.map((candidate, index) => ({
+        ...candidate,
+        index: candidate.index ?? index,
+      })),
+    } as GeminiStreamChunk;
     if (this.state.timing.firstChunkTime === null) {
       this.state.timing.firstChunkTime = Date.now();
     }
@@ -1055,6 +1064,7 @@ class GeminiStreamAdapter
                   if (toolCallIndex === undefined) return [part];
                   if (this.replacedText !== null) return [];
                   const call = this.state.toolCalls[toolCallIndex];
+                  if (!call) return []; // Disconnect cleanup discarded this held call.
                   return [
                     {
                       ...part,
@@ -1266,6 +1276,7 @@ function sdkPartToRestPart(sdkPart: Part): Gemini.Types.MessagePart {
  */
 function sdkCandidateToRestCandidate(
   sdkCandidate: Candidate,
+  position = 0,
 ): Gemini.Types.Candidate {
   return {
     content: {
@@ -1304,7 +1315,7 @@ function sdkCandidateToRestCandidate(
     groundingMetadata: sdkCandidate.groundingMetadata,
     avgLogprobs: sdkCandidate.avgLogprobs,
     logprobsResult: sdkCandidate.logprobsResult,
-    index: sdkCandidate.index ?? 0,
+    index: sdkCandidate.index ?? position,
     finishMessage: sdkCandidate.finishMessage,
   } as Gemini.Types.Candidate;
 }

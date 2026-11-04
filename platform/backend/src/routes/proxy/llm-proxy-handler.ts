@@ -3328,12 +3328,16 @@ async function handleStreaming<
             childStream.emitModel(result.sseData, result.isResponsePreamble);
           }
 
-          if (result.isFinal) {
+          if (result.isFinal && streamAdapter.provider !== "gemini") {
             providerTerminalSeen = true;
-            // Gemini finishes candidates independently and can send usage
-            // afterward. Drain its SDK iterator so every call reaches policy.
-            if (streamAdapter.provider !== "gemini") break;
+            break;
           }
+        }
+        // Gemini finishes candidates independently and can send usage afterward.
+        // Only a normal drain completes its generation; an abort must still
+        // discard held calls and preserve partial usage, even after a STOP.
+        if (streamAdapter.provider === "gemini" && !reply.raw.destroyed) {
+          providerTerminalSeen = true;
         }
 
         // Set response attributes on span per OTEL GenAI semconv

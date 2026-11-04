@@ -993,7 +993,10 @@ describe("GeminiStreamAdapter", () => {
         "functionCall",
       );
     });
-    test("keeps candidate identity and signatures in streamed rewrites and records", () => {
+    test.for([
+      true,
+      false,
+    ])("keeps candidate identity and signatures in streamed rewrites and records (indexes=%s)", (indexed) => {
       const adapter = geminiAdapterFactory.createStreamAdapter();
       const texts = [
         { text: "First answer.", thoughtSignature: "first-text-signature" },
@@ -1008,9 +1011,12 @@ describe("GeminiStreamAdapter", () => {
       }));
       adapter.processChunk({
         candidates: [
-          { index: 0, content: { role: "model", parts: [texts[0]] } },
           {
-            index: 1,
+            ...(indexed ? { index: 0 } : {}),
+            content: { role: "model", parts: [texts[0]] },
+          },
+          {
+            ...(indexed ? { index: 1 } : {}),
             content: { role: "model", parts: [texts[1], calls[1]] },
             finishReason: "STOP",
           },
@@ -1019,7 +1025,7 @@ describe("GeminiStreamAdapter", () => {
       adapter.processChunk({
         candidates: [
           {
-            index: 0,
+            ...(indexed ? { index: 0 } : {}),
             content: { role: "model", parts: [calls[0]] },
             finishReason: "STOP",
           },

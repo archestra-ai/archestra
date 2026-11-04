@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import { ResourcePermissionGrantSchema } from "@archestra/shared";
 
 /**
  * Checks whether a tool name refers to a command-execution tool.
@@ -121,10 +122,7 @@ function policyPath(path: string): string {
 const DERIVED_ARGUMENTS = {
   initialGrantPrincipals: {
     source: "initialGrants",
-    entry: (grant: unknown) =>
-      isRecord(grant) && isRecord(grant.subject)
-        ? grantPrincipal(grant.subject)
-        : null,
+    entry: grantPrincipal,
   },
   transferModes: {
     source: "environment",
@@ -157,20 +155,14 @@ function derivedValue(
   return entries.every((value) => value !== null) ? entries : null;
 }
 
-function grantPrincipal(subject: Record<string, unknown>): string | null {
-  const { type, id } = subject;
-  if (typeof id !== "string" || id.length === 0) return null;
-  switch (type) {
-    case "organization":
-      return id === "*" ? "organization" : null;
-    case "user":
-    case "team":
-    case "serviceAccount":
-    case "role":
-      return `${type}:${id}`;
-    default:
-      return null;
-  }
+/** A grant the tool would accept, as its principal; null for any other. */
+function grantPrincipal(grant: unknown): string | null {
+  const parsed = ResourcePermissionGrantSchema.safeParse(grant);
+  if (!parsed.success) return null;
+  const { subject } = parsed.data;
+  return subject.type === "organization"
+    ? "organization"
+    : `${subject.type}:${subject.id}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

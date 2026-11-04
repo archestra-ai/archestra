@@ -93,6 +93,19 @@ describe("Archestra tools under the composed default policy", () => {
         "create_agent",
         { initialGrants: [{ subject: { type: "organization", id: "t1" } }] },
       ],
+      // A grant the tool would refuse derives nothing it could pass with.
+      [
+        "create_agent",
+        { initialGrants: [{ subject: ORGANIZATION_GRANT.subject }] },
+      ],
+      [
+        "create_agent",
+        {
+          initialGrants: [
+            { subject: { type: "serviceAccount", id: "sa" }, actions: ["use"] },
+          ],
+        },
+      ],
       // A derived name the model sends is replaced by what the call shares.
       ["create_mcp_gateway", { initialGrantPrincipals: ["organization"] }],
       ["transfer_credential", { environment: [{ ...SECRET, value: "v" }] }],
@@ -112,6 +125,8 @@ describe("Archestra tools under the composed default policy", () => {
       "-/trusted+internal",
       "-/trusted",
       "-/trusted",
+      "refused",
+      "refused",
       "refused",
       "refused",
       "-/-",

@@ -993,6 +993,86 @@ describe("GeminiStreamAdapter", () => {
         "functionCall",
       );
     });
+    test("keeps candidate identity and signatures in streamed rewrites and records", () => {
+      const adapter = geminiAdapterFactory.createStreamAdapter();
+      const texts = [
+        { text: "First answer.", thoughtSignature: "first-text-signature" },
+        {
+          text: "Alternative answer.",
+          thoughtSignature: "second-text-signature",
+        },
+      ];
+      const calls = [0, 1].map((index) => ({
+        functionCall: { id: `call-${index}`, name: "lookup", args: { index } },
+        thoughtSignature: `call-${index}-signature`,
+      }));
+      adapter.processChunk({
+        candidates: [
+          { index: 0, content: { role: "model", parts: [texts[0]] } },
+          {
+            index: 1,
+            content: { role: "model", parts: [texts[1], calls[1]] },
+            finishReason: "STOP",
+          },
+        ],
+      } as unknown as GeminiStreamChunk);
+      adapter.processChunk({
+        candidates: [
+          {
+            index: 0,
+            content: { role: "model", parts: [calls[0]] },
+            finishReason: "STOP",
+          },
+        ],
+      } as unknown as GeminiStreamChunk);
+      const original = adapter.toProviderResponse().candidates;
+      expect(original?.map((candidate) => candidate.content?.parts)).toEqual([
+        [texts[0], calls[0]],
+        [texts[1], calls[1]],
+      ]);
+      const rewrittenCalls = adapter.state.toolCalls.map((call) => ({
+        ...call,
+        name: "policy_notice",
+        arguments: JSON.stringify({ blocked: call.id }),
+      }));
+      const released = adapter
+        .formatToolCallsSSE?.(rewrittenCalls)
+        .map((event) => JSON.parse(String(event).slice(6)));
+      expect(released?.map((event) => event.candidates[0].index)).toEqual([
+        1, 0,
+      ]);
+      const rewritten = (index: number) => ({
+        ...calls[index],
+        functionCall: {
+          ...calls[index].functionCall,
+          name: "policy_notice",
+          args: { blocked: `call-${index}` },
+        },
+      });
+      expect(
+        released?.map((event) => event.candidates[0].content.parts),
+      ).toEqual([[rewritten(1)], [rewritten(0)]]);
+      // The handler updates the policy batch after releasing the rewritten frames.
+      adapter.state.toolCalls.splice(
+        0,
+        adapter.state.toolCalls.length,
+        ...rewrittenCalls,
+      );
+      expect(
+        adapter
+          .toProviderResponse()
+          .candidates?.map((candidate) => candidate.content?.parts),
+      ).toEqual([
+        [texts[0], rewritten(0)],
+        [texts[1], rewritten(1)],
+      ]);
+      adapter.formatCompleteTextSSE("blocked message");
+      expect(
+        adapter
+          .toProviderResponse()
+          .candidates?.map((candidate) => candidate.content?.parts),
+      ).toEqual([[texts[0], { text: "blocked message" }], [texts[1]]]);
+    });
     test("preserves a completed candidate beside another candidate's held call", () => {
       const adapter = geminiAdapterFactory.createStreamAdapter();
       const completed = { index: 0, finishReason: "STOP" };

@@ -646,6 +646,13 @@ class GeminiStreamAdapter
   private model: string = "";
   private trafficType: TrafficType | undefined;
   private inlineDataParts: Gemini.Types.MessagePart[] = [];
+  private candidateParts = new Map<
+    number,
+    {
+      candidate: NonNullable<GeminiResponse["candidates"]>[number];
+      parts: Array<{ part: Gemini.Types.MessagePart; toolCallIndex?: number }>;
+    }
+  >();
   // Set to the refusal text when the streamed response was replaced by a policy
   // refusal, so toProviderResponse persists the refusal (finishReason STOP, no
   // function calls) instead of the blocked tool calls.
@@ -724,6 +731,29 @@ class GeminiStreamAdapter
         isToolCallChunk: false,
         isFinal: false,
       };
+    }
+
+    // Keep the signed parts associated with their candidate for audit records.
+    // Tool indexes follow arrival order, just like the shared policy batch.
+    let toolCallIndex = this.state.toolCalls.length;
+    for (const [position, candidate] of (
+      sdkResponseToRestResponse(chunk, this.model).candidates ?? []
+    ).entries()) {
+      const index = candidate.index ?? position;
+      const previous = this.candidateParts.get(index);
+      const parts = previous?.parts ?? [];
+      for (const part of candidate.content?.parts ?? []) {
+        parts.push({
+          part,
+          ...("functionCall" in part && part.functionCall
+            ? { toolCallIndex: toolCallIndex++ }
+            : {}),
+        });
+      }
+      this.candidateParts.set(index, {
+        candidate: { ...previous?.candidate, ...candidate, index },
+        parts,
+      });
     }
 
     // Every candidate must participate in policy evaluation before its calls
@@ -876,6 +906,23 @@ class GeminiStreamAdapter
   }
 
   formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
+    if (
+      this.state.rawToolCallEvents.length > 0 &&
+      toolCalls.length === this.state.toolCalls.length
+    ) {
+      let offset = 0;
+      return this.state.rawToolCallEvents.map((event) => {
+        const adapter = new GeminiResponseAdapter(
+          sdkResponseToRestResponse(event as GeminiStreamChunk, this.model),
+        );
+        const count = adapter.getToolCalls().length;
+        const response = adapter.withRewrittenToolCalls(
+          toolCalls.slice(offset, offset + count),
+        );
+        offset += count;
+        return `data: ${JSON.stringify(response)}\n\n`;
+      });
+    }
     // One REST-shaped chunk carrying every call as a functionCall part —
     // exactly how the upstream delivers whole (non-incremental) calls, so the
     // client accumulates it the same way. No finishReason: formatEndSSE closes
@@ -998,8 +1045,58 @@ class GeminiStreamAdapter
       parts.push({ text: this.replacedText });
     }
 
+    const separateCandidates =
+      this.candidateParts.size > 1 ||
+      (this.candidateParts.size === 1 && !this.candidateParts.has(0))
+        ? [...this.candidateParts.entries()].map(
+            ([index, { candidate, parts }]) => {
+              const candidateParts = parts.flatMap(
+                ({ part, toolCallIndex }) => {
+                  if (toolCallIndex === undefined) return [part];
+                  if (this.replacedText !== null) return [];
+                  const call = this.state.toolCalls[toolCallIndex];
+                  return [
+                    {
+                      ...part,
+                      functionCall: {
+                        ...("functionCall" in part ? part.functionCall : {}),
+                        name: call.name,
+                        args: parseArgs(call.arguments),
+                      },
+                    },
+                  ];
+                },
+              );
+              if (index === 0 && this.replacedText !== null)
+                candidateParts.push({ text: this.replacedText });
+              return {
+                ...candidate,
+                content: {
+                  ...candidate.content,
+                  role: "model",
+                  parts: candidateParts,
+                },
+                ...(this.replacedText !== null
+                  ? { finishReason: "STOP" as const }
+                  : {}),
+              };
+            },
+          )
+        : null;
+    if (
+      separateCandidates &&
+      this.replacedText !== null &&
+      !this.candidateParts.has(0)
+    ) {
+      separateCandidates.unshift({
+        index: 0,
+        content: { role: "model", parts: [{ text: this.replacedText }] },
+        finishReason: "STOP",
+      });
+    }
+
     return {
-      candidates: [
+      candidates: separateCandidates ?? [
         {
           content: {
             parts,

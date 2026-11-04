@@ -138,6 +138,8 @@ export type SettingsPageHeader = {
   /** Browser tab title, when `title` is composed markup rather than a string. */
   documentTitle?: string;
   description?: React.ReactNode;
+  /** The record's own mark, drawn beside the title as on a detail page. */
+  icon?: React.ReactNode;
   backLink?: React.ReactNode;
   status?: React.ReactNode;
   /**
@@ -211,6 +213,7 @@ export default function SettingsLayout({
         title={pageHeader?.title ?? config.title}
         documentTitle={pageHeader?.documentTitle}
         description={pageHeader ? pageHeader.description : config.description}
+        icon={pageHeader?.icon}
         backLink={pageHeader?.backLink}
         status={pageHeader?.status}
         tabs={pageHeader?.tabs}

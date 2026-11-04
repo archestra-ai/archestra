@@ -156,6 +156,18 @@ describe("access-control", () => {
       });
     });
 
+    test("the roles pages take the ac action their API calls need", () => {
+      expect(requiredPagePermissionsMap["/settings/roles/new"]).toEqual({
+        ac: ["create"],
+      });
+      expect(requiredPagePermissionsMap["/settings/roles/[id]"]).toEqual({
+        ac: ["read"],
+      });
+      expect(requiredPagePermissionsMap["/settings/roles/[id]/edit"]).toEqual({
+        ac: ["update"],
+      });
+    });
+
     test("connecting an external agent takes the same permission as creating a local one", () => {
       for (const routeId of [
         RouteId.InspectA2aRemoteAgent,

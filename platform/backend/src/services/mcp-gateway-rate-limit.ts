@@ -39,8 +39,8 @@ class McpGatewayAuthenticationCapacity {
     operation: () => Promise<T>,
     admission: AuthenticationAdmission,
   ): Promise<T> {
-    const { pool } = admission;
-    const credentialKey =
+    let { pool } = admission;
+    let credentialKey =
       admission.pool === "verified"
         ? fingerprint(admission.credential)
         : undefined;
@@ -48,9 +48,16 @@ class McpGatewayAuthenticationCapacity {
       ? (this.verifiedActive.get(credentialKey) ?? 0)
       : 0;
     if (
-      this.active[pool] >= MAX_AUTHENTICATION_OPERATIONS_PER_POOL ||
-      credentialActive >= MAX_VERIFIED_OPERATIONS_PER_CREDENTIAL
+      pool === "verified" &&
+      (this.active.verified >= MAX_AUTHENTICATION_OPERATIONS_PER_POOL ||
+        credentialActive >= MAX_VERIFIED_OPERATIONS_PER_CREDENTIAL)
     ) {
+      // Shared credentials may burst into spare unverified capacity without
+      // taking the reserved slots that keep other verified callers working.
+      pool = "unverified";
+      credentialKey = undefined;
+    }
+    if (this.active[pool] >= MAX_AUTHENTICATION_OPERATIONS_PER_POOL) {
       throw new McpGatewayAuthenticationBusyError(
         "Gateway authentication capacity is exhausted",
       );

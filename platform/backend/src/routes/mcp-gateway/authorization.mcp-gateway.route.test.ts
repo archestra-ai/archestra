@@ -8,6 +8,9 @@ import {
   McpOauthClientModel,
   MemberModel,
   OAuthAccessTokenModel,
+  ServiceAccountModel,
+  TeamModel,
+  UserTokenModel,
 } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
@@ -126,6 +129,122 @@ describe("MCP Gateway authorization failures", () => {
         }
       }
     }
+  });
+
+  test("distinguishes platform-token grant loss from invalid credentials on every transport", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeAgent,
+    makeServiceAccountToken,
+  }) => {
+    const org = await makeOrganization();
+    const otherOrg = await makeOrganization();
+    const owner = await makeUser();
+    const user = await makeUser();
+    const member = await makeMember(user.id, org.id, { role: "member" });
+    // Membership in both organizations must not let an org-scoped token cross over.
+    await makeMember(user.id, otherOrg.id, { role: "member" });
+    const team = await makeTeam(org.id, owner.id);
+    await makeTeamMember(team.id, user.id);
+    const gateway = await makeAgent({
+      organizationId: org.id,
+      authorId: owner.id,
+      agentType: "mcp_gateway",
+      access: { teams: [team.id] },
+    });
+    const otherGateway = await makeAgent({
+      organizationId: otherOrg.id,
+      agentType: "mcp_gateway",
+    });
+    const userToken = await UserTokenModel.create(user.id, org.id);
+    const accountToken = await makeServiceAccountToken({
+      organizationId: org.id,
+      teamId: team.id,
+    });
+    const request = (credential: string, gatewayId = gateway.id) => ({
+      method: "GET" as const,
+      url: `/v1/mcp/${gatewayId}`,
+      headers: { authorization: `Bearer ${credential}` },
+    });
+    for (const credential of [userToken.value, accountToken.value]) {
+      expect((await app.inject(request(credential))).statusCode).toBe(405);
+    }
+    await TeamModel.removeMember(team.id, user.id);
+    await ServiceAccountModel.update(accountToken.serviceAccount.id, org.id, {
+      teamId: null,
+    });
+    for (const credential of [userToken.value, accountToken.value]) {
+      for (const endpoint of ["post", "get", "sse", "delete"] as const) {
+        const response = await app.inject({
+          method:
+            endpoint === "get"
+              ? "GET"
+              : endpoint === "delete"
+                ? "DELETE"
+                : "POST",
+          url: `/v1/mcp/${gateway.id}${endpoint === "sse" ? `/messages?sessionId=${randomUUID()}` : ""}`,
+          headers: {
+            authorization: `Bearer ${credential}`,
+            accept: "application/json, text/event-stream",
+          },
+          ...((endpoint === "post" || endpoint === "sse") && {
+            payload: {
+              jsonrpc: "2.0",
+              id: 1,
+              method: "tools/list",
+              params: {},
+            },
+          }),
+        });
+        expect(response.statusCode, endpoint).toBe(403);
+        expect(response.headers["www-authenticate"]).toBeUndefined();
+      }
+    }
+    for (const credential of [userToken.value, accountToken.value])
+      expect(
+        (await app.inject(request(credential, otherGateway.id))).statusCode,
+      ).toBe(401);
+    await MemberModel.deleteByIdInOrganization(member.id, org.id);
+    await ServiceAccountModel.update(accountToken.serviceAccount.id, org.id, {
+      disabled: true,
+    });
+    for (const credential of [
+      userToken.value,
+      accountToken.value,
+      "archestra_invalid",
+    ]) {
+      const response = await app.inject(request(credential));
+      expect(response.statusCode).toBe(401);
+      expect(response.headers["www-authenticate"]).toContain(
+        "resource_metadata",
+      );
+    }
+    await ServiceAccountModel.update(accountToken.serviceAccount.id, org.id, {
+      disabled: false,
+    });
+    const tokenKey = {
+      serviceAccountId: accountToken.serviceAccount.id,
+      tokenId: accountToken.tokenId,
+      organizationId: org.id,
+    };
+    for (const data of [
+      { disabled: true },
+      { disabled: false, expiresAt: new Date(Date.now() - 60_000) },
+    ]) {
+      await ServiceAccountModel.updateToken({ ...tokenKey, data });
+      const invalid = await app.inject(request(accountToken.value));
+      expect(invalid.statusCode).toBe(401);
+      expect(invalid.headers["www-authenticate"]).toContain(
+        "resource_metadata",
+      );
+    }
+    await ServiceAccountModel.deleteToken(tokenKey);
+    expect((await app.inject(request(accountToken.value))).statusCode).toBe(
+      401,
+    );
   });
 
   test("returns 403 when an application token loses its gateway grant", async ({

@@ -2281,7 +2281,18 @@ async function authenticateUngated(
       tokenValue,
       tokenHashes.rawTokenHash,
     );
-    if (resolvedToken?.type === "serviceAccount") {
+    // Establish a valid principal in this organization before distinguishing
+    // a missing gateway grant from an invalid credential.
+    if (!resolvedToken) return { result: null, reason: "invalid_token" };
+    const context = await getAgentAccessContext();
+    const organizationId =
+      resolvedToken.type === "serviceAccount"
+        ? resolvedToken.serviceAccount.organizationId
+        : resolvedToken.token.organizationId;
+    if (!context || context.organizationId !== organizationId) {
+      return { result: null, reason: "invalid_token" };
+    }
+    if (resolvedToken.type === "serviceAccount") {
       const result = await validateServiceAccountGatewayAccess({
         profileId,
         serviceAccountId: resolvedToken.serviceAccount.id,
@@ -2291,27 +2302,22 @@ async function authenticateUngated(
       });
       return result
         ? { result, reason: null }
-        : { result: null, reason: "invalid_token" };
+        : { result: null, reason: "no_gateway_access" };
     }
-    if (resolvedToken?.type === "user") {
-      const userTokenResult = await validateResolvedUserToken({
-        profileId,
-        token: resolvedToken.token,
-        agentAccessContext: await getAgentAccessContext(),
-        lookups,
-      });
-      if (userTokenResult) {
-        cacheTokenAuthResult(authCacheKey, userTokenResult);
-        return { result: userTokenResult, reason: null };
-      }
-    }
-
-    logger.warn(
-      { profileId, tokenPrefix: tokenValue.substring(0, 14) },
-      "validateMCPGatewayToken: token validation failed - not found in any token table or access denied",
-    );
-    cacheTokenAuthResult(authCacheKey, null);
-    return { result: null, reason: "invalid_token" };
+    const { userId } = resolvedToken.token;
+    const member = lookups
+      ? await lookups.membership({ userId, organizationId })
+      : await MemberModel.getByUserId(userId, organizationId);
+    if (!member) return { result: null, reason: "invalid_token" };
+    const userTokenResult = await validateResolvedUserToken({
+      profileId,
+      token: resolvedToken.token,
+      agentAccessContext: context,
+      lookups,
+    });
+    return userTokenResult
+      ? { result: userTokenResult, reason: null }
+      : { result: null, reason: "no_gateway_access" };
   }
 
   // Try OAuth token validation (for MCP clients like Open WebUI)

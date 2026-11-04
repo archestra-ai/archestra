@@ -331,6 +331,37 @@ describe("MCP Gateway authentication rate limiting", () => {
           credential: busyCaller.value,
         }),
       );
+      // Shared credentials can burst beyond their reserved allowance while
+      // spare unverified capacity exists, including on a different gateway.
+      const burst = await Promise.all(
+        [app, replica].flatMap((instance) =>
+          gateways.map((gateway) =>
+            instance.inject({
+              ...request(gateway.id, busyCaller.value),
+              method: "POST",
+              headers: {
+                authorization: `Bearer ${busyCaller.value}`,
+                accept: "application/json, text/event-stream",
+              },
+              payload: {
+                jsonrpc: "2.0",
+                id: 1,
+                method: "tools/list",
+                params: {},
+              },
+            }),
+          ),
+        ),
+      );
+      for (const response of burst) expect(response.statusCode).toBe(200);
+      pending.push(
+        ...Array.from({ length: 16 }, () =>
+          withMcpGatewayAuthenticationCapacity(() => held, {
+            pool: "verified",
+            credential: busyCaller.value,
+          }),
+        ),
+      );
       for (const instance of [app, replica]) {
         for (const gateway of gateways) {
           const busy = await instance.inject(

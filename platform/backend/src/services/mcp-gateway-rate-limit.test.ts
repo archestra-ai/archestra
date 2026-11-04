@@ -149,24 +149,68 @@ describe("gateway attempt budgets", () => {
     }
   });
 
-  test("caps a verified credential and releases its permits after success and failure", async () => {
+  test("overflows one verified credential without consuming other callers' reserved capacity", async () => {
     const admission = { pool: "verified" as const, credential: randomUUID() };
     let release = () => {};
     const held = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const pending = Array.from({ length: 4 }, (_, index) =>
+    // Four reserved slots plus the sixteen slots shared with unknown callers.
+    const pending = Array.from({ length: 20 }, (_, index) =>
       withMcpGatewayAuthenticationCapacity(async () => {
         await held;
-        if (index === 0) throw new Error("Authentication failed");
+        if (index === 0 || index === 4)
+          throw new Error("Authentication failed");
         return true;
       }, admission),
     );
     const settled = Promise.allSettled(pending);
+    let otherCallers: Promise<void>[] = [];
     try {
       await expect(
         withMcpGatewayAuthenticationCapacity(async () => true, admission),
       ).rejects.toBeInstanceOf(McpGatewayAuthenticationBusyError);
+      await expect(
+        withMcpGatewayAuthenticationCapacity(async () => true),
+      ).rejects.toBeInstanceOf(McpGatewayAuthenticationBusyError);
+      otherCallers = Array.from({ length: 12 }, () =>
+        withMcpGatewayAuthenticationCapacity(() => held, {
+          pool: "verified",
+          credential: randomUUID(),
+        }),
+      );
+      await expect(
+        withMcpGatewayAuthenticationCapacity(async () => true, {
+          pool: "verified",
+          credential: randomUUID(),
+        }),
+      ).rejects.toBeInstanceOf(McpGatewayAuthenticationBusyError);
+    } finally {
+      release();
+      await settled;
+      await Promise.all(otherCallers);
+    }
+    expect(
+      (await settled).filter((result) => result.status === "rejected"),
+    ).toHaveLength(2);
+    const resumed = Array.from({ length: 20 }, () =>
+      withMcpGatewayAuthenticationCapacity(async () => true, admission),
+    );
+    await expect(Promise.all(resumed)).resolves.toHaveLength(20);
+  });
+
+  test("uses spare unverified slots when the verified pool is full", async () => {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const pending = Array.from({ length: 16 }, () =>
+      withMcpGatewayAuthenticationCapacity(() => held, {
+        pool: "verified",
+        credential: randomUUID(),
+      }),
+    );
+    try {
       await expect(
         withMcpGatewayAuthenticationCapacity(async () => true, {
           pool: "verified",
@@ -175,18 +219,8 @@ describe("gateway attempt budgets", () => {
       ).resolves.toBe(true);
     } finally {
       release();
-      await settled;
+      await Promise.all(pending);
     }
-    expect(
-      (await settled).filter((result) => result.status === "rejected"),
-    ).toHaveLength(1);
-    const resumed = Array.from({ length: 4 }, () =>
-      withMcpGatewayAuthenticationCapacity(async () => true, admission),
-    );
-    await expect(
-      withMcpGatewayAuthenticationCapacity(async () => true, admission),
-    ).rejects.toBeInstanceOf(McpGatewayAuthenticationBusyError);
-    await expect(Promise.all(resumed)).resolves.toHaveLength(4);
   });
 
   test("does not admit an unknown caller when shared storage is unavailable", async () => {

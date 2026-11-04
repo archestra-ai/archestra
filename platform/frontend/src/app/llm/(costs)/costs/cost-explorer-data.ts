@@ -401,6 +401,8 @@ export function usePivotCube(
   q: PivotQuery,
   timeframe: StatisticsTimeFrame,
   enabled: boolean,
+  /** Only this team's requests; answered for the team and time groupings. */
+  teamId?: string,
 ): Cube {
   const src = resolveSource(q);
   const on = (kind: Source["kind"]) => enabled && src.kind === kind;
@@ -449,10 +451,11 @@ export function usePivotCube(
     groupBy: ["skillId"],
     enabled: on("skill") && q.group === "skill",
   });
-  const teamQ = useTeamStatistics({ timeframe, enabled: on("team") });
+  const teamQ = useTeamStatistics({ timeframe, teamId, enabled: on("team") });
   const agentQ = useProfileStatistics({ timeframe, enabled: on("agent") });
   const modelQ = useCostStatistics({
     timeframe,
+    teamId,
     enabled: on("model") || on("time"),
   });
   const userQ = useUsersForPivot({
@@ -550,7 +553,7 @@ export function usePivotCube(
         : []),
     ].find((query) => query.isError);
     const base = {
-      api: apiFor(src, tf, q),
+      api: apiFor(src, tf, q, teamId),
       isLoading: false,
       error: failed?.error,
       retry: () => {
@@ -984,6 +987,7 @@ export function usePivotCube(
     proxyQ.isLoading,
     proxyItems,
     itemStamp,
+    teamId,
   ]);
 }
 
@@ -1045,10 +1049,11 @@ function resolveSource(q: PivotQuery): Source {
   return { kind: "user", models: split === "model" };
 }
 
-function apiFor(src: Source, tf: string, q: PivotQuery) {
+function apiFor(src: Source, tf: string, q: PivotQuery, teamId?: string) {
+  const team = teamId ? `&teamId=${encodeURIComponent(teamId)}` : "";
   switch (src.kind) {
     case "time":
-      return `GET /api/statistics/costs?timeframe=${tf}`;
+      return `GET /api/statistics/costs?timeframe=${tf}${team}`;
     case "tool":
       return `GET /api/statistics/mcp-tool-calls?groupBy=${src.dims.join(",")}&timeframe=${tf}`;
     case "app":
@@ -1056,11 +1061,13 @@ function apiFor(src: Source, tf: string, q: PivotQuery) {
     case "skill":
       return `GET /api/statistics/skill-usage?groupBy=${src.dims.join(",")}&timeframe=${tf}`;
     case "team":
-      return `GET /api/statistics/teams?timeframe=${tf}`;
+      return `GET /api/statistics/teams?timeframe=${tf}${team}`;
     case "agent":
       return `GET /api/statistics/agents?timeframe=${tf}`;
     case "model":
-      return `GET /api/statistics/models?timeframe=${tf}`;
+      return teamId
+        ? `GET /api/statistics/costs?timeframe=${tf}${team}`
+        : `GET /api/statistics/models?timeframe=${tf}`;
     case "user":
       return `GET /api/statistics/users?includeTimeSeries=true${src.models ? "&includeModels=true&includeModelTimeSeries=true" : ""}&timeframe=${tf}`;
     case "proxy":

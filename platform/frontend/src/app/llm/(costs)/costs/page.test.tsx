@@ -23,9 +23,11 @@ import {
 } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useTeamLimitAccess } from "@/lib/limits-access";
 import OrganizationCostsPage from "./page";
 
 vi.mock("next/navigation");
+vi.mock("@/lib/limits-access");
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query", async (importOriginal) => ({
@@ -741,5 +743,49 @@ describe("OrganizationCostsPage", () => {
       await screen.findByRole("button", { name: "Explore example/model+a" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Research agent")).not.toBeInTheDocument();
+  });
+  it("limits a team admin without organization cost access to their teams' groupings", async () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.llmCost,
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useTeamLimitAccess).mockReturnValue({
+      isTeamAdmin: true,
+      canRead: true,
+      teams: [
+        { id: "parent", name: "Platform" },
+        { id: "child", name: "Platform Search" },
+      ],
+    } as ReturnType<typeof useTeamLimitAccess>);
+    search = new URLSearchParams("group=person&metric=tokens");
+    show();
+    expect(
+      await screen.findByRole("button", { name: "by Model" }),
+    ).toBeVisible();
+    fireEvent.keyDown(screen.getByRole("button", { name: /^by / }), {
+      key: "Enter",
+    });
+    expect(
+      (await screen.findAllByRole("menuitem")).map((item) => item.textContent),
+    ).toEqual(["Time", "Team", "Model"]);
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    fireEvent.keyDown(
+      screen.getByRole("button", { name: "Team All my teams" }),
+      { key: "Enter" },
+    );
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Platform Search" }),
+    );
+    await waitFor(() =>
+      expect(
+        requests.some((url) => url.searchParams.get("teamId") === "child"),
+      ).toBe(true),
+    );
+    expect(
+      new Set(requests.map((url) => url.pathname.split("/").pop())),
+    ).toEqual(new Set(["costs"]));
   });
 });

@@ -551030,7 +551030,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get usage statistics for every team in the active organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n\nReturns aggregate team usage for the active organization.",
+        "description": "Get usage statistics for every team in the active organization. A caller without `llmCost:read` who administers a team gets only the teams they administer and their sub-teams; each request then counts for the teams whose spend limits it charges. Filtering by `teamId` does the same for one team.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmCost:read` for every team in the active organization. A session-authenticated team admin without it receives only the teams they administer and their sub-teams; any other caller gets 403, and so does a team admin filtering by another team.",
         "parameters": [
           {
             "schema": {
@@ -551061,6 +551061,16 @@
             "in": "query",
             "name": "timeframe",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "query",
+            "name": "teamId",
+            "required": false,
+            "description": "Only requests charged to this team: those billed to it or a sub-team, and those its members made through agents shared with it."
           }
         ],
         "responses": {
@@ -551404,11 +551414,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "note": "Returns aggregate team usage for the active organization.",
-          "permissions": [
-            "llmCost:read"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `llmCost:read` for every team in the active organization. A session-authenticated team admin without it receives only the teams they administer and their sub-teams; any other caller gets 403, and so does a team admin filtering by another team.",
+          "permissions": []
         }
       }
     },
@@ -555008,7 +555016,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get the Costs overview and model chart from shared aggregates. Active user counts are self-scoped without member:read; no user identities are returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics",
+        "description": "Get the Costs overview and model chart from shared aggregates. Active user counts are self-scoped without member:read; no user identities are returned. A caller without `llmCost:read` who administers a team gets only the requests charged to the teams they administer and their sub-teams, with active users counted within them. Filtering by `teamId` does the same for one team.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmCost:read` for the whole organization. A session-authenticated team admin without it receives only requests charged to the teams they administer and their sub-teams; any other caller gets 403, and so does a team admin filtering by another team.",
         "parameters": [
           {
             "schema": {
@@ -555039,6 +555047,16 @@
             "in": "query",
             "name": "timeframe",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "query",
+            "name": "teamId",
+            "required": false,
+            "description": "Only requests charged to this team: those billed to it or a sub-team, and those its members made through agents shared with it."
           }
         ],
         "responses": {
@@ -555448,10 +555466,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmCost:read"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `llmCost:read` for the whole organization. A session-authenticated team admin without it receives only requests charged to the teams they administer and their sub-teams; any other caller gets 403, and so does a team admin filtering by another team.",
+          "permissions": []
         }
       }
     },

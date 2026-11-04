@@ -17,6 +17,7 @@ import {
   UsageStatisticsModel,
 } from "@/models";
 import { callerIsAppAdmin } from "@/services/apps/app-authorization";
+import { getCostAccess } from "@/services/cost-access";
 import {
   AgentStatisticsSchema,
   APP_STATISTICS_SORT_BY,
@@ -50,6 +51,16 @@ import {
 
 const StatisticsQuerySchema = z.object({
   timeframe: StatisticsTimeFrameSchema.optional().default("24h"),
+});
+
+const TeamCostQuerySchema = StatisticsQuerySchema.extend({
+  teamId: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Only requests charged to this team: those billed to it or a sub-team, and those its members made through agents shared with it.",
+    ),
 });
 
 const AppStatisticsQuerySchema = StatisticsQuerySchema.merge(
@@ -131,17 +142,22 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetTeamStatistics,
         description:
-          "Get usage statistics for every team in the active organization.",
+          "Get usage statistics for every team in the active organization. A caller without `llmCost:read` who administers a team gets only the teams they administer and their sub-teams; each request then counts for the teams whose spend limits it charges. Filtering by `teamId` does the same for one team.",
         tags: ["Statistics"],
-        querystring: StatisticsQuerySchema,
+        querystring: TeamCostQuerySchema,
         response: constructResponseSchema(z.array(TeamStatisticsSchema)),
       },
     },
-    async ({ query: { timeframe }, organizationId }, reply) => {
+    async (request, reply) => {
+      const {
+        query: { timeframe, teamId },
+        organizationId,
+      } = request;
       return reply.send(
         await StatisticsModel.getTeamStatistics({
           timeframe,
           organizationId,
+          teamIds: (await getCostAccess(request, teamId)).teamIds,
         }),
       );
     },
@@ -419,30 +435,36 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetCostStatistics,
         description:
-          "Get the Costs overview and model chart from shared aggregates. Active user counts are self-scoped without member:read; no user identities are returned.",
+          "Get the Costs overview and model chart from shared aggregates. Active user counts are self-scoped without member:read; no user identities are returned. A caller without `llmCost:read` who administers a team gets only the requests charged to the teams they administer and their sub-teams, with active users counted within them. Filtering by `teamId` does the same for one team.",
         tags: ["Statistics"],
-        querystring: StatisticsQuerySchema,
+        querystring: TeamCostQuerySchema,
         response: constructResponseSchema(CostStatisticsSchema),
       },
     },
-    async ({
-      query: { timeframe },
-      organizationId,
-      user,
-      headers,
-      serviceAccount,
-    }) => {
-      const { success: canReadAllUsers } = await hasPermission(
-        { member: ["read"] },
+    async (request) => {
+      const {
+        query: { timeframe, teamId },
+        organizationId,
+        user,
         headers,
         serviceAccount,
-        { userId: user.id, organizationId },
-      );
+      } = request;
+      const { teamIds, teamAdmin } = await getCostAccess(request, teamId);
+      // A team admin may count who is active within their own teams.
+      const canReadAllUsers =
+        teamAdmin ||
+        (
+          await hasPermission({ member: ["read"] }, headers, serviceAccount, {
+            userId: user.id,
+            organizationId,
+          })
+        ).success;
       return StatisticsModel.getCostStatistics({
         timeframe,
         organizationId,
         requestingUserId: user.id,
         canReadAllUsers,
+        teamIds,
       });
     },
   );

@@ -107,7 +107,7 @@ An account gets the permissions of every role assigned to it directly, plus the 
 
 Within each team, a person is a **member** or an **admin**. Members receive the team's grants but cannot manage its limits just by being members. Admins manage only that team's members and settings.
 
-Team admins can manage [child-team allocations and member key caps](/docs/llm-proxy/costs-and-limits/limits#team-limits-and-spend) across their team hierarchy. Their own team's ceiling stays protected unless they also administer a parent team.
+Team admins can manage [child-team allocations and member key caps](/docs/llm-proxy/costs-and-limits/limits#team-limits-and-spend) across their team hierarchy, and see [those teams' costs](/docs/llm-proxy/costs-and-limits/costs#view-your-teams-costs). Their own team's ceiling stays protected unless they also administer a parent team.
 
 <span id="delegation-and-concurrent-edits"></span>
 

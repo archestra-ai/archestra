@@ -1446,9 +1446,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetUserToken]: {},
   [RouteId.GetUserTokenValue]: {},
   [RouteId.RotateUserToken]: {},
-  [RouteId.GetTeamStatistics]: {
-    llmCost: ["read"],
-  },
+  // Handlers require llmCost:read, or scope a team admin to the teams they
+  // administer (see services/cost-access.ts).
+  [RouteId.GetTeamStatistics]: {},
   [RouteId.GetModelUsage]: { llmCost: ["read"] },
   [RouteId.GetMyModelUsage]: {},
   [RouteId.GetProxyCostStatistics]: { llmCost: ["read"] },
@@ -1487,9 +1487,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOverviewStatistics]: {
     llmCost: ["read"],
   },
-  [RouteId.GetCostStatistics]: {
-    llmCost: ["read"],
-  },
+  // Same team admin scoping as GetTeamStatistics.
+  [RouteId.GetCostStatistics]: {},
   [RouteId.GetCostSavingsStatistics]: {
     llmCost: ["read"],
   },

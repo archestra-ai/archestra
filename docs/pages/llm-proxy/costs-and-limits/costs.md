@@ -2,12 +2,12 @@
 title: Costs
 description: Break down organization-wide API spend, subscription usage, tokens, and requests by key, team, agent, model, person, app, skill, or label
 order: 1
-lastUpdated: 2026-10-28
+lastUpdated: 2026-11-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Open **Costs & Limits → Costs** to see where your organization's model spend, tokens, and requests go across virtual keys, teams, agents, models, people, apps, skills, and custom labels. Viewing organization-wide costs requires [`llmCost:read`](/docs/reference/permissions#llmCost:read).
+Open **Costs & Limits → Costs** to see where your organization's model spend, tokens, and requests go across virtual keys, teams, agents, models, people, apps, skills, and custom labels. Viewing organization-wide costs requires [`llmCost:read`](/docs/reference/permissions#llmCost:read). Team admins without it see [their teams' costs](#view-your-teams-costs).
 
 ![Costs & Limits → Costs showing headline totals and the cost explorer](/docs/automated_screenshots/llm-proxy_costs.webp)
 
@@ -66,6 +66,19 @@ In **Costs & Limits → Costs**, set **by** to **Label** and pick a label key (d
 Anyone signed in to Archestra can open **My Usage** in the sidebar to see their own personal spend, subscription estimate, requests, and tokens without needing [`llmCost:read`](/docs/reference/permissions#llmCost:read). It offers the same date range picker, chart, and explorer controls—grouped by **Agent**, **Model**, **Provider**, **Virtual key**, **Access method**, **App**, or **Skill**—scoped to calls attributed to your account.
 
 ![My Usage showing personal spend, tokens, requests, and usage breakdown](/docs/automated_screenshots/llm-proxy_my-usage.webp)
+
+## View Your Teams' Costs
+
+A team admin can check what their teams spend against their limits without seeing the rest of the organization. Open **Costs & Limits → Costs**: without [`llmCost:read`](/docs/reference/permissions#llmCost:read), the page covers only the teams you administer and their child teams.
+
+- **Team** narrows the page to one of your teams when you administer more than one.
+- **by** groups usage by **Time**, **Team**, or **Model**.
+
+What to know:
+
+- A request counts for a team the way its [team limits](/docs/llm-proxy/costs-and-limits/limits#team-limits-and-spend) count it: billed to the team or one of its child teams, or made by a member through an agent shared with the team.
+- Headline totals count each request once, even when it counts for both a team and its parent.
+- Agent sharing and team membership are read as they are now, so changing either changes past figures here. A limit keeps the usage it already counted.
 
 ## What to Know
 

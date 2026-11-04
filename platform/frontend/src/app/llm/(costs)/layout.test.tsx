@@ -65,15 +65,19 @@ describe("CostsLayout", () => {
     expect(screen.getByTestId("tabs")).toBeEmptyDOMElement();
   });
 
-  it("hides the redundant tab bar for delegated team admins", () => {
+  it("opens both tabs to a team admin and scopes the Costs description to their teams", () => {
     setPermissions({ canReadCosts: false, canReadLimits: false });
-    vi.mocked(usePathname).mockReturnValue("/llm/limits");
     vi.mocked(useTeamLimitAccess).mockReturnValue({
       canRead: true,
       isTeamAdmin: true,
     } as ReturnType<typeof useTeamLimitAccess>);
     render(<CostsLayout>content</CostsLayout>);
-    expect(screen.getByTestId("tabs")).toBeEmptyDOMElement();
+    const tabs = screen.getByTestId("tabs");
+    expect(tabs).toHaveTextContent("/llm/costs");
+    expect(tabs).toHaveTextContent("/llm/limits");
+    expect(screen.getByTestId("description")).toHaveTextContent(
+      /across the teams you administer/i,
+    );
   });
 
   it("keeps every tab for a reader who may open them all", () => {

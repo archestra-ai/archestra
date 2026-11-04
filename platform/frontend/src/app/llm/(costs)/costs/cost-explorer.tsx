@@ -20,6 +20,7 @@ import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useTeamLimitAccess } from "@/lib/limits-access";
 import { useProxyLabelKeys } from "@/lib/proxy-label-costs.query";
 import { cn } from "@/lib/utils/tailwind";
 import {
@@ -73,8 +74,17 @@ export default function CostExplorer() {
   const { data: canReadApps } = useHasPermissions({ app: ["read"] });
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
   const poolsEnabled = useFeature("llmModelPoolsEnabled") === true;
-  const { data: canReadLimits } = useHasPermissions({ llmLimit: ["read"] });
+  const limitsAccess = useTeamLimitAccess();
+  const { data: canReadCosts, isPending: isCostAccessPending } =
+    useHasPermissions({ llmCost: ["read"] });
+  // Without organization cost access, a team admin sees only their teams'
+  // requests, which the backend scopes for the team and cost endpoints.
+  const teamScoped =
+    !isCostAccessPending && !canReadCosts && limitsAccess.isTeamAdmin;
+  const [teamId, setTeamId] = useState<string>();
+  const ready = enabled && !isCostAccessPending;
   const canGroup = (group: DimId) =>
+    (!teamScoped || TEAM_SCOPED_GROUPS.includes(group)) &&
     (group !== "app" || canReadApps) &&
     (group !== "skill" || canReadSkills) &&
     (group !== "pool" || poolsEnabled);
@@ -84,7 +94,21 @@ export default function CostExplorer() {
     encode: encodeCostExplorer,
     timeframe,
   });
-  const { query, focus, view, pivotCols } = explorer;
+  const { focus, view, pivotCols } = explorer;
+  // A shared link may name a grouping or model drill-down a team admin
+  // cannot read; fall back to spend by model.
+  const query =
+    teamScoped && (!canGroup(explorer.query.group) || explorer.query.model)
+      ? {
+          ...explorer.query,
+          metric: supports("model", explorer.query.metric)
+            ? explorer.query.metric
+            : "billed",
+          group: "model" as const,
+          split: "none" as const,
+          model: undefined,
+        }
+      : explorer.query;
   const setQ = useCallback(
     (value: SetStateAction<PivotQuery>) => setExplorer("query", value),
     [setExplorer],
@@ -100,7 +124,7 @@ export default function CostExplorer() {
 
   const labelKeys = useProxyLabelKeys({
     timeframe,
-    enabled: enabled && query.group === "label",
+    enabled: ready && query.group === "label",
   });
   const labelKey = labelKeys.data?.includes(query.labelKey ?? "")
     ? query.labelKey
@@ -129,8 +153,8 @@ export default function CostExplorer() {
     setQ,
     setFocus,
   ]);
-  const kpis = useKpis({ timeframe, enabled });
-  const allModelsCube = usePivotCube(q, timeframe, enabled && !q.model);
+  const kpis = useKpis({ timeframe, teamId, enabled: ready });
+  const allModelsCube = usePivotCube(q, timeframe, ready && !q.model, teamId);
   const modelCube = useModelUsageCube({
     model: q.model,
     group: q.group === "key" || q.group === "agent" ? q.group : "person",
@@ -151,7 +175,8 @@ export default function CostExplorer() {
 
   const statistics = useCostStatistics({
     timeframe,
-    enabled: enabled && (q.metric === "billed" || q.metric === "subscription"),
+    teamId,
+    enabled: ready && (q.metric === "billed" || q.metric === "subscription"),
   });
 
   const contentRef = useRef<HTMLDivElement>(null);
@@ -240,7 +265,7 @@ export default function CostExplorer() {
     .map((r) => r.label);
   const pivotBySplit = hasSplit && pivotCols === "split";
   const focusedRows = cube.rows.filter((row) => focus.has(row.key));
-  const limitsLink = canReadLimits
+  const limitsLink = limitsAccess.canRead
     ? getCostLimitsLink(
         q,
         focusedRows.length === 1 ? focusedRows[0] : undefined,
@@ -251,8 +276,28 @@ export default function CostExplorer() {
     focusedRows.length === 1 ? focusedRows[0] : undefined,
   );
 
+  const drilldownFrom =
+    q.group === "model" && !teamScoped ? drilldown : undefined;
   const queryControls = (
     <>
+      {teamScoped && limitsAccess.teams.length > 1 && (
+        <QueryChip
+          label="Team"
+          className="max-sm:grow"
+          value={teamId ?? ALL_TEAMS}
+          options={[
+            { id: ALL_TEAMS, label: "All my teams" },
+            ...limitsAccess.teams.map((team) => ({
+              id: team.id,
+              label: team.name,
+            })),
+          ]}
+          onChange={(id) => {
+            setTeamId(id === ALL_TEAMS ? undefined : id);
+            setFocus(new Set());
+          }}
+        />
+      )}
       {/* A saved view is a preset of the controls beside it; changing
               any of them makes the view custom. */}
       <QueryChip
@@ -296,7 +341,8 @@ export default function CostExplorer() {
                 "cacheWrite",
               ].includes(m)) &&
             (m !== "appRuns" || canReadApps) &&
-            (m !== "skillActivations" || canReadSkills),
+            (m !== "skillActivations" || canReadSkills) &&
+            (!teamScoped || DIM_IDS.some((d) => canGroup(d) && supports(d, m))),
         ).map((m) => ({
           id: m,
           label: METRICS[m].label,
@@ -560,7 +606,7 @@ export default function CostExplorer() {
                 cube={cube}
                 metric={q.metric}
                 kind={chart}
-                onDrilldown={q.group === "model" ? drilldown : undefined}
+                onDrilldown={drilldownFrom}
                 split={hasSplit}
                 focus={focus}
               />
@@ -608,7 +654,7 @@ export default function CostExplorer() {
             ) : (
               chart !== "table" && (
                 <span className="hidden text-muted-foreground text-xs md:inline">
-                  {q.group === "model"
+                  {drilldownFrom
                     ? "Select a model name to explore its people, keys and agents. Click rows to compare."
                     : q.model
                       ? "Filtered to the selected model. Summary cards above cover all models."
@@ -655,7 +701,7 @@ export default function CostExplorer() {
                 splitLabel={hasSplit ? DIMS[q.split as DimId].label : null}
                 focus={focus}
                 onToggle={toggleFocus}
-                onDrilldown={q.group === "model" ? drilldown : undefined}
+                onDrilldown={drilldownFrom}
               />
             ) : (
               <PivotTable
@@ -744,3 +790,6 @@ function Empty({ text }: { text: string }) {
 }
 
 const CUSTOM_VIEW = "custom";
+const ALL_TEAMS = "all";
+/** The groupings the team-scoped endpoints answer. */
+const TEAM_SCOPED_GROUPS: DimId[] = ["time", "team", "model"];

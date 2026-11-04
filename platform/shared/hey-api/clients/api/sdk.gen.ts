@@ -13083,7 +13083,7 @@ export const revokeSkillShareLink = <ThrowOnError extends boolean = false>(optio
 export const getProxyCostStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetProxyCostStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetProxyCostStatisticsResponses, GetProxyCostStatisticsErrors, ThrowOnError>({ url: '/api/statistics/llm-proxy', ...options });
 
 /**
- * Get usage statistics for every team in the active organization.
+ * Get usage statistics for every team in the active organization. A caller without `llmCost:read` who administers a team gets only the teams they administer and their sub-teams; each request then counts for the teams whose spend limits it charges. Filtering by `teamId` does the same for one team.
  *
  * Authentication:
  *
@@ -13091,9 +13091,7 @@ export const getProxyCostStatistics = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `llmCost:read`: View organization-wide LLM usage cost statistics and analytics
- *
- * Returns aggregate team usage for the active organization.
+ * Requires `llmCost:read` for every team in the active organization. A session-authenticated team admin without it receives only the teams they administer and their sub-teams; any other caller gets 403, and so does a team admin filtering by another team.
  */
 export const getTeamStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetTeamStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetTeamStatisticsResponses, GetTeamStatisticsErrors, ThrowOnError>({ url: '/api/statistics/teams', ...options });
 
@@ -13216,7 +13214,7 @@ export const getSkillStatistics = <ThrowOnError extends boolean = false>(options
 export const getOverviewStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetOverviewStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetOverviewStatisticsResponses, GetOverviewStatisticsErrors, ThrowOnError>({ url: '/api/statistics/overview', ...options });
 
 /**
- * Get the Costs overview and model chart from shared aggregates. Active user counts are self-scoped without member:read; no user identities are returned.
+ * Get the Costs overview and model chart from shared aggregates. Active user counts are self-scoped without member:read; no user identities are returned. A caller without `llmCost:read` who administers a team gets only the requests charged to the teams they administer and their sub-teams, with active users counted within them. Filtering by `teamId` does the same for one team.
  *
  * Authentication:
  *
@@ -13224,7 +13222,7 @@ export const getOverviewStatistics = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * `llmCost:read`: View organization-wide LLM usage cost statistics and analytics
+ * Requires `llmCost:read` for the whole organization. A session-authenticated team admin without it receives only requests charged to the teams they administer and their sub-teams; any other caller gets 403, and so does a team admin filtering by another team.
  */
 export const getCostStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetCostStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetCostStatisticsResponses, GetCostStatisticsErrors, ThrowOnError>({ url: '/api/statistics/costs', ...options });
 

@@ -499,6 +499,9 @@ function approvedGeminiCalls(
   originals: readonly { id: string }[],
   approved: StreamAccumulatorState["toolCalls"],
 ): Map<string, StreamAccumulatorState["toolCalls"][number]> {
+  // An empty approved batch needs no association, including during cleanup
+  // of a provider response whose own ids were ambiguous.
+  if (approved.length === 0) return new Map();
   const originalIds = new Set(originals.map((call) => call.id));
   const result = new Map(approved.map((call) => [call.id, call]));
   if (

@@ -54,6 +54,8 @@ for (const provider of [
     let finalizationGate: ReturnType<typeof deferred> | undefined;
     let policyGate: ReturnType<typeof deferred> | undefined;
     let policyStarted: ReturnType<typeof deferred>;
+    let bufferResponse: boolean;
+    let invalidPolicyBatch: "added" | "duplicate" | undefined;
     let unregister: (() => void) | undefined;
     let failures: number;
     let failure: unknown;
@@ -191,6 +193,8 @@ for (const provider of [
       clientDisconnected = false;
       finalizationGate = undefined;
       policyGate = undefined;
+      bufferResponse = false;
+      invalidPolicyBatch = undefined;
       policyStarted = deferred();
       failures = 0;
       failure = undefined;
@@ -198,9 +202,18 @@ for (const provider of [
       completions = 0;
       unregister = registerLlmProxyPlugin({
         id: `disconnect-proof-${crypto.randomUUID()}`,
-        onToolCalls: async () => {
+        buffersModelResponse: () => bufferResponse,
+        onToolCalls: async ({ toolCalls }) => {
           policyStarted.resolve();
           await policyGate?.promise;
+          if (invalidPolicyBatch)
+            return {
+              decision: "allow",
+              toolCalls:
+                invalidPolicyBatch === "added"
+                  ? [{ ...toolCalls[0], id: "added-call" }]
+                  : [toolCalls[0], toolCalls[0]],
+            };
           return undefined;
         },
         onModelResponse: async () => {
@@ -614,6 +627,65 @@ for (const provider of [
           expect(receipts).toHaveLength(1);
           expect(receipts[0].usage.issues).not.toContain("partial_stream");
         });
+      });
+    }
+
+    if (provider === "gemini") {
+      test("discards buffered calls when the client disconnects during final response policy", async () => {
+        mode = "tool-stream";
+        bufferResponse = true;
+        finalizationGate = deferred();
+        const controller = new AbortController();
+        const request = post(controller.signal).catch(() => undefined);
+        await received.promise;
+        if (!upstreamResponse) throw new Error("Upstream request missing");
+        finish(upstreamResponse);
+        await providerFinished.promise;
+        controller.abort();
+        await vi.waitFor(() => expect(clientDisconnected).toBe(true));
+        finalizationGate.resolve();
+        await request;
+        await vi.waitFor(async () => {
+          const rows =
+            await InteractionModel.getAllInteractionsForProfile(agentId);
+          expect(rows).toHaveLength(1);
+          expect(JSON.stringify(rows[0].response)).not.toContain("held-call");
+          expect(JSON.stringify(rows[0].response)).not.toContain("lookup");
+          expect(rows[0].inputTokens).toBe(12);
+          expect(rows[0].outputTokens).toBe(40);
+          const receipts = await InteractionBillingModel.findMany([rows[0].id]);
+          expect(receipts).toHaveLength(1);
+          expect(receipts[0].usage.issues).not.toContain("partial_stream");
+        });
+      });
+    }
+
+    if (provider === "gemini") {
+      test.for([
+        "added",
+        "duplicate",
+      ] as const)("discards unreleased calls when policy mapping fails (%s)", async (batch) => {
+        mode = "tool-stream";
+        invalidPolicyBatch = batch;
+        const response = await post(new AbortController().signal);
+        if (!upstreamResponse) throw new Error("Upstream request missing");
+        finish(upstreamResponse);
+        const delivered = await response.text();
+        expect(delivered).not.toContain("functionCall");
+        expect(delivered).not.toContain("held-call");
+        await vi.waitFor(async () => {
+          const rows =
+            await InteractionModel.getAllInteractionsForProfile(agentId);
+          expect(rows).toHaveLength(1);
+          expect(JSON.stringify(rows[0].response)).not.toContain("held-call");
+          expect(JSON.stringify(rows[0].response)).not.toContain("lookup");
+          expect(rows[0].inputTokens).toBe(12);
+          expect(rows[0].outputTokens).toBe(40);
+          const receipts = await InteractionBillingModel.findMany([rows[0].id]);
+          expect(receipts).toHaveLength(1);
+          expect(receipts[0].usage.issues).not.toContain("partial_stream");
+        });
+        expect(failures).toBe(1);
       });
     }
 

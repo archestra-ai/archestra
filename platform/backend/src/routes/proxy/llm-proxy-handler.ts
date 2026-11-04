@@ -3005,12 +3005,20 @@ async function handleStreaming<
   let accountingFinalized = false;
   let upstreamFinished = false;
   let providerTerminalSeen = false;
+  let toolCallsReleased = false;
   const observedUsage = () =>
     (!upstreamFinished ? ctx.getUpstreamStreamUsage?.() : null) ??
     streamAdapter.state.usage;
   const finalizeInteraction = async () => {
     if (accountingFinalized) return;
     accountingFinalized = true;
+    // Candidate completion and policy approval do not imply delivery. Clear
+    // held Gemini calls on every exit before release (including rewrite errors
+    // and buffered-response disconnects), without changing upstream usage.
+    if (streamAdapter.provider === "gemini" && !toolCallsReleased) {
+      streamAdapter.state.toolCalls = [];
+      streamAdapter.state.rawToolCallEvents = [];
+    }
     try {
       await ctx.throughput?.reconcile(observedUsage());
     } catch (error) {
@@ -3658,6 +3666,7 @@ async function handleStreaming<
         for (const event of allEvents) {
           childStream.emitPolicy(event);
         }
+        toolCallsReleased = !bufferModelResponse;
       } else if (streamAdapter.provider === "gemini") {
         // The upstream has finished, so retain final usage, but a disconnect
         // during policy evaluation must not record calls never handed over.
@@ -3707,6 +3716,7 @@ async function handleStreaming<
 
     if (bufferModelResponse && !reply.raw.destroyed) {
       childStream.flushAll();
+      toolCallsReleased = true;
       appaReceipts?.markReleased(bufferedOutcome.decision);
     }
 

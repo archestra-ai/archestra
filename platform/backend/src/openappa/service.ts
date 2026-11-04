@@ -216,6 +216,8 @@ type NativeOutputDecision = Extract<
 type ProcessedToolResult = {
   content: string;
   outputSource: OutputSource;
+  /** A native refusal, distinct from a successful authoritative replacement. */
+  refused?: true;
   reason?: RuntimeReason;
   code?: string;
   /** The runtime denied this call, so `content` is its ruling, not an output. */
@@ -954,6 +956,14 @@ async function approveToolResult(params: {
   return {
     content,
     outputSource,
+    ...(decision.decision === "deny_call" ||
+    decision.decision === "block" ||
+    decision.decision === "refuse" ||
+    decision.decision === "replace_output" ||
+    (decision.decision === "mcp_result" &&
+      (decision.result?.isError === true || reason === "unknown_control_call"))
+      ? { refused: true as const }
+      : {}),
     ...(reason ? { reason } : {}),
     ...(code ? { code } : {}),
     ...(decision.decision === "deny_call"

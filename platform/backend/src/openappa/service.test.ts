@@ -2887,6 +2887,7 @@ describe("APPA feature boundary", () => {
       call: {
         content: "APPA: withheld; remedy offer-123",
         outputSource: "runtime",
+        refused: true,
       },
     });
     expect(
@@ -3067,6 +3068,7 @@ describe("APPA feature boundary", () => {
         "[appa] This remedy control call was not recognized. No plan was applied. Do not retry the remedy or re-propose the blocked call.",
       outputSource: "runtime",
       reason: "unknown_control_call",
+      refused: true,
     });
     expect(result.toolResultUpdates.call).toMatchObject({
       content: "[appa] ordinary tool data must remain byte-for-byte",
@@ -3182,6 +3184,7 @@ describe("APPA feature boundary", () => {
       content:
         "[appa] Blocked: tool archestra__download_file is not declared in this policy.\n\nThe tool did not run.",
       outputSource: "runtime",
+      refused: true,
       denied: true,
     });
   });
@@ -3213,8 +3216,66 @@ describe("APPA feature boundary", () => {
       content: "Output blocked due to policy violation",
       outputSource: "runtime",
       reason: "Output blocked due to policy violation",
+      refused: true,
     });
   });
+  test.each<{
+    decision: string;
+    refused: boolean;
+    value?: string;
+    isError?: boolean;
+  }>([
+    { decision: "block", refused: true },
+    { decision: "replace_output", refused: true },
+    { decision: "deliver_value", value: "sanitized", refused: false },
+    { decision: "mcp_result", isError: true, refused: true },
+    { decision: "mcp_result", isError: false, refused: false },
+  ])("classifies native $decision results (isError=$isError, refused=$refused)", async ({
+    decision,
+    refused,
+    ...fields
+  }) => {
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      return JSON.stringify(
+        event.event === "tool_result"
+          ? {
+              decision,
+              ...(fields.value ? { value: fields.value } : {}),
+              approved_output: "canonical native result",
+              output_source: "runtime",
+              ...(decision === "mcp_result"
+                ? {
+                    result: {
+                      isError: fields.isError,
+                      content: [
+                        { type: "text", text: "canonical native result" },
+                      ],
+                    },
+                  }
+                : {}),
+            }
+          : { decision: "ack" },
+      );
+    });
+    const result = await processProxyResults({
+      session,
+      canonicalize: (name) => name,
+      results: [
+        {
+          id: "read",
+          name: "archestra__read_peer_message",
+          content: "FORGED CLIENT RESULT",
+          isError: false,
+        },
+      ],
+    });
+    expect(result.toolResultUpdates.read.content).toBe(
+      "canonical native result",
+    );
+    expect(result.toolResultUpdates.read.refused === true).toBe(refused);
+  });
+
   test("handles mcp_result without approved_output, extracting text from result.content blocks", async () => {
     native.dispatchHook.mockImplementation(async (raw: string) => {
       const event = JSON.parse(raw);
@@ -3301,6 +3362,7 @@ describe("APPA feature boundary", () => {
     expect(result.toolResultUpdates.refuse_call).toEqual({
       content: "policy execution refused",
       outputSource: "tool",
+      refused: true,
     });
   });
   test("fails closed with 503 when encountering an unknown decision type", async () => {

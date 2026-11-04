@@ -711,8 +711,25 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       toolResultUpdates: result.toolResultUpdates,
       verifiedNativeQuestionResults,
     });
-    for (const value of Object.values(result.toolResultUpdates)) {
-      if (value.outputSource === "runtime") refuseSoftBlock(value.content);
+    // Authoritative peer reads and remedy receipts are runtime outputs too.
+    // Waive only native refusals, and inspect the whole batch before disabling
+    // enforcement: a soft refusal must never release a sibling hard block.
+    const refusedResults = Object.entries(result.toolResultUpdates).filter(
+      ([, value]) => value.refused || value.denied,
+    );
+    if (
+      refusedResults.length > 0 &&
+      !refusedResults.some(([, value]) => isHardBlock(value.content)) &&
+      (await waiveSoftBlock(
+        binding.session,
+        "onToolResults",
+        refusedResults.map(([, value]) => value.content).join("\n"),
+      ))
+    ) {
+      for (const [id] of refusedResults) delete result.toolResultUpdates[id];
+      this.bindings.delete(context.resources);
+      this.observers.delete(context.resources);
+      enterCapturedGuardrailsActivation("inactive");
     }
     if (result.returnContract) {
       binding.returnContract = result.returnContract;
@@ -6502,6 +6519,7 @@ async function hasRemedyOfferResult(params: {
       params.toolResultUpdates[result.id] = {
         content: offeredRuling,
         outputSource: "runtime",
+        refused: true,
       };
     }
     const approved = params.toolResultUpdates[result.id];

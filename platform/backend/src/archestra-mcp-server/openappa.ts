@@ -1185,6 +1185,23 @@ const registry = defineArchestraTools([
       ) {
         return unknownOfferResult();
       }
+      if (remedy.offer_id && softBlocksAllowed()) {
+        // A waiver runs before native offer validation, so authorize its target
+        // independently. Caller-supplied trajectories are not ownership proof.
+        const currentSession =
+          context.openappaSubagent?.session ?? context.openappaSession;
+        if (reviewSession.caller_id !== spender) {
+          if (
+            reviewSession.caller_id ||
+            currentSession?.organization_id !== context.organizationId ||
+            currentSession.session_id !== stamp.session_id ||
+            currentSession.caller_id !== spender
+          ) {
+            return unknownOfferResult();
+          }
+          reviewSession.caller_id = spender;
+        }
+      }
       if (
         remedy.offer_id &&
         (await waiveSoftBlock(

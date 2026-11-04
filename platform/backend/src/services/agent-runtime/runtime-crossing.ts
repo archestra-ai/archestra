@@ -378,12 +378,25 @@ export async function crossRuntimeOutput(params: {
   if (relation.kind === "producer") return { kind: "producer" };
   if (await isUnenforcedSession(relation.child)) return { kind: "producer" };
   const prefix = `runtime-return:${params.taskId}:`;
-  const records = await loadChildReturns({
-    organizationId: params.organizationId,
-    parentSessionId: params.crossing.source.session_id,
-    childSessionId: relation.child.session_id,
-    operationPrefix: prefix,
-  });
+  let records: Awaited<ReturnType<typeof loadChildReturns>>;
+  try {
+    records = await loadChildReturns({
+      organizationId: params.organizationId,
+      parentSessionId: params.crossing.source.session_id,
+      childSessionId: relation.child.session_id,
+      operationPrefix: prefix,
+    });
+  } catch (error) {
+    if (
+      await waiveSoftBlock(
+        params.crossing.source,
+        "runtime_output",
+        error instanceof Error ? error.message : String(error),
+      )
+    )
+      return { kind: "producer" };
+    throw error;
+  }
   const matches = records.filter(
     (record) =>
       record.childSessionId === relation.child.session_id &&

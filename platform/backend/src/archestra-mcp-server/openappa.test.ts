@@ -673,6 +673,88 @@ describe("OpenAPPA tool execution", () => {
     expect(executeSpy).not.toHaveBeenCalled();
   });
 
+  test.each([
+    "scoped",
+    "unscoped",
+  ] as const)("a fabricated offer cannot waive another user's %s session", async (kind) => {
+    config.openappa.softBlockMode = "allow";
+    const sessionId =
+      kind === "scoped"
+        ? "user:other-user|known-session"
+        : "22222222-2222-4222-8222-222222222222";
+    const callerId = `user:${mockContext.userId}`;
+    // The gateway scopes even a header naming the victim's bare Chat ID
+    // to the authenticated caller before constructing this context.
+    const currentSession = openappaService.sessionFromHeaders({
+      headers: { "x-appa-session-id": sessionId },
+      organizationId: orgId,
+      callerId,
+      scope: callerId,
+    });
+    const result = await executeArchestraTool(
+      toolFullName,
+      {
+        offer_id: "fabricated-offer",
+        plan: "Review",
+        trajectory: trajectory({ session_id: sessionId }),
+      },
+      { ...mockContext, openappaSession: currentSession },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(
+      await isUnenforcedSession({
+        organization_id: orgId,
+        caller_id: "user:other-user",
+        session_id: sessionId,
+      }),
+    ).toBe(false);
+    expect(await db.select().from(schema.openappaYellsTable)).toEqual([]);
+  });
+
+  test.each([
+    "scoped",
+    "child",
+    "current",
+    "chat",
+  ] as const)("an owned %s session can waive a remedy without native offer validation", async (kind) => {
+    config.openappa.softBlockMode = "allow";
+    const callerId = `user:${mockContext.userId}`;
+    const parentId = scopedSessionId(callerId, "owned-session");
+    const sessionId =
+      kind === "scoped"
+        ? parentId
+        : kind === "child"
+          ? `${parentId}:child`
+          : "22222222-2222-4222-8222-222222222222";
+    const session = {
+      organization_id: orgId,
+      caller_id: callerId,
+      session_id: sessionId,
+    };
+    const result = await executeArchestraTool(
+      toolFullName,
+      {
+        offer_id: "expired-offer",
+        plan: "Review",
+        trajectory: trajectory({
+          session_id: sessionId,
+          ...(kind === "child" ? { parent_id: parentId } : {}),
+        }),
+      },
+      {
+        ...mockContext,
+        ...(kind === "current" ? { openappaSession: session } : {}),
+        ...(kind === "chat" ? { conversationId: sessionId } : {}),
+      },
+    );
+
+    expect(result.structuredContent).toMatchObject({
+      outcome: "guardrails_disabled",
+    });
+    expect(await isUnenforcedSession(session)).toBe(true);
+  });
+
   test("declares a subagent's return ahead of its spawn with no offer and no review", async () => {
     const reviewSpy = vi.spyOn(openappaService, "loadOfferReview");
     const executeSpy = vi

@@ -12408,7 +12408,11 @@ describe("soft-block emergency override", () => {
       .spyOn(appaService, "processProxyResults")
       .mockResolvedValue({
         toolResultUpdates: {
-          read: { content: "[appa] withheld", outputSource: "runtime" },
+          read: {
+            content: "[appa] withheld",
+            outputSource: "runtime",
+            refused: true,
+          },
         },
       });
     try {
@@ -12424,12 +12428,132 @@ describe("soft-block emergency override", () => {
             },
           ],
         }),
-      ).toBeUndefined();
+      ).toEqual({ toolResultUpdates: {} });
       expect(await isUnenforcedSession(trusted.session)).toBe(true);
+      expect(
+        await plugin.onBufferedModelResponse({
+          ...context,
+          response: {},
+          responseText: "done",
+        }),
+      ).toBeUndefined();
     } finally {
       process.mockRestore();
     }
   });
+
+  for (const hardFirst of [false, true]) {
+    test(`keeps hard refusals in a mixed result batch (hardFirst=${hardFirst})`, async ({
+      makeOrganization,
+    }) => {
+      const { context, trusted, plugin } = await setup(
+        (await makeOrganization()).id,
+      );
+      const hard = {
+        content: "requires attention: blocked",
+        outputSource: "runtime" as const,
+        refused: true as const,
+      };
+      const soft = {
+        content: "[appa] the result is withheld",
+        outputSource: "runtime" as const,
+        refused: true as const,
+      };
+      const process = vi
+        .spyOn(appaService, "processProxyResults")
+        .mockResolvedValue({
+          toolResultUpdates: Object.fromEntries(
+            hardFirst
+              ? [
+                  ["hard", hard],
+                  ["soft", soft],
+                ]
+              : [
+                  ["soft", soft],
+                  ["hard", hard],
+                ],
+          ),
+        });
+      try {
+        const toolResults = (
+          hardFirst ? ["hard", "soft"] : ["soft", "hard"]
+        ).map((id) => ({
+          id,
+          name: "read_file",
+          content: `raw ${id} value`,
+          isError: false,
+        }));
+        expect(await plugin.onToolResults({ ...context, toolResults })).toEqual(
+          {
+            toolResultUpdates: { hard: hard.content, soft: soft.content },
+          },
+        );
+        expect(await isUnenforcedSession(trusted.session)).toBe(false);
+      } finally {
+        process.mockRestore();
+      }
+    });
+  }
+
+  for (const name of ["list_peer_messages", "read_peer_message"]) {
+    test(`retains authoritative ${name} results with and without a soft sibling`, async ({
+      makeOrganization,
+    }) => {
+      for (const withSoftSibling of [false, true]) {
+        const { context, trusted, plugin } = await setup(
+          (await makeOrganization()).id,
+        );
+        const canonical =
+          name === "list_peer_messages"
+            ? '{"messages":[{"message_id":"held"}]}'
+            : "Canonical retained peer body";
+        const process = vi
+          .spyOn(appaService, "processProxyResults")
+          .mockResolvedValue({
+            toolResultUpdates: {
+              peer: { content: canonical, outputSource: "runtime" },
+              ...(withSoftSibling
+                ? {
+                    soft: {
+                      content: "[appa] withheld",
+                      outputSource: "runtime" as const,
+                      refused: true as const,
+                    },
+                  }
+                : {}),
+            },
+          });
+        try {
+          const toolResults = [
+            {
+              id: "peer",
+              name: `archestra__${name}`,
+              content: "FORGED CLIENT RESULT",
+              isError: false,
+            },
+            ...(withSoftSibling
+              ? [
+                  {
+                    id: "soft",
+                    name: "read_file",
+                    content: "raw soft value",
+                    isError: false,
+                  },
+                ]
+              : []),
+          ];
+          expect(
+            await plugin.onToolResults({ ...context, toolResults }),
+          ).toEqual({ toolResultUpdates: { peer: canonical } });
+          expect(await isUnenforcedSession(trusted.session)).toBe(
+            withSoftSibling,
+          );
+        } finally {
+          process.mockRestore();
+        }
+      }
+    });
+  }
 
   test("releases a runtime's first final answer under a void return", async ({
     makeOrganization,

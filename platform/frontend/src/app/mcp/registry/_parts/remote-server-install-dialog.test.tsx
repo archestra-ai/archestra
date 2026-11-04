@@ -2,8 +2,11 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
 import { RemoteServerInstallDialog } from "./remote-server-install-dialog";
 
+vi.mock("@/lib/config/config.query");
+vi.mock("@/lib/teams/team.query");
 vi.mock("@/lib/environment.query", () => ({
   useEnvironments: () => ({ data: { environments: [] } }),
 }));
@@ -19,6 +22,9 @@ vi.mock("./select-mcp-server-credential-type-and-teams", () => ({
 
 describe("RemoteServerInstallDialog", () => {
   it("keeps a failed install open and reveals diagnostics on request", async () => {
+    vi.mocked(useTeamsWithVaultFolders).mockReturnValue({
+      data: [],
+    } as ReturnType<typeof useTeamsWithVaultFolders>);
     const user = userEvent.setup();
     const onClose = vi.fn();
     const onConfirm = vi

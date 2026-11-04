@@ -3266,6 +3266,7 @@ describe("asking through the client's own question tool", () => {
     client: string;
     nativeName: string;
     offerId: string;
+    reviewedTool?: string;
   }): Promise<string> {
     const trusted = params.context.resources.get(
       APPA_PLUGIN_TRUSTED_CONTEXT,
@@ -3287,7 +3288,7 @@ describe("asking through the client's own question tool", () => {
       review: {
         offerId: params.offerId,
         text: "Canonical HITL review.",
-        tool: "archestra__whoami",
+        tool: params.reviewedTool ?? "archestra__whoami",
         arguments: "{}",
         remedyArguments: {
           offer_id: params.offerId,
@@ -3661,6 +3662,87 @@ describe("asking through the client's own question tool", () => {
       });
     } finally {
       evaluateToolCalls.mockRestore();
+      processResults.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("a denied app tool stays denied when retried as a preview", async ({
+    makeOrganization,
+    makeApp,
+    makeInternalMcpCatalog,
+    makeTool,
+    makeAppTool,
+  }) => {
+    const organization = await makeOrganization();
+    const app = await makeApp({ organizationId: organization.id });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: organization.id,
+    });
+    const tool = await makeTool({
+      name: "served__list_items",
+      catalogId: catalog.id,
+    });
+    await makeAppTool(app.id, tool.id);
+    const offerId = "offer-denied-preview";
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "user:user|denied-preview",
+      organizationId: organization.id,
+    });
+    context.headers = { "user-agent": "claude-code/1" };
+    context.interactionType = "anthropic:messages";
+    context.provider = "anthropic";
+    // The runtime's event log needs PostgreSQL; the answer's own result has no label.
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    try {
+      const questionId = await askStagedReview({
+        plugin,
+        context,
+        client: "Claude Code",
+        nativeName: "AskUserQuestion",
+        offerId,
+        reviewedTool: tool.name,
+      });
+      await plugin.onToolResults({
+        ...context,
+        toolResults: [
+          {
+            id: questionId,
+            name: "AskUserQuestion",
+            content: JSON.stringify(
+              `Your questions have been answered: "Approve the ${tool.name} call?"="Deny". You can now continue with these answers in mind.`,
+            ),
+            isError: false,
+          },
+        ],
+      });
+      await plugin.onBeforeModel({
+        ...context,
+        request: { system: "Base", messages: [] },
+      });
+      await expect(
+        plugin.onPrepareToolCalls({
+          ...context,
+          toolCalls: [
+            {
+              id: "retry-as-preview",
+              name: archestraMcpBranding.getToolName("preview_app_tool"),
+              arguments: JSON.stringify({
+                appId: app.id,
+                toolName: tool.name,
+                args: {},
+              }),
+            },
+          ],
+        }),
+      ).resolves.toMatchObject({
+        decision: "refuse",
+        refusal: { reason: "openappa_hitl_not_approved" },
+      });
+    } finally {
       processResults.mockRestore();
       await plugin.onCleanup(context);
     }

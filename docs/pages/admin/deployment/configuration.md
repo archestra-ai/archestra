@@ -197,14 +197,11 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Values: `0` or more. `0` treats every replay as reuse.
   - The window lets a client retry after a lost token response.
 
-- **`ARCHESTRA_AUTH_RATE_LIMIT_DISABLED`** - Turns off rate limiting on the sign-in, auth, and MCP gateway endpoints, including gateway authentication capacity limits. Credentials and permissions are still checked.
+- **`ARCHESTRA_AUTH_RATE_LIMIT_DISABLED`** - Turns off rate limiting on the sign-in, auth, and MCP gateway endpoints. Credentials and permissions are still checked.
   - Default: `false`
   - Values: `true`, `false`
   - The OAuth token endpoint allows 100 requests per minute per client IP, shared across grants and replicas. On HTTP `429`, wait for the `Retry-After` delay. IP resolution follows [`ARCHESTRA_TRUST_PROXY`](/docs/admin/deployment/configuration#ARCHESTRA_TRUST_PROXY).
-  - The MCP gateway tracks up to 100 credential/gateway pairs per client IP. Each tracked pair gets 10 unverified attempts in a 60-second window, shared across replicas; excess attempts return HTTP `429` with `Retry-After`. Successful credentials are exempt for 60 seconds, renewed by successful traffic, but every request still checks access. Tokenless OAuth discovery is exempt.
-  - Different credentials do not share an IP allowance, so unrelated guesses do not exhaust a new or idle client's budget. Rotating credentials can evade the per-credential limit, and older counters are evicted when tracking fills. Configure ingress traffic limits for sustained abuse; behind a proxy, trust only its IPs or CIDRs so clients cannot spoof their origin.
-  - Each backend process has two separate pools of 16 concurrent gateway admission, lookup, or authentication operations: one for unverified callers and one reserved for recently validated callers. A recent local success skips unverified admission; requests admitted through a shared success record also use the reserved pool for lookup and live authentication. A denial removes that priority. New, idle, or locally unknown callers (including after a backend restart) need unverified capacity before a shared success record can be read.
-  - Each pool returns HTTP `503` with `Retry-After: 1` when full, with no waiting queue; capacity is released when work finishes. Unknown-token traffic cannot consume the reserved pool. One credential can use at most four reserved slots per process, across all gateways and client IPs; excess concurrent work receives the same HTTP `503`. The maximum is 32 operations per process and scales with backend replicas. Unavailable shared limit storage also returns HTTP `503` for requests that need it; retry with backoff and check backend health.
+  - If the MCP gateway returns HTTP `429` or `503`, wait before retrying and follow `Retry-After` when provided.
   - Use it only for load tests or automated test runs.
 
 - **`ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL`** - Skips the sign-in page in development by signing in as the user with this email.

@@ -698,7 +698,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       .filter(
         (result) =>
           !binding.adapter?.isChildHandbackTool?.(result.name) &&
-          !binding.adapter?.isRelayTool?.(result.name) &&
+          !binding.adapter?.isRelayTool?.(result.name, result.namespace) &&
           !isPeerInboxResult(binding, result.name, result.namespace) &&
           !childReturns.ignored.has(result.id) &&
           !unansweredNotices.has(result.id),
@@ -1567,7 +1567,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         !handbackIds.has(call.id) &&
         !blockedTranscriptCalls.has(call.id) &&
         !reusedNames.has(call.id) &&
-        binding.adapter?.relayMessage?.(call) !== undefined,
+        binding.adapter?.relayMessage?.(call, binding.requestBody) !==
+          undefined,
     );
     const relayEvaluations = relayCandidates.length
       ? await withCapturedGuardrailsActivation("active", () =>
@@ -3748,7 +3749,10 @@ async function recordObservedCalls(
   try {
     const launches = observer.adapter?.teammateLaunches?.(observer.requestBody);
     const messaged = calls.flatMap((call) => {
-      const to = observer.adapter?.relayMessage?.(call)?.to;
+      const to = observer.adapter?.relayMessage?.(
+        call,
+        observer.requestBody,
+      )?.to;
       const launch =
         to?.kind === "teammate" ? launches?.get(to.name) : undefined;
       return launch ? [launch] : [];
@@ -3900,8 +3904,8 @@ async function admitRelayReports(params: {
   if (!adapter?.admitRelayReport) return;
   const reports = params.results.filter(
     (result) =>
-      adapter.isRelayTool?.(result.name) &&
-      !result.isError &&
+      adapter.isRelayTool?.(result.name, result.namespace) &&
+      (!result.isError || adapter.admitsFailedRelayReports) &&
       !adapter.isRelayReceipt?.(result.content),
   );
   if (reports.length === 0) return;
@@ -3987,7 +3991,7 @@ async function governRelays(params: {
   const adapter = binding.adapter;
   if (!adapter?.relayMessage) return outcomes;
   for (const call of params.calls) {
-    const relay = adapter.relayMessage(call);
+    const relay = adapter.relayMessage(call, binding.requestBody);
     if (!relay || relay.to.kind === "session") continue;
     if (relay.to.kind === "broadcast") {
       outcomes.set(call.id, { kind: "deny", feedback: RELAY_BROADCAST });
@@ -4081,18 +4085,22 @@ async function resolveRelayTarget(params: {
   if (relay.to.kind !== "teammate") {
     return { kind: "deny", feedback: RELAY_UNKNOWN_RECIPIENT };
   }
-  const own = await resolveNamedChild({
-    binding,
-    parent: session,
-    name: relay.to.name,
-    useRequestLaunches: true,
-  });
+  const among = relay.to.among;
+  const own =
+    among === "siblings"
+      ? undefined
+      : await resolveNamedChild({
+          binding,
+          parent: session,
+          name: relay.to.name,
+          useRequestLaunches: true,
+        });
   if (own === "ambiguous") {
     return { kind: "deny", feedback: RELAY_AMBIGUOUS_RECIPIENT };
   }
   if (own?.unchecked) return { kind: "deny", feedback: RELAY_UNCHECKED };
   if (own) return childTarget(session, own);
-  if (!session.parent_id) {
+  if (!session.parent_id || among === "children") {
     return { kind: "deny", feedback: RELAY_UNKNOWN_RECIPIENT };
   }
   const parent = await persistedSession(session, session.parent_id);
@@ -4174,7 +4182,7 @@ async function resolveNamedChild(params: {
     : undefined;
   const childNativeId = durable?.childNativeId ?? launch?.childNativeId;
   const spawnCallId = durable?.spawnCallId ?? launch?.spawnCallId;
-  if (!childNativeId) return undefined;
+  if (!childNativeId) return childOfNamedSpawn({ ...params, aliases, started });
   const childStarted = started.includes(childNativeId);
   if (!spawnCallId) return { childNativeId, started: childStarted };
   if (durable) return { childNativeId, spawnCallId, started: childStarted };
@@ -4194,6 +4202,68 @@ async function resolveNamedChild(params: {
   return allowed && !off
     ? { childNativeId, spawnCallId, started: childStarted }
     : { childNativeId, spawnCallId, started: childStarted, unchecked: true };
+}
+
+/**
+ * The one child that started under an allowed spawn `name` names, for a
+ * client whose launch result names no child id: Codex calls the agent it
+ * starts by its task name. The child's own events bind its spawn, so a spawn
+ * that never started a child counts for nothing. A child that has not started
+ * yet is not found. A child that runs out of OpenAPPA is unchecked.
+ */
+async function childOfNamedSpawn(params: {
+  parent: OpenAppaSession;
+  name: string;
+  aliases: readonly AllowedSpawnAlias[];
+  started: readonly string[];
+}): Promise<
+  | {
+      childNativeId: string;
+      spawnCallId: string;
+      started: boolean;
+      unchecked?: true;
+    }
+  | "ambiguous"
+  | undefined
+> {
+  const spawnCallIds = [
+    ...new Set(
+      params.aliases
+        .filter((alias) => alias.name === params.name)
+        .map((alias) => alias.spawnCallId),
+    ),
+  ];
+  const prefix = `${params.parent.session_id}:`;
+  const rows = await OpenAppaSpawnCorrelationModel.childrenOfSpawns({
+    organizationId: params.parent.organization_id,
+    callerId: params.parent.caller_id,
+    childSessionIds: params.started.map((id) => `${prefix}${id}`),
+    spawnCallIds,
+  });
+  const found = rows.flatMap((row) =>
+    row.childSessionId.startsWith(prefix)
+      ? [
+          {
+            spawnCallId: row.spawnCallId,
+            childNativeId: row.childSessionId.slice(prefix.length),
+          },
+        ]
+      : [],
+  );
+  if (new Set(found.map((child) => child.childNativeId)).size > 1)
+    return "ambiguous";
+  const [child] = found;
+  if (!child) return undefined;
+  const off = await startedUnenforced({
+    ...params.parent,
+    session_id: childSessionId(params.parent.session_id, child.childNativeId),
+    parent_id: params.parent.session_id,
+  });
+  return {
+    ...child,
+    started: params.started.includes(child.childNativeId),
+    ...(off ? { unchecked: true as const } : {}),
+  };
 }
 
 const RELAY_BROADCAST =
@@ -4313,13 +4383,10 @@ async function historicRelayRecords(params: {
   if (params.arrival.kind === "session" || params.arrival.from === "") {
     return [];
   }
-  if (
-    params.arrival.kind === "coordinator" ||
-    PARENT_ENVELOPE_NAMES.has(params.arrival.from)
-  ) {
-    return params.addresses();
-  }
-  const returns = await params.crossings();
+  if (namesParent(params.arrival)) return params.addresses();
+  // A sibling's message is none of this session's children's returns.
+  const returns =
+    params.arrival.sender === "sibling" ? [] : await params.crossings();
   const matched = returns.filter((record) =>
     returnNamesSender(params.arrival.from, record, params.session.session_id),
   );
@@ -4332,11 +4399,14 @@ async function historicRelayRecords(params: {
   );
   if (senders.size === 1) return matched.map((record) => record.value);
   if (senders.size > 1) return [];
-  const aliases = await OpenAppaSpawnCorrelationModel.allowedSpawnAliases({
-    organizationId: params.session.organization_id,
-    callerId: params.session.caller_id,
-    parentSessionId: params.session.session_id,
-  });
+  const aliases =
+    params.arrival.sender === "sibling"
+      ? []
+      : await OpenAppaSpawnCorrelationModel.allowedSpawnAliases({
+          organizationId: params.session.organization_id,
+          callerId: params.session.caller_id,
+          parentSessionId: params.session.session_id,
+        });
   const named = aliases.filter(
     (alias) =>
       alias.name === params.arrival.from ||
@@ -4374,29 +4444,70 @@ function returnNamesSender(
   return nativeId === from || namesTeammate(from, nativeId);
 }
 
-async function resolveArrivalSender(params: {
+/**
+ * The session that sent an arrival. A history holds many messages from the
+ * same few agents, so each sender is resolved once per request.
+ */
+function resolveArrivalSender(params: {
+  binding: AppaPluginBinding;
+  session: OpenAppaSession;
+  arrival: AppaRelayArrival;
+}): Promise<string | undefined> {
+  const { arrival } = params;
+  const key = [
+    params.session.session_id,
+    arrival.kind,
+    arrival.from,
+    arrival.sender ?? "",
+  ].join("\u0000");
+  let resolved = resolvedSenders.get(params.binding);
+  if (!resolved) {
+    resolved = new Map();
+    resolvedSenders.set(params.binding, resolved);
+  }
+  let sender = resolved.get(key);
+  if (!sender) {
+    sender = findArrivalSender(params);
+    resolved.set(key, sender);
+  }
+  return sender;
+}
+
+const resolvedSenders = new WeakMap<
+  AppaPluginBinding,
+  Map<string, Promise<string | undefined>>
+>();
+
+/** A message from the session's parent, as the client marks one. */
+function namesParent(arrival: AppaRelayArrival): boolean {
+  return (
+    arrival.kind === "coordinator" ||
+    (arrival.sender === undefined && PARENT_ENVELOPE_NAMES.has(arrival.from))
+  );
+}
+
+async function findArrivalSender(params: {
   binding: AppaPluginBinding;
   session: OpenAppaSession;
   arrival: AppaRelayArrival;
 }): Promise<string | undefined> {
   const { session, arrival } = params;
   if (arrival.kind === "session" || arrival.from === "") return undefined;
-  if (
-    arrival.kind === "coordinator" ||
-    PARENT_ENVELOPE_NAMES.has(arrival.from)
-  ) {
-    return session.parent_id;
-  }
-  const own = await resolveNamedChild({
-    binding: params.binding,
-    parent: session,
-    name: arrival.from,
-    useRequestLaunches: true,
-  });
+  if (namesParent(arrival)) return session.parent_id;
+  const own =
+    arrival.sender === "sibling"
+      ? undefined
+      : await resolveNamedChild({
+          binding: params.binding,
+          parent: session,
+          name: arrival.from,
+          useRequestLaunches: true,
+        });
   if (own && own !== "ambiguous" && !own.unchecked) {
     return `${session.session_id}:${own.childNativeId}`;
   }
-  if (own === "ambiguous" || !session.parent_id) return undefined;
+  if (own === "ambiguous" || !session.parent_id || arrival.sender === "child")
+    return undefined;
   const parent = await persistedSession(session, session.parent_id);
   if (!parent) return undefined;
   const sibling = await resolveNamedChild({

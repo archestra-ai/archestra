@@ -4,7 +4,7 @@ sidebarTitle: Setup
 description: Prepare Kubernetes nodes, storage, and the Agent Sandbox controller for Agent Runtime
 order: 1
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-31
+lastUpdated: 2026-11-04
 ---
 
 Prepare your cluster once, and every agent can get a dedicated runtime. Each run becomes a pod with its own persistent volume, created by the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/).
@@ -70,9 +70,13 @@ Runtime tiers allocate CPU, memory, and workspace storage to agent runtimes so e
 
 ![The Runtime tiers table in Settings](/docs/automated_screenshots/agents-runtime-setup_runtime-tiers.webp)
 
-Memory scales automatically with CPU at 2 GiB per requested CPU. The memory limit is twice the memory request, or 2 GiB per CPU of the CPU limit when that is lower. A new organization starts with `S` (2 CPU, 4 GiB), `M` (4 CPU, 8 GiB), and `L` (8 CPU, 16 GiB), with `M` as the default.
+Set **Memory request (GiB)** and **Memory limit (GiB)** independently of CPU for memory-heavy workloads. For example, set the CPU request to `0.5` and both memory fields to `8` for an 8 GiB request and limit.
 
-**Workspace** sets the size of each run's persistent volume in GiB. The volume holds the run's home directory and, for a [privileged agent](#privileged-containers), its Docker data. A blank size uses [`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE). Runs that build container images or run Kubernetes in Docker need about 60 GiB.
+![A runtime tier with 0.5 CPU and an 8 GiB memory request and limit](/docs/automated_screenshots/agents-runtime-setup_tier-memory.webp)
+
+Blank memory fields use defaults in GiB: the request is `2 × CPU request`, and the limit is `max(2 × memory request, 2 × CPU request, 2 × CPU limit)`. The limit uses the effective memory request, including an explicit request override. An explicit memory limit overrides that formula. A blank CPU limit leaves CPU uncapped; the memory-limit formula uses the CPU request in its place. A new organization starts with `S` (2 CPU, 4 GiB), `M` (4 CPU, 8 GiB), and `L` (8 CPU, 16 GiB), with `M` as the default.
+
+**Disk** sets the size of each run's persistent volume in GiB. The volume holds the run's home directory and, for a [privileged agent](#privileged-containers), its Docker data. A blank size uses [`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE). Runs that build container images or run Kubernetes in Docker need about 60 GiB.
 
 Agents do not configure CPU, memory, or storage directly. Each agent selects a [**Default tier**](/docs/agents/runtime#limits) for standard runs and an optional **Scaleup tier** for larger workloads. Choose **Disable autoscaling** to disable scaling up. When an agent permits scaling, a run can request any tier up to that scaleup tier.
 

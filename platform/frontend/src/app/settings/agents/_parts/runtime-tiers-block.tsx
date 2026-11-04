@@ -28,9 +28,11 @@ import {
 export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
   const { data: resolved, isPending } = useAgentRuntimeTiers();
   const save = useSaveAgentRuntimeTiers();
-  // Open dialogs: `editing` holds the tier being edited, or null for a new one.
+  // Keep the selected tier through the exit animation so validation and the
+  // title do not switch to creation mode while the dialog is still visible.
   const [editing, setEditing] = useState<{
     tier: RuntimeTierSize | null;
+    open: boolean;
   } | null>(null);
   const [deleting, setDeleting] = useState<RuntimeTierSize | null>(null);
   const [deleteFailure, setDeleteFailure] = useState<string | null>(null);
@@ -94,7 +96,7 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
     {
       id: "workspace",
       accessorFn: (row) => row.workspaceGiB ?? defaultWorkspaceGiB ?? 0,
-      header: "Workspace",
+      header: "Disk",
       size: 110,
       cell: ({ row }) =>
         row.original.workspaceGiB === null ? (
@@ -138,7 +140,7 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
                     {
                       icon: <Pencil className="h-4 w-4" />,
                       label: "Edit",
-                      onClick: () => setEditing({ tier }),
+                      onClick: () => setEditing({ tier, open: true }),
                     },
                     {
                       icon: <Trash2 className="h-4 w-4" />,
@@ -208,7 +210,10 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
       }
       control={
         canEdit ? (
-          <Button size="sm" onClick={() => setEditing({ tier: null })}>
+          <Button
+            size="sm"
+            onClick={() => setEditing({ tier: null, open: true })}
+          >
             <Plus className="h-4 w-4" />
             <span>Create tier</span>
           </Button>
@@ -233,16 +238,16 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
       />
       {resolved && (
         <RuntimeTierDialog
-          open={editing !== null}
+          open={editing?.open ?? false}
           onOpenChange={(open) => {
-            if (!open) setEditing(null);
+            setEditing((current) => current && { ...current, open });
           }}
           tier={editing?.tier ?? null}
           tiers={resolved}
           onSave={async (settings) => {
             await save.mutateAsync(settings);
             toast.success(editing?.tier ? "Tier saved" : "Tier created");
-            setEditing(null);
+            setEditing((current) => current && { ...current, open: false });
           }}
         />
       )}

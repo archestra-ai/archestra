@@ -94635,7 +94635,7 @@
                         "type": "number",
                         "minimum": 0,
                         "exclusiveMinimum": true,
-                        "maximum": 16
+                        "maximum": 256
                       },
                       "minMemoryGib": {
                         "type": "number",
@@ -488434,7 +488434,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "The organization's Agent Runtime tiers in effect, smallest first: each tier's name, CPU, the memory its CPU gives it, the spares it keeps ready, and the default tier\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "The organization's Agent Runtime tiers in effect, smallest first: each tier's name, CPU, memory, the spares it keeps ready, and the default tier\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -488473,6 +488473,18 @@
                             "maximum": 9007199254740991
                           },
                           "memoryLimitMiB": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "memoryRequestMiBOverride": {
+                            "description": "Explicit memory request in MiB; absent when the request follows CPU",
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "memoryLimitMiBOverride": {
+                            "description": "Explicit memory limit in MiB; absent when the limit follows CPU",
                             "type": "integer",
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
@@ -488788,16 +488800,28 @@
                             },
                             "cpuRequest": {
                               "type": "number",
-                              "minimum": 0,
-                              "exclusiveMinimum": true,
-                              "maximum": 8
+                              "minimum": 0.1,
+                              "maximum": 256
                             },
                             "cpuLimit": {
                               "nullable": true,
                               "type": "number",
+                              "minimum": 0.1,
+                              "maximum": 256
+                            },
+                            "memoryRequestMiB": {
+                              "nullable": true,
+                              "type": "integer",
                               "minimum": 0,
                               "exclusiveMinimum": true,
-                              "maximum": 16
+                              "maximum": 9007199254740991
+                            },
+                            "memoryLimitMiB": {
+                              "nullable": true,
+                              "type": "integer",
+                              "minimum": 0,
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
                             },
                             "pooled": {
                               "type": "boolean"
@@ -488806,7 +488830,7 @@
                               "nullable": true,
                               "type": "integer",
                               "minimum": 1,
-                              "maximum": 1024
+                              "maximum": 9007199254740991
                             },
                             "previousName": {
                               "type": "string",

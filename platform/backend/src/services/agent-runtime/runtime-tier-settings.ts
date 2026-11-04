@@ -47,7 +47,7 @@ export async function prepareAgentRuntimeTierChange(params: {
   );
   const settings = {
     tiers: next.tiers
-      .map((tier) => withCurrentWorkspace(tier, current, renamedAwayNames))
+      .map((tier) => withCurrentResources(tier, current, renamedAwayNames))
       .map(agentRuntimeTierDefinitionFromInput),
     defaultTier: next.defaultTier,
   };
@@ -112,25 +112,38 @@ export async function prepareAgentRuntimeTierChange(params: {
 // === Internal helpers ===
 
 /**
- * A tier saved without a workspace size keeps the size it has: a client that
+ * A tier saved without a resource override keeps the value it has: a client that
  * does not know the field must not erase it. The tier is matched by its name
  * before the save, so a rename keeps the size too; a new tier that takes a
  * name renamed away in the same save starts at the deployment's default.
  * Null is a choice: the deployment's default.
  */
-function withCurrentWorkspace(
+function withCurrentResources(
   tier: AgentRuntimeTierDefinitionInput,
   current: ResolvedAgentRuntimeTiers,
   renamedAwayNames: readonly string[],
 ): AgentRuntimeTierDefinitionInput {
-  if (tier.workspaceGiB !== undefined) return tier;
   const reusesRenamedName =
     !tier.previousName &&
     renamedAwayNames.some((name) => sameAgentRuntimeTierName(name, tier.name));
   const before = reusesRenamedName
     ? undefined
     : findAgentRuntimeTier(current.tiers, tier.previousName ?? tier.name);
-  return { ...tier, workspaceGiB: before?.workspaceGiB ?? null };
+  return {
+    ...tier,
+    workspaceGiB:
+      tier.workspaceGiB === undefined
+        ? (before?.workspaceGiB ?? null)
+        : tier.workspaceGiB,
+    memoryRequestMiB:
+      tier.memoryRequestMiB === undefined
+        ? (before?.memoryRequestMiBOverride ?? null)
+        : tier.memoryRequestMiB,
+    memoryLimitMiB:
+      tier.memoryLimitMiB === undefined
+        ? (before?.memoryLimitMiBOverride ?? null)
+        : tier.memoryLimitMiB,
+  };
 }
 
 /** The default list as a save would send it: what a reset restores. */
@@ -142,6 +155,8 @@ function defaultTierInput(): AgentRuntimeTierSettingsInput {
         name,
         cpuRequest,
         cpuLimit,
+        memoryRequestMiB: null,
+        memoryLimitMiB: null,
         pooled,
         workspaceGiB,
       }),

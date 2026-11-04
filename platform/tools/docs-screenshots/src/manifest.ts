@@ -507,20 +507,7 @@ export const SHOTS: Shot[] = [
   {
     asset: "automated_screenshots/agents-runtime-setup_runtime-tiers",
     route: () => "/settings/agents",
-    beforeNavigate: async (page) => {
-      await page.route(/\/api\/(config|bootstrap)$/, async (route) => {
-        const response = await route.fetch();
-        const json = await response.json();
-        const config = json.config ?? json;
-        if (config?.features) {
-          config.features.agentRuntime = true;
-          if (config.features.agentRuntimeBackend) {
-            config.features.agentRuntimeBackend.available = true;
-          }
-        }
-        await route.fulfill({ response, json });
-      });
-    },
+    beforeNavigate: showRuntimeTierSettings,
     prepare: async (page) => {
       const block = page.locator("#runtime-tiers");
       await block
@@ -528,6 +515,45 @@ export const SHOTS: Shot[] = [
         .waitFor();
     },
     target: (page) => page.locator("#runtime-tiers"),
+  },
+  {
+    asset: "automated_screenshots/agents-runtime-setup_tier-memory",
+    route: () => "/settings/agents",
+    beforeNavigate: showRuntimeTierSettings,
+    prepare: async (page) => {
+      await page
+        .getByRole("button", { name: "Create tier", exact: true })
+        .click();
+      const dialog = page.getByRole("dialog", { name: "Create tier" });
+      await expect(
+        dialog.getByLabel("Memory request (GiB)", { exact: true }),
+      ).toHaveAttribute("placeholder", "8");
+      await expect(
+        dialog.getByLabel("Memory limit (GiB)", { exact: true }),
+      ).toHaveAttribute("placeholder", "16");
+      await dialog.getByLabel("Name", { exact: true }).fill("Memory");
+      await dialog.getByLabel("CPU request", { exact: true }).fill("0.5");
+      await expect(
+        dialog.getByLabel("Memory request (GiB)", { exact: true }),
+      ).toHaveAttribute("placeholder", "1");
+      await expect(
+        dialog.getByLabel("Memory limit (GiB)", { exact: true }),
+      ).toHaveAttribute("placeholder", "2");
+      await dialog
+        .getByLabel("Memory request (GiB)", { exact: true })
+        .fill("8");
+      await expect(
+        dialog.getByLabel("Memory limit (GiB)", { exact: true }),
+      ).toHaveAttribute("placeholder", "16");
+      await dialog.getByLabel("Memory limit (GiB)", { exact: true }).fill("8");
+      await expect(
+        dialog.getByLabel("Memory request (GiB)", { exact: true }),
+      ).toHaveValue("8");
+      await expect(
+        dialog.getByLabel("Memory limit (GiB)", { exact: true }),
+      ).toHaveValue("8");
+    },
+    target: (page) => page.getByRole("dialog", { name: "Create tier" }),
   },
   {
     asset: "automated_screenshots/agents-hooks_hooks-editor",
@@ -661,6 +687,21 @@ export const SHOTS: Shot[] = [
     },
   },
 ];
+
+async function showRuntimeTierSettings(page: Page) {
+  await page.route(/\/api\/(config|bootstrap)$/, async (route) => {
+    const response = await route.fetch();
+    const json = await response.json();
+    const config = json.config ?? json;
+    if (config?.features) {
+      config.features.agentRuntime = true;
+      if (config.features.agentRuntimeBackend) {
+        config.features.agentRuntimeBackend.available = true;
+      }
+    }
+    await route.fulfill({ response, json });
+  });
+}
 
 async function prepareThroughputLimit(page: Page) {
   await page.getByRole("button", { name: "Add Limit", exact: true }).click();

@@ -82,7 +82,7 @@ import {
   packageContentHash,
   uploadedEntry,
 } from "./declarations";
-import { withReportingTool } from "./reporting-tool";
+import { withHostToolRules } from "./host-tool-rules";
 
 /** A battery after a write, and the derived row that write stands for. */
 type BatteryWriteResult = {
@@ -1245,7 +1245,7 @@ class OpenAppaBatteriesService {
     const accepted =
       composedContent === null
         ? null
-        : await withReportingTool({
+        : await withHostToolRules({
             composed: composedContent,
             validate: (text) => native.validateHostedOpenappaPolicy(text),
           });
@@ -1275,8 +1275,17 @@ class OpenAppaBatteriesService {
       const carried = expected
         ? carriedServed({ expected, installs: params.previousInstalls })
         : null;
+      // A composition stored before a host rule existed takes it here too, so
+      // a refusal does not strand its peer reads.
       return expected && carried
-        ? values(expected.content, error, () => carried)
+        ? values(
+            await withHostToolRules({
+              composed: expected.content,
+              validate: (text) => native.validateHostedOpenappaPolicy(text),
+            }),
+            error,
+            (contentHash) => ({ ...carried, contentHash }),
+          )
         : values(root.content, error, (contentHash) => ({
             v: 1,
             kind: "root_only",
@@ -2141,9 +2150,10 @@ function heldBackRemedy(battery: HeldBackBattery): string {
 // rows whose retirement suffix covers credential keys but not the stored
 // opening policies (v7), rows that do not record what they serve (v8),
 // rows that leave `yell` to the catch-all (v9), rows that dropped a retired
-// name live opening policies bound differently (v10), and rows that keep
-// retired annotators for conversations opened under earlier policies (v11).
-const COMPOSITION_VERSION = "v11:";
+// name live opening policies bound differently (v10), rows that keep
+// retired annotators for conversations opened under earlier policies (v11),
+// and rows without the empty peer read rule (v12).
+const COMPOSITION_VERSION = "v12:";
 
 /**
  * What a stored composition answers: the batteries it composed, the credential

@@ -49,6 +49,8 @@ import type {
   ThreadHistoryParams,
   UpdateApprovalRequestOptions,
 } from "@/types";
+import { trackBackgroundWork } from "@/utils/background-work";
+import { withDrainScope } from "@/utils/drain-scope";
 import { shrinkImageForModel } from "@/utils/image-conversion";
 import {
   buildWelcomeMessage,
@@ -120,6 +122,9 @@ class SlackProvider implements ChatOpsProvider {
   private teamName: string | null = null;
   private config: SlackDbConfig;
   private socketModeClient: SocketModeClient | null = null;
+  private stopping = false;
+  private stopped: Promise<void> | undefined;
+  private startupAbort: AbortController | undefined;
   private eventHandler: ChatOpsEventHandler | null = null;
   private socketDedup = new EventDedupMap();
   private missingScopes: string[] = [];
@@ -229,12 +234,15 @@ class SlackProvider implements ChatOpsProvider {
   }
 
   async initialize(): Promise<void> {
+    this.stopping = false;
+    this.stopped = undefined;
     if (!this.isConfigured()) {
       logger.info("[SlackProvider] Not configured, skipping initialization");
       return;
     }
 
     const abortController = new AbortController();
+    this.startupAbort = abortController;
     const deadline = setTimeout(
       () => abortController.abort(),
       SLACK_CONNECT_TIMEOUT_MS,
@@ -328,6 +336,7 @@ class SlackProvider implements ChatOpsProvider {
       );
     } finally {
       clearTimeout(deadline);
+      if (this.startupAbort === abortController) this.startupAbort = undefined;
     }
   }
 
@@ -343,10 +352,13 @@ class SlackProvider implements ChatOpsProvider {
     return this.teamName;
   }
 
-  async cleanup(): Promise<void> {
-    if (this.socketModeClient) {
+  /** Stop ingress immediately; keep the Web API client for admitted replies. */
+  beginShutdown(): Promise<void> {
+    this.stopping = true;
+    this.startupAbort?.abort();
+    this.stopped ??= (async () => {
       try {
-        await this.socketModeClient.disconnect();
+        await this.socketModeClient?.disconnect();
       } catch (error) {
         logger.warn(
           { error: errorMessage(error) },
@@ -354,7 +366,12 @@ class SlackProvider implements ChatOpsProvider {
         );
       }
       this.socketModeClient = null;
-    }
+    })();
+    return this.stopped;
+  }
+
+  async cleanup(): Promise<void> {
+    await this.beginShutdown();
     this.eventHandler = null;
     this.socketDedup.clear();
     this.client = null;
@@ -2345,68 +2362,76 @@ class SlackProvider implements ChatOpsProvider {
         body: unknown;
         retry_num?: number;
       }) => {
-        // Slack rotates Socket Mode WebSockets on its own schedule. If the
-        // socket goes non-ready between event receipt and our ack, the ack
-        // promise rejects. Since this listener is async and EventEmitter does
-        // not await it, an unguarded rejection becomes an unhandledRejection
-        // and Node kills the process. Slack redelivers unacked events, so
-        // swallowing the failure is safe.
-        const safeAck = async (response?: Record<string, unknown>) => {
-          try {
-            await ack(response);
-          } catch (error) {
-            logger.warn(
-              { error: errorMessage(error), type },
-              "[SlackProvider] Failed to ack Socket Mode event (socket likely rotated); Slack will redeliver",
-            );
-          }
-        };
-        switch (type) {
-          case "events_api": {
-            await safeAck();
-            // Messages carry event.ts; other events (Stop, DM opened) carry
-            // event.event_ts instead — fall back to it so they dedup too.
-            const eventBody = body as {
-              event?: { ts?: string; event_ts?: string };
-            };
-            const eventTs = eventBody?.event?.ts ?? eventBody?.event?.event_ts;
-            if (eventTs && this.socketDedup.mark(eventTs)) {
+        // Leave late envelopes unacknowledged so Slack can redeliver them to a
+        // live connection. Admission happens before the first await.
+        if (this.stopping) return;
+        const work = withDrainScope(async () => {
+          // Slack rotates Socket Mode WebSockets on its own schedule. If the
+          // socket goes non-ready between event receipt and our ack, the ack
+          // promise rejects. Since this listener is async and EventEmitter does
+          // not await it, an unguarded rejection becomes an unhandledRejection
+          // and Node kills the process. Slack redelivers unacked events, so
+          // swallowing the failure is safe.
+          const safeAck = async (response?: Record<string, unknown>) => {
+            try {
+              await ack(response);
+            } catch (error) {
+              logger.warn(
+                { error: errorMessage(error), type },
+                "[SlackProvider] Failed to ack Socket Mode event (socket likely rotated); Slack will redeliver",
+              );
+            }
+          };
+          switch (type) {
+            case "events_api": {
+              await safeAck();
+              // Messages carry event.ts; other events (Stop, DM opened) carry
+              // event.event_ts instead — fall back to it so they dedup too.
+              const eventBody = body as {
+                event?: { ts?: string; event_ts?: string };
+              };
+              const eventTs =
+                eventBody?.event?.ts ?? eventBody?.event?.event_ts;
+              if (eventTs && this.socketDedup.mark(eventTs)) {
+                break;
+              }
+              await this.eventHandler
+                ?.handleIncomingMessage(this, body)
+                .catch((error) => {
+                  logger.error(
+                    { error: errorMessage(error) },
+                    "[SlackProvider] Error processing socket event",
+                  );
+                });
               break;
             }
-            this.eventHandler
-              ?.handleIncomingMessage(this, body)
-              .catch((error) => {
+            case "interactive":
+              await safeAck();
+              await this.handleInteractivePayload(body).catch((error) => {
                 logger.error(
                   { error: errorMessage(error) },
-                  "[SlackProvider] Error processing socket event",
+                  "[SlackProvider] Error processing socket interactive event",
                 );
               });
-            break;
+              break;
+            case "slash_commands":
+              // Pass the raw ack (not safeAck): handleSlashCommandSocket has its
+              // own delivery helper that falls back to response_url when the ack
+              // rejects, and it already returns a promise that is .catch()'d here.
+              await this.handleSlashCommandSocket(body, ack).catch((error) => {
+                logger.error(
+                  { error: errorMessage(error) },
+                  "[SlackProvider] Error processing socket slash command",
+                );
+              });
+              break;
+            default:
+              await safeAck();
+              break;
           }
-          case "interactive":
-            await safeAck();
-            this.handleInteractivePayload(body).catch((error) => {
-              logger.error(
-                { error: errorMessage(error) },
-                "[SlackProvider] Error processing socket interactive event",
-              );
-            });
-            break;
-          case "slash_commands":
-            // Pass the raw ack (not safeAck): handleSlashCommandSocket has its
-            // own delivery helper that falls back to response_url when the ack
-            // rejects, and it already returns a promise that is .catch()'d here.
-            this.handleSlashCommandSocket(body, ack).catch((error) => {
-              logger.error(
-                { error: errorMessage(error) },
-                "[SlackProvider] Error processing socket slash command",
-              );
-            });
-            break;
-          default:
-            await safeAck();
-            break;
-        }
+        });
+        trackBackgroundWork(work);
+        await work;
       },
     );
 
@@ -2439,7 +2464,7 @@ class SlackProvider implements ChatOpsProvider {
       rejectInitial = undefined;
       if (onAbort) signal.removeEventListener("abort", onAbort);
       if (onInitialClose)
-        this.socketModeClient.removeListener("close", onInitialClose);
+        this.socketModeClient?.removeListener("close", onInitialClose);
     }
   }
 

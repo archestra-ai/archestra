@@ -58,6 +58,7 @@ import {
 import LlmThroughputModel from "./llm-throughput";
 import ModelModel from "./model";
 import type { ProxyRequestState } from "./proxy-request-context";
+import TeamModel from "./team";
 
 type LimitsCleanupOptionsEntities = {
   [K in Exclude<LimitEntityType, "team" | "virtual_key">]?: string;
@@ -1722,7 +1723,8 @@ export class LimitValidationService {
       // credential's billing team when it has one, otherwise the agent's teams
       // the caller belongs to.
       const agentTeamIds = params.billingTeamId
-        ? [params.billingTeamId]
+        ? (snapshot?.limitTeamIds ??
+          (await TeamModel.getBillingAncestorIds(params.billingTeamId)))
         : (snapshot?.limitTeamIds ??
           (await AgentTeamModel.getCallerTeamsForAgent({
             agentId,

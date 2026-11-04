@@ -174,6 +174,51 @@ it("leads each request's tokens with its output, labels the input, and gives exa
   expect(tooltip).not.toHaveTextContent("Cache write");
 });
 
+it("shows unknown usage when a request has no provider token count", async () => {
+  serveSession({
+    rows: [
+      summary({
+        id: "request-no-usage",
+        inputTokens: null,
+        outputTokens: null,
+      }),
+    ],
+  });
+
+  await renderPage();
+
+  const requests = await screen.findByRole("list", { name: "Requests" });
+  expect(within(requests).getByText("Unknown")).toBeVisible();
+  expect(
+    await screen.findByText(
+      "No token count was received for this request. This can happen when a stream ends early or the provider does not include token counts.",
+    ),
+  ).toBeVisible();
+});
+
+it("keeps a missing output count unknown when input usage is reported", async () => {
+  serveSession({
+    rows: [
+      summary({
+        id: "request-partial-usage",
+        inputTokens: 12,
+        outputTokens: null,
+      }),
+    ],
+  });
+
+  await renderPage();
+
+  expect(
+    await screen.findByText(
+      "Not all token counts were received for this request. This can happen when a stream ends early or the provider returns only some counts.",
+    ),
+  ).toBeVisible();
+  const tokens = screen.getByText("Output").closest("li");
+  expect(tokens).toHaveTextContent("Unknown");
+  expect(screen.getByText("Fresh input").closest("li")).toHaveTextContent("12");
+});
+
 it("starts page one at the session's first request", async () => {
   const rows = Array.from({ length: 60 }, (_, i) =>
     summary({

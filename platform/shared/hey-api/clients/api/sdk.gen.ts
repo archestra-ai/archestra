@@ -13704,7 +13704,7 @@ export const virtualApiKeyLabelValues = <ThrowOnError extends boolean = false>(o
 export const getAllVirtualApiKeys = <ThrowOnError extends boolean = false>(options?: Options<GetAllVirtualApiKeysData, ThrowOnError>) => (options?.client ?? client).get<GetAllVirtualApiKeysResponses, GetAllVirtualApiKeysErrors, ThrowOnError>({ url: '/api/llm-virtual-keys', ...options });
 
 /**
- * Create a new virtual API key. Returns the full token value once.
+ * Create a new virtual API key. Team admins creating a key for another member receive metadata only; the owner can retrieve its value.
  *
  * Authentication:
  *

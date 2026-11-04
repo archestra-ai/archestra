@@ -943,8 +943,8 @@ poolTest(
     expect(
       rows.find((row) => row.providerApiKeyId === unavailable.id),
     ).toMatchObject({
-      inputTokens: 0,
-      outputTokens: 0,
+      inputTokens: null,
+      outputTokens: null,
       model: "gemini-2.5-flash",
       attemptOutcome: "failed",
       failureReason: "key_unavailable",

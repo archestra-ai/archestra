@@ -11,6 +11,7 @@ import {
   type LucideIcon,
   Pencil,
   Plus,
+  RefreshCw,
   Server,
   Trash2,
 } from "lucide-react";
@@ -73,6 +74,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  describeRotation,
+  RotateVirtualKeyDialog,
+} from "@/components/virtual-key-rotation";
 import {
   useHasPermissions,
   useScopedCapabilities,
@@ -163,6 +168,7 @@ function VirtualKeysTable() {
     null,
   );
   const [editingKey, setEditingKey] = useState<VirtualKeyRow | null>(null);
+  const [rotatingKey, setRotatingKey] = useState<VirtualKeyRow | null>(null);
   const [deletingKey, setDeletingKey] = useState<VirtualKeyRow | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
@@ -349,6 +355,7 @@ function VirtualKeysTable() {
               })}
             </span>
           </div>
+          <VirtualKeyRotationNote virtualKey={row.original} />
         </div>
       ),
     },
@@ -366,6 +373,12 @@ function VirtualKeysTable() {
               label: "Edit",
               permissions: { llmVirtualKey: ["update"] },
               onClick: () => setEditingKey(row.original),
+            },
+            {
+              icon: <RefreshCw className="h-4 w-4" />,
+              label: "Rotate",
+              permissions: { llmVirtualKey: ["update"] },
+              onClick: () => setRotatingKey(row.original),
             },
             {
               icon: <Trash2 className="h-4 w-4" />,
@@ -577,6 +590,12 @@ function VirtualKeysTable() {
                           onClick: () => setEditingKey(key),
                         },
                         {
+                          icon: <RefreshCw className="h-4 w-4" />,
+                          label: "Rotate",
+                          permissions: { llmVirtualKey: ["update"] },
+                          onClick: () => setRotatingKey(key),
+                        },
+                        {
                           icon: <Trash2 className="h-4 w-4" />,
                           label: "Delete",
                           permissions: { llmVirtualKey: ["delete"] },
@@ -597,6 +616,7 @@ function VirtualKeysTable() {
                       <span>
                         Last used: {formatRelativeTimeFromNow(key.lastUsedAt)}
                       </span>
+                      <VirtualKeyRotationNote virtualKey={key} />
                     </div>
                   }
                 >
@@ -653,6 +673,12 @@ function VirtualKeysTable() {
           virtualKey={editingKey}
           onOpenChange={(open) => {
             if (!open) setEditingKey(null);
+          }}
+        />
+        <RotateVirtualKeyDialog
+          virtualKey={rotatingKey}
+          onOpenChange={(open) => {
+            if (!open) setRotatingKey(null);
           }}
         />
         <DeleteConfirmDialog
@@ -840,6 +866,11 @@ function VirtualKeyBudget({
       <div className="text-xs text-muted-foreground">{cap}</div>
     </div>
   );
+}
+
+function VirtualKeyRotationNote({ virtualKey }: { virtualKey: VirtualKeyRow }) {
+  const note = describeRotation(virtualKey);
+  return note ? <div className="text-muted-foreground">{note}</div> : null;
 }
 
 /**

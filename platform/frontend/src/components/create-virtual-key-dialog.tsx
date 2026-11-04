@@ -32,6 +32,7 @@ import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import { useConnectionBaseUrl } from "@/components/virtual-key-connection-base-url";
 import { VirtualKeyConnectionGuide } from "@/components/virtual-key-connection-guide";
+import { AutoRotationSelect } from "@/components/virtual-key-rotation";
 import { useScopedCapabilities, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
@@ -159,6 +160,9 @@ export function CreateVirtualKeyDialog({
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
   const [billingTeamId, setBillingTeamId] = useState<string | null>(null);
   const [spendCap, setSpendCap] = useState<SpendCapValue>(null);
+  const [rotationIntervalSeconds, setRotationIntervalSeconds] = useState<
+    number | null
+  >(null);
   const [includeFutureProviders, setIncludeFutureProviders] = useState(false);
   const [providerApiKeyIds, setProviderApiKeyIds] =
     useState<ProviderApiKeyMappings>([]);
@@ -247,6 +251,7 @@ export function CreateVirtualKeyDialog({
       setProviderApiKeyIds(initialMappings);
       setBillingTeamId(null);
       setSpendCap(null);
+      setRotationIntervalSeconds(null);
       setGrants([]);
       setModelPoolIds([]);
       setLabels([]);
@@ -258,6 +263,7 @@ export function CreateVirtualKeyDialog({
         providerApiKeyIds: initialMappings,
         billingTeamId: null,
         spendCap: null,
+        rotationIntervalSeconds: null,
         grants: [],
         modelPoolIds: [],
         labels: [],
@@ -320,6 +326,7 @@ export function CreateVirtualKeyDialog({
       providerApiKeyIds,
       billingTeamId,
       spendCap,
+      rotationIntervalSeconds,
       grants,
       modelPoolIds,
       labels,
@@ -335,6 +342,7 @@ export function CreateVirtualKeyDialog({
       labels: finalLabels,
       billingTeamId: billingTeamId ?? undefined,
       spendCap: spendCap ?? undefined,
+      ...(rotationIntervalSeconds !== null && { rotationIntervalSeconds }),
       ...(effectiveOwnerId !== currentUser?.id && {
         ownerId: effectiveOwnerId,
       }),
@@ -389,6 +397,7 @@ export function CreateVirtualKeyDialog({
     onOpenChange,
     billingTeamId,
     spendCap,
+    rotationIntervalSeconds,
   ]);
 
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -530,6 +539,16 @@ export function CreateVirtualKeyDialog({
                   spendCap={spendCap}
                   onSpendCapChange={setSpendCap}
                 />
+                <div className="space-y-2">
+                  <Label htmlFor="virtual-key-rotation">
+                    Rotate automatically
+                  </Label>
+                  <AutoRotationSelect
+                    id="virtual-key-rotation"
+                    value={rotationIntervalSeconds}
+                    onChange={setRotationIntervalSeconds}
+                  />
+                </div>
                 {!isPassthrough && !ownerManagesAccess && (
                   <ResourceAccessSection
                     resource="llmVirtualKey"

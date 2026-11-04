@@ -20,6 +20,7 @@ const {
   createVirtualApiKey,
   updateVirtualApiKey,
   deleteVirtualApiKey,
+  rotateVirtualApiKey,
   bulkDeleteVirtualApiKeys,
 } = archestraApiSdk;
 
@@ -112,6 +113,38 @@ export function useDeleteVirtualApiKey() {
       queryClient.invalidateQueries({
         queryKey: ["virtual-api-keys"],
       });
+    },
+  });
+}
+
+/**
+ * Replace a key's value. The response carries the new value only for the
+ * key's creator; the old value keeps working for the chosen grace period.
+ */
+export function useRotateVirtualApiKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      gracePeriodSeconds,
+    }: {
+      id: string;
+      gracePeriodSeconds: number;
+    }) => {
+      const { data, error } = await rotateVirtualApiKey({
+        path: { id },
+        body: { gracePeriodSeconds },
+      });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Virtual API key rotated");
+      queryClient.invalidateQueries({ queryKey: ["all-virtual-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["virtual-api-keys"] });
     },
   });
 }

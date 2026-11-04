@@ -36,6 +36,12 @@ vi.mock("@/components/resource-access-section", () => ({
   ),
 }));
 
+// Radix Select needs pointer capture and scrollIntoView, which jsdom lacks.
+Element.prototype.scrollIntoView = vi.fn();
+Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+Element.prototype.setPointerCapture = vi.fn();
+Element.prototype.releasePointerCapture = vi.fn();
+
 const mutateAsync = vi.fn();
 
 const virtualKey = {
@@ -81,6 +87,30 @@ beforeEach(() => {
 });
 
 describe("EditVirtualKeyDialog", () => {
+  it("sends the automatic rotation interval only when it changes", async () => {
+    const user = userEvent.setup();
+    mutateAsync.mockResolvedValue({});
+    renderDialog({
+      ...virtualKey,
+      rotationIntervalSeconds: null,
+      nextRotationAt: null,
+      previousTokenExpiresAt: null,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(mutateAsync.mock.calls[0][0].data).not.toHaveProperty(
+      "rotationIntervalSeconds",
+    );
+
+    await user.click(screen.getByLabelText("Rotate automatically"));
+    await user.click(screen.getByRole("option", { name: "Every 30 days" }));
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(mutateAsync).toHaveBeenLastCalledWith({
+      id: "vk-1",
+      data: expect.objectContaining({ rotationIntervalSeconds: 30 * 86400 }),
+    });
+  });
+
   it("shows reusable connection instructions without revealing the saved key", async () => {
     const user = userEvent.setup();
     renderDialog();

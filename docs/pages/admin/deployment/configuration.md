@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 6
-lastUpdated: 2026-11-03
+lastUpdated: 2026-11-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -197,10 +197,11 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Values: `0` or more. `0` treats every replay as reuse.
   - The window lets a client retry after a lost token response.
 
-- **`ARCHESTRA_AUTH_RATE_LIMIT_DISABLED`** - Turns off rate limiting on the sign-in and auth endpoints.
+- **`ARCHESTRA_AUTH_RATE_LIMIT_DISABLED`** - Turns off rate limiting on the sign-in, auth, and MCP gateway endpoints. Credentials and permissions are still checked.
   - Default: `false`
   - Values: `true`, `false`
   - The OAuth token endpoint allows 100 requests per minute per client IP, shared across grants and replicas. On HTTP `429`, wait for the `Retry-After` delay. IP resolution follows [`ARCHESTRA_TRUST_PROXY`](/docs/admin/deployment/configuration#ARCHESTRA_TRUST_PROXY).
+  - If the MCP gateway returns HTTP `429` or `503`, wait before retrying and follow `Retry-After` when provided.
   - Use it only for load tests or automated test runs.
 
 - **`ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL`** - Skips the sign-in page in development by signing in as the user with this email.

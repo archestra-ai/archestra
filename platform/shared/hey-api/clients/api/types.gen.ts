@@ -103644,6 +103644,13 @@ export type McpGatewayGetErrors = {
     /**
      * Default Response
      */
+    403: {
+        error: string;
+        message: string;
+    };
+    /**
+     * Default Response
+     */
     405: {
         jsonrpc: '2.0';
         error: {
@@ -103651,6 +103658,26 @@ export type McpGatewayGetErrors = {
             message: string;
         };
         id: null;
+    };
+    /**
+     * Default Response
+     */
+    429: {
+        error: {
+            message: string;
+            type: 'api_rate_limit_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    503: {
+        error: {
+            message: string;
+            type: 'api_service_unavailable_error';
+            internal_code?: string;
+        };
     };
 };
 
@@ -103667,11 +103694,36 @@ export type McpGatewayPostData = {
     url: '/v1/mcp/{profileId}';
 };
 
+export type McpGatewayPostErrors = {
+    /**
+     * Default Response
+     */
+    429: {
+        error: {
+            message: string;
+            type: 'api_rate_limit_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    503: {
+        error: {
+            message: string;
+            type: 'api_service_unavailable_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type McpGatewayPostError = McpGatewayPostErrors[keyof McpGatewayPostErrors];
+
 export type McpGatewayPostResponses = {
     /**
      * Default Response
      */
-    200: unknown;
+    default: unknown;
 };
 
 export type McpGatewaySseMessageData = {
@@ -103698,9 +103750,36 @@ export type McpGatewaySseMessageErrors = {
     /**
      * Default Response
      */
+    403: {
+        error: string;
+        message: string;
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string;
         message: string;
+    };
+    /**
+     * Default Response
+     */
+    429: {
+        error: {
+            message: string;
+            type: 'api_rate_limit_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    503: {
+        error: {
+            message: string;
+            type: 'api_service_unavailable_error';
+            internal_code?: string;
+        };
     };
 };
 
@@ -103786,10 +103865,30 @@ export type ReportAgentRuntimeStatusErrors = {
     /**
      * Default Response
      */
+    429: {
+        error: {
+            message: string;
+            type: 'api_rate_limit_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    503: {
+        error: {
+            message: string;
+            type: 'api_service_unavailable_error';
             internal_code?: string;
         };
     };

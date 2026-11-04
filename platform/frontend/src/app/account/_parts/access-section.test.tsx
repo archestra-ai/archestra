@@ -177,7 +177,7 @@ describe("AccessSection", () => {
     expect(screen.queryByText("View agents")).toBeNull();
   });
 
-  it("says which role grants each permission when more than one does", async () => {
+  it("says under each permission which role grants it, and through which team", async () => {
     mockRole("member");
     mockSources([
       { role: "member", team: null, permissions: { agent: ["read"] } },
@@ -202,9 +202,15 @@ describe("AccessSection", () => {
     expect(roles).toHaveTextContent("via Security");
 
     await userEvent.click(await screen.findByRole("button", { name: "Show" }));
-    expect(screen.getByText("Member, agent editor via Platform")).toBeVisible();
-    expect(screen.getByText("agent editor via Platform")).toBeVisible();
-    expect(screen.getByText("reviewer via Security")).toBeVisible();
+    expect(
+      screen.getByTitle("From Member and agent editor (through Platform)"),
+    ).toBeVisible();
+    expect(
+      screen.getByTitle("From agent editor, through the Platform team"),
+    ).toBeVisible();
+    expect(
+      screen.getByTitle("From reviewer, through the Security team"),
+    ).toBeVisible();
   });
 
   it("hides the toggle when nothing is granted", async () => {

@@ -33,21 +33,21 @@ import {
  * Every permission a role can hold, a card per resource, filtered by a search
  * and by area. With `onChange` the rows are checkboxes and `grantable` says
  * which the author may grant; without it the list is read-only and opens on
- * the granted rows alone. `attribution` names, for a granted row, where the
- * grant comes from ("Editor, Reviewer via Security") when the holder is a
- * person rather than a role.
+ * the granted rows alone. `provenance` draws, under a granted row, where the
+ * grant comes from ("From Editor and Reviewer (through Security)") when the
+ * holder is a person rather than a role.
  */
 export function PermissionList({
   permissions,
   onChange,
   grantable = {},
-  attribution,
+  provenance,
   emptyMessage = "This role grants no permissions.",
 }: {
   permissions: Permissions;
   onChange?: (permissions: Permissions) => void;
   grantable?: Permissions;
-  attribution?: (row: PermissionRow) => string | null;
+  provenance?: (row: PermissionRow) => ReactNode;
   /** Shown in place of the list when nothing is granted. */
   emptyMessage?: ReactNode;
 }) {
@@ -87,7 +87,7 @@ export function PermissionList({
               permissions={permissions}
               grantable={grantable}
               onChange={onChange}
-              attribution={attribution}
+              provenance={provenance}
             />
           </Fragment>
         ))}
@@ -244,13 +244,13 @@ function ResourceCard({
   permissions,
   grantable,
   onChange,
-  attribution,
+  provenance,
 }: {
   entry: PermissionEntry;
   permissions: Permissions;
   grantable: Permissions;
   onChange?: (permissions: Permissions) => void;
-  attribution?: (row: PermissionRow) => string | null;
+  provenance?: (row: PermissionRow) => ReactNode;
 }) {
   const { resource } = entry;
   const selected = countGranted(permissions, resource.rows);
@@ -311,10 +311,8 @@ function ResourceCard({
             onToggle={
               onChange ? () => onChange(toggleRow(permissions, row)) : undefined
             }
-            attribution={
-              attribution && isGranted(permissions, row)
-                ? attribution(row)
-                : null
+            provenance={
+              provenance && isGranted(permissions, row) ? provenance(row) : null
             }
           />
         ))}
@@ -324,29 +322,31 @@ function ResourceCard({
 }
 
 /**
- * One permission on one line: the control, its label, what it allows, where
- * it comes from when that is known, and its key. On a phone the line stacks,
- * and the key moves under the text so the description keeps the row's width.
+ * One permission on one line: the control, its label, what it allows, and
+ * its key; where it comes from, when that is known, sits on a second line.
+ * On a phone the line stacks, and the key moves under the text so the
+ * description keeps the row's width.
  */
 function PermissionRowItem({
   row,
   granted,
   disabled,
   onToggle,
-  attribution,
+  provenance,
 }: {
   row: PermissionRow;
   granted: boolean;
   disabled: boolean;
   onToggle?: () => void;
-  attribution: string | null;
+  provenance: ReactNode;
 }) {
   const id = useId();
   return (
     <Label
       htmlFor={id}
       className={cn(
-        "grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 px-3 py-1.5 font-normal transition-colors sm:min-h-8 sm:items-center sm:py-0",
+        "grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 px-3 py-1.5 font-normal transition-colors sm:min-h-8 sm:items-center",
+        provenance ? "sm:py-1.5" : "sm:py-0",
         onToggle ? "cursor-pointer hover:bg-muted/40" : "cursor-default",
         disabled && "cursor-not-allowed opacity-60",
       )}
@@ -376,22 +376,19 @@ function PermissionRowItem({
           </span>
         )}
       </span>
-      <span className="flex min-w-0 flex-col sm:flex-row sm:items-baseline sm:gap-2">
-        <span className="shrink-0 text-[13px] font-medium">{row.label}</span>
-        <span className="min-w-0 text-xs text-muted-foreground sm:truncate">
-          {row.description}
-        </span>
-        {attribution && (
-          <span
-            className="mt-0.5 shrink-0 text-xs text-muted-foreground/80 sm:mt-0 sm:ml-auto sm:max-w-[40%] sm:truncate"
-            title={attribution}
-          >
-            {attribution}
+      <span className="flex min-w-0 flex-col">
+        <span className="flex min-w-0 flex-col sm:flex-row sm:items-baseline sm:gap-2">
+          <span className="shrink-0 text-[13px] font-medium">{row.label}</span>
+          <span className="min-w-0 text-xs text-muted-foreground sm:truncate">
+            {row.description}
           </span>
+          <code className="mt-1 font-mono text-[11px] text-muted-foreground/60 sm:hidden">
+            {row.key}
+          </code>
+        </span>
+        {provenance && (
+          <span className="mt-0.5 block min-w-0">{provenance}</span>
         )}
-        <code className="mt-1 font-mono text-[11px] text-muted-foreground/60 sm:hidden">
-          {row.key}
-        </code>
       </span>
       <code className="hidden h-5 shrink-0 items-center rounded border border-border/50 bg-muted px-1.5 font-mono text-[11px] text-muted-foreground sm:inline-flex">
         {row.key}

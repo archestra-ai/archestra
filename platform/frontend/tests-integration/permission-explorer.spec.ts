@@ -168,13 +168,11 @@ test("read-only roles and personal access expose permissions and keyboard source
   // Each row says which roles grant it, directly or through a team: the
   // custom role covers read, create and delete, so those three rows name it.
   await expect(
-    personalAgents.getByText("Admin, agent editor via Platform", {
-      exact: true,
-    }),
+    personalAgents.getByTitle("From Admin and agent editor (through Platform)"),
   ).toHaveCount(3);
-  await expect(personalAgents.getByText("Admin", { exact: true })).toHaveCount(
-    1,
-  );
+  await expect(
+    personalAgents.getByTitle("From Admin", { exact: true }),
+  ).toHaveCount(1);
   await expect(personal.getByRole("checkbox")).toHaveCount(0);
   await personal.getByRole("button", { name: "Other", exact: true }).click();
   await expect(

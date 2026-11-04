@@ -417,7 +417,7 @@ function BreakTheGlassRow<T extends string>(props: {
             <code className="font-mono">
               {/* Wrap a long name only after an underscore. */}
               {props.environmentVariable.split("_").map((part, index) => (
-                <span key={`${index}-${part}`}>
+                <span key={part}>
                   {index > 0 ? (
                     <>
                       _<wbr />

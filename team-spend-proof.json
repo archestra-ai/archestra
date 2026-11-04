@@ -1,0 +1,109 @@
+{
+  "environment": "Local frontend and backend with isolated synthetic PostgreSQL records; no real provider calls or production data.",
+  "candidateManifestSha256": "cc3b975d80f06da095604ea17c835932ec36e0b06490665e7b4fdd1ec3211c4c",
+  "checks": {
+    "backendRouteTests": 5,
+    "frontendTests": 58,
+    "backendTypecheckExit": 0,
+    "frontendTypecheckExit": 0,
+    "changedFileBiomeExit": 0,
+    "backendKnipDevExit": 0,
+    "backendKnipProductionExit": 0,
+    "frontendKnipExit": 0
+  },
+  "roles": {
+    "admin": {
+      "aggregateStatus": 200,
+      "aggregateTeams": 8,
+      "personStatus": 200,
+      "personTeams": 8
+    },
+    "lead": {
+      "aggregateStatus": 200,
+      "aggregateTeams": 4,
+      "personStatus": 200,
+      "personTeams": 4
+    },
+    "childlead": {
+      "aggregateStatus": 200,
+      "aggregateTeams": 1,
+      "personStatus": 200,
+      "personTeams": 1
+    },
+    "unrelatedlead": {
+      "aggregateStatus": 200,
+      "aggregateTeams": 1,
+      "personStatus": 200,
+      "personTeams": 1
+    },
+    "member": {
+      "aggregateStatus": 403,
+      "aggregateTeams": null,
+      "personStatus": 403,
+      "personTeams": 0
+    },
+    "costreader": {
+      "aggregateStatus": 200,
+      "aggregateTeams": 8,
+      "personStatus": 403,
+      "personTeams": 0
+    },
+    "costlead": {
+      "aggregateStatus": 200,
+      "aggregateTeams": 8,
+      "personStatus": 200,
+      "personTeams": 1
+    },
+    "peoplereader": {
+      "aggregateStatus": 200,
+      "aggregateTeams": 8,
+      "personStatus": 200,
+      "personTeams": 8
+    },
+    "anonymous": {
+      "status": 401
+    }
+  },
+  "browserScenarios": [
+    {
+      "scenario": "Organization admin, last 30 days, team split by person",
+      "observed": "8 teams; Product direct billed spend $135.62; ranked people, service account and unattributed usage; row expansion leaves chart unchanged."
+    },
+    {
+      "scenario": "Cost reader who administers Product without member-read or team-directory permission",
+      "observed": "Person query shows Product only, $135.62, 94 requests; aggregate request returns 8 teams."
+    },
+    {
+      "scenario": "Last hour without requests",
+      "observed": "No team usage in this time range; no chart or top-team ranking; zero team rows retained for allowances."
+    },
+    {
+      "scenario": "Two subscription requests, no billed spend",
+      "observed": "$0 billed, $10 subscription estimate and 2 requests; billed chart replaced with No billed spend; Requests chart rendered."
+    }
+  ],
+  "limits": [
+    "Synthetic retained requests establish reporting and scope, not provider billing reconciliation.",
+    "Recorded payer attribution is historical; descendant rollups use the current hierarchy.",
+    "Shared personal credentials identify their recorded owner, not necessarily the human using them.",
+    "An existing dark-mode sidebar-logo hydration warning appears in local development; the development badge was collapsed for capture."
+  ],
+  "screenshots": {
+    "team-person-allowances.jpg": "5130b6532cd16ed09285fcb1a3599cdbced52934700152775cf7dd4f46ae6649",
+    "team-person-scoped-lead.jpg": "62ebc381d662b22092447e3133dab3b20057a5422e8e811db04521ed49afb375",
+    "team-spend-empty.jpg": "bc49e974d1550da94db0cd3398ee2b2e7011130731f2c85dbe42a70714af75b7"
+  },
+  "revision": "e1f2ca420662f6ab2d84f5656288fd55afe73105",
+  "review": {
+    "freshContext": true,
+    "findingsAddressed": [
+      "shared cube assembly and zero-valued history",
+      "unused redirect/navigation scaffolding",
+      "concise allowance copy",
+      "unused exports",
+      "Split None detail behavior"
+    ],
+    "finalFindings": 0,
+    "reviewerChecks": "Source, frozen hashes, instruction provenance, seeder syntax and screenshot pixels; test results reviewed from coordinator logs."
+  }
+}

@@ -23,9 +23,13 @@ import {
 } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useTeamSpendAccess } from "@/lib/hooks/use-team-spend-access";
+import { useTeamLimitAccess } from "@/lib/limits-access";
 import OrganizationCostsPage from "./page";
 
 vi.mock("next/navigation");
+vi.mock("@/lib/limits-access");
+vi.mock("@/lib/hooks/use-team-spend-access");
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query", async (importOriginal) => ({
@@ -120,6 +124,16 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 beforeEach(() => {
+  vi.mocked(useTeamSpendAccess).mockImplementation(() => ({
+    isTeamAdmin: useTeamLimitAccess().isTeamAdmin ?? false,
+    isPending: useTeamLimitAccess().isPending ?? false,
+    administeredTeamIds: useTeamLimitAccess().teams?.map((t) => t.id) ?? [],
+  }));
+  vi.mocked(useTeamLimitAccess).mockReturnValue({
+    canRead: false,
+    globalRead: false,
+    teams: [],
+  } as unknown as ReturnType<typeof useTeamLimitAccess>);
   localStorage.clear();
   search = new URLSearchParams();
   pending = false;
@@ -173,7 +187,7 @@ beforeEach(() => {
           });
         case "models":
           return HttpResponse.json(models);
-        case "teams":
+        case "team-spend":
           return HttpResponse.json(teams);
         case "agents":
           return HttpResponse.json(agents);
@@ -346,7 +360,7 @@ describe("OrganizationCostsPage", () => {
     await screen.findAllByText("$8.25");
     await group("Team");
     await waitFor(() =>
-      expect(requests.some((url) => url.pathname.endsWith("/teams"))).toBe(
+      expect(requests.some((url) => url.pathname.endsWith("/team-spend"))).toBe(
         true,
       ),
     );
@@ -541,13 +555,26 @@ describe("OrganizationCostsPage", () => {
       {
         teamId: "team",
         teamName: "Platform",
-        members: 3,
-        agents: 2,
+        parentId: null,
+        memberCount: 3,
         requests: 12,
-        inputTokens: 100,
-        outputTokens: 50,
-        cost: 42,
-        timeSeries: [],
+        tokens: 150,
+        directSpend: 42,
+        descendantSpend: 0,
+        subscriptionValue: 0,
+        unpricedRequests: 0,
+        models: [
+          {
+            model: "sample",
+            provider: "openai",
+            requests: 12,
+            tokens: 150,
+            billedSpend: 42,
+            subscriptionValue: 0,
+            unpricedRequests: 0,
+            timeSeries: [],
+          },
+        ],
       },
     ];
     agents = [
@@ -749,4 +776,469 @@ describe("OrganizationCostsPage", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Research agent")).not.toBeInTheDocument();
   });
+});
+
+it("keeps team leads on the scoped API even with an organization-model URL", async () => {
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: false,
+    isPending: false,
+    isLoading: false,
+  } as ReturnType<typeof useHasPermissions>);
+  search = new URLSearchParams({
+    group: "person",
+    model: "secret-model",
+    metric: "tokens",
+    timeframe: "30d",
+  });
+  show();
+  await waitFor(() =>
+    expect(requests.some((u) => u.pathname.endsWith("/team-spend"))).toBe(true),
+  );
+  expect(
+    requests.every((u) => u.pathname === "/api/statistics/team-spend"),
+  ).toBe(true);
+  expect(screen.getByRole("button", { name: "by Team" })).toBeVisible();
+  expect(screen.queryByText("Active people")).not.toBeInTheDocument();
+});
+
+it("uses scoped team totals instead of organization KPI data in Spend by team", async () => {
+  search = new URLSearchParams({
+    group: "team",
+    metric: "billed",
+    split: "model",
+    timeframe: "30d",
+  });
+  show();
+  await waitFor(() =>
+    expect(requests.some((u) => u.pathname.endsWith("/team-spend"))).toBe(true),
+  );
+  expect(
+    requests.every((u) => u.pathname === "/api/statistics/team-spend"),
+  ).toBe(true);
+  expect(
+    screen.getByRole("button", { name: "View Spend by team" }),
+  ).toBeVisible();
+});
+
+it("lets a scoped lead change model splitting on the default Costs URL", async () => {
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: false,
+    isPending: false,
+    isLoading: false,
+  } as ReturnType<typeof useHasPermissions>);
+  show();
+  await waitFor(() =>
+    expect(requests.some((u) => u.pathname.endsWith("/team-spend"))).toBe(true),
+  );
+  fireEvent.keyDown(screen.getByRole("button", { name: "split by Model" }), {
+    key: "Enter",
+  });
+  fireEvent.click(await screen.findByRole("menuitem", { name: /^None$/ }));
+  expect(screen.getByRole("button", { name: "split by None" })).toBeVisible();
+});
+
+it("distinguishes inaccessible allowances from an authorized empty limit list", async () => {
+  vi.mocked(useTeamLimitAccess).mockReturnValue({
+    canRead: true,
+    globalRead: false,
+    teams: [{ id: "product" }],
+  } as ReturnType<typeof useTeamLimitAccess>);
+  search = new URLSearchParams({ group: "team", metric: "billed" });
+  teams = [
+    {
+      teamId: "support",
+      teamName: "Support",
+      parentId: null,
+      memberCount: 2,
+      directSpend: 0,
+      descendantSpend: 0,
+      requests: 0,
+      tokens: 0,
+      subscriptionValue: 0,
+      unpricedRequests: 0,
+      models: [],
+    },
+  ];
+  const limitsRequests: string[] = [];
+  server.use(
+    http.get(`${origin}/api/limits`, ({ request }) => {
+      limitsRequests.push(request.url);
+      return HttpResponse.json([]);
+    }),
+  );
+  show();
+  fireEvent.click(await screen.findByRole("row", { name: /Support/ }));
+  expect(
+    await screen.findByText(
+      "Current allowances require limit-read access for this team.",
+    ),
+  ).toBeVisible();
+  expect(
+    screen.queryByText("No direct team spend limit."),
+  ).not.toBeInTheDocument();
+  expect(limitsRequests).toEqual([]);
+});
+
+it("lets a lead request and expand ranked people without fetching organization statistics", async () => {
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: false,
+    isPending: false,
+    isLoading: false,
+  } as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useTeamLimitAccess).mockReturnValue({
+    isTeamAdmin: true,
+    canRead: true,
+    globalRead: false,
+    teams: [],
+  } as unknown as ReturnType<typeof useTeamLimitAccess>);
+  search = new URLSearchParams({
+    group: "team",
+    split: "model",
+    timeframe: "30d",
+  });
+  const usage = {
+    requests: 1,
+    tokens: 120,
+    billedSpend: 7,
+    subscriptionValue: 0,
+    unpricedRequests: 0,
+  };
+  teams = [
+    {
+      teamId: "product",
+      teamName: "Product",
+      parentId: null,
+      memberCount: 1,
+      directSpend: 7,
+      descendantSpend: 0,
+      requests: 1,
+      tokens: 120,
+      subscriptionValue: 0,
+      unpricedRequests: 0,
+      models: [
+        {
+          model: "example",
+          provider: "openai",
+          ...usage,
+          timeSeries: [{ timestamp: "2026-11-01T00:00:00Z", ...usage }],
+        },
+      ],
+      people: [
+        {
+          personId: "user-one",
+          personName: "Recorded person",
+          kind: "person",
+          ...usage,
+          timeSeries: [{ timestamp: "2026-11-01T00:00:00Z", ...usage }],
+        },
+      ],
+    },
+  ];
+  show();
+  await screen.findByRole("row", { name: /Product/ });
+  await split("Person");
+  await waitFor(() =>
+    expect(
+      requests.some((r) => r.searchParams.get("includePeople") === "true"),
+    ).toBe(true),
+  );
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Expand by Person" }),
+  );
+  expect(
+    await screen.findByRole("row", { name: /Recorded person/ }),
+  ).toBeVisible();
+  expect(
+    requests.every((r) => r.pathname === "/api/statistics/team-spend"),
+  ).toBe(true);
+  const teamRow = screen.getByRole("row", { name: /Product.*7/ });
+  fireEvent.click(teamRow);
+  expect(
+    screen.queryByRole("row", { name: /Recorded person/ }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(teamRow);
+  expect(
+    await screen.findByRole("row", { name: /Recorded person/ }),
+  ).toBeVisible();
+  expect(screen.queryByText(/Chart shows/)).not.toBeInTheDocument();
+  expect(new URLSearchParams(window.location.search).has("focus")).toBe(false);
+  expect(
+    screen.queryByText(/Spend follows the recorded payer/),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByText(/requests have no recorded price/),
+  ).not.toBeInTheDocument();
+  await split("None");
+  expect(
+    screen.queryByRole("row", { name: /Recorded person/ }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("row", { name: /example · openai/ }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByText(
+      "Current allowances require limit-read access for this team.",
+    ),
+  ).toBeVisible();
+});
+
+it("does not offer person details to an organization cost reader without member access", async () => {
+  vi.mocked(useHasPermissions).mockImplementation(
+    (permissions) =>
+      ({
+        data: "llmCost" in permissions,
+        isPending: false,
+        isLoading: false,
+      }) as ReturnType<typeof useHasPermissions>,
+  );
+  search = new URLSearchParams({
+    group: "team",
+    split: "model",
+    timeframe: "30d",
+  });
+  show();
+  await waitFor(() => expect(requests.length).toBeGreaterThan(0));
+  fireEvent.keyDown(screen.getByRole("button", { name: "split by Model" }), {
+    key: "Enter",
+  });
+  expect(
+    screen.queryByRole("menuitem", { name: "Person" }),
+  ).not.toBeInTheDocument();
+  expect(requests.every((r) => !r.searchParams.has("includePeople"))).toBe(
+    true,
+  );
+});
+
+it("offers Person to a cost-reader team lead without team-directory permission", async () => {
+  vi.mocked(useHasPermissions).mockImplementation(
+    (permissions) =>
+      ({
+        data: "llmCost" in permissions,
+        isPending: false,
+        isLoading: false,
+      }) as ReturnType<typeof useHasPermissions>,
+  );
+  vi.mocked(useTeamSpendAccess).mockReturnValue({
+    isTeamAdmin: true,
+    isPending: false,
+    administeredTeamIds: ["product"],
+  });
+  // General team-directory discovery is unavailable for this custom role.
+  expect(useTeamLimitAccess().isTeamAdmin).toBeFalsy();
+  search = new URLSearchParams({
+    group: "team",
+    split: "model",
+    timeframe: "30d",
+  });
+  show();
+  await split("Person");
+  await waitFor(() =>
+    expect(
+      requests.some((r) => r.searchParams.get("includePeople") === "true"),
+    ).toBe(true),
+  );
+  expect(screen.getByRole("button", { name: "split by Person" })).toBeVisible();
+});
+
+function emptySpendTeam() {
+  return {
+    teamId: "no-usage",
+    teamName: "New team",
+    parentId: null,
+    memberCount: 2,
+    directSpend: 0,
+    descendantSpend: 0,
+    requests: 0,
+    tokens: 0,
+    subscriptionValue: 0,
+    unpricedRequests: 0,
+    models: [],
+  };
+}
+
+it("replaces an empty team graph with a message even when team rows exist", async () => {
+  teams = [emptySpendTeam()];
+  search = new URLSearchParams({
+    group: "team",
+    split: "model",
+    timeframe: "1h",
+  });
+  const { container } = show();
+  expect(
+    await screen.findByText("No team usage in this time range."),
+  ).toBeVisible();
+  expect(screen.getByRole("row", { name: /New team/ })).toBeVisible();
+  expect(screen.queryByText("Top team")).not.toBeInTheDocument();
+  expect(
+    container.querySelector("svg.recharts-surface"),
+  ).not.toBeInTheDocument();
+  expect(container.querySelector(".text-3xl")).not.toBeInTheDocument();
+});
+
+it("keeps zero-dollar requests distinct from no team activity", async () => {
+  const usage = {
+    requests: 2,
+    tokens: 100,
+    billedSpend: 0,
+    subscriptionValue: 3,
+    unpricedRequests: 0,
+  };
+  teams = [
+    {
+      ...emptySpendTeam(),
+      requests: 2,
+      tokens: 100,
+      subscriptionValue: 3,
+      models: [
+        {
+          model: "subscription-model",
+          provider: "example",
+          ...usage,
+          timeSeries: [{ timestamp: "2026-11-01T00:00:00Z", ...usage }],
+        },
+      ],
+    },
+  ];
+  search = new URLSearchParams({
+    group: "team",
+    split: "model",
+    timeframe: "30d",
+  });
+  const { container } = show();
+  expect(
+    await screen.findByText("No billed spend in this range."),
+  ).toBeVisible();
+  expect(
+    screen.queryByText("No team usage in this time range."),
+  ).not.toBeInTheDocument();
+  expect(container.querySelector(".text-3xl")).toHaveTextContent("$0.00");
+  expect(screen.queryByText("no trend")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Pivot" }));
+  // The existing zero marker distinguishes a recorded bucket from a blank cell.
+  const recordedRow = screen.getByRole("row", { name: /New team/ });
+  expect(within(recordedRow).getAllByRole("cell")[1]).toHaveTextContent("·");
+  await metric("Requests");
+  await waitFor(() =>
+    expect(container.querySelector("svg.recharts-surface")).toBeInTheDocument(),
+  );
+  expect(
+    screen.queryByText("No billed spend in this range."),
+  ).not.toBeInTheDocument();
+});
+
+it.each([
+  "loading",
+  "error",
+])("does not label %s team statistics as empty", async (state) => {
+  search = new URLSearchParams({
+    group: "team",
+    split: "model",
+    timeframe: "1h",
+  });
+  if (state === "loading") pending = true;
+  else
+    server.use(
+      http.get(`${origin}/api/statistics/team-spend`, () =>
+        HttpResponse.json(
+          { error: { message: "Unavailable" } },
+          { status: 500 },
+        ),
+      ),
+    );
+  const { container } = show();
+  if (state === "loading")
+    await waitFor(() => expect(requests.length).toBeGreaterThan(0));
+  else
+    expect(
+      await screen.findByText("Could not load usage statistics"),
+    ).toBeVisible();
+  expect(
+    screen.queryByText("No team usage in this time range."),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByText("No billed spend in this range."),
+  ).not.toBeInTheDocument();
+  if (state === "loading")
+    expect(
+      container.querySelector('[data-slot="skeleton"]'),
+    ).toBeInTheDocument();
+});
+
+it("shows current allowance periods and remaining or over-budget amounts independently of the chart range", async () => {
+  teams = [emptySpendTeam()];
+  search = new URLSearchParams({
+    group: "team",
+    split: "model",
+    timeframe: "1h",
+  });
+  vi.mocked(useTeamLimitAccess).mockReturnValue({
+    ...useTeamLimitAccess(),
+    globalRead: true,
+  });
+  server.use(
+    http.get(`${origin}/api/limits`, () =>
+      HttpResponse.json([
+        {
+          id: "weekly",
+          model: ["example/model-a"],
+          cleanupInterval: "1w",
+          lastCleanup: "2026-11-01T00:00:00Z",
+          behavior: "hard",
+          limitValue: 20,
+          modelUsage: [{ cost: 15 }],
+          estimatedUsage: false,
+        },
+        {
+          id: "monthly",
+          model: ["example/model-b"],
+          cleanupInterval: "1M",
+          lastCleanup: "2026-11-01T00:00:00Z",
+          behavior: "soft",
+          limitValue: 10,
+          modelUsage: [{ cost: 13.5 }],
+          estimatedUsage: true,
+        },
+        {
+          id: "unknown",
+          model: ["example/model-c"],
+          cleanupInterval: null,
+          lastCleanup: null,
+          behavior: "hard",
+          limitValue: 10,
+        },
+      ]),
+    ),
+  );
+  show();
+  fireEvent.click(await screen.findByRole("row", { name: /New team/ }));
+  expect(await screen.findByText("$5.00 remaining")).toBeVisible();
+  expect(screen.getByText("$3.50 over")).toBeVisible();
+  expect(screen.getByText("$13.50 (estimated)")).toBeVisible();
+  expect(screen.getByText("1w")).toBeVisible();
+  expect(screen.getByText("1M")).toBeVisible();
+  expect(screen.getAllByText("Unavailable")).toHaveLength(2);
+});
+
+it("reports allowance errors rather than claiming there is no limit", async () => {
+  teams = [emptySpendTeam()];
+  search = new URLSearchParams({
+    group: "team",
+    split: "model",
+    timeframe: "1h",
+  });
+  vi.mocked(useTeamLimitAccess).mockReturnValue({
+    ...useTeamLimitAccess(),
+    globalRead: true,
+  });
+  server.use(
+    http.get(`${origin}/api/limits`, () =>
+      HttpResponse.json({ error: { message: "Unavailable" } }, { status: 500 }),
+    ),
+  );
+  show();
+  fireEvent.click(await screen.findByRole("row", { name: /New team/ }));
+  expect(await screen.findByText("Could not load allowances")).toBeVisible();
+  expect(
+    screen.queryByText(/No direct team spend limit/),
+  ).not.toBeInTheDocument();
 });

@@ -1,4 +1,3 @@
-import "@/lib/limits-access";
 import type { Permissions } from "@archestra/shared";
 import { predefinedPermissionsMap } from "@archestra/shared/access-control";
 import { render, screen } from "@testing-library/react";
@@ -6,11 +5,14 @@ import { usePathname, useRouter } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPagePermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import { hasPagePermissions } from "@/lib/auth/auth.utils";
+import { useTeamSpendAccess } from "@/lib/hooks/use-team-spend-access";
+import { useTeamLimitAccess } from "@/lib/limits-access";
 import { WithPagePermissions } from "./with-page-permissions";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/limits-access");
+vi.mock("@/lib/hooks/use-team-spend-access");
 // Read only when a grant on one credential might open Settings.
 vi.mock("@/lib/runtime-credentials.query", () => ({
   useRuntimeCredentials: () => ({ data: [], isPending: false }),
@@ -51,7 +53,23 @@ function renderAt(pathname: string) {
 
 describe("WithPagePermissions", () => {
   beforeEach(() => {
+    vi.mocked(useTeamSpendAccess).mockImplementation(() => ({
+      isTeamAdmin: useTeamLimitAccess().isTeamAdmin ?? false,
+      isPending: useTeamLimitAccess().isPending ?? false,
+      administeredTeamIds: useTeamLimitAccess().teams?.map((t) => t.id) ?? [],
+    }));
     replace.mockClear();
+    vi.mocked(useTeamLimitAccess).mockReturnValue({
+      teams: [],
+      managedTeams: [],
+      isTeamAdmin: false,
+      canRead: false,
+      globalRead: false,
+      globalCreate: false,
+      isPending: false,
+      allows: () => false,
+      isLocked: () => true,
+    });
     vi.mocked(useRouter).mockReturnValue({
       replace,
     } as unknown as ReturnType<typeof useRouter>);
@@ -148,4 +166,51 @@ describe("WithPagePermissions", () => {
     expect(screen.getByText("Page content")).toBeVisible();
     expect(replace).not.toHaveBeenCalled();
   });
+});
+
+it("does not block an explicit cost reader on an unrelated team-membership query", () => {
+  signInAs({ llmCost: ["read"] });
+  vi.mocked(useTeamLimitAccess).mockReturnValue({
+    ...useTeamLimitAccess(),
+    isPending: true,
+  });
+  renderAt("/llm/costs");
+  expect(screen.getByText("Page content")).toBeVisible();
+});
+
+it("allows a team admin into Costs without organization cost permission", () => {
+  signInAs(predefinedPermissionsMap.member);
+  vi.mocked(useTeamLimitAccess).mockReturnValue({
+    ...useTeamLimitAccess(),
+    isTeamAdmin: true,
+    canRead: true,
+    isPending: false,
+  });
+  renderAt("/llm/costs");
+  expect(screen.getByText("Page content")).toBeVisible();
+});
+
+it("keeps ordinary members out of the Costs page", () => {
+  signInAs(predefinedPermissionsMap.member);
+  vi.mocked(useTeamLimitAccess).mockReturnValue({
+    ...useTeamLimitAccess(),
+    isTeamAdmin: false,
+    canRead: false,
+    isPending: false,
+  });
+  renderAt("/llm/costs");
+  expect(
+    screen.getByText("You don't have permission to access this page."),
+  ).toBeVisible();
+});
+
+it("admits a team lead with no organization cost or team-directory permissions", () => {
+  signInAs({});
+  vi.mocked(useTeamSpendAccess).mockReturnValue({
+    isTeamAdmin: true,
+    isPending: false,
+    administeredTeamIds: ["managed-team"],
+  });
+  renderAt("/llm/costs");
+  expect(screen.getByText("Page content")).toBeVisible();
 });

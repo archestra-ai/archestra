@@ -1446,6 +1446,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetUserToken]: {},
   [RouteId.GetUserTokenValue]: {},
   [RouteId.RotateUserToken]: {},
+  // The handler enforces organization cost permission or administered-team scope.
+  [RouteId.GetTeamSpend]: {},
+  [RouteId.GetTeamSpendAccess]: {},
   [RouteId.GetTeamStatistics]: {
     llmCost: ["read"],
   },

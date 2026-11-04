@@ -1,6 +1,7 @@
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { useMemo } from "react";
 import { usePermissionMap, useScopedCapabilities } from "@/lib/auth/auth.query";
+import { useTeamSpendAccess } from "@/lib/hooks/use-team-spend-access";
 import { useTeamLimitAccess } from "@/lib/limits-access";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import {
@@ -19,6 +20,7 @@ import {
 export function useNavPermissionMap(): Record<string, boolean> | null {
   const pageMap = usePermissionMap(requiredPagePermissionsMap);
   const limitsAccess = useTeamLimitAccess();
+  const spendAccess = useTeamSpendAccess();
   const manageMap = usePermissionMap(SETTINGS_MANAGE_PERMISSIONS);
   const { data: capabilities = NO_CAPABILITIES } = useScopedCapabilities();
   const permissionMap = useMemo(
@@ -42,6 +44,7 @@ export function useNavPermissionMap(): Record<string, boolean> | null {
   if (needsCredentials && credentials.isPending) return null;
   return {
     ...pageMap,
+    "/llm/costs": !!pageMap["/llm/costs"] || spendAccess.isTeamAdmin,
     "/llm/limits": !!pageMap["/llm/limits"] || !!limitsAccess.canRead,
     "/settings": canSeeSettingsArea({
       permissionMap,

@@ -24,6 +24,8 @@ const config: KnipConfig = {
     "scripts/update-grok-client-version.mjs!",
     "scripts/update-vscode-client-version.mjs!",
     "scripts/update-openappa-template.mjs!",
+    // Explicit local-only synthetic data CLI; guarded against shared databases.
+    "scripts/seed-team-spend.mjs!",
     // Test infrastructure used by *.test.ts files (dev-only entries)
     "src/test/**/*.ts",
     // Loaded by `vitest run --config` for the opt-in session storage benchmark.

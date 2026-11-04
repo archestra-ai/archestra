@@ -216,6 +216,7 @@ const layerTable = [
       "src/models/skill-usage-actors.ts",
       "src/models/skill-usage-event.ts",
       "src/models/statistics.ts",
+    "src/models/team-spend.ts",
       "src/models/usage-statistics.ts",
       "src/models/virtual-api-key.ts",
       // The auth helpers that check access to agents, catalogs, OAuth

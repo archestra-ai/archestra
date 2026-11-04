@@ -63,6 +63,7 @@
     "db:reset-openappa": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/reset-openappa.ts",
     "db:openappa-count-legacy": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/count-openappa-legacy.ts",
     "db:openappa-declare-installs": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/openappa-declare-installs.ts",
+    "db:seed:team-spend": "node scripts/seed-team-spend.mjs",
     "db:seed:mock-data": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/seed-mock-data.ts",
     "db:hydrate-from": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/hydrate-from.ts",
     "codegen:appa-guide": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/codegen-appa-guide.ts",

@@ -716,6 +716,8 @@ export function SummaryTable({
   onToggle,
   showTimeline = true,
   onDrilldown,
+  expandOnClick = false,
+  rowDetails,
   timeframe,
 }: {
   cube: Cube;
@@ -725,6 +727,8 @@ export function SummaryTable({
   splitLabel: string | null;
   focus: Set<string>;
   onToggle: (key: string) => void;
+  expandOnClick?: boolean;
+  rowDetails?: (row: CubeRow) => ReactNode;
   showTimeline?: boolean;
   onDrilldown?: (model: string) => void;
 }) {
@@ -739,6 +743,12 @@ export function SummaryTable({
     setTable("sort", value);
   const setOpen = (value: SetStateAction<Set<string>>) =>
     setTable("open", value);
+  const toggleOpen = (key: string) =>
+    setOpen((s) => {
+      const next = new Set(s);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
   const setShowAll = (value: SetStateAction<boolean>) =>
     setTable("showAll", value);
   const fmtBucket = useMemo(
@@ -815,7 +825,10 @@ export function SummaryTable({
             return (
               <RowGroup key={r.key}>
                 <tr
-                  onClick={() => onToggle(r.key)}
+                  onClick={() =>
+                    expandOnClick ? toggleOpen(r.key) : onToggle(r.key)
+                  }
+                  aria-expanded={expandOnClick ? isOpen : undefined}
                   className={cn(
                     "cursor-pointer border-b transition-colors hover:bg-muted/40",
                     focused && "bg-muted/60 hover:bg-muted/60",
@@ -830,18 +843,18 @@ export function SummaryTable({
                     )}
                   >
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      {r.children.length > 0 ? (
+                      {r.children.length > 0 || rowDetails ? (
                         <UnstyledButton
                           aria-label={
-                            isOpen ? "Collapse" : `Expand by ${splitLabel}`
+                            isOpen
+                              ? "Collapse"
+                              : splitLabel
+                                ? `Expand by ${splitLabel}`
+                                : "Expand team"
                           }
                           onClick={(e) => {
                             e.stopPropagation();
-                            setOpen((s) => {
-                              const n = new Set(s);
-                              n.has(r.key) ? n.delete(r.key) : n.add(r.key);
-                              return n;
-                            });
+                            toggleOpen(r.key);
                           }}
                           className="-ml-1 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
                         >
@@ -943,6 +956,7 @@ export function SummaryTable({
                   )}
                 </tr>
                 {isOpen &&
+                  splitLabel &&
                   r.children.slice(0, 12).map((c) => (
                     <tr key={c.key} className="border-b bg-muted/20 text-xs">
                       <td className="max-w-0 py-1.5 pr-3 pl-12 max-sm:sticky max-sm:left-0 max-sm:z-10 max-sm:bg-card">
@@ -977,6 +991,17 @@ export function SummaryTable({
                       )}
                     </tr>
                   ))}
+                {isOpen && rowDetails && (
+                  <tr className="border-b">
+                    <td
+                      colSpan={
+                        3 + cube.extraCols.length + (showTimeline ? 2 : 0)
+                      }
+                    >
+                      {rowDetails(r)}
+                    </td>
+                  </tr>
+                )}
               </RowGroup>
             );
           })}
@@ -1004,6 +1029,7 @@ export function PivotTable({
   bySplit,
   focus,
   onToggle,
+  rowDetails,
 }: {
   cube: Cube;
   metric: MetricId;
@@ -1011,7 +1037,15 @@ export function PivotTable({
   bySplit: boolean;
   focus: Set<string>;
   onToggle: (key: string) => void;
+  rowDetails?: (row: CubeRow) => ReactNode;
 }) {
+  const [open, setOpen] = useState(new Set<string>());
+  const toggleOpen = (key: string) =>
+    setOpen((previous) => {
+      const next = new Set(previous);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
   const cols = pivotColumns(cube, bySplit);
   const matrix = cube.rows.map((r) => pivotValues(r, cube, bySplit));
   const max = Math.max(1e-9, ...matrix.flat().map(Math.abs));
@@ -1042,50 +1076,76 @@ export function PivotTable({
         </thead>
         <tbody>
           {cube.rows.map((r, i) => (
-            <tr
-              key={r.key}
-              onClick={() => onToggle(r.key)}
-              className="group cursor-pointer"
-            >
-              <td
-                className={cn(
-                  "sticky left-0 z-10 max-w-56 border-b bg-card px-3 py-1.5 group-hover:bg-muted",
-                  focus.has(r.key) && "bg-muted",
-                )}
+            <RowGroup key={r.key}>
+              <tr
+                aria-expanded={rowDetails ? open.has(r.key) : undefined}
+                onClick={() =>
+                  rowDetails ? toggleOpen(r.key) : onToggle(r.key)
+                }
+                className="group cursor-pointer"
               >
-                <div className="flex min-w-0 max-w-36 items-center gap-2 sm:max-w-none sm:flex-wrap">
-                  <span
-                    className="size-2 shrink-0 rounded-[2px]"
-                    style={{ background: colorAt(i) }}
-                  />
-                  <span
-                    title={r.label}
-                    className="min-w-0 flex-1 truncate font-medium sm:whitespace-normal sm:break-words"
-                  >
-                    {r.label}
-                  </span>
-                </div>
-              </td>
-              {matrix[i].map((v, j) => (
                 <td
-                  key={cols[j].key}
-                  className="border-b border-l border-l-background px-1.5 py-1.5 text-right font-mono tabular-nums"
-                  style={{
-                    background:
-                      v !== 0
-                        ? `color-mix(in oklch, var(--chart-1) ${Math.round(8 + Math.sqrt(Math.abs(v) / max) * 62)}%, transparent)`
-                        : undefined,
-                  }}
+                  className={cn(
+                    "sticky left-0 z-10 max-w-56 border-b bg-card px-3 py-1.5 group-hover:bg-muted",
+                    focus.has(r.key) && "bg-muted",
+                  )}
                 >
-                  <span className={v === 0 ? "text-muted-foreground/50" : ""}>
-                    {r.hasSeries || bySplit ? formatCell(metric, v) : ""}
-                  </span>
+                  <div className="flex min-w-0 max-w-36 items-center gap-2 sm:max-w-none sm:flex-wrap">
+                    {rowDetails && (
+                      <UnstyledButton
+                        aria-label={
+                          open.has(r.key) ? "Collapse" : "Expand team"
+                        }
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleOpen(r.key);
+                        }}
+                      >
+                        {open.has(r.key) ? (
+                          <ChevronDown className="size-3.5" />
+                        ) : (
+                          <ChevronRight className="size-3.5" />
+                        )}
+                      </UnstyledButton>
+                    )}
+                    <span
+                      className="size-2 shrink-0 rounded-[2px]"
+                      style={{ background: colorAt(i) }}
+                    />
+                    <span
+                      title={r.label}
+                      className="min-w-0 flex-1 truncate font-medium sm:whitespace-normal sm:break-words"
+                    >
+                      {r.label}
+                    </span>
+                  </div>
                 </td>
-              ))}
-              <td className="border-b border-l bg-card px-3 py-1.5 text-right font-mono font-medium tabular-nums group-hover:bg-muted sm:sticky sm:right-0 sm:z-10">
-                {formatValue(metric, r.total)}
-              </td>
-            </tr>
+                {matrix[i].map((v, j) => (
+                  <td
+                    key={cols[j].key}
+                    className="border-b border-l border-l-background px-1.5 py-1.5 text-right font-mono tabular-nums"
+                    style={{
+                      background:
+                        v !== 0
+                          ? `color-mix(in oklch, var(--chart-1) ${Math.round(8 + Math.sqrt(Math.abs(v) / max) * 62)}%, transparent)`
+                          : undefined,
+                    }}
+                  >
+                    <span className={v === 0 ? "text-muted-foreground/50" : ""}>
+                      {r.hasSeries || bySplit ? formatCell(metric, v) : ""}
+                    </span>
+                  </td>
+                ))}
+                <td className="border-b border-l bg-card px-3 py-1.5 text-right font-mono font-medium tabular-nums group-hover:bg-muted sm:sticky sm:right-0 sm:z-10">
+                  {formatValue(metric, r.total)}
+                </td>
+              </tr>
+              {rowDetails && open.has(r.key) && (
+                <tr>
+                  <td colSpan={cols.length + 2}>{rowDetails(r)}</td>
+                </tr>
+              )}
+            </RowGroup>
           ))}
         </tbody>
         <tfoot>

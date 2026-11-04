@@ -142,7 +142,8 @@ export function useInteractions({
  * the session backwards from `endDate`. A client runs such a tool, so only
  * the asking request's stored preview knows the call id; previews are
  * decrypted on read, so the match happens here. Reading stops once every id
- * is found, the session's start is reached, or rows predate recorded call ids.
+ * is found or the session's start is reached: rows without recorded call ids
+ * (older, or written mid-deploy) can sit between ones that have them.
  */
 export function useSessionToolCallAskers({
   sessionId,
@@ -152,7 +153,14 @@ export function useSessionToolCallAskers({
   sessionId: string;
   callIds: string[];
   endDate: string | null;
-}): Map<string, { requestId: string; name: string }> {
+}): {
+  byCallId: Map<string, { requestId: string; name: string }>;
+  /** Still reading: a call not found yet may be found. */
+  pending: boolean;
+  /** A read failed: calls not found may exist. */
+  failed: boolean;
+  retry: () => void;
+} {
   const wanted = callIds.join(",");
   const query = useInfiniteQuery({
     queryKey: ["interaction-tool-call-askers", sessionId, endDate, wanted],
@@ -181,10 +189,6 @@ export function useSessionToolCallAskers({
         ),
       );
       if (callIds.every((id) => found.has(id))) return undefined;
-      // Rows from before call ids were recorded cannot match; nor can older.
-      if (last.data.some((row) => row.responseToolCalls == null)) {
-        return undefined;
-      }
       return all.length * ASKER_BATCH;
     },
     enabled: callIds.length > 0 && endDate !== null,
@@ -195,20 +199,32 @@ export function useSessionToolCallAskers({
   }, [hasNextPage, isFetchingNextPage, isError, fetchNextPage]);
 
   const pages = query.data?.pages;
-  return useMemo(() => {
+  const byCallId = useMemo(() => {
     const ids = new Set(wanted ? wanted.split(",") : []);
-    const byCallId = new Map<string, { requestId: string; name: string }>();
+    const found = new Map<string, { requestId: string; name: string }>();
     for (const page of pages ?? []) {
       for (const row of page?.data ?? []) {
         for (const call of row.responseToolCalls ?? []) {
-          if (ids.has(call.id) && !byCallId.has(call.id)) {
-            byCallId.set(call.id, { requestId: row.id, name: call.name });
+          if (ids.has(call.id) && !found.has(call.id)) {
+            found.set(call.id, { requestId: row.id, name: call.name });
           }
         }
       }
     }
-    return byCallId;
+    return found;
   }, [pages, wanted]);
+  const enabled = callIds.length > 0 && endDate !== null;
+  return {
+    byCallId,
+    pending:
+      enabled &&
+      !isError &&
+      (query.isPending || hasNextPage || isFetchingNextPage),
+    failed: enabled && isError,
+    retry: () => {
+      query.refetch();
+    },
+  };
 }
 
 export function useInteractionSummaries({

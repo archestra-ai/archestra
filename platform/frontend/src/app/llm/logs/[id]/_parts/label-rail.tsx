@@ -353,7 +353,7 @@ function Stepper({
         <TooltipTrigger asChild>
           <UnstyledButton
             onClick={() => onActivate(changes[Math.max(0, active)])}
-            aria-label={`${count}.${active >= 0 ? ` Showing change ${active + 1}: ${changeSentence(changes[active])}` : ""} ${shown.target.type === "request" ? "Opens the request that caused it." : "Selects the row that caused it."}`}
+            aria-label={`${count}.${active >= 0 ? ` Showing change ${active + 1}: ${changeSentence(changes[active])}` : ""} ${activateWords(shown)}`}
             className="inline-flex cursor-pointer items-center gap-1 border-x px-1.5 font-medium whitespace-nowrap tabular-nums outline-none transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset"
           >
             <StepperIcon
@@ -401,8 +401,7 @@ function Stepper({
             ))}
           </ol>
           <p className="mt-1 opacity-70">
-            The arrows step through them and select the row that caused each
-            one.
+            The arrows step through them and show what caused each one.
           </p>
         </TooltipContent>
       </Tooltip>
@@ -464,7 +463,7 @@ function Marker({
         <UnstyledButton
           tabIndex={-1}
           onClick={() => onActivate(last)}
-          aria-label={`${changes.map(changeSentence).join(" ")} Selects the row that caused it.`}
+          aria-label={`${changes.map(changeSentence).join(" ")} ${activateWords(last)}`}
           className={cn(
             "group/marker absolute left-0 z-[4] flex w-[13px] cursor-pointer justify-center outline-none",
             at === "top"
@@ -506,7 +505,9 @@ function Marker({
           ))}
         </div>
         <p className="mt-1 opacity-70">
-          Click to select the row that caused it.
+          {last.target.type === "request"
+            ? "Click to open the request that caused it."
+            : "Click to select the row that caused it."}
         </p>
       </TooltipContent>
     </Tooltip>
@@ -558,12 +559,19 @@ function changeSentence(change: LabelChange): string {
   return "The label was set.";
 }
 
+/** What activating a change does, for its accessible name. */
+function activateWords(change: LabelChange): string {
+  return change.target.type === "request"
+    ? "Opens the request that caused it."
+    : "Selects the row that caused it.";
+}
+
 function causeSentence(change: LabelChange): string {
   const { event, toolName } = change.cause;
   switch (event) {
     case "tool_result":
       if (change.target.type === "request") {
-        return `Caused by the result of ${toolName ?? "a tool"}, asked for on another page. Select to open that request.`;
+        return `Caused by the result of ${toolName ?? "a tool"}, asked for on another page.`;
       }
       return toolName
         ? `Caused by the result of ${toolName}.`

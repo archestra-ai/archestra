@@ -661,75 +661,7 @@ it("reports a failed lookup of a linked request's page as an error, not a missin
 });
 
 it("opens the request on an earlier page that asked for the tool behind a label change", async () => {
-  const rows = Array.from({ length: 60 }, (_, i) =>
-    summary({
-      id: `request-${String(i).padStart(2, "0")}`,
-      model: `model-${i}`,
-      createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
-      ...(i === 10
-        ? {
-            responseToolCalls: [{ id: "call_shell", name: "exec_command" }],
-          }
-        : { responseToolCalls: [] }),
-    } as Partial<ReturnType<typeof makeInteraction>>),
-  );
-  serveSession({ rows });
-  const labelChange = (params: {
-    event: string;
-    at: string;
-    callId: string | null;
-    trustAfter: string;
-  }) => ({
-    id: `${params.event}-${params.at}`,
-    organizationId: "org",
-    root: "root",
-    sessionId: "test-session",
-    callerId: null,
-    createdAt: params.at,
-    event: params.event,
-    callId: params.callId,
-    tool: null,
-    trustBefore: "trusted",
-    audienceBefore: "public",
-    trustAfter: params.trustAfter,
-    audienceAfter: "public",
-    policyRevision: null,
-    rule: null,
-  });
-  server.use(
-    http.get(`${origin}/api/openappa/external-consults`, () =>
-      HttpResponse.json({ data: [] }),
-    ),
-    http.get(`${origin}/api/openappa/yells`, () =>
-      HttpResponse.json({ data: [], pagination: { hasNext: false } }),
-    ),
-    http.get(`${origin}/api/openappa/label-changes`, () =>
-      HttpResponse.json({
-        data: [
-          labelChange({
-            event: "session_start",
-            at: "2026-01-01T00:00:00.000Z",
-            callId: null,
-            trustAfter: "trusted",
-          }),
-          labelChange({
-            event: "tool_result",
-            at: "2026-01-01T00:00:55.500Z",
-            callId: "call:call_shell",
-            trustAfter: "suspicious",
-          }),
-        ],
-      }),
-    ),
-  );
-  vi.mocked(useSearchParams).mockReturnValue(
-    new URLSearchParams("page=2&pageSize=50") as ReturnType<
-      typeof useSearchParams
-    >,
-  );
-
-  vi.mocked(useFeature).mockImplementation(((flag: string) =>
-    flag === "openappaEnabled" ? true : undefined) as typeof useFeature);
+  serveOffPageCause();
 
   await renderPage();
 
@@ -738,9 +670,40 @@ it("opens the request on an earlier page that asked for the tool behind a label 
   });
   await userEvent.click(stepper);
   expect(push).toHaveBeenCalledWith(
-    "/llm/logs/test-session?request=request-10&pageSize=50",
+    "/llm/logs/test-session?request=request-010&pageSize=50",
     { scroll: false },
   );
+});
+
+it("says when looking up the earlier request behind a label change failed", async () => {
+  serveOffPageCause();
+  server.use(
+    http.get(`${origin}/api/interactions/summaries`, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      if (
+        params.get("limit") === "100" &&
+        params.get("sortDirection") === "desc"
+      ) {
+        return HttpResponse.json(
+          { error: { message: "boom", type: "api_internal_server_error" } },
+          { status: 500 },
+        );
+      }
+    }),
+  );
+
+  await renderPage();
+
+  expect(
+    await screen.findByText(
+      "Couldn't look up which earlier request caused a label change.",
+    ),
+  ).toBeVisible();
+  expect(
+    screen.getByRole("button", {
+      name: /^1 label change\. Selects the row that caused it\.$/,
+    }),
+  ).toBeVisible();
 });
 
 it("says when a later page's axis counts from the page, not the session", async () => {
@@ -1200,6 +1163,7 @@ function serveSession({
         paginated(matching.slice(offset, offset + limit), {
           total: matching.length,
           limit,
+          hasNext: offset + limit < matching.length,
         }),
       );
     }),
@@ -1226,4 +1190,83 @@ function serveSession({
       HttpResponse.json({ data: [], pagination: { hasNext: false } }),
     ),
   );
+}
+
+/**
+ * Page 4 of a 160-request session, OpenAPPA on, with one label change caused
+ * by a client-run tool that request 10 asked for. Requests 100-140 predate
+ * recorded call ids, so finding request 10 reads past them.
+ */
+function serveOffPageCause() {
+  const rows = Array.from({ length: 160 }, (_, i) =>
+    summary({
+      id: `request-${String(i).padStart(3, "0")}`,
+      model: `model-${i}`,
+      createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+      ...(i === 10
+        ? { responseToolCalls: [{ id: "call_shell", name: "exec_command" }] }
+        : i >= 100 && i <= 140
+          ? {}
+          : { responseToolCalls: [] }),
+    } as Partial<ReturnType<typeof makeInteraction>>),
+  );
+  serveSession({ rows });
+  const labelChange = (params: {
+    event: string;
+    at: string;
+    callId: string | null;
+    trustAfter: string;
+  }) => ({
+    id: `${params.event}-${params.at}`,
+    organizationId: "org",
+    root: "root",
+    sessionId: "test-session",
+    callerId: null,
+    createdAt: params.at,
+    event: params.event,
+    callId: params.callId,
+    tool: null,
+    trustBefore: "trusted",
+    audienceBefore: "public",
+    trustAfter: params.trustAfter,
+    audienceAfter: "public",
+    policyRevision: null,
+    rule: null,
+  });
+  server.use(
+    http.get(`${origin}/api/interactions/sessions/:sessionId/lineage`, () =>
+      HttpResponse.json({ forkedFrom: null, forks: [], forksTruncated: false }),
+    ),
+    http.get(`${origin}/api/openappa/external-consults`, () =>
+      HttpResponse.json({ data: [] }),
+    ),
+    http.get(`${origin}/api/openappa/yells`, () =>
+      HttpResponse.json({ data: [], pagination: { hasNext: false } }),
+    ),
+    http.get(`${origin}/api/openappa/label-changes`, () =>
+      HttpResponse.json({
+        data: [
+          labelChange({
+            event: "session_start",
+            at: "2026-01-01T00:00:00.000Z",
+            callId: null,
+            trustAfter: "trusted",
+          }),
+          labelChange({
+            event: "tool_result",
+            at: new Date(Date.UTC(2026, 0, 1, 0, 0, 155, 500)).toISOString(),
+            callId: "call:call_shell",
+            trustAfter: "suspicious",
+          }),
+        ],
+      }),
+    ),
+  );
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams("page=4&pageSize=50") as ReturnType<
+      typeof useSearchParams
+    >,
+  );
+  vi.mocked(useFeature).mockImplementation(((flag: string) =>
+    flag === "openappaEnabled" ? true : undefined) as typeof useFeature);
 }

@@ -3,7 +3,13 @@
 // The session trace's guardrails state: the checks and label history, which
 // check is open in the details pane, and the pane that shows it.
 
-import { ArrowRight, ShieldAlert, ShieldCheck, ShieldX } from "lucide-react";
+import {
+  ArrowRight,
+  ShieldAlert,
+  ShieldCheck,
+  ShieldX,
+  TriangleAlert,
+} from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -19,6 +25,7 @@ import {
 import { toConsultView } from "@/app/consults/logs/_parts/consult-details";
 import { CodeBlock } from "@/components/ai-elements/code-block";
 import { Button } from "@/components/ui/button";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import {
   Tooltip,
   TooltipContent,
@@ -63,6 +70,8 @@ type GuardrailsState = {
   loading: boolean;
   /** Wraps the page's span selection so picking a span closes a consult. */
   selectSpan: (key: string | null) => void;
+  /** Reading earlier requests for a label change's cause failed. */
+  askerLookup: { failed: boolean; retry: () => void };
 };
 
 const GuardrailsContext = createContext<GuardrailsState | null>(null);
@@ -118,7 +127,7 @@ export function GuardrailsProvider({
       ? new Date(Math.min(...starts)).toISOString()
       : null;
   }, [timeline]);
-  const askedElsewhere = useSessionToolCallAskers({
+  const askers = useSessionToolCallAskers({
     sessionId,
     callIds: offPageCallIds,
     endDate: pageStartsAt,
@@ -130,9 +139,9 @@ export function GuardrailsProvider({
         consults: consults ?? [],
         labelChanges: labelChanges ?? [],
         yells: yells?.data ?? [],
-        askedElsewhere,
+        askedElsewhere: askers.byCallId,
       }),
-    [timeline, consults, labelChanges, yells, askedElsewhere],
+    [timeline, consults, labelChanges, yells, askers.byCallId],
   );
 
   const [selectedConsultKey, setSelectedConsultKey] = useState<string | null>(
@@ -159,7 +168,11 @@ export function GuardrailsProvider({
 
   const state: GuardrailsState = {
     guardrails,
-    loading: consultsLoading || labelChangesLoading || yellsLoading,
+    // Until the earlier requests are read, an off-page cause would point at
+    // the wrong row.
+    loading:
+      consultsLoading || labelChangesLoading || yellsLoading || askers.pending,
+    askerLookup: { failed: askers.failed, retry: askers.retry },
     selectedConsultKey,
     selectConsult,
     selectSpan: (key) => {
@@ -187,11 +200,42 @@ export function TraceWaterfall(
     "guardrails" | "selectedConsultKey" | "onSelectConsult"
   >,
 ) {
-  const { guardrails, loading, selectedConsultKey, selectConsult, selectSpan } =
-    useGuardrails();
+  const {
+    guardrails,
+    loading,
+    selectedConsultKey,
+    selectConsult,
+    selectSpan,
+    askerLookup,
+  } = useGuardrails();
   return (
     <RequestWaterfall
       {...props}
+      notice={
+        askerLookup.failed ? (
+          <>
+            <div className="border-b px-4 py-2">
+              <InlineNotice variant="error">
+                <TriangleAlert />
+                <InlineNoticeText>
+                  Couldn't look up which earlier request caused a label change.
+                </InlineNoticeText>
+                <Button
+                  variant="outline"
+                  size="xs"
+                  className="ml-auto"
+                  onClick={askerLookup.retry}
+                >
+                  <span>Retry</span>
+                </Button>
+              </InlineNotice>
+            </div>
+            {props.notice}
+          </>
+        ) : (
+          props.notice
+        )
+      }
       loading={props.loading || loading}
       onSelect={selectSpan}
       guardrails={guardrails}

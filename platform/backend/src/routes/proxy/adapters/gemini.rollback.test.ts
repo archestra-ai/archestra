@@ -59,6 +59,119 @@ function createMockRequest(
   };
 }
 
+describe("Gemini policy batch association", () => {
+  test.for([
+    true,
+    false,
+  ])("removes only unapproved calls while preserving candidate signatures (provider ids=%s)", (withIds) => {
+    const response = {
+      ...createMockResponse([]),
+      candidates: [0, 1].map((index) => ({
+        index,
+        content: {
+          role: "model",
+          parts: [
+            { text: `answer-${index}` },
+            {
+              functionCall: {
+                ...(withIds ? { id: `call-${index}` } : {}),
+                name: "lookup",
+                args: { index },
+              },
+              thoughtSignature: `signature-${index}`,
+            },
+          ],
+        },
+        finishReason: "STOP" as const,
+      })),
+    };
+    for (const retained of [[], [0], [1], [1, 0]]) {
+      const native = geminiAdapterFactory.createResponseAdapter(response);
+      const original = native.getToolCalls();
+      expect(native.getToolCalls().map((call) => call.id)).toEqual(
+        original.map((call) => call.id),
+      );
+      expect(new Set(original.map((call) => call.id)).size).toBe(2);
+      const approved = retained.map((index) => ({
+        ...original[index],
+        name: "policy_notice",
+        arguments: JSON.stringify({ approved: index }),
+      }));
+      const rewritten = native.withRewrittenToolCalls?.(approved);
+      const expected = [0, 1].map((index) => [
+        { text: `answer-${index}` },
+        ...(retained.includes(index)
+          ? [
+              {
+                ...response.candidates[index].content.parts[1],
+                functionCall: {
+                  ...(withIds ? { id: `call-${index}` } : {}),
+                  name: "policy_notice",
+                  args: { approved: index },
+                },
+              },
+            ]
+          : []),
+      ]);
+      expect(
+        rewritten?.candidates?.map((candidate) => candidate.content?.parts),
+      ).toEqual(expected);
+
+      const stream = geminiAdapterFactory.createStreamAdapter();
+      stream.processChunk(response as GeminiStreamChunk);
+      const streamedApproved = retained.map((index) => ({
+        ...stream.state.toolCalls[index],
+        name: "policy_notice",
+        arguments: JSON.stringify({ approved: index }),
+      }));
+      const frames = stream
+        .formatToolCallsSSE?.(streamedApproved)
+        .map((event) => JSON.parse(String(event).slice(6)));
+      expect(
+        frames
+          ?.flatMap((frame) => frame.candidates)
+          .flatMap(
+            (candidate: { index: number; content: { parts: unknown[] } }) =>
+              candidate.content.parts.map((part) => ({
+                index: candidate.index,
+                part,
+              })),
+          ),
+      ).toEqual(
+        [0, 1]
+          .filter((index) => retained.includes(index))
+          .map((index) => ({ index, part: expected[index][1] })),
+      );
+      stream.state.toolCalls.splice(
+        0,
+        stream.state.toolCalls.length,
+        ...streamedApproved,
+      );
+      expect(
+        stream
+          .toProviderResponse()
+          .candidates?.map((candidate) => candidate.content?.parts),
+      ).toEqual(expected);
+    }
+  });
+
+  test("rejects added and ambiguous approved call ids", () => {
+    const response = createMockResponse([
+      { functionCall: { id: "original", name: "lookup", args: {} } },
+    ]);
+    for (const approved of [
+      [{ id: "added", name: "lookup", arguments: "{}" }],
+      [0, 1].map(() => ({ id: "original", name: "lookup", arguments: "{}" })),
+    ]) {
+      const native = geminiAdapterFactory.createResponseAdapter(response);
+      expect(() => native.withRewrittenToolCalls?.(approved)).toThrow();
+      const stream = geminiAdapterFactory.createStreamAdapter();
+      stream.processChunk(response as GeminiStreamChunk);
+      expect(() => stream.formatToolCallsSSE?.(approved)).toThrow();
+    }
+  });
+});
+
 describe("GeminiResponseAdapter", () => {
   describe("getToolCalls", () => {
     test("converts function calls to common format", () => {

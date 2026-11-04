@@ -493,9 +493,60 @@ function convertMcpImageBlocksToGeminiResponse(
 // RESPONSE ADAPTER
 // =============================================================================
 
+// Policy may remove or reorder calls, but cannot invent a provider call or
+// change the candidate/signature to which it belongs.
+function approvedGeminiCalls(
+  originals: readonly { id: string }[],
+  approved: StreamAccumulatorState["toolCalls"],
+): Map<string, StreamAccumulatorState["toolCalls"][number]> {
+  const originalIds = new Set(originals.map((call) => call.id));
+  const result = new Map(approved.map((call) => [call.id, call]));
+  if (
+    originalIds.size !== originals.length ||
+    result.size !== approved.length ||
+    approved.some((call) => !originalIds.has(call.id))
+  )
+    throw new Error(
+      "Cannot associate approved Gemini tool calls with provider calls",
+    );
+  return result;
+}
+
+function rewriteGeminiCalls(
+  response: GeminiResponse,
+  originals: readonly { id: string }[],
+  approved: Map<string, StreamAccumulatorState["toolCalls"][number]>,
+): GeminiResponse {
+  let next = 0;
+  return {
+    ...response,
+    candidates: response.candidates?.map((candidate) => {
+      if (!candidate.content?.parts) return candidate;
+      const parts = candidate.content.parts.flatMap((part) => {
+        if (!("functionCall" in part) || !part.functionCall) return [part];
+        const original = originals[next++];
+        const rewritten = original && approved.get(original.id);
+        if (!rewritten) return [];
+        return [
+          {
+            ...part,
+            functionCall: {
+              ...part.functionCall,
+              name: rewritten.name,
+              args: parseArgs(rewritten.arguments),
+            },
+          },
+        ];
+      });
+      return { ...candidate, content: { ...candidate.content, parts } };
+    }),
+  };
+}
+
 class GeminiResponseAdapter implements LLMResponseAdapter<GeminiResponse> {
   readonly provider = "gemini" as const;
   private response: GeminiResponse;
+  private readonly callIdSeed = Date.now();
 
   constructor(response: GeminiResponse) {
     this.response = response;
@@ -524,7 +575,7 @@ class GeminiResponseAdapter implements LLMResponseAdapter<GeminiResponse> {
     return (this.response.candidates ?? [])
       .flatMap((candidate) => candidate.content?.parts ?? [])
       .filter((part) => "functionCall" in part && part.functionCall)
-      .map((part) => {
+      .map((part, index) => {
         const functionCall = (
           part as {
             functionCall: {
@@ -536,7 +587,8 @@ class GeminiResponseAdapter implements LLMResponseAdapter<GeminiResponse> {
         ).functionCall;
         return {
           id:
-            functionCall.id ?? `gemini-call-${functionCall.name}-${Date.now()}`,
+            functionCall.id ??
+            `gemini-call-${functionCall.name}-${this.callIdSeed + index}`,
           name: functionCall.name,
           arguments: functionCall.args ?? {},
         };
@@ -583,29 +635,12 @@ class GeminiResponseAdapter implements LLMResponseAdapter<GeminiResponse> {
   withRewrittenToolCalls(
     toolCalls: Array<{ id: string; name: string; arguments: string }>,
   ): GeminiResponse {
-    // Positional: one rewritten entry per call this response carries, in
-    // order, so ids the client correlates by are untouched.
-    let next = 0;
-    return {
-      ...this.response,
-      candidates: this.response.candidates?.map((candidate) => {
-        if (!candidate.content?.parts) return candidate;
-        const parts = candidate.content.parts.map((part) => {
-          if (!("functionCall" in part) || !part.functionCall) return part;
-          const rewritten = toolCalls[next++];
-          if (!rewritten) return part;
-          return {
-            ...part,
-            functionCall: {
-              ...part.functionCall,
-              name: rewritten.name,
-              args: parseArgs(rewritten.arguments),
-            },
-          };
-        });
-        return { ...candidate, content: { ...candidate.content, parts } };
-      }),
-    };
+    const originals = this.getToolCalls();
+    return rewriteGeminiCalls(
+      this.response,
+      originals,
+      approvedGeminiCalls(originals, toolCalls),
+    );
   }
 
   toRefusalResponse(
@@ -657,6 +692,8 @@ class GeminiStreamAdapter
   // refusal, so toProviderResponse persists the refusal (finishReason STOP, no
   // function calls) instead of the blocked tool calls.
   private replacedText: string | null = null;
+  private readonly originalToolCalls: StreamAccumulatorState["toolCalls"] = [];
+  private readonly callIdSeed = Date.now();
 
   // Gemini 3 requires thoughtSignature on all model parts when they are
   // sent back as conversation history. Track signatures during streaming
@@ -809,10 +846,12 @@ class GeminiStreamAdapter
         const toolCallIndex = this.state.toolCalls.length;
         this.state.toolCalls.push({
           id:
-            functionCall.id ?? `gemini-call-${functionCall.name}-${Date.now()}`,
+            functionCall.id ??
+            `gemini-call-${functionCall.name}-${this.callIdSeed + toolCallIndex}`,
           name: functionCall.name ?? "",
           arguments: JSON.stringify(functionCall.args ?? {}),
         });
+        this.originalToolCalls.push({ ...this.state.toolCalls[toolCallIndex] });
         // Track thoughtSignature for function call parts (required by Gemini 3)
         if (part.thoughtSignature) {
           this.toolCallSignatures.set(toolCallIndex, part.thoughtSignature);
@@ -915,51 +954,30 @@ class GeminiStreamAdapter
   }
 
   formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
-    if (
-      this.state.rawToolCallEvents.length > 0 &&
-      toolCalls.length === this.state.toolCalls.length
-    ) {
-      let offset = 0;
-      return this.state.rawToolCallEvents.map((event) => {
-        const adapter = new GeminiResponseAdapter(
-          sdkResponseToRestResponse(event as GeminiStreamChunk, this.model),
-        );
-        const count = adapter.getToolCalls().length;
-        const response = adapter.withRewrittenToolCalls(
-          toolCalls.slice(offset, offset + count),
-        );
-        offset += count;
-        return `data: ${JSON.stringify(response)}\n\n`;
-      });
-    }
-    // One REST-shaped chunk carrying every call as a functionCall part —
-    // exactly how the upstream delivers whole (non-incremental) calls, so the
-    // client accumulates it the same way. No finishReason: formatEndSSE closes
-    // the turn.
-    const chunk: GeminiResponse = {
-      candidates: [
-        {
-          content: {
-            parts: toolCalls.map((toolCall, index) => {
-              const thoughtSignature = this.toolCallSignatures.get(index);
-              return {
-                functionCall: {
-                  id: toolCall.id,
-                  name: toolCall.name,
-                  args: parseArgs(toolCall.arguments),
-                },
-                ...(thoughtSignature ? { thoughtSignature } : {}),
-              };
-            }),
-            role: "model",
-          },
-          index: 0,
-        },
-      ],
-      modelVersion: this.state.model || this.model,
-      responseId: this.state.responseId || `gemini-${Date.now()}`,
-    };
-    return [`data: ${JSON.stringify(chunk)}\n\n`];
+    const approved = approvedGeminiCalls(this.originalToolCalls, toolCalls);
+    let offset = 0;
+    return this.state.rawToolCallEvents.map((event) => {
+      const response = sdkResponseToRestResponse(
+        event as GeminiStreamChunk,
+        this.model,
+      );
+      const count =
+        response.candidates?.reduce(
+          (total, candidate) =>
+            total +
+            (candidate.content?.parts?.filter(
+              (part) => "functionCall" in part && part.functionCall,
+            ).length ?? 0),
+          0,
+        ) ?? 0;
+      const rewritten = rewriteGeminiCalls(
+        response,
+        this.originalToolCalls.slice(offset, offset + count),
+        approved,
+      );
+      offset += count;
+      return `data: ${JSON.stringify(rewritten)}\n\n`;
+    });
   }
 
   formatCompleteTextSSE(text: string): string[] {
@@ -1034,7 +1052,11 @@ class GeminiStreamAdapter
         // Keep empty object if parse fails
       }
 
-      const signature = this.toolCallSignatures.get(i);
+      const signature = this.toolCallSignatures.get(
+        this.originalToolCalls.findIndex(
+          (original) => original.id === toolCall.id,
+        ),
+      );
       parts.push({
         functionCall: {
           id: toolCall.id,
@@ -1054,6 +1076,10 @@ class GeminiStreamAdapter
       parts.push({ text: this.replacedText });
     }
 
+    const approved = approvedGeminiCalls(
+      this.originalToolCalls,
+      this.state.toolCalls,
+    );
     const separateCandidates =
       this.candidateParts.size > 1 ||
       (this.candidateParts.size === 1 && !this.candidateParts.has(0))
@@ -1063,7 +1089,9 @@ class GeminiStreamAdapter
                 ({ part, toolCallIndex }) => {
                   if (toolCallIndex === undefined) return [part];
                   if (this.replacedText !== null) return [];
-                  const call = this.state.toolCalls[toolCallIndex];
+                  const call = approved.get(
+                    this.originalToolCalls[toolCallIndex].id,
+                  );
                   if (!call) return []; // Disconnect cleanup discarded this held call.
                   return [
                     {

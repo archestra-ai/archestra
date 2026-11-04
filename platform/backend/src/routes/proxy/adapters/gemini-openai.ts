@@ -152,9 +152,9 @@ class GeminiOpenaiStreamAdapter
   private ctx: GeminiOpenaiContext;
   private toolNameCodec: GeminiToolNameCodec;
   private pendingToolCallEvents: string[] = [];
-  // Gemini 3 thought signatures per tool-call index, mirrored from the chunks
+  // Gemini 3 thought signatures per stable call id, mirrored from the chunks
   // so both SSE emission paths can encode them into the wire tool-call ids.
-  private toolCallSignatures: Map<number, string> = new Map();
+  private toolCallSignatures: Map<string, string> = new Map();
   private seenToolCalls = 0;
 
   constructor(ctx: GeminiOpenaiContext, request?: GeminiRequest) {
@@ -168,18 +168,14 @@ class GeminiOpenaiStreamAdapter
   }
 
   processChunk(chunk: GeminiStreamChunk) {
-    const decodedChunk = this.toolNameCodec.decodeResponse(chunk);
-    for (const part of decodedChunk.candidates?.[0]?.content?.parts ?? []) {
-      if ("functionCall" in part && part.functionCall) {
-        if (part.thoughtSignature) {
-          this.toolCallSignatures.set(
-            this.seenToolCalls,
-            part.thoughtSignature,
-          );
-        }
-        this.seenToolCalls += 1;
-      }
-    }
+    // This surface translates a single OpenAI choice. Keep policy accumulation
+    // on the same candidate as the wire translator, including usage-only frames.
+    const decodedChunk = this.toolNameCodec.decodeResponse({
+      ...chunk,
+      candidates: chunk.candidates?.filter(
+        (candidate, position) => (candidate.index ?? position) === 0,
+      ),
+    } as GeminiStreamChunk);
     // Prompt refusals have no candidate, but are complete responses, just as
     // the non-streaming translator's promptFeedback branch treats them.
     const blockReason = decodedChunk.promptFeedback?.blockReason;
@@ -188,6 +184,17 @@ class GeminiOpenaiStreamAdapter
       blockReason !== undefined &&
       blockReason !== "BLOCKED_REASON_UNSPECIFIED";
     const innerResult = this.inner.processChunk(decodedChunk);
+    for (const part of decodedChunk.candidates?.[0]?.content?.parts ?? []) {
+      if ("functionCall" in part && part.functionCall) {
+        if (part.thoughtSignature) {
+          this.toolCallSignatures.set(
+            this.state.toolCalls[this.seenToolCalls].id,
+            part.thoughtSignature,
+          );
+        }
+        this.seenToolCalls += 1;
+      }
+    }
     if (promptBlocked) {
       this.state.stopReason = "SAFETY";
       innerResult.isFinal = true;
@@ -228,7 +235,7 @@ class GeminiOpenaiStreamAdapter
     return encodeSignedToolCallId({
       id: params.toolCall.id,
       name: params.toolCall.name,
-      thoughtSignature: this.toolCallSignatures.get(params.index),
+      thoughtSignature: this.toolCallSignatures.get(params.toolCall.id),
     });
   }
 

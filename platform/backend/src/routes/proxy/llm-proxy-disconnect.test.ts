@@ -52,6 +52,8 @@ for (const provider of [
     let handlerFinished: ReturnType<typeof deferred>;
     let clientDisconnected: boolean;
     let finalizationGate: ReturnType<typeof deferred> | undefined;
+    let policyGate: ReturnType<typeof deferred> | undefined;
+    let policyStarted: ReturnType<typeof deferred>;
     let unregister: (() => void) | undefined;
     let failures: number;
     let failure: unknown;
@@ -188,12 +190,19 @@ for (const provider of [
       handlerFinished = deferred();
       clientDisconnected = false;
       finalizationGate = undefined;
+      policyGate = undefined;
+      policyStarted = deferred();
       failures = 0;
       failure = undefined;
       cleanups = 0;
       completions = 0;
       unregister = registerLlmProxyPlugin({
         id: `disconnect-proof-${crypto.randomUUID()}`,
+        onToolCalls: async () => {
+          policyStarted.resolve();
+          await policyGate?.promise;
+          return undefined;
+        },
         onModelResponse: async () => {
           providerFinished.resolve();
           await finalizationGate?.promise;
@@ -277,6 +286,7 @@ for (const provider of [
 
     afterEach(async () => {
       finalizationGate?.resolve();
+      policyGate?.resolve();
       upstreamResponse?.destroy();
       upstream.closeAllConnections();
       await new Promise<void>((resolve) => upstream.close(() => resolve()));
@@ -575,6 +585,34 @@ for (const provider of [
             expect(receipts[0].usage.status).toBe("incomplete");
             expect(receipts[0].usage.issues).toContain("partial_stream");
           }
+        });
+      });
+    }
+
+    if (provider === "gemini") {
+      test("discards unreleased calls on a post-drain policy disconnect while preserving final usage", async () => {
+        mode = "tool-stream";
+        policyGate = deferred();
+        const controller = new AbortController();
+        const response = await post(controller.signal);
+        expect(response.status).toBe(200);
+        if (!upstreamResponse) throw new Error("Upstream request missing");
+        finish(upstreamResponse);
+        await policyStarted.promise;
+        controller.abort();
+        await vi.waitFor(() => expect(clientDisconnected).toBe(true));
+        policyGate.resolve();
+        await vi.waitFor(async () => {
+          const rows =
+            await InteractionModel.getAllInteractionsForProfile(agentId);
+          expect(rows).toHaveLength(1);
+          expect(JSON.stringify(rows[0].response)).not.toContain("held-call");
+          expect(JSON.stringify(rows[0].response)).not.toContain("lookup");
+          expect(rows[0].inputTokens).toBe(12);
+          expect(rows[0].outputTokens).toBe(40);
+          const receipts = await InteractionBillingModel.findMany([rows[0].id]);
+          expect(receipts).toHaveLength(1);
+          expect(receipts[0].usage.issues).not.toContain("partial_stream");
         });
       });
     }

@@ -3658,6 +3658,11 @@ async function handleStreaming<
         for (const event of allEvents) {
           childStream.emitPolicy(event);
         }
+      } else if (streamAdapter.provider === "gemini") {
+        // The upstream has finished, so retain final usage, but a disconnect
+        // during policy evaluation must not record calls never handed over.
+        streamAdapter.state.toolCalls = [];
+        streamAdapter.state.rawToolCallEvents = [];
       }
     }
 

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { Gemini } from "@/types";
 import { makeGeminiOpenaiAdapterFactory } from "./gemini-openai";
+import { decodeSignedToolCallId } from "./gemini-openai-translator";
 import { GeminiToolNameCodec } from "./gemini-tool-names";
 
 describe("GeminiOpenaiResponseAdapter", () => {
@@ -57,6 +58,90 @@ describe("GeminiOpenaiResponseAdapter", () => {
 });
 
 describe("GeminiOpenaiStreamAdapter", () => {
+  test("keeps the retained call's signature when policy removes an earlier call", () => {
+    const adapter = makeGeminiOpenaiAdapterFactory({
+      chatcmplId: "chatcmpl-test",
+      createdUnix: 123,
+      requestedModel: "pool",
+    }).createStreamAdapter();
+    adapter.processChunk({
+      candidates: [
+        {
+          index: 0,
+          content: {
+            role: "model",
+            parts: [0, 1].map((index) => ({
+              functionCall: { id: `call-${index}`, name: "lookup", args: {} },
+              thoughtSignature: `signature-${index}`,
+            })),
+          },
+        },
+      ],
+    } as Parameters<typeof adapter.processChunk>[0]);
+    const approved = [adapter.state.toolCalls[1]];
+    const frames = adapter.formatToolCallsSSE?.(approved);
+    const wireCall = JSON.parse(String(frames?.[0]).slice(6)).choices[0].delta
+      .tool_calls[0];
+    expect(decodeSignedToolCallId(wireCall.id)).toMatchObject({
+      id: "call-1",
+      thoughtSignature: "signature-1",
+    });
+    adapter.state.toolCalls.splice(
+      0,
+      adapter.state.toolCalls.length,
+      ...approved,
+    );
+    expect(adapter.toProviderResponse().candidates?.[0].content?.parts).toEqual(
+      [
+        {
+          functionCall: { id: "call-1", name: "lookup", args: {} },
+          thoughtSignature: "signature-1",
+        },
+      ],
+    );
+  });
+
+  test.for([
+    true,
+    false,
+  ])("keeps its single-choice calls aligned when upstream includes alternatives (first calls=%s)", (firstCalls) => {
+    const adapter = makeGeminiOpenaiAdapterFactory({
+      chatcmplId: "chatcmpl-test",
+      createdUnix: 123,
+      requestedModel: "pool",
+    }).createStreamAdapter();
+    adapter.processChunk({
+      candidates: [0, 1].map((index) => ({
+        index,
+        content: {
+          role: "model",
+          parts:
+            index === 0 && !firstCalls
+              ? [{ text: "answer" }]
+              : [
+                  {
+                    functionCall: {
+                      id: `call-${index}`,
+                      name: `lookup_${index}`,
+                      args: {},
+                    },
+                  },
+                ],
+        },
+      })),
+    } as Parameters<typeof adapter.processChunk>[0]);
+    expect(adapter.state.toolCalls.map((call) => call.name)).toEqual(
+      firstCalls ? ["lookup_0"] : [],
+    );
+    const raw = adapter.getRawToolCallEvents().join("");
+    expect(raw).not.toContain("lookup_1");
+    if (firstCalls) expect(raw).toContain("lookup_0");
+    else expect(raw).toBe("");
+    expect(JSON.stringify(adapter.toProviderResponse())).not.toContain(
+      "lookup_1",
+    );
+  });
+
   test("keeps every text and signed tool part while withholding thought text", () => {
     const adapter = makeGeminiOpenaiAdapterFactory({
       chatcmplId: "chatcmpl-test",

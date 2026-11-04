@@ -23,6 +23,7 @@ export async function createSlackSocketFixture() {
     error?: string;
   }[] = [];
   let connections = 0;
+  let handshakes = 0;
   const calls: string[] = [];
   const acknowledgements: string[] = [];
   const pending: (() => void)[] = [];
@@ -88,6 +89,7 @@ export async function createSlackSocketFixture() {
     socket.on("close", () => sockets.delete(socket));
   });
   server.on("upgrade", (request, socket, head) => {
+    handshakes++;
     const upgrade = () =>
       websocket.handleUpgrade(request, socket, head, (client) => {
         connections++;
@@ -151,6 +153,9 @@ export async function createSlackSocketFixture() {
     },
     get connections() {
       return connections;
+    },
+    get handshakes() {
+      return handshakes;
     },
     stall(method: string) {
       stalledMethod = method;

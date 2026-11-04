@@ -1,4 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
+import { SocketModeClient } from "@slack/socket-mode";
 import Fastify from "fastify";
 import { describe, expect, test, vi } from "vitest";
 import { internalCallHeader } from "@/clients/internal-call";
@@ -360,4 +361,107 @@ describe("Slack startup cancellation", () => {
       await fixture.close();
     }
   }, 25000);
+
+  test("shutdown during a reconnect handshake settles without an unhandled rejection", async () => {
+    const fixture = await createSlackSocketFixture();
+    const provider = new SlackProvider(slackConfig);
+    try {
+      await provider.initialize();
+      fixture.stallHandshake();
+      fixture.disconnect();
+      await expect.poll(() => fixture.handshakes, { timeout: 10000 }).toBe(2);
+      await provider.beginShutdown();
+      await delay(100);
+      expect(fixture.connections).toBe(1);
+      expect(
+        fixture.calls.filter((method) => method === "apps.connections.open"),
+      ).toHaveLength(2);
+    } finally {
+      await provider.cleanup();
+      await fixture.close();
+    }
+  }, 15000);
+
+  test("a reconnect URL returned after shutdown cannot open another socket", async () => {
+    const fixture = await createSlackSocketFixture();
+    const provider = new SlackProvider(slackConfig);
+    try {
+      await provider.initialize();
+      fixture.stall("apps.connections.open");
+      fixture.disconnect();
+      await expect
+        .poll(
+          () =>
+            fixture.calls.filter((method) => method === "apps.connections.open")
+              .length,
+          { timeout: 10000 },
+        )
+        .toBe(2);
+      await provider.beginShutdown();
+      fixture.release();
+      await delay(100);
+      expect(fixture.handshakes).toBe(1);
+      expect(fixture.connections).toBe(1);
+    } finally {
+      await provider.cleanup();
+      await fixture.close();
+    }
+  }, 15000);
+
+  test("the SDK propagates a failed URL retry to its explicit start caller", async () => {
+    const fixture = await createSlackSocketFixture();
+    fixture.rejectNextConnection();
+    fixture.failNextConnection(503);
+    const client = new SocketModeClient({
+      appToken: "xapp-synthetic",
+      clientPingTimeout: 20,
+      clientOptions: { retryConfig: { retries: 0 } },
+    });
+    try {
+      await expect(client.start()).rejects.toMatchObject({
+        code: "slack_webapi_http_error",
+      });
+      expect(
+        fixture.calls.filter((method) => method === "apps.connections.open"),
+      ).toHaveLength(2);
+      expect(fixture.handshakes).toBe(0);
+    } finally {
+      await client.disconnect();
+      await fixture.close();
+    }
+  });
+
+  test("disconnect promptly rejects a start waiting in reconnect backoff", async () => {
+    const fixture = await createSlackSocketFixture();
+    fixture.rejectNextConnection();
+    const client = new SocketModeClient({
+      appToken: "xapp-synthetic",
+      clientPingTimeout: 60_000,
+      clientOptions: { retryConfig: { retries: 0 } },
+    });
+    try {
+      const pending = client.start().then(
+        () => ({ connected: true }),
+        (error: unknown) => ({ error }),
+      );
+      await expect
+        .poll(
+          () =>
+            fixture.calls.filter((method) => method === "apps.connections.open")
+              .length,
+        )
+        .toBe(1);
+      await delay(50);
+      await client.disconnect();
+      expect(await pending).toMatchObject({
+        error: { message: "Socket Mode client is shutting down" },
+      });
+      expect(
+        fixture.calls.filter((method) => method === "apps.connections.open"),
+      ).toHaveLength(1);
+    } finally {
+      await client.disconnect();
+      await fixture.close();
+    }
+  }, 3000);
 });

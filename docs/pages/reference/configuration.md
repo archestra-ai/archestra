@@ -1497,7 +1497,7 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 - **`ARCHESTRA_OPENAPPA_YELL_ENABLED`** - Lets agents report confusing blocks with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. Reports are stored locally.
   - Default: `true`
   - Values: `true`, `false`
-  - With reports off, no yell is recorded. `ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE=allow` still waives soft refusals and turns session enforcement off.
+  - With reports off, no yell is recorded. [`ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE=allow`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE) still waives soft refusals and turns session enforcement off.
 
 - **`ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED`** - Forwards agent reports to the shared OpenAPPA reporting service, independently of [`ARCHESTRA_ANALYTICS`](/docs/reference/configuration#ARCHESTRA_ANALYTICS). Requires [`ARCHESTRA_OPENAPPA_YELL_ENABLED`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_YELL_ENABLED).
   - Default: `false`, including after upgrades. Values: `true`, `false`; unset or empty means off, and invalid values stop startup.

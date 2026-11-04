@@ -272,6 +272,7 @@ test("a backward wall-clock correction cannot extend the drain wait", async () =
   const elapsedClock = vi.spyOn(performance, "now").mockReturnValue(1000);
   const wallClock = vi.spyOn(Date, "now").mockReturnValue(wallTime);
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const scheduleTimeout = vi.spyOn(globalThis, "setTimeout");
   try {
     drain.beginShutdown();
     wallClock.mockReturnValue(wallTime - 3_600_000);
@@ -280,6 +281,7 @@ test("a backward wall-clock correction cannot extend the drain wait", async () =
     const draining = drainLlmProxyRequests(app).then(() => {
       completed = true;
     });
+    expect(scheduleTimeout).toHaveBeenCalledWith(expect.any(Function), 13);
     elapsedClock.mockReturnValue(1019);
     await vi.advanceTimersByTimeAsync(12);
     expect(completed).toBe(false);
@@ -291,6 +293,7 @@ test("a backward wall-clock correction cannot extend the drain wait", async () =
     ).toBe(true);
     await draining;
   } finally {
+    scheduleTimeout.mockRestore();
     vi.useRealTimers();
     wallClock.mockRestore();
     elapsedClock.mockRestore();

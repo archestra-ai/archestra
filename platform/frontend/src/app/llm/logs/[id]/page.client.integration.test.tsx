@@ -9,7 +9,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { HttpResponse, http } from "msw";
+import { delay, HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
@@ -557,6 +557,79 @@ it("stops looking for a linked tool call when the viewer pages elsewhere", async
       name: /^Test Agent, Model 50,/,
     }),
   ).toBeVisible();
+});
+
+it("settles a linked tool call's walk when the viewer goes back to where it started", async () => {
+  serveLinkedCall({ requests: 120, callAt: "2026-01-01T00:00:30.000Z" });
+  // Page one's rows are slow, so the viewer is back before they land.
+  server.use(
+    http.get(`${origin}/api/interactions/summaries`, async ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      if (params.get("offset") === "0" && params.get("limit") === "50") {
+        await delay(300);
+      }
+      return undefined;
+    }),
+  );
+  let search = new URLSearchParams("toolCall=linked-call&page=3&pageSize=50");
+  vi.mocked(useSearchParams).mockImplementation(
+    () => search as ReturnType<typeof useSearchParams>,
+  );
+  push.mockImplementation((url: string) => {
+    search = new URLSearchParams(url.split("?")[1]);
+  });
+
+  const { rerender } = await renderPage();
+  await waitFor(() =>
+    expect(push).toHaveBeenCalledWith(
+      "/llm/logs/test-session?toolCall=linked-call&page=1&pageSize=50",
+      { scroll: false },
+    ),
+  );
+  await rerender();
+  // Back to page three.
+  search = new URLSearchParams("toolCall=linked-call&page=3&pageSize=50");
+  await rerender();
+
+  expect(
+    await screen.findByText(
+      "The linked tool call isn't among this page's records.",
+    ),
+  ).toBeVisible();
+});
+
+it("reports a failed lookup of a linked tool call's page with a retry", async () => {
+  serveLinkedCall({ requests: 60, callAt: "2026-01-01T00:00:30.000Z" });
+  server.use(
+    http.get(`${origin}/api/interactions/summaries`, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      if (
+        params.get("limit") === "1" &&
+        params.get("endDate") === "2026-01-01T00:00:30.000Z"
+      ) {
+        return HttpResponse.json(
+          { error: { message: "boom", type: "api_internal_server_error" } },
+          { status: 500 },
+        );
+      }
+    }),
+  );
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams(
+      "toolCall=linked-call&page=2&pageSize=50",
+    ) as ReturnType<typeof useSearchParams>,
+  );
+
+  await renderPage();
+
+  expect(
+    await screen.findByText(
+      "Couldn't find the page that holds the linked tool call.",
+    ),
+  ).toBeVisible();
+  expect(
+    screen.queryByText("The linked tool call isn't among this page's records."),
+  ).not.toBeInTheDocument();
 });
 
 it("keeps a page's tool-call window closed when the next page's boundary fails to load", async () => {

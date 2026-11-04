@@ -451,6 +451,8 @@ export default function SessionDetailPage({
                     missingRequest={linkedRequest.targetMissing}
                     requestLookupFailed={linkedRequest.rankFailed}
                     onRetryRequestLookup={linkedRequest.retry}
+                    toolCallLookupFailed={sessionToolCalls.rankFailed}
+                    onRetryToolCallLookup={sessionToolCalls.retryRank}
                     sessionStartFailed={sessionStartFailed}
                     onRetrySessionStart={() => firstPageHead.refetch()}
                   />
@@ -522,6 +524,8 @@ function ToolCallsNotice({
   missingRequest,
   requestLookupFailed,
   onRetryRequestLookup,
+  toolCallLookupFailed,
+  onRetryToolCallLookup,
   sessionStartFailed,
   onRetrySessionStart,
 }: {
@@ -533,6 +537,9 @@ function ToolCallsNotice({
   /** Finding the linked request's page failed. */
   requestLookupFailed: boolean;
   onRetryRequestLookup: () => void;
+  /** Finding the linked tool call's page failed. */
+  toolCallLookupFailed: boolean;
+  onRetryToolCallLookup: () => void;
   /** The session's first request didn't load, so the axis counts from this page. */
   sessionStartFailed: boolean;
   onRetrySessionStart: () => void;
@@ -543,6 +550,7 @@ function ToolCallsNotice({
     !missingToolCallId &&
     !missingRequest &&
     !requestLookupFailed &&
+    !toolCallLookupFailed &&
     !sessionStartFailed
   ) {
     return null;
@@ -578,6 +586,22 @@ function ToolCallsNotice({
             size="xs"
             className="ml-auto"
             onClick={onRetryRequestLookup}
+          >
+            <span>Retry</span>
+          </Button>
+        </InlineNotice>
+      ) : null}
+      {toolCallLookupFailed ? (
+        <InlineNotice variant="error">
+          <TriangleAlert />
+          <InlineNoticeText>
+            Couldn't find the page that holds the linked tool call.
+          </InlineNoticeText>
+          <Button
+            variant="outline"
+            size="xs"
+            className="ml-auto"
+            onClick={onRetryToolCallLookup}
           >
             <span>Retry</span>
           </Button>

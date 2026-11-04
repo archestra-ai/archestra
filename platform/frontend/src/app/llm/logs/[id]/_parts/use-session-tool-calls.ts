@@ -144,8 +144,15 @@ export function useSessionToolCalls({
   // Once settled, paging away from the linked call is the viewer's choice.
   const settledFor = useSettledOnce(targetToolCallId, targetResolved);
 
+  // Counting the requests before the call failed: no verdict either way.
+  const rankFailed =
+    target !== null && olderThanTarget.isError && !seek.settled;
+
   return {
     toolCalls,
+    /** Finding the linked call's page failed; `retryRank` tries again. */
+    rankFailed,
+    retryRank: () => olderThanTarget.refetch(),
     isError: boundary.failed || toolCallsQuery.isError,
     refetch: boundary.failed ? boundary.retry : toolCallsQuery.refetch,
     /** The window held more calls than one fetch returns. */
@@ -162,7 +169,8 @@ export function useSessionToolCalls({
       toolCallsSettled &&
       (targetToolCallId === null ||
         settledFor === targetToolCallId ||
-        boundary.failed),
+        boundary.failed ||
+        rankFailed),
   };
 }
 

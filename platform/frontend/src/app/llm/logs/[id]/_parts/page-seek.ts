@@ -41,11 +41,17 @@ export function usePageSeek({
   const mine = seek !== null && seek.id === id ? seek : null;
 
   useEffect(() => {
-    if (id === null || !ready) return;
-    if (mine?.endedAt != null) return;
+    if (id === null || mine?.endedAt != null) return;
+    // The move reached the URL; its rows may still be loading.
+    if (mine && mine.pending === pageIndex && !mine.arrived) {
+      setSeek({ ...mine, arrived: true });
+      return;
+    }
+    if (!ready) return;
     if (mine && mine.pending !== pageIndex) {
-      // Still on the page the move left: waiting for it to land.
-      if (pageIndex === mine.visited[mine.visited.length - 1]) return;
+      // Still on the page the move left, before it reached the URL.
+      if (!mine.arrived && pageIndex === mine.visited[mine.visited.length - 1])
+        return;
       // The viewer went to another page mid-walk: where they went is the
       // answer, so the walk ends there.
       setSeek({ ...mine, pending: null, endedAt: pageIndex });
@@ -57,26 +63,45 @@ export function usePageSeek({
       if (guess === undefined) return;
       const first = Math.min(lastPageIndex, Math.max(0, guess));
       if (first !== pageIndex) {
-        setSeek({ id, visited: [pageIndex], pending: first, endedAt: null });
+        setSeek({
+          id,
+          visited: [pageIndex],
+          pending: first,
+          arrived: false,
+          endedAt: null,
+        });
         onLocatePage(first);
         return;
       }
     }
     if (here === undefined) return;
     if (here === 0) {
-      setSeek({ id, visited: [], pending: null, endedAt: pageIndex });
+      setSeek({
+        id,
+        visited: [],
+        pending: null,
+        arrived: false,
+        endedAt: pageIndex,
+      });
       return;
     }
     const visited = mine?.visited ?? [];
     const next = pageIndex + here;
     if (next < 0 || next > lastPageIndex || visited.includes(next)) {
-      setSeek({ id, visited, pending: null, endedAt: pageIndex });
+      setSeek({
+        id,
+        visited,
+        pending: null,
+        arrived: false,
+        endedAt: pageIndex,
+      });
       return;
     }
     setSeek({
       id,
       visited: [...visited, pageIndex],
       pending: next,
+      arrived: false,
       endedAt: null,
     });
     onLocatePage(next);
@@ -95,6 +120,11 @@ type Seek = {
   visited: number[];
   /** The page a move is on its way to. */
   pending: number | null;
+  /**
+   * The move reached the URL: from then on, any other page is the viewer's
+   * choice, even the one the move left.
+   */
+  arrived: boolean;
   /** The page the walk ended on. */
   endedAt: number | null;
 };

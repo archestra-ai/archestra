@@ -55,6 +55,14 @@ export const InteractionSessionPreviewSchema = z.object({
    * start of its reply. Rows written before these existed have neither.
    */
   responseToolNames: z.array(z.string()).optional(),
+  /**
+   * The tool calls the response asked for, with the provider's ids: ties a
+   * later tool result (a guardrails label change, say) back to this request.
+   * Rows written before it existed, and wires without ids, have none.
+   */
+  responseToolCalls: z
+    .array(z.object({ id: z.string(), name: z.string() }))
+    .optional(),
   responseTextPreview: z.string().nullable().optional(),
 });
 export type InteractionSessionPreview = z.infer<
@@ -393,6 +401,11 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
    * requests in an agent loop, so this is what tells them apart.
    */
   responseToolNames: z.array(z.string()).nullable().optional(),
+  /** The tool calls its response asked for, with the provider's ids. */
+  responseToolCalls: z
+    .array(z.object({ id: z.string(), name: z.string() }))
+    .nullable()
+    .optional(),
   responseTextPreview: z.string().nullable().optional(),
 });
 

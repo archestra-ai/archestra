@@ -74,6 +74,39 @@ describe("buildTimeline", () => {
     expect(timeline?.ticks).toEqual([{ x: 0, label: "0s" }]);
   });
 
+  it("counts a later page's axis on from the session's start", () => {
+    // The session began 5 minutes before this page's first request.
+    const timeline = buildTimeline({
+      requests: [
+        row({ id: "a", createdAt: at(310_000), durationMs: 10_000 }),
+        row({ id: "b", createdAt: at(340_000), durationMs: 10_000 }),
+      ],
+      sessionStart: BASE,
+    });
+
+    expect(timeline?.ticks.map((tick) => tick.label)).toEqual([
+      "+5m",
+      "+5m 10s",
+      "+5m 20s",
+      "+5m 30s",
+      "+5m 40s",
+    ]);
+  });
+
+  it("labels sub-second ticks in milliseconds", () => {
+    const timeline = buildTimeline({
+      requests: [row({ id: "a", createdAt: at(500), durationMs: 500 })],
+    });
+
+    expect(timeline?.ticks.map((tick) => tick.label)).toEqual([
+      "0s",
+      "+125ms",
+      "+250ms",
+      "+375ms",
+      "+500ms",
+    ]);
+  });
+
   it("interleaves each tool call after the request that issued it", () => {
     const timeline = buildTimeline({
       requests: [

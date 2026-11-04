@@ -1,6 +1,10 @@
 import type * as archestraApiTypes from "../../hey-api/clients/api/types.gen";
 import type { PartialUIMessage } from "../types";
-import type { Interaction, InteractionUtils } from "./common";
+import type {
+  Interaction,
+  InteractionUtils,
+  RequestedToolCall,
+} from "./common";
 import { tryParseJson } from "./json";
 
 class OpenAiChatCompletionInteraction implements InteractionUtils {
@@ -52,6 +56,22 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
       }
     }
     return Array.from(toolsUsed);
+  }
+
+  getToolCallsRequested(): RequestedToolCall[] {
+    return this.response.choices.flatMap((choice) =>
+      (choice.message.tool_calls ?? []).flatMap((toolCall) => {
+        if (!toolCall.id) return [];
+        if ("function" in toolCall) {
+          return [{ id: toolCall.id, name: toolCall.function.name }];
+        }
+        // Custom (freeform) tools, such as a coding agent's apply_patch.
+        if (toolCall.type === "custom") {
+          return [{ id: toolCall.id, name: toolCall.custom.name }];
+        }
+        return [];
+      }),
+    );
   }
 
   getToolNamesRequested(): string[] {

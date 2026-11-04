@@ -637,11 +637,13 @@ async function handleObservedLLMProxy<
     utils.headers.virtualKey.getPassthroughVirtualKeyToken(
       headersForExtraction,
     );
-  // The X-Archestra-User-Id header is an unauthenticated hint; it does not
-  // participate in the cross-credential user-consistency check below.
+  // Only the platform's proof-authenticated internal callers can forward a
+  // user identity in headers. External hints must never choose who pays or
+  // whose limits apply, including on shared and ownerless credentials.
   let serviceAccountId = authOverride?.serviceAccountId;
-  let userId = (await utils.headers.userId.getUser(headersForExtraction))
-    ?.userId;
+  let userId = internalCall
+    ? (await utils.headers.userId.getUser(headersForExtraction))?.userId
+    : undefined;
   let resolvedUser: LLMProxyContext<TRequest>["resolvedUser"] = userId
     ? await UserModel.getById(userId)
     : null;
@@ -1193,11 +1195,9 @@ async function handleObservedLLMProxy<
     regularVirtualKeyUserId,
   ]);
 
-  // The acting user as proven by a credential, as opposed to `userId`, which
-  // starts from the unauthenticated X-Archestra-User-Id / OpenWebUI-email
-  // headers. Those hints may attribute requests that have no authenticated
-  // user, but must not override a credential's owner or unlock access.
-  // Authorization checks must read this instead. Undefined for org-scoped
+  // The acting user as proven by a user credential. Internal calls can also
+  // forward billing attribution in `userId`; authorization checks must read
+  // this credential identity instead. Undefined for org-scoped
   // virtual keys, OAuth client credentials, and raw provider-key calls, none
   // of which identify a user.
   const authenticatedUserId =
@@ -1441,6 +1441,8 @@ async function handleObservedLLMProxy<
       : undefined;
   };
   const limitContext = {
+    // Verified platform calls and service accounts can act without an end user.
+    allowUnattributed: internalCall || !!serviceAccountId,
     modelAliases,
     unpricedMediaModel:
       provider.unavailableUsageAccounting && !mediaPricedForBudget

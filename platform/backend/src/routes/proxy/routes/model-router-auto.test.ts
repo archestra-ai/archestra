@@ -32,6 +32,7 @@ import {
   VirtualApiKeyModel,
 } from "@/models";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import LlmThroughputModel from "@/models/llm-throughput";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RoutingDecisionModel from "@/models/routing-decision";
@@ -502,6 +503,99 @@ describe("Model Router auto model", () => {
     expect(await decisions(org.organizationId)).toEqual([]);
     expect(upstreamModels).toEqual([]);
   });
+
+  for (const limitSource of ["member", "default"] as const) {
+    test(`service-account auto routing retains its own budget under ${limitSource} user limits`, async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeUser,
+      makeMember,
+      makeServiceAccount,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      await publishPlan(org);
+      if (limitSource === "member") {
+        const user = await makeUser();
+        await makeMember(user.id, org.organizationId);
+        await LimitModel.create({
+          entityType: "user",
+          entityId: user.id,
+          limitType: "token_cost",
+          limitValue: 0,
+        });
+      } else {
+        await EnvironmentDefaultUserLimitModel.create({
+          organizationId: org.organizationId,
+          limitValue: 0,
+        });
+      }
+      const account = await makeServiceAccount(org.organizationId);
+      const { value, virtualKey: key } = await VirtualApiKeyModel.create({
+        organizationId: org.organizationId,
+        name: "Auto-routing worker",
+        authorId: serviceAccountUserId(account.id),
+        ...accessGrants("personal"),
+        providerApiKeys: [
+          { provider: "openai", providerApiKeyId: org.providerApiKeyId },
+        ],
+      });
+
+      for (const { ingress, path } of ENDPOINTS) {
+        const denied = await send(org, {
+          ingress,
+          path,
+          session: `unidentified-${ingress}`,
+        });
+        expect(denied.statusCode, denied.body).toBe(401);
+        expect(denied.json().error.message).toContain("user credential");
+      }
+      expect(jevCalls).toBe(0);
+      expect(upstreamModels).toEqual([]);
+
+      for (const { ingress, path } of ENDPOINTS) {
+        const allowed = await send(
+          { ...org, credential: value },
+          { ingress, path, session: `worker-${ingress}` },
+        );
+        expect(allowed.statusCode, allowed.body).toBe(200);
+      }
+      expect(jevCalls).toBe(2);
+      expect(upstreamModels).toEqual([
+        org.trio[2].modelId,
+        org.trio[2].modelId,
+      ]);
+      const rows = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, org.agentId));
+      expect(rows).toHaveLength(2);
+      for (const row of rows) {
+        expect(row.serviceAccountId).toBe(account.id);
+        expect(row.userId).toBeNull();
+        expect(row.virtualKeyId).toBe(key.id);
+      }
+
+      await LimitModel.create({
+        entityType: "virtual_key",
+        entityId: key.id,
+        limitType: "token_cost",
+        limitValue: 0,
+      });
+      const capped = await send(
+        { ...org, credential: value },
+        { ingress: "chat", path: "chat/completions", session: "capped-worker" },
+      );
+      expect(capped.statusCode, capped.body).toBe(402);
+      expect(capped.json().error.usage_limit.entity_type).toBe("virtual_key");
+      expect(jevCalls).toBe(2);
+      expect(upstreamModels).toHaveLength(2);
+    });
+  }
 
   test("routes to the normal tier without a decision when there is nothing to key on", async ({
     makeOrganization,

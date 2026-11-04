@@ -98,6 +98,11 @@ export function OpenAppaBreakTheGlassSettings() {
   });
   const data = deployment.data;
   const disabled = !canManage || !data?.featureEnabled || update.isPending;
+  const overriddenBy = (
+    setting: "humanApprovalMode" | "unapprovableBlockMode",
+  ) =>
+    data?.environmentOverrides?.find((each) => each.setting === setting)
+      ?.variable;
   return (
     <SettingsBlock
       id="break-the-glass"
@@ -124,6 +129,7 @@ export function OpenAppaBreakTheGlassSettings() {
         title="Human approval"
         description="Calls and remedy plans waiting for human approval."
         value={data?.humanApprovalMode}
+        environmentVariable={overriddenBy("humanApprovalMode")}
         disabled={disabled}
         options={[
           { value: "block", label: "Block until approved" },
@@ -147,6 +153,7 @@ export function OpenAppaBreakTheGlassSettings() {
           </>
         }
         value={data?.unapprovableBlockMode}
+        environmentVariable={overriddenBy("unapprovableBlockMode")}
         disabled={disabled}
         options={[
           { value: "refuse", label: "Keep the block" },
@@ -396,8 +403,11 @@ function BreakTheGlassRow<T extends string>(props: {
   value: T | undefined;
   disabled: boolean;
   options: { value: T; label: string; description?: string }[];
+  /** The environment variable that sets this setting, while one does. */
+  environmentVariable?: string;
   onChange: (value: T) => void;
 }) {
+  const noteId = `${props.title.replaceAll(" ", "-").toLowerCase()}-env-note`;
   return (
     <div className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)] lg:items-center lg:gap-8">
       <div className="min-w-0 space-y-1">
@@ -407,29 +417,54 @@ function BreakTheGlassRow<T extends string>(props: {
         </div>
       </div>
       {props.value ? (
-        <Select
-          value={props.value}
-          disabled={props.disabled}
-          onValueChange={(value) => {
-            const option = props.options.find((each) => each.value === value);
-            if (option) props.onChange(option.value);
-          }}
-        >
-          <SelectTrigger aria-label={props.title} className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent position="popper" align="end">
-            {props.options.map((option) => (
-              <SelectItem
-                key={option.value}
-                value={option.value}
-                description={option.description}
-              >
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="min-w-0 space-y-1.5">
+          <Select
+            value={props.value}
+            disabled={props.disabled || props.environmentVariable !== undefined}
+            onValueChange={(value) => {
+              const option = props.options.find((each) => each.value === value);
+              if (option) props.onChange(option.value);
+            }}
+          >
+            <SelectTrigger
+              aria-label={props.title}
+              aria-describedby={props.environmentVariable ? noteId : undefined}
+              className="w-full"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper" align="end">
+              {props.options.map((option) => (
+                <SelectItem
+                  key={option.value}
+                  value={option.value}
+                  description={option.description}
+                >
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {props.environmentVariable ? (
+            <p id={noteId} className="text-xs leading-4 text-muted-foreground">
+              Unset{" "}
+              <code className="font-mono">
+                {/* Wrap a long name only after an underscore. */}
+                {props.environmentVariable.split("_").map((part, index) => (
+                  <span key={part}>
+                    {index > 0 ? (
+                      <>
+                        _<wbr />
+                      </>
+                    ) : null}
+                    {part}
+                  </span>
+                ))}
+              </code>{" "}
+              to edit this setting.
+            </p>
+          ) : null}
+        </div>
       ) : (
         <Skeleton className="h-9 w-full" />
       )}

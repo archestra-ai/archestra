@@ -228320,6 +228320,29 @@
                         "allow"
                       ]
                     },
+                    "environmentOverrides": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "setting": {
+                            "type": "string",
+                            "enum": [
+                              "humanApprovalMode",
+                              "unapprovableBlockMode"
+                            ]
+                          },
+                          "variable": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "setting",
+                          "variable"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "annotatorModelId": {
                       "nullable": true,
                       "type": "string",
@@ -228345,6 +228368,7 @@
                     "breakTheGlassEnabled",
                     "humanApprovalMode",
                     "unapprovableBlockMode",
+                    "environmentOverrides",
                     "annotatorModelId",
                     "annotatorLlmApiKeyId",
                     "featureEnabled",
@@ -228689,6 +228713,29 @@
                         "allow"
                       ]
                     },
+                    "environmentOverrides": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "setting": {
+                            "type": "string",
+                            "enum": [
+                              "humanApprovalMode",
+                              "unapprovableBlockMode"
+                            ]
+                          },
+                          "variable": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "setting",
+                          "variable"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "annotatorModelId": {
                       "nullable": true,
                       "type": "string",
@@ -228714,6 +228761,7 @@
                     "breakTheGlassEnabled",
                     "humanApprovalMode",
                     "unapprovableBlockMode",
+                    "environmentOverrides",
                     "annotatorModelId",
                     "annotatorLlmApiKeyId",
                     "featureEnabled",

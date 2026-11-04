@@ -399,6 +399,7 @@ export const handlers: HttpHandler[] = [
     breakTheGlassEnabled: true,
     humanApprovalMode: "block",
     unapprovableBlockMode: "refuse",
+    environmentOverrides: [],
   }),
   ...getJson("/health", healthSeed),
   ...getJson("/ready", {

@@ -61697,6 +61697,10 @@ export type GetGuardrailsDeploymentResponses = {
         breakTheGlassEnabled: boolean;
         humanApprovalMode: 'block' | 'unattended' | 'everywhere';
         unapprovableBlockMode: 'refuse' | 'allow';
+        environmentOverrides: Array<{
+            setting: 'humanApprovalMode' | 'unapprovableBlockMode';
+            variable: string;
+        }>;
         annotatorModelId: string | null;
         annotatorLlmApiKeyId: string | null;
         featureEnabled: boolean;
@@ -61799,6 +61803,10 @@ export type UpdateGuardrailsDeploymentResponses = {
         breakTheGlassEnabled: boolean;
         humanApprovalMode: 'block' | 'unattended' | 'everywhere';
         unapprovableBlockMode: 'refuse' | 'allow';
+        environmentOverrides: Array<{
+            setting: 'humanApprovalMode' | 'unapprovableBlockMode';
+            variable: string;
+        }>;
         annotatorModelId: string | null;
         annotatorLlmApiKeyId: string | null;
         featureEnabled: boolean;

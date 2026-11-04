@@ -138,6 +138,8 @@ export function useInteractionSummaries({
   sessionId,
   startDate,
   endDate,
+  beforeId,
+  requestedToolCallIds,
   limit = DEFAULT_TABLE_LIMIT,
   offset = 0,
   sortBy,
@@ -150,6 +152,10 @@ export function useInteractionSummaries({
   sessionId?: string;
   startDate?: string;
   endDate?: string;
+  /** Only rows before this interaction; the total is its position. */
+  beforeId?: string;
+  /** Only rows whose response asked for one of these tool calls. */
+  requestedToolCallIds?: string[];
   limit?: number;
   offset?: number;
   sortBy?: NonNullable<
@@ -169,6 +175,8 @@ export function useInteractionSummaries({
       sessionId,
       startDate,
       endDate,
+      beforeId,
+      requestedToolCallIds?.join(","),
       limit,
       offset,
       sortBy,
@@ -183,6 +191,8 @@ export function useInteractionSummaries({
           sessionId,
           startDate,
           endDate,
+          beforeId,
+          requestedToolCallIds: requestedToolCallIds?.join(",") || undefined,
           limit,
           offset,
           sortBy,

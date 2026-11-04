@@ -188,6 +188,15 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ),
             startDate: z.string().datetime().optional(),
             endDate: z.string().datetime().optional(),
+            beforeId: UuidIdSchema.optional().describe(
+              "Only rows created before this interaction, ordered by creation time then ID at the stored precision. Its total is the interaction's zero-based position.",
+            ),
+            requestedToolCallIds: z
+              .string()
+              .optional()
+              .describe(
+                "Comma-separated tool call IDs. Only rows whose response asked for at least one of them.",
+              ),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -213,6 +222,8 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sessionId,
           startDate,
           endDate,
+          beforeId,
+          requestedToolCallIds,
           limit,
           offset,
           sortBy,
@@ -229,6 +240,11 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "log",
         "admin",
       );
+      const toolCallIds = requestedToolCallIds
+        ?.split(",")
+        .map((id) => id.trim())
+        .filter(Boolean)
+        .slice(0, MAX_REQUESTED_TOOL_CALL_IDS);
       return reply.send(
         await InteractionModel.findSummariesPaginated({
           pagination: { limit, offset },
@@ -241,6 +257,8 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
             sessionId,
             startDate: startDate ? new Date(startDate) : undefined,
             endDate: endDate ? new Date(endDate) : undefined,
+            beforeId,
+            requestedToolCallIds: toolCallIds,
           },
         }),
       );
@@ -608,3 +626,6 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default interactionRoutes;
+
+/** Tool call ids one summaries read matches against. */
+const MAX_REQUESTED_TOOL_CALL_IDS = 50;

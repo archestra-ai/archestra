@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { ExternalConsult } from "@/lib/openappa/external-consults.query";
 import type { LabelChangeRecord } from "@/lib/openappa/label-changes.query";
 import type { OpenAppaYell } from "@/lib/openappa-yells.query";
-import { buildGuardrails } from "./guardrails";
+import { buildEntries, pageChanges } from "./guardrail-rows";
+import { buildGuardrails, unexplainedCallIds } from "./guardrails";
 import {
   buildTimeline,
   type InteractionSummary,
@@ -115,6 +116,50 @@ describe("buildGuardrails", () => {
     expect(cause?.toolName).toBe("exec_command");
     expect(cause?.toolCallKey).toBe("request:asks");
     expect(cause?.summary).toBe("exec_command returned");
+  });
+
+  it("points a change at the request on another page that asked for its client-run tool", () => {
+    // The asking request is on the previous page: this page holds only the
+    // request that carried the result back.
+    const result = buildTimeline({
+      requests: [row({ id: "next", createdAt: at(20_000), durationMs: 5_000 })],
+    });
+    if (!result) throw new Error("no timeline");
+    const labelChanges = [
+      change({ event: "session_start", at: 0 }),
+      change({
+        event: "tool_result",
+        at: 16_000,
+        callId: "call:call_shell",
+        trustAfter: "suspicious",
+      }),
+    ];
+
+    expect(unexplainedCallIds({ timeline: result, labelChanges })).toEqual([
+      "call_shell",
+    ]);
+
+    const guardrails = buildGuardrails({
+      timeline: result,
+      consults: [],
+      labelChanges,
+      askedElsewhere: new Map([
+        ["call_shell", { requestId: "asks", name: "exec_command" }],
+      ]),
+    });
+    if (!guardrails) throw new Error("no guardrails");
+    expect(guardrails.labels[1]?.cause).toMatchObject({
+      toolName: "exec_command",
+      toolCallKey: null,
+      askedOnRequestId: "asks",
+    });
+
+    // Selecting the change opens that request, not a row of this page.
+    const [labelChange] = pageChanges({
+      entries: buildEntries({ spans: result.spans, guardrails }),
+      guardrails,
+    });
+    expect(labelChange?.target).toEqual({ type: "request", key: "asks" });
   });
 
   it("places yells on their calls and turns guardrails off at the first superyell", () => {

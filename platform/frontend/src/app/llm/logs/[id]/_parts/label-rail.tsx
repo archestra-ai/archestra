@@ -562,6 +562,9 @@ function causeSentence(change: LabelChange): string {
   const { event, toolName } = change.cause;
   switch (event) {
     case "tool_result":
+      if (change.target.type === "request") {
+        return `Caused by the result of ${toolName ?? "a tool"}, asked for on another page. Select to open that request.`;
+      }
       return toolName
         ? `Caused by the result of ${toolName}.`
         : "Caused by a tool result.";

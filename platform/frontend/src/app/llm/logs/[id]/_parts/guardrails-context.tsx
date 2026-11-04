@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useFeature } from "@/lib/config/config.query";
+import { useInteractionSummaries } from "@/lib/interactions/interaction.query";
 import { LLM_LOG_FOCUS_PARAM } from "@/lib/interactions/llm-log-links";
 import { useSessionConsults } from "@/lib/openappa/external-consults.query";
 import { useSessionLabelChanges } from "@/lib/openappa/label-changes.query";
@@ -33,6 +34,7 @@ import { useSessionYells } from "@/lib/openappa-yells.query";
 import { cn } from "@/lib/utils/tailwind";
 import { ConsultDetails } from "./consult-details";
 import {
+  type AskedFor,
   audienceTone,
   buildGuardrails,
   DECISION_TONE,
@@ -41,6 +43,7 @@ import {
   ROLE_LABEL,
   type TraceConsult,
   trustTone,
+  unexplainedCallIds,
 } from "./guardrails";
 import { OverviewSection } from "./overview-parts";
 import { RequestDetails } from "./request-details";
@@ -91,6 +94,30 @@ export function GuardrailsProvider({
     llmSessionId: sessionId,
     enabled: openappaEnabled,
   });
+  // A label change a client-run tool caused, whose asking request sits on
+  // another page: found by the call id its response recorded.
+  const offPageCallIds = useMemo(
+    () => unexplainedCallIds({ timeline, labelChanges: labelChanges ?? [] }),
+    [timeline, labelChanges],
+  );
+  const { data: askers } = useInteractionSummaries({
+    sessionId,
+    requestedToolCallIds: offPageCallIds,
+    limit: offPageCallIds.length,
+    enabled: offPageCallIds.length > 0,
+  });
+  const askedElsewhere = useMemo(() => {
+    const byCallId = new Map<string, AskedFor>();
+    const wanted = new Set(offPageCallIds);
+    for (const row of askers?.data ?? []) {
+      for (const call of row.responseToolCalls ?? []) {
+        if (wanted.has(call.id) && !byCallId.has(call.id)) {
+          byCallId.set(call.id, { requestId: row.id, name: call.name });
+        }
+      }
+    }
+    return byCallId;
+  }, [askers, offPageCallIds]);
   const guardrails = useMemo(
     () =>
       buildGuardrails({
@@ -98,8 +125,9 @@ export function GuardrailsProvider({
         consults: consults ?? [],
         labelChanges: labelChanges ?? [],
         yells: yells?.data ?? [],
+        askedElsewhere,
       }),
-    [timeline, consults, labelChanges, yells],
+    [timeline, consults, labelChanges, yells, askedElsewhere],
   );
 
   const [selectedConsultKey, setSelectedConsultKey] = useState<string | null>(

@@ -897,6 +897,10 @@ class InteractionModel {
       sessionId?: string;
       startDate?: Date;
       endDate?: Date;
+      /** Rows before this interaction in (createdAt, id) order. */
+      beforeId?: string;
+      /** Rows whose response asked for any of these tool calls. */
+      requestedToolCallIds?: string[];
     };
   }): Promise<PaginatedResult<InteractionSummary>> {
     const { pagination, sorting, requestingUserId, isAgentAdmin, filters } =
@@ -940,6 +944,24 @@ class InteractionModel {
     }
     if (filters?.endDate) {
       conditions.push(lte(schema.interactionsTable.createdAt, filters.endDate));
+    }
+    if (filters?.beforeId) {
+      // At the stored precision: the API's timestamps stop at milliseconds,
+      // so only the database can rank rows that share one.
+      conditions.push(
+        sql`(${schema.interactionsTable.createdAt}, ${schema.interactionsTable.id}) < (
+          SELECT ${schema.interactionsTable.createdAt}, ${schema.interactionsTable.id}
+          FROM ${schema.interactionsTable}
+          WHERE ${schema.interactionsTable.id} = ${filters.beforeId}
+        )`,
+      );
+    }
+    if (filters?.requestedToolCallIds?.length) {
+      const matches = filters.requestedToolCallIds.map(
+        (id) =>
+          sql`${schema.interactionsTable.sessionPreview} -> 'responseToolCalls' @> jsonb_build_array(jsonb_build_object('id', ${id}::text))`,
+      );
+      conditions.push(or(...matches) as SQL);
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

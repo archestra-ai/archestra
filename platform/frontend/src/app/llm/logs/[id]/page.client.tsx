@@ -11,7 +11,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { use, useCallback, useMemo, useState } from "react";
 import { sessionTitleOf } from "@/app/llm/logs/_parts/logs-table-format";
 import { PageBackLink } from "@/components/page-back-link";
@@ -38,7 +38,10 @@ import {
   useInteractionSummaries,
   useSessionLineage,
 } from "@/lib/interactions/interaction.query";
-import { LLM_LOG_FOCUS_PARAM } from "@/lib/interactions/llm-log-links";
+import {
+  LLM_LOG_FOCUS_PARAM,
+  llmSessionHref,
+} from "@/lib/interactions/llm-log-links";
 import { useMcpServerDisplayByName } from "@/lib/mcp-logs/use-mcp-server-display";
 import {
   GuardrailsProvider,
@@ -190,6 +193,16 @@ export default function SessionDetailPage({
       setPagination({ pageIndex: nextPageIndex, pageSize }),
     [setPagination, pageSize],
   );
+  // A request on another page opens as a link, which finds its page.
+  const router = useRouter();
+  const openRequest = useCallback(
+    (requestId: string) =>
+      router.push(
+        `${llmSessionHref(sessionId, { request: requestId })}&pageSize=${pageSize}`,
+        { scroll: false },
+      ),
+    [router, sessionId, pageSize],
+  );
   const sessionToolCalls = useSessionToolCalls({
     sessionId,
     requests: interactions,
@@ -212,7 +225,6 @@ export default function SessionDetailPage({
     requestsReady: interactionsResponse !== undefined && !interactionsLoading,
     pageIndex,
     pageSize,
-    lastPageIndex,
     onLocatePage: goToPage,
     targetRequestId,
   });
@@ -406,6 +418,7 @@ export default function SessionDetailPage({
               onSelectSpan={setPickedKey}
             >
               <TraceWaterfall
+                onOpenRequest={openRequest}
                 timeline={timeline}
                 loading={traceLoading}
                 profileName={profileName}

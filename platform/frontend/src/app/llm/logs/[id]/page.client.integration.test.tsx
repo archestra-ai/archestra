@@ -381,6 +381,53 @@ it("finds a linked request among more same-moment requests than one read holds",
   ).toHaveAttribute("aria-current", "true");
 });
 
+it("finds a linked request by the database's order within one millisecond", async () => {
+  // Rows 30-79 share a millisecond. The database's finer timestamps order
+  // them against their ids, so the linked row (30, on page one) sorts by id
+  // between page two's first and last rows.
+  const rows = Array.from({ length: 100 }, (_, i) => {
+    const tied = i >= 30 && i < 80;
+    return summary({
+      id: tied
+        ? `t-${String(109 - i)}`
+        : `request-${String(i).padStart(2, "0")}`,
+      model: `model-${i}`,
+      createdAt: new Date(
+        Date.UTC(2026, 0, 1, 0, 0, tied ? 30 : i),
+      ).toISOString(),
+    });
+  });
+  serveSession({ rows, storedOrder: rows.map((row) => row.id) });
+  let search = new URLSearchParams("request=t-79&page=2&pageSize=50");
+  vi.mocked(useSearchParams).mockImplementation(
+    () => search as ReturnType<typeof useSearchParams>,
+  );
+  push.mockImplementation((url: string) => {
+    search = new URLSearchParams(url.split("?")[1]);
+  });
+
+  const { rerender } = await renderPage();
+  await waitFor(() =>
+    expect(push).toHaveBeenCalledWith(
+      "/llm/logs/test-session?request=t-79&page=1&pageSize=50",
+      { scroll: false },
+    ),
+  );
+  await rerender();
+
+  const requests = await screen.findByRole("list", { name: "Requests" });
+  expect(
+    await within(requests).findByRole("button", {
+      name: /^Test Agent, Model 30,/,
+    }),
+  ).toHaveAttribute("aria-current", "true");
+  expect(
+    screen.queryByText(
+      "The linked request isn't one of this session's requests.",
+    ),
+  ).not.toBeInTheDocument();
+});
+
 it("finds a linked tool call that a long request's start puts on the next page", async () => {
   // Request 50 finishes after the call but started long before it, so its
   // page (two) owns the call although only 31 requests finished before it.
@@ -478,6 +525,54 @@ it("keeps a page's tool-call window closed when the next page's boundary fails t
   expect(await screen.findByText("Tool calls didn't load")).toBeVisible();
   // An open window would have read the later pages' calls into this one.
   expect(toolCallReads).not.toHaveBeenCalled();
+});
+
+it("keeps looking for a linked tool call while the next page's boundary is unavailable", async () => {
+  const rows = Array.from({ length: 60 }, (_, i) =>
+    summary({
+      id: `request-${i}`,
+      model: `model-${i}`,
+      createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+    }),
+  );
+  serveSession({ rows });
+  server.use(
+    http.get(`${origin}/api/interactions/summaries`, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      if (params.get("offset") === "50" && params.get("limit") === "1") {
+        return HttpResponse.json(
+          { error: { message: "boom", type: "api_internal_server_error" } },
+          { status: 500 },
+        );
+      }
+    }),
+    http.get(`${origin}/api/mcp-tool-calls/linked-call`, () =>
+      HttpResponse.json({
+        id: "linked-call",
+        agentId: "agent-1",
+        ownerType: "agent",
+        mcpServerName: "github",
+        method: "tools/call",
+        sessionId: "test-session",
+        createdAt: "2026-01-01T00:00:10.500Z",
+        toolCall: { id: "c1", name: "github__search", arguments: {} },
+        toolResult: { isError: false, content: [] },
+      }),
+    ),
+  );
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams("toolCall=linked-call") as ReturnType<
+      typeof useSearchParams
+    >,
+  );
+
+  await renderPage();
+
+  expect(await screen.findByText("Tool calls didn't load")).toBeVisible();
+  // Without a boundary there is no window to look in, so no verdict yet.
+  expect(
+    screen.queryByText("The linked tool call isn't among this page's records."),
+  ).not.toBeInTheDocument();
 });
 
 it("says when a later page's axis counts from the page, not the session", async () => {
@@ -871,16 +966,26 @@ function serveSession({
   rows,
   lastInteractionId,
   records = {},
+  storedOrder,
 }: {
   rows: Summary[];
   lastInteractionId?: string | null;
   records?: Record<string, ReturnType<typeof makeInteraction>>;
+  /**
+   * Row ids oldest first as the database orders them, when its finer
+   * timestamps order rows the API shows at one millisecond.
+   */
+  storedOrder?: string[];
 }) {
   // Newest first, ties by id, as the API orders them.
-  const sorted = [...rows].sort(
-    (a, b) =>
-      b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id),
-  );
+  const sorted = storedOrder
+    ? storedOrder
+        .map((id) => rows.find((row) => row.id === id) as Summary)
+        .reverse()
+    : [...rows].sort(
+        (a, b) =>
+          b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id),
+      );
   const latestId = lastInteractionId ?? sorted[0]?.id ?? null;
   server.use(
     http.get(sessionsUrl, () =>
@@ -898,12 +1003,25 @@ function serveSession({
       const params = new URL(request.url).searchParams;
       const startDate = params.get("startDate");
       const endDate = params.get("endDate");
+      const beforeId = params.get("beforeId");
+      const toolCallIds = params.get("requestedToolCallIds")?.split(",");
       const ordered =
         params.get("sortDirection") === "asc" ? [...sorted].reverse() : sorted;
+      // Before `beforeId` in the stored order, which `sorted` reverses.
+      const beforeRank = beforeId
+        ? sorted.length - 1 - sorted.findIndex((row) => row.id === beforeId)
+        : null;
       const matching = ordered.filter(
         (row) =>
           (!startDate || row.createdAt >= startDate) &&
-          (!endDate || row.createdAt <= endDate),
+          (!endDate || row.createdAt <= endDate) &&
+          (beforeRank === null ||
+            sorted.length - 1 - sorted.indexOf(row) < beforeRank) &&
+          (!toolCallIds ||
+            (
+              (row as { responseToolCalls?: { id: string }[] | null })
+                .responseToolCalls ?? []
+            ).some((call) => toolCallIds.includes(call.id))),
       );
       const offset = Number(params.get("offset") ?? 0);
       const limit = Number(params.get("limit") ?? 10);

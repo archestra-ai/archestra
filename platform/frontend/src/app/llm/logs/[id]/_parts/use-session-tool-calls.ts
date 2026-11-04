@@ -131,8 +131,6 @@ export function useSessionToolCalls({
     (targetOnPage && toolCallsSettled) ||
     targetQuery.isError ||
     (targetQuery.isSuccess && target === null) ||
-    // A failed boundary leaves this page unable to say.
-    boundary.failed ||
     // Settled only on the page the walk ended on: until a move lands, the
     // previous page's records are still the ones in hand.
     (seek.settled && toolCallsSettled);
@@ -150,11 +148,14 @@ export function useSessionToolCalls({
     targetMissing: targetToolCallId !== null && targetResolved && !targetOnPage,
     /**
      * This page's calls are in, and a linked call has been found on its page
-     * (or found missing): what the trace waits for, so it draws once.
+     * (or found missing): what the trace waits for, so it draws once. A failed
+     * boundary draws the page with its error; the link waits for a retry.
      */
     ready:
       toolCallsSettled &&
-      (targetToolCallId === null || settledFor === targetToolCallId),
+      (targetToolCallId === null ||
+        settledFor === targetToolCallId ||
+        boundary.failed),
   };
 }
 

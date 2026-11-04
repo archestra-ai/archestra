@@ -109,6 +109,7 @@ export function RequestWaterfall({
   guardrails = null,
   selectedConsultKey = null,
   onSelectConsult,
+  onOpenRequest,
 }: {
   /** The session's guardrail checks and label history, when OpenAPPA is on. */
   guardrails?: GuardrailsData | null;
@@ -119,6 +120,8 @@ export function RequestWaterfall({
    * Null closes it.
    */
   onSelectConsult?: (key: string | null) => void;
+  /** Opens a request of this session that is on another page. */
+  onOpenRequest?: (requestId: string) => void;
   timeline: Timeline | null;
   loading: boolean;
   profileName: string | null;
@@ -219,6 +222,8 @@ export function RequestWaterfall({
   // label changed), else the check, else the first row under the new label.
   const activateChange = (change: LabelChange) => {
     if (change.target.type === "consult") onSelectConsult?.(change.target.key);
+    else if (change.target.type === "request")
+      onOpenRequest?.(change.target.key);
     else onSelect(change.target.key);
   };
   const yellByKey = new Map(
@@ -233,12 +238,13 @@ export function RequestWaterfall({
   const isChangeActive = (change: LabelChange) =>
     change.target.type === "consult"
       ? change.target.key === selectedConsultKey
-      : !selectedConsultKey && change.target.key === selectedKey;
-  const gutterFor = (entry: Entry, index: number): GutterProps | null =>
+      : change.target.type === "span" &&
+        !selectedConsultKey &&
+        change.target.key === selectedKey;
+  const gutterFor = (entry: Entry): GutterProps | null =>
     entry.gutter
       ? {
           label: entry.gutter,
-          odd: index % 2 === 1,
           nodes: nodesByKey.get(entry.key) ?? null,
           isChangeActive,
           onActivateChange: activateChange,
@@ -548,7 +554,7 @@ export function RequestWaterfall({
                 onKeyDown={onKeyDown}
                 aria-label="Requests"
               >
-                {entries.map((entry, index) => {
+                {entries.map((entry) => {
                   if (entry.type === "consult") {
                     const { consult } = entry;
                     const isSelected =
@@ -559,7 +565,7 @@ export function RequestWaterfall({
                         layout={layout}
                         consult={consult}
                         toolSpan={entry.toolSpan}
-                        gutter={gutterFor(entry, index)}
+                        gutter={gutterFor(entry)}
                         note={notesByKey.get(entry.key) ?? null}
                         selected={isSelected}
                         buttonRef={(el) => {
@@ -575,7 +581,7 @@ export function RequestWaterfall({
                     layout,
                     selected: span.key === selectedKey && !consultRowSelected,
                     ancestor: span.key === selectedKey && consultRowSelected,
-                    gutter: gutterFor(entry, index),
+                    gutter: gutterFor(entry),
                     note: notesByKey.get(entry.key) ?? null,
                     yell: yellByKey.get(span.key) ?? null,
                     guardrailsOffAt: guardrails?.guardrailsOffAt ?? null,

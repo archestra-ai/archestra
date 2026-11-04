@@ -175,9 +175,9 @@ function checkedWhat(consult: TraceConsult): string {
 }
 
 /**
- * The one-line strip under the header: the page's checks, the check-rows
- * toggle, the gutter's key, and a stepper through the label changes (each a
- * dot in the gutter). Phones put the key on a second line.
+ * The one-line strip under the header: the page's checks, the rail's key,
+ * and a stepper through the label changes (each a marker on the rail).
+ * Phones put the key on a second line.
  */
 export function GuardrailsBar({
   consults,
@@ -263,9 +263,7 @@ export function GuardrailsBar({
 
 export type GutterProps = {
   label: LabelState;
-  /** Odd rows shift the stripe tile on phones; see `Stripes`. */
-  odd: boolean;
-  /** Change dots on this row's top or bottom edge. */
+  /** Change markers on this row's top or bottom edge. */
   nodes: { top: LabelChange[]; bottom: LabelChange[] } | null;
   isChangeActive: (change: LabelChange) => boolean;
   onActivateChange: (change: LabelChange) => void;
@@ -464,18 +462,20 @@ export type LabelChange = {
   cause: NonNullable<LabelSegment["cause"]>;
   /** What changed, in words: Trust → Suspicious, Audience → Internal. */
   parts: { field: string; to: string; tone: string }[];
-  trustChanged: boolean;
   /** The row whose detail line notes it: the cause, else the first row under it. */
   noteKey: string;
-  /** The row whose top (or, past the page's last row, bottom) edge carries the dot. */
+  /** The row whose top (or, past the page's last row, bottom) edge carries the marker. */
   nodeKey: string;
   nodeAt: "top" | "bottom";
-  /** What selecting the change selects. */
-  target: { type: "consult" | "span"; key: string };
+  /**
+   * What selecting the change selects: a row here, or the request on another
+   * page that asked for the tool (`key` is its id).
+   */
+  target: { type: "consult" | "span" | "request"; key: string };
 };
 
 /**
- * The label changes this page shows: a dot wherever two rows' labels differ,
+ * The label changes this page shows: a rail marker wherever two rows' labels differ,
  * and a note on the row that caused each one.
  */
 export function pageChanges({
@@ -505,14 +505,15 @@ export function pageChanges({
       segment,
       cause,
       parts: describeChange(prev, segment),
-      trustChanged: cause.kind === "reset" || prev.trust !== segment.trust,
       noteKey: noteEntry.key,
       nodeKey: nodeEntry.key,
       nodeAt,
       target:
-        noteEntry.type === "span"
-          ? { type: "span", key: noteEntry.key }
-          : { type: "consult", key: cause.consultKey ?? noteEntry.key },
+        noteEntry === nodeEntry && cause.askedOnRequestId
+          ? { type: "request", key: cause.askedOnRequestId }
+          : noteEntry.type === "span"
+            ? { type: "span", key: noteEntry.key }
+            : { type: "consult", key: cause.consultKey ?? noteEntry.key },
     });
   };
   const indexes = entries.map((entry) =>
@@ -528,11 +529,14 @@ export function pageChanges({
     for (let s = reached + 1; s <= indexes[i]; s++) add(s, entry, "top");
     reached = Math.max(reached, indexes[i]);
   });
-  // A change after the page's last row still shows under its cause.
+  // A change after the page's last row still shows under its cause, or,
+  // when that is a request on another page, under the page's last row.
   for (let s = reached + 1; s < labels.length; s++) {
     const cause = labels[s].cause;
     const row = cause
-      ? (rowFor(cause.consultKey) ?? rowFor(cause.toolCallKey))
+      ? (rowFor(cause.consultKey) ??
+        rowFor(cause.toolCallKey) ??
+        (cause.askedOnRequestId ? entries[entries.length - 1] : undefined))
       : undefined;
     if (row) add(s, row, "bottom");
   }

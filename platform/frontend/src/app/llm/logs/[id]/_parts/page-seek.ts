@@ -7,8 +7,8 @@ import { useEffect, useState } from "react";
  * gives the first page to try; from there each landed page says whether the
  * record lies before it, after it, or on it (or nowhere). A count alone can
  * miss: requests that share a moment, or that overlap the record, sort
- * differently from how pages own it. The walk never revisits a page and
- * stops after a few steps, so it always settles.
+ * differently from how pages own it. The walk never revisits a page, so it
+ * settles within the session's page count.
  */
 export function usePageSeek({
   id,
@@ -60,12 +60,7 @@ export function usePageSeek({
     }
     const visited = mine?.visited ?? [];
     const next = pageIndex + here;
-    if (
-      next < 0 ||
-      next > lastPageIndex ||
-      visited.includes(next) ||
-      visited.length >= MAX_STEPS
-    ) {
+    if (next < 0 || next > lastPageIndex || visited.includes(next)) {
       setSeek({ id, visited, pending: null, endedAt: pageIndex });
       return;
     }
@@ -94,5 +89,3 @@ type Seek = {
   /** The page the walk ended on. */
   endedAt: number | null;
 };
-
-const MAX_STEPS = 6;

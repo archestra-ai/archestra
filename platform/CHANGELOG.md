@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.4.18](https://github.com/archestra-ai/archestra/compare/platform-v1.4.17...platform-v1.4.18) (2026-11-04)
+
+
+### Features
+
+* **guardrails:** Break the glass settings let blocked calls through with a yell, unattended runs included [1.4] ([#10159](https://github.com/archestra-ai/archestra/issues/10159)) ([c309fdc](https://github.com/archestra-ai/archestra/commit/c309fdc0d7e3562d22632cf160c2e5c5ea7d55bd))
+* **openappa:** pin OpenAPPA 4be942a with its Archestra adaptations (1.4) ([#10149](https://github.com/archestra-ai/archestra/issues/10149)) ([902690d](https://github.com/archestra-ai/archestra/commit/902690de5decd237e4e46f3014bf4bd2c86e19a1))
+
+
+### Bug Fixes
+
+* **agents:** clarify agent creation choices and responsive layout (backport release/1.4) ([#10183](https://github.com/archestra-ai/archestra/issues/10183)) ([807e4c9](https://github.com/archestra-ai/archestra/commit/807e4c9abca7ce3ef8c89465521bce4e9bd3861a))
+* **agents:** return chat-capable built-in agents in search (1.4 backport) ([#10137](https://github.com/archestra-ai/archestra/issues/10137)) ([a91e154](https://github.com/archestra-ai/archestra/commit/a91e154dfbeff2be382fda300c7d13aed6988faf))
+* **bedrock:** guard oversized Converse prompts before inference [1.4] ([#10144](https://github.com/archestra-ai/archestra/issues/10144)) ([4185129](https://github.com/archestra-ai/archestra/commit/4185129e78786193b4348a27dc1b2ce71a20616d))
+* **bedrock:** preserve valid prompts near the context limit [1.4] ([#10158](https://github.com/archestra-ai/archestra/issues/10158)) ([15f238e](https://github.com/archestra-ai/archestra/commit/15f238e77ee0bfb41c89ab23ab72e3314fd1a5e8))
+* **connect:** trust Windows system/admin config owners and keep OpenAI passthrough sign-in (backport release/1.4) ([#10118](https://github.com/archestra-ai/archestra/issues/10118)) ([7b112a2](https://github.com/archestra-ai/archestra/commit/7b112a2b2caa77e24cf1805c77562b2d56cc51bd))
+* **frontend:** explain why personal Claude subscription requires archestra-claude-code command (backport release/1.4) ([#10184](https://github.com/archestra-ai/archestra/issues/10184)) ([b47e7a7](https://github.com/archestra-ai/archestra/commit/b47e7a71e0985200cf18e3ca8baba0f011332063))
+* **llm-proxy:** show unknown usage when streams end early (backport release/1.4) ([#10189](https://github.com/archestra-ai/archestra/issues/10189)) ([c94f406](https://github.com/archestra-ai/archestra/commit/c94f4067c86aa34530530808771c898dae7333a8))
+* **observability:** log proxy pre-handler denials (backport release/1.4) ([#10188](https://github.com/archestra-ai/archestra/issues/10188)) ([790e923](https://github.com/archestra-ai/archestra/commit/790e9239a5019862ef6f4952a037aab208bbcfc8))
+* **openappa:** let Claude Code read its own background command output (backport release/1.4) ([#10180](https://github.com/archestra-ai/archestra/issues/10180)) ([6a31edc](https://github.com/archestra-ai/archestra/commit/6a31edc1a44481a345baab8be8beeef907229f24))
+* **openappa:** redact credential headers on HITL approval cards (1.4) ([#10148](https://github.com/archestra-ai/archestra/issues/10148)) ([64b025e](https://github.com/archestra-ai/archestra/commit/64b025e69ea0a5441f0fab219e476c9b33bdaa04))
+* **openappa:** wait briefly for a battery helper slot instead of refusing (backport release/1.4) ([#10141](https://github.com/archestra-ai/archestra/issues/10141)) ([8da8432](https://github.com/archestra-ai/archestra/commit/8da8432bff9708faa67c9d3f8870ec4c80ab46da))
+* **proxy:** preserve stable question transport and Desktop setup [1.4] ([#10081](https://github.com/archestra-ai/archestra/issues/10081)) ([b6c5ae6](https://github.com/archestra-ai/archestra/commit/b6c5ae6da4fa3d603d3220982814338fc3d6b4d2))
+* **teams:** backport MCP team management permission to 1.4 ([#10166](https://github.com/archestra-ai/archestra/issues/10166)) ([c8a4620](https://github.com/archestra-ai/archestra/commit/c8a4620ef54308e9098d6c38f83263513be0d1b0))
+
 ## [1.4.17](https://github.com/archestra-ai/archestra/compare/platform-v1.4.16...platform-v1.4.17) (2026-11-02)
 
 

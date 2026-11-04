@@ -3,7 +3,7 @@ dist
 # dev/run-backend-dev.sh build staging (moved over backend/dist on success)
 .dist-next.*
 .dist-old.*
-.dist-swap.lock
+.dist-swap.lock*
 node_modules
 build
 target

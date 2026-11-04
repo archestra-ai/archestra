@@ -35,20 +35,24 @@ build_backend() {
       echo "backend build failed; the previous build keeps running until the next successful build" >&2
       exit 1
     fi
-    # Builds share dist/, so the swap runs one at a time. A build killed
-    # mid-swap leaves the lock behind; after 30 s it counts as stale.
+    # Builds share dist/, so the swap runs one at a time under a lock that
+    # names its owner. A lock whose owner is gone (a build killed mid-swap)
+    # is reclaimed under a second lock, re-checking the owner there, so two
+    # waiters cannot both reclaim it or remove a live replacement.
     lock=.dist-swap.lock
-    waited=0
     until mkdir "$lock" 2>/dev/null; do
-      if [ "$waited" -ge 150 ]; then
-        rm -rf "$lock"
-        waited=0
+      owner="$(cat "$lock/pid" 2>/dev/null || true)"
+      if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null && mkdir "$lock.reap" 2>/dev/null; then
+        if [ "$(cat "$lock/pid" 2>/dev/null || true)" = "$owner" ]; then
+          rm -rf "$lock"
+        fi
+        rmdir "$lock.reap"
         continue
       fi
-      waited=$((waited + 1))
       sleep 0.2
     done
-    trap 'rmdir "$lock" 2>/dev/null' EXIT
+    echo $$ > "$lock/pid"
+    trap 'rm -rf "$lock"' EXIT
     if [ -d dist ] && ! mv dist "$old"; then
       rm -rf "$next"
       echo "backend build: could not move the previous dist/ aside; keeping it" >&2

@@ -340,7 +340,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetAgentRuntimeTiers,
         description:
-          "The organization's Agent Runtime tiers in effect, smallest first: each tier's name, CPU, the memory its CPU gives it, the spares it keeps ready, and the default tier",
+          "The organization's Agent Runtime tiers in effect, smallest first: each tier's name, CPU, memory, the spares it keeps ready, and the default tier",
         tags: ["Organization"],
         response: constructResponseSchema(AgentRuntimeTiersResponseSchema),
       },

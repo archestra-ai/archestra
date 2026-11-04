@@ -449,12 +449,6 @@ function RequestOverview({
                   {Math.round(cacheShare * 100)}% of input from the prompt cache
                 </p>
               ) : null}
-              {row.inputTokensEstimated ? (
-                <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
-                  Input is estimated from the request: the provider reported no
-                  usage.
-                </p>
-              ) : null}
             </>
           )}
         </OverviewSection>

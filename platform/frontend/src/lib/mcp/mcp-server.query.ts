@@ -319,13 +319,17 @@ export function useInstallMcpServer() {
         const rawErrorMessage = getApiErrorMessage(error);
         // Some MCP servers return an entire tool schema in a malformed
         // discovery response. It is neither useful nor safe in a dialog.
-        const errorMessage = rawErrorMessage.includes(
+        const boundedErrorMessage = rawErrorMessage.includes(
           "Streamable HTTP error: Error POSTing to endpoint: {",
         )
           ? "The upstream MCP server returned an unexpected response while listing tools."
           : rawErrorMessage.length > 1000
             ? `${rawErrorMessage.slice(0, 1000)}…`
             : rawErrorMessage;
+        const redundantPrefix = `Failed to connect to MCP server ${data.name}: `;
+        const errorMessage = boundedErrorMessage.startsWith(redundantPrefix)
+          ? boundedErrorMessage.slice(redundantPrefix.length)
+          : boundedErrorMessage;
         toast.error(`Failed to install ${data.name}`, {
           description: errorMessage.includes(
             "Upstream MCP server returned HTTP 401",

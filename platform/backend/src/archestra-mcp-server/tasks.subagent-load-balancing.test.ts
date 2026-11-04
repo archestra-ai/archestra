@@ -30,7 +30,8 @@ import { agentRunFailure } from "@/services/agent-runtime/run-failure";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
-import type { Agent, AgentRuntime } from "@/types";
+import { type Agent, type AgentRuntime, SelectAgentSchema } from "@/types";
+import { AgentConfigSnapshotSchema } from "@/types/agent-version";
 import { drainBackgroundWork } from "@/utils/background-work";
 import { type ArchestraContext, executeArchestraTool } from ".";
 
@@ -391,6 +392,19 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
 
     const restored = await AgentModel.findById(gateway.id);
     expect(restored?.subagentLoadBalancing).toEqual(initialPolicy);
+
+    // A legacy stored row or version snapshot with retries: 5 parses as 3 through response schemas
+    const parsedAgent = SelectAgentSchema.parse({
+      ...restored,
+      subagentLoadBalancing: { ...initialPolicy, retries: 5 },
+    });
+    expect(parsedAgent.subagentLoadBalancing?.retries).toBe(3);
+
+    const parsedSnapshot = AgentConfigSnapshotSchema.parse({
+      ...v2?.snapshot,
+      subagentLoadBalancing: { ...initialPolicy, retries: 5 },
+    });
+    expect(parsedSnapshot.subagentLoadBalancing?.retries).toBe(3);
   });
 
   test("task supervisor escalates tier on OOM retry and fails over to fallback subagent on persistent failure", async ({

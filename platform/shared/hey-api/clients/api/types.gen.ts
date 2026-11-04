@@ -17260,7 +17260,7 @@ export type GetAgentCatalogResponses = {
                     weights?: {
                         [key: string]: number;
                     };
-                    retries: unknown;
+                    retries: number;
                     fallbackEnabled: boolean;
                     maxFallbacks?: number | null;
                 } | null;
@@ -17661,7 +17661,7 @@ export type GetAgentsResponses = {
                 weights?: {
                     [key: string]: number;
                 };
-                retries: unknown;
+                retries: number;
                 fallbackEnabled: boolean;
                 maxFallbacks?: number | null;
             } | null;
@@ -18109,7 +18109,7 @@ export type CreateAgentResponses = {
             weights?: {
                 [key: string]: number;
             };
-            retries: unknown;
+            retries: number;
             fallbackEnabled: boolean;
             maxFallbacks?: number | null;
         } | null;
@@ -19383,7 +19383,7 @@ export type GetDefaultMcpGatewayResponses = {
             weights?: {
                 [key: string]: number;
             };
-            retries: unknown;
+            retries: number;
             fallbackEnabled: boolean;
             maxFallbacks?: number | null;
         } | null;
@@ -19703,7 +19703,7 @@ export type ImportAgentResponses = {
                 weights?: {
                     [key: string]: number;
                 };
-                retries: unknown;
+                retries: number;
                 fallbackEnabled: boolean;
                 maxFallbacks?: number | null;
             } | null;
@@ -20032,7 +20032,7 @@ export type GetAgentResponses = {
             weights?: {
                 [key: string]: number;
             };
-            retries: unknown;
+            retries: number;
             fallbackEnabled: boolean;
             maxFallbacks?: number | null;
         } | null;
@@ -20371,7 +20371,7 @@ export type UpdateAgentResponses = {
             weights?: {
                 [key: string]: number;
             };
-            retries: unknown;
+            retries: number;
             fallbackEnabled: boolean;
             maxFallbacks?: number | null;
         } | null;
@@ -20982,7 +20982,7 @@ export type RestoreAgentVersionResponses = {
             weights?: {
                 [key: string]: number;
             };
-            retries: unknown;
+            retries: number;
             fallbackEnabled: boolean;
             maxFallbacks?: number | null;
         } | null;
@@ -21240,7 +21240,7 @@ export type CloneAgentResponses = {
             weights?: {
                 [key: string]: number;
             };
-            retries: unknown;
+            retries: number;
             fallbackEnabled: boolean;
             maxFallbacks?: number | null;
         } | null;
@@ -23737,7 +23737,7 @@ export type RestoreAgentResponses = {
             weights?: {
                 [key: string]: number;
             };
-            retries: unknown;
+            retries: number;
             fallbackEnabled: boolean;
             maxFallbacks?: number | null;
         } | null;
@@ -43110,7 +43110,7 @@ export type GetNewChatBootstrapResponses = {
                     weights?: {
                         [key: string]: number;
                     };
-                    retries: unknown;
+                    retries: number;
                     fallbackEnabled: boolean;
                     maxFallbacks?: number | null;
                 } | null;
@@ -43703,7 +43703,7 @@ export type GetConversationBootstrapResponses = {
                         weights?: {
                             [key: string]: number;
                         };
-                        retries: unknown;
+                        retries: number;
                         fallbackEnabled: boolean;
                         maxFallbacks?: number | null;
                     } | null;

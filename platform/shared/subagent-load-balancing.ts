@@ -78,10 +78,9 @@ export const StoredSubagentLoadBalancingConfigSchema = z.object({
   retries: z
     .number()
     .int()
-    .transform((value) =>
-      Math.max(0, Math.min(SUBAGENT_LOAD_BALANCING_MAX_RETRIES, value)),
-    )
-    .catch(1),
+    .min(0)
+    .max(SUBAGENT_LOAD_BALANCING_MAX_RETRIES)
+    .catch(SUBAGENT_LOAD_BALANCING_MAX_RETRIES),
   fallbackEnabled: z.boolean().catch(true),
   maxFallbacks: z
     .number()

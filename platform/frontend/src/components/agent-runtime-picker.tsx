@@ -23,6 +23,7 @@ import {
   AgentRuntimeRunControls,
   AgentRuntimeSteeringField,
   defaultAgentRuntime,
+  isClaudeCodeRuntimeConfig,
 } from "@/components/agent-runtime-fields";
 import { AgentRuntimeUnavailableNotice } from "@/components/agent-runtime-unavailable-notice";
 import { ConfigurationRow } from "@/components/configuration-row";
@@ -233,7 +234,7 @@ export function AgentRuntimePicker({
           id={`${id}-model`}
           value="model"
           title={
-            value?.command?.[0] === "archestra-claude-code"
+            isClaudeCodeRuntimeConfig(value)
               ? "Whose Claude account runs it"
               : "Model"
           }
@@ -268,13 +269,18 @@ export function AgentRuntimePicker({
                   const allowedProtocols = getAgentRuntimeAllowedProtocols(
                     next.command,
                   );
+                  const inferenceProtocol = allowedProtocols.includes(
+                    next.inferenceProtocol,
+                  )
+                    ? next.inferenceProtocol
+                    : allowedProtocols[0];
+                  const { claudeCode: _claudeCode, ...withoutClaudeCode } =
+                    next;
                   onChange({
-                    ...next,
-                    inferenceProtocol: allowedProtocols.includes(
-                      next.inferenceProtocol,
-                    )
-                      ? next.inferenceProtocol
-                      : allowedProtocols[0],
+                    ...(inferenceProtocol === "anthropic"
+                      ? next
+                      : withoutClaudeCode),
+                    inferenceProtocol,
                   });
                 }}
               />

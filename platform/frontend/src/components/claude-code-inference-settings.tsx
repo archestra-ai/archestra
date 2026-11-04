@@ -24,6 +24,8 @@ export function ClaudeCodeInferenceSettings({
   apiKeySelector,
   modelSelector,
   showModelSelector = true,
+  runtimeCommand = "archestra-claude-code",
+  disabled = false,
 }: {
   agentId: string;
   authentication: "provider" | "subscription";
@@ -36,14 +38,32 @@ export function ClaudeCodeInferenceSettings({
   modelSelector: ReactNode;
   /** False when no connection can run Claude: there is no model to pick. */
   showModelSelector?: boolean;
+  /**
+   * First element of `runtime.command`. Personal Claude subscriptions require
+   * the `archestra-claude-code` entrypoint; any other command disables the
+   * subscription option and explains how to re-enable it.
+   */
+  runtimeCommand?: string | null;
+  /** Disables the runtime-owned authentication radio cards without disabling `apiKeySelector`/`modelSelector`. */
+  disabled?: boolean;
 }) {
   const id = useId();
   const appName = useAppName();
+  const subscriptionSupported = runtimeCommand === "archestra-claude-code";
+  const trimmedCommand = runtimeCommand?.trim() || null;
+  const customCommand =
+    trimmedCommand && trimmedCommand !== "archestra-claude-code"
+      ? trimmedCommand
+      : null;
+  const effectiveAuthentication = subscriptionSupported
+    ? authentication
+    : "provider";
   return (
     <div className="space-y-2">
       <RadioGroup
         aria-label="Authentication"
-        value={authentication}
+        disabled={disabled}
+        value={effectiveAuthentication}
         onValueChange={(value) =>
           onAuthenticationChange(value as "provider" | "subscription")
         }
@@ -62,38 +82,52 @@ export function ClaudeCodeInferenceSettings({
               `An LLM provider connection set up in ${appName}. Billed to the company; cost limits apply.`,
             ],
           ] as const
-        ).map(([value, title, description]) => (
-          <Label
-            key={value}
-            htmlFor={`${id}-${value}`}
-            className={cn(
-              "flex cursor-pointer items-start gap-2.5 rounded-[10px] p-3.5 font-normal",
-              radioCardClass({ checked: authentication === value }),
-              authentication === value && "bg-primary/5",
-            )}
-          >
-            <RadioGroupItem
-              id={`${id}-${value}`}
-              value={value}
-              className="mt-0.5"
-            />
-            <span className="space-y-0.5">
-              <span className="block text-sm font-medium">{title}</span>
-              <span className="block text-[13px] leading-[1.45] text-muted-foreground">
-                {description}
+        ).map(([value, title, description]) => {
+          const cardDisabled =
+            disabled || (value === "subscription" && !subscriptionSupported);
+          return (
+            <Label
+              key={value}
+              htmlFor={`${id}-${value}`}
+              className={cn(
+                "flex cursor-pointer items-start gap-2.5 rounded-[10px] p-3.5 font-normal",
+                radioCardClass({
+                  checked: effectiveAuthentication === value,
+                  disabled: cardDisabled,
+                }),
+                effectiveAuthentication === value && "bg-primary/5",
+              )}
+            >
+              <RadioGroupItem
+                id={`${id}-${value}`}
+                value={value}
+                disabled={cardDisabled}
+                className="mt-0.5"
+              />
+              <span className="space-y-0.5">
+                <span className="block text-sm font-medium">{title}</span>
+                <span className="block text-[13px] leading-[1.45] text-muted-foreground">
+                  {description}
+                </span>
               </span>
-            </span>
-          </Label>
-        ))}
+            </Label>
+          );
+        })}
       </RadioGroup>
-      {authentication === "subscription" && (
-        <p className="text-xs text-muted-foreground">
+      {!subscriptionSupported ? (
+        <p key="unsupported" className="text-xs text-muted-foreground">
+          {customCommand
+            ? `To use personal Claude subscriptions, change Dedicated runtime → Container → Command to archestra-claude-code. Any custom logic in the current ${customCommand} entrypoint will be lost.`
+            : "To use personal Claude subscriptions, change Dedicated runtime → Container → Command to archestra-claude-code. Any custom logic in the current entrypoint will be lost."}
+        </p>
+      ) : effectiveAuthentication === "subscription" ? (
+        <p key="subscription" className="text-xs text-muted-foreground">
           {agentId
             ? "Each person connects their own Claude account once. A run's container only gets a short-lived key."
             : "You connect your Claude account right after creating. A run's container only gets a short-lived key."}
         </p>
-      )}
-      {authentication === "subscription" ? (
+      ) : null}
+      {effectiveAuthentication === "subscription" ? (
         // Before the agent exists there is nothing to sign in to; the hint
         // above already says when that happens.
         agentId ? (

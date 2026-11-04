@@ -188,8 +188,22 @@ test.describe("Add Remote MCP Server", () => {
 
     await installDialog.getByRole("button", { name: "Install" }).click();
 
+    await expect(installDialog.getByText("Connection failed")).toBeVisible();
+    const diagnostic = installDialog.getByText(
+      "Failed to connect to MCP server",
+      { exact: true },
+    );
+    await expect(diagnostic).not.toBeVisible();
+    await installDialog
+      .getByRole("button", { name: "Show diagnostics" })
+      .click();
+    await expect(diagnostic).toBeVisible();
+    await installDialog
+      .getByRole("button", { name: "Hide diagnostics" })
+      .click();
+    await expect(diagnostic).not.toBeVisible();
     await expect(
-      page.getByText(/Failed to connect to MCP server/).first(),
-    ).toBeVisible();
+      installDialog.getByRole("button", { name: "Install" }),
+    ).toBeEnabled();
   });
 });

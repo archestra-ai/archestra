@@ -3,7 +3,7 @@ import { createConnection } from "node:net";
 import { setImmediate } from "node:timers/promises";
 import fastifyHttpProxy from "@fastify/http-proxy";
 import Fastify, { type FastifyInstance } from "fastify";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { internalCallHeader } from "@/clients/internal-call";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { withDrainScope } from "@/utils/drain-scope";
@@ -207,6 +207,71 @@ test("forged scopes and live scopes past the drain deadline cannot admit new cal
       ).toBe(503);
     }
   });
+});
+
+test.each([
+  { clockShiftMs: 3_600_000, graceMs: 60_000, waitMs: 0, expectedStatus: 200 },
+  { clockShiftMs: -3_600_000, graceMs: 5, waitMs: 20, expectedStatus: 503 },
+])("drain admission uses elapsed time after a $clockShiftMs ms wall-clock correction", async ({
+  clockShiftMs,
+  graceMs,
+  waitMs,
+  expectedStatus,
+}) => {
+  const app = createApp();
+  const drain = registerLlmProxyDrain(app, graceMs);
+  const paths = ["/v1/mcp/agent", "/v1/openai/chat/completions"];
+  for (const path of paths) app.post(path, async () => ({ completed: true }));
+  await app.ready();
+  drain.beginShutdown();
+  const now = vi.spyOn(Date, "now").mockReturnValue(Date.now() + clockShiftMs);
+  try {
+    await withDrainScope(async () => {
+      if (waitMs) await new Promise((resolve) => setTimeout(resolve, waitMs));
+      for (const path of paths) {
+        const response = await app.inject({
+          method: "POST",
+          url: path,
+          headers: internalCallHeader(),
+        });
+        expect(response.statusCode).toBe(expectedStatus);
+      }
+    });
+  } finally {
+    now.mockRestore();
+  }
+});
+
+test("a backward wall-clock correction cannot extend the drain wait", async () => {
+  const app = createApp();
+  const drain = registerLlmProxyDrain(app, 20);
+  const started = gate();
+  const finish = gate();
+  app.get("/v1/openai/pending", async () => {
+    started.resolve();
+    await finish.promise;
+    return { completed: true };
+  });
+  await app.ready();
+  const request = app.inject("/v1/openai/pending");
+  await started.promise;
+  drain.beginShutdown();
+  const now = vi.spyOn(Date, "now").mockReturnValue(Date.now() - 3_600_000);
+  let watchdog: NodeJS.Timeout | undefined;
+  try {
+    const completed = await Promise.race([
+      drainLlmProxyRequests(app).then(() => true),
+      new Promise<false>((resolve) => {
+        watchdog = setTimeout(() => resolve(false), 200);
+      }),
+    ]);
+    expect(completed).toBe(true);
+  } finally {
+    clearTimeout(watchdog);
+    now.mockRestore();
+    finish.resolve();
+    await request;
+  }
 });
 
 test("Fastify already drains an HTTP stream, but not work after raw.end", async () => {

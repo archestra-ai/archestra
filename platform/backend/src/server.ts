@@ -1314,6 +1314,9 @@ function registerWebServerShutdown(
     if (shuttingDown) return;
     shuttingDown = true;
     fastify.log.info(`Received ${signal}, shutting down gracefully...`);
+    // Socket and polling events do not pass through Fastify's admission hook.
+    // Stop their intake synchronously before the loopback gateway starts draining.
+    const stoppedChatOps = chatOpsManager.beginShutdown();
     beginLlmProxyDrain(fastify);
     if (publicEndpointsServerInstance)
       beginLlmProxyDrain(publicEndpointsServerInstance);
@@ -1368,6 +1371,7 @@ function registerWebServerShutdown(
           ? drainLlmProxyRequests(publicEndpointsServerInstance)
           : Promise.resolve(),
         stoppedWorker,
+        stoppedChatOps,
       ]);
       if (intervalIds.activeChatRunReaperIntervalId) {
         clearInterval(intervalIds.activeChatRunReaperIntervalId);

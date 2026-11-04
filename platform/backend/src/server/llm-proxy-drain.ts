@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { ServerResponse } from "node:http";
+import { performance } from "node:perf_hooks";
 import { setImmediate } from "node:timers/promises";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { ServerDrainingError } from "@/types/server-draining-error";
 import { drainBackgroundWork } from "@/utils/background-work";
+import { takeDrainScope, withDrainScope } from "@/utils/drain-scope";
 
 /** Tracks admitted handlers, responses and their background persistence. */
 export function registerLlmProxyDrain(
@@ -66,9 +68,13 @@ class RequestDrain {
   ) {
     fastify.addHook("onRequest", (request, reply, done) => {
       const path = request.routeOptions.url;
+      const continuation = takeDrainScope(request);
       if (
         this.deadline !== undefined &&
-        (path === "/ready" || (!isProbe(path) && !isMcpRoute(path)))
+        (path === "/ready" ||
+          (!isProbe(path) &&
+            (!continuation || performance.now() >= this.deadline) &&
+            !isMcpRoute(path)))
       ) {
         reply.header("Connection", "close").header("Retry-After", "1");
         reply.serializer(JSON.stringify);
@@ -80,6 +86,7 @@ class RequestDrain {
         handlerDone: true,
         responseDone: false,
         longLived: false,
+        continuation,
       };
       this.requests.set(request, state);
       requestDrains.set(request, this);
@@ -124,7 +131,14 @@ class RequestDrain {
           !Array.isArray(body) &&
           ((!("method" in body) && ("result" in body || "error" in body)) ||
             body.method === "notifications/cancelled");
-        if (!admittedReplay && (!continuation || this.active.size <= 1)) {
+        const admittedScope =
+          this.requests.get(request)?.continuation &&
+          performance.now() < this.deadline;
+        if (
+          !admittedScope &&
+          !admittedReplay &&
+          (!continuation || this.active.size <= 1)
+        ) {
           reply.header("Connection", "close").header("Retry-After", "1");
           reply.serializer(JSON.stringify);
           done(new ServerDrainingError());
@@ -148,7 +162,10 @@ class RequestDrain {
           state.release?.();
         };
         try {
-          const result = handler.call(this, request, reply);
+          const result = withDrainScope(
+            () => handler.call(this, request, reply),
+            state.continuation,
+          );
           if (
             result &&
             typeof (result as PromiseLike<unknown>).then === "function"
@@ -188,7 +205,8 @@ class RequestDrain {
   }
 
   beginShutdown(): void {
-    this.deadline ??= Date.now() + this.graceMs;
+    // Clock synchronization must not shorten or extend the shutdown grace.
+    this.deadline ??= performance.now() + this.graceMs;
   }
 
   drain(): Promise<void> {
@@ -202,10 +220,16 @@ class RequestDrain {
     try {
       const completed = await Promise.race([
         (async () => {
-          if (this.active.size > 0)
-            await new Promise<void>((resolve) => {
-              this.drained = resolve;
-            });
+          do {
+            if (this.active.size > 0)
+              await new Promise<void>((resolve) => {
+                this.drained = resolve;
+              });
+            await setImmediate(); // finish/onResponse hooks may launch audit writes
+            await drainBackgroundWork();
+            // Socket work can start a loopback handler after the previous
+            // active-request check, then finish before that handler persists.
+          } while (this.active.size > 0);
           // End notification streams only after their outstanding calls finish.
           for (const close of this.streams.values()) close();
           await setImmediate(); // finish/onResponse hooks may launch audit writes
@@ -215,7 +239,10 @@ class RequestDrain {
         new Promise<false>((resolve) => {
           timeout = setTimeout(
             () => resolve(false),
-            Math.max(0, (this.deadline ?? Date.now()) - Date.now()),
+            Math.max(
+              0,
+              (this.deadline ?? performance.now()) - performance.now(),
+            ),
           );
         }),
       ]);
@@ -238,6 +265,7 @@ type RequestState = {
   handlerDone: boolean;
   responseDone: boolean;
   longLived: boolean;
+  continuation?: string;
   release?: () => void;
 };
 function isProbe(path: string | undefined): boolean {

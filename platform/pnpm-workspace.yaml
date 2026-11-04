@@ -288,6 +288,9 @@ patchedDependencies:
   '@better-auth/sso@1.6.22': patches/ee/@better-auth__sso@1.6.22.patch
   # Keep the SDK's string-keyed semantic-action records under Zod 4.
   '@microsoft/agents-activity@1.9.1': patches/@microsoft__agents-activity@1.9.1.patch
+  # Settle reconnect failures and cancellation; do not reopen after disconnect.
+  # Remove after an upstream upgrade passes the real Socket Mode lifecycle tests.
+  '@slack/socket-mode@2.0.5': patches/@slack__socket-mode@2.0.5.patch
   # Preserve v2 client URL, middleware and declaration contracts under Zod 4.
   confluence.js@2.1.0: patches/confluence.js@2.1.0.patch
   # Native Ollama /api/chat sends `"content": ""` on every thinking-phase chunk,

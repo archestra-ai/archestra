@@ -927,6 +927,10 @@ export function useCatalogInstall(opts?: {
       teamId:
         result.scope === "team" ? (result.teamId ?? undefined) : undefined,
     });
+    if (installResult.errorMessage) {
+      setInstallingItemId(null);
+      return installResult.errorMessage;
+    }
     trackPendingInstall(installResult?.installedServer);
     setInstallingItemId(null);
     onInstalled?.();

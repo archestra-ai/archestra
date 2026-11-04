@@ -225,8 +225,7 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
     catalogItem: CatalogItem,
     result: RemoteServerInstallResult,
   ) => {
-    setOpenDialog(null);
-    await installMutation.mutateAsync({
+    const installResult = await installMutation.mutateAsync({
       name: catalogItem.name,
       catalogId: result.catalogId,
       ...buildRemoteInstallCredentialPayload(result),
@@ -235,6 +234,8 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
         result.scope === "team" ? (result.teamId ?? undefined) : undefined,
       dontShowToast: true,
     });
+    if (installResult.errorMessage) return installResult.errorMessage;
+    setOpenDialog(null);
   };
 
   const handleOAuthConfirm = async (result: OAuthInstallResult) => {

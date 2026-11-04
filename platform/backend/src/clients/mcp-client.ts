@@ -213,6 +213,41 @@ class McpServerUnreachableError extends Error {
   }
 }
 
+type McpDiscoveryHttpFailure = {
+  status: number;
+  authError?: "invalid_token" | "insufficient_scope" | "invalid_request";
+};
+
+function getMcpDiscoveryAuthError(
+  challenge: string | null,
+): McpDiscoveryHttpFailure["authError"] {
+  if (!challenge || !/^\s*Bearer(?:\s|$)/i.test(challenge)) return undefined;
+  const code =
+    /\berror\s*=\s*"?(invalid_token|insufficient_scope|invalid_request)(?="|,|\s|$)/i
+      .exec(challenge)?.[1]
+      ?.toLowerCase();
+  if (
+    code === "invalid_token" ||
+    code === "insufficient_scope" ||
+    code === "invalid_request"
+  ) {
+    return code;
+  }
+  return undefined;
+}
+
+function describeMcpDiscoveryHttpFailure(
+  failure: McpDiscoveryHttpFailure,
+  operation: "connecting" | "listing tools",
+): string {
+  const detail = failure.authError ? ` (${failure.authError})` : "";
+  const guidance =
+    failure.status === 401 || failure.status === 403
+      ? " Check the MCP server's credentials and provider configuration."
+      : " Check the MCP server URL and configuration.";
+  return `Upstream MCP server returned HTTP ${failure.status}${detail} while ${operation}.${guidance}`;
+}
+
 /**
  * Ends a tool call whose MCP server stopped answering or closed the
  * connection mid-call. Its message reaches the model and the chat task card.
@@ -2845,6 +2880,7 @@ class McpClient {
       headerName: string;
       headerValue: string;
     },
+    onHttpFailure?: (failure: McpDiscoveryHttpFailure) => void,
   ): Promise<Transport> {
     if (transportKind === "http") {
       if (catalogItem.serverType === "local") {
@@ -2977,6 +3013,22 @@ class McpClient {
           new URL(catalogItem.serverUrl),
           {
             requestInit: { headers: new Headers(headers) },
+            // Discovery diagnostics are deliberately limited to status and a
+            // known Bearer error code. Never retain an upstream body or header.
+            fetch: onHttpFailure
+              ? async (url, init) => {
+                  const response = await fetch(url, init);
+                  if (!response.ok) {
+                    onHttpFailure({
+                      status: response.status,
+                      authError: getMcpDiscoveryAuthError(
+                        response.headers.get("www-authenticate"),
+                      ),
+                    });
+                  }
+                  return response;
+                }
+              : undefined,
           },
         );
       }
@@ -3194,6 +3246,7 @@ class McpClient {
       headerName: string;
       headerValue: string;
     },
+    onHttpFailure?: (failure: McpDiscoveryHttpFailure) => void,
   ): Promise<Transport> {
     const resolvedSecrets = await this.resolveSecretsForTransport({
       catalogItem,
@@ -3222,6 +3275,7 @@ class McpClient {
       connectionKey,
       tokenAuth,
       enterpriseTransportCredential,
+      onHttpFailure,
     );
   }
 
@@ -4270,6 +4324,8 @@ class McpClient {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       let client: Client | undefined;
+      let operation: "connecting" | "listing tools" = "connecting";
+      let httpFailure: McpDiscoveryHttpFailure | undefined;
       try {
         // Get the appropriate transport using the existing helper
         const transport = await this.getTransport(
@@ -4280,6 +4336,9 @@ class McpClient {
           undefined,
           undefined,
           enterpriseTransportCredential ?? undefined,
+          (failure) => {
+            httpFailure = failure;
+          },
         );
 
         // No `roots` — see the identical omission above.
@@ -4305,6 +4364,7 @@ class McpClient {
         // server through the normal tool-assignment path.
         let tools: Tool[];
         try {
+          operation = "listing tools";
           tools = await this.discoverToolsOrResourceTools(client);
         } catch (error) {
           // A Skills-only server may intentionally expose neither tools/list
@@ -4334,6 +4394,18 @@ class McpClient {
         }));
       } catch (error) {
         lastError = error instanceof Error ? error : new Error("Unknown error");
+        const httpStatus =
+          error instanceof StreamableHTTPError ? error.code : undefined;
+        const safeHttpFailure =
+          httpStatus && httpStatus > 0
+            ? {
+                status: httpStatus,
+                authError:
+                  httpFailure?.status === httpStatus
+                    ? httpFailure.authError
+                    : undefined,
+              }
+            : undefined;
 
         // Only the success path closed the client; a failure after connect
         // (e.g. tool discovery threw) would otherwise leak its transport.
@@ -4360,7 +4432,11 @@ class McpClient {
 
         // Last attempt failed, throw error
         throw new McpServerUnreachableError(
-          `Failed to connect to MCP server ${catalogItem.name}: ${lastError.message}`,
+          `Failed to connect to MCP server ${catalogItem.name}: ${
+            safeHttpFailure
+              ? describeMcpDiscoveryHttpFailure(safeHttpFailure, operation)
+              : lastError.message
+          }`,
         );
       }
     }

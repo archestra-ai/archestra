@@ -1069,6 +1069,63 @@ describe("McpClient", () => {
     expect(mockClose).toHaveBeenCalledTimes(1);
   });
 
+  test("reports the upstream HTTP status and safe Bearer code without the response body", async () => {
+    const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+    if (!catalogItem) throw new Error("expected catalog item");
+    const { StreamableHTTPClientTransport, StreamableHTTPError } = await import(
+      "@modelcontextprotocol/sdk/client/streamableHttp.js"
+    );
+    const upstreamBody = '{"result":{"tools":[{"name":"looks-successful"}]}}';
+
+    mockListTools.mockImplementationOnce(async () => {
+      const [, options] =
+        vi.mocked(StreamableHTTPClientTransport).mock.calls.at(-1) ?? [];
+      if (!options?.fetch) throw new Error("expected discovery fetch");
+      const originalFetch = global.fetch;
+      global.fetch = vi.fn().mockResolvedValue(
+        new Response(upstreamBody, {
+          status: 401,
+          headers: {
+            "www-authenticate":
+              'Bearer error="invalid_token", error_description="secret detail"',
+          },
+        }),
+      );
+      try {
+        await options.fetch(new URL("https://example.test/mcp"), {
+          method: "POST",
+        });
+      } finally {
+        global.fetch = originalFetch;
+      }
+      throw new StreamableHTTPError(
+        401,
+        `Error POSTing to endpoint: ${upstreamBody}`,
+      );
+    });
+
+    const failure = await mcpClient
+      .connectAndGetTools({
+        catalogItem: {
+          ...catalogItem,
+          serverType: "remote",
+          serverUrl: "https://example.test/mcp",
+        },
+        mcpServerId,
+        secrets: {},
+      })
+      .catch((error: Error) => error);
+    if (!(failure instanceof Error)) {
+      throw new Error("Expected MCP discovery to fail");
+    }
+    expect(failure.message).toContain(
+      "Upstream MCP server returned HTTP 401 (invalid_token) while listing tools",
+    );
+    expect(failure.message).not.toContain(upstreamBody);
+    expect(failure.message).not.toContain("secret detail");
+    expect(mockClose).toHaveBeenCalledTimes(1);
+  });
+
   describe("executeToolCallForOwner (app owner)", () => {
     test("executes an app-assigned tool and persists an app-owned audit row", async ({
       makeApp,

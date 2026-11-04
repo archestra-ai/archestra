@@ -120,7 +120,10 @@ const NON_REPORTABLE_API_ERROR_TYPES = new Set([
   "api_payload_too_large_error",
 ]);
 
-export function handleApiError(error: ApiSdkError) {
+export function handleApiError(
+  error: ApiSdkError,
+  options?: { toastOnError?: boolean },
+) {
   const sentryError = toApiError(error);
   const errorType = getApiErrorType(error);
 
@@ -143,7 +146,11 @@ export function handleApiError(error: ApiSdkError) {
     errorType === "api_authentication_error" &&
     !sessionConfirmation.isSignedIn();
 
-  if (typeof window !== "undefined" && !isUnconfirmedSignOut) {
+  if (
+    typeof window !== "undefined" &&
+    !isUnconfirmedSignOut &&
+    (options?.toastOnError ?? true)
+  ) {
     // Errors stay long enough to read and copy; the close button dismisses early.
     // The toast shows the humanized message; Sentry keeps the raw error.
     // Keyed by message so a repeating failure (retries, several queries hitting

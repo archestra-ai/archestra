@@ -98,6 +98,101 @@ test("re-checks a negative answer once it is stale and flips without a restart",
   expect(discoveryRequests).toBe(afterInstall);
 });
 
+test("launch waits for a terminating Sandbox to finish deleting before creating the replacement", async () => {
+  serveController({ installed: true });
+  await expect(manager.assertSandboxApiInstalled()).resolves.toBeUndefined();
+
+  let sandboxReads = 0;
+  let createdSandboxName: string | undefined;
+
+  server.use(
+    http.get(
+      `${origin}/apis/rbac.authorization.k8s.io/v1/namespaces/test/roles/archestra-agent-runtime`,
+      () => HttpResponse.json({ code: 404 }, { status: 404 }),
+    ),
+    http.get(
+      `${origin}/apis/agents.x-k8s.io/v1beta1/namespaces/test/sandboxes/workspace`,
+      () => {
+        sandboxReads += 1;
+        if (sandboxReads === 1) {
+          return HttpResponse.json({
+            apiVersion: "agents.x-k8s.io/v1beta1",
+            kind: "Sandbox",
+            metadata: {
+              name: "workspace",
+              namespace: "test",
+              deletionTimestamp: "2026-11-04T16:00:00Z",
+            },
+            spec: {},
+          });
+        }
+        return HttpResponse.json({ code: 404 }, { status: 404 });
+      },
+    ),
+    http.get(
+      `${origin}/apis/extensions.agents.x-k8s.io/v1beta1/namespaces/test/sandboxclaims/workspace`,
+      () => HttpResponse.json({ code: 404 }, { status: 404 }),
+    ),
+    http.post(`${origin}/api/v1/namespaces/test/secrets`, () =>
+      HttpResponse.json({}, { status: 201 }),
+    ),
+    http.get(`${origin}/apis/cilium.io/v2`, () =>
+      HttpResponse.json({ code: 404 }, { status: 404 }),
+    ),
+    http.get(`${origin}/apis/crd.projectcalico.org/v1`, () =>
+      HttpResponse.json({ code: 404 }, { status: 404 }),
+    ),
+    http.get(`${origin}/api/v1/namespaces/kube-system/services/kube-dns`, () =>
+      HttpResponse.json({ spec: { clusterIP: "10.96.0.10" } }),
+    ),
+    http.get(`${origin}/api/v1/namespaces/default/services/kubernetes`, () =>
+      HttpResponse.json({ spec: { ipFamilies: ["IPv4"] } }),
+    ),
+    http.get(`${origin}/api/v1/namespaces/:ns/services/:svc`, () =>
+      HttpResponse.json({ code: 404 }, { status: 404 }),
+    ),
+    http.post(
+      `${origin}/apis/networking.k8s.io/v1/namespaces/test/networkpolicies`,
+      () => HttpResponse.json({}, { status: 201 }),
+    ),
+    http.patch(
+      `${origin}/apis/networking.k8s.io/v1/namespaces/test/networkpolicies/:name`,
+      () => HttpResponse.json({}, { status: 200 }),
+    ),
+    http.post(
+      `${origin}/apis/agents.x-k8s.io/v1beta1/namespaces/test/sandboxes`,
+      async ({ request }) => {
+        const body = (await request.json()) as { metadata?: { name?: string } };
+        createdSandboxName = body.metadata?.name;
+        return HttpResponse.json(body, { status: 201 });
+      },
+    ),
+  );
+
+  await manager.launch({
+    taskId: "task-1",
+    agentRuntimeId: "agent-1",
+    frozenName: "workspace",
+    runtimeScope: "test",
+    image: "runtime:v1",
+    command: ["echo", "hello"],
+    privileged: false,
+    resources: { cpuRequest: "500m", memoryRequest: "1Gi" },
+    tier: null,
+    warmTiers: [],
+    env: {},
+    secretEnv: {},
+    inputFileCount: 0,
+    activeDeadlineSeconds: 600,
+    nodeSelector: {},
+    imagePullSecrets: [],
+    effectiveNetworkPolicy: { source: "built_in", policy: null },
+  });
+
+  expect(sandboxReads).toBe(2);
+  expect(createdSandboxName).toBe("workspace");
+});
+
 // === Internal helpers ===
 
 function serveController({ installed }: { installed: boolean }) {

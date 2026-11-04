@@ -117,6 +117,7 @@ async function startAgentRunSession(params: {
   ephemeralCredentials?: Record<string, string>;
   settleTaskOnFailure?: boolean;
   shouldSettleLaunchFailure?: (failure: unknown) => Promise<boolean> | boolean;
+  replacePriorAttempt?: boolean;
   boundContract?: { resolved: boolean; contract?: string };
   abortSignal?: AbortSignal;
 }): Promise<AgentRunRecord> {
@@ -279,6 +280,7 @@ async function startAgentRunSession(params: {
     virtualApiKeyId,
     gatewayTokenId,
     completionTarget: params.completionTarget,
+    replacePriorAttempt: params.replacePriorAttempt,
   });
 
   if (params.title === undefined && !resumeWithoutPrompt) {
@@ -428,10 +430,19 @@ async function startAgentRunSession(params: {
         await AgentRunModel.close({ id: session.id });
       } else {
         // A retry or fallback will continue using this taskId. Tear down the
-        // failed attempt and remove its rows without entering "deleting" while
-        // the task is still working, so the reconciler never cancels the task.
+        // failed attempt and mark its workspace deleted without entering
+        // "deleting" while the task is still working (so the reconciler never
+        // cancels the task), and close the run row rather than deleting it so
+        // the orphan reaper still sees an agent_runs row until the next
+        // attempt's AgentRunModel.create transaction replaces it.
         await backend.teardown(session);
-        await AgentRunModel.deleteAttemptByTaskId(params.taskId);
+        if (createdWorkspace)
+          await AgentWorkspaceModel.transition({
+            id: createdWorkspace.id,
+            from: "active",
+            to: "deleted",
+          });
+        await AgentRunModel.close({ id: session.id });
       }
     } catch (cleanupError) {
       // Leave the session open for terminal reconciliation, including failed
@@ -477,15 +488,16 @@ export function resolveAgentRuntime(
 }
 
 /**
- * Tear down a failed attempt's workload and delete its run/workspace rows
- * (even when `endedAt` is already set and the workspace is in `deleting` or
- * `deleted` as well as `active`) so the supervisor can retry or fail over the
- * same A2A task cleanly before the next `AgentRunModel.create` and
- * `AgentWorkspaceModel.create`.
+ * Tear down a failed attempt's workload and close its run/workspace rows while
+ * keeping the closed `agent_runs` row in place until the next attempt's
+ * `AgentRunModel.create` transaction atomically replaces it (so the orphan
+ * reaper never observes a working task without an `agent_runs` row).
  */
 async function cleanupFailedAttemptForRetry(taskId: string): Promise<void> {
   const existingRun = await AgentRunModel.findByTaskId(taskId);
-  if (existingRun && !existingRun.endedAt) {
+  if (!existingRun) return;
+  const workspace = await AgentWorkspaceModel.findById(taskId);
+  if (!existingRun.endedAt || (workspace && workspace.state !== "deleted")) {
     try {
       const backend = resolveAgentRuntimeBackendDriver(existingRun.backend);
       await backend.teardown(existingRun);
@@ -496,7 +508,16 @@ async function cleanupFailedAttemptForRetry(taskId: string): Promise<void> {
       );
     }
   }
-  await AgentRunModel.deleteAttemptByTaskId(taskId);
+  if (workspace && workspace.state !== "deleted") {
+    await AgentWorkspaceModel.transition({
+      id: workspace.id,
+      from: workspace.state,
+      to: "deleted",
+    });
+  }
+  if (!existingRun.endedAt) {
+    await AgentRunModel.close({ id: existingRun.id });
+  }
 }
 
 /**
@@ -632,10 +653,32 @@ export async function runTaskInAgentRuntime(params: {
     let oomEscalations = 0;
 
     while (true) {
-      if (hasPriorAttempt) {
+      const isRetryAttempt = hasPriorAttempt;
+      if (isRetryAttempt) {
         await cleanupFailedAttemptForRetry(params.taskId);
       }
       hasPriorAttempt = true;
+
+      const resolveNextOomEscalationLimits =
+        async (): Promise<AgentRunLimits | null> => {
+          if (oomEscalations >= maxOomEscalations) return null;
+          const tiers = await organizationAgentRuntimeTiers(
+            params.organizationId,
+          );
+          const baseLimits =
+            currentLimits ??
+            resolveAgentRunLimits({ runtime: currentRuntime, tiers });
+          const allowedTiers = agentRuntimeAllowedTiers(currentRuntime, tiers);
+          const nextTier = baseLimits.tier
+            ? nextLargerAgentRuntimeTier(allowedTiers, baseLimits.tier)
+            : undefined;
+          if (!nextTier) return null;
+          return {
+            ...baseLimits,
+            tier: nextTier.name,
+            workspaceGiB: tierWorkspaceGiB(nextTier),
+          };
+        };
 
       const launchedAt = Date.now();
       try {
@@ -647,9 +690,16 @@ export async function runTaskInAgentRuntime(params: {
           modelId: currentModelId,
           llmApiKeyId: currentLlmApiKeyId,
           ephemeralCredentials: candidateEphemeralCredentials,
+          replacePriorAttempt: isRetryAttempt,
           shouldSettleLaunchFailure: async (launchFailure) => {
             if (params.abortSignal?.aborted) return false;
             const classified = classifyAgentRunFailure(launchFailure);
+            if (
+              classified?.code === "pod.oom_killed" &&
+              (await resolveNextOomEscalationLimits()) !== null
+            ) {
+              return false;
+            }
             const willRetryCurrent =
               classified?.retriable === true && retryCount < maxRetries;
             if (willRetryCurrent) return false;
@@ -678,27 +728,11 @@ export async function runTaskInAgentRuntime(params: {
         const classified = classifyAgentRunFailure(error);
 
         // Automatic OOM tier escalation on the same subagent up to its maxTier.
-        if (
-          classified?.code === "pod.oom_killed" &&
-          oomEscalations < maxOomEscalations
-        ) {
-          const tiers = await organizationAgentRuntimeTiers(
-            params.organizationId,
-          );
-          const baseLimits =
-            currentLimits ??
-            resolveAgentRunLimits({ runtime: currentRuntime, tiers });
-          const allowedTiers = agentRuntimeAllowedTiers(currentRuntime, tiers);
-          const nextTier = baseLimits.tier
-            ? nextLargerAgentRuntimeTier(allowedTiers, baseLimits.tier)
-            : undefined;
-          if (nextTier) {
+        if (classified?.code === "pod.oom_killed") {
+          const escalatedLimits = await resolveNextOomEscalationLimits();
+          if (escalatedLimits) {
             oomEscalations += 1;
-            currentLimits = {
-              ...baseLimits,
-              tier: nextTier.name,
-              workspaceGiB: tierWorkspaceGiB(nextTier),
-            };
+            currentLimits = escalatedLimits;
             continue;
           }
         }

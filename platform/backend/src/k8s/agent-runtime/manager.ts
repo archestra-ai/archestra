@@ -194,20 +194,37 @@ class AgentRuntimeManager {
       }),
     };
 
-    const existingSandbox = await readWorkspaceSandbox({
-      api: clients.customObjectsApi,
-      name: names.sandbox,
-      namespace: withOwner.namespace,
-    }).catch((error) => {
-      if (isK8sNotFoundError(error)) return null;
-      throw error;
-    });
-    if (existingSandbox) {
-      logger.info(
-        { taskId: withOwner.taskId, sandbox: names.sandbox },
-        "Adopting an existing Agent Sandbox with the same frozen name",
-      );
-      return;
+    const startupDeadline =
+      Date.now() + config.agentRuntime.podStartTimeoutSeconds * 1000;
+    let deletionPollDelayMs = 250;
+    while (true) {
+      const existingSandbox = await readWorkspaceSandbox({
+        api: clients.customObjectsApi,
+        name: names.sandbox,
+        namespace: withOwner.namespace,
+        includeDeletingClaim: true,
+      }).catch((error) => {
+        if (isK8sNotFoundError(error)) return null;
+        throw error;
+      });
+      if (!existingSandbox) break;
+      if (!existingSandbox.metadata.deletionTimestamp) {
+        logger.info(
+          { taskId: withOwner.taskId, sandbox: names.sandbox },
+          "Adopting an existing Agent Sandbox with the same frozen name",
+        );
+        return;
+      }
+      if (Date.now() >= startupDeadline) {
+        throw tagAgentRunFailure(
+          new Error(
+            `Timed out waiting for previous Agent Sandbox ${names.sandbox} deletion to finish`,
+          ),
+          "launch.capacity_timeout",
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, deletionPollDelayMs));
+      deletionPollDelayMs = Math.min(deletionPollDelayMs * 2, 1000);
     }
 
     await withK8sApiRetry(
@@ -268,12 +285,20 @@ class AgentRuntimeManager {
       let pollDelayMs = 250;
       while (true) {
         try {
-          await readWorkspaceSandbox({
+          const sandbox = await readWorkspaceSandbox({
             api: clients.customObjectsApi,
             namespace: withOwner.namespace,
             name: spec.frozenName,
           });
-          break;
+          if (!sandbox.metadata.deletionTimestamp) break;
+          if (Date.now() >= deadline) {
+            throw tagAgentRunFailure(
+              new Error(
+                `Timed out waiting for Agent Sandbox ${spec.frozenName} allocation`,
+              ),
+              "launch.capacity_timeout",
+            );
+          }
         } catch (error) {
           if (!isK8sNotFoundError(error) || Date.now() >= deadline) throw error;
         }

@@ -52,8 +52,9 @@ export async function readWorkspaceSandbox(params: {
   api: CustomObjectsApi;
   namespace: string;
   name: string;
+  includeDeletingClaim?: boolean;
 }): Promise<AgentSandbox> {
-  const { api, namespace, name } = params;
+  const { api, namespace, name, includeDeletingClaim = false } = params;
   try {
     return (await api.getNamespacedCustomObject({
       ...AGENT_SANDBOX_API,
@@ -67,6 +68,18 @@ export async function readWorkspaceSandbox(params: {
       namespace,
       name,
     })) as Claim;
+    if (claim.metadata.deletionTimestamp && includeDeletingClaim) {
+      return {
+        apiVersion: "agents.x-k8s.io/v1beta1",
+        kind: "Sandbox",
+        metadata: {
+          name,
+          namespace,
+          deletionTimestamp: claim.metadata.deletionTimestamp,
+        },
+        spec: {} as AgentSandbox["spec"],
+      };
+    }
     const failure = claim.status?.conditions?.find(
       (condition) =>
         condition.status === "False" &&
@@ -91,6 +104,12 @@ export async function readWorkspaceSandbox(params: {
       )
     )
       throw new Error("Sandbox does not belong to this Agent allocation");
+    if (
+      claim.metadata.deletionTimestamp &&
+      !sandbox.metadata.deletionTimestamp
+    ) {
+      sandbox.metadata.deletionTimestamp = claim.metadata.deletionTimestamp;
+    }
     return sandbox;
   }
 }
@@ -550,7 +569,7 @@ const API_VERSION = "extensions.agents.x-k8s.io/v1beta1";
 const POOL_API = { ...SANDBOX_CLAIM_API, plural: "sandboxwarmpools" };
 const TEMPLATE_API = { ...SANDBOX_CLAIM_API, plural: "sandboxtemplates" };
 type Claim = {
-  metadata: { uid?: string };
+  metadata: { uid?: string; deletionTimestamp?: Date };
   status?: {
     sandbox?: { name?: string };
     conditions?: Array<{ status: string; reason?: string }>;

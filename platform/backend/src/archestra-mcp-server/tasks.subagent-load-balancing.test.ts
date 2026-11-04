@@ -15,6 +15,7 @@ import {
   AgentRunModel,
   AgentToolModel,
   AgentVersionModel,
+  AgentWorkspaceModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
   OrganizationModel,
@@ -26,7 +27,10 @@ import {
   resolveAgentRuntime,
   runTaskInAgentRuntime,
 } from "@/services/agent-runtime/pod-run";
-import { agentRunFailure } from "@/services/agent-runtime/run-failure";
+import {
+  agentRunFailure,
+  tagAgentRunFailure,
+} from "@/services/agent-runtime/run-failure";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
@@ -551,9 +555,19 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     expect(finalRun?.endedAt).not.toBeNull();
   });
 
-  test("fails over cleanly when backend.launch rejects on the first subagent after closing the run and workspace", async ({
+  test("fails over cleanly when backend.launch rejects on the first subagent after OOM escalation and retry while keeping the task working and protected from orphan reaping", async ({
     makeAgent,
   }) => {
+    await OrganizationModel.patch(organizationId, {
+      agentRuntimeTiers: {
+        tiers: [
+          { name: "S", cpuRequest: 2, cpuLimit: null, warmSpares: 0 },
+          { name: "M", cpuRequest: 4, cpuLimit: null, warmSpares: 0 },
+        ],
+        defaultTier: "S",
+      },
+    });
+
     const subagentA = await createRuntimeSubagent(makeAgent, "Subagent A");
     const subagentB = await createRuntimeSubagent(makeAgent, "Subagent B");
 
@@ -566,11 +580,42 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       agentId: subagentA.id,
     });
 
-    const launchedAgentIds: string[] = [];
+    const launchedAttempts: Array<{
+      agentId: string;
+      tier: string;
+      taskStateBeforeLaunch: string | undefined;
+    }> = [];
+    let launchAttempt = 0;
+
     vi.spyOn(backend, "launch").mockImplementation(
       async (spec: AgentRunLaunchSpec) => {
-        launchedAgentIds.push(spec.agentRuntimeId);
-        if (spec.agentRuntimeId === subagentA.id) {
+        launchAttempt += 1;
+        const currentTask = await A2ATaskModel.findById(task.id);
+        const tiers = JSON.parse(
+          spec.env.ARCHESTRA_AGENT_RUNTIME_TIERS,
+        ) as Array<{
+          name: string;
+          current?: boolean;
+        }>;
+        const currentTier = tiers.find((t) => t.current)?.name ?? "unknown";
+        launchedAttempts.push({
+          agentId: spec.agentRuntimeId,
+          tier: currentTier,
+          taskStateBeforeLaunch: currentTask?.state,
+        });
+        if (launchAttempt === 1) {
+          throw tagAgentRunFailure(
+            new Error("OOM during launch on Subagent A tier S"),
+            "pod.oom_killed",
+          );
+        }
+        if (launchAttempt === 2) {
+          throw tagAgentRunFailure(
+            new Error("Pod startup timed out on Subagent A tier M"),
+            "launch.capacity_timeout",
+          );
+        }
+        if (launchAttempt === 3) {
           throw new Error("Kubernetes pod publish failed on Subagent A");
         }
       },
@@ -590,6 +635,33 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     );
     vi.spyOn(backend, "waitForCompletion").mockResolvedValue({
       outcome: "succeeded",
+    });
+    const observedDuringTeardownGap: Array<{
+      hasRunRow: boolean;
+      workspaceState: string | undefined;
+      reapedCount: number;
+    }> = [];
+    const origClose = AgentRunModel.close.bind(AgentRunModel);
+    vi.spyOn(AgentRunModel, "close").mockImplementation(async (params) => {
+      const closed = await origClose(params);
+      if (launchAttempt < 4) {
+        // Simulate a stale heartbeat between attempts and verify reapStaleRunning
+        // spares the task because the closed agent_runs row remains in place
+        // until the next attempt's AgentRunModel.create replaces it atomically.
+        const runRow = await AgentRunModel.findByTaskId(task.id);
+        const wsRow = await AgentWorkspaceModel.findById(task.id);
+        const reapedCount = await A2ATaskModel.reapStaleRunning({
+          staleMs: 0,
+          statusReason: "Orphaned",
+          buildEventPayload: () => ({}),
+        });
+        observedDuringTeardownGap.push({
+          hasRunRow: Boolean(runRow),
+          workspaceState: wsRow?.state,
+          reapedCount,
+        });
+      }
+      return closed;
     });
     vi.spyOn(backend, "teardown").mockResolvedValue();
     vi.spyOn(backend, "releaseRun").mockResolvedValue();
@@ -614,7 +686,34 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     });
 
     expect(result.text).toBe("Fallback succeeded after launch failure");
-    expect(launchedAgentIds).toEqual([subagentA.id, subagentB.id]);
+    expect(launchedAttempts).toEqual([
+      {
+        agentId: subagentA.id,
+        tier: "S",
+        taskStateBeforeLaunch: "TASK_STATE_SUBMITTED",
+      },
+      {
+        agentId: subagentA.id,
+        tier: "M",
+        taskStateBeforeLaunch: "TASK_STATE_SUBMITTED",
+      },
+      {
+        agentId: subagentA.id,
+        tier: "M",
+        taskStateBeforeLaunch: "TASK_STATE_SUBMITTED",
+      },
+      {
+        agentId: subagentB.id,
+        tier: "S",
+        taskStateBeforeLaunch: "TASK_STATE_SUBMITTED",
+      },
+    ]);
+    expect(observedDuringTeardownGap).toHaveLength(3);
+    for (const gap of observedDuringTeardownGap) {
+      expect(gap.hasRunRow).toBe(true);
+      expect(gap.workspaceState).toBe("deleted");
+      expect(gap.reapedCount).toBe(0);
+    }
 
     const updatedTask = await A2ATaskModel.findById(task.id);
     expect(updatedTask?.agentId).toBe(subagentB.id);

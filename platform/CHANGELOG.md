@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.21](https://github.com/archestra-ai/archestra/compare/platform-v1.4.20...platform-v1.4.21) (2026-11-05)
+
+
+### Bug Fixes
+
+* **guardrails:** raise the policy size limit to 1 MiB (backport release/1.4) ([#10270](https://github.com/archestra-ai/archestra/issues/10270)) ([678ec47](https://github.com/archestra-ai/archestra/commit/678ec47c96ea39e0d07a1a80f485ba54f47e9fac))
+* **proxy:** keep cut-off and blocked turns distinguishable (backport release/1.4) ([#10264](https://github.com/archestra-ai/archestra/issues/10264)) ([34b70c0](https://github.com/archestra-ai/archestra/commit/34b70c048c0dfb3e84ebccc509dfe9274f2614af))
+
 ## [1.4.20](https://github.com/archestra-ai/archestra/compare/platform-v1.4.19...platform-v1.4.20) (2026-11-05)
 
 

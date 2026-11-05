@@ -11,6 +11,7 @@
  */
 
 import { eq } from "drizzle-orm";
+import type { LightMyRequestResponse } from "fastify";
 import { HttpResponse, http } from "msw";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -43,7 +44,7 @@ const poolTest = test.extend<{
     ask: (
       wire: "openai" | "anthropic",
       extra?: Record<string, unknown>,
-    ) => ReturnType<ReturnType<typeof createFastifyInstance>["inject"]>;
+    ) => Promise<LightMyRequestResponse>;
   };
 }>({
   pool: async (

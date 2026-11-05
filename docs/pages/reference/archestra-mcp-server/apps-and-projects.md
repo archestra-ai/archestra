@@ -42,7 +42,7 @@ Required RBAC permission: [`app:create`](/docs/reference/permissions#app:create)
 |-----------|------|----------|-------------|
 | `initialGrants` | `object[]` | No |  |
 | `initialGrants[].subject` | `object` | Yes |  |
-| `initialGrants[].subject.type` | `"user" \| "team" \| "serviceAccount" \| "role" \| "organization"` | Yes |  |
+| `initialGrants[].subject.type` | `"user" \| "team" \| "serviceAccount" \| "oauthClient" \| "role" \| "organization"` | Yes |  |
 | `initialGrants[].subject.id` | `string \| "*"` | Yes |  |
 | `initialGrants[].actions` | `string[]` | Yes |  |
 | `name` | `string` | Yes | App name. |

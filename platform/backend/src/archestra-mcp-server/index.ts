@@ -658,6 +658,7 @@ async function resolveToolAssignment(params: {
     toolName,
     agentId: context.agentId,
     userId: context.userId,
+    oauthClientId: context.tokenAuth?.oauthClientId,
     organizationId: context.organizationId,
     exclusionSets,
   });

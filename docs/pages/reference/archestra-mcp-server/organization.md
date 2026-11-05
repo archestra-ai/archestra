@@ -559,7 +559,7 @@ Required RBAC permission: [`plugin:create`](/docs/reference/permissions#plugin:c
 |-----------|------|----------|-------------|
 | `initialGrants` | `object[]` | No |  |
 | `initialGrants[].subject` | `object` | Yes |  |
-| `initialGrants[].subject.type` | `"user" \| "team" \| "serviceAccount" \| "role" \| "organization"` | Yes |  |
+| `initialGrants[].subject.type` | `"user" \| "team" \| "serviceAccount" \| "oauthClient" \| "role" \| "organization"` | Yes |  |
 | `initialGrants[].subject.id` | `string \| "*"` | Yes |  |
 | `initialGrants[].actions` | `string[]` | Yes |  |
 | `displayName` | `string` | Yes | Human-readable plugin name. |

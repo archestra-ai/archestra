@@ -332,7 +332,7 @@ Required RBAC permission: [`agent:create`](/docs/reference/permissions#agent:cre
 |-----------|------|----------|-------------|
 | `initialGrants` | `object[]` | No |  |
 | `initialGrants[].subject` | `object` | Yes |  |
-| `initialGrants[].subject.type` | `"user" \| "team" \| "serviceAccount" \| "role" \| "organization"` | Yes |  |
+| `initialGrants[].subject.type` | `"user" \| "team" \| "serviceAccount" \| "oauthClient" \| "role" \| "organization"` | Yes |  |
 | `initialGrants[].subject.id` | `string \| "*"` | Yes |  |
 | `initialGrants[].actions` | `string[]` | Yes |  |
 | `name` | `string` | Yes | Name for the new resource. |

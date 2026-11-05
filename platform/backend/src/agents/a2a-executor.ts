@@ -419,6 +419,7 @@ export async function executeA2AMessage(
       mcpTools,
       organizationId,
       userId,
+      oauthClientId: params.oauthExecution?.clientId,
       agentId: agent.id,
       isFork: params.selfFork === true,
     });

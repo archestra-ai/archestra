@@ -16174,6 +16174,9 @@ export type CreateA2aRemoteAgentData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
@@ -17072,7 +17075,7 @@ export type GetAgentCatalogData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -17458,7 +17461,7 @@ export type GetAgentsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -17933,6 +17936,9 @@ export type CreateAgentData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -21056,6 +21062,9 @@ export type CloneAgentData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -29615,7 +29624,7 @@ export type GetAppsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -29793,6 +29802,9 @@ export type CreateAppData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -58611,6 +58623,9 @@ export type InstallCopilotGithubAppData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
@@ -58725,6 +58740,9 @@ export type ConnectCopilotGithubAppCredentialData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -59025,6 +59043,9 @@ export type ConnectExistingCopilotGithubAppData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -86692,7 +86713,7 @@ export type GetInternalMcpCatalogData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -87074,6 +87095,9 @@ export type CreateInternalMcpCatalogItemData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
@@ -87328,7 +87352,7 @@ export type SearchMcpRegistryData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -87596,7 +87620,7 @@ export type SearchMcpRegistryIdsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -93648,7 +93672,7 @@ export type GetKnowledgeBasesData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -93810,6 +93834,9 @@ export type CreateKnowledgeBaseData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -94636,7 +94663,7 @@ export type GetConnectorsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -95207,6 +95234,9 @@ export type CreateConnectorData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -98942,7 +98972,7 @@ export type GetKnowledgeFilesData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -99089,6 +99119,9 @@ export type UploadKnowledgeFileData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -99342,6 +99375,9 @@ export type PromoteAttachmentToKnowledgeFileData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -101745,7 +101781,7 @@ export type GetModelsWithApiKeysData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -102986,7 +103022,7 @@ export type GetLlmOauthClientsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -103168,6 +103204,9 @@ export type CreateLlmOauthClientData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -103966,7 +104005,7 @@ export type GetLlmProviderApiKeysData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -104130,6 +104169,9 @@ export type CreateLlmProviderApiKeyData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -105640,7 +105682,7 @@ export type GetMcpOauthClientsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -105785,6 +105827,9 @@ export type CreateMcpOauthClientData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -114585,7 +114630,7 @@ export type GetOauthClientsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -114780,6 +114825,9 @@ export type CreateOauthClientData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -129628,7 +129676,7 @@ export type GetPluginsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -129807,6 +129855,9 @@ export type CreatePluginData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -130129,6 +130180,9 @@ export type ImportGithubPluginMarketplaceData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
@@ -130437,6 +130491,9 @@ export type ImportGithubPluginData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -132183,7 +132240,7 @@ export type GetProjectsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -132332,6 +132389,9 @@ export type CreateProjectData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -134448,7 +134508,7 @@ export type ListRuntimeCredentialsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -134578,6 +134638,9 @@ export type CreateRuntimeCredentialData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -137119,6 +137182,9 @@ export type CreateServiceAccountData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
@@ -139044,7 +139110,7 @@ export type GetSkillsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -139257,6 +139323,9 @@ export type CreateSkillData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -141481,6 +141550,9 @@ export type ImportGithubSkillsData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -147592,7 +147664,7 @@ export type GetAllVirtualApiKeysData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -147770,6 +147842,9 @@ export type CreateVirtualApiKeyData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -151883,6 +151958,9 @@ export type SearchInitialPermissionSubjectsResponses = {
             type: 'serviceAccount';
             id: string;
         } | {
+            type: 'oauthClient';
+            id: string;
+        } | {
             type: 'role';
             id: string;
         } | {
@@ -152084,6 +152162,9 @@ export type SearchResourcePermissionSubjectsResponses = {
             type: 'serviceAccount';
             id: string;
         } | {
+            type: 'oauthClient';
+            id: string;
+        } | {
             type: 'role';
             id: string;
         } | {
@@ -152196,6 +152277,9 @@ export type GetResourcePermissionsResponses = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
@@ -152214,6 +152298,9 @@ export type GetResourcePermissionsResponses = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -152236,6 +152323,9 @@ export type GetResourcePermissionsResponses = {
             id: string;
         } | {
             type: 'serviceAccount';
+            id: string;
+        } | {
+            type: 'oauthClient';
             id: string;
         } | {
             type: 'role';
@@ -152261,6 +152351,9 @@ export type UpdateResourcePermissionsData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -152369,6 +152462,9 @@ export type UpdateResourcePermissionsResponses = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
@@ -152387,6 +152483,9 @@ export type UpdateResourcePermissionsResponses = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -152409,6 +152508,9 @@ export type UpdateResourcePermissionsResponses = {
             id: string;
         } | {
             type: 'serviceAccount';
+            id: string;
+        } | {
+            type: 'oauthClient';
             id: string;
         } | {
             type: 'role';

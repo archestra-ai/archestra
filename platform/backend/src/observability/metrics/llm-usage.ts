@@ -3,6 +3,7 @@
  * proxy's adapters read it. It lives below both, so the metrics need no adapter
  * and the core layer no proxy route.
  */
+import type { SupportedProvider } from "@archestra/shared";
 import type { Anthropic, Cohere, Minimax, OpenAi, Zhipuai } from "@/types";
 
 export function anthropicUsageTokens(usage: Anthropic.Types.Usage) {
@@ -73,7 +74,16 @@ export function ollamaNativeUsageTokens(response: {
   };
 }
 
-export function openAIUsageTokens(usage: OpenAi.Types.Usage) {
+/**
+ * `reasoningOutsideCompletion` is the dialect of providers whose
+ * `completion_tokens` leaves `reasoning_tokens` out (see
+ * `reportsReasoningOutsideCompletion`). Reasoning is billed as output, so it
+ * is folded in: `output` always includes reasoning.
+ */
+export function openAIUsageTokens(
+  usage: OpenAi.Types.Usage,
+  options: { reasoningOutsideCompletion?: boolean } = {},
+) {
   // OpenAI reports cached tokens as a SUBSET already inside prompt_tokens, so
   // subtract them to get the uncached input and avoid double-counting.
   const cacheRead =
@@ -83,15 +93,12 @@ export function openAIUsageTokens(usage: OpenAi.Types.Usage) {
     | { cache_write_tokens?: number; cache_write_1h_tokens?: number }
     | undefined;
   const cacheWrite = details?.cache_write_tokens ?? 0;
-  const reasoning =
-    (
-      usage.completion_tokens_details as
-        | { reasoning_tokens?: number }
-        | undefined
-    )?.reasoning_tokens ?? 0;
+  const reasoning = reasoningTokensOf(usage);
   return {
     input: Math.max(0, (usage.prompt_tokens ?? 0) - cacheRead - cacheWrite),
-    output: usage.completion_tokens ?? 0,
+    output:
+      (usage.completion_tokens ?? 0) +
+      (options.reasoningOutsideCompletion ? reasoning : 0),
     cacheRead,
     cacheWrite,
     cacheWrite1h: details?.cache_write_1h_tokens,
@@ -99,14 +106,42 @@ export function openAIUsageTokens(usage: OpenAi.Types.Usage) {
   };
 }
 
-/**
- * xAI speaks the OpenAI wire, but its `completion_tokens` leaves out
- * `completion_tokens_details.reasoning_tokens` (its `total_tokens` is prompt +
- * completion + reasoning). Reasoning is billed as output, so fold it in.
- */
 export function xaiUsageTokens(usage: OpenAi.Types.Usage) {
-  const tokens = openAIUsageTokens(usage);
-  return { ...tokens, output: tokens.output + tokens.reasoning };
+  return openAIUsageTokens(usage, { reasoningOutsideCompletion: true });
+}
+
+/**
+ * Whether an OpenAI-wire provider's `completion_tokens` leaves
+ * `completion_tokens_details.reasoning_tokens` out. xAI's does: its
+ * `total_tokens` is prompt + completion + reasoning. Every other OpenAI-wire
+ * provider, and every translator onto that wire, counts reasoning inside.
+ */
+export function reportsReasoningOutsideCompletion(
+  provider: SupportedProvider,
+): boolean {
+  return provider === "xai";
+}
+
+/**
+ * An OpenAI-wire usage object rewritten into one reasoning dialect: with
+ * reasoning inside `completion_tokens`, or left out of it. `total_tokens`
+ * counts reasoning either way, so it is left as reported.
+ */
+export function withReasoningOutsideCompletion<
+  T extends Pick<
+    OpenAi.Types.Usage,
+    "completion_tokens" | "completion_tokens_details"
+  >,
+>(usage: T, outside: boolean): T {
+  const reasoning = reasoningTokensOf(usage);
+  if (!reasoning) return usage;
+  const completion = usage.completion_tokens ?? 0;
+  return {
+    ...usage,
+    completion_tokens: outside
+      ? Math.max(0, completion - reasoning)
+      : completion + reasoning,
+  };
 }
 
 export function zhipuaiUsageTokens(usage: Zhipuai.Types.Usage) {
@@ -114,4 +149,18 @@ export function zhipuaiUsageTokens(usage: Zhipuai.Types.Usage) {
     input: usage.prompt_tokens,
     output: usage.completion_tokens,
   };
+}
+
+// === Internal helpers ===
+
+function reasoningTokensOf(
+  usage: Pick<OpenAi.Types.Usage, "completion_tokens_details">,
+): number {
+  return (
+    (
+      usage.completion_tokens_details as
+        | { reasoning_tokens?: number }
+        | undefined
+    )?.reasoning_tokens ?? 0
+  );
 }

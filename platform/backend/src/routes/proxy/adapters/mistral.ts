@@ -161,7 +161,7 @@ class MistralStreamAdapter
   private delegate: OpenAIStreamAdapter;
 
   constructor(request?: MistralRequest) {
-    this.delegate = new OpenAIStreamAdapter("openai", request);
+    this.delegate = new OpenAIStreamAdapter({ clientRequest: request });
   }
 
   get state() {

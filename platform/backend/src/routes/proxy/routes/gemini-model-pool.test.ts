@@ -190,7 +190,7 @@ const poolTest = test.extend<{
   },
 });
 
-for (const wire of ["openai", "anthropic"] as const) {
+for (const wire of ["openai", "anthropic", "xai"] as const) {
   for (const stream of [false, true]) {
     poolTest(
       `answers ${wire} through the selected Gemini key and model (stream=${stream})`,
@@ -226,14 +226,15 @@ for (const wire of ["openai", "anthropic"] as const) {
         ]);
         if (stream)
           expect(response.body).toContain(
-            wire === "openai" ? "[DONE]" : "event: message_stop",
+            wire === "anthropic" ? "event: message_stop" : "[DONE]",
           );
-        else if (wire === "openai")
+        else if (wire !== "anthropic")
           expect(response.json()).toMatchObject({
             model: "gemini-pool",
             usage: {
               prompt_tokens: 20,
-              completion_tokens: 5,
+              // xAI's dialect leaves the 2 thoughts out of completion_tokens.
+              completion_tokens: wire === "xai" ? 3 : 5,
               total_tokens: 25,
               prompt_tokens_details: { cached_tokens: 4 },
               completion_tokens_details: { reasoning_tokens: 2 },
@@ -245,11 +246,15 @@ for (const wire of ["openai", "anthropic"] as const) {
           .where(eq(schema.interactionsTable.modelPoolId, pool.poolId));
         expect(rows).toHaveLength(1);
         expect(rows[0]).toMatchObject({
-          type:
-            wire === "openai" ? "openai:chatCompletions" : "anthropic:messages",
+          type: {
+            openai: "openai:chatCompletions",
+            anthropic: "anthropic:messages",
+            xai: "xai:chatCompletions",
+          }[wire],
           model: "gemini-3.1-flash-lite",
           providerApiKeyId: pool.keyId,
           inputTokens: 16,
+          // 3 visible + 2 thoughts, counted once whatever the client's route.
           outputTokens: 5,
           cacheReadTokens: 4,
           cost: "0.0000280000",

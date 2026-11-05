@@ -12,7 +12,10 @@ import type {
 import config from "@/config";
 import logger from "@/logging";
 import { metrics } from "@/observability";
-import { openAIUsageTokens } from "@/observability/metrics/llm-usage";
+import {
+  openAIUsageTokens,
+  withReasoningOutsideCompletion,
+} from "@/observability/metrics/llm-usage";
 import { priceOpenAiAudioChat } from "@/services/media-pricing";
 import {
   decodeOpenAiCodexCredential,
@@ -71,7 +74,15 @@ type OpenAiHeaders = OpenAi.Types.ChatCompletionsHeaders;
 type OpenAiStreamChunk = OpenAi.Types.ChatCompletionChunk;
 type OpenAiEmbeddingRequest = OpenAi.Types.EmbeddingRequest;
 type OpenAiEmbeddingResponse = OpenAi.Types.EmbeddingResponse;
-type OpenAiUsageReader = typeof openAIUsageTokens;
+/**
+ * How an OpenAI-wire provider's adapters read and write its usage.
+ * `reasoningOutsideCompletion` is xAI's dialect (see
+ * `reportsReasoningOutsideCompletion`).
+ */
+type OpenAiAdapterOptions = {
+  provider?: SupportedProvider;
+  reasoningOutsideCompletion?: boolean;
+};
 
 type OpenAiToolResultImageBlock = {
   type: "image_url";
@@ -881,19 +892,19 @@ export class OpenAIResponseAdapter
 {
   readonly provider: SupportedProvider;
   private response: OpenAiResponse;
-  private readonly readUsage: OpenAiUsageReader;
+  private readonly reasoningOutsideCompletion: boolean;
 
   constructor(
     response: OpenAiResponse,
-    provider: SupportedProvider = "openai",
-    // OpenAI-wire providers that report reasoning outside completion_tokens
-    // (xAI) pass a reader that folds it into output.
-    readUsage: OpenAiUsageReader = openAIUsageTokens,
+    {
+      provider = "openai",
+      reasoningOutsideCompletion = false,
+    }: OpenAiAdapterOptions = {},
   ) {
     assertResponseHasChoices(response, provider);
     this.response = response;
     this.provider = provider;
-    this.readUsage = readUsage;
+    this.reasoningOutsideCompletion = reasoningOutsideCompletion;
   }
 
   getId(): string {
@@ -960,7 +971,9 @@ export class OpenAIResponseAdapter
       };
     }
     const { input, output, cacheRead, cacheWrite, cacheWrite1h, reasoning } =
-      this.readUsage(this.response.usage);
+      openAIUsageTokens(this.response.usage, {
+        reasoningOutsideCompletion: this.reasoningOutsideCompletion,
+      });
     return withAudioTokenCost(
       {
         inputTokens: input,
@@ -1131,12 +1144,17 @@ export class OpenAIStreamAdapter
   // with empty `choices`, after the finish chunk.
   private readonly clientRequestedUsage: boolean;
 
-  constructor(
-    provider: SupportedProvider = "openai",
-    clientRequest?: OpenAiStreamUsageRequest,
-    private readonly readUsage: OpenAiUsageReader = openAIUsageTokens,
-  ) {
+  private readonly reasoningOutsideCompletion: boolean;
+
+  constructor({
+    provider = "openai",
+    clientRequest,
+    reasoningOutsideCompletion = false,
+  }: OpenAiAdapterOptions & {
+    clientRequest?: OpenAiStreamUsageRequest;
+  } = {}) {
     this.provider = provider;
+    this.reasoningOutsideCompletion = reasoningOutsideCompletion;
     this.clientRequestedUsage =
       clientRequest?.stream_options?.include_usage === true;
     this.state = {
@@ -1174,7 +1192,9 @@ export class OpenAIStreamAdapter
     // when stream_options.include_usage is true
     if (chunk.usage) {
       this.upstreamUsage = chunk.usage;
-      const tokens = this.readUsage(chunk.usage);
+      const tokens = openAIUsageTokens(chunk.usage, {
+        reasoningOutsideCompletion: this.reasoningOutsideCompletion,
+      });
       this.state.usage = withAudioTokenCost(
         {
           inputTokens: tokens.input,
@@ -1449,10 +1469,7 @@ export class OpenAIStreamAdapter
     // OpenAI-compatible models) never see token counts. `state.usage.inputTokens` is net of
     // cache reads (see processChunk above), so this must recombine them into a gross
     // `prompt_tokens` with `prompt_tokens_details` — mirrors `toProviderResponse()` below.
-    const usage = withUpstreamUsageDetails(
-      toOpenAiStreamUsageWithCache(this.state.usage),
-      this.upstreamUsage,
-    );
+    const usage = this.rebuiltUsage();
     if (usage && this.clientRequestedUsage) {
       const usageChunk: OpenAiStreamChunk = {
         id: finalChunk.id,
@@ -1511,10 +1528,7 @@ export class OpenAIStreamAdapter
             : ((this.state.stopReason as OpenAi.Types.FinishReason) ?? "stop"),
         },
       ],
-      usage: withUpstreamUsageDetails(
-        toOpenAiStreamUsageWithCache(this.state.usage),
-        this.upstreamUsage,
-      ) ?? {
+      usage: this.rebuiltUsage() ?? {
         prompt_tokens: 0,
         completion_tokens: 0,
         total_tokens: 0,
@@ -1544,6 +1558,22 @@ export class OpenAIStreamAdapter
       return "";
     }
     return this.getTextSuffix(firstText);
+  }
+
+  /**
+   * The wire usage rebuilt from the proxy's counts, in the provider's own
+   * dialect: `state.usage.outputTokens` includes reasoning, so a provider that
+   * reports it outside `completion_tokens` gets it taken back out, and a
+   * streamed turn reports what the same turn would report unstreamed.
+   */
+  private rebuiltUsage() {
+    const usage = withUpstreamUsageDetails(
+      toOpenAiStreamUsageWithCache(this.state.usage),
+      this.upstreamUsage,
+    );
+    return usage && this.reasoningOutsideCompletion
+      ? withReasoningOutsideCompletion(usage, true)
+      : usage;
   }
 }
 
@@ -1691,7 +1721,7 @@ export const openaiAdapterFactory: LLMProvider<
   createStreamAdapter(
     request?: OpenAiRequest,
   ): LLMStreamAdapter<OpenAiStreamChunk, OpenAiResponse> {
-    return new OpenAIStreamAdapter("openai", request);
+    return new OpenAIStreamAdapter({ clientRequest: request });
   },
 
   extractApiKey(headers: OpenAiHeaders): string | undefined {

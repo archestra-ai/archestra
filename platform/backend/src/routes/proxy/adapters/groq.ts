@@ -151,7 +151,7 @@ class GroqStreamAdapter
   private delegate: OpenAIStreamAdapter;
 
   constructor(request?: GroqRequest) {
-    this.delegate = new OpenAIStreamAdapter("openai", request);
+    this.delegate = new OpenAIStreamAdapter({ clientRequest: request });
   }
 
   get state() {

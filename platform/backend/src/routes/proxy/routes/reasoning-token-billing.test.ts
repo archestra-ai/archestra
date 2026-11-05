@@ -221,10 +221,22 @@ describe("reasoning tokens reported outside output are billed as output", () => 
         payload: {
           model: "grok-4.7",
           stream: streaming,
+          ...(streaming ? { stream_options: { include_usage: true } } : {}),
           messages: [{ role: "user", content: "Hi" }],
         },
       });
       expect(response.statusCode, response.body).toBe(200);
+
+      // The client gets xAI's own usage either way: reasoning beside
+      // completion_tokens, not inside it.
+      const clientUsage = streaming
+        ? response.body
+            .split("\n\n")
+            .filter((line) => line.startsWith("data: {"))
+            .map((line) => JSON.parse(line.slice(6)))
+            .find((chunk) => chunk.usage)?.usage
+        : response.json().usage;
+      expect(clientUsage).toMatchObject(usage);
 
       await expectBilledAsOutput(agent.id);
       await app.close();

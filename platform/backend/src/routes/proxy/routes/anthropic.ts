@@ -71,7 +71,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await claudeCodeToolTokenCountObserver.prepare(
             request,
             body,
-            resolveUpstream(request),
+            upstream,
           );
         }
       },

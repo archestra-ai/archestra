@@ -161,11 +161,12 @@ export function createProxyPreHandler(params: {
       : "";
     const pathAfterPrefix = request.url.replace(apiPrefix, "");
     const uuidMatch = pathAfterPrefix.match(UUID_REGEX);
+    const forwardedPath = uuidMatch ? uuidMatch[2] || "" : pathAfterPrefix;
 
     if (uuidMatch) {
       const remainingPath = uuidMatch[2] || "";
       const originalUrl = request.raw.url;
-      request.raw.url = `${apiPrefix}${upstreamPathPrefix}${remainingPath}`;
+      request.raw.url = `${apiPrefix}${remainingPath}`;
 
       logger.info(
         {
@@ -178,9 +179,6 @@ export function createProxyPreHandler(params: {
         `${providerName} proxy preHandler: URL rewritten (UUID stripped)`,
       );
     } else {
-      if (upstreamPathPrefix) {
-        request.raw.url = `${apiPrefix}${upstreamPathPrefix}${pathAfterPrefix}`;
-      }
       logger.info(
         {
           method: request.method,
@@ -193,7 +191,8 @@ export function createProxyPreHandler(params: {
     }
 
     // Strip last: the body hooks (e.g. Claude Code's count observer) still
-    // read X-Archestra-* headers such as the agent id.
+    // read X-Archestra-* headers such as the agent id, and match request.url
+    // before any upstream base-path prefix is added for @fastify/http-proxy.
     cleanForwardedBody(
       request,
       beforeCleanBody,
@@ -201,6 +200,9 @@ export function createProxyPreHandler(params: {
         ? { provider: provider.data, baseUrl: resolvedUpstream }
         : undefined,
     ).then(() => {
+      if (upstreamPathPrefix) {
+        request.raw.url = `${apiPrefix}${upstreamPathPrefix}${forwardedPath}`;
+      }
       stripArchestraRequestHeaders(request);
       next();
     }, next);

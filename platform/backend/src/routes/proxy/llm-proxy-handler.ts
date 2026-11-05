@@ -182,6 +182,7 @@ import {
   withoutResponsesModelOutputSSE,
 } from "./adapters/openai-responses";
 import {
+  ANTHROPIC_SUBSCRIPTION_UPSTREAM,
   assertConsistentUserCredentials,
   assertPlatformAuthenticated,
   attemptJwksAuth,
@@ -957,7 +958,7 @@ async function handleObservedLLMProxy<
         );
       }
       apiKey = `Bearer:${claudeCodeToken}`;
-      perKeyBaseUrl = "https://api.anthropic.com";
+      perKeyBaseUrl = ANTHROPIC_SUBSCRIPTION_UPSTREAM;
     } else {
       throw new ApiError(
         400,

@@ -17,6 +17,7 @@
 import { Readable } from "node:stream";
 import {
   CLAUDE_CLIENT_ID,
+  CLAUDE_CODE_CLIENT_ID,
   CLAUDE_METADATA_SESSION_SOURCE,
   resolveAgentRuntimeTiers,
 } from "@archestra/shared";
@@ -55,10 +56,13 @@ import { secretManager } from "@/secrets-manager";
 import { handleServerError } from "@/server/error-handler";
 import { buildAgentRunLaunchSpec } from "@/services/agent-runtime/launch-spec";
 import { resolveAgentRunLimits } from "@/services/agent-runtime/runtime-tiers";
+import { getObservedClaudeCodeToolTokenCount } from "@/services/claude-code-tool-token-count";
+import { buildClaudeMcpToolDefinitions } from "@/services/mcp-tool-token-estimate";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { createAnthropicTestClient } from "@/test/llm-provider-stubs";
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
+import { drainBackgroundWork } from "@/utils/background-work";
 import { anthropicAdapterFactory } from "../adapters";
 import anthropicProxyRoutes from "./anthropic";
 
@@ -1967,7 +1971,7 @@ describe("Claude Code subscription run one-off virtual key resolution", () => {
         authorization: req.headers.authorization,
         xApiKey: req.headers["x-api-key"],
       });
-      return { input_tokens: 99 };
+      return { input_tokens: 799 };
     });
     await customUpstream.listen({ port: 0, host: "127.0.0.1" });
     const customAddress = customUpstream.server.address();
@@ -2012,7 +2016,7 @@ describe("Claude Code subscription run one-off virtual key resolution", () => {
         callback?.(null, {
           statusCode: 200,
           headers: { "content-type": "application/json" },
-          body: Readable.from([JSON.stringify({ input_tokens: 42 })]),
+          body: Readable.from([JSON.stringify({ input_tokens: 642 })]),
         });
         return undefined as never;
       }
@@ -2102,7 +2106,35 @@ describe("Claude Code subscription run one-off virtual key resolution", () => {
 
       // 5. Real catch-all request routes a redeemed subscription token to https://api.anthropic.com
       //    even when anthropicProxyRoutes was registered against a custom base URL, while
-      //    non-subscription requests still reach the registered custom upstream.
+      //    non-subscription requests still reach the registered custom upstream and both
+      //    preserve Claude Code count_tokens observation on path-bearing base URLs.
+      const observedToolSurface = {
+        organizationId: agent.organizationId,
+        gatewayId: agent.id,
+        serverName: "gateway",
+        tools: [
+          {
+            name: "documents__read_0",
+            description: attestToolDescription({
+              organizationId: agent.organizationId,
+              gatewayId: agent.id,
+              advertisedName: "documents__read_0",
+              kind: "t",
+              description: "Read document 0.",
+            }),
+            inputSchema: {
+              type: "object",
+              properties: { id: { type: "string" } },
+            } as Record<string, unknown>,
+          },
+        ],
+      };
+      const countTokensPayload = {
+        model: "claude-opus-4-20250514",
+        tools: buildClaudeMcpToolDefinitions(observedToolSurface),
+        messages: [{ role: "user", content: "foo" }],
+      };
+
       const countTokensWithRunKey = await app.inject({
         method: "POST",
         url: `/v1/anthropic/${agent.id}/v1/messages/count_tokens`,
@@ -2110,15 +2142,14 @@ describe("Claude Code subscription run one-off virtual key resolution", () => {
           "content-type": "application/json",
           authorization: `Bearer ${podToken}`,
           "x-archestra-virtual-key": spec.secretEnv.ARCHESTRA_VIRTUAL_KEY,
+          "x-archestra-agent-id": CLAUDE_CODE_CLIENT_ID,
           "anthropic-version": "2023-06-01",
         },
-        payload: {
-          model: "claude-opus-4-20250514",
-          messages: [{ role: "user", content: "Count my tokens" }],
-        },
+        payload: countTokensPayload,
       });
+      await drainBackgroundWork();
       expect(countTokensWithRunKey.statusCode).toBe(200);
-      expect(countTokensWithRunKey.json()).toEqual({ input_tokens: 42 });
+      expect(countTokensWithRunKey.json()).toEqual({ input_tokens: 642 });
       expect(customUpstreamRequests).toHaveLength(0);
       expect(capturedAnthropicPassthroughRequests.at(-1)).toMatchObject({
         origin: "https://api.anthropic.com",
@@ -2128,6 +2159,13 @@ describe("Claude Code subscription run one-off virtual key resolution", () => {
           authorization: `Bearer ${subscriptionToken}`,
           "anthropic-beta": "oauth-2025-04-20",
         },
+      });
+      expect(
+        await getObservedClaudeCodeToolTokenCount(observedToolSurface),
+      ).toEqual({
+        total: 142,
+        model: "claude-opus-4-20250514",
+        observedAt: expect.any(String),
       });
 
       const nonRunCountTokensKey = await makePassthroughCredential({
@@ -2141,16 +2179,15 @@ describe("Claude Code subscription run one-off virtual key resolution", () => {
           "content-type": "application/json",
           authorization: `Bearer ${nonRunCountTokensKey}`,
           "x-archestra-virtual-key": nonRunCountTokensKey,
+          "x-archestra-agent-id": CLAUDE_CODE_CLIENT_ID,
           "x-api-key": "sk-ant-api03-custom",
           "anthropic-version": "2023-06-01",
         },
-        payload: {
-          model: "claude-opus-4-20250514",
-          messages: [{ role: "user", content: "Count on custom upstream" }],
-        },
+        payload: countTokensPayload,
       });
+      await drainBackgroundWork();
       expect(countTokensWithCustomKey.statusCode).toBe(200);
-      expect(countTokensWithCustomKey.json()).toEqual({ input_tokens: 99 });
+      expect(countTokensWithCustomKey.json()).toEqual({ input_tokens: 799 });
       expect(customUpstreamRequests).toEqual([
         {
           url: "/anthropic/v1/messages/count_tokens",
@@ -2158,6 +2195,13 @@ describe("Claude Code subscription run one-off virtual key resolution", () => {
           xApiKey: "sk-ant-api03-custom",
         },
       ]);
+      expect(
+        await getObservedClaudeCodeToolTokenCount(observedToolSurface),
+      ).toEqual({
+        total: 299,
+        model: "claude-opus-4-20250514",
+        observedAt: expect.any(String),
+      });
 
       // 6. If the owner loses access to the agent, model listing is refused with 403
       const agentPolicy = await ResourcePermissionPolicyModel.find({

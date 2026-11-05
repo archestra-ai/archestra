@@ -231,7 +231,7 @@ export async function validateVirtualApiKey(params: {
       if (claudeCodeToken) {
         return {
           apiKey: `Bearer:${claudeCodeToken}`,
-          baseUrl: "https://api.anthropic.com",
+          baseUrl: ANTHROPIC_SUBSCRIPTION_UPSTREAM,
           ...(await virtualKeyIdentity(resolved.virtualKey)),
           passthroughVirtualKeyId: resolved.virtualKey.id,
         };
@@ -1722,7 +1722,7 @@ function trimTrailingSlash(url: string | undefined): string | undefined {
   return url?.replace(/\/+$/, "");
 }
 
-const ANTHROPIC_SUBSCRIPTION_UPSTREAM = "https://api.anthropic.com";
+export const ANTHROPIC_SUBSCRIPTION_UPSTREAM = "https://api.anthropic.com";
 const passthroughUpstreamOverrides = new WeakMap<object, string>();
 
 export function getPassthroughUpstream(

@@ -28,7 +28,6 @@ describe("SSO sign-in when the IdP reassigns an email to a new subject", () => {
       makeUser,
       makeOrganization,
       makeMember,
-      makeAccount,
       makeIdentityProvider,
     }) => {
       config.enterpriseFeatures.core = true;
@@ -53,10 +52,6 @@ describe("SSO sign-in when the IdP reassigns an email to a new subject", () => {
           pkce: false,
           mapping: { id: "sub", email: "email", name: "name" },
         },
-      });
-      await makeAccount(departedUserId, {
-        providerId: PROVIDER,
-        accountId: DEPARTED_SUBJECT,
       });
       profile = {
         sub: NEW_SUBJECT,
@@ -85,31 +80,61 @@ describe("SSO sign-in when the IdP reassigns an email to a new subject", () => {
     },
   );
 
-  test("does not sign the new subject into the departed user's account", async () => {
-    const response = await signIn();
-    const session = await auth.api.getSession({
-      headers: new Headers({ cookie: cookies(response) }),
+  test("refuses to sign the new subject into the departed user's account", async ({
+    makeAccount,
+  }) => {
+    await makeAccount(departedUserId, {
+      providerId: PROVIDER,
+      accountId: DEPARTED_SUBJECT,
     });
 
-    expect(session?.user.id).not.toBe(departedUserId);
-    expect(
-      (await AccountModel.getAllByUserId(departedUserId)).map(
-        (account) => account.accountId,
-      ),
-    ).toEqual([DEPARTED_SUBJECT]);
+    const response = await signIn();
+
+    expectSubjectConflict(response);
+    expect(await sessionUserId(response)).toBeUndefined();
+    expect(await subjectsOf(departedUserId)).toEqual([DEPARTED_SUBJECT]);
   });
 
-  test("does not sign the new subject in after the departed user left the organization", async () => {
-    // The user row outlives its last membership when it was removed through
-    // a path that does not delete users (or before removal deleted them).
+  test("refuses the new subject after the departed user left the organization", async ({
+    makeAccount,
+  }) => {
+    // The user row outlives its last membership when it was removed through a
+    // path that does not delete users. Sign-in must not revive it for someone
+    // else, or organization provisioning hands them the old account's data.
+    await makeAccount(departedUserId, {
+      providerId: PROVIDER,
+      accountId: DEPARTED_SUBJECT,
+    });
     await db.delete(schema.membersTable);
 
     const response = await signIn();
-    const session = await auth.api.getSession({
-      headers: new Headers({ cookie: cookies(response) }),
-    });
 
-    expect(session?.user.id).not.toBe(departedUserId);
+    expectSubjectConflict(response);
+    expect(await sessionUserId(response)).toBeUndefined();
+    expect(await db.select().from(schema.membersTable)).toEqual([]);
+  });
+
+  test("still signs in the subject that is already linked", async ({
+    makeAccount,
+  }) => {
+    await makeAccount(departedUserId, {
+      providerId: PROVIDER,
+      accountId: DEPARTED_SUBJECT,
+    });
+    profile.sub = DEPARTED_SUBJECT;
+
+    const response = await signIn();
+
+    expect(response.headers.get("location")).toBe(`${ORIGIN}/chat`);
+    expect(await sessionUserId(response)).toBe(departedUserId);
+  });
+
+  test("still links a user's first subject from this provider by email", async () => {
+    const response = await signIn();
+
+    expect(response.headers.get("location")).toBe(`${ORIGIN}/chat`);
+    expect(await sessionUserId(response)).toBe(departedUserId);
+    expect(await subjectsOf(departedUserId)).toEqual([NEW_SUBJECT]);
   });
 });
 
@@ -133,6 +158,25 @@ async function signIn() {
       { headers: { cookie: cookies(start) } },
     ),
   );
+}
+
+function expectSubjectConflict(response: Response) {
+  expect(response.status).toBe(302);
+  const location = new URL(response.headers.get("location") ?? "");
+  expect(location.searchParams.get("error")).toBe("SSO_SUBJECT_CONFLICT");
+}
+
+async function sessionUserId(response: Response) {
+  const session = await auth.api.getSession({
+    headers: new Headers({ cookie: cookies(response) }),
+  });
+  return session?.user.id;
+}
+
+async function subjectsOf(userId: string) {
+  return (await AccountModel.getAllByUserId(userId))
+    .filter((account) => account.providerId === PROVIDER)
+    .map((account) => account.accountId);
 }
 
 function cookies(response: Response) {

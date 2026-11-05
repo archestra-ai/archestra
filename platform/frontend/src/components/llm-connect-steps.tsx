@@ -71,11 +71,13 @@ import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
-import { useLlmOauthClients } from "@/lib/llm-oauth-clients.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useLlmProxy, useUpdateLlmProxy } from "@/lib/llm-proxy.query";
 import { type ModelPool, useModelPools } from "@/lib/model-pools.query";
-import { useCreateOauthClient } from "@/lib/oauth-clients.query";
+import {
+  useCreateOauthClient,
+  useOauthClients,
+} from "@/lib/oauth-clients.query";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
 import {
@@ -84,7 +86,7 @@ import {
 } from "@/lib/virtual-api-keys.query";
 
 type LlmOauthClient =
-  archestraApiTypes.GetLlmOauthClientsResponses["200"]["data"][number];
+  archestraApiTypes.GetOauthClientsResponses["200"]["data"][number];
 
 /** How callers authenticate to the LLM Proxy. */
 export type LlmAuthMethod = "standard" | "passthrough" | "oauth" | "idp";
@@ -144,8 +146,9 @@ export function LlmConnectSteps({
     enabled: auth === "standard" || auth === "passthrough",
     toastOnError: false,
   });
-  const { data: llmOauthClients } = useLlmOauthClients({
+  const { data: llmOauthClients } = useOauthClients({
     limit: 100,
+    capability: LLM_PROXY_OAUTH_SCOPE,
     enabled: auth === "oauth",
     toastOnError: false,
   });

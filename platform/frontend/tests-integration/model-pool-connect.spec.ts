@@ -203,10 +203,11 @@ async function mockPool({
       url: "/api/llm-virtual-keys",
       body: makeVirtualKeysList({ keys: virtualKeys }),
     },
-    // Both client APIs include the explicit pool grants.
-    ...["/api/llm-oauth-clients", "/api/oauth-clients"].map((url) => ({
-      method: "get" as const,
-      url,
+    // The managed list exposes automatic access; keep the LLM capability filter.
+    {
+      method: "get",
+      url: "/api/oauth-clients",
+      query: { capability: "llm:proxy" },
       body: {
         data: oauthClients,
         pagination: {
@@ -218,7 +219,7 @@ async function mockPool({
           hasPrev: false,
         },
       },
-    })),
+    },
   ]);
 }
 

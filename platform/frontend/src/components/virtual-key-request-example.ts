@@ -111,11 +111,12 @@ export function buildCurlExample(params: {
     if (passthrough) return null;
     const [provider, ...modelIdParts] = model.split(":");
     const modelId = modelIdParts.join(":");
+    // The router refuses chat completions for any model its provider
+    // publishes as Responses only, whichever provider that is.
     const useResponses =
       !isPool &&
-      ((provider === "openai" && requiresOpenAiResponsesApi(modelId)) ||
-        (provider === "github-copilot" &&
-          requiresResponsesApi(supportedEndpoints)));
+      (requiresResponsesApi(supportedEndpoints) ||
+        (provider === "openai" && requiresOpenAiResponsesApi(modelId)));
     return curl(
       `${baseUrl}/${useResponses ? "responses" : "chat/completions"}`,
       [`Authorization: Bearer ${keyValue}`, "Content-Type: application/json"],

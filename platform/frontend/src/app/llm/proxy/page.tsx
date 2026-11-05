@@ -388,7 +388,8 @@ function ProxyEndpointCard({
                   ),
                 };
               })}
-              className={moreClassName}
+              // Pinned right, so leftover room sits between the tabs and More.
+              className={cn(moreClassName, "ml-auto")}
               contentClassName="w-64"
             />
           )}

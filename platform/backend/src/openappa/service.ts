@@ -2299,6 +2299,37 @@ async function governedReadPeerMessage(params: {
 }
 
 /**
+ * Opens an authenticated session's retained offer refusal, including encrypted
+ * and plaintext-escaped receipts, without executing or consuming the offer.
+ */
+export async function loadRetainedOfferRefusal(
+  params: Parameters<typeof OpenAppaSessionModel.recordedOfferDecisions>[0],
+): Promise<string | null> {
+  const records = await OpenAppaSessionModel.recordedOfferDecisions(params);
+  if (records.length === 0) return null;
+  // This pure decoder needs no runtime initialization or database connection:
+  // the model has already verified the receipt's authenticated session scope.
+  const module = await import("@archestra/openappa-rs");
+  return withOpenappaContentEncryption(
+    params.organizationId,
+    params.sessionId,
+    async (encryption) =>
+      module.retainedOfferRefusal(
+        JSON.stringify({
+          organization_id: params.organizationId,
+          session_id: params.sessionId,
+          offer_id: params.offerId,
+          records: records.map((row) => ({
+            operation_id: row.operationId,
+            decision: row.decision,
+          })),
+        }),
+        encryption,
+      ),
+  );
+}
+
+/**
  * Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
  * Session routing comes from the proxy-stamped current trajectory.
  */

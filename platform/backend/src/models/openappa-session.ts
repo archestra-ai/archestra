@@ -1,5 +1,6 @@
 import {
   and,
+  desc,
   eq,
   inArray,
   isNotNull,
@@ -318,16 +319,19 @@ class OpenAppaSessionModel {
   }
 
   /** Retained denial for an offer, including expired or already resolved offers. */
-  static async recordedOfferRefusal(params: {
+  static async recordedOfferDecisions(params: {
     organizationId: string;
     sessionId: string;
     callerId: string;
     parentId?: string;
     offerId: string;
-  }): Promise<string | null> {
+  }): Promise<Array<{ operationId: string; decision: unknown }>> {
     const operations = schema.openappaOperationsTable;
-    const [row] = await db
-      .select({ decision: operations.decision })
+    const rows = await db
+      .select({
+        operationId: operations.operationId,
+        decision: operations.decision,
+      })
       .from(operations)
       .innerJoin(
         table,
@@ -347,14 +351,20 @@ class OpenAppaSessionModel {
             ? eq(table.parentId, params.parentId)
             : isNull(table.parentId),
           eq(operations.status, "complete"),
-          sql`${operations.decision}->'offers' @> ${JSON.stringify([{ offer_id: params.offerId }])}::jsonb`,
+          // Encrypted and plaintext-escaped receipts must be opened by the
+          // native storage cipher before their offers can be inspected.
+          sql`(${operations.decision}->'offers' @> ${JSON.stringify([{ offer_id: params.offerId }])}::jsonb OR ${operations.decision} ? '__appa_encrypted')`,
         ),
       )
-      .limit(1);
-    const decision = row?.decision;
-    if (!decision || typeof decision !== "object") return null;
-    const feedback = (decision as Record<string, unknown>).feedback;
-    return typeof feedback === "string" && feedback.trim() ? feedback : null;
+      .orderBy(desc(operations.createdAt))
+      .limit(10_001);
+    if (rows.length > 10_000) {
+      throw new ApiError(
+        503,
+        "OpenAPPA offer lookup exceeds the retained receipt budget",
+      );
+    }
+    return rows;
   }
 
   /** Call rulings recorded by this exact session, never inherited fork history. */

@@ -18,7 +18,6 @@ import ConversationEnabledToolModel from "@/models/conversation-enabled-tool";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import OpenAppaDeploymentModel from "@/models/openappa-deployment";
 import OpenappaExternalConsultModel from "@/models/openappa-external-consult";
-import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
@@ -67,6 +66,7 @@ import {
   executeYell,
   listPeerMessages,
   loadOfferReview,
+  loadRetainedOfferRefusal,
   type OpenAppaSession,
   readPeerMessage,
 } from "@/openappa/service";
@@ -1208,7 +1208,7 @@ const registry = defineArchestraTools([
         }
         // Ownership alone does not establish a soft refusal. Unknown offers
         // must not turn a hard-denied session into an unenforced one.
-        const refusal = await OpenAppaSessionModel.recordedOfferRefusal({
+        const refusal = await loadRetainedOfferRefusal({
           organizationId: context.organizationId,
           sessionId: stamp.session_id,
           callerId: spender,

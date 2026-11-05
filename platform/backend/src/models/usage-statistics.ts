@@ -10,23 +10,33 @@ import {
   desc,
   eq,
   inArray,
+  isNull,
   type SQL,
   sql,
 } from "drizzle-orm";
-import type { PgColumn } from "drizzle-orm/pg-core";
+import type { PgColumn, PgSelect } from "drizzle-orm/pg-core";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type {
   AppUsageDimension,
   AppUsageResponse,
+  LlmUsageDimension,
+  LlmUsageResponse,
   McpToolCallUsageDimension,
   McpToolCallUsageResponse,
   SkillUsageDimension,
   SkillUsageResponse,
 } from "@/types";
-import { mcpToolCallBelongsToOrganization } from "./log-organization";
+import AgentTeamModel from "./agent-team";
+import {
+  interactionBelongsToOrganization,
+  mcpToolCallBelongsToOrganization,
+} from "./log-organization";
 import { MCP_TOOL_CALL_TOOL_NAME as TOOL_NAME } from "./mcp-tool-call-name";
-import StatisticsModel from "./statistics";
+import StatisticsModel, {
+  billedModelJoins,
+  llmUsageAggregates,
+} from "./statistics";
 
 /**
  * Grouped usage reporting: one row per distinct combination of the requested
@@ -406,6 +416,162 @@ class UsageStatisticsModel {
         contextTokens: Number(totals?.contextTokens ?? 0),
         users: Number(totals?.users ?? 0),
       },
+    };
+  }
+
+  /**
+   * LLM requests, tokens and spend, grouped by any mix of team, credential,
+   * provider, model and day. Each dimension keeps the meaning it has on its
+   * own Costs view, so a breakdown's row totals match that view: team as in
+   * {@link StatisticsModel.getTeamStatistics} (an agent shared with several
+   * teams counts in each), credential as in the LLM proxy statistics (proxy
+   * traffic only), and model as the billed model of
+   * {@link StatisticsModel.getModelStatistics}.
+   */
+  static async getLlmUsage(params: {
+    timeframe: StatisticsTimeFrame;
+    organizationId: string;
+    pagination: PaginationQuery;
+    groupBy: LlmUsageDimension[];
+    teamId?: string;
+    credentialId?: string;
+    provider?: string;
+    model?: string;
+  }): Promise<LlmUsageResponse> {
+    const i = schema.interactionsTable;
+    const agents = schema.agentsTable;
+    const teams = schema.teamsTable;
+    const keys = schema.virtualApiKeysTable;
+    const { groupBy, pagination, organizationId } = params;
+    const byModel = groupBy.includes("model") || params.model !== undefined;
+    const byTeam = groupBy.includes("teamId") || params.teamId !== undefined;
+    const byCredential =
+      groupBy.includes("credentialId") || params.credentialId !== undefined;
+
+    const billed = billedModelJoins();
+    const teamAssignments = AgentTeamModel.readAssignments(organizationId);
+    const method = sql<string>`COALESCE(${i.authMethod}, 'unknown')`;
+    const credential = sql<string | null>`CASE
+      WHEN ${method} = 'virtual_key' THEN ${i.virtualKeyId}::text
+      WHEN ${method} = 'passthrough_virtual_key' THEN ${i.passthroughVirtualKeyId}::text
+      WHEN ${method} = 'oauth_client_credentials' THEN ${i.authenticatedAppId}
+      ELSE NULL END`;
+    const provider = sql<string>`split_part(${i.type}, ':', 1)`;
+    const model = byModel ? billed.model : sql<string>`${i.model}`;
+
+    const dimensionColumns: Record<
+      LlmUsageDimension,
+      Record<string, SQL | PgColumn>
+    > = {
+      day: { day: utcDay(i.createdAt) },
+      teamId: { teamId: teams.id, teamName: teams.name },
+      credentialId: {
+        authMethod: method,
+        credentialId: credential,
+        credentialName: sql<string | null>`CASE
+          WHEN ${method} IN ('virtual_key', 'passthrough_virtual_key') THEN ${keys.name}
+          WHEN ${method} = 'oauth_client_credentials' THEN ${i.authenticatedAppName}
+          ELSE NULL END`,
+      },
+      provider: { provider },
+      model: { model },
+    };
+    const selected = selectDimensions(dimensionColumns, groupBy);
+    const aggregates = llmUsageAggregates(byModel);
+
+    const where = and(
+      ...StatisticsModel.timeframeConditions(params.timeframe),
+      byTeam || byCredential
+        ? eq(agents.organizationId, organizationId)
+        : interactionBelongsToOrganization(organizationId),
+      byTeam ? eq(teams.organizationId, organizationId) : undefined,
+      byTeam ? notDeleted(agents) : undefined,
+      byCredential
+        ? inArray(agents.agentType, ["llm_proxy", "profile"])
+        : undefined,
+      params.teamId ? eq(teams.id, params.teamId) : undefined,
+      params.credentialId ? eq(credential, params.credentialId) : undefined,
+      params.provider ? eq(provider, params.provider) : undefined,
+      params.model ? eq(model, params.model) : undefined,
+    );
+
+    // Join only what the requested dimensions need: the receipt expansion and
+    // the team grants each multiply rows, and each is wasted work otherwise.
+    const scoped = <Q extends PgSelect>(query: Q) => {
+      let q: PgSelect = query;
+      if (byModel)
+        q = q
+          .leftJoin(billed.receipt, billed.receiptOn)
+          .leftJoin(billed.facts, sql`true`);
+      if (byTeam || byCredential)
+        q = q.innerJoin(agents, eq(agents.id, i.profileId));
+      if (byTeam)
+        q = q
+          .leftJoin(
+            teamAssignments,
+            and(
+              isNull(i.billingTeamId),
+              eq(teamAssignments.agentId, agents.id),
+            ),
+          )
+          .innerJoin(
+            teams,
+            eq(
+              teams.id,
+              sql`COALESCE(${i.billingTeamId}, ${teamAssignments.teamId})`,
+            ),
+          );
+      if (groupBy.includes("credentialId"))
+        q = q.leftJoin(
+          keys,
+          and(
+            eq(sql`${keys.id}::text`, credential),
+            eq(keys.organizationId, organizationId),
+            inArray(method, ["virtual_key", "passthrough_virtual_key"]),
+          ),
+        );
+      return q.where(where) as Q;
+    };
+
+    const groupedQuery = scoped(
+      db
+        .select({ ...selected, ...aggregates, total: TOTAL_GROUPS })
+        .from(i)
+        .$dynamic(),
+    ).groupBy(...Object.values(selected));
+    const [rows, [totals]] = await Promise.all([
+      groupedQuery
+        .orderBy(...usageOrder(selected, aggregates.billedCost))
+        .limit(pagination.limit)
+        .offset(pagination.offset),
+      scoped(db.select(aggregates).from(i).$dynamic()),
+    ]);
+
+    const numbers = (row: Record<keyof typeof aggregates, unknown>) => ({
+      requests: Number(row.requests) || 0,
+      inputTokens: Number(row.inputTokens) || 0,
+      outputTokens: Number(row.outputTokens) || 0,
+      cacheReadTokens: Number(row.cacheReadTokens) || 0,
+      cacheWriteTokens: Number(row.cacheWriteTokens) || 0,
+      totalTokens: Number(row.totalTokens) || 0,
+      billedCost: Number(row.billedCost) || 0,
+      subscriptionCost: Number(row.subscriptionCost) || 0,
+    });
+    return {
+      ...paginate(
+        rows as (Record<string, unknown> & { total?: unknown })[],
+        pagination,
+        (row) => ({
+          ...(row as LlmUsageResponse["data"][number]),
+          ...numbers(row as Record<keyof typeof aggregates, unknown>),
+        }),
+        await emptyPageTotal(rows as { total?: unknown }[], pagination, () =>
+          groupedQuery.limit(1).offset(0),
+        ),
+      ),
+      totals: numbers(
+        (totals ?? {}) as Record<keyof typeof aggregates, unknown>,
+      ),
     };
   }
 }

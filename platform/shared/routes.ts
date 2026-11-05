@@ -744,6 +744,7 @@ export const RouteId = {
   GetMcpToolCallUsage: "getMcpToolCallUsage",
   GetAppUsage: "getAppUsage",
   GetSkillUsage: "getSkillUsage",
+  GetLlmUsage: "getLlmUsage",
 
   // Secrets Routes
   GetSecretsType: "getSecretsType",

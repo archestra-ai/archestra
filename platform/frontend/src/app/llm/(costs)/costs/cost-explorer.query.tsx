@@ -20,6 +20,9 @@ export type AppUsageDimension = NonNullable<
 export type SkillUsageDimension = NonNullable<
   NonNullable<archestraApiTypes.GetSkillUsageData["query"]>["groupBy"]
 >[number];
+export type LlmUsageDimension = NonNullable<
+  NonNullable<archestraApiTypes.GetLlmUsageData["query"]>["groupBy"]
+>[number];
 type UsageFilters = {
   timeframe: StatisticsTimeFrame;
   userId?: string;
@@ -65,6 +68,31 @@ export function useToolCallUsage({
       collectPages(async (offset) => {
         const { data, error } = await archestraApiSdk.getMcpToolCallUsage({
           query: { ...filters, groupBy, mcpServerName, limit: 100, offset },
+          querySerializer,
+        });
+        throwOnApiError(error, { toastOnError: false });
+        if (!data) throw new Error("No usage response received");
+        return data;
+      }),
+    enabled,
+  });
+}
+
+export function useLlmUsage({
+  timeframe,
+  groupBy,
+  enabled = true,
+}: {
+  timeframe: StatisticsTimeFrame;
+  groupBy: LlmUsageDimension[];
+  enabled?: boolean;
+}) {
+  return useQuery({
+    queryKey: ["usage-statistics", "getLlmUsage", groupBy, timeframe],
+    queryFn: () =>
+      collectPages(async (offset) => {
+        const { data, error } = await archestraApiSdk.getLlmUsage({
+          query: { timeframe, groupBy, limit: 100, offset },
           querySerializer,
         });
         throwOnApiError(error, { toastOnError: false });

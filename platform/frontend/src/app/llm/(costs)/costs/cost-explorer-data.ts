@@ -7,9 +7,11 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
   type StatisticsTimeFrame,
+  type SupportedProvider,
 } from "@archestra/shared";
 import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import {
   useProfileStatistics,
   useProxyCostStatistics,
@@ -21,11 +23,13 @@ import {
   formatCompact,
   formatCost,
   formatInt,
+  type LlmUsageDimension,
   type SkillUsageDimension,
   type ToolCallUsageDimension,
   useAppCostAttribution,
   useAppUsage,
   useCostStatistics,
+  useLlmUsage,
   useSkillCostAttribution,
   useSkillUsage,
   useToolCallUsage,
@@ -52,6 +56,7 @@ export const DIM_IDS = [
   "team",
   "agent",
   "model",
+  "provider",
   "person",
   "app",
   "skill",
@@ -134,6 +139,7 @@ export const DIMS: Record<DimId, { label: string; plural: string }> = {
   team: { label: "Team", plural: "teams" },
   agent: { label: "Agent", plural: "agents" },
   model: { label: "Model", plural: "models" },
+  provider: { label: "Provider", plural: "providers" },
   person: { label: "Person", plural: "people" },
   app: { label: "App", plural: "apps" },
   skill: { label: "Skill", plural: "skills" },
@@ -162,6 +168,7 @@ const SUPPORT: Record<DimId, MetricId[]> = {
     "toolCalls",
   ],
   model: LLM_METRICS,
+  provider: LLM_METRICS,
   person: METRIC_IDS.filter(
     (metric) => metric !== "cacheSavings" && metric !== "cacheWrite",
   ),
@@ -191,6 +198,8 @@ export function splitOptions(metric: MetricId, group: DimId): DimId[] {
     if (metric === "skillActivations") return ["skill"];
     return ["model"];
   }
+  if (LLM_METRICS.includes(metric) && BREAKDOWN_DIMS.includes(group))
+    return BREAKDOWN_DIMS.filter((d) => d !== group);
   return [];
 }
 
@@ -207,6 +216,9 @@ export function normalize(q: PivotQuery): PivotQuery {
       : "none";
   return { ...q, group, split };
 }
+
+/** LLM dimensions that combine through GET /api/statistics/llm-usage. */
+const BREAKDOWN_DIMS: DimId[] = ["team", "key", "provider", "model"];
 
 const PREFERRED_GROUP: Partial<Record<MetricId, DimId>> = {
   cacheSavings: "time",
@@ -245,6 +257,16 @@ export const SAVED_VIEWS: { id: string; label: string; q: PivotQuery }[] = [
     id: "tools",
     label: "Tool calls by server",
     q: { metric: "toolCalls", group: "server", split: "tool", chart: "bars" },
+  },
+  {
+    id: "team-model",
+    label: "Team spend by model",
+    q: { metric: "billed", group: "team", split: "model", chart: "table" },
+  },
+  {
+    id: "key-provider",
+    label: "Credential spend by provider",
+    q: { metric: "billed", group: "key", split: "provider", chart: "table" },
   },
   {
     id: "keys",
@@ -368,6 +390,11 @@ export type Cube = {
   notice?: string;
   retry: () => void;
   total: number;
+  /**
+   * Every metric per group and split, for the CSV export. Set by sources
+   * that return them all at once; others export the metric on screen.
+   */
+  exportTable?: { header: string[]; rows: (string | number)[][] };
 };
 
 export function usePivotCube(
@@ -444,6 +471,12 @@ export function usePivotCube(
     limit: 50,
     enabled: on("proxy"),
   });
+  const llmQ = useLlmUsage({
+    timeframe,
+    groupBy: src.kind === "llm" ? src.dims : ["day"],
+    enabled: on("llm"),
+  });
+  const providerCatalog = useModelProviderCatalog();
 
   const proxyBy = src.kind === "proxy" ? src.by : null;
   const proxyItems = useMemo(
@@ -479,15 +512,17 @@ export function usePivotCube(
             : appQ
           : src.kind === "skill"
             ? skillQ
-            : src.kind === "team"
-              ? teamQ
-              : src.kind === "agent"
-                ? agentQ
-                : src.kind === "model" || src.kind === "time"
-                  ? modelQ
-                  : src.kind === "user"
-                    ? userQ
-                    : proxyQ;
+            : src.kind === "llm"
+              ? llmQ
+              : src.kind === "team"
+                ? teamQ
+                : src.kind === "agent"
+                  ? agentQ
+                  : src.kind === "model" || src.kind === "time"
+                    ? modelQ
+                    : src.kind === "user"
+                      ? userQ
+                      : proxyQ;
     const failed = [
       primary,
       ...(src.kind === "proxy" ? itemQs : []),
@@ -730,6 +765,28 @@ export function usePivotCube(
               : [],
         };
       }
+      case "llm": {
+        const rows = llmQ.data?.data ?? [];
+        const describe = (dim: DimId | SplitId, row: LlmUsageRow) =>
+          llmDimValue(dim, row, providerCatalog.label);
+        const facts: Fact[] = rows.map((row) => {
+          const g = describe(q.group, row);
+          const s = q.split === "none" ? null : describe(q.split, row);
+          return {
+            ...g,
+            s: s?.g,
+            sLabel: s?.gLabel,
+            b: row.day ?? "",
+            v: pointValue(metric, row),
+          };
+        });
+        return {
+          ...assemble(facts),
+          ...base,
+          isLoading: llmQ.isLoading,
+          exportTable: llmExportTable(rows, q, describe),
+        };
+      }
       case "team":
       case "agent":
       case "model": {
@@ -907,6 +964,10 @@ export function usePivotCube(
     proxyQ.isLoading,
     proxyItems,
     itemStamp,
+    llmQ.data,
+    llmQ.error,
+    llmQ.isLoading,
+    providerCatalog,
   ]);
 }
 
@@ -920,6 +981,7 @@ type Source =
   | { kind: "agent" }
   | { kind: "model" }
   | { kind: "user"; models: boolean }
+  | { kind: "llm"; dims: LlmUsageDimension[] }
   | { kind: "proxy"; by: "method" | "key" };
 
 function resolveSource(q: PivotQuery): Source {
@@ -954,6 +1016,24 @@ function resolveSource(q: PivotQuery): Source {
     }
     return { kind: "skill", dims };
   }
+  // A provider, or a team, credential or model broken down by another of
+  // them, comes from the grouped LLM usage endpoint.
+  if (
+    LLM_METRICS.includes(q.metric) &&
+    (q.group === "provider" ||
+      (BREAKDOWN_DIMS.includes(q.group) &&
+        split !== null &&
+        BREAKDOWN_DIMS.includes(split)))
+  ) {
+    const dims: LlmUsageDimension[] = ["day"];
+    for (const d of [q.group, split]) {
+      if (d === "team") dims.push("teamId");
+      if (d === "key") dims.push("credentialId");
+      if (d === "provider") dims.push("provider");
+      if (d === "model") dims.push("model");
+    }
+    return { kind: "llm", dims };
+  }
   if (q.group === "team") return { kind: "team" };
   if (q.group === "agent") return { kind: "agent" };
   if (q.group === "model") return { kind: "model" };
@@ -972,6 +1052,8 @@ function apiFor(src: Source, tf: string, q: PivotQuery) {
       return `GET /api/statistics/app-usage?groupBy=${src.dims.join(",")}&timeframe=${tf}`;
     case "skill":
       return `GET /api/statistics/skill-usage?groupBy=${src.dims.join(",")}&timeframe=${tf}`;
+    case "llm":
+      return `GET /api/statistics/llm-usage?groupBy=${src.dims.join(",")}&timeframe=${tf}`;
     case "team":
       return `GET /api/statistics/teams?timeframe=${tf}`;
     case "agent":
@@ -1183,6 +1265,94 @@ function proxyItemsFor(by: "method" | "key", data: ProxyData) {
     };
   });
 }
+
+type LlmUsageRow =
+  archestraApiTypes.GetLlmUsageResponses["200"]["data"][number];
+
+function llmDimValue(
+  dim: DimId | SplitId,
+  row: LlmUsageRow,
+  providerLabel: (provider: SupportedProvider) => string,
+): Omit<Fact, "b" | "v"> {
+  switch (dim) {
+    case "team":
+      return { g: row.teamId ?? "?", gLabel: row.teamName ?? "Unknown team" };
+    case "provider":
+      return {
+        g: row.provider ?? "?",
+        gLabel: row.provider
+          ? providerLabel(row.provider as SupportedProvider)
+          : "Unknown",
+      };
+    case "key": {
+      const method = row.authMethod ?? "unknown";
+      const methodName = METHOD_NAMES[method] ?? method;
+      return {
+        g: row.credentialId ?? method,
+        gLabel: row.credentialName ?? methodName,
+        gSub: row.credentialId ? `ID ${row.credentialId}` : undefined,
+        gTag: methodName,
+      };
+    }
+    default:
+      return { g: row.model ?? "?", gLabel: row.model ?? "Unknown" };
+  }
+}
+
+/** One line per group and split, summed over days, with every metric. */
+function llmExportTable(
+  rows: LlmUsageRow[],
+  q: PivotQuery,
+  describe: (dim: DimId | SplitId, row: LlmUsageRow) => Omit<Fact, "b" | "v">,
+): NonNullable<Cube["exportTable"]> {
+  const dims = (q.split === "none" ? [q.group] : [q.group, q.split]).map(
+    (d) => d as DimId,
+  );
+  const sums = new Map<string, { labels: string[]; values: number[] }>();
+  for (const row of rows) {
+    const parts = dims.map((d) => describe(d, row));
+    const id = parts.map((p) => p.g).join("\u0000");
+    const entry = sums.get(id) ?? {
+      labels: parts.flatMap((p, i) =>
+        dims[i] === "key"
+          ? [p.gLabel, p.gTag ?? "", row.credentialId ?? ""]
+          : [p.gLabel],
+      ),
+      values: EXPORT_METRICS.map(() => 0),
+    };
+    EXPORT_METRICS.forEach(([, field], i) => {
+      entry.values[i] += row[field];
+    });
+    sums.set(id, entry);
+  }
+  return {
+    header: [
+      ...dims.flatMap((d) =>
+        d === "key"
+          ? [DIMS.key.label, "Access method", "Credential ID"]
+          : [DIMS[d].label],
+      ),
+      ...EXPORT_METRICS.map(([label]) => label),
+    ],
+    rows: [...sums.values()]
+      .sort((a, b) => b.values[EXPORT_BILLED] - a.values[EXPORT_BILLED])
+      .map((entry) => [...entry.labels, ...entry.values]),
+  };
+}
+
+const EXPORT_METRICS = [
+  ["Requests", "requests"],
+  ["Input tokens", "inputTokens"],
+  ["Output tokens", "outputTokens"],
+  ["Cache read tokens", "cacheReadTokens"],
+  ["Cache write tokens", "cacheWriteTokens"],
+  ["Total tokens", "totalTokens"],
+  ["Billed spend (USD)", "billedCost"],
+  ["Subscription estimate (USD)", "subscriptionCost"],
+] as const satisfies readonly (readonly [string, keyof LlmUsageRow])[];
+const EXPORT_BILLED = EXPORT_METRICS.findIndex(
+  ([, field]) => field === "billedCost",
+);
 
 function useUsersForPivot({
   timeframe,

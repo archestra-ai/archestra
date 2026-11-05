@@ -453,6 +453,11 @@ async function keepDatabaseForNextFile(client: PGlite): Promise<boolean> {
     // drop the temporary tables the snapshot's migrations left in its
     // session, which PGlite cannot recover from ("cannot open relation").
     await resetDatabase(client);
+    // PGlite keeps its write-ahead log in memory and checkpoints on its own
+    // only at max_wal_size (1 GB), so a database kept across files would
+    // hold up to that much log. A checkpoint after each file (~5 ms) keeps it
+    // at about 100 MB.
+    await client.exec("CHECKPOINT");
     if ((await databaseState(client)) !== loaded) {
       return false;
     }

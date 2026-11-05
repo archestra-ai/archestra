@@ -104,6 +104,16 @@ export const ATTR_ARCHESTRA_USER_ID = "archestra.user.id";
 export const ATTR_ARCHESTRA_USER_EMAIL = "archestra.user.email";
 export const ATTR_ARCHESTRA_USER_NAME = "archestra.user.name";
 export const ATTR_ARCHESTRA_AGENT_LABEL_PREFIX = "archestra.agent.label.";
+// Subagent failover provenance on chat spans when in-place runtime failover
+// switches a detached run from its initially claimed primary subagent to a
+// fallback subagent. The OTEL semantic-convention registry has no failover
+// provenance attributes, so these live under `archestra.subagent.*`.
+export const ATTR_ARCHESTRA_SUBAGENT_INITIAL_AGENT_ID =
+  "archestra.subagent.initial_agent_id";
+export const ATTR_ARCHESTRA_SUBAGENT_INITIAL_AGENT_NAME =
+  "archestra.subagent.initial_agent_name";
+export const ATTR_ARCHESTRA_SUBAGENT_FAILOVER_COUNT =
+  "archestra.subagent.failover_count";
 // Team metadata. Teams are an Archestra concept with no OTEL semantic-convention
 // registry equivalent, so the custom `archestra.<scope>.team.*` namespace is
 // used, where scope is the principal the teams belong to (`agent` or `user`). A

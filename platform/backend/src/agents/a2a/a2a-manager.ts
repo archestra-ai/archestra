@@ -516,6 +516,7 @@ export class A2AManager {
           runtime,
           agent,
           actor,
+          ephemeralCredentials: systemParams?.ephemeralCredentials,
         });
       }
 

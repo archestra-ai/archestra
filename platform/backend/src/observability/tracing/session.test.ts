@@ -11,7 +11,7 @@ import {
   SimpleSpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
 import { afterAll, afterEach, beforeAll, expect, test } from "vitest";
-import { startActiveChatSpan } from "./chat";
+import { startActiveChatSpan, updateActiveChatSpanAgent } from "./chat";
 import { startActiveLlmSpan } from "./llm";
 import { startActiveMcpSpan } from "./mcp";
 import { traceOpenappaDispatch } from "./openappa";
@@ -172,4 +172,46 @@ test("failed hooks preserve the error while exported spans and logs omit policy 
   expect(JSON.stringify(logExporter.getFinishedLogRecords())).not.toContain(
     "private-policy-payload",
   );
+});
+
+test("updateActiveChatSpanAgent renames the active chat span and records subagent failover provenance", async () => {
+  await startActiveChatSpan({
+    sessionId: "session-failover",
+    agentId: "agent-primary",
+    agentName: "Lobster Code Review Grok",
+    agentType: "agent",
+    callback: async () => {
+      updateActiveChatSpanAgent({
+        agentId: "agent-fallback-1",
+        agentName: "Lobster Code Review Kimi",
+        agentType: "agent",
+      });
+      updateActiveChatSpanAgent({
+        agentId: "agent-fallback-2",
+        agentName: "Lobster Code Review Copilot",
+        agentType: "agent",
+      });
+    },
+  });
+  await logProvider.forceFlush();
+
+  const chatSpan = exporter.getFinishedSpans()[0];
+  expect(chatSpan?.name).toBe("chat Lobster Code Review Copilot");
+  expect(chatSpan?.attributes).toMatchObject({
+    "gen_ai.agent.id": "agent-fallback-2",
+    "gen_ai.agent.name": "Lobster Code Review Copilot",
+    "archestra.subagent.initial_agent_id": "agent-primary",
+    "archestra.subagent.initial_agent_name": "Lobster Code Review Grok",
+    "archestra.subagent.failover_count": 2,
+  });
+
+  const logRecord = logExporter.getFinishedLogRecords()[0];
+  expect(JSON.parse(String(logRecord?.body))).toMatchObject({
+    operation: "chat Lobster Code Review Copilot",
+    "gen_ai.agent.id": "agent-fallback-2",
+    "gen_ai.agent.name": "Lobster Code Review Copilot",
+    "archestra.subagent.initial_agent_id": "agent-primary",
+    "archestra.subagent.initial_agent_name": "Lobster Code Review Grok",
+    "archestra.subagent.failover_count": 2,
+  });
 });

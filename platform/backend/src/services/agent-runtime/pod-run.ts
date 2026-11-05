@@ -20,6 +20,7 @@ import {
   AgentModel,
   AgentRunInputModel,
   AgentRunModel,
+  AgentTeamModel,
   AgentWorkspaceModel,
   EnvironmentModel,
   LimitModel,
@@ -30,12 +31,14 @@ import {
   reportAgentRuntimeStarted,
   reportAgentRuntimeTerminated,
 } from "@/observability/metrics/agent-runtime";
+import { updateActiveChatSpanAgent } from "@/observability/tracing/chat";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
 import type {
   Agent,
   AgentRunCompletionTarget,
   AgentRunLimitsRequest,
   AgentRunRecord,
+  AgentType,
   ResolvedAgentRuntime,
 } from "@/types";
 import { type AgentRunLimits, ApiError } from "@/types";
@@ -44,8 +47,10 @@ import {
   prepareAgentRuntimeBackendDriver,
   resolveAgentRuntimeBackendDriver,
 } from "./backends";
+import { preflightAgentRuntimeCredentials } from "./credentials";
 import { buildAgentRunLaunchSpec } from "./launch-spec";
 import { AgentRuntimeOutputCapture } from "./output-capture";
+import { canLaunchAgentRuntimeModel } from "./preflight";
 import {
   agentRunFailure,
   classifyAgentRunFailure,
@@ -620,6 +625,8 @@ export async function runTaskInAgentRuntime(params: {
 
   type CandidateConfig = {
     agentId: string;
+    agentName?: string;
+    agentType?: AgentType;
     runtime: ResolvedAgentRuntime;
     limits: AgentRunLimits | null | undefined;
     modelId: string | null;
@@ -652,6 +659,29 @@ export async function runTaskInAgentRuntime(params: {
           continue;
         }
         try {
+          const nextEphemeralCredentials =
+            policy?.ephemeralCredentialsByAgentId?.[nextAgent.id] ??
+            params.ephemeralCredentials;
+          const nextCredentials = await preflightAgentRuntimeCredentials({
+            runtime: nextRuntime,
+            organizationId: params.organizationId,
+            userId: params.actor.kind === "user" ? params.actor.id : null,
+            ephemeralCredentials: nextEphemeralCredentials,
+          });
+          if (
+            nextCredentials.missing.length > 0 ||
+            nextCredentials.misconfigured.length > 0
+          ) {
+            continue;
+          }
+          const nextModelReady = await canLaunchAgentRuntimeModel({
+            runtime: nextRuntime,
+            agent: nextAgent,
+            actor: params.actor,
+          });
+          if (!nextModelReady) {
+            continue;
+          }
           const tiers = await organizationAgentRuntimeTiers(
             params.organizationId,
           );
@@ -662,6 +692,8 @@ export async function runTaskInAgentRuntime(params: {
           });
           prefetchedFallback = {
             agentId: nextAgent.id,
+            agentName: nextAgent.name,
+            agentType: nextAgent.agentType ?? undefined,
             runtime: nextRuntime,
             limits: nextLimits,
             modelId: nextAgent.modelId,
@@ -799,6 +831,17 @@ export async function runTaskInAgentRuntime(params: {
     prefetchedFallback = null;
     currentCandidate = nextCandidate;
     await A2ATaskModel.updateAgentId(params.taskId, currentCandidate.agentId);
+    if (currentCandidate.agentName) {
+      const teams = await AgentTeamModel.getTeamLabelInfoForAgent(
+        currentCandidate.agentId,
+      );
+      updateActiveChatSpanAgent({
+        agentId: currentCandidate.agentId,
+        agentName: currentCandidate.agentName,
+        agentType: currentCandidate.agentType,
+        teams,
+      });
+    }
   }
 
   if (!anySessionLaunched) {

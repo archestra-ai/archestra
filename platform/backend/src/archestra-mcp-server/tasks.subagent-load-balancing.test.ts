@@ -1431,4 +1431,203 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     ).toBe(b);
     expect([workerA.id, workerB.id, workerC.id]).toContain(b);
   });
+
+  test("skips subagents whose personal subscription credentials the acting user lacks before claiming or creating a failed task", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeMember,
+    makeSecret,
+    makeUser,
+  }) => {
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, organizationId, { role: "member" });
+
+    // Other user's personal SuperGrok (x-premium) subscription key
+    const grokSecret = await makeSecret({
+      secret: { apiKey: "xai-subscription:other-user-supergrok" },
+    });
+    const otherUserGrokKey = await makeLlmProviderApiKey(
+      organizationId,
+      grokSecret.id,
+      {
+        provider: "xai",
+        name: "SuperGrok",
+        userId: otherUser.id,
+      },
+    );
+    const grokModel = await ModelModel.create({
+      externalId: "xai/grok-4.20-0309-reasoning",
+      provider: "xai",
+      modelId: "grok-4.20-0309-reasoning",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+      otherUserGrokKey.id,
+      [grokModel.id],
+    );
+
+    // Org-wide Kimi Code key usable by any user
+    const kimiSecret = await makeSecret({
+      secret: { apiKey: "kimi-org-wide-key" },
+    });
+    const orgKimiKey = await makeLlmProviderApiKey(
+      organizationId,
+      kimiSecret.id,
+      {
+        provider: "kimi-code",
+        name: "Kimi Code",
+      },
+    );
+    const kimiModel = await ModelModel.create({
+      externalId: "kimi-code/kimi-for-coding",
+      provider: "kimi-code",
+      modelId: "kimi-for-coding",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(orgKimiKey.id, [
+      kimiModel.id,
+    ]);
+
+    // Acting user's personal GitHub Copilot key
+    const copilotSecret = await makeSecret({
+      secret: { apiKey: "ghu_acting_user_copilot" },
+    });
+    const actorCopilotKey = await makeLlmProviderApiKey(
+      organizationId,
+      copilotSecret.id,
+      {
+        provider: "github-copilot",
+        name: "GitHub Copilot",
+        userId: actorId,
+      },
+    );
+    const copilotModel = await ModelModel.create({
+      externalId: "github-copilot/gpt-5.4",
+      provider: "github-copilot",
+      modelId: "gpt-5.4",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+      actorCopilotKey.id,
+      [copilotModel.id],
+    );
+
+    // 1. Subagent pinned to another user's personal SuperGrok subscription
+    const grokSubagent = await makeAgent({
+      organizationId,
+      name: "Lobster Code Review Grok",
+      agentType: "agent",
+      modelId: grokModel.id,
+      llmApiKeyId: otherUserGrokKey.id,
+      runtime: runtimeConfig({
+        command: ["archestra-grok"],
+        inferenceProtocol: "openai_chat",
+      }),
+    });
+
+    // 2. Subagent using archestra-claude-code personal subscription (acting user not connected)
+    const claudeSubagent = await makeAgent({
+      organizationId,
+      name: "Lobster Code Review Claude Code",
+      agentType: "agent",
+      runtime: runtimeConfig({
+        command: ["archestra-claude-code"],
+        inferenceProtocol: "anthropic",
+        claudeCode: { authentication: "subscription" },
+      }),
+    });
+
+    // 3. Subagent using archestra-codex (acting user has no ChatGPT Subscription)
+    const codexSubagent = await makeAgent({
+      organizationId,
+      name: "Lobster Code Review Codex",
+      agentType: "agent",
+      runtime: runtimeConfig({
+        command: ["archestra-codex"],
+        inferenceProtocol: "openai_responses",
+      }),
+    });
+
+    // 4. Subagent using org-wide Kimi Code key (ready)
+    const kimiSubagent = await makeAgent({
+      organizationId,
+      name: "Lobster Code Review Kimi",
+      agentType: "agent",
+      modelId: kimiModel.id,
+      llmApiKeyId: orgKimiKey.id,
+      runtime: runtimeConfig({
+        command: ["archestra-kimi"],
+        inferenceProtocol: "openai_chat",
+      }),
+    });
+
+    // 5. Subagent using acting user's GitHub Copilot key (ready)
+    const copilotSubagent = await makeAgent({
+      organizationId,
+      name: "Lobster Code Review Copilot",
+      agentType: "agent",
+      modelId: copilotModel.id,
+      llmApiKeyId: null,
+      runtime: runtimeConfig({
+        command: ["archestra-copilot"],
+        inferenceProtocol: "openai_chat",
+      }),
+    });
+
+    for (const subagent of [
+      grokSubagent,
+      claudeSubagent,
+      codexSubagent,
+      kimiSubagent,
+      copilotSubagent,
+    ]) {
+      const delegationTool = await ToolModel.findOrCreateDelegationTool(
+        subagent.id,
+      );
+      await AgentToolModel.create(gateway.id, delegationTool.id);
+    }
+
+    await AgentModel.update(gateway.id, {
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    const mockedStart = await mockDetachedTaskStart();
+
+    const selectedAgentIds: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const result = await executeArchestraTool(
+        TOOL_START_AGENT_RUN_FULL_NAME,
+        { message: `Review PR #${i + 1}` },
+        context,
+      );
+      expect(result.isError).toBeFalsy();
+      const agentId = (
+        result.structuredContent as { run: { agent_id: string } }
+      ).run.agent_id;
+      selectedAgentIds.push(agentId);
+    }
+
+    // Only the two ready subagents (Kimi and Copilot) are ever claimed or launched,
+    // alternating cleanly in round-robin order with zero failed task rows.
+    expect(selectedAgentIds).toEqual([
+      kimiSubagent.id,
+      copilotSubagent.id,
+      kimiSubagent.id,
+      copilotSubagent.id,
+    ]);
+    expect(mockedStart).toHaveBeenCalledTimes(4);
+  });
 });

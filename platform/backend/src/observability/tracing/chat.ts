@@ -13,6 +13,9 @@ import type { AgentType } from "@/types";
 import {
   ATTR_ARCHESTRA_AGENT_LABEL_PREFIX,
   ATTR_ARCHESTRA_AGENT_TYPE,
+  ATTR_ARCHESTRA_SUBAGENT_FAILOVER_COUNT,
+  ATTR_ARCHESTRA_SUBAGENT_INITIAL_AGENT_ID,
+  ATTR_ARCHESTRA_SUBAGENT_INITIAL_AGENT_NAME,
   ATTR_ARCHESTRA_TRIGGER_SOURCE,
   ATTR_GENAI_AGENT_ID,
   ATTR_GENAI_AGENT_NAME,
@@ -27,6 +30,56 @@ import {
   setUserAttributes,
 } from "./attributes";
 import { sessionContext } from "./session";
+
+const activeChatSpanState = new WeakMap<
+  Span,
+  { initialAgentId: string; initialAgentName: string; failoverCount: number }
+>();
+
+/**
+ * Updates the active parent chat span when in-place subagent failover switches
+ * execution to a fallback subagent, preserving the initial primary subagent's
+ * identity and failover count as span attributes.
+ */
+export function updateActiveChatSpanAgent(params: {
+  agentId: string;
+  agentName: string;
+  agentType?: AgentType;
+  teams?: SpanTeamInfo[];
+  span?: Span;
+}): void {
+  const span = params.span ?? trace.getSpan(context.active());
+  if (!span) return;
+
+  const state = activeChatSpanState.get(span);
+  if (state) {
+    if (state.failoverCount === 0) {
+      span.setAttribute(
+        ATTR_ARCHESTRA_SUBAGENT_INITIAL_AGENT_ID,
+        state.initialAgentId,
+      );
+      span.setAttribute(
+        ATTR_ARCHESTRA_SUBAGENT_INITIAL_AGENT_NAME,
+        state.initialAgentName,
+      );
+    }
+    state.failoverCount += 1;
+    span.setAttribute(
+      ATTR_ARCHESTRA_SUBAGENT_FAILOVER_COUNT,
+      state.failoverCount,
+    );
+  }
+
+  span.updateName(`chat ${params.agentName}`);
+  span.setAttribute(ATTR_GENAI_AGENT_ID, params.agentId);
+  span.setAttribute(ATTR_GENAI_AGENT_NAME, params.agentName);
+  if (params.agentType) {
+    span.setAttribute(ATTR_ARCHESTRA_AGENT_TYPE, params.agentType);
+  }
+  if (params.teams) {
+    setTeamAttributes(span, params.teams, "agent");
+  }
+}
 
 /**
  * Starts an active parent chat span that groups LLM and MCP tool calls within
@@ -86,6 +139,11 @@ export async function startActiveChatSpan<T>(params: {
       },
       ctx,
       async (span) => {
+        activeChatSpanState.set(span, {
+          initialAgentId: params.agentId,
+          initialAgentName: params.agentName,
+          failoverCount: 0,
+        });
         setSessionId(span, params.sessionId);
 
         if (params.agentType) {

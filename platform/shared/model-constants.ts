@@ -594,6 +594,7 @@ export function getAgentRuntimeAllowedProtocols(
 ): readonly ("openai_responses" | "openai_chat" | "anthropic")[] {
   switch (runtimeCommand?.[0]) {
     case "archestra-claude-code":
+    case "archestra-claude-code-runtime":
       return ["anthropic"];
     case "archestra-codex":
       return ["openai_responses", "openai_chat"];
@@ -619,7 +620,10 @@ export function getAgentRuntimeProviderCompatibility(params: {
   provider: SupportedProvider;
 }): { compatible: true } | { compatible: false; message: string } {
   const runtimeCommand = params.runtimeCommand?.[0];
-  if (runtimeCommand === "archestra-claude-code") {
+  if (
+    runtimeCommand === "archestra-claude-code" ||
+    runtimeCommand === "archestra-claude-code-runtime"
+  ) {
     if (
       !getAgentRuntimeAllowedProtocols(params.runtimeCommand).includes(
         params.inferenceProtocol,
@@ -698,7 +702,8 @@ export function getAgentRuntimeModelCompatibility(params: {
   if (!providerCompatibility.compatible) return providerCompatibility;
 
   if (
-    params.runtimeCommand?.[0] === "archestra-claude-code" &&
+    (params.runtimeCommand?.[0] === "archestra-claude-code" ||
+      params.runtimeCommand?.[0] === "archestra-claude-code-runtime") &&
     params.provider === "bedrock" &&
     params.modelId &&
     !isClaudeOnBedrock(params.modelId)

@@ -161,7 +161,36 @@ export default function CostExplorer() {
     metric: q.metric,
     timeframe,
   });
-  const cube = q.model ? modelCube : allModelsCube;
+  const pivotCube = q.model ? modelCube : allModelsCube;
+  // A sub-team's spend also counts toward its parent team, as it does for
+  // spend limits, so a team admin's team rows overlap. Their headline and
+  // shares use the scope's total, which counts each request once.
+  const scopedTeamTotal =
+    teamScoped &&
+    q.group === "team" &&
+    !q.model &&
+    (q.metric === "billed" ||
+      q.metric === "subscription" ||
+      q.metric === "requests" ||
+      q.metric === "tokens") &&
+    !kpis.isCostPending
+      ? kpis[q.metric].value
+      : null;
+  const cube = useMemo(
+    () =>
+      scopedTeamTotal === null
+        ? pivotCube
+        : {
+            ...pivotCube,
+            total: scopedTeamTotal,
+            notice:
+              pivotCube.notice ??
+              (teamId
+                ? undefined
+                : "A sub-team's spend also counts toward its parent team, as it does for spend limits, so rows can add up to more than the total."),
+          },
+    [pivotCube, scopedTeamTotal, teamId],
+  );
   const drilldown = (model: string) => {
     setQ((previous) => ({
       ...previous,

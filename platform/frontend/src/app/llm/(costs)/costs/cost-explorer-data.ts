@@ -795,7 +795,7 @@ export function usePivotCube(
             ? (teamQ.data ?? []).map((t) => ({
                 key: t.teamId,
                 label: t.teamName,
-                sub: `${t.members} members`,
+                sub: `${t.members} ${t.members === 1 ? "member" : "members"}`,
                 series: t.timeSeries,
                 totals: t,
               }))
@@ -1052,8 +1052,6 @@ function resolveSource(q: PivotQuery): Source {
 function apiFor(src: Source, tf: string, q: PivotQuery, teamId?: string) {
   const team = teamId ? `&teamId=${encodeURIComponent(teamId)}` : "";
   switch (src.kind) {
-    case "time":
-      return `GET /api/statistics/costs?timeframe=${tf}${team}`;
     case "tool":
       return `GET /api/statistics/mcp-tool-calls?groupBy=${src.dims.join(",")}&timeframe=${tf}`;
     case "app":
@@ -1064,10 +1062,9 @@ function apiFor(src: Source, tf: string, q: PivotQuery, teamId?: string) {
       return `GET /api/statistics/teams?timeframe=${tf}${team}`;
     case "agent":
       return `GET /api/statistics/agents?timeframe=${tf}`;
+    case "time":
     case "model":
-      return teamId
-        ? `GET /api/statistics/costs?timeframe=${tf}${team}`
-        : `GET /api/statistics/models?timeframe=${tf}`;
+      return `GET /api/statistics/costs?timeframe=${tf}${team}`;
     case "user":
       return `GET /api/statistics/users?includeTimeSeries=true${src.models ? "&includeModels=true&includeModelTimeSeries=true" : ""}&timeframe=${tf}`;
     case "proxy":

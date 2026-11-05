@@ -37,6 +37,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { cn } from "@/lib/utils/tailwind";
 
 /** Whether tool calls are checked against the policy at all. */
 export function OpenAppaEnforcementSetting() {
@@ -424,7 +425,14 @@ function BreakTheGlassRow<T extends string>(props: {
 }) {
   const current = props.options.find((option) => option.value === props.value);
   return (
-    <div className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)] lg:items-center lg:gap-8">
+    <div
+      className={cn(
+        "grid gap-3 p-4 lg:items-center lg:gap-8",
+        props.environmentVariable
+          ? "lg:grid-cols-[minmax(0,1fr)_max-content]"
+          : "lg:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)]",
+      )}
+    >
       <div className="min-w-0 space-y-1">
         <h3 className="text-sm font-medium leading-5">{props.title}</h3>
         <div className="text-sm leading-5 text-muted-foreground">
@@ -436,7 +444,7 @@ function BreakTheGlassRow<T extends string>(props: {
           <p className="text-sm font-medium leading-5">
             {current?.label ?? props.value}
           </p>
-          <p className="text-xs leading-4 text-muted-foreground">
+          <p className="text-xs leading-4 text-muted-foreground lg:whitespace-nowrap">
             <span>Set with </span>
             <code className="font-mono">
               {/* Wrap a long name only after an underscore. */}

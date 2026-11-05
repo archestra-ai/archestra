@@ -331,7 +331,10 @@ export default function CostExplorer() {
           ...SAVED_VIEWS.filter(
             (v) =>
               canGroup(v.q.group) &&
-              (!q.model || ["person", "key", "agent"].includes(v.q.group)),
+              // A model drill-down answers one grouping and no split.
+              (!q.model ||
+                (["person", "key", "agent"].includes(v.q.group) &&
+                  v.q.split === "none")),
           ).map((v) => ({
             id: v.id,
             label: v.label,

@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "v1.5.0-rc.22"
+    "version": "v1.5.0-rc.23"
   },
   "components": {
     "schemas": {
@@ -557774,7 +557774,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get LLM requests, tokens and spend grouped by any combination of `day`, `teamId`, `credentialId` (virtual key, passthrough key or OAuth client), `provider` and `model` — one row per group. For example `groupBy=teamId,provider,model` answers which providers and models each team used and what they cost, and `groupBy=day,credentialId` gives a daily series per virtual key. Each dimension is attributed as on its own statistics endpoint: team as in GET /api/statistics/teams, credential as in GET /api/statistics/llm-proxy, model as the billed model of GET /api/statistics/models. Grouped or filtered by credential, callers without [`member:read`](/docs/reference/permissions#member:read) see only their own usage, since a virtual key can be one person's own.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`llmCost:read`](/docs/reference/permissions#llmCost:read): View organization-wide LLM usage cost statistics and analytics",
+        "description": "Get LLM requests, tokens and spend grouped by any combination of `day`, `teamId`, `agentId`, `userId`, `credentialId` (virtual key, passthrough key or OAuth client), `provider` and `model` — one row per group. For example `groupBy=teamId,provider,model` answers which providers and models each team used and what they cost, `groupBy=agentId,userId` who used each agent, and `groupBy=day,credentialId` gives a daily series per virtual key. Each dimension is attributed as on its own statistics endpoint: team as in GET /api/statistics/teams, agent as in GET /api/statistics/agents, credential as in GET /api/statistics/llm-proxy, model as the billed model of GET /api/statistics/models. Grouped by agent, person or credential, or filtered by credential, callers without [`member:read`](/docs/reference/permissions#member:read) see only their own usage.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`llmCost:read`](/docs/reference/permissions#llmCost:read): View organization-wide LLM usage cost statistics and analytics",
         "parameters": [
           {
             "schema": {
@@ -557837,6 +557837,8 @@
                 "enum": [
                   "day",
                   "teamId",
+                  "agentId",
+                  "userId",
                   "credentialId",
                   "provider",
                   "model"
@@ -557846,7 +557848,7 @@
             "in": "query",
             "name": "groupBy",
             "required": false,
-            "description": "Comma-separated dimensions to group by: day, teamId, credentialId, provider, model. Defaults to teamId,provider,model."
+            "description": "Comma-separated dimensions to group by: day, teamId, agentId, userId, credentialId, provider, model. Defaults to teamId,provider,model."
           },
           {
             "schema": {
@@ -557911,6 +557913,22 @@
                             "type": "string"
                           },
                           "teamName": {
+                            "type": "string"
+                          },
+                          "agentId": {
+                            "description": "Agent, MCP gateway or LLM proxy that made the requests, as in GET /api/statistics/agents: legacy proxy rows count under the organization's LLM proxy. Present when grouped by agentId.",
+                            "type": "string"
+                          },
+                          "agentName": {
+                            "type": "string"
+                          },
+                          "userId": {
+                            "nullable": true,
+                            "description": "Who made the calls. Null for usage without a resolved user. Present when grouped by userId.",
+                            "type": "string"
+                          },
+                          "userName": {
+                            "nullable": true,
                             "type": "string"
                           },
                           "authMethod": {

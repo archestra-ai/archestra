@@ -61,7 +61,11 @@ import {
   peerProofAuthorizes,
   verifyPeerProof,
 } from "@/openappa/peer-claims";
-import { displayedReview, reviewedToolLabel } from "@/openappa/review-display";
+import {
+  displayedReview,
+  reviewedCallArguments,
+  reviewedToolLabel,
+} from "@/openappa/review-display";
 import {
   chatOpenAppaSession,
   executeRemedyByOffer,
@@ -1375,6 +1379,7 @@ const registry = defineArchestraTools([
                   offerIds: [remedy.offer_id],
                 });
                 const shown = displayedReview(review);
+                const shownArguments = reviewedCallArguments(shown);
                 const outcome = await context.elicitation.elicit({
                   toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
                   message: prepared?.question ?? shown.text,
@@ -1382,7 +1387,11 @@ const registry = defineArchestraTools([
                   kind: "openappa_review",
                   ...(shown.tool ? { reviewedTool: shown.tool } : {}),
                   ...(shown.arguments
-                    ? { reviewedArguments: shown.arguments }
+                    ? {
+                        reviewedArguments: shownArguments
+                          ? JSON.stringify(shownArguments)
+                          : shown.arguments,
+                      }
                     : {}),
                 });
                 if (outcome.status === "answered") {
@@ -1994,7 +2003,8 @@ async function precheckReviewedCall(params: {
   context: ArchestraContext;
 }): Promise<string | undefined> {
   const { review, context } = params;
-  const args = parseArgumentsRecord(review.arguments);
+  // The call runs with its own arguments, not the copies the proxy rules it with.
+  const args = reviewedCallArguments(review);
   if (!review.tool || !args) return undefined;
   // Dynamic import avoids the circular import between this file and ./index
   // (index.ts imports every tool group, including this one).
@@ -2085,20 +2095,6 @@ function truncateUtf8(text: string, maxBytes: number): string {
   // Back off out of a continuation-byte run to cut on a character boundary.
   while (end > 0 && (bytes[end] & 0xc0) === 0x80) end--;
   return `${bytes.subarray(0, end).toString("utf8")}…`;
-}
-
-function parseArgumentsRecord(
-  json: string | undefined,
-): Record<string, unknown> | undefined {
-  if (json === undefined) return undefined;
-  try {
-    const value: unknown = JSON.parse(json);
-    return typeof value === "object" && value !== null && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 /**

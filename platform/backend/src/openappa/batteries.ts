@@ -5,6 +5,7 @@ import type {
   PolicyEditInput,
 } from "@archestra/openappa-rs";
 import { matchBatteries, parseFullToolName } from "@archestra/shared";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
@@ -1119,6 +1120,7 @@ class OpenAppaBatteriesService {
       const values = await this.compose({
         root: planned.root,
         roster: planned.roster,
+        serverName: planned.serverName,
         planned: planned.batteries,
         composed,
         installFingerprint,
@@ -1220,6 +1222,7 @@ class OpenAppaBatteriesService {
   private async compose(params: {
     root: GuardrailsPolicy;
     roster: HostMemberRoster;
+    serverName: string;
     planned: readonly PlannedBattery[];
     composed: ComposeBatteryInput[];
     installFingerprint: string;
@@ -1230,7 +1233,14 @@ class OpenAppaBatteriesService {
     /** When this composition is stored; its record says it was composed then. */
     now: Date;
   }): Promise<EffectivePolicyValues> {
-    const { root, planned, composed, installFingerprint, expected } = params;
+    const {
+      root,
+      planned,
+      composed,
+      installFingerprint,
+      expected,
+      serverName,
+    } = params;
     const native = await loadNative();
     const result = await native.composeOpenappaPolicy({
       root: root.content,
@@ -1247,6 +1257,7 @@ class OpenAppaBatteriesService {
         ? null
         : await withHostToolRules({
             composed: composedContent,
+            serverName,
             validate: (text) => native.validateHostedOpenappaPolicy(text),
           });
     const values = (
@@ -1281,6 +1292,7 @@ class OpenAppaBatteriesService {
         ? values(
             await withHostToolRules({
               composed: expected.content,
+              serverName,
               validate: (text) => native.validateHostedOpenappaPolicy(text),
             }),
             error,
@@ -1487,6 +1499,7 @@ class OpenAppaBatteriesService {
       resolution,
       deployed,
       roster,
+      serverName: archestraMcpBranding.serverName,
       batteries,
       rows: [...rows.values()],
       unusedAliases: resolution.aliases.filter(
@@ -2040,6 +2053,7 @@ type PlannedComposition = {
   resolution: PolicyResolution;
   deployed: DeployedEntries;
   roster: HostMemberRoster;
+  serverName: string;
   batteries: PlannedBattery[];
   rows: BatteryInstallRow[];
   unusedAliases: PolicyDeclarationsView["unusedAliases"];
@@ -2152,8 +2166,9 @@ function heldBackRemedy(battery: HeldBackBattery): string {
 // rows that leave `yell` to the catch-all (v9), rows that dropped a retired
 // name live opening policies bound differently (v10), rows that keep
 // retired annotators for conversations opened under earlier policies (v11),
-// and rows without the empty peer read rule (v12).
-const COMPOSITION_VERSION = "v12:";
+// rows without the empty peer read rule (v12), and rows that rule the peer
+// read under the default server name on a white-labeled deployment (v13).
+const COMPOSITION_VERSION = "v13:";
 
 /**
  * What a stored composition answers: the batteries it composed, the credential
@@ -2173,6 +2188,7 @@ function compositionFingerprint(params: {
         batteries,
         credentials: planned.resolution.credentials,
         roster: [...planned.roster].sort(([a], [b]) => a - b),
+        serverName: planned.serverName,
         // A base composes while its target waits on a credential; the rows still move.
         statuses: planned.batteries.map(({ name, status }) => [name, status]),
         ...(held.length > 0 ? { held } : {}),

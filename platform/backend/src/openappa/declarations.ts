@@ -8,6 +8,7 @@ import type {
   PolicyDeclarations,
   TokenEnvReader,
 } from "@archestra/openappa-rs";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
@@ -462,6 +463,7 @@ class OpenAppaDeclarations {
           ...composed,
           content: await withHostToolRules({
             composed: content,
+            serverName: archestraMcpBranding.serverName,
             validate: (text) => native.validateHostedOpenappaPolicy(text),
           }),
         };

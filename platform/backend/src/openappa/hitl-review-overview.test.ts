@@ -903,6 +903,22 @@ describe("renderHitlReviewText", () => {
     expect(text).toContain("escaped");
   });
 
+  test("leaves out a derived transfer mode only for the Archestra tool that derives it", () => {
+    const args = JSON.stringify({
+      agent_id: "a",
+      environment: [{ key: "TOKEN", type: "secret" }],
+      transferModes: ["link"],
+    });
+    const rendered = (tool: string) =>
+      renderHitlReviewText({ tool, arguments: args, text: COVERAGE });
+    expect(rendered("mcp/archestra/transfer_credential")).not.toContain(
+      "transferModes",
+    );
+    expect(rendered("mcp/vault/transfer_credential")).toContain(
+      "transferModes",
+    );
+  });
+
   test("shows unparsed arguments verbatim", () => {
     const text = renderHitlReviewText({
       tool: "Bash",

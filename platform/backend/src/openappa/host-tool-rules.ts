@@ -10,9 +10,10 @@ import { asRecord, parsePolicyToml, toolEntries } from "./policy-text";
  *   battery declares. Without its own rule, `yell` falls to the catch-all: an
  *   annotator there must answer before the report runs, and a policy with no
  *   catch-all refuses it. `yell` is how a stuck session reaches a person.
- * - `mcp/archestra/read_peer_message`: the runtime admits a peer read only
- *   through an exact rule with an empty `delta`, so the reader receives the
- *   message under the label its sender captured.
+ * - `mcp/<server>/read_peer_message`, under the deployment's (possibly
+ *   white-labeled) server name: the runtime admits a peer read only through an
+ *   exact rule with an empty `delta`, so the reader receives the message under
+ *   the label its sender captured.
  *
  * The rules are part of the composition, so every process dispatches the same
  * bytes for it. A rule the organization wrote stands. When the runtime refuses
@@ -20,10 +21,15 @@ import { asRecord, parsePolicyToml, toolEntries } from "./policy-text";
  */
 export async function withHostToolRules(params: {
   composed: string;
+  serverName: string;
   validate: (text: string) => Promise<string[]>;
 }): Promise<string> {
   let text = params.composed;
-  for (const tool of HOST_TOOLS) {
+  // Yell comes last, so it is prepended last and stays the document's first rule.
+  for (const tool of [
+    `mcp/${params.serverName}/read_peer_message`,
+    "mcp/appa/yell",
+  ]) {
     text = await withEmptyRule({
       composed: text,
       tool,
@@ -59,11 +65,3 @@ async function withEmptyRule(params: {
   );
   return composed;
 }
-
-// ===
-
-/**
- * The names the runtime rules the host's own tools under. Yell comes last, so
- * it is prepended last and stays the document's first rule.
- */
-const HOST_TOOLS = ["mcp/archestra/read_peer_message", "mcp/appa/yell"];

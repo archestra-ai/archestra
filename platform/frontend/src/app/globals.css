@@ -132,7 +132,7 @@
 
 
   /* Code/terminal surface, shared by every command block and copyable code
-     field (see components/terminal-surface.tsx). Derived from the active theme
+     field (see components/agent-runs/terminal-surface.tsx). Derived from the active theme
      so each of the 24 selectable themes gets a block in its own palette, and
      derived *from the surface* rather than from the theme's text tokens so the
      contrast holds without per-theme tuning. --terminal-anchor is the far end

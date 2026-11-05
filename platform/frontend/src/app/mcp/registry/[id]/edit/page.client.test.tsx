@@ -11,7 +11,7 @@ vi.mock("@/lib/hooks/use-app-name", () => ({
   useAppName: () => "Archestra",
 }));
 vi.mock("@/lib/mcp/mcp-registry.query");
-vi.mock("@/components/mcp-catalog-icon", () => ({
+vi.mock("@/components/mcp-registry/mcp-catalog-icon", () => ({
   McpCatalogIcon: () => <span />,
 }));
 vi.mock("../../_parts/catalog-setup-wizard", () => ({

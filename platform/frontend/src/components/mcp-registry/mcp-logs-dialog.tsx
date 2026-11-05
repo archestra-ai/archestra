@@ -23,7 +23,7 @@ import {
   DeploymentConsoleTabs,
   DeploymentLogPanel,
   useDeploymentLogAutoScroll,
-} from "@/components/deployment-console";
+} from "@/components/deployment/deployment-console";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

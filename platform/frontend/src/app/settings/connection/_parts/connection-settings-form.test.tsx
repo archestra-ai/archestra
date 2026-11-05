@@ -22,7 +22,7 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/llm-models.query", () => ({
   useLlmModelIdsByKey: () => ({ data: [], isPending: false }),
 }));
-vi.mock("@/components/agent-selector", () => ({
+vi.mock("@/components/agents/agent-selector", () => ({
   AgentSelector: ({ agents }: { agents: { id: string; name: string }[] }) => (
     <ul aria-label="Default MCP Gateway options">
       {agents.map((agent) => (

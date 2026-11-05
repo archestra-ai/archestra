@@ -118,7 +118,7 @@ vi.mock("@/lib/mcp/mcp-registry.query", () => ({
 }));
 
 // The catalog icon pulls in white-label app-name hooks the bare render lacks.
-vi.mock("@/components/mcp-catalog-icon", () => ({
+vi.mock("@/components/mcp-registry/mcp-catalog-icon", () => ({
   McpCatalogIcon: () => null,
 }));
 

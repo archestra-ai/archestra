@@ -103,7 +103,7 @@ function StubDialog({
     </div>
   );
 }
-vi.mock("@/components/oauth-confirmation-dialog", () => ({
+vi.mock("@/components/mcp-registry/oauth-confirmation-dialog", () => ({
   OAuthConfirmationDialog: (props: StubDialogProps) => (
     <StubDialog {...props} />
   ),

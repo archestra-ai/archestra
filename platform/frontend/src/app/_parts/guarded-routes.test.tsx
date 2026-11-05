@@ -34,7 +34,7 @@ vi.mock("@/components/agent-pages/agent-create-page", () => ({
     <p data-can-create-agent={String(canCreateAgent)}>Page content</p>
   ),
 }));
-vi.mock("@/components/a2a-remote-agent-page", () => ({
+vi.mock("@/components/a2a/a2a-remote-agent-page", () => ({
   CreateA2aRemoteAgentPage: () => <p>Page content</p>,
   A2aRemoteAgentDetailPage: () => <p>Page content</p>,
 }));

@@ -6,13 +6,13 @@ import {
   useEffect,
   useState,
 } from "react";
+import type * as DefaultModelModule from "@/app/chat/_parts/default-model-onboarding";
 import type * as BrowserPanelModule from "@/components/chat/browser-panel";
 import type * as ChatMessagesModule from "@/components/chat/chat-messages";
 import type * as FilesPanelModule from "@/components/chat/conversation-files-panel";
 import type * as OnboardingWizardModule from "@/components/chat/onboarding-wizard-button";
 import type * as RightPanelModule from "@/components/chat/right-side-panel";
-import type * as DefaultModelModule from "@/components/default-model-onboarding";
-import type * as NoApiKeyModule from "@/components/no-api-key-setup";
+import type * as NoApiKeyModule from "@/components/model-providers/no-api-key-setup";
 import { afterNextPaint } from "@/lib/app-interactive";
 import { lazyComponent } from "@/lib/utils/preloadable-lazy";
 
@@ -82,12 +82,16 @@ export const OnboardingWizardButton = lazyComponent<
 
 export const NoApiKeySetup = lazyComponent<
   ComponentProps<typeof NoApiKeyModule.NoApiKeySetup>
->(() => import("@/components/no-api-key-setup").then((m) => m.NoApiKeySetup));
+>(() =>
+  import("@/components/model-providers/no-api-key-setup").then(
+    (m) => m.NoApiKeySetup,
+  ),
+);
 
 export const DefaultModelOnboardingStep = lazyComponent<
   ComponentProps<typeof DefaultModelModule.DefaultModelOnboardingStep>
 >(() =>
-  import("@/components/default-model-onboarding").then(
+  import("@/app/chat/_parts/default-model-onboarding").then(
     (m) => m.DefaultModelOnboardingStep,
   ),
 );

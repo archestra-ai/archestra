@@ -1,6 +1,6 @@
 "use client";
 
-import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
+import type { LlmProviderApiKeyResponse } from "@/components/model-providers/llm-provider-api-key-form";
 import {
   SubscriptionCard,
   SubscriptionCardsSection,

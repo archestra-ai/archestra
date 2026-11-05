@@ -7,7 +7,7 @@ import type {
   RowSelectionState,
 } from "@tanstack/react-table";
 import { AppWindow, Loader2 } from "lucide-react";
-import { AgentNameCell } from "@/components/agent-name-cell";
+import { AgentNameCell } from "@/components/agents/agent-name-cell";
 import { RowPinButton } from "@/components/row-pin-button";
 import {
   type TableRowAction,

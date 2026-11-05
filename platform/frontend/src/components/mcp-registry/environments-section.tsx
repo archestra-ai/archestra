@@ -9,8 +9,12 @@ import {
   type ProfileLabel,
   ProfileLabels,
   type ProfileLabelsRef,
-} from "@/components/agent-labels";
+} from "@/components/agents/agent-labels";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import {
+  EGRESS_MODE_LABELS,
+  NetworkPolicyFields,
+} from "@/components/deployment/network-policy-fields";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
@@ -22,12 +26,8 @@ import {
 } from "@/components/filter-bar";
 import { useSelectedLabels } from "@/components/label-select";
 import { LabelTags } from "@/components/label-tags";
-import {
-  EGRESS_MODE_LABELS,
-  NetworkPolicyFields,
-} from "@/components/network-policy-fields";
-import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
-import { ResourceAccessSection } from "@/components/resource-access-section";
+import { ReinstallConfirmBar } from "@/components/mcp-registry/reinstall-confirm-bar";
+import { ResourceAccessSection } from "@/components/resource-access/resource-access-section";
 import { SearchInput } from "@/components/search-input";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { TableRowActions } from "@/components/table-row-actions";

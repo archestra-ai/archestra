@@ -31,7 +31,7 @@ vi.mock("@/lib/chatops/chatops-config.query", () => ({
 vi.mock("@/lib/integration-overrides", () => ({
   useMessagingChannelCatalog: () => ({ isHidden: () => false }),
 }));
-vi.mock("@/components/slack-bot-edit-dialog", () => ({
+vi.mock("@/components/messaging-channels/slack-bot-edit-dialog", () => ({
   SlackBotEditDialog: () => null,
 }));
 vi.mock("@/lib/agent-runtime.query", () => ({

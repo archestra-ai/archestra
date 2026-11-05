@@ -40,6 +40,7 @@ import {
   McpServerCard,
   type RegistryListItem,
 } from "@/components/mcp-registry/mcp-server-card";
+import { OAuthConfirmationDialog } from "@/components/mcp-registry/oauth-confirmation-dialog";
 import { MCP_REGISTRY_VIEW_STORAGE_KEY } from "@/components/mcp-registry/registry-list-params";
 import {
   buildRegistryListQuery,
@@ -57,12 +58,11 @@ import {
   type RemoteServerInstallResult,
 } from "@/components/mcp-registry/remote-server-install-dialog";
 import type { McpServerInstallScope } from "@/components/mcp-registry/select-mcp-server-credential-type-and-teams";
-import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
 import {
   RESOURCE_ACCESS_FILTER_PARAMS,
   ResourceAccessFilter,
-} from "@/components/resource-access-filter";
-import { useScopeFilterParams } from "@/components/resource-scope-filter";
+} from "@/components/resource-access/resource-access-filter";
+import { useScopeFilterParams } from "@/components/resource-access/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCardGrid,

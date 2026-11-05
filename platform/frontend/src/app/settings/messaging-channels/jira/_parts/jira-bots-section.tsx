@@ -4,11 +4,10 @@ import type { archestraApiTypes } from "@archestra/shared";
 import { Info, Plus } from "lucide-react";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { AgentSelector } from "@/components/agent-selector";
+import { AgentSelector } from "@/components/agents/agent-selector";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
-import { RemoteUserSelect } from "@/components/remote-user-select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,6 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { RemoteUserSelect } from "@/components/users/remote-user-select";
 import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import {
   useCreateJiraChatOpsBot,

@@ -5,7 +5,7 @@ import { GitBranch, GitFork, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
-import { formatCost } from "@/components/cost";
+import { formatCost } from "@/components/cost-explorer/cost";
 import {
   Fact,
   FactSub,

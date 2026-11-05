@@ -2,7 +2,7 @@ import * as simpleIcons from "simple-icons";
 import {
   buildIconList,
   filterIcons,
-} from "@/components/service-logo-picker.utils";
+} from "@/components/agents/service-logo-picker.utils";
 
 const CACHE_CONTROL = "public, max-age=3600, stale-while-revalidate=86400";
 const PAGE_SIZE = 120;

@@ -2,9 +2,9 @@
 
 import { ExternalLink, Loader2, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AgentIcon } from "@/components/agent-icon";
 import { agentNewHref } from "@/components/agent-pages/agent-page-config";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { AgentIcon } from "@/components/agents/agent-icon";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";

@@ -7,7 +7,7 @@ import {
 import type {
   LlmProviderApiKeyFormValues,
   LlmProviderApiKeyResponse,
-} from "@/components/llm-provider-api-key-form";
+} from "@/components/model-providers/llm-provider-api-key-form";
 
 /** The providers the subscription registry can offer, narrowed to those. */
 export type SubscriptionProvider =

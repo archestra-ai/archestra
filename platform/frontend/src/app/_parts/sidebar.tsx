@@ -26,15 +26,7 @@ import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { getCostsNavigationUrl } from "@/app/_parts/costs-navigation";
 import { ShortcutHint } from "@/app/_parts/shortcut-hint";
 import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
-import { preloadAgentsPage } from "@/app/agents/_parts/preload";
-import { AppLogo } from "@/components/app-logo";
-import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
-import { prefetchMcpRegistry } from "@/components/mcp-registry/prefetch-registry";
-import { OnboardingDot } from "@/components/onboarding-dot";
-import { OpenAppaAlertIcon } from "@/components/openappa-icon";
-import { getSettingsNavigationUrl } from "@/components/settings/settings-navigation";
-import { useNavPermissionMap } from "@/components/settings/use-settings-area-access";
-import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
+import { SidebarWarningsAccordion } from "@/app/_parts/sidebar-warnings-accordion";
 import {
   AUTO_ROUTING_URL,
   chatsNavItems,
@@ -42,7 +34,15 @@ import {
   isNavItemPermitted,
   type NavGroup,
   type NavItem,
-} from "@/components/studio-nav";
+} from "@/app/_parts/studio-nav";
+import { preloadAgentsPage } from "@/app/agents/_parts/preload";
+import { AppLogo } from "@/components/app-logo";
+import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
+import { prefetchMcpRegistry } from "@/components/mcp-registry/prefetch-registry";
+import { OnboardingDot } from "@/components/onboarding-dot";
+import { OpenAppaAlertIcon } from "@/components/openappa/openappa-icon";
+import { getSettingsNavigationUrl } from "@/components/settings/settings-navigation";
+import { useNavPermissionMap } from "@/components/settings/use-settings-area-access";
 import { Badge } from "@/components/ui/badge";
 import {
   Sidebar,

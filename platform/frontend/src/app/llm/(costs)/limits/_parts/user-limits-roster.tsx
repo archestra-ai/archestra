@@ -9,7 +9,7 @@ import {
   Undo2,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { EstimatedSpendBadge } from "@/components/estimated-spend-badge";
+import { EstimatedSpendBadge } from "@/components/cost-explorer/estimated-spend-badge";
 import {
   FilterBar,
   FilterSelect,

@@ -5,7 +5,10 @@ import { FolderPlus, Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DirectoryDialog } from "@/app/knowledge/files/_parts/directory-dialog";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
-import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
+import type {
+  ProfileLabel,
+  ProfileLabelsRef,
+} from "@/components/agents/agent-labels";
 import {
   FileDropInput,
   fileToBase64,
@@ -14,7 +17,7 @@ import {
 import {
   type InitialPermissionGrant,
   InitialResourcePermissions,
-} from "@/components/initial-resource-permissions";
+} from "@/components/resource-access/initial-resource-permissions";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";

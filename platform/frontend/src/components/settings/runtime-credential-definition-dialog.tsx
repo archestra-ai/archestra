@@ -6,10 +6,10 @@ import { ArrowLeft } from "lucide-react";
 import { type ReactNode, useCallback, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { AgentIconPicker } from "@/components/agent-icon-picker";
-import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
-import { ResourceAccessSection } from "@/components/resource-access-section";
-import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
+import { RuntimeCredentialIcon } from "@/components/agent-runtime/runtime-credential-icon";
+import { AgentIconPicker } from "@/components/agents/agent-icon-picker";
+import type { InitialPermissionGrant } from "@/components/resource-access/initial-resource-permissions";
+import { ResourceAccessSection } from "@/components/resource-access/resource-access-section";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {

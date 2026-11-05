@@ -7,7 +7,7 @@ import {
   formatTokens,
   percentOf,
 } from "@/app/llm/usage/_parts/usage-format";
-import { BilledCost } from "@/components/billed-cost";
+import { BilledCost } from "@/components/cost-explorer/billed-cost";
 import {
   Card,
   CardContent,

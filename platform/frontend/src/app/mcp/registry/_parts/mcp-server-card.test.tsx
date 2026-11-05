@@ -135,7 +135,7 @@ vi.mock("@/lib/auth/oauth.query", () => ({
   useInitiateOAuth: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
-vi.mock("@/components/resource-scope-filter", () => ({
+vi.mock("@/components/resource-access/resource-scope-filter", () => ({
   ResourceScopeFilter: () => null,
   useScopeFilterParams: () => ({
     access: ["mine", "shared", "org"],
@@ -143,12 +143,15 @@ vi.mock("@/components/resource-scope-filter", () => ({
   }),
 }));
 
-vi.mock("@/components/resource-access-filter", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("@/components/resource-access-filter")
-  >()),
-  ResourceAccessFilter: () => null,
-}));
+vi.mock(
+  "@/components/resource-access/resource-access-filter",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@/components/resource-access/resource-access-filter")
+    >()),
+    ResourceAccessFilter: () => null,
+  }),
+);
 
 vi.mock("@/components/table-card-view", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/components/table-card-view")>()),
@@ -208,7 +211,7 @@ vi.mock("@/components/mcp-registry/remote-server-install-dialog", () => ({
   },
 }));
 
-vi.mock("@/components/oauth-confirmation-dialog", () => ({
+vi.mock("@/components/mcp-registry/oauth-confirmation-dialog", () => ({
   OAuthConfirmationDialog: () => null,
 }));
 

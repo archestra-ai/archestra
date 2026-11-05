@@ -25,7 +25,7 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
 vi.mock("@/lib/llm-models.query", () => ({
   useModelsWithApiKeys: () => ({ data: [] }),
 }));
-vi.mock("@/components/virtual-key-connection-base-url", () => ({
+vi.mock("@/components/virtual-keys/virtual-key-connection-base-url", () => ({
   useConnectionBaseUrl: () => "http://localhost:9000/v1",
 }));
 

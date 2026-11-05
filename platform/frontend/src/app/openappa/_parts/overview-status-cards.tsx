@@ -16,6 +16,7 @@ import Link from "next/link";
 import { type ReactNode, useState } from "react";
 import { GithubSyncSetupDialog } from "@/components/openappa/github-sync-setup-dialog";
 import { OpenAppaChatButton } from "@/components/openappa/openappa-chat-button";
+import { OpenAppaAlertIcon } from "@/components/openappa/openappa-icon";
 import { ValidationStatusBadge } from "@/components/openappa/validation-parts";
 import {
   validationRunBars,
@@ -23,7 +24,6 @@ import {
   validationSuiteSummary,
   validationSummaryText,
 } from "@/components/openappa/validation-run-history";
-import { OpenAppaAlertIcon } from "@/components/openappa-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {

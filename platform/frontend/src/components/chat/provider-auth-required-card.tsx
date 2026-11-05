@@ -8,7 +8,7 @@ import {
 } from "@archestra/shared";
 import { KeyRound } from "lucide-react";
 import { toast } from "sonner";
-import { SubscriptionSignIn } from "@/components/subscription-sign-in";
+import { SubscriptionSignIn } from "@/components/subscriptions/subscription-sign-in";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useSession } from "@/lib/auth/auth.query";

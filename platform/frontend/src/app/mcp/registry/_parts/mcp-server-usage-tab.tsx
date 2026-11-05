@@ -20,17 +20,17 @@ import {
   useRef,
   useState,
 } from "react";
-import { AgentIcon } from "@/components/agent-icon";
 import {
   agentDetailHref,
   agentPageKindForType,
 } from "@/components/agent-pages/agent-page-config";
+import { AgentIcon } from "@/components/agents/agent-icon";
 import {
   type AgentUsage,
   deriveAgentUsage,
 } from "@/components/mcp-registry/mcp-server-agent-usage";
 import { QueryLoadError } from "@/components/query-load-error";
-import { scopeLabel } from "@/components/scope-vocabulary";
+import { scopeLabel } from "@/components/resource-access/scope-vocabulary";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { type AgentOwner, describeAgentOwner } from "@/lib/agent-owner-label";

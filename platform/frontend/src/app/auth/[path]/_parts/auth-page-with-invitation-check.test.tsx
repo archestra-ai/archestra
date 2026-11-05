@@ -42,7 +42,7 @@ vi.mock("@/components/app-logo", () => ({
 }));
 
 // Mock CommunityLinks
-vi.mock("@/components/community-links", () => ({
+vi.mock("@/components/auth/community-links", () => ({
   CommunityLinks: vi.fn(() => (
     <div data-testid="community-links">Community Links</div>
   )),

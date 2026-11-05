@@ -15,8 +15,8 @@ import {
 } from "vitest";
 import { AgentReachBrowser } from "@/components/chat/agent-quick-edit/agent-reach-browser";
 import { SubagentsView } from "@/components/chat/agent-quick-edit/subagents-view";
-import { RemoteUserSelect } from "@/components/remote-user-select";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { RemoteUserSelect } from "@/components/users/remote-user-select";
 
 vi.mock("next/navigation");
 vi.mock("sonner");

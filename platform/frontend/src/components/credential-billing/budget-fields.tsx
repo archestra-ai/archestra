@@ -3,12 +3,12 @@
 import { ADMIN_ROLE_NAME, DocsPage, getDocsUrl } from "@archestra/shared";
 import { Info } from "lucide-react";
 import { useMemo, useState } from "react";
-import { EstimatedSpendBadge } from "@/components/estimated-spend-badge";
+import { EstimatedSpendBadge } from "@/components/cost-explorer/estimated-spend-badge";
 import {
   CLEANUP_INTERVAL_LABELS,
   type LimitCleanupInterval,
-} from "@/components/limit-cleanup-interval-select";
-import { TeamSelect } from "@/components/team-select";
+} from "@/components/cost-explorer/limit-cleanup-interval-select";
+import { TeamSelect } from "@/components/teams/team-select";
 import { Badge } from "@/components/ui/badge";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import {

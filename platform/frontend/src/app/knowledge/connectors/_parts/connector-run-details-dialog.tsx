@@ -3,8 +3,8 @@
 import type { ReactNode } from "react";
 import { contentRunPhase } from "@/app/knowledge/connectors/_parts/content-run-phase";
 import { formatRunDuration } from "@/app/knowledge/connectors/_parts/run-duration";
+import { LogConsole } from "@/components/deployment/log-console";
 import { ConnectorStatusBadge } from "@/components/knowledge/connector-status-badge";
-import { LogConsole } from "@/components/log-console";
 import { RelativeTime } from "@/components/relative-time";
 import {
   Dialog,

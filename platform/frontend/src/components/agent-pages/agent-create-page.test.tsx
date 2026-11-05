@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentFormProps } from "@/components/agent-form";
+import type { AgentFormProps } from "@/components/agents/agent-form";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useK8sCapabilities } from "@/lib/environment.query";
@@ -34,7 +34,7 @@ vi.mock("@/lib/hooks/use-app-name");
 // `onCreated` and report dirtiness.
 const formProps = vi.fn<(props: AgentFormProps) => void>();
 const formState = { hasRuntime: false };
-vi.mock("@/components/agent-form", () => ({
+vi.mock("@/components/agents/agent-form", () => ({
   AgentForm: (props: AgentFormProps) => {
     formProps(props);
     return (

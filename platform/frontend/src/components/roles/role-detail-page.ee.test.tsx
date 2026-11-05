@@ -16,7 +16,7 @@ import {
   it,
   vi,
 } from "vitest";
-import type { SettingsPageHeader } from "@/app/settings/layout";
+import type { SettingsPageHeader } from "@/components/settings/settings-layout.context";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { RoleDetailPage } from "./role-detail-page.ee";
 
@@ -27,7 +27,7 @@ const layout = vi.hoisted(() => ({
   setPageHeader: vi.fn(),
   setActionButton: vi.fn(),
 }));
-vi.mock("@/app/settings/layout", () => ({
+vi.mock("@/components/settings/settings-layout.context", () => ({
   useSetSettingsPageHeader: () => layout.setPageHeader,
   useSetSettingsAction: () => layout.setActionButton,
 }));

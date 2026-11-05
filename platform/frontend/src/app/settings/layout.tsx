@@ -4,12 +4,16 @@ import { DocsPage, getDocsUrl, SecretsManagerType } from "@archestra/shared";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { createContext, useContext, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { MessagingProvidersSubnav } from "@/components/messaging-channels/messaging-providers";
 import { PageLayout } from "@/components/page-layout";
 import { SectionNav } from "@/components/section-nav";
 import { AppearanceSubnav } from "@/components/settings/appearance-navigation";
+import {
+  SettingsLayoutContext,
+  type SettingsPageHeader,
+} from "@/components/settings/settings-layout.context";
 import {
   resolveSettingsSection,
   useSettingsTabs,
@@ -134,54 +138,6 @@ function UsersDescription() {
   return disableInvitations === false
     ? "Manage users, their roles, and user invitations."
     : "Manage users and their roles.";
-}
-
-export type SettingsPageHeader = {
-  title: React.ReactNode;
-  /** Browser tab title, when `title` is composed markup rather than a string. */
-  documentTitle?: string;
-  description?: React.ReactNode;
-  /** The record's own mark, drawn beside the title as on a detail page. */
-  icon?: React.ReactNode;
-  backLink?: React.ReactNode;
-  status?: React.ReactNode;
-  /**
-   * Secondary tabs under the header, for a record with more facets than one
-   * screen should carry at once. The same bar the agent, MCP gateway and MCP
-   * server detail pages use, reached from here because a settings page does
-   * not render its own {@link PageLayout} - this layout does.
-   *
-   * Only a record page has any use for it. The section list on the left is
-   * how you move between settings pages; these move within one.
-   */
-  tabs?: React.ComponentProps<typeof PageLayout>["tabs"];
-};
-
-type SettingsLayoutContextType = {
-  setActionButton: (node: React.ReactNode) => void;
-  setPageHeader: (header: SettingsPageHeader | null) => void;
-};
-
-const SettingsLayoutContext = createContext<SettingsLayoutContextType>({
-  setActionButton: () => {},
-  setPageHeader: () => {},
-});
-
-export function useSetSettingsAction() {
-  return useContext(SettingsLayoutContext).setActionButton;
-}
-
-/**
- * Lets a settings page replace the header this layout would otherwise derive
- * from the pathname. A record page needs to say *which* record you are on, and
- * `PAGE_CONFIG` is keyed by route, so without this the detail pages under
- * `/settings/*` inherit their list's title and never name their subject.
- *
- * Call it from an effect and clear it on unmount, the way `setActionButton` is
- * used, so the header does not outlive the page that set it.
- */
-export function useSetSettingsPageHeader() {
-  return useContext(SettingsLayoutContext).setPageHeader;
 }
 
 export default function SettingsLayout({

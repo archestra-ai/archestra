@@ -18,9 +18,12 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
-import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
-import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
-import { ResourceAccessSection } from "@/components/resource-access-section";
+import type {
+  ProfileLabel,
+  ProfileLabelsRef,
+} from "@/components/agents/agent-labels";
+import { PROVIDER_CONFIG } from "@/components/model-providers/llm-provider-api-key-form";
+import { ResourceAccessSection } from "@/components/resource-access/resource-access-section";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";

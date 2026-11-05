@@ -20,7 +20,7 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { ExecutedAsBadge } from "@/components/executed-as-badge";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
 import {
   Tooltip,
   TooltipContent,

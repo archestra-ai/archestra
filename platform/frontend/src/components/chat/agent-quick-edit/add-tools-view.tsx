@@ -14,8 +14,8 @@ import {
   Search,
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { LocalServerInstallDialog } from "@/components/mcp-registry/local-server-install-dialog";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
 import { NoAuthInstallDialog } from "@/components/mcp-registry/no-auth-install-dialog";
 import { RemoteServerInstallDialog } from "@/components/mcp-registry/remote-server-install-dialog";
 import { Button } from "@/components/ui/button";

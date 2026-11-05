@@ -1,8 +1,8 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
-import { McpGatewayConnectInstructions } from "@/components/agent-connect-instructions";
+import { A2AConnectionInstructions } from "@/components/a2a/a2a-connection-instructions";
+import { McpGatewayConnectInstructions } from "@/components/agents/agent-connect-instructions";
 import type { AgentPageKind } from "./agent-page-config";
 
 type Agent = archestraApiTypes.GetAgentResponses["200"];

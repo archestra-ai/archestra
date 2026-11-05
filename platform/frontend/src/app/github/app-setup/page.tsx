@@ -3,10 +3,10 @@
 import { Check, CircleAlert } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { AuthCallbackLayout } from "@/components/auth-callback-layout";
+import { AuthCallbackLayout } from "@/components/auth/auth-callback-layout";
 import { LoadingState } from "@/components/loading";
 import { notifyGithubAppSetup } from "@/components/openappa/github-app-channel";
-import { OpenAppaSolidIcon } from "@/components/openappa-icon";
+import { OpenAppaSolidIcon } from "@/components/openappa/openappa-icon";
 import { Button } from "@/components/ui/button";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useCompleteAppaGithubApp } from "@/lib/openappa-github-sync.query";

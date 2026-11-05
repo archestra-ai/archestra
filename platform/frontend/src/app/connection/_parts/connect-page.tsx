@@ -51,7 +51,7 @@ import { ClientIcon } from "@/components/connection/client-icon";
 import type { ConnectClient } from "@/components/connection/clients";
 import { detectPlatform } from "@/components/connection/platform.utils";
 import { useUpdateUrlParams } from "@/components/connection/use-update-url-params";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {

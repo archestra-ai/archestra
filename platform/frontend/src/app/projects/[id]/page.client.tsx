@@ -26,7 +26,7 @@ import {
   formatScheduledRecentRow,
 } from "@/app/projects/[id]/_parts/project-chats.utils";
 import { ProjectSchedulesSection } from "@/app/projects/[id]/_parts/project-schedules-section";
-import { AgentIcon } from "@/components/agent-icon";
+import { AgentIcon } from "@/components/agents/agent-icon";
 import { Response } from "@/components/ai-elements/response";
 import type { FileListItem } from "@/components/chat/file-list-section";
 import { FilePreview } from "@/components/chat/file-preview";

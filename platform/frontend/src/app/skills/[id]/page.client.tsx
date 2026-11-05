@@ -11,11 +11,11 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ProfileLabelsRef } from "@/components/agent-labels";
+import type { ProfileLabelsRef } from "@/components/agents/agent-labels";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { GitSourceTooltip } from "@/components/git/git-source-card";
 import { PageLayout } from "@/components/page-layout";
-import { ResourcePermissions } from "@/components/resource-permissions";
+import { ResourcePermissions } from "@/components/resource-access/resource-permissions";
 import {
   GithubSnapshotNotice,
   GithubSyncPanel,
@@ -54,7 +54,7 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
-import { WizardFooter } from "@/components/wizard-footer";
+import { WizardFooter } from "@/components/wizard/wizard-footer";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 import {
   backToListLabel,

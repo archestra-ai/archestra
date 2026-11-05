@@ -7,8 +7,8 @@ import {
 } from "@archestra/shared";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ToolChecklist } from "@/components/agent-tools-editor";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { ToolChecklist } from "@/components/agents/agent-tools-editor";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {

@@ -14,7 +14,7 @@ import {
   FilterBar,
   filterSearchClass,
 } from "@/components/filter-bar";
-import { ProviderIcon } from "@/components/provider-icon";
+import { ProviderIcon } from "@/components/model-providers/provider-icon";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { SearchInput } from "@/components/search-input";
 import {

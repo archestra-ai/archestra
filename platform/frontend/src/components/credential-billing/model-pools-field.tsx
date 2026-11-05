@@ -10,7 +10,7 @@ import {
 } from "@/components/credential-billing/model-pool-access";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PoolProviderIcons } from "@/components/model-pools/pool-providers";
-import { ProviderIcon } from "@/components/provider-icon";
+import { ProviderIcon } from "@/components/model-providers/provider-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {

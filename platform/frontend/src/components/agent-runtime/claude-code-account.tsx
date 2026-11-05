@@ -1,0 +1,404 @@
+"use client";
+
+import { DEFAULT_CLAUDE_CODE_MODEL } from "@archestra/shared";
+import { CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ClaudeCodeSignInSteps } from "@/components/agent-runtime/claude-code-sign-in-steps";
+import { RuntimeCredentialIcon } from "@/components/agent-runtime/runtime-credential-icon";
+import { ModelSelector } from "@/components/chat/model-selector";
+import { QueryLoadError } from "@/components/query-load-error";
+import { StandardDialog } from "@/components/standard-dialog";
+import { Button } from "@/components/ui/button";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import { Label } from "@/components/ui/label";
+import { DialogCancelButton } from "@/components/unsaved-changes-guard";
+import {
+  useClaudeCodeAccount,
+  useClaudeCodeModels,
+  useClaudeCodeSignIn,
+  useDisconnectClaudeCodeAccount,
+} from "@/lib/claude-code-account.query";
+import type { LlmModel } from "@/lib/llm-models.query";
+
+export function ClaudeCodeAccount({
+  agentId,
+  model,
+  onModelChange,
+  variant = "card",
+  showDisconnectedNotice = true,
+}: {
+  agentId: string;
+  showDisconnectedNotice?: boolean;
+  /**
+   * `button` renders only the sign-in button, for a setup checklist row.
+   * `inline` signs in right where it sits, inside another dialog, rather than
+   * opening a dialog of its own.
+   */
+  variant?: "card" | "row" | "compact" | "button" | "inline";
+  model?: string;
+  onModelChange?: (model: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [code, setCode] = useState("");
+
+  const [submitted, setSubmitted] = useState(false);
+  const account = useClaudeCodeAccount(agentId, open);
+  const connected = account.data?.state === "connected";
+  const discoveredModels = useClaudeCodeModels(
+    agentId,
+    connected && Boolean(onModelChange),
+  );
+  const signIn = useClaudeCodeSignIn(agentId);
+  const disconnect = useDisconnectClaudeCodeAccount(agentId);
+  const models = useMemo<LlmModel[]>(
+    () =>
+      (discoveredModels.data ?? []).map((entry) => ({
+        id: entry.value,
+        dbId: entry.value,
+        displayName: entry.displayName,
+        provider: "anthropic",
+        isFree: false,
+      })),
+    [discoveredModels.data],
+  );
+  useEffect(() => {
+    if (submitted && connected) {
+      setOpen(false);
+      setSubmitted(false);
+      setCode("");
+    }
+  }, [submitted, connected]);
+
+  const {
+    mutate: finishSignIn,
+    isPending: finishing,
+    isError: signInFailed,
+  } = signIn;
+  const flowId = account.data?.flowId;
+  const state = account.data?.state;
+  useEffect(() => {
+    if (!open || state !== "connecting" || !flowId || finishing || signInFailed)
+      return;
+    const timer = setTimeout(() => {
+      setSubmitted(true);
+      finishSignIn({ flowId });
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [open, state, flowId, finishing, signInFailed, finishSignIn]);
+
+  // Opening the dialog to sign in is asking to sign in, so the flow starts
+  // straight away instead of behind a second "Sign in with Claude" button.
+  const openAccount = () => {
+    setOpen(true);
+    if (
+      connected ||
+      signIn.isPending ||
+      (state && ["starting", "connecting", "awaiting_code"].includes(state))
+    )
+      return;
+    setSubmitted(true);
+    signIn.reset();
+    signIn.mutate(undefined);
+  };
+
+  const completeSignIn = () => {
+    if (!account.data?.flowId) return;
+    setSubmitted(true);
+    signIn.mutate(
+      { flowId: account.data.flowId, code: code.trim() },
+      { onSuccess: () => setCode("") },
+    );
+  };
+
+  const statusText = account.isPending
+    ? "Checking connection…"
+    : account.isError
+      ? "Could not check connection"
+      : connected
+        ? "Signed in for you"
+        : account.data?.state === "expired"
+          ? "Connection expired. Sign in again."
+          : variant === "row"
+            ? "Sign in once for all your Claude Code agents."
+            : "Sign in to use this agent.";
+
+  if (agentId && !connected && !showDisconnectedNotice) return null;
+
+  if (!agentId)
+    return (
+      <p className="text-sm text-muted-foreground">
+        Save this agent to connect your Claude Code account.
+      </p>
+    );
+
+  const flow = account.isError ? (
+    <QueryLoadError
+      title="Could not check Claude Code"
+      error={account.error}
+      onRetry={() => void account.refetch()}
+    />
+  ) : connected ? (
+    <div className="space-y-3">
+      <div className="flex items-start gap-2 rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm">
+        <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-green-500" />
+        <div>
+          <p className="font-medium text-green-600 dark:text-green-400">
+            Connected for you
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            This account is available to all your Claude Code agents. Other
+            users sign in separately.
+          </p>
+        </div>
+      </div>
+      {account.data?.expiresAt && (
+        <p className="text-xs text-muted-foreground">
+          Reconnect by {new Date(account.data.expiresAt).toLocaleDateString()}.
+        </p>
+      )}
+      <p className="text-xs text-muted-foreground">
+        Disconnect prevents new runs across all your Claude Code agents from
+        using this account. Running sessions keep their token. Revoke the token
+        in Claude to end its access.
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={disconnect.isPending}
+        onClick={() => disconnect.mutate()}
+      >
+        <span>Disconnect</span>
+      </Button>
+    </div>
+  ) : signIn.isError ? (
+    <div className="space-y-2">
+      <p role="alert" className="text-sm text-destructive">
+        Could not complete sign-in. Please try again.
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => {
+          signIn.reset();
+          signIn.mutate(undefined);
+        }}
+      >
+        Try again
+      </Button>
+    </div>
+  ) : account.data?.state === "awaiting_code" ? (
+    <ClaudeCodeSignInSteps
+      authorizationUrl={account.data.authorizationUrl}
+      code={code}
+      onCodeChange={setCode}
+      onSubmit={completeSignIn}
+      submitting={signIn.isPending}
+      submitLabel={variant === "inline" ? "Connect" : undefined}
+    />
+  ) : signIn.isPending ||
+    account.data?.state === "starting" ||
+    account.data?.state === "connecting" ? (
+    <div className="space-y-2">
+      <output className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" />
+        <span>
+          {account.data?.state === "connecting"
+            ? "Completing sign-in…"
+            : "Preparing Claude sign-in…"}
+        </span>
+      </output>
+    </div>
+  ) : (
+    <div className="space-y-2">
+      {account.data?.state === "failed" && (
+        <p role="alert" className="text-sm text-destructive">
+          Sign-in did not complete. Please try again.
+        </p>
+      )}
+      {account.data?.state === "expired" && (
+        <p className="text-sm text-muted-foreground">
+          Your connection expired. Sign in again to start new runs.
+        </p>
+      )}
+
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => {
+          setSubmitted(true);
+          signIn.mutate(undefined);
+        }}
+      >
+        <RuntimeCredentialIcon icon="logo:anthropic" className="size-4" />
+        <span>Sign in with Claude</span>
+      </Button>
+    </div>
+  );
+
+  if (variant === "inline") {
+    return (
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2">
+          <RuntimeCredentialIcon
+            icon="logo:anthropic"
+            className="size-4 shrink-0"
+            size={16}
+          />
+          <span className="text-sm font-medium">Claude subscription</span>
+          {connected ? (
+            <span className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+              <CheckCircle2 className="size-3.5 text-green-500" aria-hidden />
+              <span>Signed in for you</span>
+            </span>
+          ) : (
+            !open && (
+              <Button
+                type="button"
+                size="sm"
+                className="ml-auto"
+                onClick={openAccount}
+                disabled={account.isPending}
+              >
+                Sign in with Claude
+              </Button>
+            )
+          )}
+        </div>
+        {open && !connected && flow}
+      </div>
+    );
+  }
+
+  return (
+    <div className={variant === "button" ? "contents" : "space-y-4"}>
+      {variant === "button" ? (
+        <Button
+          type="button"
+          size="sm"
+          variant={connected ? "outline" : "default"}
+          onClick={openAccount}
+          disabled={account.isPending}
+        >
+          <span>{connected ? "Manage" : "Sign in with Claude"}</span>
+        </Button>
+      ) : variant === "compact" ? (
+        <InlineNotice
+          variant={connected ? "success" : "warning"}
+          role={connected ? "status" : "alert"}
+        >
+          <RuntimeCredentialIcon icon="logo:anthropic" className="size-3.5" />
+          <span className="font-medium">Claude Code</span>
+          <InlineNoticeText>{statusText}</InlineNoticeText>
+          {connected && <CheckCircle2 aria-label="Connected" />}
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            className="ml-auto shrink-0 bg-background"
+            onClick={openAccount}
+            disabled={account.isPending}
+          >
+            <span>{connected ? "Manage" : "Sign in"}</span>
+            <ExternalLink className="size-3" />
+          </Button>
+        </InlineNotice>
+      ) : (
+        <div
+          className={
+            variant === "row"
+              ? "flex flex-wrap items-center gap-3 p-3"
+              : "flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2.5"
+          }
+        >
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background">
+            <RuntimeCredentialIcon icon="logo:anthropic" className="size-4" />
+          </div>
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <p className="text-sm font-medium">Claude Code</p>
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              {connected && (
+                <CheckCircle2 className="size-3.5 text-green-500" />
+              )}
+              <span>{statusText}</span>
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            className="shrink-0"
+            onClick={openAccount}
+            disabled={account.isPending}
+          >
+            <span>{connected ? "Manage" : "Sign in"}</span>
+            <ExternalLink className="size-3" />
+          </Button>
+        </div>
+      )}
+      {connected && onModelChange && (
+        <div className="space-y-2">
+          <Label>Model</Label>
+          {discoveredModels.isPending ? (
+            <p className="text-sm text-muted-foreground">
+              Loading models from Claude Code…
+            </p>
+          ) : discoveredModels.isError ? (
+            <QueryLoadError
+              title="Could not load Claude Code models"
+              error={discoveredModels.error}
+              onRetry={() => void discoveredModels.refetch()}
+            />
+          ) : (
+            <div>
+              <ModelSelector
+                models={models}
+                selectedModel={model ?? DEFAULT_CLAUDE_CODE_MODEL}
+                onModelChange={(value) => {
+                  if (value) onModelChange(value);
+                }}
+                variant="outline"
+                suppressAutoSelect
+              />
+              {(!model || model === "default") && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {model === "default"
+                    ? "Claude chooses the model from your account settings. Choose a named model here to make it explicit."
+                    : "New runs use Opus unless you choose another model."}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+      <StandardDialog
+        open={open}
+        onOpenChange={(value) => {
+          setOpen(value);
+          if (!value) setCode("");
+        }}
+        title={connected ? "Claude Code account" : "Connect Claude Code"}
+        description="Use your personal Claude Pro or Max subscription. Connect once to use your account across all your Claude Code agents. Other people connect their own accounts."
+        size="small"
+        className="sm:max-w-xl"
+        footer={
+          <>
+            <DialogCancelButton>Cancel</DialogCancelButton>
+            {account.data?.state === "awaiting_code" && (
+              <Button
+                type="button"
+                disabled={!code.trim() || signIn.isPending}
+                onClick={completeSignIn}
+              >
+                <span>Complete sign-in</span>
+              </Button>
+            )}
+          </>
+        }
+      >
+        {flow}
+      </StandardDialog>
+    </div>
+  );
+}

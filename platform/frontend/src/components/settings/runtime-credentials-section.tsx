@@ -4,8 +4,14 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle, Plus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useSetSettingsAction } from "@/app/settings/layout";
-import { AgentNameCell } from "@/components/agent-name-cell";
+import { RuntimeCredentialActions } from "@/components/agent-runtime/runtime-credential-actions";
+import { RuntimeCredentialConnectionDialog } from "@/components/agent-runtime/runtime-credential-connection-dialog";
+import { RuntimeCredentialDisconnectDialog } from "@/components/agent-runtime/runtime-credential-disconnect-dialog";
+import {
+  RuntimeCredentialIcon,
+  runtimeCredentialIconOf,
+} from "@/components/agent-runtime/runtime-credential-icon";
+import { AgentNameCell } from "@/components/agents/agent-name-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   CollectionFilters,
@@ -18,19 +24,13 @@ import {
   RESOURCE_ACCESS_FILTER_PARAMS,
   ResourceAccessFilter,
   useResourceAccessParam,
-} from "@/components/resource-access-filter";
+} from "@/components/resource-access/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
-import { RuntimeCredentialActions } from "@/components/runtime-credential-actions";
-import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
-import { RuntimeCredentialDisconnectDialog } from "@/components/runtime-credential-disconnect-dialog";
-import {
-  RuntimeCredentialIcon,
-  runtimeCredentialIconOf,
-} from "@/components/runtime-credential-icon";
 import { SearchInput } from "@/components/search-input";
 import { AccountPageAction } from "@/components/settings/account-page-action";
 import { ClaudeCodeSubscription } from "@/components/settings/claude-code-subscription";
 import { RuntimeCredentialDefinitionDialog } from "@/components/settings/runtime-credential-definition-dialog";
+import { useSetSettingsAction } from "@/components/settings/settings-layout.context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";

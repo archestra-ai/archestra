@@ -92,7 +92,7 @@ vi.mock("@/components/mcp-app/app-tools-editor", () => ({
 }));
 // The access editor is its own tested component; here it only has to hand
 // the dialog a save so the one Save can be asserted to commit it.
-vi.mock("@/components/resource-permissions", async () => {
+vi.mock("@/components/resource-access/resource-permissions", async () => {
   const { useEffect } = await import("react");
   return {
     ResourcePermissions: ({
@@ -114,7 +114,7 @@ vi.mock("@/components/environment-selector", () => ({
 
 // The picker itself (emoji tab, logo tab, upload, clear) is a shared component;
 // here it only has to report a chosen value so the save path can be asserted.
-vi.mock("@/components/agent-icon-picker", () => ({
+vi.mock("@/components/agents/agent-icon-picker", () => ({
   AgentIconPicker: ({
     value,
     onChange,

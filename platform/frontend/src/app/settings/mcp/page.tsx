@@ -2,11 +2,11 @@
 
 import type { Permissions } from "@archestra/shared";
 import { useEffect, useState } from "react";
+import { WithPermissions } from "@/components/roles/with-permissions";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { DisabledEnterpriseSection } from "@/components/disabled-enterprise-section";
-import { WithPermissions } from "@/components/roles/with-permissions";
+import { DisabledEnterpriseSection } from "@/components/settings/disabled-enterprise-section";
 import {
   SettingsBlock,
   SettingsSaveBar,
@@ -15,7 +15,7 @@ import {
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
+import { SmallTeamTierBanner } from "@/components/settings/small-team-tier-banner";
 // SPDX-SnippetEnd
 import {
   Select,

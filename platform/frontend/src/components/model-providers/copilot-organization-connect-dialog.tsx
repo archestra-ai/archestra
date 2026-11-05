@@ -25,7 +25,7 @@ import { ManifestRow } from "@/components/github-app-setup/manifest-row";
 import type { PrivateKeyStatus } from "@/components/github-app-setup/private-key-drop";
 import { shortGithubAppError } from "@/components/github-app-setup/short-error";
 import { GitHubConnectButton } from "@/components/github-connect-button";
-import { ResourceAccessSection } from "@/components/resource-access-section";
+import { ResourceAccessSection } from "@/components/resource-access/resource-access-section";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {

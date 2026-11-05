@@ -1,0 +1,558 @@
+"use client";
+
+import {
+  E2eTestId,
+  getChatApiKeySelectorOptionTestId,
+  getChatApiKeySelectorProviderGroupTestId,
+  type SupportedProvider,
+} from "@archestra/shared";
+import {
+  CheckIcon,
+  ChevronDown,
+  Key,
+  LayersIcon,
+  Plus,
+  TriangleAlert,
+} from "lucide-react";
+import Image from "next/image";
+import { useMemo } from "react";
+import { PromptInputButton } from "@/components/ai-elements/prompt-input";
+import { PROVIDER_CONFIG } from "@/components/model-providers/llm-provider-api-key-form";
+import { SubscriptionBrandIcon } from "@/components/subscriptions/subscription-brand-icon";
+import { SubscriptionReconnectNotice } from "@/components/subscriptions/subscription-reconnect-notice";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
+import { isPersonalSubscription } from "@/lib/llm-key-subscription";
+import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
+import type { AvailableModelPool } from "@/lib/model-pools.query";
+import {
+  isOrganizationSubscription,
+  ORGANIZATION_SUBSCRIPTIONS_HEADING,
+  organizationSubscriptionName,
+  organizationSubscriptionSubtitle,
+} from "@/lib/organization-subscription";
+import { cn } from "@/lib/utils/tailwind";
+
+type DropdownLlmProviderApiKey = Pick<
+  LlmProviderApiKey,
+  "id" | "name" | "provider"
+> &
+  Partial<
+    Pick<
+      LlmProviderApiKey,
+      | "scope"
+      | "teamName"
+      | "subscriptionKind"
+      | "requiresReauthentication"
+      | "isGithubAppKey"
+      | "githubOrganization"
+    >
+  > & {
+    connectRequired?: boolean;
+  };
+
+interface LlmProviderApiKeyDropdownProps {
+  availableKeys: DropdownLlmProviderApiKey[];
+  selectedApiKeyId: string | null;
+  disabled?: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSelectKey: (keyId: string) => void;
+  onAddApiKey?: () => void;
+  currentProvider?: SupportedProvider;
+  /** Restricts new selections while retaining an invalid current selection. */
+  providerFilter?: (provider: SupportedProvider) => boolean;
+  triggerVariant?: "prompt-input" | "button" | "select";
+  triggerClassName?: string;
+  /**
+   * Accessible name for the trigger. The trigger otherwise takes its name from
+   * whichever key is selected, which says what it holds but not what it does —
+   * fine inside a labelled form row, not enough in a filter bar where several
+   * anonymous dropdowns sit side by side.
+   */
+  triggerAriaLabel?: string;
+  popoverClassName?: string;
+  popoverPortal?: boolean;
+  searchPlaceholder?: string;
+  emptyTriggerLabel?: string;
+  triggerTestId?: string;
+  showChatTestIds?: boolean;
+  allOptionLabel?: string;
+  allOptionSelected?: boolean;
+  onSelectAllOption?: () => void;
+  allowOrganizationDefault?: boolean;
+  organizationDefaultSelected?: boolean;
+  /** What "Organization default" currently runs on. */
+  organizationDefaultDescription?: string;
+  onSelectOrganizationDefault?: () => void;
+  /** Model pools offered before the keys; a picked pool replaces the key. */
+  pools?: AvailableModelPool[];
+  selectedPoolId?: string | null;
+  onSelectPool?: (poolId: string) => void;
+}
+
+export function LlmProviderApiKeyDropdown({
+  availableKeys,
+  selectedApiKeyId,
+  disabled = false,
+  open,
+  onOpenChange,
+  onSelectKey,
+  onAddApiKey,
+  currentProvider,
+  providerFilter,
+  triggerVariant = "prompt-input",
+  triggerClassName,
+  triggerAriaLabel,
+  popoverClassName,
+  popoverPortal = true,
+  searchPlaceholder = "Search API Keys...",
+  emptyTriggerLabel,
+  triggerTestId,
+  showChatTestIds = false,
+  allOptionLabel,
+  allOptionSelected = false,
+  onSelectAllOption,
+  allowOrganizationDefault = false,
+  organizationDefaultSelected = false,
+  organizationDefaultDescription,
+  onSelectOrganizationDefault,
+  pools = [],
+  selectedPoolId = null,
+  onSelectPool,
+}: LlmProviderApiKeyDropdownProps) {
+  const selectableKeys = useMemo(
+    () =>
+      availableKeys.filter(
+        (key) =>
+          !providerFilter ||
+          providerFilter(key.provider) ||
+          key.id === selectedApiKeyId,
+      ),
+    [availableKeys, providerFilter, selectedApiKeyId],
+  );
+  const subscriptionKeys = useMemo(
+    () => selectableKeys.filter(isPersonalSubscription),
+    [selectableKeys],
+  );
+  const organizationKeys = useMemo(
+    () => selectableKeys.filter(isOrganizationSubscription),
+    [selectableKeys],
+  );
+  const apiKeys = useMemo(
+    () =>
+      selectableKeys.filter(
+        (key) =>
+          !isPersonalSubscription(key) && !isOrganizationSubscription(key),
+      ),
+    [selectableKeys],
+  );
+  const keysByProvider = useMemo(() => groupKeysByProvider(apiKeys), [apiKeys]);
+  const availableProviders = useMemo(
+    () =>
+      sortProviders({
+        providers: Object.keys(keysByProvider) as SupportedProvider[],
+        currentProvider,
+      }),
+    [keysByProvider, currentProvider],
+  );
+  const selectedPool = pools.find((pool) => pool.id === selectedPoolId);
+  const selectedKey = selectedPool
+    ? undefined
+    : availableKeys.find((key) => key.id === selectedApiKeyId);
+  const checkedKeyId = selectedPool ? null : selectedApiKeyId;
+  const selectedKeyIsSubscription =
+    selectedKey !== undefined && isPersonalSubscription(selectedKey);
+  const fallbackTriggerLabel =
+    emptyTriggerLabel ??
+    (allOptionSelected && allOptionLabel ? allOptionLabel : undefined) ??
+    (allowOrganizationDefault
+      ? "Organization default"
+      : "Select provider key...");
+
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>
+        {triggerVariant === "button" || triggerVariant === "select" ? (
+          <Button
+            variant="outline"
+            disabled={disabled}
+            className={cn(
+              // Default (input) height and `--input` edge: it stands in for a
+              // Select in forms and filter bars.
+              "min-w-0 justify-start gap-1.5 border-input px-3",
+              triggerVariant === "select" && "justify-between",
+              triggerClassName,
+            )}
+            aria-label={triggerAriaLabel}
+            data-testid={triggerTestId}
+          >
+            <span className="flex min-w-0 items-center gap-1.5">
+              {selectedPool ? (
+                <>
+                  <LayersIcon className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate font-medium">
+                    {selectedPool.name}
+                  </span>
+                </>
+              ) : selectedKey ? (
+                <>
+                  <SubscriptionBrandIcon
+                    kind={selectedKey.subscriptionKind}
+                    provider={selectedKey.provider}
+                  />
+                  <span className="truncate font-medium">
+                    {isOrganizationSubscription(selectedKey)
+                      ? organizationSubscriptionName(selectedKey)
+                      : selectedKey.name}
+                  </span>
+                  {selectedKeyIsSubscription && (
+                    <Badge
+                      variant="secondary"
+                      className="shrink-0 px-1.5 py-0 text-[10px]"
+                    >
+                      {selectedKey.requiresReauthentication
+                        ? "Reconnect required"
+                        : "Per-user"}
+                    </Badge>
+                  )}
+                </>
+              ) : (
+                <>
+                  {triggerVariant === "button" && (
+                    <Key className="h-3 w-3 shrink-0" />
+                  )}
+                  <span className="truncate text-muted-foreground">
+                    {fallbackTriggerLabel}
+                  </span>
+                </>
+              )}
+            </span>
+            {triggerVariant === "select" && (
+              <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            )}
+          </Button>
+        ) : (
+          <PromptInputButton
+            disabled={disabled}
+            className={cn("max-w-[220px] min-w-0", triggerClassName)}
+            data-testid={
+              triggerTestId ??
+              (showChatTestIds
+                ? E2eTestId.ChatApiKeySelectorTrigger
+                : undefined)
+            }
+          >
+            {selectedKey?.requiresReauthentication ? (
+              <TriangleAlert
+                className="size-4 shrink-0 text-amber-500"
+                aria-label="Reconnect required"
+              />
+            ) : (
+              <Key className="size-4 shrink-0" />
+            )}
+          </PromptInputButton>
+        )}
+      </PopoverTrigger>
+      <PopoverContent
+        className={cn("w-80 p-0", popoverClassName)}
+        align="start"
+        portal={popoverPortal}
+      >
+        {selectedKey?.requiresReauthentication && (
+          <SubscriptionReconnectNotice credential={selectedKey} compact />
+        )}
+        <Command>
+          <CommandInput
+            placeholder={searchPlaceholder}
+            data-testid={
+              showChatTestIds
+                ? E2eTestId.ChatApiKeySelectorSearchInput
+                : undefined
+            }
+          />
+          <CommandList onWheelCapture={(event) => event.stopPropagation()}>
+            <CommandEmpty>No credentials found.</CommandEmpty>
+            {allOptionLabel && onSelectAllOption && (
+              <CommandGroup>
+                <CommandItem onSelect={onSelectAllOption}>
+                  <span className="text-muted-foreground">
+                    {allOptionLabel}
+                  </span>
+                  {allOptionSelected && (
+                    <CheckIcon className="ml-auto h-4 w-4 shrink-0" />
+                  )}
+                </CommandItem>
+              </CommandGroup>
+            )}
+            {allowOrganizationDefault && onSelectOrganizationDefault && (
+              <CommandGroup>
+                <CommandItem onSelect={onSelectOrganizationDefault}>
+                  <div className="flex min-w-0 flex-col">
+                    <span className="text-muted-foreground">
+                      Organization default
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {organizationDefaultDescription ??
+                        "No model or key set - falls back to the organization default"}
+                    </span>
+                  </div>
+                  {organizationDefaultSelected && (
+                    <CheckIcon className="ml-auto h-4 w-4 shrink-0" />
+                  )}
+                </CommandItem>
+              </CommandGroup>
+            )}
+            {onSelectPool && pools.length > 0 && (
+              <CommandGroup
+                heading={
+                  <div className="space-y-0.5">
+                    <div className="text-foreground">Model pools</div>
+                    <div className="font-normal">
+                      Fail over across every member
+                    </div>
+                  </div>
+                }
+              >
+                {pools.map((pool) => (
+                  <CommandItem
+                    key={pool.id}
+                    value={`pool:${pool.id}`}
+                    keywords={[pool.name, "model pool", ...pool.providers]}
+                    onSelect={() => onSelectPool(pool.id)}
+                    className="cursor-pointer"
+                  >
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <LayersIcon className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{pool.name}</span>
+                    </div>
+                    {selectedPoolId === pool.id && (
+                      <CheckIcon className="h-4 w-4 shrink-0" />
+                    )}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+            {subscriptionKeys.length > 0 && (
+              <CommandGroup
+                heading={
+                  <div className="space-y-0.5">
+                    <div className="text-foreground">
+                      Personal subscriptions
+                    </div>
+                    <div className="font-normal">
+                      Each user connects their own account
+                    </div>
+                  </div>
+                }
+              >
+                {subscriptionKeys.map((key) => (
+                  <CommandItem
+                    key={key.id}
+                    data-testid={
+                      showChatTestIds
+                        ? getChatApiKeySelectorOptionTestId(key.id)
+                        : undefined
+                    }
+                    value={key.id}
+                    keywords={[
+                      key.provider,
+                      key.name,
+                      "personal subscription",
+                      "per-user",
+                    ]}
+                    disabled={providerFilter?.(key.provider) === false}
+                    onSelect={() => onSelectKey(key.id)}
+                    className="cursor-pointer"
+                  >
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <SubscriptionBrandIcon
+                        kind={key.subscriptionKind}
+                        provider={key.provider}
+                      />
+                      <span className="truncate">{key.name}</span>
+                      <Badge
+                        variant={key.connectRequired ? "outline" : "secondary"}
+                        className="shrink-0 px-1 py-0 text-[10px]"
+                      >
+                        {key.requiresReauthentication
+                          ? "Reconnect required"
+                          : key.connectRequired
+                            ? "Connect"
+                            : "Per-user"}
+                      </Badge>
+                    </div>
+                    {checkedKeyId === key.id && (
+                      <CheckIcon className="h-4 w-4 shrink-0" />
+                    )}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+            {organizationKeys.length > 0 && (
+              <CommandGroup heading={ORGANIZATION_SUBSCRIPTIONS_HEADING}>
+                {organizationKeys.map((key) => (
+                  <CommandItem
+                    key={key.id}
+                    data-testid={
+                      showChatTestIds
+                        ? getChatApiKeySelectorOptionTestId(key.id)
+                        : undefined
+                    }
+                    value={key.id}
+                    keywords={[
+                      key.provider,
+                      key.name,
+                      key.githubOrganization ?? "",
+                      "enterprise plan",
+                    ]}
+                    disabled={providerFilter?.(key.provider) === false}
+                    onSelect={() => onSelectKey(key.id)}
+                    className="cursor-pointer"
+                  >
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <SubscriptionBrandIcon
+                        kind={null}
+                        provider={key.provider}
+                      />
+                      <div className="flex min-w-0 flex-col">
+                        <span className="truncate">
+                          {organizationSubscriptionName(key)}
+                        </span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {organizationSubscriptionSubtitle(key)}
+                        </span>
+                      </div>
+                    </div>
+                    {selectedApiKeyId === key.id && (
+                      <CheckIcon className="h-4 w-4 shrink-0" />
+                    )}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+            {(availableProviders.length > 0 || onAddApiKey) && (
+              <div className="border-t px-3 pb-1 pt-2 text-xs">
+                <div className="font-medium text-foreground">API keys</div>
+                <div className="text-muted-foreground">
+                  Stored credentials shared through permissions
+                </div>
+              </div>
+            )}
+            {onAddApiKey && (
+              <CommandGroup>
+                <CommandItem onSelect={onAddApiKey} className="cursor-pointer">
+                  <Plus className="h-4 w-4 shrink-0" />
+                  <span>Add provider key</span>
+                </CommandItem>
+              </CommandGroup>
+            )}
+            {availableProviders.map((provider) => (
+              <CommandGroup
+                key={provider}
+                data-testid={
+                  showChatTestIds
+                    ? getChatApiKeySelectorProviderGroupTestId(provider)
+                    : undefined
+                }
+                heading={<ProviderGroupHeading provider={provider} />}
+              >
+                {keysByProvider[provider]?.map((key) => (
+                  <CommandItem
+                    key={key.id}
+                    data-testid={
+                      showChatTestIds
+                        ? getChatApiKeySelectorOptionTestId(key.id)
+                        : undefined
+                    }
+                    value={key.id}
+                    keywords={[provider, key.name]}
+                    disabled={providerFilter?.(key.provider) === false}
+                    onSelect={() => onSelectKey(key.id)}
+                    className="cursor-pointer"
+                  >
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <span className="truncate">{key.name}</span>
+                    </div>
+                    {checkedKeyId === key.id && (
+                      <CheckIcon className="h-4 w-4 shrink-0" />
+                    )}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function groupKeysByProvider(availableKeys: DropdownLlmProviderApiKey[]) {
+  const grouped = {} as Record<SupportedProvider, DropdownLlmProviderApiKey[]>;
+
+  for (const key of availableKeys) {
+    if (!grouped[key.provider]) {
+      grouped[key.provider] = [];
+    }
+    grouped[key.provider].push(key);
+  }
+
+  return grouped;
+}
+
+function ProviderGroupHeading({ provider }: { provider: SupportedProvider }) {
+  const providerCatalog = useModelProviderCatalog();
+
+  return (
+    <span className="flex items-center gap-1.5">
+      <ProviderIcon provider={provider} />
+      <span>{providerCatalog.label(provider)}</span>
+    </span>
+  );
+}
+
+function ProviderIcon({ provider }: { provider: SupportedProvider }) {
+  const providerConfig = PROVIDER_CONFIG[provider];
+
+  if (!providerConfig?.icon) {
+    return <Key className="h-3.5 w-3.5 shrink-0" />;
+  }
+
+  return (
+    <Image
+      src={providerConfig.icon}
+      alt={providerConfig.name}
+      width={14}
+      height={14}
+      className="shrink-0 rounded dark:invert"
+    />
+  );
+}
+
+function sortProviders(params: {
+  providers: SupportedProvider[];
+  currentProvider?: SupportedProvider;
+}) {
+  const { providers, currentProvider } = params;
+
+  return [...providers].sort((a, b) => {
+    if (a === currentProvider) return -1;
+    if (b === currentProvider) return 1;
+    return a.localeCompare(b);
+  });
+}

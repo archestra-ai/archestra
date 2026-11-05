@@ -3,6 +3,7 @@
 import { RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { TerminalCard } from "@/components/agent-runs/terminal-surface";
 import {
   type ConnectionBaseUrl,
   resolveAdminDefaultBaseUrl,
@@ -18,7 +19,6 @@ import { ConnectionPlatformSelect } from "@/components/connection/platform-selec
 import { SetupCommandLine } from "@/components/connection/setup-command-line";
 import { SetupSummaryRow } from "@/components/connection/setup-summary-row";
 import { StandardDialog } from "@/components/standard-dialog";
-import { TerminalCard } from "@/components/terminal-surface";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { WizardStep } from "@/components/wizard-step";
+import { WizardStep } from "@/components/wizard/wizard-step";
 import config from "@/lib/config/config";
 import {
   type CreateConnectionSetupResult,

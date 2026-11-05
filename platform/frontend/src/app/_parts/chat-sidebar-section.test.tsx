@@ -202,7 +202,7 @@ vi.mock("@/lib/app.query", () => ({
   useOpenExternalAppInChat: () => ({ mutateAsync: vi.fn() }),
 }));
 
-vi.mock("@/components/agent-icon", () => ({
+vi.mock("@/components/agents/agent-icon", () => ({
   AgentIcon: ({ icon }: { icon?: string | null }) => (
     <span data-testid="project-emoji">{icon}</span>
   ),
@@ -232,7 +232,7 @@ vi.mock("@/components/chat/conversation-project-actions", () => ({
 // Pinned apps render their icon through this component: an owned app's own
 // icon, an external one's backing MCP server registry icon. `fallback` is what
 // each row shows when no icon is set, so the mock surfaces it.
-vi.mock("@/components/mcp-catalog-icon", () => ({
+vi.mock("@/components/mcp-registry/mcp-catalog-icon", () => ({
   McpCatalogIcon: ({
     icon,
     fallback,

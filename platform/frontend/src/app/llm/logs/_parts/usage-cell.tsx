@@ -1,6 +1,6 @@
 "use client";
 
-import { formatCost } from "@/components/cost";
+import { formatCost } from "@/components/cost-explorer/cost";
 import {
   formatCompactNumber,
   formatUsageCost,

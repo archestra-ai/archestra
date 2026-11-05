@@ -4,8 +4,8 @@ import { E2eTestId } from "@archestra/shared";
 import { ArrowLeft, ArrowRight, CircleCheck, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AgentForm } from "@/components/agent-form";
-import { defaultAgentRuntime } from "@/components/agent-runtime-fields";
+import { defaultAgentRuntime } from "@/components/agent-runtime/agent-runtime-fields";
+import { AgentForm } from "@/components/agents/agent-form";
 import { Button } from "@/components/ui/button";
 import {
   Empty,
@@ -19,8 +19,8 @@ import {
   useBeforeUnloadWhileDirty,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
-import { WizardFooter } from "@/components/wizard-footer";
-import { WizardStepper } from "@/components/wizard-stepper";
+import { WizardFooter } from "@/components/wizard/wizard-footer";
+import { WizardStepper } from "@/components/wizard/wizard-stepper";
 import { a2aRemoteAgentNewHref } from "@/lib/a2a-remote-agent-route";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";

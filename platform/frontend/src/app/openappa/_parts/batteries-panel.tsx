@@ -14,11 +14,15 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useEffect, useState } from "react";
-import { AgentNameCell } from "@/components/agent-name-cell";
 import {
   openRowOnPlainClick,
   RowClickShield,
 } from "@/components/agent-pages/row-click-shield";
+import {
+  RuntimeCredentialIcon,
+  runtimeCredentialIconOf,
+} from "@/components/agent-runtime/runtime-credential-icon";
+import { AgentNameCell } from "@/components/agents/agent-name-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   CollectionFilters,
@@ -26,16 +30,12 @@ import {
   FilterSelect,
   filterSearchClass,
 } from "@/components/filter-bar";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
 import {
   GithubManagedPolicyNotice,
   githubPolicyFileUrl,
 } from "@/components/openappa/github-managed-policy-notice";
 import { QueryLoadError } from "@/components/query-load-error";
-import {
-  RuntimeCredentialIcon,
-  runtimeCredentialIconOf,
-} from "@/components/runtime-credential-icon";
 import { SearchInput } from "@/components/search-input";
 import { useSettingsAreaAccess } from "@/components/settings/use-settings-area-access";
 import { StandardDialog } from "@/components/standard-dialog";

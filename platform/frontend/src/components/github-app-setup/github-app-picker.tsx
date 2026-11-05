@@ -1,6 +1,6 @@
 "use client";
 
-import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
+import { RuntimeCredentialIcon } from "@/components/agent-runtime/runtime-credential-icon";
 import { Label } from "@/components/ui/label";
 import {
   RadioGroup,

@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import {
   AgentRuntimeCredentialPrompt,
   AgentRuntimePreflightError,
-} from "@/components/agent-run-credential-prompt";
+} from "@/components/agent-runs/agent-run-credential-prompt";
 import ArchestraPromptInput from "@/components/chat/prompt-input";
 import { useChatAgents, useDefaultAgentId } from "@/lib/agent.query";
 import {

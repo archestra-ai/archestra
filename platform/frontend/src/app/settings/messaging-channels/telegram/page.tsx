@@ -4,9 +4,9 @@ import { MESSAGING_CHANNEL_LABELS } from "@archestra/shared";
 import { Info } from "lucide-react";
 import Image from "next/image";
 import { useState } from "react";
+import { TelegramSetupDialog } from "@/app/settings/messaging-channels/telegram/_parts/telegram-setup-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { useTriggerStatuses } from "@/components/messaging-channels/use-trigger-statuses";
-import { TelegramSetupDialog } from "@/components/telegram-setup-dialog";
 import { Button } from "@/components/ui/button";
 import {
   useChatOpsBindings,

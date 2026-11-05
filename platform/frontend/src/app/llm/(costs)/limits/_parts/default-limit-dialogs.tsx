@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { FormDialog } from "@/components/form-dialog";
+import { LlmModelPicker } from "@/app/llm/(costs)/limits/_parts/llm-model-picker";
 import {
   DEFAULT_LIMIT_CLEANUP_INTERVAL,
   type LimitCleanupInterval,
   LimitCleanupIntervalSelect,
-} from "@/components/limit-cleanup-interval-select";
-import { LlmModelPicker } from "@/components/llm-model-picker";
+} from "@/components/cost-explorer/limit-cleanup-interval-select";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import {
   DialogBody,

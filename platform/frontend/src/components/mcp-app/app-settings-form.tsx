@@ -5,12 +5,15 @@ import { AlertTriangle, AppWindow } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
-import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
+import type {
+  ProfileLabel,
+  ProfileLabelsRef,
+} from "@/components/agents/agent-labels";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { IdentityFields } from "@/components/identity-fields";
 import { AppToolsEditor } from "@/components/mcp-app/app-tools-editor";
-import { ResourcePermissions } from "@/components/resource-permissions";
+import { ResourcePermissions } from "@/components/resource-access/resource-permissions";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";

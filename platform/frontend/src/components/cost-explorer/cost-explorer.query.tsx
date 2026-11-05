@@ -6,7 +6,7 @@ import {
 } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
-import { useSetCostsAction } from "@/app/llm/(costs)/layout";
+import { useSetCostsAction } from "@/components/cost-explorer/costs-layout.context";
 import { useStatisticsTimeRange } from "@/components/time-range-picker/statistics-time-range";
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
 import { statisticsRefresh } from "@/lib/statistics.query";

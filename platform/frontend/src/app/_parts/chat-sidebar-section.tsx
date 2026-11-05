@@ -23,18 +23,18 @@ import {
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ChatListSkeleton } from "@/app/_parts/chat-list-skeleton";
+import { ProjectBadgeButton } from "@/app/_parts/project-badge-button";
 import { groupSidebarTasks } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { ShortcutHint } from "@/app/_parts/shortcut-hint";
-import { AgentIcon } from "@/components/agent-icon";
 import { runActionConfirmCopy } from "@/components/agent-pages/agent-run-actions-copy";
+import { AgentIcon } from "@/components/agents/agent-icon";
 import { useConversationActions } from "@/components/chat/conversation-actions";
 import { ConversationProjectActions } from "@/components/chat/conversation-project-actions";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { RunStateIcon } from "@/components/chat/run-state-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { ProjectBadgeButton } from "@/components/project-badge-button";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
 import { TruncatedText } from "@/components/truncated-text";
 import { Button } from "@/components/ui/button";
 import {

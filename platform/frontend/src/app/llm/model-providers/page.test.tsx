@@ -106,29 +106,32 @@ vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
   useDataTableQueryParams: () => useDataTableQueryParamsMock(),
 }));
 
-vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
-  CreateLlmProviderApiKeyDialog: (props: {
-    open: boolean;
-    title: string;
-    description?: string;
-    defaultValues?: unknown;
-    allowedProviders?: unknown;
-    reconnectKeyId?: string;
-    onOpenChange: (open: boolean) => void;
-  }) =>
-    props.open ? (
-      <div data-testid="create-dialog">
-        {props.title}
-        {props.description}
-        {JSON.stringify(props.defaultValues)}
-        {JSON.stringify(props.allowedProviders)}
-        <span>{props.reconnectKeyId}</span>
-        <button type="button" onClick={() => props.onOpenChange(false)}>
-          Cancel
-        </button>
-      </div>
-    ) : null,
-}));
+vi.mock(
+  "@/components/model-providers/create-llm-provider-api-key-dialog",
+  () => ({
+    CreateLlmProviderApiKeyDialog: (props: {
+      open: boolean;
+      title: string;
+      description?: string;
+      defaultValues?: unknown;
+      allowedProviders?: unknown;
+      reconnectKeyId?: string;
+      onOpenChange: (open: boolean) => void;
+    }) =>
+      props.open ? (
+        <div data-testid="create-dialog">
+          {props.title}
+          {props.description}
+          {JSON.stringify(props.defaultValues)}
+          {JSON.stringify(props.allowedProviders)}
+          <span>{props.reconnectKeyId}</span>
+          <button type="button" onClick={() => props.onOpenChange(false)}>
+            Cancel
+          </button>
+        </div>
+      ) : null,
+  }),
+);
 
 vi.mock("@/components/delete-confirm-dialog", () => ({
   DeleteConfirmDialog: ({
@@ -164,7 +167,7 @@ vi.mock("@/components/form-dialog", () => ({
   ),
 }));
 
-vi.mock("@/components/llm-provider-api-key-form", () => ({
+vi.mock("@/components/model-providers/llm-provider-api-key-form", () => ({
   LLM_PROVIDER_API_KEY_PLACEHOLDER: "__placeholder__",
   LlmProviderApiKeyForm: (props: unknown) => {
     mockLlmProviderApiKeyForm(props);
@@ -187,7 +190,7 @@ vi.mock("@/components/llm-provider-api-key-form", () => ({
   },
 }));
 
-vi.mock("@/components/llm-provider-select-items", () => ({
+vi.mock("@/components/model-providers/llm-provider-select-items", () => ({
   LlmProviderSelectItems: () => null,
 }));
 
@@ -286,7 +289,7 @@ vi.mock("@/components/ui/dialog", () => ({
   ),
 }));
 
-vi.mock("@/components/resource-access-section", () => ({
+vi.mock("@/components/resource-access/resource-access-section", () => ({
   ResourceAccessSection: () => null,
 }));
 

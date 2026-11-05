@@ -12,7 +12,7 @@ import {
 import Link from "next/link";
 import { type ReactNode, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { AgentIcon } from "@/components/agent-icon";
+import { AgentIcon } from "@/components/agents/agent-icon";
 import { MOBILE_HEADER_TITLE_CONTAINER_ID } from "@/components/chat/chat-help-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

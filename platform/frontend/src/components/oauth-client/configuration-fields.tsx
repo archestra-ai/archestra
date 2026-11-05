@@ -5,8 +5,8 @@ import { useMutation } from "@tanstack/react-query";
 import { Bot, Network, Workflow } from "lucide-react";
 import { type UseFormReturn, useWatch } from "react-hook-form";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
-import type { ProfileLabelsRef } from "@/components/agent-labels";
-import type { AgentSelectorAgent } from "@/components/agent-selector";
+import type { ProfileLabelsRef } from "@/components/agents/agent-labels";
+import type { AgentSelectorAgent } from "@/components/agents/agent-selector";
 import {
   BudgetFields,
   UsersPayNotice,
@@ -16,11 +16,11 @@ import {
   useCanSetModelPools,
 } from "@/components/credential-billing/model-pools-field";
 import { ProviderKeyList } from "@/components/credential-billing/provider-key-list";
-import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
+import type { LlmProviderApiKeyResponse } from "@/components/model-providers/llm-provider-api-key-form";
+import { ProviderAccessField } from "@/components/model-providers/provider-access-field";
 import { GatewayPicker } from "@/components/oauth-client/gateway-picker";
+import { RedirectUrisField } from "@/components/oauth-client/oauth-client-form-fields";
 import { OAuthServiceAccountField } from "@/components/oauth-client/service-account-field";
-import { RedirectUrisField } from "@/components/oauth-client-form-fields";
-import { ProviderAccessField } from "@/components/provider-access-field";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { fetchAgentOptionIds } from "@/lib/agent-options.query";

@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import {
   type InitialPermissionGrant,
   InitialResourcePermissions,
-} from "@/components/initial-resource-permissions";
+} from "@/components/resource-access/initial-resource-permissions";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

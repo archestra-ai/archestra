@@ -31,7 +31,7 @@ import {
 import {
   type InitialPermissionGrant,
   InitialResourcePermissions,
-} from "@/components/initial-resource-permissions";
+} from "@/components/resource-access/initial-resource-permissions";
 import { SearchInput } from "@/components/search-input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";

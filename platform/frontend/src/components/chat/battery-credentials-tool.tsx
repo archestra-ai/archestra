@@ -14,7 +14,7 @@ import {
   PlusIcon,
 } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
-import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
+import { RuntimeCredentialConnectionDialog } from "@/components/agent-runtime/runtime-credential-connection-dialog";
 import { slugifyCredentialKey } from "@/components/settings/runtime-credential-definition-dialog";
 import { Button } from "@/components/ui/button";
 import {

@@ -4,7 +4,10 @@
 import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
-import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
+import type {
+  ProfileLabel,
+  ProfileLabelsRef,
+} from "@/components/agents/agent-labels";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {

@@ -6,8 +6,8 @@ import {
 } from "@archestra/shared";
 import { AlertTriangle, Cable, Globe, Info, Waypoints } from "lucide-react";
 import { useEffect, useState } from "react";
+import { NgrokSetupDialog } from "@/components/messaging-channels/ngrok-setup-dialog";
 import { useReachabilityMode } from "@/components/messaging-channels/use-reachability-mode";
-import { NgrokSetupDialog } from "@/components/ngrok-setup-dialog";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useChatOpsStatus } from "@/lib/chatops/chatops.query";

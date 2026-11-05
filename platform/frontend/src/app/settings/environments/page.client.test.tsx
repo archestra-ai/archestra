@@ -18,7 +18,7 @@ vi.mock("@/components/mcp-registry/environments-section", () => ({
 // The layout renders whatever the page registers, so render it inline to
 // assert on the real buttons rather than on the registration call.
 const setActionButton = vi.fn();
-vi.mock("../layout", () => ({
+vi.mock("@/components/settings/settings-layout.context", () => ({
   useSetSettingsAction: () => setActionButton,
 }));
 

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AppLogo } from "@/components/app-logo";
-import { AuthCallbackLayout } from "@/components/auth-callback-layout";
+import { AuthCallbackLayout } from "@/components/auth/auth-callback-layout";
 import { notifyGithubAppSetup } from "@/components/github-app-setup/github-app-window";
 import { shortGithubAppError } from "@/components/github-app-setup/short-error";
 import { LoadingState } from "@/components/loading";

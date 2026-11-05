@@ -2,8 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
-import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
-import { ResourceAccessSection } from "@/components/resource-access-section";
+import type {
+  ProfileLabel,
+  ProfileLabelsRef,
+} from "@/components/agents/agent-labels";
+import { ResourceAccessSection } from "@/components/resource-access/resource-access-section";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

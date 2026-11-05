@@ -1,7 +1,7 @@
 "use client";
 
-import type { AgentIconPickerFallback } from "@/components/agent-icon-picker";
-import { AgentIconPicker } from "@/components/agent-icon-picker";
+import type { AgentIconPickerFallback } from "@/components/agents/agent-icon-picker";
+import { AgentIconPicker } from "@/components/agents/agent-icon-picker";
 
 /**
  * The block every entity form opens with: an icon picker beside the labelled

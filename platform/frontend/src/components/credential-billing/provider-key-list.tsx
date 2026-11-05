@@ -12,9 +12,9 @@ import {
   useKeyOwnerLabel,
   useModelIdsByKey,
 } from "@/components/credential-billing/provider-key-data";
-import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
-import { ProviderIcon } from "@/components/provider-icon";
-import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
+import type { LlmProviderApiKeyResponse } from "@/components/model-providers/llm-provider-api-key-form";
+import { ProviderIcon } from "@/components/model-providers/provider-icon";
+import type { ProviderApiKeyMappings } from "@/components/model-providers/provider-key-mappings-field";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {

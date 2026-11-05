@@ -24,7 +24,7 @@ vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 vi.mock("sonner");
-vi.mock("@/app/settings/layout", () => ({
+vi.mock("@/components/settings/settings-layout.context", () => ({
   useSetSettingsAction: vi.fn(() => () => undefined),
 }));
 

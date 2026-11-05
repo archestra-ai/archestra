@@ -8,7 +8,7 @@ import {
   FilterBar,
   filterSearchClass,
 } from "@/components/filter-bar";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";

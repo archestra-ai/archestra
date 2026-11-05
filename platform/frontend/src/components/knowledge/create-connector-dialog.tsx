@@ -14,14 +14,14 @@ import {
   type ProfileLabel,
   ProfileLabels,
   type ProfileLabelsRef,
-} from "@/components/agent-labels";
+} from "@/components/agents/agent-labels";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { AutoSyncPermissionsToggle } from "@/components/knowledge/auto-sync-permissions-toggle";
 import {
   type InitialPermissionGrant,
   InitialResourcePermissions,
-} from "@/components/initial-resource-permissions";
-import { AutoSyncPermissionsToggle } from "@/components/knowledge/auto-sync-permissions-toggle";
+} from "@/components/resource-access/initial-resource-permissions";
 import { SearchInput } from "@/components/search-input";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";

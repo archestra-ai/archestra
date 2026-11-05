@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import Link from "next/link";
-import { AgentIcon } from "@/components/agent-icon";
+import { AgentIcon } from "@/components/agents/agent-icon";
 import { type PinnedTile, PinnedTiles } from "@/components/pinned-tiles";
 import { Button } from "@/components/ui/button";
 import { ProjectActionsMenu } from "./projects-table";

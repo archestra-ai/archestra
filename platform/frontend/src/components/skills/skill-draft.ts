@@ -1,6 +1,6 @@
 import type { archestraApiTypes } from "@archestra/shared";
-import type { ProfileLabel } from "@/components/agent-labels";
-import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
+import type { ProfileLabel } from "@/components/agents/agent-labels";
+import type { InitialPermissionGrant } from "@/components/resource-access/initial-resource-permissions";
 import { composeManifest } from "@/lib/skills/manifest-compose";
 import type { SkillDetail } from "./github-sync-panel";
 

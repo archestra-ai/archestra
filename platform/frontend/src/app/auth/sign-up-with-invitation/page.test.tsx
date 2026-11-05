@@ -29,7 +29,7 @@ vi.mock("@/components/app-logo", () => ({
   AppLogo: () => <div data-testid="app-logo">App Logo</div>,
 }));
 
-vi.mock("@/components/community-links", () => ({
+vi.mock("@/components/auth/community-links", () => ({
   CommunityLinks: () => (
     <div data-testid="community-links">Community Links</div>
   ),

@@ -1,7 +1,7 @@
 "use client";
 
 import { type Ref, useMemo } from "react";
-import type { ProfileLabelsRef } from "@/components/agent-labels";
+import type { ProfileLabelsRef } from "@/components/agents/agent-labels";
 import { IdentityFields } from "@/components/identity-fields";
 import {
   SettingsSection,

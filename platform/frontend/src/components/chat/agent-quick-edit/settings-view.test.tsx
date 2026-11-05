@@ -12,7 +12,7 @@ import { AgentSettingsView } from "./settings-view";
 
 vi.mock("next/navigation");
 vi.mock("sonner");
-vi.mock("@/components/system-prompt-editor", () => ({
+vi.mock("@/components/agents/system-prompt-editor", () => ({
   SystemPromptEditor: () => <textarea aria-label="Instructions" />,
 }));
 const server = setupServer(...handlers);

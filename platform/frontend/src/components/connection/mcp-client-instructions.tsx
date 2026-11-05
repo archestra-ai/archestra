@@ -11,14 +11,14 @@ import {
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
-  SECRET_PLACEHOLDER_TOKEN,
-  SecretCopyButton,
-} from "@/components/secret-copy-button";
-import {
   TerminalCard,
   terminalActionClass,
   terminalCodeClass,
-} from "@/components/terminal-surface";
+} from "@/components/agent-runs/terminal-surface";
+import {
+  SECRET_PLACEHOLDER_TOKEN,
+  SecretCopyButton,
+} from "@/components/secret-copy-button";
 import { ServiceAccountHint } from "@/components/tokens/service-account-hint";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UnstyledButton } from "@/components/ui/unstyled-button";

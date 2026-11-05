@@ -5,6 +5,8 @@ import { AlertTriangle, ExternalLink, GitBranch } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { RuntimeCredentialConnectionDialog } from "@/components/agent-runtime/runtime-credential-connection-dialog";
+import { RuntimeCredentialIcon } from "@/components/agent-runtime/runtime-credential-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   GitSourceBranch,
@@ -12,10 +14,8 @@ import {
   GitSourceError,
   GitSourceNotice,
 } from "@/components/git/git-source-card";
-import { OpenAppaGithubAppRequirements } from "@/components/openappa-github-app-requirements";
+import { OpenAppaGithubAppRequirements } from "@/components/openappa/openappa-github-app-requirements";
 import { QueryLoadError } from "@/components/query-load-error";
-import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
-import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { RuntimeCredentialDefinitionDialog } from "@/components/settings/runtime-credential-definition-dialog";
 import { SettingsBlock } from "@/components/settings/settings-block";
 import { StandardFormDialog } from "@/components/standard-dialog";

@@ -24,22 +24,24 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { AgentForm, type AgentFormSection } from "@/components/agent-form";
-import { AgentIcon } from "@/components/agent-icon";
-import { AgentRuntimeCredentialsDeepLink } from "@/components/agent-runtime-credentials-dialog";
-import { AgentSavedSetupBanner } from "@/components/agent-saved-setup-banner";
-import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
-import { AudienceChip } from "@/components/audience-chip";
-import { BuiltInAgentBadge } from "@/components/built-in-agent-badge";
+import { AgentRuntimeCredentialsDeepLink } from "@/components/agent-runtime/agent-runtime-credentials-dialog";
+import {
+  AgentForm,
+  type AgentFormSection,
+} from "@/components/agents/agent-form";
+import { AgentIcon } from "@/components/agents/agent-icon";
+import { AgentSavedSetupBanner } from "@/components/agents/agent-saved-setup-banner";
+import { BuiltInAgentBadge } from "@/components/agents/built-in-agent-badge";
+import { CloneAgentDialog } from "@/components/agents/clone-agent-dialog";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
-import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { KebabItem } from "@/components/kebab-item";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
-import { ResourcePermissions } from "@/components/resource-permissions";
+import { AudienceChip } from "@/components/resource-access/audience-chip";
+import { ResourcePermissions } from "@/components/resource-access/resource-permissions";
 import { AgentSchedulesSection } from "@/components/scheduled-tasks/agent-schedules-section";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -66,7 +68,8 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
-import { WizardFooter } from "@/components/wizard-footer";
+import { AgentVersionHistoryDialog } from "@/components/version-history/agent-version-history-dialog";
+import { WizardFooter } from "@/components/wizard/wizard-footer";
 import {
   useDeleteProfile,
   useExportAgent,

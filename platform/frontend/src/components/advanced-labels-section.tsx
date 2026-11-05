@@ -6,7 +6,7 @@ import {
   type ProfileLabel,
   ProfileLabels,
   type ProfileLabelsRef,
-} from "@/components/agent-labels";
+} from "@/components/agents/agent-labels";
 
 /**
  * Labels at the foot of a form, optionally folded into Advanced.

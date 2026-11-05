@@ -1,7 +1,7 @@
 "use client";
 
 import type { SupportedProvider } from "@archestra/shared";
-import { ProviderIcon } from "@/components/provider-icon";
+import { ProviderIcon } from "@/components/model-providers/provider-icon";
 import { OverlappedIcons } from "@/components/ui/overlapped-icons";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import type { ModelPool } from "@/lib/model-pools.query";

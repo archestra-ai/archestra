@@ -23,7 +23,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { WizardFooter } from "@/components/wizard-footer";
+import { WizardFooter } from "@/components/wizard/wizard-footer";
 import {
   getCatalogMutationErrorCode,
   REMOTE_SERVER_URL_NOT_ALLOWED_CODE,

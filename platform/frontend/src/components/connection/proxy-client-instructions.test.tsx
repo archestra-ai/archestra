@@ -32,10 +32,13 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useAvailableLlmProviderApiKeys: () => availableKeysMock(),
 }));
 
-vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
-  CreateLlmProviderApiKeyDialog: ({ open }: { open: boolean }) =>
-    open ? <div data-testid="add-provider-key-dialog" /> : null,
-}));
+vi.mock(
+  "@/components/model-providers/create-llm-provider-api-key-dialog",
+  () => ({
+    CreateLlmProviderApiKeyDialog: ({ open }: { open: boolean }) =>
+      open ? <div data-testid="add-provider-key-dialog" /> : null,
+  }),
+);
 
 // The component reads the selected provider from the URL and writes selections
 // back; initialize matching history for the selection assertions.

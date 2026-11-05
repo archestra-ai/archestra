@@ -35,7 +35,6 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { AgentIcon } from "@/components/agent-icon";
 import {
   CatalogAgentIcon,
   getAgentCatalogTemplates,
@@ -47,7 +46,8 @@ import {
   AgentRuntimeProtocolField,
   AgentRuntimeSteeringField,
   defaultAgentRuntime,
-} from "@/components/agent-runtime-fields";
+} from "@/components/agent-runtime/agent-runtime-fields";
+import { AgentIcon } from "@/components/agents/agent-icon";
 import { IdentityFields } from "@/components/identity-fields";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SettingsSaveBar } from "@/components/settings/settings-block";

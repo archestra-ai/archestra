@@ -12,11 +12,11 @@ import {
   type ProfileLabel,
   ProfileLabels,
   type ProfileLabelsRef,
-} from "@/components/agent-labels";
+} from "@/components/agents/agent-labels";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { AutoSyncPermissionsToggle } from "@/components/knowledge/auto-sync-permissions-toggle";
-import { ResourceAccessSection } from "@/components/resource-access-section";
+import { ResourceAccessSection } from "@/components/resource-access/resource-access-section";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
 import {

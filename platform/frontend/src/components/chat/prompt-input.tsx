@@ -41,7 +41,7 @@ import { preloadResponseMarkdown } from "@/components/ai-elements/response";
 import { ChatComposerSecurity } from "@/components/chat/chat-composer-security";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
-import { SubscriptionReconnectNotice } from "@/components/subscription-reconnect-notice";
+import { SubscriptionReconnectNotice } from "@/components/subscriptions/subscription-reconnect-notice";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import {

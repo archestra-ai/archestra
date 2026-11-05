@@ -19,7 +19,7 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/agent-options.query", () => ({ useAgentOptionsPage: vi.fn() }));
-vi.mock("@/components/claude-code-account", () => ({
+vi.mock("@/components/agent-runtime/claude-code-account", () => ({
   ClaudeCodeAccount: () => <div>Claude Code sign-in</div>,
 }));
 // The shared table has its own tests; here it only matters whether it renders.

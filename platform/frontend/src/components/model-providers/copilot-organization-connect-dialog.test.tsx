@@ -48,7 +48,7 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
 vi.mock("@/lib/runtime-credentials.query", () => ({
   useRuntimeCredentials: vi.fn(),
 }));
-vi.mock("@/components/resource-access-section", () => ({
+vi.mock("@/components/resource-access/resource-access-section", () => ({
   ResourceAccessSection: () => <div>Access picker</div>,
 }));
 

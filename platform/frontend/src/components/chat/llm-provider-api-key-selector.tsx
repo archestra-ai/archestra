@@ -19,10 +19,10 @@ import {
   useRef,
   useState,
 } from "react";
-import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
-import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
-import type { LlmProviderApiKeyFormValues } from "@/components/llm-provider-api-key-form";
-import { useLlmProviderApiKeyCreateDialog } from "@/components/use-llm-provider-api-key-create-dialog";
+import { CreateLlmProviderApiKeyDialog } from "@/components/model-providers/create-llm-provider-api-key-dialog";
+import { LlmProviderApiKeyDropdown } from "@/components/model-providers/llm-provider-api-key-dropdown";
+import type { LlmProviderApiKeyFormValues } from "@/components/model-providers/llm-provider-api-key-form";
+import { useLlmProviderApiKeyCreateDialog } from "@/components/model-providers/use-llm-provider-api-key-create-dialog";
 import { useSession } from "@/lib/auth/auth.query";
 import { useUpdateConversation } from "@/lib/chat/chat.query";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";

@@ -11,7 +11,7 @@ import {
   OpenAppaShadesIcon,
   OpenAppaSuspiciousIcon,
   OpenAppaZzzIcon,
-} from "@/components/openappa-icon";
+} from "@/components/openappa/openappa-icon";
 import {
   Popover,
   PopoverContent,

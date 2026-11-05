@@ -75,7 +75,7 @@ vi.mock("@/lib/mcp/archestra-mcp-server", () => ({
   useArchestraMcpIdentity: () => ({ catalogName: "Archestra" }),
 }));
 
-vi.mock("@/components/mcp-catalog-icon", () => ({
+vi.mock("@/components/mcp-registry/mcp-catalog-icon", () => ({
   McpCatalogIcon: () => null,
 }));
 

@@ -7,6 +7,7 @@ import {
 } from "@archestra/shared";
 import { Bot, Cpu, Globe, KeyRound, Users, UserX } from "lucide-react";
 import Image from "next/image";
+import type { UnattributedReason } from "@/app/llm/logs/_parts/unattributed-user-badge";
 import { PersonAvatar } from "@/components/logs/hue-avatar";
 import {
   isKnowledgeSource,
@@ -14,7 +15,7 @@ import {
   sourceLabel,
   uniqueSources,
 } from "@/components/logs/logs-table-format";
-import { ClientIcon } from "@/components/provider-icon";
+import { ClientIcon } from "@/components/model-providers/provider-icon";
 import { SourceIcon } from "@/components/source-badge";
 import {
   Tooltip,
@@ -22,7 +23,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import type { UnattributedReason } from "@/components/unattributed-user-badge";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { providerLogoUrl } from "@/lib/provider-logos";
 import { cn } from "@/lib/utils/tailwind";

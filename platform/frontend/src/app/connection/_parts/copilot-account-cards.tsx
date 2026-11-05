@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import { CopilotOrganizationConnectDialog } from "@/components/model-providers/copilot-organization-connect-dialog";
 import { SubscriptionCard } from "@/components/model-providers/subscription-provider-cards";
+import { GithubCopilotSignIn } from "@/components/subscriptions/github-copilot-sign-in";
 import { cn } from "@/lib/utils/tailwind";
 
 /** A GitHub Copilot key the person may use, as the available-keys list has it. */

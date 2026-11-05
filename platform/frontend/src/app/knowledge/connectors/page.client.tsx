@@ -19,7 +19,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { GoogleDriveOAuthResultToast } from "@/app/knowledge/connectors/_parts/gdrive-connection-card";
-import { BulkResourceAccessDialog } from "@/components/bulk-resource-access-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -39,15 +38,16 @@ import {
   permanentDeleteRowAction,
 } from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
+import { BulkResourceAccessDialog } from "@/components/resource-access/bulk-resource-access-dialog";
 import {
   RESOURCE_ACCESS_FILTER_PARAMS,
   ResourceAccessFilter,
-} from "@/components/resource-access-filter";
-import { ResourceListActions } from "@/components/resource-list-actions";
+} from "@/components/resource-access/resource-access-filter";
 import {
   ResourceDeletedStatusFilter,
   useScopeFilterParams,
-} from "@/components/resource-scope-filter";
+} from "@/components/resource-access/resource-scope-filter";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCard,

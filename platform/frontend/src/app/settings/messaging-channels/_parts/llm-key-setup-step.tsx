@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
-import type { LlmProviderApiKeyFormValues } from "@/components/llm-provider-api-key-form";
+import { CreateLlmProviderApiKeyDialog } from "@/components/model-providers/create-llm-provider-api-key-dialog";
+import type { LlmProviderApiKeyFormValues } from "@/components/model-providers/llm-provider-api-key-form";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { SetupStep } from "./setup-step";
 

@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AppLogo } from "@/components/app-logo";
-import { CommunityLinks } from "@/components/community-links";
+import { CommunityLinks } from "@/components/auth/community-links";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { LoadingState } from "@/components/loading";
 import { Button } from "@/components/ui/button";

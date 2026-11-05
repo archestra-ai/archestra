@@ -3,7 +3,7 @@
 "use client";
 
 import { Mail } from "lucide-react";
-import { OpenAppaSolidIcon } from "@/components/openappa-icon";
+import { OpenAppaSolidIcon } from "@/components/openappa/openappa-icon";
 import { PageLayout } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import {

@@ -9,7 +9,7 @@ import type { ReactNode } from "react";
 import { McpCallChip } from "@/components/log-detail/request-waterfall";
 import { AgentIdenticon } from "@/components/logs/hue-avatar";
 import { sourceLabel } from "@/components/logs/logs-table-format";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
 import { SourceIcon } from "@/components/source-badge";
 import {
   Tooltip,

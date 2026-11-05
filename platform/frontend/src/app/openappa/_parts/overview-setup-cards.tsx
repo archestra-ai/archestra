@@ -1,11 +1,11 @@
 "use client";
 
 import { MessageCircle } from "lucide-react";
+import { OpenAppaMascot } from "@/app/openappa/_parts/openappa-mascot";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { GithubManagedPolicyNotice } from "@/components/openappa/github-managed-policy-notice";
 import { OpenAppaChatButton } from "@/components/openappa/openappa-chat-button";
 import { useOpenAppaSetupState } from "@/components/openappa/use-openappa-setup-state";
-import { OpenAppaMascot } from "@/components/openappa-mascot";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 

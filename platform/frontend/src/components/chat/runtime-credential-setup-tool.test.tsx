@@ -18,17 +18,20 @@ vi.mock("@/components/settings/runtime-credential-definition-dialog", () => ({
     </button>
   ),
 }));
-vi.mock("@/components/runtime-credential-connection-dialog", () => ({
-  RuntimeCredentialConnectionDialog: ({
-    onConnected,
-  }: {
-    onConnected: () => void;
-  }) => (
-    <button type="button" onClick={onConnected}>
-      Connect private key
-    </button>
-  ),
-}));
+vi.mock(
+  "@/components/agent-runtime/runtime-credential-connection-dialog",
+  () => ({
+    RuntimeCredentialConnectionDialog: ({
+      onConnected,
+    }: {
+      onConnected: () => void;
+    }) => (
+      <button type="button" onClick={onConnected}>
+        Connect private key
+      </button>
+    ),
+  }),
+);
 
 beforeEach(() => sessionStorage.clear());
 

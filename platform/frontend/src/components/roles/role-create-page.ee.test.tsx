@@ -28,7 +28,7 @@ import { RoleCreatePage } from "./role-create-page.ee";
 vi.mock("next/navigation");
 vi.mock("sonner");
 vi.mock("@/lib/auth/auth.query");
-vi.mock("@/app/settings/layout", () => ({
+vi.mock("@/components/settings/settings-layout.context", () => ({
   useSetSettingsPageHeader: () => vi.fn(),
   useSetSettingsAction: () => vi.fn(),
 }));

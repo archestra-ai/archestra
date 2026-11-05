@@ -6,7 +6,7 @@ import {
 } from "@archestra/shared";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChannelIcon } from "@/components/channel-icon";
+import { ChannelIcon } from "@/components/messaging-channels/channel-icon";
 import { SectionSubnavLink } from "@/components/section-nav";
 import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
 import { cn } from "@/lib/utils/tailwind";

@@ -2,7 +2,7 @@ import type { archestraApiTypes } from "@archestra/shared";
 import {
   hasNoRecentModelActivity,
   modelActivityBaseline,
-} from "@/components/agent-run-liveness";
+} from "@/components/agent-runs/agent-run-liveness";
 import { hasRetainedSessionActivity } from "@/lib/agent-run-activity";
 import type { AgentRunSession } from "@/lib/agent-runtime.query";
 import { formatRuntimeDuration } from "@/lib/agent-runtime-time";

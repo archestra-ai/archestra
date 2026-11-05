@@ -4,7 +4,7 @@ import type { Permissions } from "@archestra/shared";
 import { Plus } from "lucide-react";
 import { LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
-import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
+import { SmallTeamTierBanner } from "@/components/settings/small-team-tier-banner";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useIsKnowledgeBaseConfigured } from "@/lib/knowledge/knowledge-base.query";
 import { EmbeddingRequiredPlaceholder } from "./embedding-required-placeholder";

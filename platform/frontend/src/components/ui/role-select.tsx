@@ -5,7 +5,7 @@ import { findUngrantablePermissions } from "@archestra/shared/access-control";
 import { ShieldAlert } from "lucide-react";
 import type * as React from "react";
 import { filterControlClass } from "@/components/filter-bar";
-import { RoleOptionLabel } from "@/components/role-type-icon";
+import { RoleOptionLabel } from "@/components/roles/role-type-icon";
 import { SearchableMultiSelect } from "@/components/searchable-multi-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useAllPermissions } from "@/lib/auth/auth.query";

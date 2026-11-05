@@ -3,7 +3,7 @@
 import { PROJECT_NAME_MAX_LENGTH } from "@archestra/shared";
 import { Check, Folder, FolderInput, FolderPlus, FolderX } from "lucide-react";
 import { Fragment, useState } from "react";
-import { AgentIcon } from "@/components/agent-icon";
+import { AgentIcon } from "@/components/agents/agent-icon";
 import {
   Command,
   CommandEmpty,

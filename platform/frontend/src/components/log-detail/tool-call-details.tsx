@@ -3,7 +3,6 @@
 import { Braces } from "lucide-react";
 import type { ReactNode } from "react";
 import { CopyButton } from "@/components/copy-button";
-import { EncryptedChatContentUnavailable } from "@/components/encrypted-chat-content-unavailable";
 import { PaneHeader } from "@/components/log-detail/pane-header";
 import { ToolCallOutcomeNotice } from "@/components/log-detail/tool-call-outcome-notice";
 import {
@@ -11,8 +10,9 @@ import {
   ToolArgumentsView,
   ToolResultView,
 } from "@/components/log-detail/tool-result-view";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { McpToolCallStatusLabel } from "@/components/mcp-tool-call-status";
+import { EncryptedChatContentUnavailable } from "@/components/logs/encrypted-chat-content-unavailable";
+import { McpToolCallStatusLabel } from "@/components/logs/mcp-tool-call-status";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
 import { readMcpToolCall } from "@/lib/mcp-logs/tool-call-content";
 import type { McpServerDisplay } from "@/lib/mcp-logs/use-mcp-server-display";
 import { formatDate } from "@/lib/utils/date-time";

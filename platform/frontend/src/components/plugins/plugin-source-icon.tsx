@@ -1,6 +1,6 @@
 import { DEFAULT_GIT_WEB_URLS, type GitProvider } from "@archestra/shared";
 import { Puzzle } from "lucide-react";
-import { AgentIcon } from "@/components/agent-icon";
+import { AgentIcon } from "@/components/agents/agent-icon";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
 import { repositoryLabel } from "@/lib/skills/skill-source";
 

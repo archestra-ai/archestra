@@ -4,7 +4,7 @@ import { isSupportedProvider, type SupportedProvider } from "@archestra/shared";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
-import { AgentSelector } from "@/components/agent-selector";
+import { AgentSelector } from "@/components/agents/agent-selector";
 import {
   isInstallerClientId,
   visibleClients,
@@ -18,7 +18,7 @@ import {
 import { McpClientInstructions } from "@/components/connection/mcp-client-instructions";
 import { ProxyClientInstructions } from "@/components/connection/proxy-client-instructions";
 import { useUpdateUrlParams } from "@/components/connection/use-update-url-params";
-import { WizardStep } from "@/components/wizard-step";
+import { WizardStep } from "@/components/wizard/wizard-step";
 import {
   useAgentOptionsByIds,
   useAgentOptionsPage,

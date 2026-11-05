@@ -12,7 +12,7 @@ import {
   it,
   vi,
 } from "vitest";
-import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
+import type { LlmProviderApiKeyResponse } from "@/components/model-providers/llm-provider-api-key-form";
 import { useSession } from "@/lib/auth/auth.query";
 import { useOrganization } from "@/lib/organization.query";
 import { ProviderKeyList } from "./provider-key-list";

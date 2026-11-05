@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import type { LlmProviderApiKeyFormValues } from "@/components/llm-provider-api-key-form";
+import type { LlmProviderApiKeyFormValues } from "@/components/model-providers/llm-provider-api-key-form";
 import {
   isEditApiKeyFormValid,
   subscriptionSignInRequired,

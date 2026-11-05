@@ -45,11 +45,11 @@ import {
   useRef,
   useState,
 } from "react";
-import { AgentIcon } from "@/components/agent-icon";
 import { agentListHref } from "@/components/agent-pages/agent-page-config";
+import { AgentIcon } from "@/components/agents/agent-icon";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
-import { ProviderIcon } from "@/components/provider-icon";
-import { SubscriptionBrandIcon } from "@/components/subscription-brand-icon";
+import { ProviderIcon } from "@/components/model-providers/provider-icon";
+import { SubscriptionBrandIcon } from "@/components/subscriptions/subscription-brand-icon";
 import { Button } from "@/components/ui/button";
 import {
   Command,

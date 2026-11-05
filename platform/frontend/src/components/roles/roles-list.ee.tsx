@@ -12,7 +12,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
-import { useSetSettingsAction } from "@/app/settings/layout";
 import {
   openRowOnPlainClick,
   RowClickShield,
@@ -24,8 +23,9 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { QueryLoadError } from "@/components/query-load-error";
-import { RoleTypeIcon } from "@/components/role-type-icon";
+import { RoleTypeIcon } from "@/components/roles/role-type-icon";
 import { SearchInput } from "@/components/search-input";
+import { useSetSettingsAction } from "@/components/settings/settings-layout.context";
 import {
   type TableRowAction,
   TableRowActions,

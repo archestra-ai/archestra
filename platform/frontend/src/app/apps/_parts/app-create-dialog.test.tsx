@@ -8,7 +8,7 @@ const { pushMock, createMutateMock, useCreateAppMock } = vi.hoisted(() => ({
   useCreateAppMock: vi.fn(),
 }));
 
-vi.mock("@/components/initial-resource-permissions", () => ({
+vi.mock("@/components/resource-access/initial-resource-permissions", () => ({
   InitialResourcePermissions: () => null,
 }));
 

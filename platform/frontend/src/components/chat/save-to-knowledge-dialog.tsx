@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import {
   type InitialPermissionGrant,
   InitialResourcePermissions,
-} from "@/components/initial-resource-permissions";
+} from "@/components/resource-access/initial-resource-permissions";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";

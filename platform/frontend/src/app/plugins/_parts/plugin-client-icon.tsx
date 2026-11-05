@@ -1,5 +1,5 @@
 import { CLIENT_FILTER_OPTIONS } from "@archestra/shared";
-import { ClientIcon } from "@/components/provider-icon";
+import { ClientIcon } from "@/components/model-providers/provider-icon";
 
 /** Canonical colorful client mark used across every Plugin surface. */
 export function PluginClientIcon({

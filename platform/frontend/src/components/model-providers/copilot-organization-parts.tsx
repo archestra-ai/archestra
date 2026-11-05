@@ -1,8 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { RuntimeCredentialIcon } from "@/components/agent-runtime/runtime-credential-icon";
 import { AccountChip } from "@/components/github-app-setup/account-chip";
-import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { Badge } from "@/components/ui/badge";
 
 /**

@@ -40,12 +40,12 @@ const mocks = vi.hoisted(() => ({
   ],
 }));
 
-vi.mock("@/app/settings/layout", () => ({
+vi.mock("@/components/settings/settings-layout.context", () => ({
   useSetSettingsAction: () => mocks.setActionButton,
 }));
 vi.mock("next/navigation");
 
-vi.mock("@/components/agent-icon-picker", () => ({
+vi.mock("@/components/agents/agent-icon-picker", () => ({
   AgentIconPicker: () => <button type="button">Choose icon</button>,
 }));
 vi.mock("@/components/roles/with-permissions", () => ({
@@ -72,7 +72,7 @@ vi.mock("@/lib/config/config.query", () => ({ useFeature: () => false }));
 vi.mock("@/components/resource-list-actions", () => ({
   ResourceListActions: () => null,
 }));
-vi.mock("@/components/resource-access-section", () => ({
+vi.mock("@/components/resource-access/resource-access-section", () => ({
   ResourceAccessSection: () => null,
 }));
 vi.mock("@/lib/runtime-credentials.query", () => ({

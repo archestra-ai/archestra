@@ -27,11 +27,11 @@ import {
 import {
   type AgentRuntimeConfig,
   defaultAgentRuntime,
-} from "@/components/agent-runtime-fields";
+} from "@/components/agent-runtime/agent-runtime-fields";
 import {
   AgentRuntimePicker,
   type AgentRuntimeSelection,
-} from "@/components/agent-runtime-picker";
+} from "@/components/agent-runtime/agent-runtime-picker";
 import {
   useHasPermissions,
   useMissingPermissions,

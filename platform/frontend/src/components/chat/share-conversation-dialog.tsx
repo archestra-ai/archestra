@@ -3,7 +3,7 @@
 
 import { Info } from "lucide-react";
 import { ShareLink } from "@/components/chat/share-link";
-import { ResourcePermissionsDialog } from "@/components/resource-permissions";
+import { ResourcePermissionsDialog } from "@/components/resource-access/resource-permissions";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 
 export function ShareConversationDialog({

@@ -64,7 +64,7 @@ vi.mock("@/lib/auth/auth.query");
 
 // The status filter reads permissions and URL state of its own; its behavior
 // is the shared component's contract, not this page's.
-vi.mock("@/components/resource-scope-filter", () => ({
+vi.mock("@/components/resource-access/resource-scope-filter", () => ({
   ResourceDeletedStatusFilter: () => <div>status filter</div>,
   ResourceScopeFilter: () => <div>scope filter</div>,
   useScopeFilterParams: () => ({ hasActiveScopeFilters: false }),

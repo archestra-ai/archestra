@@ -27,13 +27,13 @@ import { RuntimeCredentialsSection } from "./runtime-credentials-section";
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
-vi.mock("@/components/claude-code-account", () => ({
+vi.mock("@/components/agent-runtime/claude-code-account", () => ({
   ClaudeCodeAccount: () => <div>Claude Code sign-in</div>,
 }));
-vi.mock("@/components/agent-icon-picker", () => ({
+vi.mock("@/components/agents/agent-icon-picker", () => ({
   AgentIconPicker: () => null,
 }));
-vi.mock("@/app/settings/layout", () => ({
+vi.mock("@/components/settings/settings-layout.context", () => ({
   useSetSettingsAction: () => setActionButton,
 }));
 const setActionButton = vi.fn();

@@ -11,7 +11,6 @@ import { Eye, GitBranch, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { useSetSettingsAction } from "@/app/settings/layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   CollectionFilters,
@@ -28,6 +27,7 @@ import {
 } from "@/components/label-select";
 import { LabelTags } from "@/components/label-tags";
 import { SearchInput } from "@/components/search-input";
+import { useSetSettingsAction } from "@/components/settings/settings-layout.context";
 import {
   type TableRowAction,
   TableRowActions,

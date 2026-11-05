@@ -27,7 +27,6 @@ import {
 import { useRouter } from "next/navigation";
 import { memo, useState } from "react";
 import { RowClickShield } from "@/components/agent-pages/row-click-shield";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { useCanModifyCatalogItem } from "@/components/mcp-registry/catalog-edit-access";
 import { shouldShowMcpCardChatButton } from "@/components/mcp-registry/chat-button-visibility";
 import {
@@ -38,6 +37,7 @@ import {
 import type { DismissAlertTarget } from "@/components/mcp-registry/dismiss-alert-dialog";
 import { DismissAlertDialog } from "@/components/mcp-registry/dismiss-alert-dialog";
 import { McpCapabilityBadges } from "@/components/mcp-registry/mcp-capability-badges";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
 import {
   InstallBlockedTooltip,
   installBlockedSummary,

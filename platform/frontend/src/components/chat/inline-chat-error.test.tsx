@@ -32,7 +32,7 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
 }));
 
 // Invoke onToken on click so we can exercise the connect → auto-resend flow.
-vi.mock("@/components/github-copilot-sign-in", () => ({
+vi.mock("@/components/subscriptions/github-copilot-sign-in", () => ({
   GithubCopilotSignIn: ({ onToken }: { onToken: (token: string) => void }) => (
     <button type="button" onClick={() => onToken("gho_test")}>
       Sign in with GitHub

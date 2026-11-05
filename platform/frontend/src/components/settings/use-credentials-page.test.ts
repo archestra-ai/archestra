@@ -1,6 +1,6 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { useCredentialsPageHref } from "@/components/settings-link";
+import { useCredentialsPageHref } from "@/components/settings/settings-link";
 import { useCredentialsPage } from "./use-credentials-page";
 import { useNavPermissionMap } from "./use-settings-area-access";
 

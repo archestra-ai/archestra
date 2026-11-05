@@ -1,0 +1,1001 @@
+"use client";
+
+import { Check, ChevronDown, ExternalLink, Plus, X } from "lucide-react";
+import type * as React from "react";
+import { useMemo, useRef, useState } from "react";
+import { AgentIcon } from "@/components/agents/agent-icon";
+import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
+import { QueryLoadError } from "@/components/query-load-error";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  type AgentOptionFilters,
+  useAgentOptionIds,
+  useAgentOptionsByIds,
+  useAgentOptionsPage,
+} from "@/lib/agent-options.query";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
+import { cn } from "@/lib/utils/tailwind";
+
+/**
+ * Keeps the list scrollable inside a modal dialog.
+ *
+ * The list portals to `<body>` so a short dialog cannot clip it (the dialog is
+ * `overflow-hidden`). A modal dialog locks scrolling by preventDefaulting, at
+ * the document, every wheel and touch move outside its own subtree; stopping
+ * them at the list keeps them from reaching that lock.
+ */
+const keepScrollInList = {
+  onWheelCapture: (event: React.WheelEvent) => event.stopPropagation(),
+  onTouchMoveCapture: (event: React.TouchEvent) => event.stopPropagation(),
+};
+
+export type AgentSelectorAgent = {
+  id: string;
+  name: string;
+  agentType: "agent" | "mcp_gateway" | "llm_proxy" | "profile";
+  isPersonalGateway?: boolean;
+  icon?: string | null;
+  scope?: "personal" | "team" | "org";
+  authorName?: string | null;
+  authorEmail?: string | null;
+  description?: string | null;
+  teams?: Array<{ name: string }>;
+  runtime?: unknown | null;
+};
+
+type AgentSelectorProps = {
+  remote?: { filters?: AgentOptionFilters; enabled?: boolean };
+} & (
+  | {
+      mode: "single";
+      agents?: AgentSelectorAgent[];
+      value: string;
+      onValueChange: (value: string) => void;
+      placeholder?: string;
+      searchPlaceholder?: string;
+      emptyMessage?: string;
+      disabled?: boolean;
+      className?: string;
+      hint?: string;
+      /**
+       * Render every agent in one ungrouped list regardless of `agentType`,
+       * instead of the default "Agents"/"MCP Gateways" group headings. Use this
+       * for single-purpose pickers (e.g. an LLM-proxy or MCP-gateway dropdown)
+       * whose items are all one conceptual kind but may carry mixed
+       * `agentType`s (`profile`/`llm_proxy`/`mcp_gateway`).
+       */
+      flat?: boolean;
+      /**
+       * Keep the trigger to a single line: the agent's name,
+       * without the owner email that otherwise wraps underneath. For filter
+       * bars, where every control is one compact row height and the owner is
+       * still there to read in the open dropdown.
+       */
+      compactTrigger?: boolean;
+      /**
+       * Render the trigger as a small text button with this label (e.g.
+       * "Change") instead of a field showing the selection. For rows that
+       * already show the selected agent's name beside it.
+       */
+      triggerLabel?: string;
+      /**
+       * An extra choice rendered above the agent list whose value is not an
+       * agent id — e.g. "All agents" in a log filter, or "Each user personal"
+       * in a default picker. Hidden while a search excludes its label.
+       */
+      sentinelOption?: {
+        value: string;
+        label: string;
+      };
+    }
+  | {
+      mode: "multiple";
+      agents?: AgentSelectorAgent[];
+      value: string[];
+      onValueChange: (value: string[]) => void;
+      placeholder?: string;
+      searchPlaceholder?: string;
+      emptyMessage?: string;
+      disabled?: boolean;
+      disabledLabel?: string;
+      className?: string;
+      /**
+       * Show a compact dropdown trigger instead of rendering selected values
+       * inside the control. Useful when selections are already displayed by
+       * the surrounding editor.
+       */
+      triggerLabel?: string;
+      createAction?: {
+        label: string;
+        href: string;
+      };
+      /**
+       * Render every agent in one ungrouped list regardless of `agentType`,
+       * instead of the default "Agents"/"MCP Gateways" group headings. Use this
+       * for single-purpose multi-pickers (e.g. an MCP-gateway or LLM-proxy
+       * allow-list) whose items are all one conceptual kind but may carry mixed
+       * `agentType`s (`profile`/`llm_proxy`/`mcp_gateway`). Without it,
+       * `llm_proxy` agents are not rendered.
+       */
+      flat?: boolean;
+      allOption?: {
+        label: string;
+      };
+    }
+);
+
+export function AgentSelector(props: AgentSelectorProps) {
+  if (props.remote) return <RemoteAgentSelector {...props} />;
+  return props.mode === "single" ? (
+    <SingleAgentSelector {...props} />
+  ) : (
+    <MultiAgentSelector {...props} />
+  );
+}
+
+function SingleAgentSelector({
+  agents = [],
+  remoteState,
+  value,
+  onValueChange,
+  placeholder = "Select agent...",
+  searchPlaceholder = "Search agents...",
+  emptyMessage = "No agents found.",
+  disabled,
+  className,
+  hint,
+  flat,
+  compactTrigger,
+  triggerLabel,
+  sentinelOption,
+}: Extract<AgentSelectorProps, { mode: "single" }> & {
+  remoteState?: RemoteAgentChoices;
+}) {
+  const [localOpen, setLocalOpen] = useState(false);
+  const [localSearch, setLocalSearch] = useState("");
+  const open = remoteState?.open ?? localOpen;
+  const setOpen = remoteState?.setOpen ?? setLocalOpen;
+  const search = remoteState?.search ?? localSearch;
+  const setSearch = remoteState?.setSearch ?? setLocalSearch;
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const selectedAgent = (remoteState?.selectedAgents ?? agents).find(
+    (agent) => agent.id === value,
+  );
+  const isSentinelSelected = sentinelOption?.value === value;
+  const { groupedAgents, visibleAgents, page, total, setPage } =
+    usePagedAgentChoices({
+      agents,
+      search: remoteState ? "" : search,
+      flat: flat === true,
+    });
+
+  const handleSelect = (agentId: string) => {
+    onValueChange(agentId);
+    setOpen(false);
+    setSearch("");
+  };
+
+  return (
+    <Popover
+      open={disabled ? false : open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) {
+          setSearch("");
+        }
+      }}
+    >
+      <PopoverTrigger asChild>
+        {triggerLabel ? (
+          <Button
+            ref={triggerRef}
+            variant="ghost"
+            size="xs"
+            role="combobox"
+            aria-expanded={open}
+            disabled={disabled}
+            className={cn("text-muted-foreground", className)}
+          >
+            {triggerLabel}
+          </Button>
+        ) : (
+          <Button
+            ref={triggerRef}
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            disabled={disabled}
+            className={cn(
+              // h-auto + min-h-9 so a two-line row (name + owner email) isn't
+              // vertically smushed, while single-line values keep the 9-height.
+              "h-auto min-h-9 justify-between bg-transparent py-1.5 font-normal shadow-xs hover:bg-transparent hover:text-foreground",
+              !value && "text-muted-foreground",
+              className,
+            )}
+          >
+            <span className="min-w-0 flex-1 truncate text-left">
+              {selectedAgent ? (
+                <AgentSelectorRow
+                  agent={selectedAgent}
+                  variant={compactTrigger ? "compact" : "trigger"}
+                />
+              ) : isSentinelSelected ? (
+                <span>{sentinelOption.label}</span>
+              ) : (
+                <span>{placeholder}</span>
+              )}
+            </span>
+            <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        )}
+      </PopoverTrigger>
+      <PopoverContent
+        align={triggerLabel ? "end" : undefined}
+        // Rows carry a description and an owner email, so the
+        // list keeps a readable floor even when the trigger is a narrow filter
+        // control — capped to the viewport so it can't overflow a phone.
+        className="flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] min-w-[min(20rem,calc(100vw-2rem))] flex-col p-0"
+        collisionPadding={8}
+      >
+        <Command shouldFilter={false} className="min-h-0">
+          <CommandInput
+            value={search}
+            onValueChange={(value) => {
+              setSearch(value);
+              setPage(0);
+            }}
+            placeholder={searchPlaceholder}
+          />
+          {hint && (
+            <div className="px-3 py-2 text-xs text-muted-foreground">
+              {hint}
+            </div>
+          )}
+          <CommandList className="min-h-0 flex-1" {...keepScrollInList}>
+            <CommandEmpty>
+              {remoteState?.isLoading ? (
+                <span>Loading agents...</span>
+              ) : remoteState?.isError ? (
+                <span>Could not load agents.</span>
+              ) : (
+                <span>{emptyMessage}</span>
+              )}
+            </CommandEmpty>
+            {sentinelOption && matchesSearch(sentinelOption.label, search) && (
+              <CommandGroup>
+                <CommandItem
+                  value={sentinelOption.value}
+                  onSelect={() => handleSelect(sentinelOption.value)}
+                  className="justify-between"
+                >
+                  <span>{sentinelOption.label}</span>
+                  <Check
+                    className={cn(
+                      "h-4 w-4",
+                      isSentinelSelected ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                </CommandItem>
+              </CommandGroup>
+            )}
+            {flat ? (
+              <CommandGroup>
+                {visibleAgents.map((agent) => (
+                  <AgentSelectorItem
+                    key={agent.id}
+                    agent={agent}
+                    selected={agent.id === value}
+                    onSelect={handleSelect}
+                  />
+                ))}
+              </CommandGroup>
+            ) : (
+              <AgentSelectorGroups
+                groupedAgents={groupedAgents}
+                selectedIds={[value]}
+                onSelect={handleSelect}
+              />
+            )}
+          </CommandList>
+        </Command>
+        {remoteState ? (
+          <RemoteAgentPagination state={remoteState} />
+        ) : (
+          <AgentSelectorPagination
+            page={page}
+            total={total}
+            onPageChange={setPage}
+          />
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function MultiAgentSelector({
+  agents = [],
+  remoteState,
+  value,
+  onValueChange,
+  placeholder = "Search agents and MCP gateways...",
+  searchPlaceholder = "Search agents and MCP gateways...",
+  emptyMessage = "No agents or MCP gateways found.",
+  disabled,
+  disabledLabel,
+  className,
+  triggerLabel,
+  createAction,
+  flat,
+  allOption,
+}: Extract<AgentSelectorProps, { mode: "multiple" }> & {
+  remoteState?: RemoteAgentChoices;
+}) {
+  const [localOpen, setLocalOpen] = useState(false);
+  const [localSearch, setLocalSearch] = useState("");
+  const open = remoteState?.open ?? localOpen;
+  const setOpen = remoteState?.setOpen ?? setLocalOpen;
+  const search = remoteState?.search ?? localSearch;
+  const setSearch = remoteState?.setSearch ?? setLocalSearch;
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const restoreFocusRef = useRef(false);
+  const selectedIdSet = useMemo(() => new Set(value), [value]);
+  const selectedAgents = (remoteState?.selectedAgents ?? agents).filter(
+    (agent) => selectedIdSet.has(agent.id),
+  );
+  const { groupedAgents, visibleAgents, page, total, setPage } =
+    usePagedAgentChoices({
+      agents,
+      search: remoteState ? "" : search,
+      flat: flat === true,
+    });
+  const allAgentIds = remoteState?.allIds ?? agents.map((agent) => agent.id);
+  const hasAllCandidates = remoteState
+    ? remoteState.hasCandidates
+    : allAgentIds.length > 0;
+  const allSelected =
+    !!allOption &&
+    allAgentIds.length > 0 &&
+    allAgentIds.every((agentId) => selectedIdSet.has(agentId));
+
+  const handleSelect = (agentId: string) => {
+    if (remoteState?.selectionPending) return;
+    if (allSelected) {
+      onValueChange([agentId]);
+      setSearch("");
+      return;
+    }
+
+    onValueChange(
+      value.includes(agentId)
+        ? value.filter((selectedId) => selectedId !== agentId)
+        : [...value, agentId],
+    );
+    setSearch("");
+  };
+
+  const handleSelectAll = async () => {
+    if (remoteState?.selectionPending) return;
+    const ids = remoteState ? await remoteState.loadAllIds() : allAgentIds;
+    if (!ids) return;
+    onValueChange(allSelected ? [] : ids);
+    setSearch("");
+  };
+
+  return (
+    <Popover open={disabled ? false : open} onOpenChange={setOpen}>
+      <PopoverAnchor asChild>
+        <div
+          ref={anchorRef}
+          role="combobox"
+          aria-label={triggerLabel}
+          aria-expanded={open}
+          aria-disabled={disabled}
+          tabIndex={disabled ? undefined : triggerLabel ? 0 : -1}
+          className={cn(
+            "flex min-h-9 w-full flex-wrap items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
+            triggerLabel &&
+              // Matches the dashed `sm` "+ Add" chips (AssignmentCombobox)
+              // that sit beside it in the same editors.
+              "h-8 min-h-8 w-fit cursor-pointer gap-1.5 border-dashed px-2.5 py-1 text-xs text-muted-foreground shadow-xs hover:bg-accent hover:text-accent-foreground",
+            disabled && "cursor-not-allowed opacity-60",
+            className,
+          )}
+          onClick={() => {
+            if (!disabled) setOpen(true);
+          }}
+          onKeyDown={(event) => {
+            if (disabled) return;
+            if (event.key === "Enter" || event.key === " ") {
+              if (triggerLabel) event.preventDefault();
+              setOpen(true);
+            }
+          }}
+        >
+          {triggerLabel ? (
+            <>
+              <Plus className="h-3.5 w-3.5 shrink-0" />
+              <span>{triggerLabel}</span>
+            </>
+          ) : disabled && disabledLabel ? (
+            <span className="text-muted-foreground">{disabledLabel}</span>
+          ) : allSelected && allOption ? (
+            <span>{allOption.label}</span>
+          ) : selectedAgents.length === 0 ? (
+            <span className="text-muted-foreground">{placeholder}</span>
+          ) : (
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              {selectedAgents.map((agent) => (
+                <Badge
+                  key={agent.id}
+                  variant="secondary"
+                  className="max-w-[220px] gap-1"
+                >
+                  <span className="truncate">{agent.name}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Remove ${agent.name}`}
+                    className="h-4 w-4 rounded-sm p-0 hover:bg-muted-foreground/20"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleSelect(agent.id);
+                    }}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </Badge>
+              ))}
+              {remoteState && value.length > selectedAgents.length && (
+                <span className="text-sm text-muted-foreground">
+                  +{value.length - selectedAgents.length} selected
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </PopoverAnchor>
+      <PopoverContent
+        // Rows carry a description and an owner email, so the
+        // list keeps a readable floor even when the trigger is a narrow filter
+        // control — capped to the viewport so it can't overflow a phone.
+        className="flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] min-w-[min(20rem,calc(100vw-2rem))] flex-col p-0"
+        align="start"
+        onOpenAutoFocus={(event) => {
+          if (!triggerLabel) event.preventDefault();
+        }}
+        onEscapeKeyDown={() => {
+          restoreFocusRef.current = true;
+        }}
+        onCloseAutoFocus={(event) => {
+          if (triggerLabel && restoreFocusRef.current) {
+            event.preventDefault();
+            anchorRef.current?.focus();
+          }
+          restoreFocusRef.current = false;
+        }}
+        collisionPadding={8}
+      >
+        <Command shouldFilter={false} className="min-h-0">
+          <CommandInput
+            value={search}
+            onValueChange={(value) => {
+              setSearch(value);
+              setPage(0);
+            }}
+            placeholder={searchPlaceholder}
+          />
+          <CommandList
+            className="max-h-[260px] min-h-0 flex-1 overflow-y-auto"
+            {...keepScrollInList}
+          >
+            <CommandEmpty>
+              {remoteState?.isLoading ? (
+                <span>Loading agents...</span>
+              ) : remoteState?.isError ? (
+                <span>Could not load agents.</span>
+              ) : (
+                <span>{emptyMessage}</span>
+              )}
+            </CommandEmpty>
+            {flat ? (
+              <>
+                {allOption &&
+                  hasAllCandidates &&
+                  matchesSearch(allOption.label, search) && (
+                    <CommandGroup>
+                      <CommandItem
+                        value={allOption.label}
+                        onSelect={handleSelectAll}
+                        className="justify-between"
+                      >
+                        <span>{allOption.label}</span>
+                        <Check
+                          className={cn(
+                            "h-4 w-4",
+                            allSelected ? "opacity-100" : "opacity-0",
+                          )}
+                        />
+                      </CommandItem>
+                    </CommandGroup>
+                  )}
+                <CommandGroup>
+                  {visibleAgents.map((agent) => (
+                    <AgentSelectorItem
+                      key={agent.id}
+                      agent={agent}
+                      selected={
+                        allSelected ? false : selectedIdSet.has(agent.id)
+                      }
+                      onSelect={handleSelect}
+                    />
+                  ))}
+                </CommandGroup>
+              </>
+            ) : (
+              <AgentSelectorGroups
+                allOption={
+                  allOption &&
+                  hasAllCandidates &&
+                  matchesSearch(allOption.label, search)
+                    ? {
+                        label: allOption.label,
+                        selected: allSelected,
+                        onSelect: handleSelectAll,
+                      }
+                    : undefined
+                }
+                groupedAgents={groupedAgents}
+                selectedIds={allSelected ? [] : value}
+                onSelect={handleSelect}
+              />
+            )}
+          </CommandList>
+        </Command>
+        {remoteState ? (
+          <RemoteAgentPagination state={remoteState} />
+        ) : (
+          <AgentSelectorPagination
+            page={page}
+            total={total}
+            onPageChange={setPage}
+          />
+        )}
+        {createAction && (
+          <div className="border-t p-1">
+            <Button
+              asChild
+              variant="ghost"
+              size="sm"
+              className="w-full justify-between px-2 font-normal"
+            >
+              <a
+                href={createAction.href}
+                target="_blank"
+                rel="noopener"
+                onClick={() => setOpen(false)}
+              >
+                <span>{createAction.label}</span>
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </Button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function AgentSelectorGroups({
+  allOption,
+  groupedAgents,
+  selectedIds,
+  onSelect,
+}: {
+  allOption?: {
+    label: string;
+    selected: boolean;
+    onSelect: () => void;
+  };
+  groupedAgents: ReturnType<typeof useGroupedAgents>;
+  selectedIds: string[];
+  onSelect: (agentId: string) => void;
+}) {
+  return (
+    <>
+      {allOption && (
+        <CommandGroup>
+          <CommandItem
+            value={allOption.label}
+            onSelect={allOption.onSelect}
+            className="justify-between"
+          >
+            <span>{allOption.label}</span>
+            <Check
+              className={cn(
+                "h-4 w-4",
+                allOption.selected ? "opacity-100" : "opacity-0",
+              )}
+            />
+          </CommandItem>
+        </CommandGroup>
+      )}
+      {groupedAgents.agents.length > 0 && (
+        <CommandGroup heading="Agents">
+          {groupedAgents.agents.map((agent) => (
+            <AgentSelectorItem
+              key={agent.id}
+              agent={agent}
+              selected={selectedIds.includes(agent.id)}
+              onSelect={onSelect}
+            />
+          ))}
+        </CommandGroup>
+      )}
+      {groupedAgents.gateways.length > 0 && (
+        <CommandGroup heading="MCP Gateways">
+          {groupedAgents.gateways.map((agent) => (
+            <AgentSelectorItem
+              key={agent.id}
+              agent={agent}
+              selected={selectedIds.includes(agent.id)}
+              onSelect={onSelect}
+            />
+          ))}
+        </CommandGroup>
+      )}
+    </>
+  );
+}
+
+function AgentSelectorItem({
+  agent,
+  selected,
+  onSelect,
+}: {
+  agent: AgentSelectorAgent;
+  selected: boolean;
+  onSelect: (agentId: string) => void;
+}) {
+  return (
+    <CommandItem
+      value={agent.id}
+      onSelect={() => onSelect(agent.id)}
+      className="justify-between"
+    >
+      <AgentSelectorRow agent={agent} variant="option" />
+      <Check
+        className={cn(
+          "h-4 w-4 shrink-0",
+          selected ? "opacity-100" : "opacity-0",
+        )}
+      />
+    </CommandItem>
+  );
+}
+
+function AgentSelectorRow({
+  agent,
+  variant = "trigger",
+}: {
+  agent: AgentSelectorAgent;
+  /**
+   * "option" is a dropdown row: it has room for the description, and stretches
+   * to the full row width so the text stays left-aligned beside the row's
+   * check in {@link AgentSelectorItem}.
+   * "trigger" is the compact button showing the current value — no
+   * description, and its capability/scope indicators center against the whole
+   * name + owner block rather than hanging off the first line.
+   * "compact" is "trigger" pared back to one line, dropping the owner email so
+   * the control fits a filter bar's row height.
+   */
+  variant?: "trigger" | "option" | "compact";
+}) {
+  const isOption = variant === "option";
+  const owner = variant === "compact" ? null : getOwnerLabel(agent);
+  const description = isOption ? agent.description?.trim() : null;
+
+  return (
+    <span
+      className={cn("flex min-w-0 items-center gap-2", isOption && "flex-1")}
+    >
+      <AgentIcon
+        icon={agent.icon}
+        fallbackType={agent.agentType === "profile" ? "agent" : agent.agentType}
+        className="text-muted-foreground"
+      />
+      <span className="min-w-0 flex-1">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate">{agent.name}</span>
+          {isOption && agent.runtime ? (
+            <RuntimeCapableIndicator runtime={agent.runtime} />
+          ) : null}
+        </span>
+        {description && (
+          <span className="block truncate text-xs text-muted-foreground">
+            {description}
+          </span>
+        )}
+        {owner && (
+          <span className="block truncate text-xs text-muted-foreground/70">
+            {owner}
+          </span>
+        )}
+      </span>
+      {!isOption && agent.runtime ? (
+        <RuntimeCapableIndicator
+          runtime={agent.runtime}
+          className="self-center"
+        />
+      ) : null}
+    </span>
+  );
+}
+
+const AGENT_SELECTOR_PAGE_SIZE = 100;
+
+function AgentSelectorPagination({
+  page,
+  total,
+  onPageChange,
+}: {
+  page: number;
+  total: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (total <= AGENT_SELECTOR_PAGE_SIZE) return null;
+  return (
+    <div className="flex items-center justify-between gap-2 border-t p-2">
+      <Button
+        size="sm"
+        variant="outline"
+        aria-label="Previous agents"
+        disabled={page === 0}
+        onClick={() => onPageChange(page - 1)}
+      >
+        Previous
+      </Button>
+      <span className="text-xs text-muted-foreground">
+        {page + 1} / {Math.ceil(total / AGENT_SELECTOR_PAGE_SIZE)}
+      </span>
+      <Button
+        size="sm"
+        variant="outline"
+        aria-label="Next agents"
+        disabled={(page + 1) * AGENT_SELECTOR_PAGE_SIZE >= total}
+        onClick={() => onPageChange(page + 1)}
+      >
+        Next
+      </Button>
+    </div>
+  );
+}
+
+function usePagedAgentChoices({
+  agents,
+  search,
+  flat,
+}: {
+  agents: AgentSelectorAgent[];
+  search: string;
+  flat: boolean;
+}) {
+  const [requestedPage, setPage] = useState(0);
+  const matches = useVisibleAgents(agents, search);
+  const ordered = useMemo(
+    () =>
+      flat
+        ? matches
+        : [
+            ...matches.filter((agent) => agent.agentType === "agent"),
+            ...matches.filter((agent) => agent.agentType === "mcp_gateway"),
+          ],
+    [matches, flat],
+  );
+  const page = Math.min(
+    requestedPage,
+    Math.max(0, Math.ceil(ordered.length / AGENT_SELECTOR_PAGE_SIZE) - 1),
+  );
+  const visibleAgents = ordered.slice(
+    page * AGENT_SELECTOR_PAGE_SIZE,
+    (page + 1) * AGENT_SELECTOR_PAGE_SIZE,
+  );
+  const groupedAgents = useGroupedAgents(visibleAgents, "");
+  return { visibleAgents, groupedAgents, page, total: ordered.length, setPage };
+}
+
+function useVisibleAgents(agents: AgentSelectorAgent[], search: string) {
+  return useMemo(
+    () =>
+      agents.filter((agent) => matchesSearch(agentSearchText(agent), search)),
+    [agents, search],
+  );
+}
+
+function useGroupedAgents(agents: AgentSelectorAgent[], search: string) {
+  return useMemo(() => {
+    const visibleAgents = agents.filter((agent) =>
+      matchesSearch(agentSearchText(agent), search),
+    );
+
+    return {
+      agents: visibleAgents.filter((agent) => agent.agentType === "agent"),
+      gateways: visibleAgents.filter(
+        (agent) => agent.agentType === "mcp_gateway",
+      ),
+    };
+  }, [agents, search]);
+}
+
+function agentSearchText(agent: AgentSelectorAgent) {
+  return [agent.name, agent.authorEmail, agent.authorName]
+    .concat((agent.teams ?? []).map((team) => team.name))
+    .filter(Boolean)
+    .join(" ");
+}
+
+// Identity only. The email disambiguates
+// other users' personal gateways/proxies, which an admin genuinely sees in the
+// connect settings picker.
+function getOwnerLabel(agent: AgentSelectorAgent) {
+  return agent.scope === "personal"
+    ? (agent.authorEmail ?? agent.authorName ?? null)
+    : null;
+}
+
+function matchesSearch(value: string, search: string) {
+  return !search || value.toLowerCase().includes(search.toLowerCase());
+}
+
+// Server-backed choices are separate so static selectors need no query provider.
+function RemoteAgentSelector(props: AgentSelectorProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 200);
+  const filters = props.remote?.filters;
+  const enabled = props.remote?.enabled !== false && !props.disabled;
+  const pageQuery = useAgentOptionsPage({
+    filters,
+    search: debouncedSearch,
+    enabled: enabled && open,
+  });
+  const selectedIds =
+    props.mode === "single"
+      ? props.value && props.value !== props.sentinelOption?.value
+        ? [props.value]
+        : []
+      : props.value;
+  const selected = useAgentOptionsByIds({
+    ids: selectedIds.slice(0, 20),
+    enabled,
+  });
+  const needsAllIds = props.mode === "multiple" && !!props.allOption;
+  const allIds = useAgentOptionIds({
+    filters,
+    enabled: enabled && open && needsAllIds && selectedIds.length > 0,
+  });
+  const queryKey = JSON.stringify([filters, debouncedSearch]);
+  const [requested, setRequested] = useState({ key: queryKey, page: 0 });
+  const pages = pageQuery.data?.pages ?? [];
+  const page =
+    requested.key === queryKey
+      ? Math.min(requested.page, Math.max(0, pages.length - 1))
+      : 0;
+  const changePage = async (next: number) => {
+    if (next < pages.length) {
+      setRequested({ key: queryKey, page: next });
+      return;
+    }
+    const result = await pageQuery.fetchNextPage();
+    if (result.data && result.data.pages.length > next)
+      setRequested({ key: queryKey, page: next });
+  };
+  const state: RemoteAgentChoices = {
+    open,
+    setOpen,
+    search,
+    setSearch,
+    selectedAgents: selected.data ?? props.agents ?? [],
+    hasCandidates: (pages[0]?.data.length ?? 0) > 0,
+    loadAllIds: async () => {
+      if (allIds.isSuccess) return allIds.data;
+      const result = await allIds.refetch();
+      return result.isSuccess ? result.data : undefined;
+    },
+    allIds: needsAllIds ? (allIds.data ?? []) : undefined,
+    selectionPending:
+      needsAllIds && selectedIds.length > 0 && !allIds.isSuccess,
+    page,
+    hasNext: page + 1 < pages.length || pageQuery.hasNextPage,
+    isLoading:
+      pageQuery.isLoading ||
+      pageQuery.isFetchingNextPage ||
+      (needsAllIds && selectedIds.length > 0 && !allIds.isSuccess) ||
+      debouncedSearch !== search,
+    isError: pageQuery.isError || (needsAllIds && allIds.isError),
+    retry: () => {
+      void pageQuery.refetch();
+      if (needsAllIds) void allIds.refetch();
+    },
+    changePage,
+  };
+  const agents =
+    debouncedSearch === search && !state.selectionPending
+      ? (pages[page]?.data ?? [])
+      : [];
+  return props.mode === "single" ? (
+    <SingleAgentSelector {...props} agents={agents} remoteState={state} />
+  ) : (
+    <MultiAgentSelector {...props} agents={agents} remoteState={state} />
+  );
+}
+
+type RemoteAgentChoices = {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  search: string;
+  setSearch: (search: string) => void;
+  selectedAgents: AgentSelectorAgent[];
+  allIds?: string[];
+  hasCandidates: boolean;
+  loadAllIds: () => Promise<string[] | undefined>;
+  selectionPending: boolean;
+  page: number;
+  hasNext: boolean;
+  isLoading: boolean;
+  isError: boolean;
+  retry: () => void;
+  changePage: (page: number) => void;
+};
+
+function RemoteAgentPagination({ state }: { state: RemoteAgentChoices }) {
+  if (state.isError)
+    return (
+      <QueryLoadError
+        title="Could not load agents"
+        onRetry={state.retry}
+        className="h-auto"
+      />
+    );
+  if (state.page === 0 && !state.hasNext) return null;
+  return (
+    <div className="flex items-center justify-between gap-2 border-t p-2">
+      <Button
+        size="sm"
+        variant="outline"
+        aria-label="Previous agents"
+        disabled={state.page === 0 || state.isLoading}
+        onClick={() => state.changePage(state.page - 1)}
+      >
+        Previous
+      </Button>
+      <span className="text-xs text-muted-foreground">
+        Page {state.page + 1}
+      </span>
+      <Button
+        size="sm"
+        variant="outline"
+        aria-label="Next agents"
+        disabled={!state.hasNext || state.isLoading}
+        onClick={() => state.changePage(state.page + 1)}
+      >
+        Next
+      </Button>
+    </div>
+  );
+}

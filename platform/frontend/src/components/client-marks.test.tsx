@@ -1,9 +1,9 @@
 import { AGENT_CATALOG_IDS, type AgentCatalogId } from "@archestra/shared";
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { AgentIcon } from "@/components/agent-icon";
-import { CATALOG_AGENT_ICONS } from "@/components/agent-icon.utils";
 import { CatalogAgentIcon } from "@/components/agent-pages/agent-catalog";
+import { AgentIcon } from "@/components/agents/agent-icon";
+import { CATALOG_AGENT_ICONS } from "@/components/agents/agent-icon.utils";
 import { ClientIcon } from "@/components/connection/client-icon";
 import { CONNECT_CLIENTS } from "@/components/connection/clients";
 

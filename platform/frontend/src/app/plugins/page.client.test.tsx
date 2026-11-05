@@ -19,7 +19,7 @@ vi.mock("@/lib/auth/auth.query", () => ({
     "/plugins": true,
   }),
 }));
-vi.mock("@/components/resource-scope-filter", () => ({
+vi.mock("@/components/resource-access/resource-scope-filter", () => ({
   ActiveFilterBadges: () => null,
   ResourceScopeFilter: () => <button type="button">Visibility filter</button>,
   useScopeFilterParams: () => ({

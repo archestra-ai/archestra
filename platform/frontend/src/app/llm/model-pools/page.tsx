@@ -9,7 +9,6 @@ import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { Layers, Pencil, Plus, Server, Trash2 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { useCallback, useState } from "react";
-import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -23,6 +22,7 @@ import {
   PoolProviderIcons,
   PoolProviders,
 } from "@/components/model-pools/pool-providers";
+import { CreateLlmProviderApiKeyDialog } from "@/components/model-providers/create-llm-provider-api-key-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";

@@ -63,7 +63,7 @@ import { TwoFactorView } from "./two-factor-view";
 
 const IdentityProviderSelector = dynamic(() =>
   // biome-ignore lint/style/noRestrictedImports: dual-licensed at request time
-  import("@/components/identity-provider-selector.ee").then((m) => ({
+  import("@/app/auth/_parts/identity-provider-selector.ee").then((m) => ({
     default: m.IdentityProviderSelector,
   })),
 );

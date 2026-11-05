@@ -15,7 +15,8 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
-import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
+import { useSetSettingsPageHeader } from "@/components/settings/settings-layout.context";
+import { SmallTeamTierBanner } from "@/components/settings/small-team-tier-banner";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -30,7 +31,6 @@ import {
   useUpdateSiteNotification,
 } from "@/lib/site-notification.query";
 import { applyThemeOnUI } from "@/lib/use-org-theme";
-import { useSetSettingsPageHeader } from "../../layout";
 import { AppearanceEditor } from "./appearance-editor";
 import {
   type AppearanceDraft,

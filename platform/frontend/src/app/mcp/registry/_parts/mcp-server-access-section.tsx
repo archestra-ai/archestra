@@ -1,8 +1,8 @@
 "use client";
 
 import { grantsAudience } from "@archestra/shared";
-import { AudienceChip } from "@/components/audience-chip";
-import { ResourcePermissions } from "@/components/resource-permissions";
+import { AudienceChip } from "@/components/resource-access/audience-chip";
+import { ResourcePermissions } from "@/components/resource-access/resource-permissions";
 import { SettingsSection } from "@/components/settings-section";
 import { useResourcePermissions } from "@/lib/resource-permissions.query";
 

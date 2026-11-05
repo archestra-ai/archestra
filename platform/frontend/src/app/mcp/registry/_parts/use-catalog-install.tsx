@@ -25,14 +25,14 @@ import {
   type NoAuthInstallResult,
 } from "@/components/mcp-registry/no-auth-install-dialog";
 import {
+  OAuthConfirmationDialog,
+  type OAuthInstallResult,
+} from "@/components/mcp-registry/oauth-confirmation-dialog";
+import {
   RemoteServerInstallDialog,
   type RemoteServerInstallResult,
 } from "@/components/mcp-registry/remote-server-install-dialog";
 import type { McpServerInstallScope } from "@/components/mcp-registry/select-mcp-server-credential-type-and-teams";
-import {
-  OAuthConfirmationDialog,
-  type OAuthInstallResult,
-} from "@/components/oauth-confirmation-dialog";
 import { useInitiateOAuth } from "@/lib/auth/oauth.query";
 import {
   clearInstallationCompleteCatalogId,

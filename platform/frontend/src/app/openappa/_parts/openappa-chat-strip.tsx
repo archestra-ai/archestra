@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppaKeeperIcon } from "@/components/appa-keeper-icon";
+import { AppaKeeperIcon } from "@/components/openappa/appa-keeper-icon";
 import {
   OpenAppaChatButton,
   useOpenAppaChatLaunch,

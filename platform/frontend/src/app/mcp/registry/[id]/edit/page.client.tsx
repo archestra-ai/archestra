@@ -3,11 +3,11 @@
 import { ArrowLeft, ArrowRight, PackageX } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useRef } from "react";
-import { AppaKeeperIcon } from "@/components/appa-keeper-icon";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { EditCatalogContent } from "@/components/mcp-registry/edit-catalog-dialog";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
 // SPDX-SnippetEnd
 import type { CatalogItem } from "@/components/mcp-registry/mcp-server-card";
+import { AppaKeeperIcon } from "@/components/openappa/appa-keeper-icon";
 import { OpenAppaChatButton } from "@/components/openappa/openappa-chat-button";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
@@ -21,7 +21,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
-import { WizardFooter } from "@/components/wizard-footer";
+import { WizardFooter } from "@/components/wizard/wizard-footer";
 import { useFeature } from "@/lib/config/config.query";
 import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
 import {

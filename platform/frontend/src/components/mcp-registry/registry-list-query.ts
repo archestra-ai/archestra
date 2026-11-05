@@ -2,7 +2,7 @@ import {
   RESOURCE_ACCESS_RELATIONS,
   type ResourceAccessRelation,
 } from "@archestra/shared";
-import { readResourceAccessParams } from "@/components/resource-access-params";
+import { readResourceAccessParams } from "@/components/resource-access/resource-access-params";
 import { PAGE_SIZE_OPTIONS } from "@/components/ui/table-pagination";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { parseLabelsParam } from "@/lib/labels-param";

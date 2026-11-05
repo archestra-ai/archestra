@@ -4,11 +4,14 @@ import type { archestraApiTypes } from "@archestra/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
-import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
+import type {
+  ProfileLabel,
+  ProfileLabelsRef,
+} from "@/components/agents/agent-labels";
 import { createdByFact } from "@/components/created-by-cell";
 import { DetailFacts } from "@/components/detail-facts";
 import { EnvironmentSelector } from "@/components/environment-selector";
-import { ResourceAccessSection } from "@/components/resource-access-section";
+import { ResourceAccessSection } from "@/components/resource-access/resource-access-section";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {

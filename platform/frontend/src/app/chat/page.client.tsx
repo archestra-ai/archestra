@@ -34,10 +34,9 @@ import { scheduledRunContext } from "@/app/_parts/scheduled-run-sidebar.utils";
 import {
   AgentRuntimeCredentialPrompt,
   AgentRuntimePreflightError,
-} from "@/components/agent-run-credential-prompt";
+} from "@/components/agent-runs/agent-run-credential-prompt";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { preloadResponseMarkdown } from "@/components/ai-elements/response";
-import { ApiKeyLoadError } from "@/components/api-key-load-error";
 import { AppLogo } from "@/components/app-logo";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { AgentConnectionNotice } from "@/components/chat/agent-connection-notice";
@@ -80,6 +79,7 @@ import {
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { useChatApps } from "@/components/chat/use-chat-apps";
 import { LoadingState } from "@/components/loading";
+import { ApiKeyLoadError } from "@/components/model-providers/api-key-load-error";
 import { getScheduledRunChatState } from "@/components/scheduled-tasks/schedule-run-state";
 import { MobileScheduleRuns } from "@/components/scheduled-tasks/schedule-runs-panel";
 import { ScheduledRunInProgress } from "@/components/scheduled-tasks/scheduled-run-in-progress";

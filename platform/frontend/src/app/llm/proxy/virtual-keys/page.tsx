@@ -17,14 +17,9 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useSetLlmProxyAction } from "@/app/llm/proxy/_parts/llm-proxy-action-context";
-import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
-import {
-  CreateVirtualKeyDialogWithData,
-  type VirtualKeyType,
-} from "@/components/create-virtual-key-dialog";
+import { EditVirtualKeyDialog } from "@/app/llm/proxy/virtual-keys/_parts/edit-virtual-key-dialog";
 import { formatSpendCap } from "@/components/credential-billing/budget-fields";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { EditVirtualKeyDialog } from "@/components/edit-virtual-key-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -36,18 +31,19 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { LabelTags } from "@/components/label-tags";
+import { CreateLlmProviderApiKeyDialog } from "@/components/model-providers/create-llm-provider-api-key-dialog";
 import {
   isProviderApiKeyId,
   ProviderKeyFilterSelect,
-} from "@/components/provider-key-filter-select";
-import { formatProviderKeySummary } from "@/components/provider-key-mappings-field";
+} from "@/components/model-providers/provider-key-filter-select";
+import { formatProviderKeySummary } from "@/components/model-providers/provider-key-mappings-field";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   RESOURCE_ACCESS_FILTER_PARAMS,
   ResourceAccessFilter,
-} from "@/components/resource-access-filter";
+} from "@/components/resource-access/resource-access-filter";
+import { useScopeFilterParams } from "@/components/resource-access/resource-scope-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
-import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCard,
@@ -73,6 +69,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  CreateVirtualKeyDialogWithData,
+  type VirtualKeyType,
+} from "@/components/virtual-keys/create-virtual-key-dialog";
 import {
   useHasPermissions,
   useScopedCapabilities,

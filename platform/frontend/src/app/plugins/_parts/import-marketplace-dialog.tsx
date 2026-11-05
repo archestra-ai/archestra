@@ -40,8 +40,8 @@ import {
   ImportSelectionList,
   ImportSettings,
 } from "@/components/git/import-selection";
-import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
-import { ResourceAccessSection } from "@/components/resource-access-section";
+import type { InitialPermissionGrant } from "@/components/resource-access/initial-resource-permissions";
+import { ResourceAccessSection } from "@/components/resource-access/resource-access-section";
 import { SearchInput } from "@/components/search-input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";

@@ -11,18 +11,18 @@ import { AlertTriangle, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { siKubernetes } from "simple-icons";
-import { AgentRuntimeUnavailableNotice } from "@/components/agent-runtime-unavailable-notice";
-import { AgentSelector } from "@/components/agent-selector";
-import { ButtonWithTooltip } from "@/components/button-with-tooltip";
-import { ChannelIcon } from "@/components/channel-icon";
-import { ExternalDocsLink } from "@/components/external-docs-link";
-import { LlmModelSearchableSelect } from "@/components/llm-model-select";
-import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import {
   EMPTY_MODEL_TIERS,
   ModelTierPickers,
   type ModelTierSelection,
-} from "@/components/model-tier-pickers";
+} from "@/app/settings/agents/_parts/model-tier-pickers";
+import { AgentRuntimeUnavailableNotice } from "@/components/agent-runtime/agent-runtime-unavailable-notice";
+import { AgentSelector } from "@/components/agents/agent-selector";
+import { ButtonWithTooltip } from "@/components/button-with-tooltip";
+import { ExternalDocsLink } from "@/components/external-docs-link";
+import { ChannelIcon } from "@/components/messaging-channels/channel-icon";
+import { LlmProviderApiKeyDropdown } from "@/components/model-providers/llm-provider-api-key-dropdown";
+import { LlmModelSearchableSelect } from "@/components/models/llm-model-select";
 import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { IntegrationAvailabilitySection } from "@/components/settings/integration-availability-section";

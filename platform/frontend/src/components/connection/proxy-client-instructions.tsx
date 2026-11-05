@@ -16,19 +16,19 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  type ConnectionCreditWarning,
-  CreditWarningNotice,
-} from "@/components/connection/credit-warning-notice";
-import { CopyableCode } from "@/components/copyable-code";
-import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
-import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
-import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
-import {
   TerminalCard,
   terminalActionClass,
   terminalCodeClass,
   terminalLabelClass,
-} from "@/components/terminal-surface";
+} from "@/components/agent-runs/terminal-surface";
+import {
+  type ConnectionCreditWarning,
+  CreditWarningNotice,
+} from "@/components/connection/credit-warning-notice";
+import { CopyableCode } from "@/components/copyable-code";
+import { CreateLlmProviderApiKeyDialog } from "@/components/model-providers/create-llm-provider-api-key-dialog";
+import { PROVIDER_CONFIG } from "@/components/model-providers/llm-provider-api-key-form";
+import { LlmProviderSelectItems } from "@/components/model-providers/llm-provider-select-items";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import {
   Select,

@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
+import { RuntimeCredentialIcon } from "@/components/agent-runtime/runtime-credential-icon";
 import { GitAccessStep } from "@/components/git/git-access-step";
 import { GitProviderStep } from "@/components/git/git-provider-step";
 import {
@@ -41,7 +42,6 @@ import {
 } from "@/components/github-app-setup/github-app-window";
 import { ManifestRow } from "@/components/github-app-setup/manifest-row";
 import { GitHubConnectButton } from "@/components/github-connect-button";
-import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

@@ -69,7 +69,7 @@ vi.mock("next/navigation");
 // The edit dialog's Permissions page loads and saves the project's own policy.
 // This suite is about the row actions and the General page, so it is stubbed
 // rather than wiring the permission queries into every case.
-vi.mock("@/components/resource-access-section", () => ({
+vi.mock("@/components/resource-access/resource-access-section", () => ({
   ResourceAccessSection: () => <div>permissions</div>,
 }));
 
@@ -77,7 +77,7 @@ vi.mock("@/components/search-input", () => ({
   SearchInput: () => <input aria-label="Search projects" />,
 }));
 
-vi.mock("@/components/resource-scope-filter", () => ({
+vi.mock("@/components/resource-access/resource-scope-filter", () => ({
   ResourceScopeFilter: () => <div>scope filter</div>,
   ResourceDeletedStatusFilter: () => <div>status filter</div>,
   useScopeFilterParams: () => ({
@@ -137,17 +137,17 @@ vi.mock("@/components/page-layout", () => ({
   ),
 }));
 
-vi.mock("@/components/no-api-key-setup", () => ({
+vi.mock("@/components/model-providers/no-api-key-setup", () => ({
   NoApiKeySetup: () => <div data-testid="no-api-key-setup" />,
 }));
 
-vi.mock("@/components/agent-icon", () => ({
+vi.mock("@/components/agents/agent-icon", () => ({
   AgentIcon: ({ icon }: { icon?: string | null }) => (
     <span>{icon ?? "project icon"}</span>
   ),
 }));
 
-vi.mock("@/components/agent-icon-picker", () => ({
+vi.mock("@/components/agents/agent-icon-picker", () => ({
   AgentIconPicker: () => <button type="button">Pick icon</button>,
 }));
 
@@ -219,12 +219,15 @@ vi.mock("@/components/ui/button", () => ({
 }));
 
 // The access filter is a real dropdown, which this file stubs flat.
-vi.mock("@/components/resource-access-filter", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("@/components/resource-access-filter")
-  >()),
-  ResourceAccessFilter: () => null,
-}));
+vi.mock(
+  "@/components/resource-access/resource-access-filter",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@/components/resource-access/resource-access-filter")
+    >()),
+    ResourceAccessFilter: () => null,
+  }),
+);
 vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenu: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
@@ -272,7 +275,7 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useHasAnyApiKey: () => mockApiKeyState,
 }));
 
-vi.mock("@/components/api-key-load-error", () => ({
+vi.mock("@/components/model-providers/api-key-load-error", () => ({
   ApiKeyLoadError: ({ onRetry }: { onRetry: () => void }) => (
     <button type="button" data-testid="api-key-load-error" onClick={onRetry}>
       retry

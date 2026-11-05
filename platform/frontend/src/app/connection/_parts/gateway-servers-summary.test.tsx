@@ -33,7 +33,7 @@ vi.mock("@/lib/auth/use-can-manage-gateway", () => ({
   useCanManageGateway: vi.fn(),
 }));
 // next/image + app-logo plumbing is irrelevant to the grouping/link behavior
-vi.mock("@/components/mcp-catalog-icon", () => ({
+vi.mock("@/components/mcp-registry/mcp-catalog-icon", () => ({
   McpCatalogIcon: () => null,
 }));
 

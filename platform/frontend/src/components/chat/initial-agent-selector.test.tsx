@@ -283,10 +283,10 @@ vi.mock("@/components/mcp-registry/no-auth-install-dialog", () => ({
 vi.mock("@/components/mcp-registry/remote-server-install-dialog", () => ({
   RemoteServerInstallDialog: () => null,
 }));
-vi.mock("@/components/oauth-confirmation-dialog", () => ({
+vi.mock("@/components/mcp-registry/oauth-confirmation-dialog", () => ({
   OAuthConfirmationDialog: () => null,
 }));
-vi.mock("@/components/system-prompt-editor", () => ({
+vi.mock("@/components/agents/system-prompt-editor", () => ({
   SystemPromptEditor: ({
     title,
     value,

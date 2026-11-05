@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import type { ModelTierSelection } from "@/components/model-tier-pickers";
+import type { ModelTierSelection } from "@/app/settings/agents/_parts/model-tier-pickers";
 import {
   buildSavePayload,
   detectChanges,

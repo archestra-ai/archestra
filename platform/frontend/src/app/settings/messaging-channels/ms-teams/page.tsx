@@ -3,10 +3,10 @@
 import { MESSAGING_CHANNEL_LABELS } from "@archestra/shared";
 import { Globe, Info, Waypoints } from "lucide-react";
 import { useState } from "react";
+import { MsTeamsSetupDialog } from "@/app/settings/messaging-channels/ms-teams/_parts/ms-teams-setup-dialog";
+import { NgrokSetupDialog } from "@/components/messaging-channels/ngrok-setup-dialog";
 import { useReachabilityMode } from "@/components/messaging-channels/use-reachability-mode";
 import { useTriggerStatuses } from "@/components/messaging-channels/use-trigger-statuses";
-import { MsTeamsSetupDialog } from "@/components/ms-teams-setup-dialog";
-import { NgrokSetupDialog } from "@/components/ngrok-setup-dialog";
 import {
   InlineNotice,
   InlineNoticeBody,

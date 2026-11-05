@@ -27,9 +27,12 @@ import {
 import { toast } from "sonner";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import { AdvancedSection } from "@/components/advanced-section";
-import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
+import type {
+  ProfileLabel,
+  ProfileLabelsRef,
+} from "@/components/agents/agent-labels";
 import { ExternalDocsLink } from "@/components/external-docs-link";
-import { RoleAssignmentBlockedNotice } from "@/components/role-assignment-blocked-notice";
+import { RoleAssignmentBlockedNotice } from "@/components/roles/role-assignment-blocked-notice";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
@@ -52,7 +55,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   UserSearchableMultiSelect,
   type UserSelectOption,
-} from "@/components/user-searchable-multi-select";
+} from "@/components/users/user-searchable-multi-select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnterpriseFeature } from "@/lib/config/config.query";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
@@ -69,7 +72,7 @@ import {
 import { throwOnApiError } from "@/lib/utils/api";
 import { formatRoleName } from "@/lib/utils/role";
 import { cn } from "@/lib/utils/tailwind";
-import { EnterpriseLicenseRequired } from "../enterprise-license-required";
+import { EnterpriseLicenseRequired } from "../settings/enterprise-license-required";
 import { TeamMemberRoleSelect } from "./team-member-role-select";
 
 type Team = archestraApiTypes.GetTeamResponses["200"];

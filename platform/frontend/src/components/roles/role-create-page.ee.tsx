@@ -10,12 +10,12 @@ import { ArrowLeft, ArrowRight, Plus } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { PageBackLink } from "@/components/page-back-link";
+import { RoleTypeIcon } from "@/components/roles/role-type-icon";
 import {
   useSetSettingsAction,
   useSetSettingsPageHeader,
-} from "@/app/settings/layout";
-import { PageBackLink } from "@/components/page-back-link";
-import { RoleTypeIcon } from "@/components/role-type-icon";
+} from "@/components/settings/settings-layout.context";
 import {
   SettingsSection,
   SettingsSectionGroup,
@@ -25,8 +25,8 @@ import { Form } from "@/components/ui/form";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { WizardFooter } from "@/components/wizard-footer";
-import { WizardStepper } from "@/components/wizard-stepper";
+import { WizardFooter } from "@/components/wizard/wizard-footer";
+import { WizardStepper } from "@/components/wizard/wizard-stepper";
 import { useAllPermissions } from "@/lib/auth/auth.query";
 import { useCreateRole, useRoles } from "@/lib/role.query";
 import { cn } from "@/lib/utils/tailwind";

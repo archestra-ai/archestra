@@ -5,8 +5,8 @@ import { Info } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useMemo, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
-import { LlmModelSearchableSelect } from "@/components/llm-model-select";
-import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
+import { LlmProviderApiKeyDropdown } from "@/components/model-providers/llm-provider-api-key-dropdown";
+import { LlmModelSearchableSelect } from "@/components/models/llm-model-select";
 import { useOpenAppaSetupState } from "@/components/openappa/use-openappa-setup-state";
 import { SettingsBlock } from "@/components/settings/settings-block";
 import {

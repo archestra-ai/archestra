@@ -3,7 +3,7 @@
 import { Check, Copy, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { terminalActionClass } from "@/components/terminal-surface";
+import { terminalActionClass } from "@/components/agent-runs/terminal-surface";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,

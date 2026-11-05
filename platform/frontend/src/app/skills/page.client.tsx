@@ -37,7 +37,7 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { LabelTags } from "@/components/label-tags";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
 import { PageLayout } from "@/components/page-layout";
 import {
   PERMANENT_DELETE_LABEL,
@@ -49,13 +49,13 @@ import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
 import {
   RESOURCE_ACCESS_FILTER_PARAMS,
   ResourceAccessFilter,
-} from "@/components/resource-access-filter";
-import { ResourceListActions } from "@/components/resource-list-actions";
+} from "@/components/resource-access/resource-access-filter";
 import {
   ActiveFilterBadges,
   ResourceDeletedStatusFilter,
   useScopeFilterParams,
-} from "@/components/resource-scope-filter";
+} from "@/components/resource-access/resource-scope-filter";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import { SearchInput } from "@/components/search-input";
 import {
   skillEditHref,

@@ -29,7 +29,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { LabelTags } from "@/components/label-tags";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
 import { TableCard } from "@/components/table-card-view";
 import { TableRowActions } from "@/components/table-row-actions";
 import {

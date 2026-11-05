@@ -31,7 +31,7 @@ vi.mock("@/components/settings/runtime-credential-definition-dialog", () => ({
   ),
 }));
 
-vi.mock("@/components/mcp-catalog-icon", () => ({
+vi.mock("@/components/mcp-registry/mcp-catalog-icon", () => ({
   McpCatalogIcon: ({
     catalogId,
   }: {

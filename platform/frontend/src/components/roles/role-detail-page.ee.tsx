@@ -6,14 +6,14 @@ import { Copy, Download, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import {
-  useSetSettingsAction,
-  useSetSettingsPageHeader,
-} from "@/app/settings/layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { PageBackLink } from "@/components/page-back-link";
 import { QueryLoadError } from "@/components/query-load-error";
-import { RoleTypeIcon } from "@/components/role-type-icon";
+import { RoleTypeIcon } from "@/components/roles/role-type-icon";
+import {
+  useSetSettingsAction,
+  useSetSettingsPageHeader,
+} from "@/components/settings/settings-layout.context";
 import {
   SettingsSection,
   SettingsSectionGroup,

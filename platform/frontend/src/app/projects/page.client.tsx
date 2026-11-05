@@ -12,10 +12,11 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
-import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
-import { AgentSelector } from "@/components/agent-selector";
-import { ApiKeyLoadError } from "@/components/api-key-load-error";
-import { BulkResourceAccessDialog } from "@/components/bulk-resource-access-dialog";
+import type {
+  ProfileLabel,
+  ProfileLabelsRef,
+} from "@/components/agents/agent-labels";
+import { AgentSelector } from "@/components/agents/agent-selector";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
@@ -27,17 +28,19 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { IdentityFields } from "@/components/identity-fields";
-import { NoApiKeySetup } from "@/components/no-api-key-setup";
+import { ApiKeyLoadError } from "@/components/model-providers/api-key-load-error";
+import { NoApiKeySetup } from "@/components/model-providers/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
-import { ResourceAccessFilter } from "@/components/resource-access-filter";
-import { ResourceListActions } from "@/components/resource-list-actions";
+import { BulkResourceAccessDialog } from "@/components/resource-access/bulk-resource-access-dialog";
+import { ResourceAccessFilter } from "@/components/resource-access/resource-access-filter";
 import {
   ResourceDeletedStatusFilter,
   useScopeFilterParams,
-} from "@/components/resource-scope-filter";
+} from "@/components/resource-access/resource-scope-filter";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import { SearchInput } from "@/components/search-input";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { EmptyTableSection } from "@/components/table-section-heading";

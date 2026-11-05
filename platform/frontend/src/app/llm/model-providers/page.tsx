@@ -23,8 +23,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
-import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
-import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
+import type {
+  ProfileLabel,
+  ProfileLabelsRef,
+} from "@/components/agents/agent-labels";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
@@ -36,6 +38,8 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { LabelTags } from "@/components/label-tags";
+import { CopilotOrganizationConnectDialog } from "@/components/model-providers/copilot-organization-connect-dialog";
+import { CreateLlmProviderApiKeyDialog } from "@/components/model-providers/create-llm-provider-api-key-dialog";
 import {
   deserializeExtraHeaders,
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
@@ -44,9 +48,8 @@ import {
   type LlmProviderApiKeyResponse,
   PROVIDER_CONFIG,
   serializeExtraHeaders,
-} from "@/components/llm-provider-api-key-form";
-import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
-import { CopilotOrganizationConnectDialog } from "@/components/model-providers/copilot-organization-connect-dialog";
+} from "@/components/model-providers/llm-provider-api-key-form";
+import { LlmProviderSelectItems } from "@/components/model-providers/llm-provider-select-items";
 import {
   buildSubscriptionOffers,
   type SubscriptionOffer,
@@ -57,12 +60,12 @@ import { PageLayout } from "@/components/page-layout";
 import {
   RESOURCE_ACCESS_FILTER_PARAMS,
   ResourceAccessFilter,
-} from "@/components/resource-access-filter";
-import { ResourceAccessSection } from "@/components/resource-access-section";
+} from "@/components/resource-access/resource-access-filter";
+import { ResourceAccessSection } from "@/components/resource-access/resource-access-section";
+import { useScopeFilterParams } from "@/components/resource-access/resource-scope-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
-import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
-import { SettingsLink } from "@/components/settings-link";
+import { SettingsLink } from "@/components/settings/settings-link";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";

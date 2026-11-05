@@ -3,12 +3,12 @@
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { SecretCopyButton } from "@/components/secret-copy-button";
 import {
   TerminalCard,
   terminalActionClass,
   terminalCodeClass,
-} from "@/components/terminal-surface";
+} from "@/components/agent-runs/terminal-surface";
+import { SecretCopyButton } from "@/components/secret-copy-button";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { copyToClipboard } from "@/lib/clipboard";
 import { cn } from "@/lib/utils/tailwind";

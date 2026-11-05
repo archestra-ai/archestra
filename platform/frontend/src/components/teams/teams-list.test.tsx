@@ -22,7 +22,7 @@ const { mockSetSettingsAction, queryParamsHolder } = vi.hoisted(() => ({
 
 vi.mock("next/navigation");
 
-vi.mock("@/app/settings/layout", () => ({
+vi.mock("@/components/settings/settings-layout.context", () => ({
   useSetSettingsAction: () => mockSetSettingsAction,
 }));
 

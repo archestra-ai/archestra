@@ -13,7 +13,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { describeKey } from "@/components/virtual-key-badge";
+import { describeKey } from "@/components/virtual-keys/virtual-key-badge";
 import { copilotCredentialSourceLabel } from "@/lib/organization-subscription";
 import { cn } from "@/lib/utils/tailwind";
 

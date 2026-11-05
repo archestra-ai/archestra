@@ -22,18 +22,18 @@ import {
   useState,
 } from "react";
 import { CopyButton } from "@/components/copy-button";
-import { EncryptedChatContentUnavailable } from "@/components/encrypted-chat-content-unavailable";
 import { JsonCodeBlock } from "@/components/json-code-block";
+import MessageThread from "@/components/log-detail/message-thread";
 import { PaneHeader } from "@/components/log-detail/pane-header";
 import { PayloadSection } from "@/components/log-detail/tool-result-view";
-import MessageThread from "@/components/message-thread";
+import { EncryptedChatContentUnavailable } from "@/components/logs/encrypted-chat-content-unavailable";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { describeKey } from "@/components/virtual-key-badge";
+import { describeKey } from "@/components/virtual-keys/virtual-key-badge";
 import { useInteraction } from "@/lib/interactions/interaction.query";
 import { copilotCredentialSourceLabel } from "@/lib/organization-subscription";
 import { formatDate } from "@/lib/utils/date-time";

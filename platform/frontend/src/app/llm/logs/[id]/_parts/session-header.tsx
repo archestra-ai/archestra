@@ -7,7 +7,7 @@ import {
   describeSessionOrigin,
   SessionClientMark,
 } from "@/app/llm/logs/_parts/session-identity";
-import { AgentIcon } from "@/components/agent-icon";
+import { AgentIcon } from "@/components/agents/agent-icon";
 import { AgentIdenticon, PersonAvatar } from "@/components/logs/hue-avatar";
 import {
   type LogSession,
@@ -21,7 +21,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { describeKey } from "@/components/virtual-key-badge";
+import { describeKey } from "@/components/virtual-keys/virtual-key-badge";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
 /** The session's mark for the page's icon tile: the client it came through. */

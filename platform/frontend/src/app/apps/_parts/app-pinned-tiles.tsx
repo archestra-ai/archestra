@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import { AppWindow, Loader2 } from "lucide-react";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
 import { type PinnedTile, PinnedTiles } from "@/components/pinned-tiles";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";

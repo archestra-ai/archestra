@@ -26,7 +26,7 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useAvailableLlmProviderApiKeys: vi.fn(),
 }));
 
-vi.mock("@/components/llm-provider-api-key-dropdown", () => ({
+vi.mock("@/components/model-providers/llm-provider-api-key-dropdown", () => ({
   LlmProviderApiKeyDropdown: ({
     availableKeys,
     onAddApiKey,
@@ -58,32 +58,35 @@ vi.mock("@/components/llm-provider-api-key-dropdown", () => ({
   ),
 }));
 
-vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
-  CreateLlmProviderApiKeyDialog: ({
-    title,
-    defaultValues,
-    onSuccess,
-    open,
-    reconnectKeyId,
-  }: {
-    title: string;
-    defaultValues?: { provider?: string; authMethod?: string };
-    onSuccess?: (keyId?: string) => void;
-    open: boolean;
-    reconnectKeyId?: string;
-  }) =>
-    open ? (
-      <div>
-        <span>{title}</span>
-        <span>{defaultValues?.provider}</span>
-        <span>{defaultValues?.authMethod}</span>
-        {reconnectKeyId && <span>{`reconnect:${reconnectKeyId}`}</span>}
-        <button type="button" onClick={() => onSuccess?.("new-key-id")}>
-          Create key
-        </button>
-      </div>
-    ) : null,
-}));
+vi.mock(
+  "@/components/model-providers/create-llm-provider-api-key-dialog",
+  () => ({
+    CreateLlmProviderApiKeyDialog: ({
+      title,
+      defaultValues,
+      onSuccess,
+      open,
+      reconnectKeyId,
+    }: {
+      title: string;
+      defaultValues?: { provider?: string; authMethod?: string };
+      onSuccess?: (keyId?: string) => void;
+      open: boolean;
+      reconnectKeyId?: string;
+    }) =>
+      open ? (
+        <div>
+          <span>{title}</span>
+          <span>{defaultValues?.provider}</span>
+          <span>{defaultValues?.authMethod}</span>
+          {reconnectKeyId && <span>{`reconnect:${reconnectKeyId}`}</span>}
+          <button type="button" onClick={() => onSuccess?.("new-key-id")}>
+            Create key
+          </button>
+        </div>
+      ) : null,
+  }),
+);
 
 import { LlmProviderApiKeySelector } from "./llm-provider-api-key-selector";
 

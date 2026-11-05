@@ -10,7 +10,7 @@ vi.mock("@/lib/git-credentials.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/components/editor");
-vi.mock("@/components/resource-access-section", () => ({
+vi.mock("@/components/resource-access/resource-access-section", () => ({
   ResourceAccessSection: ({
     resource,
     id,

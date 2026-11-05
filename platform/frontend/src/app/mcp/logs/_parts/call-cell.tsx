@@ -6,9 +6,9 @@ import {
   parseFullToolName,
 } from "@archestra/shared";
 import { Bot, Globe, type LucideIcon, Users, UserX } from "lucide-react";
-import { EncryptedChatContentUnavailableLabel } from "@/components/encrypted-chat-content-unavailable";
+import { EncryptedChatContentUnavailableLabel } from "@/components/logs/encrypted-chat-content-unavailable";
 import { PersonAvatar } from "@/components/logs/hue-avatar";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
 import {
   Tooltip,
   TooltipContent,

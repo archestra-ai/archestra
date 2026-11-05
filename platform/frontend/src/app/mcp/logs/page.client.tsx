@@ -5,19 +5,19 @@ import { MessagesSquare } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLogsHeaderAction } from "@/app/_parts/logs-section-layout";
-import { AgentSelector } from "@/components/agent-selector";
+import { AgentSelector } from "@/components/agents/agent-selector";
 import { ErrorBoundary } from "@/components/error-boundary";
 import {
   CollectionFilters,
   FilterBar,
   filterControlClass,
 } from "@/components/filter-bar";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { UserFilterSelect } from "@/components/logs/user-client-filter-selects";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
 import { QueryLoadError } from "@/components/query-load-error";
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
 import { DataTable } from "@/components/ui/data-table";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { UserFilterSelect } from "@/components/user-client-filter-selects";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { resourceOwnerLabel } from "@/lib/agent-owner-label";

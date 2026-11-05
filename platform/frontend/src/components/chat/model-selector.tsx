@@ -42,12 +42,12 @@ import {
   LatestModelBadge,
   OldModelBadge,
   PooledModelBadge,
-} from "@/components/model-badges";
+} from "@/components/models/model-badges";
 import {
   ModelCapabilityBadges,
   ModelContextLengthIndicator,
-} from "@/components/model-capability-indicators";
-import { SubscriptionReconnectNotice } from "@/components/subscription-reconnect-notice";
+} from "@/components/models/model-capability-indicators";
+import { SubscriptionReconnectNotice } from "@/components/subscriptions/subscription-reconnect-notice";
 import { Button } from "@/components/ui/button";
 import { DialogClose } from "@/components/ui/dialog";
 import { Toggle } from "@/components/ui/toggle";

@@ -39,12 +39,12 @@ import { QueryLoadError } from "@/components/query-load-error";
 import {
   RESOURCE_ACCESS_FILTER_PARAMS,
   ResourceAccessFilter,
-} from "@/components/resource-access-filter";
-import { ResourceListActions } from "@/components/resource-list-actions";
+} from "@/components/resource-access/resource-access-filter";
 import {
   ResourceDeletedStatusFilter,
   useScopeFilterParams,
-} from "@/components/resource-scope-filter";
+} from "@/components/resource-access/resource-scope-filter";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
 import {

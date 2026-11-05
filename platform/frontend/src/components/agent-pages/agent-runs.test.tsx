@@ -59,7 +59,7 @@ vi.mock("@/lib/clipboard", () => ({
   copyToClipboard: vi.fn().mockResolvedValue(undefined),
 }));
 // Terminal process boundaries are covered by their own WebSocket suites.
-vi.mock("@/components/agent-run-terminal", () => ({
+vi.mock("@/components/agent-runs/agent-run-terminal", () => ({
   AgentRunTerminal: ({
     taskId,
     onCommandChange,
@@ -75,8 +75,10 @@ vi.mock("@/components/agent-run-terminal", () => ({
     </div>
   ),
 }));
-vi.mock("@/components/agent-run-logs", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/components/agent-run-logs")>()),
+vi.mock("@/components/agent-runs/agent-run-logs", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/components/agent-runs/agent-run-logs")
+  >()),
   AgentRunLogs: () => <div>Retained output</div>,
 }));
 

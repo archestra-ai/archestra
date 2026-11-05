@@ -9,15 +9,15 @@ import {
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ToolChecklist } from "@/components/agent-tools-editor";
+import { ToolChecklist } from "@/components/agents/agent-tools-editor";
 import {
   isCatalogInAppEnvironment,
   setsEqual,
   sortCatalogItems,
-} from "@/components/agent-tools-editor.utils";
+} from "@/components/agents/agent-tools-editor.utils";
 import { LoadingWrapper } from "@/components/loading";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { McpServerPillShell } from "@/components/mcp-server-pill-shell";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
+import { McpServerPillShell } from "@/components/mcp-registry/mcp-server-pill-shell";
 import {
   AssignmentCombobox,
   type AssignmentComboboxItem,

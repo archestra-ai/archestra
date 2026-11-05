@@ -26,9 +26,15 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import { A2aRemoteAgentActions } from "@/components/a2a-remote-agent-actions";
-import { AgentIcon } from "@/components/agent-icon";
-import { AgentNameCell } from "@/components/agent-name-cell";
+import { A2aRemoteAgentActions } from "@/app/agents/_parts/a2a-remote-agent-actions";
+import { AgentProviderIndicator } from "@/app/agents/_parts/agent-provider-indicator";
+import { AgentScheduleIndicator } from "@/app/agents/_parts/agent-schedules-indicator";
+import {
+  DefaultAgentTag,
+  offersDefaultPin,
+  resolveDefaultAgentBadge,
+} from "@/app/agents/_parts/default-agent-tag";
+import { ImportAgentDialog } from "@/app/agents/_parts/import-agent-dialog";
 import {
   CatalogAgentIcon,
   PlatformAgentIcon,
@@ -45,16 +51,10 @@ import {
   RowClickShield,
 } from "@/components/agent-pages/row-click-shield";
 import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
-import { AgentProviderIndicator } from "@/components/agent-provider-indicator";
-import { AgentScheduleIndicator } from "@/components/agent-schedules-indicator";
-import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
+import { AgentIcon } from "@/components/agents/agent-icon";
+import { AgentNameCell } from "@/components/agents/agent-name-cell";
+import { CloneAgentDialog } from "@/components/agents/clone-agent-dialog";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
-import { CloneAgentDialog } from "@/components/clone-agent-dialog";
-import {
-  DefaultAgentTag,
-  offersDefaultPin,
-  resolveDefaultAgentBadge,
-} from "@/components/default-agent-tag";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ErrorBoundary } from "@/components/error-boundary";
 import {
@@ -63,24 +63,23 @@ import {
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
-import { ImportAgentDialog } from "@/components/import-agent-dialog";
 import { resolveCatalogEnvironmentLabel } from "@/components/mcp-registry/catalog-environment-label";
-import { PageLayout } from "@/components/page-layout";
-import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
-import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import {
   isProviderApiKeyId,
   ProviderKeyFilterSelect,
-} from "@/components/provider-key-filter-select";
+} from "@/components/model-providers/provider-key-filter-select";
+import { PageLayout } from "@/components/page-layout";
+import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
-import { ResourceAccessFilter } from "@/components/resource-access-filter";
-import { ResourceListActions } from "@/components/resource-list-actions";
+import { PermissionRequirementHint } from "@/components/resource-access/permission-requirement-hint";
+import { ResourceAccessFilter } from "@/components/resource-access/resource-access-filter";
 import {
   ActiveFilterBadges,
   ResourceDeletedStatusFilter,
   ResourceScopeFilter,
   useScopeFilterParams,
-} from "@/components/resource-scope-filter";
+} from "@/components/resource-access/resource-scope-filter";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import { SearchInput } from "@/components/search-input";
 import { SortableHeader } from "@/components/sortable-header";
 import {
@@ -101,6 +100,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { AgentVersionHistoryDialog } from "@/components/version-history/agent-version-history-dialog";
 import { DEFAULT_AGENT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import { getA2aRemoteAgentDeleteDescription } from "@/lib/a2a-remote-agent-delete";
 import { a2aRemoteAgentDetailHref } from "@/lib/a2a-remote-agent-route";

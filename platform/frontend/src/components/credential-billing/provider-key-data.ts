@@ -5,8 +5,8 @@ import {
   type SupportedProvider,
 } from "@archestra/shared";
 import { useMemo } from "react";
-import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
-import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
+import type { LlmProviderApiKeyResponse } from "@/components/model-providers/llm-provider-api-key-form";
+import type { ProviderApiKeyMappings } from "@/components/model-providers/provider-key-mappings-field";
 import { useSession } from "@/lib/auth/auth.query";
 import { useLlmModelIdsByKey } from "@/lib/llm-models.query";
 

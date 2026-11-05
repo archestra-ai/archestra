@@ -10,7 +10,7 @@ import {
   getIncomingEmailTimeUntilExpiry,
   getIncomingEmailWebhookUrl,
 } from "@/components/messaging-channels/email-trigger.utils";
-import { SetupDialog } from "@/components/setup-dialog";
+import { SetupDialog } from "@/components/messaging-channels/setup-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {

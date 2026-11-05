@@ -4,9 +4,9 @@ import { toast } from "sonner";
 import type { LocalServerInstallResult } from "@/components/mcp-registry/local-server-install-dialog";
 import type { CatalogItem } from "@/components/mcp-registry/mcp-server-card";
 import type { NoAuthInstallResult } from "@/components/mcp-registry/no-auth-install-dialog";
+import type { OAuthInstallResult } from "@/components/mcp-registry/oauth-confirmation-dialog";
 import type { RemoteServerInstallResult } from "@/components/mcp-registry/remote-server-install-dialog";
 import type { McpServerInstallScope } from "@/components/mcp-registry/select-mcp-server-credential-type-and-teams";
-import type { OAuthInstallResult } from "@/components/oauth-confirmation-dialog";
 import { useSession } from "@/lib/auth/auth.query";
 import { useInitiateOAuth } from "@/lib/auth/oauth.query";
 import {

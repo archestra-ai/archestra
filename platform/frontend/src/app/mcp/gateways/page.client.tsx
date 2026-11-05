@@ -10,8 +10,6 @@ import { ChevronDown, ChevronUp, Plus, Trash2, Waypoints } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { AgentIcon } from "@/components/agent-icon";
-import { AgentNameCell } from "@/components/agent-name-cell";
 import {
   AGENT_PAGE_CONFIGS,
   agentConfigureHref,
@@ -24,8 +22,9 @@ import {
   RowClickShield,
 } from "@/components/agent-pages/row-click-shield";
 import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
-import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
-import { CloneAgentDialog } from "@/components/clone-agent-dialog";
+import { AgentIcon } from "@/components/agents/agent-icon";
+import { AgentNameCell } from "@/components/agents/agent-name-cell";
+import { CloneAgentDialog } from "@/components/agents/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -37,14 +36,14 @@ import {
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
-import { ResourceAccessFilter } from "@/components/resource-access-filter";
-import { ResourceListActions } from "@/components/resource-list-actions";
+import { ResourceAccessFilter } from "@/components/resource-access/resource-access-filter";
 import {
   ActiveFilterBadges,
   ResourceDeletedStatusFilter,
   ResourceScopeFilter,
   useScopeFilterParams,
-} from "@/components/resource-scope-filter";
+} from "@/components/resource-access/resource-scope-filter";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import { SearchInput } from "@/components/search-input";
 import {
   EmptyTableSection,
@@ -62,6 +61,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { AgentVersionHistoryDialog } from "@/components/version-history/agent-version-history-dialog";
 import { DEFAULT_AGENT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
   useAllMatchingProfiles,

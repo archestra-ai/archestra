@@ -45,7 +45,7 @@ vi.mock("next/link", () => ({
   }) => <a href={href}>{children}</a>,
 }));
 
-vi.mock("@/components/llm-provider-api-key-form", () => ({
+vi.mock("@/components/model-providers/llm-provider-api-key-form", () => ({
   PROVIDER_CONFIG: {
     vertex_ai: {
       icon: "/vertex.svg",
@@ -114,7 +114,7 @@ vi.mock("@/components/settings/settings-block", () => ({
     ) : null,
 }));
 
-vi.mock("@/components/agent-selector", () => ({
+vi.mock("@/components/agents/agent-selector", () => ({
   AgentSelector: (props: Record<string, unknown>) =>
     mockAgentSelector(props as { value: string }),
 }));

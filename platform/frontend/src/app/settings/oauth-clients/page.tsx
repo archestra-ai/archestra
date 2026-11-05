@@ -3,10 +3,9 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { Plus, Server, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { useSetSettingsAction } from "@/app/settings/layout";
-import { CreateManagedOAuthClientDialog } from "@/components/create-managed-oauth-client-dialog";
+import { OAuthClientPermissions } from "@/app/settings/oauth-clients/_parts/oauth-client-permissions";
+import { OAuthClientsTable } from "@/app/settings/oauth-clients/_parts/oauth-clients-table";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { EditManagedOAuthClientDialog } from "@/components/edit-managed-oauth-client-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import { ErrorBoundary } from "@/components/error-boundary";
 import {
@@ -17,19 +16,20 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { oauthCapabilities } from "@/components/oauth-client/configuration-fields";
+import { CreateManagedOAuthClientDialog } from "@/components/oauth-client/create-managed-oauth-client-dialog";
+import { EditManagedOAuthClientDialog } from "@/components/oauth-client/edit-managed-oauth-client-dialog";
 import {
   type CreatedCredentials,
   OAuthClientCreatedDialog,
-} from "@/components/oauth-client-created-dialog";
-import { OAuthClientPermissions } from "@/components/oauth-client-permissions";
-import { OAuthClientsTable } from "@/components/oauth-clients-table";
+} from "@/components/oauth-client/oauth-client-created-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   RESOURCE_ACCESS_FILTER_PARAMS,
   ResourceAccessFilter,
-} from "@/components/resource-access-filter";
-import { useScopeFilterParams } from "@/components/resource-scope-filter";
+} from "@/components/resource-access/resource-access-filter";
+import { useScopeFilterParams } from "@/components/resource-access/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
+import { useSetSettingsAction } from "@/components/settings/settings-layout.context";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import {

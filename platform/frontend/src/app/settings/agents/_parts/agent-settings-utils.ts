@@ -1,4 +1,4 @@
-import type { ModelTierSelection } from "@/components/model-tier-pickers";
+import type { ModelTierSelection } from "@/app/settings/agents/_parts/model-tier-pickers";
 
 interface ApiKey {
   id: string;

@@ -38,7 +38,9 @@ const { setHeader, push } = vi.hoisted(() => ({
   setHeader: vi.fn(),
   push: vi.fn(),
 }));
-vi.mock("../../layout", () => ({ useSetSettingsPageHeader: () => setHeader }));
+vi.mock("@/components/settings/settings-layout.context", () => ({
+  useSetSettingsPageHeader: () => setHeader,
+}));
 
 const API = "http://localhost:9000";
 const server = setupServer();

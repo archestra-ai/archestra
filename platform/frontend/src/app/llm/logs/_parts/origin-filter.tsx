@@ -11,7 +11,7 @@ import { filterControlClass } from "@/components/filter-bar";
 import {
   ClientFilterOption,
   SourceFilterOption,
-} from "@/components/log-filter-option";
+} from "@/components/logs/log-filter-option";
 import { Button } from "@/components/ui/button";
 import {
   Command,

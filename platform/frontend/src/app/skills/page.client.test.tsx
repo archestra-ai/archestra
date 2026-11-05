@@ -32,7 +32,7 @@ vi.mock("@/lib/skills/skill.query", () => ({
 }));
 // Filter chrome reads the URL and the org's teams; the row actions are what
 // this file is about.
-vi.mock("@/components/resource-scope-filter", () => ({
+vi.mock("@/components/resource-access/resource-scope-filter", () => ({
   ActiveFilterBadges: () => null,
   ResourceDeletedStatusFilter: () => null,
   ResourceScopeFilter: () => null,

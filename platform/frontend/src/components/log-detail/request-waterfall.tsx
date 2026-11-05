@@ -18,8 +18,8 @@ import {
   shortModelName,
 } from "@/components/logs/logs-table-format";
 import { MakerDisc } from "@/components/logs/maker-disc";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { McpToolCallStatusIcon } from "@/components/mcp-tool-call-status";
+import { McpToolCallStatusIcon } from "@/components/logs/mcp-tool-call-status";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
 import { Kbd } from "@/components/ui/kbd";
 import { Skeleton } from "@/components/ui/skeleton";
 import {

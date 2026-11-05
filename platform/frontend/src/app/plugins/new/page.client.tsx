@@ -10,10 +10,10 @@ import {
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
-import type { ProfileLabelsRef } from "@/components/agent-labels";
-import { CatalogSourceCard } from "@/components/catalog-source-card";
+import type { ProfileLabelsRef } from "@/components/agents/agent-labels";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { FilterBar } from "@/components/filter-bar";
+import { CatalogSourceCard } from "@/components/mcp-registry/catalog-source-card";
 import { PageLayout } from "@/components/page-layout";
 import { SearchInput } from "@/components/search-input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -23,8 +23,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Separator } from "@/components/ui/separator";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { WizardFooter } from "@/components/wizard-footer";
-import { WizardStepper } from "@/components/wizard-stepper";
+import { WizardFooter } from "@/components/wizard/wizard-footer";
+import { WizardStepper } from "@/components/wizard/wizard-stepper";
 import { useCreatePlugin } from "@/lib/plugins/plugin.query";
 import { ImportMarketplaceDialog } from "../_parts/import-marketplace-dialog";
 import {

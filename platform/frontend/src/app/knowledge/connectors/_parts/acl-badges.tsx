@@ -4,7 +4,10 @@
 "use client";
 
 import { Lock, type LucideIcon } from "lucide-react";
-import { SCOPE_META, scopeStyles } from "@/components/scope-vocabulary";
+import {
+  SCOPE_META,
+  scopeStyles,
+} from "@/components/resource-access/scope-vocabulary";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,

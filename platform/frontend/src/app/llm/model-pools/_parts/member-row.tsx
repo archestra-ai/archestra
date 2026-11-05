@@ -7,14 +7,14 @@ import { CircleAlert, GripVertical, TriangleAlert, X } from "lucide-react";
 import { useState } from "react";
 import { Controller } from "react-hook-form";
 import {
-  LlmModelSearchableSelect,
-  type LlmModelSelectOption,
-} from "@/components/llm-model-select";
-import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
-import {
   poolModelName,
   suggestModelId,
 } from "@/components/model-pools/model-name";
+import { LlmProviderApiKeyDropdown } from "@/components/model-providers/llm-provider-api-key-dropdown";
+import {
+  LlmModelSearchableSelect,
+  type LlmModelSelectOption,
+} from "@/components/models/llm-model-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { NetworkPolicyFields } from "@/components/network-policy-fields";
+import { NetworkPolicyFields } from "@/components/deployment/network-policy-fields";
 import { useFeature } from "@/lib/config/config.query";
 import {
   useBulkDeleteEnvironments,

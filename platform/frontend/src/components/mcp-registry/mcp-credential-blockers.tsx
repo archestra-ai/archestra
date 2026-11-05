@@ -3,7 +3,7 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { KeyRound, Lock } from "lucide-react";
 import Link from "next/link";
-import { useCredentialsPageHref } from "@/components/settings-link";
+import { useCredentialsPageHref } from "@/components/settings/settings-link";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useMcpCatalogCredentialPreflight } from "@/lib/mcp/internal-mcp-catalog.query";

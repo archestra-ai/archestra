@@ -18,12 +18,12 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import { useOrganization } from "@/lib/organization.query";
 import { useMyTeams, useTeams } from "@/lib/teams/team.query";
-import { EditManagedOAuthClientDialog } from "./edit-managed-oauth-client-dialog";
+import { EditManagedOAuthClientDialog } from "./oauth-client/edit-managed-oauth-client-dialog";
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 vi.mock("sonner");
-vi.mock("@/components/resource-access-section", () => ({
+vi.mock("@/components/resource-access/resource-access-section", () => ({
   ResourceAccessSection: () => null,
 }));
 vi.mock("@/lib/llm-models.query", () => ({

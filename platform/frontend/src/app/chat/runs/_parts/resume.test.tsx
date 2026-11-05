@@ -21,13 +21,15 @@ vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("sonner");
 // Terminal IO is a separate WebSocket boundary.
-vi.mock("@/components/agent-run-terminal", () => ({
+vi.mock("@/components/agent-runs/agent-run-terminal", () => ({
   AgentRunTerminal: ({ taskId }: { taskId: string }) => (
     <div>Live terminal {taskId}</div>
   ),
 }));
-vi.mock("@/components/agent-run-logs", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/components/agent-run-logs")>()),
+vi.mock("@/components/agent-runs/agent-run-logs", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/components/agent-runs/agent-run-logs")
+  >()),
   AgentRunLogs: () => <div>Saved output</div>,
 }));
 vi.mock("@/components/chat/share-agent-run-dialog", () => ({

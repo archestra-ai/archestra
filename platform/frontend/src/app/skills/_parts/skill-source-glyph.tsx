@@ -1,6 +1,6 @@
 import { BookOpen } from "lucide-react";
-import { AgentIcon } from "@/components/agent-icon";
-import { OpenAppaSolidIcon } from "@/components/openappa-icon";
+import { AgentIcon } from "@/components/agents/agent-icon";
+import { OpenAppaSolidIcon } from "@/components/openappa/openappa-icon";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
 import { parseRepoFromSourceRef } from "@/lib/skills/skill-source";
 

@@ -22,7 +22,6 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
@@ -34,8 +33,9 @@ import {
 } from "@/components/filter-bar";
 import { useSelectedLabels } from "@/components/label-select";
 import { LabelTags } from "@/components/label-tags";
-import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
-import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
+import { CreateLlmProviderApiKeyDialog } from "@/components/model-providers/create-llm-provider-api-key-dialog";
+import { LlmProviderApiKeyDropdown } from "@/components/model-providers/llm-provider-api-key-dropdown";
+import { PROVIDER_CONFIG } from "@/components/model-providers/llm-provider-api-key-form";
 import {
   BestModelBadge,
   EmbeddingModelBadge,
@@ -43,17 +43,17 @@ import {
   LatestModelBadge,
   PerUserModelBadge,
   UnknownCapabilitiesBadge,
-} from "@/components/model-badges";
+} from "@/components/models/model-badges";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   RESOURCE_ACCESS_FILTER_PARAMS,
   ResourceAccessFilter,
-} from "@/components/resource-access-filter";
+} from "@/components/resource-access/resource-access-filter";
+import { useScopeFilterParams } from "@/components/resource-access/resource-scope-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
-import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
-import { SubscriptionReconnectNotice } from "@/components/subscription-reconnect-notice";
+import { SubscriptionReconnectNotice } from "@/components/subscriptions/subscription-reconnect-notice";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";

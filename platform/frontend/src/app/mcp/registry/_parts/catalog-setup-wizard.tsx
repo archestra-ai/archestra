@@ -24,13 +24,13 @@ import {
 } from "@/components/mcp-registry/local-server-install-dialog";
 import type { CatalogItem } from "@/components/mcp-registry/mcp-server-card";
 import {
+  OAuthConfirmationDialog,
+  type OAuthInstallResult,
+} from "@/components/mcp-registry/oauth-confirmation-dialog";
+import {
   RemoteServerInstallDialog,
   type RemoteServerInstallResult,
 } from "@/components/mcp-registry/remote-server-install-dialog";
-import {
-  OAuthConfirmationDialog,
-  type OAuthInstallResult,
-} from "@/components/oauth-confirmation-dialog";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -48,7 +48,7 @@ import {
 } from "@/components/ui/empty";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { WizardStepper } from "@/components/wizard-stepper";
+import { WizardStepper } from "@/components/wizard/wizard-stepper";
 import { useSession } from "@/lib/auth/auth.query";
 import { useInitiateOAuth } from "@/lib/auth/oauth.query";
 import {

@@ -10,7 +10,7 @@ import {
 
 vi.mock("@/lib/auth/auth.query");
 
-vi.mock("@/components/github-copilot-sign-in", () => ({
+vi.mock("@/components/subscriptions/github-copilot-sign-in", () => ({
   GithubCopilotSignIn: ({
     onToken,
     disabled,

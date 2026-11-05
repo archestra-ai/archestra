@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import { AgentIcon } from "@/components/connection/agent-icon";
 import { QueryChip } from "@/components/cost-explorer/cost-explorer-parts";
 import { CreatedByCell } from "@/components/created-by-cell";
-import { LogTime } from "@/components/log-time";
+import { LogTime } from "@/components/logs/log-time";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";

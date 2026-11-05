@@ -6,13 +6,13 @@ import { useForm } from "react-hook-form";
 import {
   isRoleAssignmentBlocked,
   RoleAssignmentBlockedNotice,
-} from "@/components/role-assignment-blocked-notice";
+} from "@/components/roles/role-assignment-blocked-notice";
 import {
   SettingsBlock,
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
-import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
+import { SmallTeamTierBanner } from "@/components/settings/small-team-tier-banner";
 import { Form, FormField } from "@/components/ui/form";
 import { RoleSelect } from "@/components/ui/role-select";
 import { Switch } from "@/components/ui/switch";

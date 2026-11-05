@@ -3,7 +3,7 @@
 import {
   AgentSelector,
   type AgentSelectorAgent,
-} from "@/components/agent-selector";
+} from "@/components/agents/agent-selector";
 import type { AgentOptionFilters } from "@/lib/agent-options.query";
 
 /** Shares grouping, search and personal-owner labels with other resource pickers. */

@@ -17,7 +17,7 @@ import {
   siPosthog,
   siSentry,
 } from "simple-icons";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
 import { cn } from "@/lib/utils/tailwind";
 
 export type CatalogEntry = {

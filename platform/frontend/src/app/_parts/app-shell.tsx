@@ -7,19 +7,19 @@ import {
   useEffect,
   useState,
 } from "react";
+import { ConnectivityStatusBar } from "@/app/_parts/connectivity-status-bar";
+import { ConversationSearchProvider } from "@/app/_parts/conversation-search-provider";
+import { ImpersonationBanner } from "@/app/_parts/impersonation-banner";
+import {
+  NavigationStatusProvider,
+  useNavigationStatus,
+} from "@/app/_parts/navigation-status-provider";
 import {
   MOBILE_HEADER_ACTIONS_CONTAINER_ID,
   MOBILE_HEADER_TITLE_CONTAINER_ID,
 } from "@/components/chat/chat-help-link";
-import { ConnectivityStatusBar } from "@/components/connectivity-status-bar";
-import { ConversationSearchProvider } from "@/components/conversation-search-provider";
 import { DevFeedbackLauncher } from "@/components/dev-feedback/dev-feedback-launcher";
-import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { LoadingState } from "@/components/loading";
-import {
-  NavigationStatusProvider,
-  useNavigationStatus,
-} from "@/components/navigation-status-provider";
 import {
   SidebarCircleToggle,
   SidebarPlaceholder,
@@ -315,7 +315,7 @@ function AfterIdle({ children }: { children: React.ReactNode }) {
 }
 
 const OnboardingSurveyDialog = lazyComponent(() =>
-  import("@/components/onboarding-survey-dialog").then(
+  import("@/app/_parts/onboarding-survey-dialog").then(
     (m) => m.OnboardingSurveyDialog,
   ),
 );

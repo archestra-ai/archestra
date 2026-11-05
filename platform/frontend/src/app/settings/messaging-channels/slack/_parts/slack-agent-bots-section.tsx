@@ -18,12 +18,12 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { AgentIcon } from "@/components/agent-icon";
-import { AgentSelector } from "@/components/agent-selector";
+import { SlackSetupDialog } from "@/app/settings/messaging-channels/slack/_parts/slack-setup-dialog";
+import { AgentIcon } from "@/components/agents/agent-icon";
+import { AgentSelector } from "@/components/agents/agent-selector";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
-import { SlackBotEditDialog } from "@/components/slack-bot-edit-dialog";
-import { SlackSetupDialog } from "@/components/slack-setup-dialog";
+import { SlackBotEditDialog } from "@/components/messaging-channels/slack-bot-edit-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,

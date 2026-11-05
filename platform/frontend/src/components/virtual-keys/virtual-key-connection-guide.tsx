@@ -1,0 +1,1014 @@
+"use client";
+
+import {
+  E2eTestId,
+  isModelRouterSupportedProvider,
+  PROVIDER_MODEL_TIERS,
+  providerSupportsChat,
+  requiresPerplexityAgentApi,
+  type SupportedProvider,
+  VIRTUAL_KEY_HEADER,
+} from "@archestra/shared";
+import {
+  AlertTriangle,
+  Check,
+  Copy,
+  Eye,
+  EyeOff,
+  Info,
+  Loader2,
+  Plug,
+  Waypoints,
+} from "lucide-react";
+import Link from "next/link";
+import { useId, useMemo, useState } from "react";
+import {
+  terminalActionClass,
+  terminalCodeClass,
+} from "@/components/agent-runs/terminal-surface";
+import { PROVIDER_ORIGINAL_URLS } from "@/components/connection/proxy-client-instructions";
+import { SecretCopyButton } from "@/components/secret-copy-button";
+import { Button } from "@/components/ui/button";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import { Label } from "@/components/ui/label";
+import {
+  RadioGroup,
+  RadioGroupItem,
+  radioCardClass,
+} from "@/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
+import {
+  buildCurlExample,
+  getImageExampleOperations,
+  getProviderAuthHeader,
+  getProxyBaseUrl,
+  type ImageExampleOperation,
+  providerKeyEnvVar,
+  type RequestCredential,
+  type RequestTarget,
+} from "@/components/virtual-keys/virtual-key-request-example";
+import { copyToClipboard } from "@/lib/clipboard";
+import { useAppName } from "@/lib/hooks/use-app-name";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
+import { useLlmModels, useModelsWithApiKeys } from "@/lib/llm-models.query";
+import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { cn } from "@/lib/utils/tailwind";
+
+type Endpoint = "model-router" | "provider";
+
+/**
+ * Connect a virtual key to a client. The full value is available only in the
+ * post-create view; later visits use an environment variable in examples.
+ */
+export function VirtualKeyConnectionGuide({
+  keyValue,
+  keyType,
+  mappedProviderKeys: explicitKeys,
+  includeFutureProviders = false,
+  connectionBaseUrl,
+  name,
+  expiration,
+  visibleTo,
+}: {
+  keyValue?: string;
+  keyType: "standard" | "passthrough";
+  /** The provider keys a standard key maps to (empty for passthrough). */
+  mappedProviderKeys: Array<{
+    provider: SupportedProvider;
+    providerApiKeyId: string;
+  }>;
+  /** The key also reaches each provider's shared primary key. */
+  includeFutureProviders?: boolean;
+  connectionBaseUrl: string;
+  name: string;
+  expiration: string;
+  /** Who can use the key; omitted for passthrough keys (always personal). */
+  visibleTo: string | null;
+}) {
+  const appName = useAppName();
+  const providerCatalog = useModelProviderCatalog();
+  const isPassthrough = keyType === "passthrough";
+  const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
+  // As the proxy resolves it: a provider the key doesn't map falls back to
+  // that provider's shared primary key.
+  const mappedProviderKeys = useMemo(() => {
+    if (!includeFutureProviders) return explicitKeys;
+    const mapped = new Set(explicitKeys.map((mapping) => mapping.provider));
+    return [
+      ...explicitKeys,
+      ...providerApiKeys
+        .filter(
+          (key) =>
+            key.isPrimary && key.userId === null && !mapped.has(key.provider),
+        )
+        .map((key) => ({ provider: key.provider, providerApiKeyId: key.id })),
+    ];
+  }, [includeFutureProviders, explicitKeys, providerApiKeys]);
+
+  // A standard key only works on routes for the providers it maps; a
+  // passthrough key carries no provider key, so any chat provider route works.
+  const providers = useMemo(
+    () =>
+      isPassthrough
+        ? providerCatalog.visibleIds.filter(providerSupportsChat)
+        : mappedProviderKeys.map((mapping) => mapping.provider),
+    [isPassthrough, providerCatalog.visibleIds, mappedProviderKeys],
+  );
+  const routerProviders = isPassthrough
+    ? []
+    : providers.filter(isModelRouterSupportedProvider);
+  const routerAvailable = routerProviders.length > 0;
+
+  const [endpoint, setEndpoint] = useState<Endpoint>(
+    routerAvailable ? "model-router" : "provider",
+  );
+  const [pickedProvider, setPickedProvider] =
+    useState<SupportedProvider | null>(null);
+  const provider =
+    pickedProvider && providers.includes(pickedProvider)
+      ? pickedProvider
+      : providers[0];
+
+  const target: RequestTarget =
+    endpoint === "model-router"
+      ? { kind: "model-router" }
+      : { kind: "provider", provider };
+  const baseUrl = getProxyBaseUrl(connectionBaseUrl, target);
+
+  return (
+    <ol>
+      <Step
+        number={1}
+        title={keyValue ? "Copy your key" : "Use your saved key"}
+      >
+        <p className="text-sm text-muted-foreground">
+          {isPassthrough
+            ? "Send it alongside your own provider key so requests are attributed to you."
+            : "Use it anywhere you would use a provider API key."}
+        </p>
+        {/* Same no-wrap layout as agent-form's notices: the icon stays beside
+            the text instead of wrapping onto its own line. */}
+        {keyValue ? (
+          <>
+            <InlineNotice className="flex-nowrap items-start">
+              <AlertTriangle className="mt-px" />
+              <InlineNoticeText>
+                This is the only time the full key is shown. Store it in a
+                secret manager or your app&apos;s environment.
+              </InlineNoticeText>
+            </InlineNotice>
+            <CopyField
+              value={keyValue}
+              copyLabel="Copy key"
+              primary
+              data-testid={E2eTestId.VirtualKeyValue}
+            />
+          </>
+        ) : (
+          <InlineNotice className="flex-nowrap items-start" variant="info">
+            <Info className="mt-px" />
+            <InlineNoticeText>
+              The full key was shown only when it was created. Set your saved
+              key as <InlineCode>ARCHESTRA_LLM_VIRTUAL_KEY</InlineCode> before
+              running the example below.
+            </InlineNoticeText>
+          </InlineNotice>
+        )}
+        <dl className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <KeyFact label="Name" value={name} />
+          <KeyFact label="Expires" value={expiration} />
+          {visibleTo && <KeyFact label="Visible to" value={visibleTo} />}
+        </dl>
+      </Step>
+
+      <Step number={2} title={`Point your app at ${appName}`}>
+        <p className="text-sm text-muted-foreground">
+          {isPassthrough
+            ? "Passthrough keys work on the native provider routes."
+            : `Choose how your app talks to ${appName}.`}
+        </p>
+        <EndpointPicker
+          value={endpoint}
+          onChange={setEndpoint}
+          routerAvailable={routerAvailable}
+        />
+        {endpoint === "provider" && providers.length > 1 && (
+          <Select
+            value={provider}
+            onValueChange={(value) =>
+              setPickedProvider(value as SupportedProvider)
+            }
+          >
+            <SelectTrigger aria-label="Provider" className="w-full sm:w-64">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {providers.map((p) => (
+                <SelectItem key={p} value={p}>
+                  {providerCatalog.label(p)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <CopyField label="Base URL" value={baseUrl} />
+        <EndpointDetails
+          target={target}
+          isPassthrough={isPassthrough}
+          providerLabel={providerCatalog.label(provider)}
+        />
+      </Step>
+
+      <Step number={3} title="Make your first request">
+        <RequestExample
+          // Remount on target change so the model resets to that target's
+          // recommended model instead of keeping one it can't serve.
+          key={endpoint === "model-router" ? endpoint : provider}
+          connectionBaseUrl={connectionBaseUrl}
+          target={target}
+          keyType={keyType}
+          keyValue={keyValue}
+          routerProviders={routerProviders}
+          mappedProviderKeys={mappedProviderKeys}
+        />
+        {isPassthrough && (
+          <p className="text-xs text-muted-foreground">
+            Using Claude Code or Claude Desktop? The{" "}
+            <Link
+              href="/connection"
+              className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+            >
+              Connection page
+            </Link>{" "}
+            sets this header up for you.
+          </p>
+        )}
+      </Step>
+    </ol>
+  );
+}
+
+function Step({
+  number,
+  title,
+  children,
+}: {
+  number: number;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    // The rail runs from under each marker to the next one.
+    <li className="relative flex gap-3.5 pb-7 before:absolute before:top-7 before:bottom-1 before:left-3 before:w-px before:bg-border last:pb-0 last:before:hidden">
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-muted-foreground/40 bg-background text-xs font-semibold text-muted-foreground tabular-nums">
+        {number}
+      </span>
+      <div className="min-w-0 flex-1 space-y-3">
+        <h3 className="text-sm leading-6 font-semibold">{title}</h3>
+        {children}
+      </div>
+    </li>
+  );
+}
+
+function EndpointPicker({
+  value,
+  onChange,
+  routerAvailable,
+}: {
+  value: Endpoint;
+  onChange: (value: Endpoint) => void;
+  routerAvailable: boolean;
+}) {
+  const id = useId();
+  const options = [
+    {
+      value: "model-router" as const,
+      label: "Unified Model API",
+      description: "One OpenAI-compatible endpoint for all providers",
+      icon: Waypoints,
+      disabled: !routerAvailable,
+    },
+    {
+      value: "provider" as const,
+      label: "Native provider API",
+      description: "Keep your provider's SDK, change only the base URL",
+      icon: Plug,
+      disabled: false,
+    },
+  ];
+  return (
+    <RadioGroup
+      aria-label="Endpoint"
+      value={value}
+      onValueChange={(next) => onChange(next as Endpoint)}
+      className="grid gap-2 sm:grid-cols-2"
+    >
+      {options.map((option) => (
+        <Label
+          key={option.value}
+          htmlFor={`${id}-${option.value}`}
+          className={cn(
+            "flex cursor-pointer flex-col items-start gap-1 rounded-md p-3 font-normal",
+            radioCardClass({ checked: value === option.value }),
+          )}
+        >
+          <RadioGroupItem
+            className="sr-only"
+            id={`${id}-${option.value}`}
+            value={option.value}
+            disabled={option.disabled}
+          />
+          <span className="flex items-center gap-2 text-sm font-medium">
+            <option.icon className="size-4" />
+            {option.label}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {option.description}
+          </span>
+        </Label>
+      ))}
+    </RadioGroup>
+  );
+}
+
+function EndpointDetails({
+  target,
+  isPassthrough,
+  providerLabel,
+}: {
+  target: RequestTarget;
+  isPassthrough: boolean;
+  providerLabel: string;
+}) {
+  if (target.kind === "model-router") {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Use any OpenAI-compatible client with your virtual key as the API key.
+        Pick the provider per request with a prefixed model name, like{" "}
+        <InlineCode>openai:gpt-5.4</InlineCode>.
+      </p>
+    );
+  }
+  const authHeader = getProviderAuthHeader(target.provider);
+  const originalUrl = (
+    PROVIDER_ORIGINAL_URLS as Partial<Record<SupportedProvider, string>>
+  )[target.provider];
+  return (
+    <div className="space-y-1 text-xs text-muted-foreground">
+      {originalUrl && (
+        <p>
+          Replaces <s>{originalUrl}</s>
+        </p>
+      )}
+      {isPassthrough ? (
+        <p>
+          Keep sending your own {providerLabel} key
+          {authHeader ? (
+            <span>
+              {" "}
+              as <InlineCode>{authHeader}</InlineCode>
+            </span>
+          ) : null}
+          <span>
+            , and add your virtual key in the{" "}
+            <InlineCode>{VIRTUAL_KEY_HEADER}</InlineCode> header.
+          </span>
+        </p>
+      ) : (
+        <p>
+          Your virtual key replaces your {providerLabel} API key
+          {authHeader ? (
+            <span>
+              {" "}
+              (sent as <InlineCode>{authHeader}</InlineCode>)
+            </span>
+          ) : null}
+          <span>.</span>
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The request a client sends, with a model picked from what the credential can
+ * reach. `credentialEnvVar` names the variable the example reads the
+ * credential from when its value is not on hand.
+ */
+export function RequestExample({
+  connectionBaseUrl,
+  target,
+  keyType,
+  keyValue,
+  routerProviders,
+  mappedProviderKeys,
+  credentialEnvVar = "ARCHESTRA_LLM_VIRTUAL_KEY",
+  secret,
+  credentialField,
+  pools = [],
+  initialModel,
+  onModelChange,
+  fixedModel,
+}: {
+  connectionBaseUrl: string;
+  target: RequestTarget;
+  keyType: RequestCredential;
+  keyValue?: string;
+  routerProviders: SupportedProvider[];
+  mappedProviderKeys: Array<{
+    provider: SupportedProvider;
+    providerApiKeyId: string;
+  }>;
+  credentialEnvVar?: string;
+  /**
+   * A key value the reader may see but that stays masked until they ask:
+   * revealed in place, or copied with the real value or a placeholder.
+   */
+  secret?: RevealableSecret;
+  /**
+   * Shows the credential itself in place of the line telling the reader to
+   * set {@link credentialEnvVar}.
+   */
+  credentialField?: React.ReactNode;
+  /**
+   * Model pools offered above the models. A pool is asked for by its name,
+   * on chat completions.
+   */
+  pools?: Array<{ name: string; description: React.ReactNode }>;
+  /** The option picked at first, such as the one picked before a remount. */
+  initialModel?: string;
+  /** Told the picked option's value, so a remount can start from it. */
+  onModelChange?: (value: string) => void;
+  /**
+   * The one model the request asks for, such as a pool's name, with no
+   * picker. It has no listed endpoints, so the request uses chat completions.
+   */
+  fixedModel?: string;
+}) {
+  const providerCatalog = useModelProviderCatalog();
+  const isPassthrough = keyType === "passthrough";
+  // A credential with no provider keys of its own (passthrough, an identity
+  // provider's JWT) can reach the whole catalog.
+  const usesCatalog =
+    !fixedModel && keyType !== "standard" && mappedProviderKeys.length === 0;
+  const { data: passthroughModels, isPending: passthroughModelsPending } =
+    useLlmModels({ enabled: usesCatalog });
+  // The general catalog spans every key the creator can access. For mapped
+  // credentials, use the model-to-key links instead so this example only
+  // offers models served by the provider keys the credential maps to.
+  const mappedKeyIds = new Set(
+    mappedProviderKeys.map((mapping) => mapping.providerApiKeyId),
+  );
+  const readsLinkedModels =
+    !fixedModel && !usesCatalog && mappedKeyIds.size > 0;
+  const { data: linkedModels, isPending: linkedModelsPending } =
+    useModelsWithApiKeys({
+      enabled: readsLinkedModels,
+      apiKeyIds: [...mappedKeyIds].sort(),
+      includeAssignments: false,
+    });
+  const isPending = usesCatalog
+    ? passthroughModelsPending
+    : readsLinkedModels && linkedModelsPending;
+  const imageOperations = getImageExampleOperations(target);
+  const candidates = usesCatalog
+    ? (passthroughModels ?? []).map((model) => ({
+        id: model.id,
+        provider: model.provider,
+        isBest: model.isBest,
+        supportedEndpoints: model.capabilities?.supportedEndpoints,
+        isImage:
+          model.capabilities?.outputModalities?.includes("image") ?? false,
+      }))
+    : (linkedModels ?? [])
+        .filter((model) =>
+          model.apiKeys.some((key) => mappedKeyIds.has(key.id)),
+        )
+        .filter(
+          (model) =>
+            !model.ignored &&
+            model.embeddingDimensions === null &&
+            (!model.inputModalities ||
+              model.inputModalities.includes("text")) &&
+            // Decision models answer with probabilities, not text.
+            (model.provider === "jev" ||
+              !model.outputModalities ||
+              model.outputModalities.includes("text") ||
+              model.outputModalities.includes("image")),
+        )
+        .map((model) => ({
+          id: model.modelId,
+          provider: model.provider,
+          isBest: model.isBest,
+          isImage: model.outputModalities?.includes("image") ?? false,
+          supportedEndpoints: Array.isArray(model.supportedEndpoints)
+            ? model.supportedEndpoints.filter(
+                (endpoint): endpoint is string => typeof endpoint === "string",
+              )
+            : null,
+        }));
+  const modelOptions: Array<{
+    value: string;
+    supportedEndpoints: string[] | null | undefined;
+    isImage: boolean;
+    pool?: string;
+  }> = candidates
+    .filter((model) => !model.isImage || imageOperations.length > 0)
+    .filter((model) =>
+      target.kind === "model-router"
+        ? routerProviders.includes(model.provider) &&
+          // The router does not have a native Perplexity Agent API adapter.
+          !(
+            model.provider === "perplexity" &&
+            requiresPerplexityAgentApi(model.id)
+          )
+        : model.provider === target.provider,
+    )
+    .sort((a, b) => Number(b.isBest ?? false) - Number(a.isBest ?? false))
+    .map((model) => ({
+      value:
+        target.kind === "model-router"
+          ? `${model.provider}:${model.id}`
+          : model.id,
+      supportedEndpoints: model.supportedEndpoints,
+      isImage: model.isImage,
+    }));
+  // A provider route still has a request to show before its models sync: the
+  // provider's default model stands in rather than leaving the step empty.
+  // A key that reaches no provider yet (no shared primary keys) has none.
+  const defaultModel =
+    target.kind === "provider"
+      ? PROVIDER_MODEL_TIERS[target.provider]?.normal
+      : undefined;
+  if (fixedModel) {
+    modelOptions.push({
+      value: fixedModel,
+      supportedEndpoints: null,
+      isImage: false,
+      pool: fixedModel,
+    });
+  } else if (!isPending && modelOptions.length === 0 && defaultModel) {
+    modelOptions.push({
+      value: defaultModel,
+      supportedEndpoints: null,
+      isImage: false,
+    });
+  }
+
+  // A pool has no listed endpoints, so its request uses chat completions.
+  const poolOptions = pools.map((pool) => ({
+    value: POOL_VALUE_PREFIX + pool.name,
+    supportedEndpoints: null,
+    isImage: false,
+    pool: pool.name,
+  }));
+  const allOptions = [...poolOptions, ...modelOptions];
+  const initialOption = allOptions.find(
+    (option) => option.value === initialModel,
+  )?.value;
+  const [pickedModel, setPickedModel] = useState<string | null>(null);
+  const model =
+    pickedModel && allOptions.some((option) => option.value === pickedModel)
+      ? pickedModel
+      : (initialOption ?? modelOptions[0]?.value ?? allOptions[0]?.value);
+  const selectedModel = allOptions.find((option) => option.value === model);
+  const [imageOperation, setImageOperation] =
+    useState<ImageExampleOperation>("generate");
+  const selectedImageOperation = selectedModel?.isImage
+    ? (imageOperations.find((operation) => operation === imageOperation) ??
+      imageOperations[0])
+    : undefined;
+  const showImageOperationPicker =
+    selectedModel?.isImage && imageOperations.length > 1;
+
+  const example =
+    model &&
+    buildCurlExample({
+      connectionBaseUrl,
+      target,
+      keyType,
+      keyValue: secret ? MASKED_KEY : (keyValue ?? `$${credentialEnvVar}`),
+      model: selectedModel?.pool ?? model,
+      isPool: !!selectedModel?.pool,
+      supportedEndpoints: selectedModel?.supportedEndpoints,
+      imageOperation: selectedImageOperation,
+    });
+  const providerLabel =
+    target.kind === "provider" ? providerCatalog.label(target.provider) : null;
+
+  if (!isPending && allOptions.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        {target.kind === "model-router" &&
+        candidates.some(
+          (candidate) =>
+            candidate.isImage && routerProviders.includes(candidate.provider),
+        )
+          ? "Choose the native provider API for image generation examples."
+          : "No runnable model example is available for this key and endpoint yet."}
+      </p>
+    );
+  }
+
+  if (!example) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        {isPending
+          ? "Loading models…"
+          : `No example for ${providerLabel} yet. Point your ${providerLabel} SDK at the base URL above.`}
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {credentialField ?? (
+        <p className="text-sm text-muted-foreground">
+          {!keyValue ? (
+            <span>
+              Set <InlineCode>{credentialEnvVar}</InlineCode>{" "}
+              {keyType === "token" ? "to your token" : "to your saved key"}{" "}
+              before running this example.
+              {isPassthrough && target.kind === "provider" && (
+                <span>
+                  {" "}
+                  Your {providerLabel} key is read from{" "}
+                  <InlineCode>{providerKeyEnvVar(target.provider)}</InlineCode>.
+                </span>
+              )}
+            </span>
+          ) : isPassthrough && target.kind === "provider" ? (
+            <span>
+              Your key, base URL and model are filled in. Your {providerLabel}{" "}
+              key is read from{" "}
+              <InlineCode>{providerKeyEnvVar(target.provider)}</InlineCode>.
+            </span>
+          ) : (
+            <span>
+              Your key, base URL and model are filled in. Run it as is.
+            </span>
+          )}
+        </p>
+      )}
+      {!fixedModel && (
+        <div
+          className={cn(
+            "grid gap-3",
+            showImageOperationPicker ? "sm:grid-cols-2" : "sm:max-w-80",
+          )}
+        >
+          <div className="space-y-1.5">
+            <Label htmlFor="virtual-key-example-model">Model</Label>
+            <Select
+              value={model ?? ""}
+              onValueChange={(value) => {
+                setPickedModel(value);
+                onModelChange?.(value);
+              }}
+              disabled={isPending || allOptions.length === 0}
+            >
+              <SelectTrigger id="virtual-key-example-model" className="w-full">
+                <SelectValue
+                  placeholder={
+                    isPending
+                      ? "Loading models…"
+                      : "No models found for this key"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {pools.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel>Model pools</SelectLabel>
+                    {pools.map((pool) => (
+                      <SelectItem
+                        key={pool.name}
+                        value={POOL_VALUE_PREFIX + pool.name}
+                        description={pool.description}
+                      >
+                        {pool.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
+                <SelectGroup>
+                  {pools.length > 0 && modelOptions.length > 0 && (
+                    <SelectLabel>Models</SelectLabel>
+                  )}
+                  {modelOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.value}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            {usesCatalog && (
+              <p className="text-xs text-muted-foreground">
+                From your organization&apos;s model catalog. Your own key may
+                have access to different models.
+              </p>
+            )}
+          </div>
+          {showImageOperationPicker && (
+            <div className="space-y-1.5">
+              <Label htmlFor="virtual-key-image-operation">
+                Image operation
+              </Label>
+              <Select
+                value={selectedImageOperation}
+                onValueChange={(value) =>
+                  setImageOperation(value as ImageExampleOperation)
+                }
+              >
+                <SelectTrigger
+                  id="virtual-key-image-operation"
+                  className="w-full"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {imageOperations.map((operation) => (
+                    <SelectItem key={operation} value={operation}>
+                      {operation === "generate"
+                        ? "Generate an image"
+                        : "Edit an image"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+      )}
+      {selectedImageOperation === "edit" && (
+        <p className="text-xs text-muted-foreground">
+          Save your input image as <InlineCode>edit.png</InlineCode> in the
+          current directory. Use a deployment that supports image editing. cURL
+          sets the multipart boundary automatically.
+        </p>
+      )}
+      {selectedImageOperation &&
+        target.kind === "provider" &&
+        target.provider === "gemini" && (
+          <p className="text-xs text-muted-foreground">
+            The response includes base64 image data in{" "}
+            <InlineCode>inlineData</InlineCode>.
+          </p>
+        )}
+      {secret ? (
+        <MaskedCodeExample
+          language="cURL"
+          code={example}
+          placeholder={`$${credentialEnvVar}`}
+          secret={secret}
+        />
+      ) : (
+        <CodeExample language="cURL" code={example} />
+      )}
+    </div>
+  );
+}
+
+/** A single-line value with its copy button on the same row. */
+function KeyFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex gap-1">
+      <dt>{label}</dt>
+      <dd className="font-medium text-foreground">{value}</dd>
+    </div>
+  );
+}
+
+function CopyField({
+  label,
+  value,
+  copyLabel = label ? `Copy ${label.toLowerCase()}` : "Copy",
+  primary = false,
+  ...props
+}: {
+  label?: string;
+  value: string;
+  copyLabel?: string;
+  primary?: boolean;
+} & React.ComponentProps<"div">) {
+  return (
+    <div
+      className="flex items-center gap-2 rounded-md border border-terminal-edge bg-terminal py-1 pr-1 pl-3"
+      {...props}
+    >
+      {label && (
+        <span className="shrink-0 text-xs text-terminal-muted">{label}</span>
+      )}
+      <code className={cn(terminalCodeClass, "min-w-0 flex-1 break-all")}>
+        {value}
+      </code>
+      <CopyButton value={value} label={copyLabel} primary={primary} />
+    </div>
+  );
+}
+
+/** Stands in for a key the reader has not asked to reveal. */
+export const MASKED_KEY = "arch_••••••••••••••••";
+
+// A pool can share its name with a model a provider lists, so a picked pool
+// keeps its own value in the picker.
+const POOL_VALUE_PREFIX = "pool:";
+
+/**
+ * A key the reader may see once they ask. The caller owns `revealed` so every
+ * place showing the same key reveals and hides together.
+ */
+export type RevealableSecret = {
+  resolve: () => Promise<string | null>;
+  revealed: string | null;
+  onRevealedChange: (value: string | null) => void;
+};
+
+/**
+ * A code example embedding a key shown masked, like the MCP gateway's token
+ * examples: the eye reveals it in place, and copying is an explicit choice
+ * between the real key and a placeholder.
+ */
+export function MaskedCodeExample({
+  language,
+  code,
+  placeholder,
+  secret,
+}: {
+  language: string;
+  code: string;
+  placeholder: string;
+  secret: RevealableSecret;
+}) {
+  const { resolve, revealed, onRevealedChange: setRevealed } = secret;
+  const [isRevealing, setIsRevealing] = useState(false);
+  const withKey = (value: string) => code.replaceAll(MASKED_KEY, value);
+
+  return (
+    <div className="overflow-hidden rounded-md border border-terminal-edge bg-terminal">
+      <div className="flex items-center justify-between border-b border-terminal-edge py-1 pr-1 pl-3">
+        <span className="text-xs text-terminal-muted">{language}</span>
+        <div className="flex items-center gap-1">
+          <UnstyledButton
+            type="button"
+            aria-label={revealed ? "Hide key" : "Show key"}
+            aria-pressed={revealed !== null}
+            className={cn(terminalActionClass, "size-7")}
+            disabled={isRevealing}
+            onClick={async () => {
+              if (revealed) {
+                setRevealed(null);
+                return;
+              }
+              setIsRevealing(true);
+              try {
+                setRevealed(await resolve());
+              } finally {
+                setIsRevealing(false);
+              }
+            }}
+          >
+            {isRevealing ? (
+              <Loader2 className="animate-spin" />
+            ) : revealed ? (
+              <EyeOff />
+            ) : (
+              <Eye />
+            )}
+          </UnstyledButton>
+          <SecretCopyButton
+            variant="terminal"
+            getSecretText={async () => {
+              const value = revealed ?? (await resolve());
+              return value ? withKey(value) : null;
+            }}
+            placeholderText={withKey(placeholder)}
+          />
+        </div>
+      </div>
+      <pre
+        className={cn(
+          terminalCodeClass,
+          "m-0 max-h-[360px] overflow-auto px-3.5 py-3 text-[12.5px]",
+        )}
+      >
+        <HighlightedCurl code={revealed ? withKey(revealed) : code} />
+      </pre>
+    </div>
+  );
+}
+
+/** A multi-line example with a header bar naming the language. */
+export function CodeExample({
+  language,
+  code,
+}: {
+  language: string;
+  code: string;
+}) {
+  return (
+    <div className="overflow-hidden rounded-md border border-terminal-edge bg-terminal">
+      <div className="flex items-center justify-between border-b border-terminal-edge py-1 pr-1 pl-3">
+        <span className="text-xs text-terminal-muted">{language}</span>
+        <CopyButton value={code} label="Copy example" />
+      </div>
+      <pre
+        className={cn(
+          terminalCodeClass,
+          "m-0 max-h-[360px] overflow-auto px-3.5 py-3 text-[12.5px]",
+        )}
+      >
+        <HighlightedCurl code={code} />
+      </pre>
+    </div>
+  );
+}
+
+function CopyButton({
+  value,
+  label,
+  primary = false,
+}: {
+  value: string;
+  label: string;
+  primary?: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+  const onClick = async () => {
+    await copyToClipboard(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
+  };
+  const icon = copied ? <Check /> : <Copy />;
+  // `primary` is the one deliberate call to action (copy the key you just
+  // created); every other copy on a code surface is the shared terminal action.
+  if (primary) {
+    return (
+      <Button
+        type="button"
+        size="icon-xs"
+        aria-label={copied ? "Copied" : label}
+        className="shrink-0"
+        onClick={onClick}
+      >
+        {icon}
+      </Button>
+    );
+  }
+  return (
+    <UnstyledButton
+      type="button"
+      aria-label={copied ? "Copied" : label}
+      className={cn(terminalActionClass, "size-7 shrink-0")}
+      onClick={onClick}
+    >
+      {icon}
+    </UnstyledButton>
+  );
+}
+
+/** Colors curl's command/flags and quoted strings; everything else is plain. */
+function HighlightedCurl({ code }: { code: string }) {
+  return code.split("\n").map((line, lineIndex) => {
+    const [, indent, command, rest] =
+      line.match(/^(\s*)(curl|-H|-d)?(.*)$/) ?? [];
+    return (
+      // biome-ignore lint/suspicious/noArrayIndexKey: lines are positional and never reorder
+      <span key={lineIndex}>
+        <span>{indent}</span>
+        {command && <span className="text-primary">{command}</span>}
+        {rest.split(/("[^"]*")/).map((part, partIndex) =>
+          part.startsWith('"') ? (
+            // biome-ignore lint/suspicious/noArrayIndexKey: parts are positional and never reorder
+            <span key={partIndex} className="text-terminal-success">
+              {part}
+            </span>
+          ) : (
+            // biome-ignore lint/suspicious/noArrayIndexKey: parts are positional and never reorder
+            <span key={partIndex}>{part}</span>
+          ),
+        )}
+        <span>{"\n"}</span>
+      </span>
+    );
+  });
+}
+
+function InlineCode({ children }: { children: React.ReactNode }) {
+  return (
+    <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">
+      {children}
+    </code>
+  );
+}

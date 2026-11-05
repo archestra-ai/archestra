@@ -29,17 +29,17 @@ import {
   useRef,
   useState,
 } from "react";
-import { AgentIcon } from "@/components/agent-icon";
 import {
   agentListHref,
   agentNewHref,
 } from "@/components/agent-pages/agent-page-config";
+import { AgentIcon } from "@/components/agents/agent-icon";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { McpInstallDialogs } from "@/components/chat/mcp-install-dialogs";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { ConnectorTypeIcon } from "@/components/knowledge/connector-icons";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { platformOwnedStyles } from "@/components/scope-vocabulary";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
+import { platformOwnedStyles } from "@/components/resource-access/scope-vocabulary";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

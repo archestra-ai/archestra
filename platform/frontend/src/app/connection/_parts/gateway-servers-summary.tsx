@@ -4,7 +4,7 @@ import { ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { agentConfigureHref } from "@/components/agent-pages/agent-page-config";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useCanManageGateway } from "@/lib/auth/use-can-manage-gateway";
 import { cn } from "@/lib/utils/tailwind";

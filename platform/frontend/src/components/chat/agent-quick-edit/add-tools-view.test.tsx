@@ -32,7 +32,7 @@ vi.mock("@/lib/mcp/mcp-server.query", () => ({
   useMcpServersGroupedByCatalog: () => ({}),
 }));
 
-vi.mock("@/components/mcp-catalog-icon", () => ({
+vi.mock("@/components/mcp-registry/mcp-catalog-icon", () => ({
   McpCatalogIcon: () => null,
 }));
 

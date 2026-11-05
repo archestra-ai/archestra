@@ -40,13 +40,15 @@ vi.mock("@/lib/impersonation.query", () => ({
   }),
 }));
 vi.mock("@/lib/role.query", () => ({ useRoles: () => ({ data: [] }) }));
-vi.mock("@/components/small-team-tier-banner", () => ({
+vi.mock("@/components/settings/small-team-tier-banner", () => ({
   SmallTeamTierBanner: () => null,
 }));
 vi.mock("@/components/search-input", () => ({
   SearchInput: () => <input aria-label="Search users by name and email" />,
 }));
-vi.mock("../layout", () => ({ useSetSettingsAction: () => vi.fn() }));
+vi.mock("@/components/settings/settings-layout.context", () => ({
+  useSetSettingsAction: () => vi.fn(),
+}));
 
 import { useSearchParams } from "next/navigation";
 import {

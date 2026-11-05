@@ -15,7 +15,8 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { AuthProviderIcon } from "@/components/auth-provider-icon";
+import { AuthProviderIcon } from "@/app/settings/users/_parts/auth-provider-icon";
+import { InviteByLinkCard } from "@/app/settings/users/_parts/invite-by-link-card";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ErrorBoundary } from "@/components/error-boundary";
 import {
@@ -24,11 +25,11 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
-import { InviteByLinkCard } from "@/components/invite-by-link-card";
 import { LoadingWrapper } from "@/components/loading";
-import { RoleAssignmentBlockedNotice } from "@/components/role-assignment-blocked-notice";
+import { RoleAssignmentBlockedNotice } from "@/components/roles/role-assignment-blocked-notice";
 import { SearchInput } from "@/components/search-input";
-import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
+import { useSetSettingsAction } from "@/components/settings/settings-layout.context";
+import { SmallTeamTierBanner } from "@/components/settings/small-team-tier-banner";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -69,7 +70,6 @@ import {
 } from "@/lib/organization.query";
 import { formatRoleName } from "@/lib/utils/role";
 import { cn } from "@/lib/utils/tailwind";
-import { useSetSettingsAction } from "../layout";
 
 export default function UsersPageClient() {
   return (

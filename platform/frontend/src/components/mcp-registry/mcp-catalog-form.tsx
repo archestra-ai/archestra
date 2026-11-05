@@ -31,24 +31,27 @@ import {
   type ProfileLabel,
   ProfileLabels,
   type ProfileLabelsRef,
-} from "@/components/agent-labels";
-import { ContainerDeploymentFields } from "@/components/container-deployment-fields";
+} from "@/components/agents/agent-labels";
+import { ContainerDeploymentFields } from "@/components/deployment/container-deployment-fields";
+import { EnvironmentVariablesFormField } from "@/components/deployment/environment-variables-form-field";
+import { HeadersReadOnlyTable } from "@/components/deployment/headers-read-only-table";
 import {
   AddListItemButton,
   EmptyListState,
 } from "@/components/empty-list-state";
+import { EnvironmentSelector } from "@/components/environment-selector";
+import { ExternalDocsLink } from "@/components/external-docs-link";
+import { IdentityFields } from "@/components/identity-fields";
 import {
   type EnterpriseManagedConfigInput,
   EnterpriseManagedCredentialFields,
-} from "@/components/enterprise-managed-credential-fields";
-import { EnvironmentSelector } from "@/components/environment-selector";
-import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
-import { ExternalDocsLink } from "@/components/external-docs-link";
-import { HeaderDialog, type HeaderDraft } from "@/components/header-dialog";
-import { HeadersReadOnlyTable } from "@/components/headers-read-only-table";
-import { IdentityFields } from "@/components/identity-fields";
-import { InitialResourcePermissions } from "@/components/initial-resource-permissions";
-import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
+} from "@/components/mcp-registry/enterprise-managed-credential-fields";
+import {
+  HeaderDialog,
+  type HeaderDraft,
+} from "@/components/mcp-registry/header-dialog";
+import { ReinstallConfirmBar } from "@/components/mcp-registry/reinstall-confirm-bar";
+import { InitialResourcePermissions } from "@/components/resource-access/initial-resource-permissions";
 import {
   SettingsSection,
   SettingsSectionGroup,

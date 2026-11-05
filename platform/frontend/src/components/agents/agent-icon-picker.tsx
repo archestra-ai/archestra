@@ -1,0 +1,297 @@
+"use client";
+
+import {
+  AppWindow,
+  Bot,
+  Folder,
+  ImageIcon,
+  Layers,
+  Network,
+  Puzzle,
+  Route,
+  Server,
+  SmileIcon,
+  Sparkles,
+  Upload,
+  X,
+} from "lucide-react";
+import dynamic from "next/dynamic";
+import Image from "next/image";
+import { useCallback, useRef, useState } from "react";
+import { toast } from "sonner";
+import {
+  AgentIcon,
+  type AgentIconVariant,
+} from "@/components/agents/agent-icon";
+import {
+  isAgentImageIcon,
+  isBuiltInServiceIcon,
+} from "@/components/agents/agent-icon.utils";
+import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { cn } from "@/lib/utils/tailwind";
+import { ServiceLogoPicker } from "./service-logo-picker";
+
+const AgentEmojiPicker = dynamic(
+  async () => {
+    const module = await import("./agent-emoji-picker");
+    return module.AgentEmojiPicker;
+  },
+  { loading: () => <div className="h-[336px] w-full" aria-hidden="true" /> },
+);
+
+const MAX_IMAGE_SIZE = 512 * 1024; // 512 KB
+
+/** Entities that open a form with an icon picker, and the glyph each falls back to. */
+export type AgentIconPickerFallback =
+  | AgentIconVariant
+  | "server"
+  | "project"
+  | "app"
+  | "skill"
+  | "plugin";
+
+interface AgentIconPickerProps {
+  value: string | null;
+  onChange: (icon: string | null) => void;
+  className?: string;
+  /** Show the current icon without allowing it to be changed or removed. */
+  disabled?: boolean;
+  /** Show a "Logos" tab with pre-built service brand logos */
+  showLogos?: boolean;
+  fallbackType?: AgentIconPickerFallback;
+}
+
+export function AgentIconPicker({
+  value,
+  onChange,
+  className,
+  disabled = false,
+  showLogos = false,
+  fallbackType = "agent",
+}: AgentIconPickerProps) {
+  const [open, setOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isImage = isAgentImageIcon(value);
+
+  const handleEmojiSelect = useCallback(
+    (emoji: string) => {
+      onChange(emoji);
+      setOpen(false);
+    },
+    [onChange],
+  );
+
+  const handleLogoSelect = useCallback(
+    (dataUrl: string) => {
+      onChange(dataUrl);
+      setOpen(false);
+    },
+    [onChange],
+  );
+
+  const handleFileUpload = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      if (!file.type.startsWith("image/")) {
+        toast.error("Please upload an image file");
+        return;
+      }
+
+      if (file.size > MAX_IMAGE_SIZE) {
+        toast.error("Image must be smaller than 512 KB");
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string;
+        onChange(base64);
+        setOpen(false);
+      };
+      reader.readAsDataURL(file);
+
+      // Reset input so same file can be selected again
+      e.target.value = "";
+    },
+    [onChange],
+  );
+
+  const handleRemove = useCallback(
+    (e: React.MouseEvent | React.KeyboardEvent) => {
+      e.stopPropagation();
+      onChange(null);
+    },
+    [onChange],
+  );
+
+  const defaultTab = showLogos ? "logos" : "emoji";
+  const FallbackIcon =
+    fallbackType === "llm_proxy"
+      ? Network
+      : fallbackType === "mcp_gateway"
+        ? Route
+        : fallbackType === "server"
+          ? Server
+          : fallbackType === "project"
+            ? Folder
+            : fallbackType === "app"
+              ? AppWindow
+              : fallbackType === "skill"
+                ? Sparkles
+                : fallbackType === "plugin"
+                  ? Puzzle
+                  : Bot;
+
+  return (
+    <Popover
+      open={disabled ? false : open}
+      onOpenChange={(next) => {
+        if (!disabled) setOpen(next);
+      }}
+    >
+      <PopoverTrigger asChild>
+        <UnstyledButton
+          type="button"
+          aria-label={disabled ? "Icon" : value ? "Change icon" : "Choose icon"}
+          disabled={disabled}
+          className={cn(
+            "relative group flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border-2 border-dashed transition-colors",
+            disabled
+              ? "cursor-default opacity-80"
+              : "cursor-pointer hover:border-primary/50 hover:bg-accent",
+            value && "border-solid border-border",
+            className,
+          )}
+        >
+          {value ? (
+            isImage ? (
+              <Image
+                src={value}
+                alt=""
+                width={32}
+                height={32}
+                className="rounded-md object-contain"
+              />
+            ) : isBuiltInServiceIcon(value) ? (
+              <AgentIcon icon={value} size={28} />
+            ) : (
+              <span className="text-2xl leading-none">{value}</span>
+            )
+          ) : (
+            <FallbackIcon className="h-5 w-5 text-muted-foreground" />
+          )}
+          {value && !disabled && (
+            // biome-ignore lint/a11y/useSemanticElements: can't use <button> here as it's nested inside PopoverTrigger's <button>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={handleRemove}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") handleRemove(e);
+              }}
+              className="absolute -top-1.5 -right-1.5 hidden group-hover:flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground cursor-pointer"
+            >
+              <X className="h-2.5 w-2.5" />
+            </div>
+          )}
+        </UnstyledButton>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[352px] overflow-hidden rounded-lg p-0"
+        align="start"
+        sideOffset={4}
+      >
+        <Tabs defaultValue={defaultTab} className="gap-0">
+          <TabsList className="w-full rounded-none border-b bg-transparent p-0 h-auto">
+            {showLogos && (
+              <TabsTrigger
+                value="logos"
+                className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none gap-1.5 py-2.5"
+              >
+                <Layers className="h-3.5 w-3.5" />
+                Logos
+              </TabsTrigger>
+            )}
+            <TabsTrigger
+              value="emoji"
+              className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none gap-1.5 py-2.5"
+            >
+              <SmileIcon className="h-3.5 w-3.5" />
+              Emoji
+            </TabsTrigger>
+            <TabsTrigger
+              value="upload"
+              className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none gap-1.5 py-2.5"
+            >
+              <ImageIcon className="h-3.5 w-3.5" />
+              Upload
+            </TabsTrigger>
+          </TabsList>
+          {showLogos && (
+            <TabsContent
+              value="logos"
+              className="m-0"
+              onWheel={(e) => e.stopPropagation()}
+              onTouchMove={(e) => e.stopPropagation()}
+            >
+              <ServiceLogoPicker onSelect={handleLogoSelect} />
+            </TabsContent>
+          )}
+          <TabsContent
+            value="emoji"
+            className="m-0 w-full overflow-hidden rounded-none"
+            onWheel={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
+          >
+            {open && <AgentEmojiPicker onEmojiSelect={handleEmojiSelect} />}
+          </TabsContent>
+          <TabsContent value="upload" className="m-0 p-4">
+            <div className="flex flex-col items-center gap-3 py-6">
+              <div className="flex h-16 w-16 items-center justify-center rounded-lg border-2 border-dashed">
+                {value && isImage ? (
+                  <Image
+                    src={value}
+                    alt="Preview"
+                    width={48}
+                    height={48}
+                    className="rounded-md object-contain"
+                  />
+                ) : (
+                  <Upload className="h-6 w-6 text-muted-foreground" />
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground text-center">
+                PNG, JPG, SVG or GIF. Max 512 KB.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Choose image
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileUpload}
+              />
+            </div>
+          </TabsContent>
+        </Tabs>
+      </PopoverContent>
+    </Popover>
+  );
+}

@@ -13,7 +13,7 @@ import {
   Plus,
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
-import { SettingsLink } from "@/components/settings-link";
+import { SettingsLink } from "@/components/settings/settings-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field-description";

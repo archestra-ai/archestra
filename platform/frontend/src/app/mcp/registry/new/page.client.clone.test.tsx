@@ -21,7 +21,7 @@ import {
 } from "@/lib/teams/team.query";
 import NewMcpCatalogItemPage from "./page.client";
 
-vi.mock("@/components/initial-resource-permissions", () => ({
+vi.mock("@/components/resource-access/initial-resource-permissions", () => ({
   InitialResourcePermissions: () => null,
 }));
 
@@ -95,15 +95,15 @@ vi.mock("@/lib/docs/docs", () => ({
 
 vi.mock("@/lib/hooks/use-app-name");
 
-vi.mock("@/components/agent-icon-picker", () => ({
+vi.mock("@/components/agents/agent-icon-picker", () => ({
   AgentIconPicker: () => <div data-testid="agent-icon-picker" />,
 }));
 
-vi.mock("@/components/agent-labels", () => ({
+vi.mock("@/components/agents/agent-labels", () => ({
   ProfileLabels: () => <div data-testid="profile-labels" />,
 }));
 
-vi.mock("@/components/environment-variables-form-field", () => ({
+vi.mock("@/components/deployment/environment-variables-form-field", () => ({
   EnvironmentVariablesFormField: () => (
     <div data-testid="environment-variables-form-field" />
   ),

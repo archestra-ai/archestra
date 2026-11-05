@@ -4,14 +4,14 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
-import {
-  useSetSettingsAction,
-  useSetSettingsPageHeader,
-} from "@/app/settings/layout";
 import { ClientRedirect } from "@/components/client-redirect";
 import { PageBackLink } from "@/components/page-back-link";
 import { QueryLoadError } from "@/components/query-load-error";
-import { RoleTypeIcon } from "@/components/role-type-icon";
+import { RoleTypeIcon } from "@/components/roles/role-type-icon";
+import {
+  useSetSettingsAction,
+  useSetSettingsPageHeader,
+} from "@/components/settings/settings-layout.context";
 import { SettingsSectionGroup } from "@/components/settings-section";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
@@ -22,7 +22,7 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
-import { WizardFooter } from "@/components/wizard-footer";
+import { WizardFooter } from "@/components/wizard/wizard-footer";
 import { useAllPermissions } from "@/lib/auth/auth.query";
 import { useRole, useUpdateRole } from "@/lib/role.query";
 import { allPermissionRows, countGranted } from "./permission-list-model.ee";

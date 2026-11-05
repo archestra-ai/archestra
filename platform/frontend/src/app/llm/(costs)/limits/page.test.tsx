@@ -53,7 +53,7 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("@/app/llm/(costs)/layout", () => ({
+vi.mock("@/components/cost-explorer/costs-layout.context", () => ({
   useSetCostsAction: () => mockSetCostsAction,
 }));
 
@@ -214,7 +214,7 @@ vi.mock("@/components/ui/data-table", () => ({
   ),
 }));
 
-vi.mock("@/components/llm-model-select", () => ({
+vi.mock("@/components/models/llm-model-select", () => ({
   LlmModelSearchableSelect: () => <div>Model filter</div>,
 }));
 
@@ -222,7 +222,7 @@ vi.mock("@/components/llm-model-multi-select", () => ({
   LlmModelMultiSearchableSelect: () => <div>Model multi filter</div>,
 }));
 
-vi.mock("@/components/llm-model-picker", () => ({
+vi.mock("@/app/llm/(costs)/limits/_parts/llm-model-picker", () => ({
   LlmModelPicker: ({
     value,
     placeholder,

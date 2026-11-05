@@ -18,7 +18,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ProfileLabelsRef } from "@/components/agent-labels";
+import type { ProfileLabelsRef } from "@/components/agents/agent-labels";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { GitSourceTooltip } from "@/components/git/git-source-card";
@@ -42,7 +42,7 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
-import { WizardFooter } from "@/components/wizard-footer";
+import { WizardFooter } from "@/components/wizard/wizard-footer";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 import {

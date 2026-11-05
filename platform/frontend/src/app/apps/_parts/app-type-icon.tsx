@@ -1,7 +1,7 @@
 "use client";
 
 import { AppWindow } from "lucide-react";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
 import {
   Tooltip,
   TooltipContent,

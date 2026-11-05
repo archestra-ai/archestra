@@ -2,11 +2,11 @@
 
 import { RefreshCw, Server } from "lucide-react";
 import { useCallback, useEffect } from "react";
-import { useSetSettingsAction } from "@/app/settings/layout";
 import {
   SettingsBlock,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
+import { useSetSettingsAction } from "@/components/settings/settings-layout.context";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {

@@ -3,7 +3,7 @@
 import type { GitProvider } from "@archestra/shared";
 import { Check, ChevronRight } from "lucide-react";
 import type * as React from "react";
-import { AgentIcon } from "@/components/agent-icon";
+import { AgentIcon } from "@/components/agents/agent-icon";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {

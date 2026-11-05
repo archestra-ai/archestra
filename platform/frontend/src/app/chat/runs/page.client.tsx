@@ -1,3 +1,3 @@
 "use client";
 
-export { AgentRunChatSession } from "@/components/agent-run-session";
+export { AgentRunChatSession } from "@/components/agent-runs/agent-run-session";

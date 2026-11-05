@@ -24,7 +24,7 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 
 // Complete the sign-in on click so the save path is exercised directly.
-vi.mock("@/components/subscription-sign-in", () => ({
+vi.mock("@/components/subscriptions/subscription-sign-in", () => ({
   SubscriptionSignIn: ({
     kind,
     onSecret,

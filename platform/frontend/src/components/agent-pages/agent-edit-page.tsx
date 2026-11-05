@@ -5,9 +5,12 @@ import { ArrowLeft, ArrowRight, Info, Loader2, PackageX } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AgentForm, type AgentFormSection } from "@/components/agent-form";
+import {
+  AgentForm,
+  type AgentFormSection,
+} from "@/components/agents/agent-form";
 import { QueryLoadError } from "@/components/query-load-error";
-import { ResourcePermissions } from "@/components/resource-permissions";
+import { ResourcePermissions } from "@/components/resource-access/resource-permissions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,8 +27,8 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
-import { WizardFooter } from "@/components/wizard-footer";
-import { WizardStepper } from "@/components/wizard-stepper";
+import { WizardFooter } from "@/components/wizard/wizard-footer";
+import { WizardStepper } from "@/components/wizard/wizard-stepper";
 import { useProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";

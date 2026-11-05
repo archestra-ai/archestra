@@ -1,6 +1,6 @@
 import { DEFAULT_GIT_WEB_URLS, type GitProvider } from "@archestra/shared";
 import { Github } from "lucide-react";
-import { AgentIcon } from "@/components/agent-icon";
+import { AgentIcon } from "@/components/agents/agent-icon";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getRepositoryDisplay } from "@/lib/github/repository-display";
 import { cn } from "@/lib/utils/tailwind";

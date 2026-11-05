@@ -21,7 +21,7 @@ vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 vi.mock("sonner");
-vi.mock("@/app/settings/layout", () => ({
+vi.mock("@/components/settings/settings-layout.context", () => ({
   useSetSettingsAction: vi.fn(() => () => undefined),
 }));
 
@@ -238,7 +238,9 @@ describe("OauthClientsPage", () => {
 
   it("offers a single canonical permissions control", async () => {
     let headerAction: React.ReactNode = null;
-    const { useSetSettingsAction } = await import("@/app/settings/layout");
+    const { useSetSettingsAction } = await import(
+      "@/components/settings/settings-layout.context"
+    );
     vi.mocked(useSetSettingsAction).mockReturnValue((node) => {
       headerAction = node;
     });

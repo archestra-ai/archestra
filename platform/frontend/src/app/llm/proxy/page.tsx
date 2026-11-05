@@ -2,6 +2,7 @@
 
 import { Waypoints } from "lucide-react";
 import { useMemo, useState } from "react";
+import { terminalRaisedClass } from "@/components/agent-runs/terminal-surface";
 import {
   type AuthMethodOption,
   AuthMethodPicker,
@@ -14,15 +15,14 @@ import {
   resolveCandidateBaseUrls,
 } from "@/components/connection/connection-flow.utils";
 import { TerminalBlock } from "@/components/connection/terminal-block";
+import { PROVIDER_CONFIG } from "@/components/model-providers/llm-provider-api-key-form";
+import { LlmProviderOptionLabel } from "@/components/model-providers/llm-provider-select-items";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   type LlmAuthMethod,
   LlmConnectSteps,
-} from "@/components/llm-connect-steps";
-import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
-import { LlmProviderOptionLabel } from "@/components/llm-provider-select-items";
-import { terminalRaisedClass } from "@/components/terminal-surface";
-import { SearchableSelect } from "@/components/ui/searchable-select";
-import { UnstyledButton } from "@/components/ui/unstyled-button";
+} from "@/components/virtual-keys/llm-connect-steps";
 import config from "@/lib/config/config";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";

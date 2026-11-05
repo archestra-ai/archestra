@@ -7,7 +7,7 @@ import MyUsagePage from "./page";
 vi.mock("next/navigation");
 vi.mock("@/lib/statistics.query");
 
-vi.mock("@/components/my-usage-summary", () => ({
+vi.mock("@/components/cost-explorer/my-usage-summary", () => ({
   MyUsageSummary: () => <div>usage summary</div>,
 }));
 

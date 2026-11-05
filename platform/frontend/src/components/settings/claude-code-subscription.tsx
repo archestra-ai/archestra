@@ -1,6 +1,6 @@
 "use client";
 
-import { ClaudeCodeAccount } from "@/components/claude-code-account";
+import { ClaudeCodeAccount } from "@/components/agent-runtime/claude-code-account";
 import { QueryLoadError } from "@/components/query-load-error";
 import { useAgentOptionsPage } from "@/lib/agent-options.query";
 import { useFeature } from "@/lib/config/config.query";

@@ -47,15 +47,17 @@ vi.mock("@/lib/agent-runtime.query", () => ({
   useMyAgentRun: () => queryState.value,
 }));
 
-vi.mock("@/components/agent-run-terminal", () => ({
+vi.mock("@/components/agent-runs/agent-run-terminal", () => ({
   AgentRunTerminal: (props: NonNullable<typeof terminalState.props>) => {
     terminalState.props = props;
     return <div>Live terminal {props.taskId}</div>;
   },
 }));
 
-vi.mock("@/components/agent-run-logs", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/components/agent-run-logs")>()),
+vi.mock("@/components/agent-runs/agent-run-logs", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/components/agent-runs/agent-run-logs")
+  >()),
   AgentRunLogs: () => <div>Retained run output</div>,
 }));
 

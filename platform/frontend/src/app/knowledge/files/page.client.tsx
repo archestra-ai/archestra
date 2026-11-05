@@ -16,7 +16,6 @@ import { AddToKnowledgeBaseDialog } from "@/app/knowledge/files/_parts/add-to-kn
 import { DirectoryDialog } from "@/app/knowledge/files/_parts/directory-dialog";
 import { EditFileDialog } from "@/app/knowledge/files/_parts/edit-file-dialog";
 import { UploadFileDialog } from "@/app/knowledge/files/_parts/upload-file-dialog";
-import { BulkResourceAccessDialog } from "@/components/bulk-resource-access-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
@@ -31,12 +30,13 @@ import {
 } from "@/components/filter-bar";
 import { LabelTags } from "@/components/label-tags";
 import { QueryLoadError } from "@/components/query-load-error";
+import { BulkResourceAccessDialog } from "@/components/resource-access/bulk-resource-access-dialog";
 import {
   RESOURCE_ACCESS_FILTER_PARAMS,
   ResourceAccessFilter,
-} from "@/components/resource-access-filter";
+} from "@/components/resource-access/resource-access-filter";
+import { useScopeFilterParams } from "@/components/resource-access/resource-scope-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
-import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";

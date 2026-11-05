@@ -5,8 +5,8 @@ import { BookOpen, Puzzle, Search, Server } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useEffect, useState } from "react";
 import type { ConnectClient } from "@/components/connection/clients";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { SCOPE_META } from "@/components/scope-vocabulary";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
+import { SCOPE_META } from "@/components/resource-access/scope-vocabulary";
 import { skillDetailHref } from "@/components/skills/skill-page-config";
 import { Button } from "@/components/ui/button";
 import {

@@ -14,8 +14,8 @@ import {
   initiatorLabel,
   starterKey,
 } from "@/components/agent-pages/agent-run-list";
-import { AgentRunChatSession } from "@/components/agent-run-session";
-import { AgentRunState } from "@/components/agent-run-state";
+import { AgentRunChatSession } from "@/components/agent-runs/agent-run-session";
+import { AgentRunState } from "@/components/agent-runs/agent-run-state";
 import { EmptyState } from "@/components/empty-state";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";

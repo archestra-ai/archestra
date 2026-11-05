@@ -1,7 +1,7 @@
 import type { AgentType } from "@archestra/shared";
-import type { AgentFormSection } from "@/components/agent-form";
-import type { AgentIconVariant } from "@/components/agent-icon";
-import type { WizardStepDefinition } from "@/components/wizard-stepper";
+import type { AgentFormSection } from "@/components/agents/agent-form";
+import type { AgentIconVariant } from "@/components/agents/agent-icon";
+import type { WizardStepDefinition } from "@/components/wizard/wizard-stepper";
 
 /**
  * The two route families that host an agent-shaped resource. Legacy

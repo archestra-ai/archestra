@@ -7,7 +7,7 @@ import {
 } from "@archestra/shared";
 import { INSTALLER_CLIENT_IDS } from "@archestra/shared/connection-setup";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { AgentSelector } from "@/components/agent-selector";
+import { AgentSelector } from "@/components/agents/agent-selector";
 import { CodeText } from "@/components/code-text";
 import { ClientIcon } from "@/components/connection/client-icon";
 import {

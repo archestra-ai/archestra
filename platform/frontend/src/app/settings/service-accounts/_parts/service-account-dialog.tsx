@@ -13,9 +13,13 @@ import {
 } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
+import { KeyStatusBadge } from "@/app/settings/service-accounts/_parts/service-account-status-badge";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
-import { AgentIcon } from "@/components/agent-icon";
-import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
+import { AgentIcon } from "@/components/agents/agent-icon";
+import type {
+  ProfileLabel,
+  ProfileLabelsRef,
+} from "@/components/agents/agent-labels";
 import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
@@ -29,10 +33,9 @@ import {
 import { FormDialog } from "@/components/form-dialog";
 import { IdentityFields } from "@/components/identity-fields";
 import { QueryLoadError } from "@/components/query-load-error";
-import { ResourceAccessSection } from "@/components/resource-access-section";
-import { RoleAssignmentBlockedNotice } from "@/components/role-assignment-blocked-notice";
+import { ResourceAccessSection } from "@/components/resource-access/resource-access-section";
+import { RoleAssignmentBlockedNotice } from "@/components/roles/role-assignment-blocked-notice";
 import { SearchInput } from "@/components/search-input";
-import { KeyStatusBadge } from "@/components/service-account-status-badge";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";

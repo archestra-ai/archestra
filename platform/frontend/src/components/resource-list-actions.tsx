@@ -5,7 +5,7 @@ import type { ScopedResource } from "@archestra/shared";
 import { MoreHorizontal, Shield } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useState } from "react";
-import { ResourcePermissionsDialog } from "@/components/resource-permissions";
+import { ResourcePermissionsDialog } from "@/components/resource-access/resource-permissions";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,

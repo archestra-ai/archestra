@@ -2,8 +2,8 @@
 
 import { GithubIcon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { OpenAppaGithubAppRequirements } from "@/components/openappa-github-app-requirements";
-import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
+import { RuntimeCredentialConnectionDialog } from "@/components/agent-runtime/runtime-credential-connection-dialog";
+import { OpenAppaGithubAppRequirements } from "@/components/openappa/openappa-github-app-requirements";
 import { RuntimeCredentialDefinitionDialog } from "@/components/settings/runtime-credential-definition-dialog";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";

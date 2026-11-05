@@ -25,7 +25,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import type { OverviewFact } from "@/app/mcp/registry/[id]/_parts/overview-summary";
 import { useCanModifyCatalogItem } from "@/components/mcp-registry/catalog-edit-access";
 import { resolveCatalogEnvironmentLabel } from "@/components/mcp-registry/catalog-environment-label";
 import { shouldShowMcpCardChatButton } from "@/components/mcp-registry/chat-button-visibility";
@@ -40,6 +40,7 @@ import { getLocalInstallationCopy } from "@/components/mcp-registry/local-instal
 import { ManageUsersContent } from "@/components/mcp-registry/manage-users-dialog";
 import type { McpCatalogFormValues } from "@/components/mcp-registry/mcp-catalog-form.types";
 import { transformCatalogItemToFormValues } from "@/components/mcp-registry/mcp-catalog-form.utils";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
 import { deriveAgentUsage } from "@/components/mcp-registry/mcp-server-agent-usage";
 import type {
   CatalogItem,
@@ -47,7 +48,6 @@ import type {
 } from "@/components/mcp-registry/mcp-server-card";
 import { McpServerIssueNotice } from "@/components/mcp-registry/mcp-server-issue-notice";
 import { useChatWithCatalogItem } from "@/components/mcp-registry/use-chat-with-catalog-item";
-import type { OverviewFact } from "@/components/overview-summary";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import {

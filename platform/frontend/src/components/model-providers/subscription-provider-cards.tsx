@@ -7,8 +7,8 @@ import {
 } from "@archestra/shared";
 import { CheckCircle2, TriangleAlert, Unplug } from "lucide-react";
 import type { ReactNode } from "react";
-import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
-import { SubscriptionBrandIcon } from "@/components/subscription-brand-icon";
+import type { LlmProviderApiKeyResponse } from "@/components/model-providers/llm-provider-api-key-form";
+import { SubscriptionBrandIcon } from "@/components/subscriptions/subscription-brand-icon";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";

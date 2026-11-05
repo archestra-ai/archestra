@@ -1,0 +1,993 @@
+"use client";
+
+import type { archestraApiTypes } from "@archestra/shared";
+import { CheckCircle2, Loader2 } from "lucide-react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
+import { useForm } from "react-hook-form";
+import {
+  type InitialPermissionGrant,
+  InitialResourcePermissions,
+} from "@/components/resource-access/initial-resource-permissions";
+import { FloatingActionBar } from "@/components/settings/settings-block";
+import {
+  SettingsSection,
+  SettingsSectionGroup,
+} from "@/components/settings-section";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { FieldDescription } from "@/components/ui/field-description";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  RadioGroup,
+  RadioGroupItem,
+  radioCardClass,
+} from "@/components/ui/radio-group";
+import { SecretInput } from "@/components/ui/secret-input";
+import { Textarea } from "@/components/ui/textarea";
+import type {
+  A2aRemoteAgent,
+  CreateA2aRemoteAgentBody,
+  UpdateA2aRemoteAgentBody,
+} from "@/lib/a2a-remote-agents.query";
+import { useInspectA2aRemoteAgent } from "@/lib/a2a-remote-agents.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
+import { getApiErrorMessage } from "@/lib/utils/api";
+import { cn } from "@/lib/utils/tailwind";
+
+type AuthType = "none" | "bearer" | "api_key";
+type Source = NonNullable<UpdateA2aRemoteAgentBody["source"]>;
+type Auth = NonNullable<UpdateA2aRemoteAgentBody["auth"]>;
+type Inspection = archestraApiTypes.InspectA2aRemoteAgentResponses["200"];
+type FormValues = {
+  url: string;
+  name: string;
+  description: string;
+  authType: AuthType;
+  headerName: string;
+  credential: string;
+};
+type CardPrefill = Pick<FormValues, "name" | "description">;
+
+export type A2aRemoteAgentFormSubmission = UpdateA2aRemoteAgentBody &
+  Pick<CreateA2aRemoteAgentBody, "initialGrants">;
+
+const AUTH_LABELS: Record<AuthType, string> = {
+  none: "None",
+  bearer: "Bearer token",
+  api_key: "API key header",
+};
+const ALL_AUTH_TYPES: AuthType[] = ["none", "bearer", "api_key"];
+const MAX_PREVIEW_SKILLS = 5;
+const DOTTED_VERSION = /^v?\d+(\.\d+)+([-+][0-9a-z.-]+)?$/i;
+const EMPTY_CARD_PREFILL: CardPrefill = { name: "", description: "" };
+
+export function A2aRemoteAgentForm({
+  agent,
+  readOnly = false,
+  isSaving,
+  onSubmit,
+  onDirtyChange,
+  permissions,
+}: {
+  agent?: A2aRemoteAgent;
+  readOnly?: boolean;
+  isSaving: boolean;
+  onSubmit: (submission: A2aRemoteAgentFormSubmission) => void;
+  onDirtyChange?: (isDirty: boolean) => void;
+  /**
+   * An existing agent's Permissions section. It keeps its own edits, and this
+   * form's Save commits them, so the page shows one Save.
+   */
+  permissions?: {
+    section: ReactNode;
+    dirty: boolean;
+    save: () => Promise<void>;
+  };
+}) {
+  const formId = useId();
+  const initial = valuesFromAgent(agent);
+  const form = useForm<FormValues>({ defaultValues: initial });
+  // Who else can use the agent once it exists. An existing agent's access is
+  // edited in its own Permissions section, which saves on its own.
+  const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
+    [],
+  );
+  const { mutate: inspectRemoteAgent, reset: resetRemoteAgentInspection } =
+    useInspectA2aRemoteAgent();
+  const appName = useAppName();
+  const [inspection, setInspection] = useState<Inspection | null>(() =>
+    agent ? inspectionFromAgent(agent) : null,
+  );
+  const [capabilitiesInspected, setCapabilitiesInspected] = useState(false);
+  const [compatibleStamp, setCompatibleStamp] = useState<string | null>(() =>
+    agent ? connectionStamp(initial, agent) : null,
+  );
+  const [inspectionError, setInspectionError] = useState<string | null>(null);
+  const [inspectionPending, setInspectionPending] = useState(false);
+  const requestRef = useRef(0);
+  const refreshedAgentIdRef = useRef<string | null>(null);
+  const cardPrefillRef = useRef<CardPrefill>({ ...EMPTY_CARD_PREFILL });
+  const values = form.watch();
+  const keepsLegacySource = !!agent && !storedWellKnownBaseUrl(agent);
+  const urlRequiredMessage = keepsLegacySource
+    ? undefined
+    : "An agent base URL is required.";
+  const connectionNeedsInspection =
+    connectionStamp(values, agent) !== compatibleStamp;
+  const inspectionNeedsPersistence =
+    !!agent && !!inspection && inspection.cardHash !== agent.cardHash;
+  const formDirty =
+    form.formState.isDirty ||
+    inspectionNeedsPersistence ||
+    initialGrants.length > 0;
+  const isDirty = formDirty || !!permissions?.dirty;
+
+  useEffect(() => onDirtyChange?.(formDirty), [formDirty, onDirtyChange]);
+  useEffect(
+    () => () => {
+      requestRef.current += 1;
+      onDirtyChange?.(false);
+    },
+    [onDirtyChange],
+  );
+
+  const invalidateSource = () => {
+    requestRef.current += 1;
+    form.clearErrors("url");
+    resetRemoteAgentInspection();
+    setInspection(null);
+    setCapabilitiesInspected(false);
+    setCompatibleStamp(null);
+    setInspectionError(null);
+    setInspectionPending(false);
+  };
+  const invalidateCompatibility = () => {
+    requestRef.current += 1;
+    resetRemoteAgentInspection();
+    setCompatibleStamp(null);
+    setInspectionError(null);
+    setInspectionPending(false);
+  };
+
+  const prefillDetailsFromCard = useCallback(
+    (result: Inspection) => {
+      const current = form.getValues();
+      const next = nextCardPrefill({
+        current: { name: current.name, description: current.description },
+        previousPrefill: cardPrefillRef.current,
+        card: { name: result.name, description: result.description ?? "" },
+      });
+      cardPrefillRef.current = next.prefill;
+      for (const field of next.updatedFields) {
+        form.setValue(field, next.prefill[field], { shouldDirty: true });
+      }
+    },
+    [form],
+  );
+
+  const inspectConnection = useCallback(
+    async ({
+      validate = true,
+      onSuccess,
+    }: {
+      validate?: boolean;
+      onSuccess?: (result: Inspection, draft: FormValues) => void;
+    } = {}) => {
+      const draft = form.getValues();
+      const fieldsToValidate: (keyof FormValues)[] = ["url"];
+      if (draft.authType === "api_key") fieldsToValidate.push("headerName");
+      if (validate && !(await form.trigger(fieldsToValidate))) return;
+
+      form.clearErrors("credential");
+      const credential = draft.credential.trim();
+      const usesStoredCredential =
+        !credential && keepsStoredCredential(draft, agent);
+      if (draft.authType !== "none" && !credential && !usesStoredCredential) {
+        form.setError("credential", {
+          message: agent
+            ? "Enter a credential when changing authentication."
+            : "A credential is required.",
+        });
+        return;
+      }
+
+      const source = sourceForInspection(draft, agent);
+      if (!source) return;
+      const auth =
+        draft.authType === "none"
+          ? { type: "none" as const }
+          : draft.authType === "bearer"
+            ? {
+                type: "bearer" as const,
+                ...(credential ? { credential } : {}),
+              }
+            : {
+                type: "api_key" as const,
+                headerName: draft.headerName.trim(),
+                ...(credential ? { credential } : {}),
+              };
+      const requestId = ++requestRef.current;
+      setInspectionPending(true);
+      setInspectionError(null);
+      setInspection(null);
+      setCompatibleStamp(null);
+      inspectRemoteAgent(
+        {
+          source,
+          auth,
+          ...(usesStoredCredential && agent ? { remoteAgentId: agent.id } : {}),
+        },
+        {
+          onSuccess: (result) => {
+            if (requestId !== requestRef.current) return;
+            if (!result) {
+              setInspectionError("The Agent Card inspection returned no data.");
+              setInspectionPending(false);
+              return;
+            }
+            setInspection(result);
+            setCapabilitiesInspected(true);
+            setCompatibleStamp(connectionStamp(draft, agent));
+            setInspectionPending(false);
+            if (!agent) prefillDetailsFromCard(result);
+            onSuccess?.(result, draft);
+          },
+          onError: (error) => {
+            if (requestId !== requestRef.current) return;
+            setCapabilitiesInspected(false);
+            setInspectionError(getApiErrorMessage(error));
+            setInspectionPending(false);
+          },
+        },
+      );
+    },
+    [agent, form, inspectRemoteAgent, prefillDetailsFromCard],
+  );
+
+  useEffect(() => {
+    if (
+      readOnly ||
+      !agent ||
+      !storedWellKnownBaseUrl(agent) ||
+      refreshedAgentIdRef.current === agent.id
+    )
+      return;
+    refreshedAgentIdRef.current = agent.id;
+    void inspectConnection({ validate: false });
+    return () => {
+      if (refreshedAgentIdRef.current === agent.id) {
+        refreshedAgentIdRef.current = null;
+      }
+    };
+  }, [agent, inspectConnection, readOnly]);
+
+  const validateCredential = () => {
+    form.clearErrors("credential");
+    if (values.authType === "none") return true;
+    if (values.credential.trim() || keepsStoredCredential(values, agent))
+      return true;
+    form.setError("credential", {
+      message: agent
+        ? "Enter a credential when changing authentication."
+        : "A credential is required.",
+    });
+    return false;
+  };
+  const buildSubmission = ({
+    verifiedInspection = inspection,
+    verifiedStamp = compatibleStamp,
+  }: {
+    verifiedInspection?: Inspection | null;
+    verifiedStamp?: string | null;
+  } = {}): A2aRemoteAgentFormSubmission | null => {
+    const current = form.getValues();
+    if (connectionStamp(current, agent) !== verifiedStamp) return null;
+    const source = parseSource({ values: current, agent, form });
+    const auth = parseAuth({ values: current, agent, form });
+    if (source === null || auth === null) return null;
+    if (!agent) {
+      if (!source) return null;
+      return {
+        source,
+        ...(auth ? { auth } : {}),
+        name: current.name.trim() || undefined,
+        description: current.description.trim() || undefined,
+        initialGrants: initialGrants.map(({ subject, actions }) => ({
+          subject,
+          actions,
+        })),
+      };
+    }
+    const submission: A2aRemoteAgentFormSubmission = {};
+    const verifiedInspectionNeedsPersistence =
+      !!verifiedInspection && verifiedInspection.cardHash !== agent.cardHash;
+    if (
+      source &&
+      (!sameSource(source, agent) ||
+        (verifiedInspectionNeedsPersistence &&
+          agent.discoveryMode === "well_known"))
+    )
+      submission.source = source;
+    if (auth) submission.auth = auth;
+    const name = current.name.trim();
+    if (name && name !== agent.name) submission.name = name;
+    const description = current.description.trim() || null;
+    if (description !== agent.description) submission.description = description;
+    return submission;
+  };
+
+  const discardChanges = () => {
+    const resetValues = valuesFromAgent(agent);
+    requestRef.current += 1;
+    cardPrefillRef.current = { ...EMPTY_CARD_PREFILL };
+    form.reset(resetValues);
+    setInitialGrants([]);
+    setInspection(agent ? inspectionFromAgent(agent) : null);
+    setCapabilitiesInspected(false);
+    setCompatibleStamp(agent ? connectionStamp(resetValues, agent) : null);
+    setInspectionError(null);
+    setInspectionPending(false);
+    resetRemoteAgentInspection();
+  };
+  const completeSubmission = ({
+    verifiedInspection = inspection,
+    verifiedStamp = compatibleStamp,
+  }: {
+    verifiedInspection?: Inspection | null;
+    verifiedStamp?: string | null;
+  } = {}) => {
+    const submission = buildSubmission({
+      verifiedInspection,
+      verifiedStamp,
+    });
+    if (!submission) return;
+    const hasFieldChanges = !agent || Object.keys(submission).length > 0;
+    if (!hasFieldChanges && !permissions?.dirty) {
+      discardChanges();
+      return;
+    }
+    void (async () => {
+      if (permissions?.dirty) {
+        try {
+          await permissions.save();
+        } catch {
+          // The Permissions section reports its own error.
+          return;
+        }
+      }
+      if (hasFieldChanges) onSubmit(submission);
+      else discardChanges();
+    })();
+  };
+  const submit = form.handleSubmit(() => {
+    if (!validateCredential()) return;
+    const draft = form.getValues();
+    const draftStamp = connectionStamp(draft, agent);
+    if (draftStamp === compatibleStamp && inspection) {
+      completeSubmission();
+      return;
+    }
+    void inspectConnection({
+      validate: false,
+      onSuccess: (result, inspectedDraft) => {
+        completeSubmission({
+          verifiedInspection: result,
+          verifiedStamp: connectionStamp(inspectedDraft, agent),
+        });
+      },
+    });
+  });
+  const canReuseStoredCredential = keepsStoredCredential(values, agent);
+  const hasRequiredCredential =
+    values.authType === "none" ||
+    !!values.credential.trim() ||
+    canReuseStoredCredential;
+  const canInspect =
+    !!values.url.trim() &&
+    hasRequiredCredential &&
+    (values.authType !== "api_key" || !!values.headerName.trim());
+  const canSubmit = !agent || isDirty;
+
+  if (readOnly && agent) {
+    return <ReadOnlySummary agent={agent} />;
+  }
+
+  return (
+    <>
+      <form id={formId} className="flex flex-col" onSubmit={submit}>
+        <SettingsSectionGroup>
+          <SettingsSection
+            title="Connection"
+            description={`Set the external agent's base URL and how ${appName} authenticates. Connecting validates the Agent Card before saving.`}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="a2a-url">Agent base URL</Label>
+              <Input
+                id="a2a-url"
+                type="url"
+                aria-invalid={!!form.formState.errors.url}
+                aria-describedby="a2a-url-help a2a-url-error"
+                placeholder="https://agent.example.com"
+                {...form.register("url", {
+                  required: urlRequiredMessage,
+                  validate: (value) =>
+                    keepsLegacySource && !value.trim()
+                      ? true
+                      : !!normalizeAgentBaseUrl(value.trim()) ||
+                        "Enter an HTTP(S) base URL without credentials, a query, or a fragment.",
+                  onChange: invalidateSource,
+                })}
+              />
+              <FieldDescription id="a2a-url-help">
+                {keepsLegacySource
+                  ? "This connection uses a legacy Agent Card source. Leave this blank to keep it, or enter a base URL to replace it."
+                  : "We'll append /.well-known/agent-card.json to this base URL."}
+              </FieldDescription>
+              {form.formState.errors.url ? (
+                <p
+                  id="a2a-url-error"
+                  role="alert"
+                  className="text-sm text-destructive"
+                >
+                  {form.formState.errors.url.message}
+                </p>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <Label>Authentication</Label>
+              <FieldDescription>
+                These credentials are also used to retrieve protected Agent
+                Cards.
+              </FieldDescription>
+            </div>
+            <RadioGroup
+              aria-label="Authentication"
+              value={values.authType}
+              onValueChange={(value) => {
+                const nextAuthType = value as AuthType;
+                form.setValue("authType", nextAuthType, {
+                  shouldDirty: true,
+                });
+                invalidateCompatibility();
+              }}
+              className="grid gap-2 sm:grid-cols-3"
+            >
+              {ALL_AUTH_TYPES.map((authType) => {
+                const unsupported =
+                  capabilitiesInspected &&
+                  !!inspection &&
+                  !inspection.supportedAuthTypes.includes(authType);
+                return (
+                  <Label
+                    key={authType}
+                    htmlFor={`a2a-auth-${authType}`}
+                    className={cn(
+                      "flex cursor-pointer items-start gap-2 rounded-md p-3",
+                      radioCardClass(),
+                    )}
+                  >
+                    <RadioGroupItem
+                      id={`a2a-auth-${authType}`}
+                      value={authType}
+                      disabled={unsupported}
+                    />
+                    <span className="space-y-1">
+                      <span className="block">{AUTH_LABELS[authType]}</span>
+                      {unsupported ? (
+                        <span className="block text-xs font-normal text-muted-foreground">
+                          Not supported by this Agent Card
+                        </span>
+                      ) : null}
+                    </span>
+                  </Label>
+                );
+              })}
+            </RadioGroup>
+            {values.authType === "api_key" ? (
+              <div className="space-y-2">
+                <Label htmlFor="a2a-header">Header name</Label>
+                <Input
+                  id="a2a-header"
+                  aria-invalid={!!form.formState.errors.headerName}
+                  aria-describedby="a2a-header-error"
+                  {...form.register("headerName", {
+                    required: "A header name is required.",
+                    onChange: invalidateCompatibility,
+                  })}
+                />
+                {form.formState.errors.headerName ? (
+                  <p
+                    id="a2a-header-error"
+                    role="alert"
+                    className="text-sm text-destructive"
+                  >
+                    {form.formState.errors.headerName.message}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            {values.authType !== "none" ? (
+              <div className="space-y-2">
+                <Label htmlFor="a2a-credential">
+                  {canReuseStoredCredential
+                    ? "Replace credential (optional)"
+                    : "Credential"}
+                </Label>
+                <SecretInput
+                  id="a2a-credential"
+                  revealable
+                  aria-invalid={!!form.formState.errors.credential}
+                  aria-describedby="a2a-credential-help a2a-credential-error"
+                  placeholder={
+                    canReuseStoredCredential ? "••••••••" : undefined
+                  }
+                  {...form.register("credential", {
+                    onChange: invalidateCompatibility,
+                  })}
+                />
+                <FieldDescription id="a2a-credential-help">
+                  {canReuseStoredCredential
+                    ? "Leave this blank to keep the stored credential, or enter a replacement."
+                    : "The credential is stored securely and cannot be shown again."}
+                </FieldDescription>
+                {form.formState.errors.credential ? (
+                  <p
+                    id="a2a-credential-error"
+                    role="alert"
+                    className="text-sm text-destructive"
+                  >
+                    {form.formState.errors.credential.message}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={inspectionPending || !canInspect}
+                onClick={() => void inspectConnection()}
+              >
+                <span>
+                  {inspectionPending ? "Checking…" : "Check Agent Card"}
+                </span>
+              </Button>
+            </div>
+            {inspectionPending ? (
+              <output
+                aria-label="Checking Agent Card"
+                className="flex items-center gap-2 text-sm text-muted-foreground"
+              >
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>
+                  Checking the Agent Card and authentication settings…
+                </span>
+              </output>
+            ) : null}
+            {inspectionError ? (
+              <p
+                role="alert"
+                aria-label="Agent Card unavailable"
+                className="text-sm text-destructive"
+              >
+                {inspectionError}
+              </p>
+            ) : null}
+            {inspection && !inspectionError ? (
+              <AgentCardPreview inspection={inspection} />
+            ) : null}
+            {inspection && !inspectionPending && !connectionNeedsInspection ? (
+              <output
+                aria-label="Connection compatible"
+                className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                <span>
+                  Agent Card and authentication settings are compatible.
+                </span>
+              </output>
+            ) : null}
+          </SettingsSection>
+          <SettingsSection
+            title="Details"
+            description={
+              agent
+                ? `Customize how this external agent appears in ${appName}.`
+                : "Checking the Agent Card fills these in. Edit them to customize; empty fields use the Agent Card values."
+            }
+          >
+            <div className="space-y-2">
+              <Label htmlFor="a2a-name">Display name (optional)</Label>
+              <Input
+                id="a2a-name"
+                placeholder={inspection?.name ?? "Uses the Agent Card name"}
+                {...form.register("name")}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="a2a-description">Description (optional)</Label>
+              <Textarea
+                id="a2a-description"
+                rows={3}
+                placeholder={
+                  inspection?.description ?? "Uses the Agent Card description"
+                }
+                {...form.register("description")}
+              />
+            </div>
+          </SettingsSection>
+          {!agent && (
+            <InitialResourcePermissions
+              layout="settings"
+              resource="externalAgent"
+              grants={initialGrants}
+              onChange={setInitialGrants}
+            />
+          )}
+        </SettingsSectionGroup>
+      </form>
+      {/* Outside the form: the Permissions editor is a form of its own, and
+        forms cannot nest. The rule and padding match the group's sections. */}
+      {agent && permissions && (
+        <div className="border-t pt-8">{permissions.section}</div>
+      )}
+      <FloatingActionBar>
+        <Button
+          type="submit"
+          form={formId}
+          disabled={isSaving || inspectionPending || !canSubmit}
+        >
+          {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          <span>
+            {isSaving
+              ? agent
+                ? "Saving..."
+                : "Connecting..."
+              : agent
+                ? "Save changes"
+                : "Connect agent"}
+          </span>
+        </Button>
+      </FloatingActionBar>
+    </>
+  );
+}
+
+function AgentCardPreview({ inspection }: { inspection: Inspection }) {
+  const card = agentCardPreviewFields(inspection);
+  const shownSkills = card.skills.slice(0, MAX_PREVIEW_SKILLS);
+  const hiddenSkillCount = card.skills.length - shownSkills.length;
+  // The card description is not repeated here: it fills the Description field.
+  return (
+    <output
+      aria-label="Agent Card found"
+      className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm"
+    >
+      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
+      <div className="min-w-0 flex-1 space-y-2">
+        <div className="space-y-0.5">
+          <p className="break-words font-medium">{inspection.name}</p>
+          <p className="text-muted-foreground">
+            {[
+              card.provider ? `by ${card.provider}` : null,
+              card.version ? `v${card.version}` : null,
+              `A2A ${inspection.selectedInterface.protocolVersion} over ${inspection.selectedInterface.protocolBinding}`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        </div>
+        {shownSkills.length > 0 ? (
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">
+              What this agent can do
+            </p>
+            <ul aria-label="What this agent can do" className="space-y-1">
+              {shownSkills.map((skill, index) => (
+                <li
+                  // biome-ignore lint/suspicious/noArrayIndexKey: card skills may repeat names
+                  key={index}
+                  className="min-w-0"
+                >
+                  <span className="font-medium">{skill.name}</span>
+                  {skill.description ? (
+                    <span className="line-clamp-1 break-words text-muted-foreground">
+                      {skill.description}
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+            {hiddenSkillCount > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                +{hiddenSkillCount} more
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </output>
+  );
+}
+
+function ReadOnlySummary({ agent }: { agent: A2aRemoteAgent }) {
+  return (
+    <div className="space-y-6">
+      <Alert>
+        <AlertDescription>
+          You can view this external agent, but you do not have permission to
+          change its connection settings.
+        </AlertDescription>
+      </Alert>
+      <SettingsSectionGroup>
+        <SettingsSection title="Connection">
+          <dl className="grid gap-4 text-sm sm:grid-cols-2">
+            <SummaryItem
+              label="Delegation"
+              value={agent.connection.enabled ? "Enabled" : "Paused"}
+            />
+            <SummaryItem
+              label="Discovery URL"
+              value={
+                storedWellKnownBaseUrl(agent) ?? "Legacy Agent Card source"
+              }
+            />
+            <SummaryItem
+              label="Protocol"
+              value={`${agent.connection.selectedInterface.protocolBinding} ${agent.connection.selectedInterface.protocolVersion}`}
+            />
+            <SummaryItem
+              label="Last discovered"
+              value={new Date(agent.lastDiscoveredAt).toLocaleString()}
+            />
+          </dl>
+        </SettingsSection>
+        <SettingsSection title="Authentication">
+          <dl className="grid gap-4 text-sm sm:grid-cols-2">
+            <SummaryItem
+              label="Method"
+              value={AUTH_LABELS[agent.connection.authType]}
+            />
+            <SummaryItem
+              label="Credential"
+              value={
+                agent.connection.hasCredential ? "Configured" : "Not configured"
+              }
+            />
+          </dl>
+        </SettingsSection>
+        <SettingsSection title="Details">
+          <dl className="grid gap-4 text-sm sm:grid-cols-2">
+            <SummaryItem label="Display name" value={agent.name} />
+            <SummaryItem
+              label="Description"
+              value={agent.description || "No description"}
+            />
+          </dl>
+        </SettingsSection>
+      </SettingsSectionGroup>
+    </div>
+  );
+}
+
+function SummaryItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="break-words font-medium">{value}</dd>
+    </div>
+  );
+}
+
+function valuesFromAgent(agent?: A2aRemoteAgent): FormValues {
+  return {
+    url: storedWellKnownBaseUrl(agent) ?? "",
+    name: agent?.name ?? "",
+    description: agent?.description ?? "",
+    authType: agent?.connection.authType ?? "none",
+    headerName: agent?.connection.authConfig.headerName ?? "X-API-Key",
+    credential: "",
+  };
+}
+function inspectionFromAgent(agent: A2aRemoteAgent): Inspection {
+  return {
+    name: agent.name,
+    description: agent.description,
+    agentCard: agent.agentCard,
+    cardHash: agent.cardHash,
+    selectedInterface: agent.connection.selectedInterface,
+    supportedAuthTypes: ALL_AUTH_TYPES,
+    selectedSecurityRequirement: agent.connection.securityRequirement,
+  };
+}
+function sourceForInspection(
+  values: FormValues,
+  agent?: A2aRemoteAgent,
+): Source | null {
+  const url = normalizeAgentBaseUrl(values.url.trim());
+  if (url) return { type: "well_known", url };
+  if (agent && !storedWellKnownBaseUrl(agent) && !values.url.trim())
+    return { type: "inline_card", agentCard: agent.agentCard };
+  return null;
+}
+function connectionStamp(values: FormValues, agent?: A2aRemoteAgent) {
+  const source = sourceForInspection(values, agent);
+  if (!source) return null;
+  const sourceKey =
+    source.type === "well_known"
+      ? source.url
+      : `inline:${agent?.cardHash ?? ""}`;
+  const header =
+    values.authType === "api_key" ? values.headerName.trim().toLowerCase() : "";
+  return `${sourceKey}|${values.authType}|${header}`;
+}
+function parseSource({
+  values,
+  agent,
+  form,
+}: {
+  values: FormValues;
+  agent?: A2aRemoteAgent;
+  form: ReturnType<typeof useForm<FormValues>>;
+}): Source | undefined | null {
+  form.clearErrors("url");
+  const enteredUrl = values.url.trim();
+  if (agent && !storedWellKnownBaseUrl(agent) && !enteredUrl) return undefined;
+  const url = normalizeAgentBaseUrl(enteredUrl);
+  if (!url) {
+    form.setError("url", {
+      message:
+        "Enter an HTTP(S) base URL without credentials, a query, or a fragment.",
+    });
+    return null;
+  }
+  return { type: "well_known", url };
+}
+function parseAuth({
+  values,
+  agent,
+  form,
+}: {
+  values: FormValues;
+  agent?: A2aRemoteAgent;
+  form: ReturnType<typeof useForm<FormValues>>;
+}): Auth | undefined | null {
+  form.clearErrors(["credential", "headerName"]);
+  if (values.authType === "none")
+    return agent?.connection.authType === "none" ? undefined : { type: "none" };
+  const credential = values.credential.trim();
+  const keepsStored = keepsStoredCredential(values, agent);
+  if (!credential && keepsStored) return undefined;
+  if (!credential) {
+    form.setError("credential", {
+      message: agent
+        ? "Enter a credential when changing authentication."
+        : "A credential is required.",
+    });
+    return null;
+  }
+  if (values.authType === "bearer") return { type: "bearer", credential };
+  const headerName = values.headerName.trim();
+  if (!headerName) {
+    form.setError("headerName", { message: "A header name is required." });
+    return null;
+  }
+  return { type: "api_key", headerName, credential };
+}
+function sameSource(source: Source, agent: A2aRemoteAgent) {
+  return (
+    source.type === "well_known" &&
+    agent.discoveryMode === "well_known" &&
+    source.url === normalizeAgentBaseUrl(agent.discoveryUrl ?? "")
+  );
+}
+function keepsStoredCredential(values: FormValues, agent?: A2aRemoteAgent) {
+  const storedBaseUrl = storedWellKnownBaseUrl(agent);
+  const keepsSource = storedBaseUrl
+    ? normalizeAgentBaseUrl(values.url.trim()) === storedBaseUrl
+    : !values.url.trim();
+  return (
+    !!agent?.connection.hasCredential &&
+    keepsSource &&
+    values.authType === agent.connection.authType &&
+    (values.authType !== "api_key" ||
+      values.headerName.trim().toLowerCase() ===
+        (agent.connection.authConfig.headerName ?? "X-API-Key").toLowerCase())
+  );
+}
+function storedWellKnownBaseUrl(agent?: A2aRemoteAgent) {
+  if (agent?.discoveryMode !== "well_known" || !agent.discoveryUrl) return null;
+  return normalizeAgentBaseUrl(agent.discoveryUrl);
+}
+function normalizeAgentBaseUrl(value: string) {
+  try {
+    const url = new URL(value);
+    if (
+      (url.protocol !== "http:" && url.protocol !== "https:") ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+    )
+      return null;
+    const pathname = url.pathname.replace(/\/+$/, "");
+    return pathname ? `${url.origin}${pathname}` : url.origin;
+  } catch {
+    return null;
+  }
+}
+function nextCardPrefill({
+  current,
+  previousPrefill,
+  card,
+}: {
+  current: CardPrefill;
+  previousPrefill: CardPrefill;
+  card: CardPrefill;
+}): { prefill: CardPrefill; updatedFields: (keyof CardPrefill)[] } {
+  const prefill = { ...previousPrefill };
+  const updatedFields: (keyof CardPrefill)[] = [];
+  for (const field of ["name", "description"] as const) {
+    // Only replace values the user has not typed or edited: an empty field,
+    // or the exact value a previous Agent Card check filled in.
+    const untouched =
+      !current[field].trim() || current[field] === previousPrefill[field];
+    if (!untouched) continue;
+    prefill[field] = card[field];
+    if (current[field] !== card[field]) updatedFields.push(field);
+  }
+  return { prefill, updatedFields };
+}
+function agentCardPreviewFields(inspection: Inspection) {
+  const { agentCard } = inspection;
+  const provider = asRecord(agentCard.provider);
+  const skills = Array.isArray(agentCard.skills) ? agentCard.skills : [];
+  const version = nonEmptyString(agentCard.version);
+  const agentName = comparable(inspection.name);
+  const agentDescription = comparable(inspection.description);
+  return {
+    // Cards may carry a build number or timestamp as `version`; only a dotted
+    // release version (1.2, 2.1.0, v3.0.0-beta) is worth showing.
+    version:
+      version && DOTTED_VERSION.test(version)
+        ? version.replace(/^v/i, "")
+        : null,
+    provider: nonEmptyString(provider?.organization),
+    skills: skills.flatMap((value) => {
+      const skill = asRecord(value);
+      const name = nonEmptyString(skill?.name) ?? nonEmptyString(skill?.id);
+      // Single-skill cards often name the skill after the agent; that repeats
+      // the header instead of saying what the agent can do.
+      if (!name || comparable(name) === agentName) return [];
+      const description = nonEmptyString(skill?.description);
+      return [
+        {
+          name,
+          description:
+            description && comparable(description) !== agentDescription
+              ? description
+              : null,
+        },
+      ];
+    }),
+  };
+}
+function comparable(value: string | null | undefined) {
+  return value?.trim().toLowerCase() ?? "";
+}
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+function nonEmptyString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}

@@ -1,5 +1,5 @@
-import type { ProfileLabel } from "@/components/agent-labels";
-import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
+import type { ProfileLabel } from "@/components/agents/agent-labels";
+import type { InitialPermissionGrant } from "@/components/resource-access/initial-resource-permissions";
 import type { PluginDetail } from "@/lib/plugins/plugin.query";
 import type {
   PluginClientType,

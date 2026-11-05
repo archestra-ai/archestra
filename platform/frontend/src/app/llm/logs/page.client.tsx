@@ -6,7 +6,7 @@ import { MessagesSquare } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo } from "react";
 import { useLogsHeaderAction } from "@/app/_parts/logs-section-layout";
-import { AgentSelector } from "@/components/agent-selector";
+import { AgentSelector } from "@/components/agents/agent-selector";
 import { ErrorBoundary } from "@/components/error-boundary";
 import {
   CollectionFilters,
@@ -15,11 +15,11 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import type { LogSession } from "@/components/logs/logs-table-format";
+import { UserFilterSelect } from "@/components/logs/user-client-filter-selects";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
 import { DataTable } from "@/components/ui/data-table";
-import { UserFilterSelect } from "@/components/user-client-filter-selects";
 import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";

@@ -1,0 +1,442 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
+import { useOrganization } from "@/lib/organization.query";
+import { CreateLlmProviderApiKeyDialog } from "./create-llm-provider-api-key-dialog";
+
+const mutateAsync = vi.fn();
+const reconnectMutateAsync = vi.fn();
+
+vi.mock("@/components/model-providers/llm-provider-api-key-form", () => ({
+  LLM_PROVIDER_API_KEY_PLACEHOLDER: "••••••••••••••••",
+  serializeExtraHeaders: () => null,
+  PROVIDER_CONFIG: { anthropic: { name: "Anthropic" } },
+  LlmProviderApiKeyForm: ({
+    allowedProviders,
+    form,
+    credentialMode,
+    onSubscriptionCredential,
+  }: {
+    allowedProviders?: string[];
+    form: { register: (name: string) => Record<string, unknown> };
+    credentialMode?: "api-key" | "subscription";
+    onSubscriptionCredential?: (credential: string) => void | Promise<void>;
+  }) => (
+    <div>
+      <output data-testid="allowed-providers">
+        {allowedProviders?.join(",")}
+      </output>
+      {credentialMode === "subscription" ? (
+        <button
+          type="button"
+          onClick={() => {
+            const result = onSubscriptionCredential?.("subscription-token");
+            if (result instanceof Promise) void result.catch(() => undefined);
+          }}
+        >
+          Sign in
+        </button>
+      ) : (
+        <>
+          <label htmlFor="chat-api-key-name">Name</label>
+          <input id="chat-api-key-name" {...form.register("name")} />
+          <label htmlFor="chat-api-key-value">API Key</label>
+          <input id="chat-api-key-value" {...form.register("apiKey")} />
+        </>
+      )}
+    </div>
+  ),
+}));
+
+vi.mock("@/components/resource-access/resource-access-section", () => ({
+  ResourceAccessSection: () => <div>Permissions</div>,
+}));
+
+vi.mock("@/lib/llm-provider-api-keys.query", () => ({
+  useLlmProviderApiKeys: () => ({ data: [] }),
+  useCreateLlmProviderApiKey: () => ({
+    mutateAsync,
+    isPending: false,
+  }),
+  useReconnectLlmProviderApiKey: () => ({
+    mutateAsync: reconnectMutateAsync,
+    isPending: false,
+  }),
+}));
+
+vi.mock("@/lib/config/config.query");
+
+vi.mock("@/lib/auth/auth.query");
+
+vi.mock("@/lib/organization.query");
+
+describe("CreateLlmProviderApiKeyDialog", () => {
+  beforeEach(() => {
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "user-1" } },
+    } as unknown as ReturnType<typeof useSession>);
+    mutateAsync.mockReset();
+    mutateAsync.mockResolvedValue({ id: "created-key-id" });
+    reconnectMutateAsync.mockReset();
+    reconnectMutateAsync.mockResolvedValue({ id: "existing-key-id" });
+    vi.mocked(useFeature).mockReturnValue(false);
+    vi.mocked(useHasPermissions).mockReset();
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: undefined,
+    } as unknown as ReturnType<typeof useOrganization>);
+  });
+
+  it("submits the shared create API key flow and closes on success", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    const onSuccess = vi.fn();
+
+    render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={onOpenChange}
+        onSuccess={onSuccess}
+        title="Add API Key"
+        description="Shared dialog"
+      />,
+    );
+
+    await user.type(screen.getByLabelText("Name"), "Primary OpenAI Key");
+    await user.type(screen.getByLabelText("API Key"), "sk-test");
+    await user.click(screen.getByRole("button", { name: /test & create/i }));
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      name: "Primary OpenAI Key",
+      provider: "anthropic",
+      apiKey: "sk-test",
+      baseUrl: undefined,
+      inferenceBaseUrl: undefined,
+      extraHeaders: undefined,
+      shared: true,
+      initialGrants: [],
+      isPrimary: false,
+
+      awsAccessKeyId: undefined,
+      awsSecretAccessKey: undefined,
+      awsSessionToken: undefined,
+      labels: [],
+    });
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(onSuccess).toHaveBeenCalledWith("created-key-id");
+  });
+
+  it("falls back to the provider name when the name field is empty", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Add API Key"
+        description="Shared dialog"
+      />,
+    );
+
+    await user.type(screen.getByLabelText("API Key"), "sk-test");
+    await user.click(screen.getByRole("button", { name: /test & create/i }));
+
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Anthropic" }),
+    );
+  });
+
+  it("keeps form input through an equivalent allowed-provider refresh", async () => {
+    const user = userEvent.setup();
+    const view = render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Add API Key"
+        description="Shared dialog"
+        allowedProviders={["anthropic", "openai"]}
+      />,
+    );
+    await user.type(screen.getByLabelText("Name"), "Unchanged key name");
+    view.rerender(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Add API Key"
+        description="Shared dialog"
+        allowedProviders={["anthropic", "openai"]}
+      />,
+    );
+
+    expect(screen.getByLabelText("Name")).toHaveValue("Unchanged key name");
+  });
+
+  it("intersects runtime providers with organization-visible providers", async () => {
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: { anthropic: { hidden: true } },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+    const user = userEvent.setup();
+
+    render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Add API Key"
+        description="Shared dialog"
+        allowedProviders={["anthropic", "openai"]}
+      />,
+    );
+
+    expect(screen.getByTestId("allowed-providers")).toHaveTextContent("openai");
+    await user.type(screen.getByLabelText("API Key"), "sk-test");
+    await user.click(screen.getByRole("button", { name: /test & create/i }));
+
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: "openai" }),
+    );
+  });
+
+  it("does not offer a forbidden fallback provider when none are visible", () => {
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: { openai: { hidden: true } },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Add API Key"
+        description="Shared dialog"
+        allowedProviders={["openai"]}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "No compatible LLM providers are enabled for this agent.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Add API Key" })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /test & create/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not publish a new key merely because its creator is an admin", async () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    const user = userEvent.setup();
+
+    render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Add API Key"
+        description="Shared dialog"
+      />,
+    );
+
+    await user.type(screen.getByLabelText("Name"), "Org Wide Key");
+    await user.type(screen.getByLabelText("API Key"), "sk-test");
+    await user.click(screen.getByRole("button", { name: /test & create/i }));
+
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ shared: true, initialGrants: [] }),
+    );
+  });
+
+  it("submits explicit per-recipient access without display-only names", async () => {
+    const user = userEvent.setup();
+    render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Add API Key"
+        description="Create a key"
+        defaultValues={{
+          name: "Build service",
+          apiKey: "test-key",
+          shared: true,
+          initialGrants: [
+            {
+              subject: { type: "team", id: "support" },
+              name: "Support",
+              actions: ["read", "use", "update"],
+            },
+            {
+              subject: { type: "user", id: "reviewer" },
+              name: "Reviewer",
+              actions: ["read"],
+            },
+          ],
+        }}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /test & create/i }));
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        shared: true,
+        initialGrants: [
+          {
+            subject: { type: "team", id: "support" },
+            actions: ["read", "use", "update"],
+          },
+          { subject: { type: "user", id: "reviewer" }, actions: ["read"] },
+        ],
+      }),
+    );
+  });
+
+  it("creates a subscription immediately after sign-in", async () => {
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+
+    render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={vi.fn()}
+        onSuccess={onSuccess}
+        title="Sign in with ChatGPT"
+        description="Connect your ChatGPT account"
+        credentialMode="subscription"
+        allowedProviders={["openai"]}
+        defaultValues={{
+          name: "ChatGPT Subscription",
+          provider: "openai",
+          shared: false,
+          authMethod: "subscription",
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("dialog", { name: "Sign in with ChatGPT" }),
+    ).toBeVisible();
+
+    expect(
+      screen.queryByRole("button", { name: "Test & Create" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "ChatGPT Subscription",
+        provider: "openai",
+        apiKey: "subscription-token",
+        shared: false,
+      }),
+    );
+    expect(onSuccess).toHaveBeenCalledWith("created-key-id");
+  });
+
+  it("keeps a subscription sign-in just for the user even when the form says shared", async () => {
+    // Ownership coercion in the form is deferred until sign-in completes, and
+    // the sign-in callback reads form values in the same tick the credential
+    // lands — so the payload must resolve it itself.
+    const user = userEvent.setup();
+
+    render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Sign in with ChatGPT"
+        description="Connect your ChatGPT account"
+        credentialMode="subscription"
+        allowedProviders={["openai"]}
+        defaultValues={{
+          name: "ChatGPT Subscription",
+          provider: "openai",
+          shared: true,
+          authMethod: "subscription",
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ shared: false, initialGrants: [] }),
+    );
+  });
+
+  it("rotates the existing credential in place when reconnecting a subscription", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    const onSuccess = vi.fn();
+
+    render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={onOpenChange}
+        onSuccess={onSuccess}
+        title="Reconnect ChatGPT Subscription"
+        description="Sign in again"
+        credentialMode="subscription"
+        allowedProviders={["openai"]}
+        reconnectKeyId="existing-key-id"
+        defaultValues={{
+          name: "ChatGPT Subscription",
+          provider: "openai",
+          shared: false,
+          authMethod: "subscription",
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    // The fresh credential replaces the stored secret via the self-service
+    // reconnect endpoint (default members lack llmProviderApiKey:update, so
+    // the PATCH route would 403); no duplicate key row.
+    expect(reconnectMutateAsync).toHaveBeenCalledWith({
+      id: "existing-key-id",
+      apiKey: "subscription-token",
+    });
+    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(onSuccess).toHaveBeenCalledWith("existing-key-id");
+  });
+
+  it("closes a failed subscription sign-in without an unsaved-changes prompt", async () => {
+    mutateAsync.mockRejectedValueOnce(new Error("credential rejected"));
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+
+    render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={onOpenChange}
+        title="Sign in with ChatGPT"
+        description="Connect your ChatGPT account"
+        credentialMode="subscription"
+        allowedProviders={["openai"]}
+        defaultValues={{
+          name: "ChatGPT Subscription",
+          provider: "openai",
+          shared: false,
+          authMethod: "subscription",
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(mutateAsync).toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(
+      screen.queryByRole("dialog", { name: "Discard unsaved changes?" }),
+    ).not.toBeInTheDocument();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+});

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { CLEANUP_INTERVAL_LABELS } from "@/components/limit-cleanup-interval-select";
+import { CLEANUP_INTERVAL_LABELS } from "@/components/cost-explorer/limit-cleanup-interval-select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type {
   DefaultUserLimit,

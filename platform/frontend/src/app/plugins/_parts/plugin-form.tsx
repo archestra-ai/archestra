@@ -5,8 +5,8 @@ import { AdvancedSection } from "@/components/advanced-section";
 import {
   ProfileLabels,
   type ProfileLabelsRef,
-} from "@/components/agent-labels";
-import { ResourceAccessSection } from "@/components/resource-access-section";
+} from "@/components/agents/agent-labels";
+import { ResourceAccessSection } from "@/components/resource-access/resource-access-section";
 import {
   SettingsSection,
   SettingsSectionGroup,

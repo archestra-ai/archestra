@@ -19,7 +19,7 @@ import {
   Users,
   UsersRound,
 } from "lucide-react";
-import { OpenAppaIcon } from "@/components/openappa-icon";
+import { OpenAppaIcon } from "@/components/openappa/openappa-icon";
 import { usePermissionMap } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useSecretsType } from "@/lib/secrets.query";

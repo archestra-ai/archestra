@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { memo } from "react";
 import { useForm } from "react-hook-form";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
+import type { LlmProviderApiKeyResponse } from "@/components/model-providers/llm-provider-api-key-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

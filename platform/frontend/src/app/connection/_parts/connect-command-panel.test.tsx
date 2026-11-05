@@ -158,7 +158,7 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   }),
 }));
 
-vi.mock("@/components/github-copilot-sign-in", () => ({
+vi.mock("@/components/subscriptions/github-copilot-sign-in", () => ({
   GithubCopilotSignIn: ({ onToken }: { onToken: (token: string) => void }) => (
     <button type="button" onClick={() => onToken("gho_test")}>
       Sign in with GitHub
@@ -166,14 +166,17 @@ vi.mock("@/components/github-copilot-sign-in", () => ({
   ),
 }));
 
-vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
-  CreateLlmProviderApiKeyDialog: ({ open }: { open: boolean }) =>
-    open ? <div data-testid="add-provider-key-dialog" /> : null,
-}));
+vi.mock(
+  "@/components/model-providers/create-llm-provider-api-key-dialog",
+  () => ({
+    CreateLlmProviderApiKeyDialog: ({ open }: { open: boolean }) =>
+      open ? <div data-testid="add-provider-key-dialog" /> : null,
+  }),
+);
 
 // Stubbed so the gate's provider logo doesn't pull next/image into jsdom; the
 // branded-CTA test asserts on the provider it's told to render.
-vi.mock("@/components/provider-icon", () => ({
+vi.mock("@/components/model-providers/provider-icon", () => ({
   ProviderIcon: ({ provider }: { provider: string }) => (
     <span data-testid="provider-icon" data-provider={provider} />
   ),

@@ -5,7 +5,7 @@ import { type ReactNode, useId, useMemo, useState } from "react";
 import {
   AgentSelector,
   type AgentSelectorAgent,
-} from "@/components/agent-selector";
+} from "@/components/agents/agent-selector";
 import { PluginSourceGlyph } from "@/components/plugins/plugin-source-icon";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";

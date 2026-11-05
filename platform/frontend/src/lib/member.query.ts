@@ -6,7 +6,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { UserSelectOption } from "@/components/user-select-option";
+import type { UserSelectOption } from "@/components/users/user-select-option";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";

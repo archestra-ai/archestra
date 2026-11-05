@@ -43,15 +43,15 @@ import {
   EmbeddingModelImageSupportNotice,
   embeddingModelSupportsImages,
 } from "@/components/knowledge/embedding-model-image-support-notice";
-import { LlmModelSearchableSelect } from "@/components/llm-model-select";
-import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
+import { LoadingWrapper } from "@/components/loading";
+import { LlmProviderApiKeyDropdown } from "@/components/model-providers/llm-provider-api-key-dropdown";
 import {
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
   LlmProviderApiKeyForm,
   type LlmProviderApiKeyFormValues,
   PROVIDER_CONFIG,
-} from "@/components/llm-provider-api-key-form";
-import { LoadingWrapper } from "@/components/loading";
+} from "@/components/model-providers/llm-provider-api-key-form";
+import { LlmModelSearchableSelect } from "@/components/models/llm-model-select";
 import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { IntegrationAvailabilitySection } from "@/components/settings/integration-availability-section";
@@ -60,7 +60,7 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
-import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
+import { SmallTeamTierBanner } from "@/components/settings/small-team-tier-banner";
 import {
   Accordion,
   AccordionContent,

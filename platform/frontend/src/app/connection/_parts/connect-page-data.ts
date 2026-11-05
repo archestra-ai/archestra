@@ -20,7 +20,7 @@ import {
   isPlainMcpClientServerName,
 } from "@archestra/shared/connection-setup";
 import { useEffect, useMemo, useState } from "react";
-import type { AgentSelectorAgent } from "@/components/agent-selector";
+import type { AgentSelectorAgent } from "@/components/agents/agent-selector";
 import {
   type ConnectClient,
   usesGenericInstructions,

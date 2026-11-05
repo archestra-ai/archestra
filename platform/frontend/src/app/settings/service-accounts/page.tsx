@@ -12,10 +12,14 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
+import { AccountHealthBadge } from "@/app/settings/service-accounts/_parts/service-account-status-badge";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
-import { AgentIcon } from "@/components/agent-icon";
-import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
-import { AgentNameCell } from "@/components/agent-name-cell";
+import { AgentIcon } from "@/components/agents/agent-icon";
+import type {
+  ProfileLabel,
+  ProfileLabelsRef,
+} from "@/components/agents/agent-labels";
+import { AgentNameCell } from "@/components/agents/agent-name-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
@@ -29,9 +33,9 @@ import { FormDialog } from "@/components/form-dialog";
 import { IdentityFields } from "@/components/identity-fields";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceListActions } from "@/components/resource-list-actions";
-import { RoleAssignmentBlockedNotice } from "@/components/role-assignment-blocked-notice";
+import { RoleAssignmentBlockedNotice } from "@/components/roles/role-assignment-blocked-notice";
 import { SearchInput } from "@/components/search-input";
-import { AccountHealthBadge } from "@/components/service-account-status-badge";
+import { useSetSettingsAction } from "@/components/settings/settings-layout.context";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -83,7 +87,6 @@ import {
 } from "@/lib/service-account-status";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { formatRoleName } from "@/lib/utils/role";
-import { useSetSettingsAction } from "../layout";
 import { ServiceAccountDialog } from "./_parts/service-account-dialog";
 import { ServiceAccountTeamSelect } from "./_parts/service-account-team-select";
 

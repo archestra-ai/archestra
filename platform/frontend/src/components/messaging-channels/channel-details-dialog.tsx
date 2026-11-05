@@ -7,9 +7,9 @@ import {
 } from "@archestra/shared";
 import Link from "next/link";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { AgentIcon } from "@/components/agent-icon";
-import { ChannelIcon } from "@/components/channel-icon";
-import { SystemPromptEditor } from "@/components/system-prompt-editor";
+import { AgentIcon } from "@/components/agents/agent-icon";
+import { SystemPromptEditor } from "@/components/agents/system-prompt-editor";
+import { ChannelIcon } from "@/components/messaging-channels/channel-icon";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

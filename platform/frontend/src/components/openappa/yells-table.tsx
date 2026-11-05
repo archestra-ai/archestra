@@ -28,7 +28,7 @@ import {
   FilterSelect,
   filterSearchClass,
 } from "@/components/filter-bar";
-import { LogTime } from "@/components/log-time";
+import { LogTime } from "@/components/logs/log-time";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";

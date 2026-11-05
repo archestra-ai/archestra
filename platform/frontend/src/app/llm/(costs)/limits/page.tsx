@@ -26,17 +26,28 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSetCostsAction } from "@/app/llm/(costs)/layout";
+import { LlmModelPicker } from "@/app/llm/(costs)/limits/_parts/llm-model-picker";
+import { VirtualKeySearchableSelect } from "@/app/llm/(costs)/limits/_parts/virtual-key-searchable-select";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import { AdvancedSection } from "@/components/advanced-section";
-import { AgentIcon } from "@/components/agent-icon";
-import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
-import { AgentSelector } from "@/components/agent-selector";
+import { AgentIcon } from "@/components/agents/agent-icon";
+import type {
+  ProfileLabel,
+  ProfileLabelsRef,
+} from "@/components/agents/agent-labels";
+import { AgentSelector } from "@/components/agents/agent-selector";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
+import { useSetCostsAction } from "@/components/cost-explorer/costs-layout.context";
+import { EstimatedSpendBadge } from "@/components/cost-explorer/estimated-spend-badge";
+import {
+  type LimitCleanupInterval as BudgetCleanupInterval,
+  CLEANUP_INTERVAL_LABELS,
+  DEFAULT_LIMIT_CLEANUP_INTERVAL,
+  LimitCleanupIntervalSelect,
+} from "@/components/cost-explorer/limit-cleanup-interval-select";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import { EnvironmentSelector } from "@/components/environment-selector";
-import { EstimatedSpendBadge } from "@/components/estimated-spend-badge";
 import {
   CollectionFilters,
   FilterBar,
@@ -46,15 +57,7 @@ import {
 import { FormDialog } from "@/components/form-dialog";
 import { useSelectedLabels } from "@/components/label-select";
 import { LabelTags } from "@/components/label-tags";
-import {
-  type LimitCleanupInterval as BudgetCleanupInterval,
-  CLEANUP_INTERVAL_LABELS,
-  DEFAULT_LIMIT_CLEANUP_INTERVAL,
-  LimitCleanupIntervalSelect,
-} from "@/components/limit-cleanup-interval-select";
-import { LlmModelPicker } from "@/components/llm-model-picker";
 import { QueryLoadError } from "@/components/query-load-error";
-import { RemoteUserSelect } from "@/components/remote-user-select";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
@@ -85,7 +88,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { VirtualKeySearchableSelect } from "@/components/virtual-key-searchable-select";
+import { RemoteUserSelect } from "@/components/users/remote-user-select";
 import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useDefaultUserLimits } from "@/lib/default-user-limit.query";

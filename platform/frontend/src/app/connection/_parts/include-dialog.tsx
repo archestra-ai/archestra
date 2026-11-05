@@ -8,7 +8,7 @@
 import { BookOpen, Cpu, Info, Puzzle, Wrench, X } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AgentSelector } from "@/components/agent-selector";
+import { AgentSelector } from "@/components/agents/agent-selector";
 import type { ConnectClient } from "@/components/connection/clients";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

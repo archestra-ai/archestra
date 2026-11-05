@@ -9,10 +9,10 @@ import {
 } from "@/components/mcp-registry/environment-edit-link";
 import { EnvironmentsSection } from "@/components/mcp-registry/environments-section";
 import { ResourceListActions } from "@/components/resource-list-actions";
+import { useSetSettingsAction } from "@/components/settings/settings-layout.context";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnvironments } from "@/lib/environment.query";
-import { useSetSettingsAction } from "../layout";
 
 export default function EnvironmentsPageClient() {
   const setActionButton = useSetSettingsAction();

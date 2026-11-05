@@ -5,7 +5,7 @@ import type { UseFormReturn } from "react-hook-form";
 import {
   type InitialPermissionGrant,
   InitialResourcePermissions,
-} from "@/components/initial-resource-permissions";
+} from "@/components/resource-access/initial-resource-permissions";
 
 export interface KnowledgeBaseFormValues {
   name: string;

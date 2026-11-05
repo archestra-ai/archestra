@@ -39,10 +39,11 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import { TerminalCard } from "@/components/agent-runs/terminal-surface";
 import {
   AgentSelector,
   type AgentSelectorAgent,
-} from "@/components/agent-selector";
+} from "@/components/agents/agent-selector";
 import {
   type ConnectClient,
   FINISH_OAUTH_FLOW_TITLE,
@@ -68,12 +69,11 @@ import { ConnectionPlatformToggle } from "@/components/connection/platform-selec
 import { SetupCommandLine } from "@/components/connection/setup-command-line";
 import { SetupSummaryRow } from "@/components/connection/setup-summary-row";
 import { TerminalBlock } from "@/components/connection/terminal-block";
-import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
-import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
-import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
-import { ProviderIcon } from "@/components/provider-icon";
-import { TerminalCard } from "@/components/terminal-surface";
+import { CreateLlmProviderApiKeyDialog } from "@/components/model-providers/create-llm-provider-api-key-dialog";
+import { PROVIDER_CONFIG } from "@/components/model-providers/llm-provider-api-key-form";
+import { LlmProviderSelectItems } from "@/components/model-providers/llm-provider-select-items";
+import { ProviderIcon } from "@/components/model-providers/provider-icon";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -94,7 +94,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { WizardStep } from "@/components/wizard-step";
+import { WizardStep } from "@/components/wizard/wizard-step";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useClientConnection } from "@/lib/client-connection.query";
 import {

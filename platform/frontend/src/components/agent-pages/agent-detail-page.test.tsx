@@ -31,7 +31,7 @@ vi.mock("@/lib/agent.query", () => ({
 // mount the right one for the tab it is on. The form stub reports which
 // section it was asked for, and hands back a dirty-marker so the navigation
 // guard can be driven.
-vi.mock("@/components/agent-form", () => ({
+vi.mock("@/components/agents/agent-form", () => ({
   AgentForm: (props: {
     sections: string[];
     readOnly?: boolean;
@@ -101,13 +101,13 @@ vi.mock("./agent-work-sources", () => ({
     </div>
   ),
 }));
-vi.mock("@/components/agent-saved-setup-banner", () => ({
+vi.mock("@/components/agents/agent-saved-setup-banner", () => ({
   AgentSavedSetupBanner: () => null,
 }));
-vi.mock("@/components/clone-agent-dialog", () => ({
+vi.mock("@/components/agents/clone-agent-dialog", () => ({
   CloneAgentDialog: () => null,
 }));
-vi.mock("@/components/agent-version-history-dialog", () => ({
+vi.mock("@/components/version-history/agent-version-history-dialog", () => ({
   AgentVersionHistoryDialog: () => null,
 }));
 
@@ -131,10 +131,13 @@ vi.mock("@/lib/resource-permissions.query", () => ({
   useResourcePermissions: () => ({ data: { grants: savedGrants } }),
 }));
 // The editor has its own tests; here it only needs to be on the right tab.
-vi.mock("@/components/resource-permissions", async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  ResourcePermissions: () => <div data-testid="resource-permissions" />,
-}));
+vi.mock(
+  "@/components/resource-access/resource-permissions",
+  async (importOriginal) => ({
+    ...(await importOriginal<object>()),
+    ResourcePermissions: () => <div data-testid="resource-permissions" />,
+  }),
+);
 
 const baseAgent = {
   id: "a1",

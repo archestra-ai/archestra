@@ -1,9 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { DisabledEnterpriseSection } from "@/components/disabled-enterprise-section";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
+import { DisabledEnterpriseSection } from "@/components/settings/disabled-enterprise-section";
+import { SmallTeamTierBanner } from "@/components/settings/small-team-tier-banner";
 import { useEnterpriseFeature } from "@/lib/config/config.query";
 
 const IdentityProvidersSettingsContent = dynamic(() =>

@@ -5,7 +5,6 @@ import { Info, Unlink, Waypoints } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { CopyButton } from "@/components/copy-button";
-import { EncryptedChatContentUnavailableLabel } from "@/components/encrypted-chat-content-unavailable";
 import { ExecutedAsBadge } from "@/components/executed-as-badge";
 import {
   Fact,
@@ -13,7 +12,8 @@ import {
   FactsStrip,
   FactValue,
 } from "@/components/log-detail/facts-strip";
-import { McpToolCallStatusLabel } from "@/components/mcp-tool-call-status";
+import { EncryptedChatContentUnavailableLabel } from "@/components/logs/encrypted-chat-content-unavailable";
+import { McpToolCallStatusLabel } from "@/components/logs/mcp-tool-call-status";
 import {
   Tooltip,
   TooltipContent,

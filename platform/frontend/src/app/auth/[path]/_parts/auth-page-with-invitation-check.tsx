@@ -6,7 +6,7 @@ import { AuthViewWithErrorHandling } from "@/app/auth/_parts/auth-view-with-erro
 import { BackendConnectivityStatus } from "@/app/auth/_parts/backend-connectivity-status";
 import { SignInNotice } from "@/app/auth/_parts/sign-in-notice";
 import { AppLogo } from "@/components/app-logo";
-import { CommunityLinks } from "@/components/community-links";
+import { CommunityLinks } from "@/components/auth/community-links";
 import { LoadingState } from "@/components/loading";
 import {
   Card,

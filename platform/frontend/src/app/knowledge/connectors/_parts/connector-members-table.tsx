@@ -14,7 +14,6 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
-import { RemoteUserSelect } from "@/components/remote-user-select";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +37,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { RemoteUserSelect } from "@/components/users/remote-user-select";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import type {

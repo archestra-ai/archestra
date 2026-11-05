@@ -11,7 +11,7 @@ import {
   FilterBar,
   FilterSelect,
 } from "@/components/filter-bar";
-import { LogTime } from "@/components/log-time";
+import { LogTime } from "@/components/logs/log-time";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";

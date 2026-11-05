@@ -10,7 +10,7 @@ import {
 } from "@archestra/shared";
 import { ArrowDown } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useDeploymentLogAutoScroll } from "@/components/deployment-console";
+import { useDeploymentLogAutoScroll } from "@/components/deployment/deployment-console";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

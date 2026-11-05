@@ -29,7 +29,7 @@ vi.mock("@/lib/agent.query", async (importOriginal) => ({
 // showed, and hands back a dirty marker so saving and the guard can be driven.
 let realPermissions = false;
 const formMounts = vi.fn();
-vi.mock("@/components/agent-form", async () => {
+vi.mock("@/components/agents/agent-form", async () => {
   const { useEffect } = await import("react");
   return {
     AgentForm: (props: {
@@ -71,21 +71,26 @@ vi.mock("@/components/agent-form", async () => {
     },
   };
 });
-vi.mock("@/components/resource-permissions", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/components/resource-permissions")>();
-  return {
-    ...actual,
-    ResourcePermissions: (
-      props: React.ComponentProps<typeof actual.ResourcePermissions>,
-    ) =>
-      realPermissions ? (
-        <actual.ResourcePermissions {...props} />
-      ) : (
-        <div data-testid="resource-permissions" />
-      ),
-  };
-});
+vi.mock(
+  "@/components/resource-access/resource-permissions",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/components/resource-access/resource-permissions")
+      >();
+    return {
+      ...actual,
+      ResourcePermissions: (
+        props: React.ComponentProps<typeof actual.ResourcePermissions>,
+      ) =>
+        realPermissions ? (
+          <actual.ResourcePermissions {...props} />
+        ) : (
+          <div data-testid="resource-permissions" />
+        ),
+    };
+  },
+);
 
 let access = {
   resource: "agent",

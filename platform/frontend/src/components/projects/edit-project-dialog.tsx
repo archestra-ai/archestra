@@ -8,10 +8,13 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
-import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
-import { AgentSelector } from "@/components/agent-selector";
+import type {
+  ProfileLabel,
+  ProfileLabelsRef,
+} from "@/components/agents/agent-labels";
+import { AgentSelector } from "@/components/agents/agent-selector";
 import { IdentityFields } from "@/components/identity-fields";
-import { ResourceAccessSection } from "@/components/resource-access-section";
+import { ResourceAccessSection } from "@/components/resource-access/resource-access-section";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field-description";

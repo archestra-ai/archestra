@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { OpenAppaAlertIcon } from "@/components/openappa-icon";
+import { OpenAppaAlertIcon } from "@/components/openappa/openappa-icon";
 import { SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 

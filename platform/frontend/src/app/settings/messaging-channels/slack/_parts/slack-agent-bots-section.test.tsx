@@ -112,12 +112,15 @@ vi.mock("@/lib/chatops/chatops-config.query", () => ({
 vi.mock("@/lib/chatops/chatops.query", () => ({
   useAllChatOpsBindings: vi.fn(),
 }));
-vi.mock("@/components/slack-bot-edit-dialog", () => ({
+vi.mock("@/components/messaging-channels/slack-bot-edit-dialog", () => ({
   SlackBotEditDialog: () => null,
 }));
-vi.mock("@/components/slack-setup-dialog", () => ({
-  SlackSetupDialog: () => null,
-}));
+vi.mock(
+  "@/app/settings/messaging-channels/slack/_parts/slack-setup-dialog",
+  () => ({
+    SlackSetupDialog: () => null,
+  }),
+);
 
 const saveToken = vi.fn();
 

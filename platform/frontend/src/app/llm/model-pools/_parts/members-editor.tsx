@@ -30,7 +30,7 @@ import {
   Plus,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
-import { ProviderIcon } from "@/components/provider-icon";
+import { ProviderIcon } from "@/components/model-providers/provider-icon";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { OverlappedIcons } from "@/components/ui/overlapped-icons";

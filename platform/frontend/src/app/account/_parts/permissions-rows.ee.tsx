@@ -10,7 +10,6 @@ import { ChevronDown } from "lucide-react";
 import { Fragment, type ReactNode, useId, useMemo, useState } from "react";
 import { AccountRow, AccountRowMuted } from "@/app/account/_parts/account-rows";
 import { QueryLoadError } from "@/components/query-load-error";
-import { RoleTypeIcon } from "@/components/role-type-icon";
 import { PermissionList } from "@/components/roles/permission-list.ee";
 import {
   allPermissionRows,
@@ -18,6 +17,7 @@ import {
   isGranted,
   type PermissionRow,
 } from "@/components/roles/permission-list-model.ee";
+import { RoleTypeIcon } from "@/components/roles/role-type-icon";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAllPermissions } from "@/lib/auth/auth.query";

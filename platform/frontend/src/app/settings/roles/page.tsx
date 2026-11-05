@@ -4,13 +4,13 @@ import { E2eTestId } from "@archestra/shared";
 import { Eye } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useState } from "react";
-import { DisabledEnterpriseSection } from "@/components/disabled-enterprise-section";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { QueryLoadError } from "@/components/query-load-error";
-import { RemoteUserSelect } from "@/components/remote-user-select";
-import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
+import { DisabledEnterpriseSection } from "@/components/settings/disabled-enterprise-section";
+import { SmallTeamTierBanner } from "@/components/settings/small-team-tier-banner";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
+import { RemoteUserSelect } from "@/components/users/remote-user-select";
 import { useEnterpriseFeature } from "@/lib/config/config.query";
 import {
   useCanImpersonate,

@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
+import type { LlmProviderApiKeyResponse } from "@/components/model-providers/llm-provider-api-key-form";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { hasPermissions } from "@/lib/auth/auth.utils";
 import { OrganizationSubscriptionCards } from "./organization-subscription-cards";

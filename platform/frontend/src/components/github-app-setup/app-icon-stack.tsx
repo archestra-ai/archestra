@@ -1,6 +1,6 @@
 "use client";
 
-import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
+import { RuntimeCredentialIcon } from "@/components/agent-runtime/runtime-credential-icon";
 
 /** The first few connected GitHub Apps' icons, overlapping. */
 export function AppIconStack({ icons }: { icons: (string | null)[] }) {

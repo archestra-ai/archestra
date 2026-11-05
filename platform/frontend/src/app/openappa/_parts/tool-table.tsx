@@ -9,7 +9,7 @@ import {
   FilterSelect,
   filterSearchClass,
 } from "@/components/filter-bar";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { McpCatalogIcon } from "@/components/mcp-registry/mcp-catalog-icon";
 import { policyLineHref } from "@/components/openappa/policy-line-href";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";

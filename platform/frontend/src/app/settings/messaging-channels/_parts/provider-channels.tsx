@@ -6,7 +6,7 @@ import {
 } from "@archestra/shared";
 import { Search } from "lucide-react";
 import { useState } from "react";
-import { AgentSelector } from "@/components/agent-selector";
+import { AgentSelector } from "@/components/agents/agent-selector";
 import {
   ChannelDetailsDialog,
   channelDisplayName,

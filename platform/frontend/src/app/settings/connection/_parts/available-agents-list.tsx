@@ -32,10 +32,10 @@ import { type ReactNode, useState } from "react";
 import { ClientIcon } from "@/components/connection/client-icon";
 import type { ConnectClient } from "@/components/connection/clients";
 import { ProviderKeyList } from "@/components/credential-billing/provider-key-list";
-import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
-import { ProviderAccessField } from "@/components/provider-access-field";
-import { ProviderIcon } from "@/components/provider-icon";
-import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
+import type { LlmProviderApiKeyResponse } from "@/components/model-providers/llm-provider-api-key-form";
+import { ProviderAccessField } from "@/components/model-providers/provider-access-field";
+import { ProviderIcon } from "@/components/model-providers/provider-icon";
+import type { ProviderApiKeyMappings } from "@/components/model-providers/provider-key-mappings-field";
 import { Button } from "@/components/ui/button";
 import {
   Command,

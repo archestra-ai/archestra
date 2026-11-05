@@ -5,7 +5,7 @@ import {
 import {
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
   type LlmProviderApiKeyFormValues,
-} from "@/components/llm-provider-api-key-form";
+} from "@/components/model-providers/llm-provider-api-key-form";
 
 /**
  * Whether the edit-key form can be submitted. Editing keeps the existing secret

@@ -8,8 +8,8 @@ import type {
 } from "@tanstack/react-table";
 import { ArchiveRestore, FolderKanban, Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { AgentIcon } from "@/components/agent-icon";
-import { AgentNameCell } from "@/components/agent-name-cell";
+import { AgentIcon } from "@/components/agents/agent-icon";
+import { AgentNameCell } from "@/components/agents/agent-name-cell";
 import { permanentDeleteRowAction } from "@/components/permanent-delete";
 import { RowPinButton } from "@/components/row-pin-button";
 import {

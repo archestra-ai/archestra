@@ -2,7 +2,7 @@
 "use client";
 
 import { ShareLink } from "@/components/chat/share-link";
-import { ResourcePermissionsDialog } from "@/components/resource-permissions";
+import { ResourcePermissionsDialog } from "@/components/resource-access/resource-permissions";
 
 export function ShareAgentRunDialog({
   taskId,

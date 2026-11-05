@@ -2,12 +2,12 @@
 
 import type { AgentType } from "@archestra/shared";
 import type { ReactNode } from "react";
-import { AgentIcon } from "@/components/agent-icon";
 import {
   agentAction,
   getAgentActionModel,
 } from "@/components/agent-pages/agent-actions-model";
 import { agentDetailHref } from "@/components/agent-pages/agent-page-config";
+import { AgentIcon } from "@/components/agents/agent-icon";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { type PinnedTile, PinnedTiles } from "@/components/pinned-tiles";

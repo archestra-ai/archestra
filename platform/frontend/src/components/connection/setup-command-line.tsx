@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import {
   terminalActionClass,
   terminalCodeClass,
-} from "@/components/terminal-surface";
+} from "@/components/agent-runs/terminal-surface";
 import { Button } from "@/components/ui/button";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { copyToClipboard } from "@/lib/clipboard";

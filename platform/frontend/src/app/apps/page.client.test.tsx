@@ -98,10 +98,10 @@ vi.mock("@/components/page-layout", () => ({
 vi.mock("@/components/resource-list-actions", () => ({
   ResourceListActions: () => null,
 }));
-vi.mock("@/components/resource-access-filter", () => ({
+vi.mock("@/components/resource-access/resource-access-filter", () => ({
   ResourceAccessFilter: () => null,
 }));
-vi.mock("@/components/resource-scope-filter", () => ({
+vi.mock("@/components/resource-access/resource-scope-filter", () => ({
   useScopeFilterParams: () => ({}),
 }));
 vi.mock("@/components/search-input", () => ({
@@ -141,7 +141,7 @@ vi.mock("./_parts/app-delete-dialog", () => ({
   AppDeleteDialog: () => null,
 }));
 
-vi.mock("@/components/mcp-catalog-icon", () => ({
+vi.mock("@/components/mcp-registry/mcp-catalog-icon", () => ({
   McpCatalogIcon: () => <span />,
 }));
 

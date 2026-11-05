@@ -14,7 +14,6 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
-import { BulkResourceAccessDialog } from "@/components/bulk-resource-access-dialog";
 import { OsLogos } from "@/components/connection/os-logos";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
@@ -34,15 +33,16 @@ import {
 } from "@/components/plugins/plugin-source-icon";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
+import { BulkResourceAccessDialog } from "@/components/resource-access/bulk-resource-access-dialog";
 import {
   RESOURCE_ACCESS_FILTER_PARAMS,
   ResourceAccessFilter,
-} from "@/components/resource-access-filter";
-import { ResourceListActions } from "@/components/resource-list-actions";
+} from "@/components/resource-access/resource-access-filter";
 import {
   ActiveFilterBadges,
   useScopeFilterParams,
-} from "@/components/resource-scope-filter";
+} from "@/components/resource-access/resource-scope-filter";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCard,

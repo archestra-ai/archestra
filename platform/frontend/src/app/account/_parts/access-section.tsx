@@ -13,7 +13,7 @@ import {
   AccountRows,
 } from "@/app/account/_parts/account-rows";
 import { QueryLoadError } from "@/components/query-load-error";
-import { RoleOptionLabel } from "@/components/role-type-icon";
+import { RoleOptionLabel } from "@/components/roles/role-type-icon";
 import { SettingsSection } from "@/components/settings-section";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";

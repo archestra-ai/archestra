@@ -1,9 +1,9 @@
 "use client";
 
 import { ConnectStep } from "@/components/connect-rail";
-import { LlmConnectSteps } from "@/components/llm-connect-steps";
-import { useConnectionBaseUrl } from "@/components/virtual-key-connection-base-url";
-import { getProxyBaseUrl } from "@/components/virtual-key-request-example";
+import { LlmConnectSteps } from "@/components/virtual-keys/llm-connect-steps";
+import { useConnectionBaseUrl } from "@/components/virtual-keys/virtual-key-connection-base-url";
+import { getProxyBaseUrl } from "@/components/virtual-keys/virtual-key-request-example";
 import type { ModelPool } from "@/lib/model-pools.query";
 
 /**

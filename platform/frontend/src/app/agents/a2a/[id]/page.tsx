@@ -1,4 +1,4 @@
-import { A2aRemoteAgentDetailPage } from "@/components/a2a-remote-agent-page";
+import { A2aRemoteAgentDetailPage } from "@/components/a2a/a2a-remote-agent-page";
 
 export default async function A2aRemoteAgentDetailPageServer({
   params,

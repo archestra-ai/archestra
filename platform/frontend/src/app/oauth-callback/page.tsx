@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { AuthCallbackLayout } from "@/components/auth-callback-layout";
+import { AuthCallbackLayout } from "@/components/auth/auth-callback-layout";
 import { trackEvent } from "@/lib/analytics";
 import { useHandleOAuthCallback } from "@/lib/auth/oauth.query";
 import {

@@ -24,7 +24,6 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import { AgentNameCell } from "@/components/agent-name-cell";
 import {
   type RunAction,
   runActionConfirmCopy,
@@ -33,7 +32,8 @@ import {
   openRowOnPlainClick,
   RowClickShield,
 } from "@/components/agent-pages/row-click-shield";
-import { AgentRunState } from "@/components/agent-run-state";
+import { AgentRunState } from "@/components/agent-runs/agent-run-state";
+import { AgentNameCell } from "@/components/agents/agent-name-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   CollectionFilters,

@@ -4,7 +4,7 @@ import type { SupportedProvider } from "@archestra/shared";
 import { ArrowRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { CopyButton } from "@/components/copy-button";
-import { formatCost } from "@/components/cost";
+import { formatCost } from "@/components/cost-explorer/cost";
 import {
   describeModelOrigin,
   formatCompactNumber,
@@ -14,7 +14,7 @@ import {
   sourceLabel,
 } from "@/components/logs/logs-table-format";
 import { MakerDisc } from "@/components/logs/maker-disc";
-import { RequestAttributionLabels } from "@/components/request-attribution-labels";
+import { RequestAttributionLabels } from "@/components/logs/request-attribution-labels";
 import { SourceIcon } from "@/components/source-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {

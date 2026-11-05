@@ -5,9 +5,9 @@ import { AdvancedSection } from "@/components/advanced-section";
 import {
   ProfileLabels,
   type ProfileLabelsRef,
-} from "@/components/agent-labels";
+} from "@/components/agents/agent-labels";
 import { EnvironmentSelector } from "@/components/environment-selector";
-import { InitialResourcePermissions } from "@/components/initial-resource-permissions";
+import { InitialResourcePermissions } from "@/components/resource-access/initial-resource-permissions";
 import type { SkillDraft } from "@/components/skills/skill-draft";
 
 /**

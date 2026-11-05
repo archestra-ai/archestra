@@ -13,6 +13,7 @@
     "build": "node ../scripts/check-workspace.mjs build",
     "start": "NODE_ENV=production next start",
     "lint": "biome check",
+    "check:route-imports": "node scripts/check-route-imports.mjs",
     "lint:fix": "biome check --write",
     "lint:fix:unsafe": "biome check --write --unsafe",
     "type-check": "tsx ../scripts/type-check.ts --noEmit",

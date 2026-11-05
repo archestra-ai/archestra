@@ -257,6 +257,13 @@ function staticChecks(workspace: string, tests: boolean): WorkspaceCheck[] {
       : []),
     { label: `biome (${workspace})`, command: "biome", args: ["ci"] },
   ];
+  if (workspace === "frontend") {
+    checks.push({
+      label: "route import boundaries (frontend)",
+      command: process.execPath,
+      args: ["scripts/check-route-imports.mjs"],
+    });
+  }
   if (workspace === "backend") {
     checks.push(
       {

@@ -3,7 +3,8 @@
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { createContext, useContext, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { CostsLayoutContext } from "@/components/cost-explorer/costs-layout.context";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
 import { usePermissionMap } from "@/lib/auth/auth.query";
@@ -63,18 +64,6 @@ function ModelSettingsNote() {
       .
     </>
   );
-}
-
-type CostsLayoutContextType = {
-  setActionButton: (button: React.ReactNode) => void;
-};
-
-const CostsLayoutContext = createContext<CostsLayoutContextType>({
-  setActionButton: () => {},
-});
-
-export function useSetCostsAction() {
-  return useContext(CostsLayoutContext).setActionButton;
 }
 
 export default function CostsLayout({

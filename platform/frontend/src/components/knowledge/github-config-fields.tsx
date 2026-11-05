@@ -2,7 +2,7 @@
 
 import { type ReactNode, useEffect, useId } from "react";
 import type { UseFormReturn } from "react-hook-form";
-import { SettingsLink } from "@/components/settings-link";
+import { SettingsLink } from "@/components/settings/settings-link";
 import {
   FormControl,
   FormDescription,

@@ -39,6 +39,7 @@ RUN curl -fsSL --retry 3 \
  && /out/gh auth git-credential --help >/dev/null
 
 FROM node:24-bookworm-slim AS agent-base
+ARG TARGETARCH
 
 # Require fixed apt, OpenSSL and Cyrus SASL packages and refresh cached apt layers.
 # CVE-2026-109518 (apt), CVE-2026-84782 (OpenSSL), CVE-2026-107161 (Cyrus SASL).

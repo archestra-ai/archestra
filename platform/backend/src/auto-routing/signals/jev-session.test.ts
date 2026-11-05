@@ -167,6 +167,19 @@ describe("JevSessionSource", () => {
     await expectSourceError(source.read(INPUT, ctx()), "timeout");
   });
 
+  test.each([
+    { input_tokens: -1 },
+    { output_tokens: 1.5 },
+    { cost: -0.01 },
+  ])("rejects invalid usage metadata: %j", async (usage) => {
+    server.use(
+      http.post(TYPESAFE_ENDPOINT, () =>
+        HttpResponse.json({ ...ANSWERS, usage }),
+      ),
+    );
+    await expectSourceError(source.read(INPUT, ctx()), "invalid_response");
+  });
+
   test("reports an HTTP error with its status", async () => {
     server.use(
       http.post(TYPESAFE_ENDPOINT, () =>

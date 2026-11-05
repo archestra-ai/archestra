@@ -706,9 +706,9 @@ function readingStatus(reading: Reading): "scored" | "failed" | null {
 }
 
 /**
- * The session's opening: its first main turn, as the sessions list picks
- * one, read page by page until found or the session ends. A slow page fails
- * the run, which retries the session.
+ * Search every page for the first main turn. If there is none, use the first
+ * readable user request; retain the first unreadable row only to classify a
+ * skip. A slow page fails the run, which retries the session.
  */
 async function findOpening(
   session: RoutingHistorySession,

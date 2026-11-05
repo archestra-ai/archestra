@@ -20,7 +20,7 @@ export interface VendorPublishedPrices {
  * default estimate instead — $50/M against a published $1.25/M for the Codex
  * models, and against $0.15/M for Gemma, a 333× overstatement.
  *
- * Refreshing means re-reading the two pages cited below. Every id is stated
+ * Refreshing means re-reading the vendor pages cited below. Every id is stated
  * outright rather than derived from a base model by stripping a suffix: that
  * predicts the price for `gpt-5.1-codex` and then breaks on
  * `gpt-5.1-codex-mini`, which bills a fifth of what `gpt-5.1` does.
@@ -29,8 +29,6 @@ const PUBLISHED_PRICES: Record<
   string,
   { in: number; cachedIn: number; out: number } | undefined
 > = {
-  // TypeSafe: https://help.typesafe.ai/articles/5187202169-how-much-does-jev-cost
-  "jev-1.13.0": { in: 0.042, cachedIn: 0, out: 0 },
   // OpenAI, standard tier: https://developers.openai.com/api/docs/pricing
   //
   // A bare id, not a typo: OpenAI lists the ChatGPT-latest alias under this
@@ -64,11 +62,7 @@ const PUBLISHED_PRICES: Record<
  * A reseller is excluded: it republishes these models at its own margin, and its
  * registry entry already carries that price.
  */
-const PUBLISHING_PROVIDERS = new Set<SupportedProvider>([
-  "openai",
-  "gemini",
-  "jev",
-]);
+const PUBLISHING_PROVIDERS = new Set<SupportedProvider>(["openai", "gemini"]);
 
 /**
  * Published prices for a model served by the vendor that makes it, or null when

@@ -305,7 +305,16 @@ export function LlmConnectSteps({
 
   // Pool grants authorize their member keys independently of which provider
   // keys the viewer can read directly.
-  const hasProviderKey = !!pool || targetProviderKeys.length > 0;
+  const hasUsablePoolGrant =
+    auth === "standard"
+      ? keyOptions.some((key) => poolsOf(key).some(poolAnswers))
+      : auth === "oauth"
+        ? clientOptions.some((client) =>
+            clientPoolsOf(client).some(poolAnswers),
+          )
+        : false;
+  const hasProviderKey =
+    !!pool || targetProviderKeys.length > 0 || hasUsablePoolGrant;
   const [addProviderKeyOpen, setAddProviderKeyOpen] = useState(false);
   // A new key starts with the primary key of each provider this target
   // serves; the create dialog shows and changes them.

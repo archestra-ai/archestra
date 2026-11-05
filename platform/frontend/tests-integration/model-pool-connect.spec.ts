@@ -329,42 +329,88 @@ test.describe("LLM Proxy pool discovery", () => {
       noun: "client",
     },
   ]) {
-    test(`shows granted pools for an automatic ${label} without stored provider mappings`, async ({
+    test(`does not count a disabled pool as provider access for a ${label}`, async ({
       page,
       mswControl,
       request,
     }) => {
-      await mockPool({ mswControl, request });
+      await mockPool({
+        mswControl,
+        request,
+        poolOverrides: {
+          members: pool.members.map((member) => ({
+            ...member,
+            enabled: false,
+          })),
+        },
+      });
+      await mswControl.use({
+        method: "get",
+        url: "/api/llm-provider-api-keys",
+        body: [],
+      });
       await page.goto("/llm/proxy");
       if (label === "OAuth client") {
         await page.getByText(label, { exact: true }).click();
       }
-      const picker = page.getByRole("combobox", { name: label, exact: true });
-      await picker.click();
-      await page.getByRole("option").filter({ hasText: granted }).click();
-      await page
-        .getByRole("button", { name: `1 pool on this ${noun}` })
-        .click();
       await expect(
-        page.getByRole("listitem").filter({ hasText: /^fast-chat$/ }),
+        page.getByRole("button", { name: "Add provider key" }),
       ).toBeVisible();
-      await page.getByRole("combobox", { name: "Model", exact: true }).click();
-      await page.getByRole("option").filter({ hasText: POOL_NAME }).click();
-      await expect(page.getByText('"model": "fast-chat"')).toBeVisible();
-      if (label === "OAuth client") {
-        await expect(page.getByText("client_id=granted-client")).toBeVisible();
-        await expect(
-          page.getByText(
-            "$ARCHESTRA_LLM_ACCESS_TOKEN is the access_token from the token request above.",
-          ),
-        ).toBeVisible();
-      }
-      await picker.click();
-      await page.getByRole("option").filter({ hasText: ungranted }).click();
-      await expect(page.getByText(`No pools on this ${noun}`)).toBeVisible();
-      // These credentials have no matching models in the catalog fixture;
-      // switching away from the grant must also remove the pool request.
+      await expect(
+        page.getByRole("combobox", { name: label, exact: true }),
+      ).toHaveCount(0);
       await expect(page.getByText('"model": "fast-chat"')).toHaveCount(0);
     });
+
+    for (const visibleProviderKeys of [true, false]) {
+      test(`shows granted pools for an automatic ${label} without stored mappings and ${visibleProviderKeys ? "visible" : "no visible"} provider keys`, async ({
+        page,
+        mswControl,
+        request,
+      }) => {
+        await mockPool({ mswControl, request });
+        if (!visibleProviderKeys) {
+          await mswControl.use({
+            method: "get",
+            url: "/api/llm-provider-api-keys",
+            body: [],
+          });
+        }
+        await page.goto("/llm/proxy");
+        if (label === "OAuth client") {
+          await page.getByText(label, { exact: true }).click();
+        }
+        const picker = page.getByRole("combobox", { name: label, exact: true });
+        await picker.click();
+        await page.getByRole("option").filter({ hasText: granted }).click();
+        await page
+          .getByRole("button", { name: `1 pool on this ${noun}` })
+          .click();
+        await expect(
+          page.getByRole("listitem").filter({ hasText: /^fast-chat$/ }),
+        ).toBeVisible();
+        await page
+          .getByRole("combobox", { name: "Model", exact: true })
+          .click();
+        await page.getByRole("option").filter({ hasText: POOL_NAME }).click();
+        await expect(page.getByText('"model": "fast-chat"')).toBeVisible();
+        if (label === "OAuth client") {
+          await expect(
+            page.getByText("client_id=granted-client"),
+          ).toBeVisible();
+          await expect(
+            page.getByText(
+              "$ARCHESTRA_LLM_ACCESS_TOKEN is the access_token from the token request above.",
+            ),
+          ).toBeVisible();
+        }
+        await picker.click();
+        await page.getByRole("option").filter({ hasText: ungranted }).click();
+        await expect(page.getByText(`No pools on this ${noun}`)).toBeVisible();
+        // These credentials have no matching models in the catalog fixture;
+        // switching away from the grant must also remove the pool request.
+        await expect(page.getByText('"model": "fast-chat"')).toHaveCount(0);
+      });
+    }
   }
 });

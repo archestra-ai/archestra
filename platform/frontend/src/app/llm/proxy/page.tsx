@@ -114,36 +114,20 @@ const PRIMARY_PROVIDERS: ProxyEndpointProvider[] = [
 ];
 
 /**
- * The first `count` candidates, except that a selected provider past the cut
- * takes the last slot so the active tab is always visible.
- */
-function pickVisibleTabs(
-  candidates: ProxyEndpointProvider[],
-  count: number,
-  selected: ProxyEndpointProvider | null,
-): ProxyEndpointProvider[] {
-  const visible = candidates.slice(0, count);
-  if (count === 0 || !selected || visible.includes(selected)) return visible;
-  if (!candidates.includes(selected)) return visible;
-  return [...visible.slice(0, count - 1), selected];
-}
-
-/**
  * How many provider tabs fit on one line beside the Unified Model API tab,
  * leaving room for "More providers" whenever any provider is left out. Widths
- * come from the measure row: Unified tab, one tab per candidate, More trigger.
+ * come from the measure row: Unified tab, one tab per candidate, More trigger
+ * (measured at its widest, since it grows to show a chosen provider).
  */
 function useTabsThatFit({
   rowRef,
   measureRef,
   candidates: candidateList,
-  selected,
   hasRest,
 }: {
   rowRef: RefObject<HTMLDivElement | null>;
   measureRef: RefObject<HTMLDivElement | null>;
   candidates: ProxyEndpointProvider[];
-  selected: ProxyEndpointProvider | null;
   hasRest: boolean;
 }): number {
   const [count, setCount] = useState(candidateList.length);
@@ -186,10 +170,11 @@ function useTabsThatFit({
         Number.parseFloat(style.paddingRight);
 
       const fits = (n: number, withMore: boolean) => {
-        const tabs = pickVisibleTabs(candidates, n, selected);
         const used =
           unified +
-          tabs.reduce((sum, p) => sum + (tabWidth.get(p) ?? 0) + gap, 0) +
+          candidates
+            .slice(0, n)
+            .reduce((sum, p) => sum + (tabWidth.get(p) ?? 0) + gap, 0) +
           (withMore ? gap + moreMargin + more : 0);
         // Sub-pixel slack so rounding never pushes the last item to a new line.
         return used <= available - 1;
@@ -207,7 +192,7 @@ function useTabsThatFit({
     observer.observe(row);
     observer.observe(measure);
     return () => observer.disconnect();
-  }, [candidates, selected, hasRest, rowRef, measureRef]);
+  }, [candidates, hasRest, rowRef, measureRef]);
 
   return Math.min(count, candidates.length);
 }
@@ -253,25 +238,23 @@ function ProxyEndpointCard({
     ),
   ].slice(0, Math.max(PRIMARY_PROVIDERS.length, configured.length));
   const rest = providers.filter((p) => !primary.includes(p));
-  const selectedFromRest =
-    selected !== "model-router" && rest.includes(selected) ? selected : null;
-  const candidates = selectedFromRest
-    ? [...primary, selectedFromRest]
-    : primary;
-  const selectedProvider = selected === "model-router" ? null : selected;
 
   // The tabs stay on one line: those that don't fit go behind "More providers".
+  // Picking from it never changes the tabs; the select shows the choice instead.
   const rowRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
   const fitCount = useTabsThatFit({
     rowRef,
     measureRef,
-    candidates,
-    selected: selectedProvider,
-    hasRest: rest.length > (selectedFromRest ? 1 : 0),
+    candidates: primary,
+    hasRest: rest.length > 0,
   });
-  const tabProviders = pickVisibleTabs(candidates, fitCount, selectedProvider);
+  const tabProviders = primary.slice(0, fitCount);
   const moreProviders = providers.filter((p) => !tabProviders.includes(p));
+  const moreSelected =
+    selected !== "model-router" && moreProviders.includes(selected)
+      ? selected
+      : "";
 
   // The measure row draws its labels as CSS content, so they take up the same
   // width without adding a second copy of each label to the page's text.
@@ -291,8 +274,9 @@ function ProxyEndpointCard({
       {tabLabel(providerCatalog.label(provider), measure)}
     </>
   );
+  // Bounded width: a long provider name truncates instead of crowding the tabs.
   const moreClassName =
-    "ml-1 h-auto w-auto min-w-0 shrink-0 justify-start gap-2 rounded-full border border-dashed border-terminal-edge bg-transparent px-3 py-1.5 font-normal text-terminal-muted text-xs shadow-none hover:bg-transparent hover:text-terminal-emphasis";
+    "ml-1 h-auto w-auto min-w-36 max-w-48 shrink-0 justify-start gap-2 rounded-full border border-dashed border-terminal-edge bg-transparent px-3 py-1.5 font-normal text-terminal-muted text-xs shadow-none hover:bg-transparent hover:text-terminal-emphasis";
 
   const url = endpointUrl(baseUrl, selected);
 
@@ -334,7 +318,7 @@ function ProxyEndpointCard({
               <Waypoints className="size-3.5" />
               {tabLabel("Unified Model API", true)}
             </span>
-            {candidates.map((provider) => (
+            {primary.map((provider) => (
               <span key={provider} className={endpointTabClass(true)}>
                 {providerTab(provider, true)}
               </span>
@@ -344,7 +328,7 @@ function ProxyEndpointCard({
               onValueChange={() => {}}
               placeholder={`More providers (${providers.length})`}
               items={[]}
-              className={moreClassName}
+              className={cn(moreClassName, "w-48")}
             />
           </div>
           <UnstyledButton
@@ -367,7 +351,7 @@ function ProxyEndpointCard({
           ))}
           {moreProviders.length > 0 && (
             <SearchableSelect
-              value=""
+              value={moreSelected}
               onValueChange={(value) =>
                 onSelect(value as ProxyEndpointProvider)
               }
@@ -386,10 +370,25 @@ function ProxyEndpointCard({
                       name={label}
                     />
                   ),
+                  selectedContent: (
+                    <span className="flex min-w-0 items-center gap-2">
+                      <img
+                        src={PROVIDER_CONFIG[provider].icon}
+                        alt=""
+                        className="size-3.5 shrink-0 rounded-sm dark:invert"
+                      />
+                      <span className="truncate">{label}</span>
+                    </span>
+                  ),
                 };
               })}
               // Pinned right, so leftover room sits between the tabs and More.
-              className={cn(moreClassName, "ml-auto")}
+              className={cn(
+                moreClassName,
+                "ml-auto",
+                moreSelected &&
+                  cn("border-solid font-semibold", terminalRaisedClass),
+              )}
               contentClassName="w-64"
             />
           )}

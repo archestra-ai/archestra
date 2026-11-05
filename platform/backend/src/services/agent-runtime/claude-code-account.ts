@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import logger from "@/logging";
-import { AgentRunModel, EnvironmentModel, OrganizationModel } from "@/models";
+import {
+  AgentRunModel,
+  AgentWorkspaceModel,
+  EnvironmentModel,
+  OrganizationModel,
+} from "@/models";
 import ClaudeCodeAccountModel from "@/models/claude-code-account";
 import { secretManager } from "@/secrets-manager";
 import {
@@ -199,6 +204,7 @@ class ClaudeCodeAccountManager {
     userId: string;
     agentId?: string;
   }): Promise<string | null> {
+    if (!params.agentId) return null;
     const run = await AgentRunModel.findByVirtualApiKeyId(params.virtualKeyId);
     if (
       !run ||
@@ -206,9 +212,25 @@ class ClaudeCodeAccountManager {
       run.organizationId !== params.organizationId ||
       run.actorKind !== "user" ||
       run.actorUserId !== params.userId ||
-      (params.agentId !== undefined && run.agentId !== params.agentId)
+      run.agentId !== params.agentId
     ) {
       return null;
+    }
+    if (run.endedAt !== null) {
+      const workspace = await AgentWorkspaceModel.findByWorkloadName(
+        run.workloadName,
+      );
+      if (
+        !workspace ||
+        workspace.organizationId !== run.organizationId ||
+        workspace.agentId !== run.agentId ||
+        workspace.actorKind !== "user" ||
+        workspace.actorId !== run.actorUserId ||
+        (workspace.state !== "idle" && workspace.state !== "active") ||
+        workspace.expiresAt.getTime() <= Date.now()
+      ) {
+        return null;
+      }
     }
     const account = await ClaudeCodeAccountModel.find({
       organizationId: params.organizationId,

@@ -43,6 +43,7 @@ describe("Anthropic bearer credentials", () => {
     expect(request.headers.get("authorization")).toBe(
       "Bearer sk-ant-oat01-fixture-subscription",
     );
+    expect(request.headers.get("anthropic-beta")).toBe("oauth-2025-04-20");
     expect(request.headers.get("x-api-key")).toBeNull();
   });
 });

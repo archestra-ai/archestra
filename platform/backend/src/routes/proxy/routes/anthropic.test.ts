@@ -40,6 +40,7 @@ import {
   VirtualApiKeyModel,
 } from "@/models";
 import ClaudeCodeAccountModel from "@/models/claude-code-account";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
 import {
@@ -1781,18 +1782,24 @@ describe("Claude Code subscription run one-off virtual key resolution", () => {
   });
 
   test("resolves the connected subscription token only for a bound agent-run virtual key and rejects it after revocation", async ({
-    makeAgent,
+    makeInternalAgent,
     makeMember,
     makeUser,
   }) => {
     vi.spyOn(agentRuntimeManager, "isEnabled", "get").mockReturnValue(true);
     const subscriptionToken = `sk-ant-oat01-${"subscription".repeat(6)}`;
-    const agent = await makeAgent({ name: "Claude Subscription Run Agent" });
+    const owner = await makeUser();
+    const otherUser = await makeUser();
+    const agent = await makeInternalAgent({
+      name: "Claude Subscription Run Agent",
+      authorId: otherUser.id,
+      access: { users: [owner.id], preset: "use" },
+    });
     await OrganizationModel.patch(agent.organizationId, {
       defaultEnvironmentNamespace: "agent-tests",
     });
-    const owner = await makeUser();
     await makeMember(owner.id, agent.organizationId);
+    await makeMember(otherUser.id, agent.organizationId);
 
     const secret = await secretManager().createSecret(
       { value: subscriptionToken },
@@ -1945,11 +1952,17 @@ describe("Claude Code subscription run one-off virtual key resolution", () => {
       },
     );
 
-    const capturedPassthroughAuthHeaders: Array<string | undefined> = [];
+    const capturedPassthroughHeaders: Array<{
+      authorization: string | undefined;
+      anthropicBeta: string | string[] | undefined;
+    }> = [];
     const previousAnthropicBaseUrl = config.llm.anthropic.baseUrl;
     const upstream = Fastify();
     upstream.post("/v1/messages/count_tokens", async (request) => {
-      capturedPassthroughAuthHeaders.push(request.headers.authorization);
+      capturedPassthroughHeaders.push({
+        authorization: request.headers.authorization,
+        anthropicBeta: request.headers["anthropic-beta"],
+      });
       return { input_tokens: 42 };
     });
     await upstream.listen({ port: 0 });
@@ -2025,7 +2038,18 @@ describe("Claude Code subscription run one-off virtual key resolution", () => {
         authHeader: `Bearer ${subscriptionToken}`,
       });
 
-      // 4. Catch-all passthrough endpoint (/v1/messages/count_tokens) with the run's one-off virtual key
+      // 4. Default route without :agentId refuses to redeem the run-bound subscription token
+      const modelsWithoutAgent = await app.inject({
+        method: "GET",
+        url: "/v1/anthropic/v1/models",
+        headers: {
+          authorization: `Bearer ${podToken}`,
+          "anthropic-version": "2023-06-01",
+        },
+      });
+      expect(modelsWithoutAgent.statusCode).toBe(400);
+
+      // 5. Catch-all passthrough endpoint (/v1/messages/count_tokens) with the run's one-off virtual key
       const countTokensResponse = await app.inject({
         method: "POST",
         url: `/v1/anthropic/${agent.id}/v1/messages/count_tokens`,
@@ -2041,11 +2065,54 @@ describe("Claude Code subscription run one-off virtual key resolution", () => {
         },
       });
       expect(countTokensResponse.statusCode).toBe(200);
-      expect(capturedPassthroughAuthHeaders.at(-1)).toBe(
-        `Bearer ${subscriptionToken}`,
-      );
+      expect(capturedPassthroughHeaders.at(-1)).toEqual({
+        authorization: `Bearer ${subscriptionToken}`,
+        anthropicBeta: "oauth-2025-04-20",
+      });
 
-      // 5. A non-run passthrough virtual key (e.g. /connection key, not bound to agent_runs) cannot resolve the subscription token
+      // 6. If the owner loses access to the agent, model listing is refused with 403
+      const agentPolicy = await ResourcePermissionPolicyModel.find({
+        organizationId: agent.organizationId,
+        resource: "agent",
+        scope: agent.id,
+      });
+      await ResourcePermissionPolicyModel.replace({
+        organizationId: agent.organizationId,
+        resource: "agent",
+        scope: agent.id,
+        revision: agentPolicy?.revision ?? 0,
+        grants: [],
+      });
+      const restrictedModels = await app.inject({
+        method: "GET",
+        url: `/v1/anthropic/${agent.id}/v1/models`,
+        headers: {
+          authorization: `Bearer ${podToken}`,
+          "anthropic-version": "2023-06-01",
+        },
+      });
+      expect(restrictedModels.statusCode).toBe(403);
+
+      // Restore owner's use grant on the agent for the remaining checks
+      const revokedPolicy = await ResourcePermissionPolicyModel.find({
+        organizationId: agent.organizationId,
+        resource: "agent",
+        scope: agent.id,
+      });
+      await ResourcePermissionPolicyModel.replace({
+        organizationId: agent.organizationId,
+        resource: "agent",
+        scope: agent.id,
+        revision: revokedPolicy?.revision ?? 0,
+        grants: [
+          {
+            subject: { type: "user", id: owner.id },
+            actions: ["read", "use"],
+          },
+        ],
+      });
+
+      // 7. A non-run passthrough virtual key (e.g. /connection key, not bound to agent_runs) cannot resolve the subscription token
       const nonRunPassthroughKey = await makePassthroughCredential({
         organizationId: agent.organizationId,
         ownerId: owner.id,
@@ -2067,7 +2134,19 @@ describe("Claude Code subscription run one-off virtual key resolution", () => {
       });
       expect(nonRunMessages.statusCode).toBe(400);
 
-      // 6. Revoking the run's one-off virtual key immediately invalidates it
+      // 8. A closed run row (endedAt set, no active/idle workspace) cannot redeem the subscription token even while its virtual key row still exists
+      await AgentRunModel.close({ id: run.id });
+      const afterClosedRun = await app.inject({
+        method: "GET",
+        url: `/v1/anthropic/${agent.id}/v1/models`,
+        headers: {
+          authorization: `Bearer ${podToken}`,
+          "anthropic-version": "2023-06-01",
+        },
+      });
+      expect(afterClosedRun.statusCode).toBe(400);
+
+      // 9. Revoking the run's one-off virtual key immediately invalidates it with 401
       if (virtualApiKeyId) {
         await VirtualApiKeyModel.delete(virtualApiKeyId);
       }

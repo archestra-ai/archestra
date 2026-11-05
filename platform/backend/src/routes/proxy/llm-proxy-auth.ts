@@ -214,24 +214,21 @@ export async function validateVirtualApiKey(params: {
     if (
       expectedProvider === "anthropic" &&
       resolved.virtualKey.scope === "personal" &&
-      resolved.virtualKey.authorId
+      resolved.virtualKey.authorId &&
+      params.agentId
     ) {
+      const targetAgent = params.agent ?? (await resolveAgent(params.agentId));
+      await validatePassthroughVirtualKey({
+        tokenValue,
+        agent: targetAgent,
+      });
       const claudeCodeToken = await claudeCodeAccountManager.resolveProxyToken({
         virtualKeyId: resolved.virtualKey.id,
         organizationId: resolved.virtualKey.organizationId,
         userId: resolved.virtualKey.authorId,
-        agentId: params.agentId,
+        agentId: targetAgent.id,
       });
       if (claudeCodeToken) {
-        const targetAgent =
-          params.agent ??
-          (params.agentId ? await resolveAgent(params.agentId) : undefined);
-        if (targetAgent) {
-          await validatePassthroughVirtualKey({
-            tokenValue,
-            agent: targetAgent,
-          });
-        }
         return {
           apiKey: `Bearer:${claudeCodeToken}`,
           baseUrl: "https://api.anthropic.com",
@@ -1546,6 +1543,7 @@ async function authenticatePassthroughProxyRequest(params: {
           agent,
         });
         if (
+          agentId &&
           provider === "anthropic" &&
           isTrustedAnthropicPassthroughUpstream(
             getProviderConfiguredBaseUrl("anthropic"),
@@ -1556,7 +1554,7 @@ async function authenticatePassthroughProxyRequest(params: {
               virtualKeyId: resolved.passthroughVirtualKeyId,
               organizationId: agent.organizationId,
               userId: resolved.userId,
-              agentId,
+              agentId: agent.id,
             });
           if (claudeCodeToken) {
             providerApiKey = `Bearer:${claudeCodeToken}`;
@@ -1686,6 +1684,8 @@ async function passthroughProviderApiKey(params: {
   return apiKey;
 }
 
+const CLAUDE_OAUTH_BETA_HEADER = "oauth-2025-04-20";
+
 /**
  * Puts the mapped provider key on the request in the header the provider
  * reads, unless the caller already sent its own provider credential there.
@@ -1704,6 +1704,21 @@ function forwardPassthroughProviderApiKey(params: {
   if (request.raw.headers[name] !== undefined) return;
   request.headers[name] = value;
   request.raw.headers[name] = value;
+  if (provider === "anthropic" && apiKey.startsWith("Bearer:sk-ant-oat")) {
+    const rawBeta = request.raw.headers["anthropic-beta"];
+    const existing = (Array.isArray(rawBeta) ? rawBeta.join(",") : rawBeta)
+      ?.split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    if (!existing?.includes(CLAUDE_OAUTH_BETA_HEADER)) {
+      const nextBeta =
+        existing && existing.length > 0
+          ? `${existing.join(",")},${CLAUDE_OAUTH_BETA_HEADER}`
+          : CLAUDE_OAUTH_BETA_HEADER;
+      request.headers["anthropic-beta"] = nextBeta;
+      request.raw.headers["anthropic-beta"] = nextBeta;
+    }
+  }
 }
 
 function trimTrailingSlash(url: string | undefined): string | undefined {

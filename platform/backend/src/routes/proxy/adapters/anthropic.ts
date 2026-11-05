@@ -1419,6 +1419,26 @@ class AnthropicStreamAdapter
 // must forward such requests — the upstream API is the authority on whether
 // they need streaming.
 const ANTHROPIC_CLIENT_TIMEOUT_MS = 10 * 60 * 1000;
+const CLAUDE_OAUTH_BETA_HEADER = "oauth-2025-04-20";
+
+function withClaudeOAuthBetaHeader(
+  defaultHeaders: Record<string, string> | undefined,
+): Record<string, string> {
+  const existing = defaultHeaders?.["anthropic-beta"]
+    ?.split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  if (existing?.includes(CLAUDE_OAUTH_BETA_HEADER)) {
+    return { ...defaultHeaders };
+  }
+  return {
+    ...defaultHeaders,
+    "anthropic-beta":
+      existing && existing.length > 0
+        ? `${existing.join(",")},${CLAUDE_OAUTH_BETA_HEADER}`
+        : CLAUDE_OAUTH_BETA_HEADER,
+  };
+}
 
 export const anthropicAdapterFactory: LLMProvider<
   AnthropicRequest,
@@ -1564,6 +1584,10 @@ export const anthropicAdapterFactory: LLMProvider<
       });
     }
 
+    const defaultHeaders = isClaudeSubscriptionToken
+      ? withClaudeOAuthBetaHeader(options.defaultHeaders)
+      : options.defaultHeaders;
+
     return new AnthropicProvider({
       maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey: regularApiKey,
@@ -1575,7 +1599,7 @@ export const anthropicAdapterFactory: LLMProvider<
         : options.baseUrl,
       fetch: customFetch,
       timeout: ANTHROPIC_CLIENT_TIMEOUT_MS,
-      defaultHeaders: options.defaultHeaders,
+      defaultHeaders,
     });
   },
 

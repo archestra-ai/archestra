@@ -10,6 +10,7 @@ import {
 } from "@/fastify-instance";
 import { ModelPoolModel, VirtualApiKeyModel } from "@/models";
 import { initializeLlmProxyMetrics } from "@/observability/metrics/llm-proxy";
+import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-providers";
 import { accessGrants, beforeEach, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
@@ -34,6 +35,7 @@ const poolTest = test.extend<{
   router: {
     app: FastifyInstanceWithZod;
     agentId: string;
+    organizationId: string;
     token: string;
     /** A virtual key in the same org that maps no member key and has no grant. */
     ungrantedToken: string;
@@ -121,6 +123,7 @@ const poolTest = test.extend<{
       await use({
         app,
         agentId: agent.id,
+        organizationId: org.id,
         token: virtual.value,
         ungrantedToken: ungranted.value,
         memberKeyToken: memberKey.value,
@@ -228,6 +231,59 @@ poolTest(
       },
     });
     expect(response.headers["x-archestra-pool"]).toBeUndefined();
+  },
+);
+
+poolTest(
+  "serves a granted pool to a key that resolves to no provider key",
+  async ({ router }) => {
+    server.use(
+      http.post(`${zaiOrigin}/chat/completions`, () =>
+        HttpResponse.json({
+          id: "chatcmpl-1",
+          object: "chat.completion",
+          created: 1,
+          model: "glm-5",
+          choices: [
+            {
+              index: 0,
+              message: { role: "assistant", content: "hi" },
+              finish_reason: "stop",
+            },
+          ],
+          usage: { prompt_tokens: 9, completion_tokens: 2, total_tokens: 11 },
+        }),
+      ),
+    );
+    // Current and future providers, in an org whose keys aren't primaries:
+    // the key resolves to no provider key and only has the pool.
+    const automatic = await VirtualApiKeyModel.create({
+      organizationId: router.organizationId,
+      name: "Pool-only automatic key",
+      ...accessGrants("org"),
+      providerApiKeys: [],
+      includeFutureProviders: true,
+    });
+    await ModelPoolModel.setPoolsForVirtualApiKey({
+      organizationId: router.organizationId,
+      virtualApiKeyId: automatic.virtualKey.id,
+      poolIds: [router.poolId],
+    });
+    expect(
+      await resolveVirtualKeyProviderMappings(automatic.virtualKey.id),
+    ).toEqual([]);
+
+    const response = await router.app.inject({
+      method: "POST",
+      url: `/v1/model-router/${router.agentId}/chat/completions`,
+      headers: { authorization: `Bearer ${automatic.value}` },
+      payload: {
+        model: "glm-5",
+        messages: [{ role: "user", content: "hello" }],
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.headers["x-archestra-pool"]).toBe("glm-5");
   },
 );
 

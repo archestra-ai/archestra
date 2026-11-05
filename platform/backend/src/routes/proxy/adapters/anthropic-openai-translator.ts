@@ -50,6 +50,20 @@ export function openaiToAnthropic(req: OpenAiRequest): {
   openaiContext: AnthropicOpenaiContext;
 } {
   assertUnstructuredResponseFormat(req, "the Anthropic translation");
+  const output = req as OpenAiRequest & {
+    modalities?: string[];
+    audio?: unknown;
+  };
+  if (
+    output.audio !== undefined ||
+    output.modalities?.some((modality) => modality !== "text")
+  )
+    throw new ApiError(400, "Anthropic translation supports only text output");
+  if (req.tools?.some((tool) => tool.type !== "function"))
+    throw new ApiError(
+      400,
+      "Anthropic translation supports only function tools",
+    );
   assertModelRouterCacheControls("anthropic", req);
   const loose = req as OpenAiRequest & {
     stop?: string | string[] | null;
@@ -126,9 +140,8 @@ export function openaiToAnthropic(req: OpenAiRequest): {
       // Anthropic tool_result content accepts text and image blocks, so forward
       // images returned by a tool instead of flattening them to text. Text-only
       // results stay a plain string to match prior behavior.
-      const normalized = normalizeOpenAiContentParts(message.content);
-      const hasMedia = normalized.some((part) => part.kind !== "text");
       const blocks = cacheableContentBlocks(message.content);
+      const hasMedia = blocks.some((part) => part.type !== "text");
       const cache_control = readCacheControl(message);
       messages.push({
         role: "user",
@@ -152,6 +165,32 @@ export function openaiToAnthropic(req: OpenAiRequest): {
         400,
         "Unsupported Anthropic message with cache_control",
       );
+  }
+
+  // All results of a parallel tool turn must be in one user message, before
+  // any sibling text/images. OpenAI represents those results as separate turns.
+  for (let index = 1; index < messages.length; ) {
+    const previous = messages[index - 1];
+    const current = messages[index];
+    if (
+      previous.role === "user" &&
+      current.role === "user" &&
+      Array.isArray(previous.content) &&
+      previous.content.some((part) => part.type === "tool_result") &&
+      // Keep an explicit cache boundary separate from subsequent user content.
+      (!previous.content.some(
+        (part) => "cache_control" in part && part.cache_control !== undefined,
+      ) ||
+        (Array.isArray(current.content) &&
+          current.content.some((part) => part.type === "tool_result")))
+    ) {
+      previous.content.push(
+        ...(typeof current.content === "string"
+          ? [{ type: "text" as const, text: current.content }]
+          : current.content),
+      );
+      messages.splice(index, 1);
+    } else index++;
   }
 
   const anthropicBody: AnthropicRequest = {
@@ -450,12 +489,24 @@ function cacheableContentBlocks(
   const blocks: Array<Record<string, unknown>> = [];
   for (const raw of Array.isArray(content) ? content : []) {
     const cache_control = readCacheControl(raw);
-    const converted = normalizeOpenAiContentParts([raw]).flatMap((part) => {
-      const block = normalizedPartToAnthropicBlock(part);
-      return block && !(block.type === "text" && block.text === "")
-        ? [block]
-        : [];
-    });
+    let converted: Array<Record<string, unknown>>;
+    try {
+      converted = normalizeOpenAiContentParts([raw], {
+        rejectUnsupported: true,
+      }).flatMap((part) => {
+        const block = normalizedPartToAnthropicBlock(part);
+        return block && !(block.type === "text" && block.text === "")
+          ? [block]
+          : [];
+      });
+    } catch (error) {
+      if (cache_control !== undefined && error instanceof ApiError)
+        throw new ApiError(
+          400,
+          "Unsupported Anthropic content part with cache_control",
+        );
+      throw error;
+    }
     if (cache_control !== undefined && converted.length === 0)
       throw new ApiError(
         400,
@@ -491,11 +542,18 @@ function normalizedPartToAnthropicBlock(
       if (/^https?:\/\//i.test(part.url)) {
         return { type: "image", source: { type: "url", url: part.url } };
       }
-      return null;
+      throw new ApiError(
+        400,
+        "Anthropic translation requires an inline image or HTTP image URL",
+      );
     }
     case "file": {
       const inline = parseDataUrl(part.fileData);
-      if (!inline || inline.mimeType !== "application/pdf") return null;
+      if (!inline || inline.mimeType !== "application/pdf")
+        throw new ApiError(
+          400,
+          "Anthropic translation supports only inline PDF files",
+        );
       return {
         type: "document",
         source: {
@@ -506,7 +564,10 @@ function normalizedPartToAnthropicBlock(
       };
     }
     case "audio":
-      return null;
+      throw new ApiError(
+        400,
+        "Anthropic translation does not support audio input",
+      );
   }
 }
 

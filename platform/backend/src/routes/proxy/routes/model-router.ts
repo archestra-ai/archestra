@@ -1419,7 +1419,15 @@ export async function authenticateModelRouterBearer(params: {
     const mappings = await resolveVirtualKeyProviderMappings(
       resolved.virtualKey.id,
     );
-    if (mappings.length === 0) {
+    // A pool added to the key answers with its own member keys, so the key
+    // can still call that pool when it resolves to no provider key.
+    if (
+      mappings.length === 0 &&
+      !(
+        config.llmProxy.modelPoolsEnabled &&
+        (await ModelPoolModel.hasVirtualApiKeyGrant(resolved.virtualKey.id))
+      )
+    ) {
       throw new ApiError(
         401,
         "Virtual API key has no provider API keys configured.",

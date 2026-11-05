@@ -13269,7 +13269,7 @@ export const getCostSavingsStatistics = <ThrowOnError extends boolean = false>(o
 export const getMcpToolCallUsage = <ThrowOnError extends boolean = false>(options?: Options<GetMcpToolCallUsageData, ThrowOnError>) => (options?.client ?? client).get<GetMcpToolCallUsageResponses, GetMcpToolCallUsageErrors, ThrowOnError>({ url: '/api/statistics/mcp-tool-calls', ...options });
 
 /**
- * Get LLM requests, tokens and spend grouped by any combination of `day`, `teamId`, `credentialId` (virtual key, passthrough key or OAuth client), `provider` and `model` — one row per group. For example `groupBy=teamId,provider,model` answers which providers and models each team used and what they cost, and `groupBy=day,credentialId` gives a daily series per virtual key. Each dimension is attributed as on its own statistics endpoint: team as in GET /api/statistics/teams, credential as in GET /api/statistics/llm-proxy, model as the billed model of GET /api/statistics/models.
+ * Get LLM requests, tokens and spend grouped by any combination of `day`, `teamId`, `credentialId` (virtual key, passthrough key or OAuth client), `provider` and `model` — one row per group. For example `groupBy=teamId,provider,model` answers which providers and models each team used and what they cost, and `groupBy=day,credentialId` gives a daily series per virtual key. Each dimension is attributed as on its own statistics endpoint: team as in GET /api/statistics/teams, credential as in GET /api/statistics/llm-proxy, model as the billed model of GET /api/statistics/models. Grouped or filtered by credential, callers without [`member:read`](/docs/reference/permissions#member:read) see only their own usage, since a virtual key can be one person's own.
  *
  * Authentication:
  *

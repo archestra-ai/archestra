@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { TimeInMs } from "@archestra/shared";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
@@ -5,6 +6,7 @@ import logger from "@/logging";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
+import type { UnapprovableBlockMode } from "@/types/guardrails-policy";
 import type { OpenAppaSession } from "./service";
 import { isUnenforcedSession, superyellSession } from "./unenforced";
 
@@ -39,14 +41,35 @@ export function softBlockTools(error: Error): string[] {
   return error instanceof SoftBlockRefusal ? error.tools : [];
 }
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+const requestSettings = new AsyncLocalStorage<{
+  mode?: UnapprovableBlockMode;
+}>();
+
+/** Isolate the proxy's captured setting from other requests and MCP calls. */
+export function withSoftBlockRequest<T>(run: () => Promise<T>): Promise<T> {
+  return requestSettings.run({}, run);
+}
+
+/** Use the deployment snapshot already read for this proxy request. */
+export function captureSoftBlockMode(mode: UnapprovableBlockMode): void {
+  const settings = requestSettings.getStore();
+  if (settings) settings.mode = mode;
+}
+
 export async function softBlocksAllowed(): Promise<boolean> {
   const override =
     config.openappa.breakTheGlassOverrides?.unapprovableBlockMode;
   if (override !== undefined) return override === "allow";
+  const captured = requestSettings.getStore()?.mode;
+  if (captured !== undefined) return captured === "allow";
   return (
     (await GuardrailsDeploymentModel.get()).unapprovableBlockMode === "allow"
   );
 }
+// SPDX-SnippetEnd
 
 export function isHardBlock(message: string): boolean {
   return /requires attention: [^\n]*\b(?:blocked|hard-block)\b/.test(message);

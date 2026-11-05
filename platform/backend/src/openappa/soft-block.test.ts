@@ -7,12 +7,54 @@ import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { clearRegisteredProcessLocalCaches } from "@/process-local-cache-registry";
 import { expect, test } from "@/test";
-import { waiveSoftBlock } from "./soft-block";
+import {
+  captureSoftBlockMode,
+  softBlocksAllowed,
+  waiveSoftBlock,
+  withSoftBlockRequest,
+} from "./soft-block";
 import { isUnenforcedSession, startedUnenforced } from "./unenforced";
 
 const initialMode =
   config.openappa.breakTheGlassOverrides?.unapprovableBlockMode;
 const initialYell = config.openappa.yellEnabled;
+test("captured settings stay isolated across concurrent requests and outside calls", async () => {
+  const overrides = config.openappa.breakTheGlassOverrides;
+  delete config.openappa.breakTheGlassOverrides;
+  await GuardrailsDeploymentModel.set({ unapprovableBlockMode: "refuse" });
+  try {
+    const results = await Promise.all(
+      (["allow", "refuse"] as const).map((mode) =>
+        withSoftBlockRequest(async () => {
+          captureSoftBlockMode(mode);
+          // Both request contexts are active before either reads its setting.
+          await Promise.resolve();
+          return softBlocksAllowed();
+        }),
+      ),
+    );
+    expect(results).toEqual([true, false]);
+    // MCP/runtime calls outside the proxy still read the live setting.
+    expect(await softBlocksAllowed()).toBe(false);
+    await GuardrailsDeploymentModel.set({ unapprovableBlockMode: "allow" });
+    expect(await softBlocksAllowed()).toBe(true);
+    expect(await withSoftBlockRequest(() => softBlocksAllowed())).toBe(true);
+    for (const mode of ["allow", "refuse"] as const) {
+      config.openappa.breakTheGlassOverrides = {
+        unapprovableBlockMode: mode,
+      };
+      expect(
+        await withSoftBlockRequest(async () => {
+          captureSoftBlockMode(mode === "allow" ? "refuse" : "allow");
+          return softBlocksAllowed();
+        }),
+      ).toBe(mode === "allow");
+    }
+  } finally {
+    config.openappa.breakTheGlassOverrides = overrides;
+  }
+});
+
 afterEach(() => {
   config.openappa.breakTheGlassOverrides = {
     ...config.openappa.breakTheGlassOverrides,

@@ -119,14 +119,17 @@ describe("usage exploration", () => {
   });
   it("charts cache reads and writes as selectable personal metrics and exports them", async () => {
     const user = userEvent.setup();
-    const write = vi.spyOn(navigator.clipboard, "writeText");
+    const downloads = captureDownloads();
     render(<UsageContent {...makeUsageData()} />);
     await view(user, "Cache reads by model");
     expect(
       screen.getByRole("button", { name: "Show Cache reads" }),
     ).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Copy as CSV" }));
-    expect(String(write.mock.calls[0]?.[0])).toContain("1000");
+    await user.click(screen.getByRole("button", { name: "Export CSV" }));
+    expect(downloads[0]?.name).toMatch(
+      /^my-usage-cache-reads-by-model-.*\.csv$/,
+    );
+    expect(await downloads[0]?.blob.text()).toContain("1000");
     await user.click(screen.getByRole("button", { name: /^Show / }));
     await user.click(screen.getByRole("menuitem", { name: "Cache writes" }));
     expect(
@@ -207,15 +210,15 @@ describe("usage exploration", () => {
   });
   it("exports the input/output pivot rather than unrelated summary columns", async () => {
     const user = userEvent.setup();
-    const write = vi.spyOn(navigator.clipboard, "writeText");
+    const downloads = captureDownloads();
     render(<UsageContent {...makeUsageData()} />);
     await user.click(screen.getByRole("button", { name: /^Show / }));
     await user.click(screen.getByRole("menuitem", { name: "Tokens" }));
     await user.click(screen.getByRole("button", { name: "split by None" }));
     await user.click(screen.getByRole("menuitem", { name: "Input / output" }));
     await user.click(screen.getByRole("button", { name: /^pivot$/i }));
-    await user.click(screen.getByRole("button", { name: "Copy as CSV" }));
-    expect(write).toHaveBeenCalledWith(
+    await user.click(screen.getByRole("button", { name: "Export CSV" }));
+    expect(await downloads[0]?.blob.text()).toBe(
       "Model,Input,Output,total\nexample-model,80,20,100",
     );
   });
@@ -302,4 +305,23 @@ describe("usage exploration", () => {
 async function view(user: ReturnType<typeof userEvent.setup>, name: string) {
   await user.click(screen.getByRole("button", { name: /^View / }));
   await user.click(screen.getByRole("menuitem", { name }));
+}
+
+/** Files the page downloads, by name and contents. */
+function captureDownloads() {
+  const files: { name: string; blob: Blob }[] = [];
+  let blob = new Blob();
+  Object.assign(URL, {
+    createObjectURL: (value: Blob) => {
+      blob = value;
+      return "blob:export";
+    },
+    revokeObjectURL: () => undefined,
+  });
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    files.push({ name: this.download, blob });
+  });
+  return files;
 }

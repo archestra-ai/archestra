@@ -2,7 +2,7 @@
 // one result: headline, chart, sortable summary or heat-shaded pivot, CSV,
 // and the REST call that returns the same data.
 
-import { ArrowRight, ClipboardCopy, Info, X } from "lucide-react";
+import { ArrowRight, Download, Info, X } from "lucide-react";
 import { type SetStateAction, useCallback, useMemo } from "react";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
@@ -37,7 +37,8 @@ import {
 import {
   ApiLine,
   ChartKindToggle,
-  copyCsv,
+  csvFilename,
+  exportCsv,
   PivotChart,
   PivotTable,
   QueryChip,
@@ -502,17 +503,29 @@ export default function CostExplorer() {
               className="ml-auto"
               disabled={cube.rows.length === 0}
               onClick={() =>
-                copyCsv({
+                exportCsv({
                   cube,
                   metric: q.metric,
                   dimLabel: dim.label,
                   view,
                   bySplit: pivotBySplit,
+                  filename: csvFilename({
+                    scope: "costs",
+                    parts: [
+                      view === "summary" && cube.exportTable
+                        ? null
+                        : metric.label,
+                      `by ${dim.label}`,
+                      hasSplit ? `and ${DIMS[q.split as DimId].label}` : null,
+                      q.model,
+                    ],
+                    timeframe: String(timeframe),
+                  }),
                 })
               }
             >
-              <ClipboardCopy />
-              Copy as CSV
+              <Download />
+              <span>Export CSV</span>
             </Button>
           </div>
           <div className="border-t">

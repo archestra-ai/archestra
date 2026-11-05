@@ -21,6 +21,7 @@ type AgentStatistics = archestraApiTypes.GetAgentStatisticsResponses["200"];
 type AppUsage = archestraApiTypes.GetAppUsageResponses["200"];
 type SkillUsage = archestraApiTypes.GetSkillUsageResponses["200"];
 type ToolCallUsage = archestraApiTypes.GetMcpToolCallUsageResponses["200"];
+type LlmUsage = archestraApiTypes.GetLlmUsageResponses["200"];
 type AppStatistics = archestraApiTypes.GetAppStatisticsResponses["200"];
 type SkillStatistics = archestraApiTypes.GetSkillStatisticsResponses["200"];
 type MyStatistics = archestraApiTypes.GetMyStatisticsResponses["200"];
@@ -524,6 +525,171 @@ export function toolCallUsageFor(query: URLSearchParams): ToolCallUsage {
   return { ...paginate(rows, query), totals };
 }
 
+/**
+ * `GET /api/statistics/llm-usage` — team, credential, provider and model
+ * breakdowns. Team cuts come from the same per-person facts as the Teams view
+ * and credential cuts from the same slices as the proxy view, split across
+ * models (and teams) by each bucket's share, so every breakdown adds up to its
+ * one-dimension view.
+ */
+export function llmUsageFor(query: URLSearchParams): LlmUsage {
+  const { rows, totals } = memo(`llm-usage:${groupingKey(query)}`, () => {
+    const dims = groupByParam(query);
+    const timeframe = query.get("timeframe");
+    const org = orgFacts(timeframe);
+    const people = userFacts(timeframe);
+    const byCredential = dims.has("credentialId");
+    const byTeam = dims.has("teamId");
+    const byModel = dims.has("model") || dims.has("provider");
+
+    type Cell = {
+      bucket: number;
+      team?: (typeof TEAMS)[number];
+      slice?: ProxySlice;
+      model?: ModelSpec;
+      usage: Usage;
+    };
+    const cells: Cell[] = [];
+    const teamPoints = TEAMS.map((team) => ({
+      team,
+      models: MODELS.map((spec) => ({
+        spec,
+        points: org.window.buckets.map((_, i) =>
+          people.users
+            .filter((u) => u.spec.team === team.id)
+            .reduce(
+              (acc, u) =>
+                addUsage(
+                  acc,
+                  u.models.find((m) => m.spec.id === spec.id)?.points[i] ??
+                    emptyUsage(),
+                ),
+              emptyUsage(),
+            ),
+        ),
+      })),
+    }));
+    org.window.buckets.forEach((bucket, i) => {
+      const whole = org.totals[i];
+      const share = (part: Usage) => ({
+        volume: whole.requests ? part.requests / whole.requests : 0,
+        billed: whole.billedCost ? part.billedCost / whole.billedCost : 0,
+        subscription: whole.subscriptionCost
+          ? part.subscriptionCost / whole.subscriptionCost
+          : 0,
+      });
+      if (!byCredential) {
+        if (byTeam) {
+          for (const { team, models } of teamPoints)
+            for (const m of models)
+              cells.push({
+                bucket: i,
+                team,
+                model: m.spec,
+                usage: m.points[i],
+              });
+        } else {
+          for (const m of org.models)
+            cells.push({ bucket: i, model: m.spec, usage: m.points[i] });
+        }
+        return;
+      }
+      const parts: {
+        team?: (typeof TEAMS)[number];
+        model?: ModelSpec;
+        usage: Usage;
+      }[] = byTeam
+        ? teamPoints.flatMap(({ team, models }) =>
+            byModel
+              ? models.map((m) => ({ team, model: m.spec, usage: m.points[i] }))
+              : [
+                  {
+                    team,
+                    usage: models.reduce(
+                      (acc, m) => addUsage(acc, m.points[i]),
+                      emptyUsage(),
+                    ),
+                  },
+                ],
+          )
+        : byModel
+          ? org.models.map((m) => ({ model: m.spec, usage: m.points[i] }))
+          : [{ usage: whole }];
+      for (const slice of proxyFacts(timeframe).slices) {
+        for (const part of parts) {
+          const s = share(part.usage);
+          cells.push({
+            bucket: i,
+            team: part.team,
+            model: part.model,
+            slice,
+            usage: splitUsage(slice.points[i], s.volume, s.billed, {
+              subscription: s.subscription,
+              seed: `llm|${slice.credentialName}|${part.team?.id}|${part.model?.id}|${bucket.start}`,
+            }),
+          });
+        }
+      }
+    });
+
+    const groups = new Map<
+      string,
+      { row: Partial<LlmUsage["data"][number]>; usage: Usage }
+    >();
+    for (const cell of cells) {
+      if (cell.usage.requests === 0) continue;
+      const day = iso(org.window.buckets[cell.bucket].start).slice(0, 10);
+      const provider = cell.model ? providerOf(cell.model) : "";
+      const key = [
+        dims.has("day") ? day : "",
+        dims.has("teamId") ? cell.team?.id : "",
+        dims.has("credentialId")
+          ? `${cell.slice?.authMethod}:${cell.slice?.credentialId}`
+          : "",
+        dims.has("provider") ? provider : "",
+        dims.has("model") ? cell.model?.id : "",
+      ].join("|");
+      const group = groups.get(key) ?? {
+        row: {
+          ...(dims.has("day") ? { day } : {}),
+          ...(dims.has("teamId") && cell.team
+            ? { teamId: cell.team.id, teamName: cell.team.name }
+            : {}),
+          ...(dims.has("credentialId") && cell.slice
+            ? {
+                authMethod: cell.slice.authMethod,
+                credentialId: cell.slice.credentialId,
+                credentialName: cell.slice.credentialName,
+              }
+            : {}),
+          ...(dims.has("provider") ? { provider } : {}),
+          ...(dims.has("model") && cell.model ? { model: cell.model.id } : {}),
+        },
+        usage: emptyUsage(),
+      };
+      group.usage = addUsage(group.usage, cell.usage);
+      groups.set(key, group);
+    }
+    const rows = [...groups.values()]
+      .map(({ row, usage }) => ({ ...row, ...llmUsageNumbers(usage) }))
+      .sort(
+        (a, b) =>
+          (a.day ?? "").localeCompare(b.day ?? "") ||
+          b.billedCost - a.billedCost,
+      ) as LlmUsage["data"];
+    return {
+      rows,
+      totals: llmUsageNumbers(
+        [...groups.values()].reduce(
+          (acc, g) => addUsage(acc, g.usage),
+          emptyUsage(),
+        ),
+      ),
+    };
+  });
+  return { ...paginate(rows, query), totals };
+}
+
 /** `GET /api/statistics/apps` — build vs runtime cost per app. */
 export function appStatisticsFor(query: URLSearchParams): AppStatistics {
   const timeframe = query.get("timeframe");
@@ -933,6 +1099,14 @@ function addUsage(a: Usage, b: Usage): Usage {
 
 function sumUsage(points: Usage[]): Usage {
   return points.reduce(addUsage, emptyUsage());
+}
+
+function llmUsageNumbers(u: Usage) {
+  return {
+    ...roundUsage(u),
+    cacheWriteTokens: 0,
+    totalTokens: u.inputTokens + u.outputTokens,
+  };
 }
 
 function roundUsage(u: Usage): Usage {
@@ -1679,6 +1853,16 @@ function teamName(id: string): string {
 }
 
 // ===== roster =====
+
+/** The provider a request went to: a routing prefix wins over the vendor. */
+function providerOf(spec: ModelSpec): string {
+  const prefix = spec.id.split("/")[0];
+  if (["bedrock", "azure", "openrouter", "ollama"].includes(prefix))
+    return prefix;
+  if (spec.id.startsWith("mistral")) return "mistral";
+  if (spec.provider === "google") return "gemini";
+  return spec.provider === "other" ? "openrouter" : spec.provider;
+}
 
 type Provider = "anthropic" | "openai" | "google" | "other";
 

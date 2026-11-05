@@ -23,7 +23,6 @@ import {
   YAxis,
   type YAxisTickContentProps,
 } from "recharts";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   type ChartConfig,
@@ -49,6 +48,7 @@ import {
   formatCell,
   formatValue,
   type MetricId,
+  TIMEFRAME_LABEL,
 } from "./cost-explorer-data";
 
 // ===== palette =====
@@ -1139,7 +1139,32 @@ export function ApiLine({ call }: { call: string }) {
   );
 }
 
-export function copyCsv({
+/** Download the table on screen as a CSV file named after what it shows. */
+export function exportCsv(params: {
+  cube: Cube;
+  metric: MetricId;
+  dimLabel: string;
+  view: "summary" | "pivot";
+  bySplit: boolean;
+  filename: string;
+}) {
+  const blob = new Blob([csvText(params)], {
+    type: "text/csv;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = params.filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * The table as CSV. A summary with every metric available (`exportTable`)
+ * exports all of them, one line per group and split; otherwise the metric on
+ * screen.
+ */
+function csvText({
   cube,
   metric,
   dimLabel,
@@ -1158,7 +1183,14 @@ export function copyCsv({
   };
   const num = (v: number) => (Number.isInteger(v) ? v : v.toFixed(4));
   let lines: (string | number)[][];
-  if (view === "summary") {
+  if (view === "summary" && cube.exportTable) {
+    lines = [
+      cube.exportTable.header,
+      ...cube.exportTable.rows.map((row) =>
+        row.map((cell) => (typeof cell === "number" ? num(cell) : cell)),
+      ),
+    ];
+  } else if (view === "summary") {
     lines = [
       [dimLabel, ...cube.extraCols.map((c) => c.label), metric, "share"],
       ...cube.rows.map((r) => [
@@ -1179,14 +1211,44 @@ export function copyCsv({
       ]),
     ];
   }
-  const text = lines.map((l) => l.map(esc).join(",")).join("\n");
-  void navigator.clipboard
-    ?.writeText(text)
-    .then(() => toast.success(`Copied ${cube.rows.length} rows as CSV`))
-    .catch(() => toast.error("Clipboard is not available"));
+  return lines.map((l) => l.map(esc).join(",")).join("\n");
+}
+
+/**
+ * e.g. `costs-billed-spend-by-team-and-model-last-7-days-2026-11-04.csv`.
+ * `today` is the export date; a custom range names its own dates instead.
+ */
+export function csvFilename({
+  scope,
+  parts,
+  timeframe,
+  today = new Date(),
+}: {
+  scope: string;
+  parts: (string | null | undefined)[];
+  timeframe: string;
+  today?: Date;
+}) {
+  const custom = /^custom:(\d{4}-\d{2}-\d{2})[^_]*_(\d{4}-\d{2}-\d{2})/.exec(
+    timeframe,
+  );
+  const range = custom
+    ? `${custom[1]}-to-${custom[2]}`
+    : `${TIMEFRAME_LABEL[timeframe] ?? timeframe}-${localDate(today)}`;
+  const slug = [scope, ...parts.filter(Boolean), range]
+    .join(" ")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return `${slug}.csv`;
 }
 
 // ===== helpers =====
+function localDate(date: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 function pivotColumns(cube: Cube, bySplit: boolean) {
   if (bySplit) {
     const top = cube.splitKeys.slice(0, 12);

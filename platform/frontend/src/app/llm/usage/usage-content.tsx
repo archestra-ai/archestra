@@ -1,5 +1,5 @@
 "use client";
-import { ClipboardCopy, X } from "lucide-react";
+import { Download, X } from "lucide-react";
 import type { SetStateAction } from "react";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,8 @@ import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   ApiLine,
   ChartKindToggle,
-  copyCsv,
+  csvFilename,
+  exportCsv,
   PivotChart,
   PivotTable,
   QueryChip,
@@ -394,17 +395,22 @@ export function UsageContent(props: UsageViewProps) {
                 className="ml-auto"
                 disabled={cube.rows.length === 0}
                 onClick={() =>
-                  copyCsv({
+                  exportCsv({
                     cube,
                     metric,
                     dimLabel: label,
                     view: effectiveView,
                     bySplit: canSplit && split,
+                    filename: csvFilename({
+                      scope: "my usage",
+                      parts: [metricLabel, `by ${label}`, model],
+                      timeframe: String(props.timeframe),
+                    }),
                   })
                 }
               >
-                <ClipboardCopy />
-                <span>Copy as CSV</span>
+                <Download />
+                <span>Export CSV</span>
               </Button>
             </div>
             {effectiveView === "pivot" ? (

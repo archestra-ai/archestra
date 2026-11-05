@@ -59,6 +59,50 @@ import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
 import { interactionBelongsToOrganization } from "./log-organization";
 
+/**
+ * The receipt joins that split each request into the models it billed, and the
+ * billed-model expression they produce. Join `receipt` with `receiptOn`, then
+ * `facts` on `true`, before grouping by `model`.
+ */
+export function billedModelJoins() {
+  return {
+    receipt: schema.interactionBillingTable,
+    receiptOn: billingReceiptJoin,
+    facts: billingModelFacts,
+    model: billedModel,
+  };
+}
+
+/**
+ * Request, token and spend aggregates over interactions. With
+ * `perBilledModel`, the numbers come from each receipt's per-model components
+ * (as on the Models view), so the query must apply {@link billedModelJoins}.
+ */
+export function llmUsageAggregates(perBilledModel: boolean) {
+  const i = schema.interactionsTable;
+  return perBilledModel
+    ? {
+        requests: modelRequests,
+        inputTokens: sql<number>`CAST(${modelInput} AS DOUBLE PRECISION)`,
+        outputTokens: sql<number>`CAST(${modelOutput} AS DOUBLE PRECISION)`,
+        cacheReadTokens: sql<number>`CAST(${modelCacheRead} AS DOUBLE PRECISION)`,
+        cacheWriteTokens: sql<number>`CAST(${modelCacheWrite} AS DOUBLE PRECISION)`,
+        totalTokens: sql<number>`CAST(${modelInput} + ${modelOutput} AS DOUBLE PRECISION)`,
+        billedCost: modelBilledCost,
+        subscriptionCost: modelSubscriptionCost,
+      }
+    : {
+        requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+        inputTokens: tokenSum(i.inputTokens),
+        outputTokens: tokenSum(i.outputTokens),
+        cacheReadTokens: tokenSum(i.cacheReadTokens),
+        cacheWriteTokens: tokenSum(i.cacheWriteTokens),
+        totalTokens: sql<number>`CAST(COALESCE(SUM(${i.inputTokens}), 0) + COALESCE(SUM(${i.outputTokens}), 0) AS DOUBLE PRECISION)`,
+        billedCost: billedSum(i.cost, "DOUBLE PRECISION"),
+        subscriptionCost: subscriptionCostSum("DOUBLE PRECISION"),
+      };
+}
+
 class StatisticsModel {
   static async getModelUsage(params: {
     model: string;

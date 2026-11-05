@@ -28,6 +28,9 @@ import OrganizationCostsPage from "./page";
 vi.mock("next/navigation");
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/integration-overrides", () => ({
+  useModelProviderCatalog: () => ({ label: (provider: string) => provider }),
+}));
 vi.mock("sonner");
 const origin = "http://localhost:9000";
 const server = setupServer();
@@ -39,6 +42,7 @@ let agents: Record<string, unknown>[];
 let apps: Record<string, unknown>[];
 let skills: Record<string, unknown>[];
 let skillsUsage: Record<string, unknown>[];
+let llmUsage: Record<string, unknown>[];
 let savings: Record<string, unknown>;
 let requests: URL[];
 let pending = false;
@@ -63,6 +67,18 @@ const model = (name = "example/model-a", cost = 8.25) => ({
   cost,
   percentage: 100,
   timeSeries: [],
+});
+const usage = (
+  values: Partial<Record<"requests" | "billedCost", number>> = {},
+) => ({
+  requests: values.requests ?? 0,
+  inputTokens: (values.requests ?? 0) * 100,
+  outputTokens: (values.requests ?? 0) * 10,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+  totalTokens: (values.requests ?? 0) * 110,
+  billedCost: values.billedCost ?? 0,
+  subscriptionCost: 0,
 });
 function show() {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -122,6 +138,7 @@ beforeEach(() => {
   apps = [];
   skills = [];
   skillsUsage = [];
+  llmUsage = [];
   savings = {
     totalActualCost: 8.25,
     totalSubscriptionCost: 14.5,
@@ -206,6 +223,11 @@ beforeEach(() => {
           });
         case "cost-savings":
           return HttpResponse.json(savings);
+        case "llm-usage":
+          return HttpResponse.json({
+            ...paginated(llmUsage),
+            totals: usage(),
+          });
         default:
           return HttpResponse.json(
             { error: { message: "Unexpected endpoint" } },
@@ -514,6 +536,83 @@ describe("OrganizationCostsPage", () => {
     expect(keys.length).toBeGreaterThan(0);
     expect(keys.every((key) => /^[A-Za-z0-9_-]+$/.test(key))).toBe(true);
   });
+  it("breaks team spend down by model and exports every metric", async () => {
+    const files: { name: string; blob: Blob }[] = [];
+    let blob = new Blob();
+    Object.assign(URL, {
+      createObjectURL: (value: Blob) => {
+        blob = value;
+        return "blob:export";
+      },
+      revokeObjectURL: () => undefined,
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      files.push({ name: this.download, blob });
+    });
+    llmUsage = [
+      {
+        day: "2026-01-01",
+        teamId: "team-research",
+        teamName: "Research",
+        model: "model-large",
+        ...usage({ requests: 3, billedCost: 6 }),
+      },
+      {
+        day: "2026-01-02",
+        teamId: "team-research",
+        teamName: "Research",
+        model: "model-large",
+        ...usage({ requests: 1, billedCost: 2 }),
+      },
+      {
+        day: "2026-01-01",
+        teamId: "team-research",
+        teamName: "Research",
+        model: "model-small",
+        ...usage({ requests: 2, billedCost: 0.5 }),
+      },
+      {
+        day: "2026-01-01",
+        teamId: "team-platform",
+        teamName: "Platform",
+        model: "model-small",
+        ...usage({ requests: 4, billedCost: 1 }),
+      },
+    ];
+    search = new URLSearchParams({ chart: "table" });
+    show();
+    await group("Team");
+    await split("Model");
+
+    const table = await screen.findByRole("table");
+    await waitFor(() =>
+      expect(within(table).getByText("Research")).toBeInTheDocument(),
+    );
+    expect(
+      within(
+        within(table).getByText("Research").closest("tr") as HTMLElement,
+      ).getByText("$8.50"),
+    ).toBeInTheDocument();
+    expect(
+      requests
+        .find((url) => url.pathname.endsWith("/llm-usage"))
+        ?.searchParams.get("groupBy"),
+    ).toBe("day,teamId,model");
+
+    fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+    expect(files[0]?.name).toMatch(
+      /^costs-by-team-and-model-last-hour-\d{4}-\d{2}-\d{2}\.csv$/,
+    );
+    expect((await files[0]?.blob.text())?.split("\n")).toEqual([
+      "Team,Model,Requests,Input tokens,Output tokens,Cache read tokens,Cache write tokens,Total tokens,Billed spend (USD),Subscription estimate (USD)",
+      "Research,model-large,4,400,40,0,0,440,8,0",
+      "Platform,model-small,4,400,40,0,0,440,1,0",
+      "Research,model-small,2,200,20,0,0,220,0.5000,0",
+    ]);
+  });
+
   it("renders each selected entity in one reusable table", async () => {
     teams = [
       {

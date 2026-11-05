@@ -1033,13 +1033,18 @@ describe("buildAgentRunLaunchSpec", () => {
       runMode: "one_shot",
     });
 
+    expect(spec.secretEnv.ARCHESTRA_VIRTUAL_KEY).toMatch(/^arch_/);
     expect(spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).toBe(
+      spec.secretEnv.ARCHESTRA_VIRTUAL_KEY,
+    );
+    expect(spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).not.toBe(
       "managed-subscription-token",
     );
+    expect(JSON.stringify(spec)).not.toContain("managed-subscription-token");
+    expect(JSON.stringify(spec)).not.toContain("claude-subscription-token");
     expect(spec.secretEnv).not.toHaveProperty("ANTHROPIC_API_KEY");
     expect(spec.secretEnv).not.toHaveProperty("ANTHROPIC_AUTH_TOKEN");
     expect(spec.secretEnv).not.toHaveProperty("OPENAI_API_KEY");
-    expect(spec.secretEnv.ARCHESTRA_VIRTUAL_KEY).toMatch(/^arch_/);
     expect(spec.env.ANTHROPIC_BASE_URL).toBe(
       `https://platform.example.test/v1/anthropic/${setup.agent.id}`,
     );
@@ -1073,6 +1078,34 @@ describe("buildAgentRunLaunchSpec", () => {
         userId: setup.user.id,
         runtime: configuredRuntime,
       }),
+    );
+
+    const secondLaunch = await buildAgentRunLaunchSpec({
+      runtime: configuredRuntime,
+      limits: resolveAgentRunLimits({
+        runtime: configuredRuntime,
+        tiers: TIERS,
+      }),
+      taskId: crypto.randomUUID(),
+      runId: crypto.randomUUID(),
+      agentId: setup.agent.id,
+      actor: {
+        id: setup.user.id,
+        kind: "user",
+        organizationId: setup.agent.organizationId,
+      },
+      organizationId: setup.agent.organizationId,
+      runtimeScope: "agent-tests",
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      appName: "Archestra",
+      runMode: "one_shot",
+    });
+    expect(secondLaunch.virtualApiKeyId).not.toBe(virtualApiKeyId);
+    expect(secondLaunch.spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).toBe(
+      secondLaunch.spec.secretEnv.ARCHESTRA_VIRTUAL_KEY,
+    );
+    expect(secondLaunch.spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).not.toBe(
+      spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN,
     );
   });
 

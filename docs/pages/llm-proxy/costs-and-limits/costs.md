@@ -2,7 +2,7 @@
 title: Costs
 description: Break down organization-wide API spend, subscription usage, tokens, and requests by credential, team, agent, model, person, app, skill, or label
 order: 1
-lastUpdated: 2026-11-04
+lastUpdated: 2026-11-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -25,7 +25,7 @@ Pick a time range in the top-right corner (**Today**, **Last 7 days**, **Last 30
 
 ## Review Prompt Caching
 
-In the explorer’s **Show** menu, choose **Cache reads**, **Cache writes**, or **Net cache savings**. The **Cache reads by model** and **Prompt cache savings** presets open these views directly.
+In the explorer’s **Show** menu, choose **Cache reads**, **Cache writes**, or **Net cache savings**. The **Cache reads by model** and **Cache savings over time** presets open these views directly.
 
 On **Costs**, cache tokens include all billing modes. Net savings cover metered usage only and are available **by Time** across the organization.
 
@@ -41,7 +41,7 @@ Below the headline cards, use the cost explorer to break down usage by any dimen
 
 1. Choose **Show** to pick the metric: **Billed spend**, **Subscription estimate**, **Requests**, **Tokens**, **Cache reads**, **Cache writes**, **Net cache savings**, **Tool calls**, **App runs**, or **Skill activations**.
 2. Choose **by** to group rows by **Credential** (virtual key, OAuth client, or other sign-in), **Team**, **Agent**, **Model**, **Provider**, **Person**, **App**, **Skill**, **MCP server**, **MCP tool**, or **Label**.
-3. Optionally choose **split by** to break each row down by a second dimension. **Team**, **Credential**, **Provider**, and **Model** split by each other, so you can see which providers and models each team or virtual key used and what they cost. The **Team spend by model** and **Credential spend by provider** presets open two of these.
+3. Optionally choose **split by** to break each row down by a second dimension. **Team**, **Agent**, **Person**, **Credential**, **Provider**, and **Model** split by each other, so you can see who uses each agent, or which models each team used and what they cost. The **Tokens by agent and person** and **Spend by team and model** presets open two of these.
 
 Switch between **Summary** (ranked totals, share of total, and period-over-period trend) and **Pivot** (a heat-shaded matrix with time buckets or split values as columns). Click any row to isolate it in the chart, click **Export CSV** to download the current table, or click **Show ... limits** in the toolbar to jump to [Limits](/docs/llm-proxy/costs-and-limits/limits) filtered to the selected scope or row.
 
@@ -57,7 +57,7 @@ Label attribution resolves on each request in this order:
 2. If the credential does not set a given label key, the request inherits that key from its billing **Team**.
 3. Labels are captured when the request starts, so editing a key's or team's labels later does not rewrite past cost reports.
 
-In **Costs & Limits → Costs**, set **by** to **Label** and pick a label key (defaults to `cost_center`), or choose the **Spend by cost center** preset view. Requests without the selected label key appear under **Unlabeled**.
+In **Costs & Limits → Costs**, set **by** to **Label** and pick a label key (defaults to `cost_center`), or choose the **Spend by label** preset view. Requests without the selected label key appear under **Unlabeled**.
 
 ## View Your Own Usage
 
@@ -84,5 +84,5 @@ What to know:
 ## What to Know
 
 - **A split exports every metric:** the CSV of a split **Summary** has one line per row and split value, with requests, tokens, billed spend, and subscription estimate side by side.
-- **Query the same data via API:** the footer of the cost explorer shows the exact request behind the current view, so you can copy it for scripts or internal billing pipelines. [`GET /api/statistics/llm-usage`](/docs/reference/api/operations#tag/statistics/GET/api/statistics/llm-usage) groups requests, tokens, and spend by any mix of day, team, credential, provider, and model.
+- **Query the same data via API:** the footer of the cost explorer shows the exact request behind the current view, so you can copy it for scripts or internal billing pipelines. [`GET /api/statistics/llm-usage`](/docs/reference/api/operations#tag/statistics/GET/api/statistics/llm-usage) groups requests, tokens, and spend by any mix of day, team, agent, person, credential, provider, and model.
 - **Export to Prometheus and Grafana:** for real-time scraping and alerting, use the LLM cost and token counters in [Prometheus Metrics](/docs/admin/observability/metrics/llm).

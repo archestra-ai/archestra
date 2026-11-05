@@ -97,6 +97,7 @@ export async function resolveProxyModelsApiKey(params: {
       tokenValue: token,
       expectedProvider: provider,
       expectedOrganizationId: null,
+      agentId,
     });
     if (!resolved.apiKey && !allowKeyless) {
       throw new ApiError(401, `Could not resolve an API key for ${provider}.`);
@@ -117,7 +118,9 @@ export async function resolveProxyModelsApiKey(params: {
     // back to the provider default (undefined) when no base is configured.
     return {
       apiKey: resolved.apiKey ?? "",
-      baseUrl: providerKey?.baseUrl ?? undefined,
+      baseUrl:
+        providerKey?.baseUrl ??
+        (resolved.passthroughVirtualKeyId ? resolved.baseUrl : undefined),
       extraHeaders: providerKey?.extraHeaders ?? null,
       providerApiKeyId: providerKey?.id,
     };

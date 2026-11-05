@@ -29,7 +29,8 @@ function installLoggerSpies(): void {
   for (const level of LEVELS) {
     vi.spyOn(logger, level).mockImplementation(() => {});
   }
-  vi.spyOn(logger, "child").mockReturnValue(logger);
+  // child() is generic over custom levels; the logger itself has none.
+  vi.spyOn(logger, "child").mockReturnValue(logger as never);
 }
 
 const LEVELS = ["fatal", "error", "warn", "info", "debug", "trace"] as const;

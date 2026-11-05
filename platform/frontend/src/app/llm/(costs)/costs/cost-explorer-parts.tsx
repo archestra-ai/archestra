@@ -1015,8 +1015,12 @@ export function PivotTable({
   const cols = pivotColumns(cube, bySplit);
   const matrix = cube.rows.map((r) => pivotValues(r, cube, bySplit));
   const max = Math.max(1e-9, ...matrix.flat().map(Math.abs));
+  // Overlapping rows (a team admin's teams) carry their own bucket totals.
+  const bucketTotals = bySplit ? undefined : cube.bucketTotals;
   const colTotals = cols.map((_, j) =>
-    matrix.reduce((a, row) => a + row[j], 0),
+    bucketTotals
+      ? (bucketTotals[j] ?? 0)
+      : matrix.reduce((a, row) => a + row[j], 0),
   );
   return (
     <div className="overflow-x-auto">

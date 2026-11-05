@@ -751,7 +751,7 @@ describe("OrganizationCostsPage", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Research agent")).not.toBeInTheDocument();
   });
-  it("totals a team admin's overlapping team rows once", async () => {
+  it("counts a team admin's overlapping team rows once in totals, trend and pivot", async () => {
     vi.mocked(useHasPermissions).mockImplementation(
       (permissions) =>
         ({
@@ -767,31 +767,59 @@ describe("OrganizationCostsPage", () => {
         { id: "child", name: "Platform Search" },
       ],
     } as ReturnType<typeof useTeamLimitAccess>);
-    const row = (teamId: string, teamName: string, cost: number) => ({
+    const days = ["2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"];
+    const series = (cacheReads: number[]) =>
+      days.map((day, i) => ({
+        timestamp: `${day}T00:00:00.000Z`,
+        value: 0,
+        cacheReadTokens: cacheReads[i],
+      }));
+    const row = (teamId: string, teamName: string, cacheReads: number[]) => ({
       teamId,
       teamName,
       members: 1,
       agents: 1,
       requests: 1,
-      inputTokens: 10,
-      outputTokens: 5,
-      cost,
-      timeSeries: [],
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: cacheReads.reduce((a, b) => a + b, 0),
+      cost: 0,
+      timeSeries: series(cacheReads),
     });
-    // The parent's row already includes the child's billed spend.
+    // The parent's rows already include its sub-team's usage, so the rows
+    // sum to 140, 140, 360, 360 while the scope used 100, 100, 200, 200.
     teams = [
-      row("parent", "Platform", 8.25),
-      row("child", "Platform Search", 2),
+      row("parent", "Platform", [100, 100, 200, 200]),
+      row("child", "Platform Search", [40, 40, 160, 160]),
     ];
-    search = new URLSearchParams("group=team&metric=billed");
+    models = [
+      {
+        ...model(),
+        cacheReadTokens: 600,
+        timeSeries: series([100, 100, 200, 200]),
+      },
+    ];
+    search = new URLSearchParams("group=team&metric=cacheRead");
     show();
-    const table = await screen.findByRole("table");
-    await within(table).findByText("Platform Search");
-    // The headline is the scope's total (8.25), not the rows' sum (10.25).
-    expect(screen.queryByText("$10.25")).not.toBeInTheDocument();
+    await within(await screen.findByRole("table")).findByText(
+      "Platform Search",
+    );
+    // The headline (and the parent's row) read 600; the rows' sum, 1,000,
+    // never appears.
+    expect((await screen.findAllByText("600")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("1,000")).not.toBeInTheDocument();
+    expect(screen.getByText("+100%")).toBeVisible();
     expect(
       screen.getByText(/rows can add up to more than the total/),
     ).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Pivot" }));
+    const all = (await screen.findAllByRole("row")).find(
+      (r) => r.firstElementChild?.textContent === "All",
+    );
+    expect(all).toBeDefined();
+    const cells = [...(all?.children ?? [])].map((cell) => cell.textContent);
+    expect(cells.slice(1, 5)).toEqual(["100", "100", "200", "200"]);
   });
   it("limits a team admin without organization cost access to their teams' groupings", async () => {
     vi.mocked(useHasPermissions).mockImplementation(

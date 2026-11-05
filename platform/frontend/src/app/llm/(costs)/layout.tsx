@@ -34,13 +34,24 @@ const PAGE_CONFIG: Record<
   },
 };
 
-/** The Costs description for a team admin without organization cost access. */
-const TEAM_COSTS_DESCRIPTION = (
-  <>
-    Track spend, token usage and requests across the teams you administer.{" "}
-    <ModelSettingsNote />
-  </>
-);
+/**
+ * The Costs description for a team admin without organization cost access.
+ * Team admins may not be able to open Model Settings, so the link is shown
+ * only to those who can.
+ */
+function TeamCostsDescription({ canReadModels }: { canReadModels: boolean }) {
+  return (
+    <>
+      Track spend, token usage and requests across the teams you administer.
+      {canReadModels && (
+        <>
+          {" "}
+          <ModelSettingsNote />
+        </>
+      )}
+    </>
+  );
+}
 
 function ModelSettingsNote() {
   return (
@@ -100,9 +111,11 @@ export default function CostsLayout({
     title: "Costs & Limits",
     description: "Monitor and manage AI model usage costs.",
   };
-  const description = teamScopedCosts
-    ? TEAM_COSTS_DESCRIPTION
-    : config.description;
+  const description = teamScopedCosts ? (
+    <TeamCostsDescription canReadModels={pageMap?.["/llm/models"] === true} />
+  ) : (
+    config.description
+  );
 
   const contextValue = useMemo(() => ({ setActionButton }), []);
 

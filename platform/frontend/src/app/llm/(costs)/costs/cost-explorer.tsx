@@ -154,43 +154,17 @@ export default function CostExplorer() {
     setFocus,
   ]);
   const kpis = useKpis({ timeframe, teamId, enabled: ready });
-  const allModelsCube = usePivotCube(q, timeframe, ready && !q.model, teamId);
+  const allModelsCube = usePivotCube(q, timeframe, ready && !q.model, {
+    teamId,
+    teamScoped,
+  });
   const modelCube = useModelUsageCube({
     model: q.model,
     group: q.group === "key" || q.group === "agent" ? q.group : "person",
     metric: q.metric,
     timeframe,
   });
-  const pivotCube = q.model ? modelCube : allModelsCube;
-  // A sub-team's spend also counts toward its parent team, as it does for
-  // spend limits, so a team admin's team rows overlap. Their headline and
-  // shares use the scope's total, which counts each request once.
-  const scopedTeamTotal =
-    teamScoped &&
-    q.group === "team" &&
-    !q.model &&
-    (q.metric === "billed" ||
-      q.metric === "subscription" ||
-      q.metric === "requests" ||
-      q.metric === "tokens") &&
-    !kpis.isCostPending
-      ? kpis[q.metric].value
-      : null;
-  const cube = useMemo(
-    () =>
-      scopedTeamTotal === null
-        ? pivotCube
-        : {
-            ...pivotCube,
-            total: scopedTeamTotal,
-            notice:
-              pivotCube.notice ??
-              (teamId
-                ? undefined
-                : "A sub-team's spend also counts toward its parent team, as it does for spend limits, so rows can add up to more than the total."),
-          },
-    [pivotCube, scopedTeamTotal, teamId],
-  );
+  const cube = q.model ? modelCube : allModelsCube;
   const drilldown = (model: string) => {
     setQ((previous) => ({
       ...previous,
@@ -273,11 +247,14 @@ export default function CostExplorer() {
     let trend: number | null = null;
     if (n >= 4) {
       const half = Math.floor(n / 2);
+      const { bucketTotals } = cube;
       const sumRange = (a: number, b: number) =>
-        cube.rows.reduce(
-          (acc, r) => acc + r.series.slice(a, b).reduce((x, y) => x + y, 0),
-          0,
-        );
+        bucketTotals
+          ? bucketTotals.slice(a, b).reduce((x, y) => x + y, 0)
+          : cube.rows.reduce(
+              (acc, r) => acc + r.series.slice(a, b).reduce((x, y) => x + y, 0),
+              0,
+            );
       const first = sumRange(0, half);
       const second = sumRange(n - half, n);
       trend = first > 0 ? (second - first) / first : null;

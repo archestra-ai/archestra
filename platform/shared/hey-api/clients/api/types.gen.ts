@@ -18490,6 +18490,7 @@ export type GetChatAgentRosterResponses = {
         modelId: string | null;
         llmApiKeyId: string | null;
         modelPoolId: string | null;
+        sharedByName: boolean;
     }>;
 };
 
@@ -18635,6 +18636,7 @@ export type GetChatAgentRosterPageResponses = {
             modelId: string | null;
             llmApiKeyId: string | null;
             modelPoolId: string | null;
+            sharedByName: boolean;
         }>;
         pagination: {
             limit: number;
@@ -42891,6 +42893,7 @@ export type GetNewChatBootstrapResponses = {
             modelId: string | null;
             llmApiKeyId: string | null;
             modelPoolId: string | null;
+            sharedByName: boolean;
         }>;
         apiKeys: Array<{
             id: string;
@@ -43483,6 +43486,7 @@ export type GetConversationBootstrapResponses = {
                 modelId: string | null;
                 llmApiKeyId: string | null;
                 modelPoolId: string | null;
+                sharedByName: boolean;
             }>;
             apiKeys: Array<{
                 id: string;

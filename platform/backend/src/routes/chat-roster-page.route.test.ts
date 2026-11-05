@@ -134,18 +134,22 @@ describe("bounded chat roster", () => {
         rows.push(...page.data);
         cursor = page.pagination.nextCursor;
       } while (cursor);
+      // A personal agent shared with the caller by name lists with the
+      // caller's own; one that is not shared stays out.
       expect(rows.map((row) => row.id)).toEqual([
         own.id,
+        shared.id,
         teamAgent.id,
         organization.id,
         system.id,
       ]);
+      expect(rows.map((row) => row.id)).not.toContain(hidden.id);
       expect(rows.map((row) => row.id)).not.toContain(compaction.id);
       expect(
         (
           await get("/api/agents/chat-roster/page?search=Needle%20match")
         ).data.map((row: { id: string }) => row.id),
-      ).toEqual([own.id]);
+      ).toEqual([own.id, shared.id]);
       const oversized = await ctx.app.inject({
         method: "GET",
         url: `/api/agents/chat-roster?ids=${Array.from({ length: 101 }, () => own.id).join(",")}`,
@@ -358,6 +362,8 @@ describe("bounded chat roster", () => {
       });
     }
     const expectedShared = new Set<string>();
+    // Personal agents whose own policy names the caller as a reader.
+    const namedShares = new Set<string>();
     for (const item of subjectCases) {
       const agent = await makeAgent({
         organizationId: ctx.organizationId,
@@ -410,6 +416,15 @@ describe("bounded chat roster", () => {
           ["Unrelated role read", "Unrelated team read"].includes(item.name))
       )
         expectedShared.add(agent.id);
+      else if (
+        item.grants.some(
+          (grant) =>
+            grant.subject.type === "user" &&
+            grant.subject.id === ctx.user.id &&
+            grant.actions.includes("read"),
+        )
+      )
+        namedShares.add(agent.id);
     }
     const own = await makeAgent({
       organizationId: ctx.organizationId,
@@ -446,7 +461,8 @@ describe("bounded chat roster", () => {
         (!agent.builtIn || agent.id === builtin.id) &&
         (agent.scope !== "personal" ||
           agent.authorId === ctx.user.id ||
-          agent.id === builtin.id),
+          agent.id === builtin.id ||
+          namedShares.has(agent.id)),
     );
     expected.sort(
       (
@@ -463,7 +479,7 @@ describe("bounded chat roster", () => {
       },
     );
     expect(new Set(expected.map((agent: { id: string }) => agent.id))).toEqual(
-      new Set([own.id, builtin.id, ...expectedShared]),
+      new Set([own.id, builtin.id, ...expectedShared, ...namedShares]),
     );
     const actual = [];
     let cursor: string | null = null;
@@ -486,6 +502,112 @@ describe("bounded chat roster", () => {
     );
   });
   // SPDX-SnippetEnd
+  test.for([
+    "admin",
+    "member",
+  ] as const)("lists another user's personal agent shared with a %s by name", async (role, {
+    makeMember,
+    makeUser,
+    makeAgent,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role });
+    const other = await makeUser();
+    await makeMember(other.id, ctx.organizationId);
+    const team = await makeTeam(ctx.organizationId, ctx.user.id);
+    await makeTeamMember(team.id, ctx.user.id);
+    const make = (
+      name: string,
+      authorId: string,
+      access: NonNullable<Parameters<typeof makeAgent>[0]>["access"],
+    ) =>
+      makeAgent({
+        organizationId: ctx.organizationId,
+        authorId,
+        agentType: "agent",
+        name,
+        access,
+      });
+    const own = await make("Own", ctx.user.id, "personal");
+    const sharedWithMe = await make("Shared with me", other.id, {
+      users: [ctx.user.id],
+      preset: "use",
+    });
+    const sharedWithSomeoneElse = await make("Shared elsewhere", other.id, {
+      users: [(await makeUser()).id],
+      preset: "use",
+    });
+    const unshared = await make("Unshared", other.id, "personal");
+    const teamAgent = await make("Team", other.id, {
+      teams: [team.id],
+      level: "use",
+    });
+    const orgAgent = await make("Org", other.id, "org");
+
+    const ids = (rows: { id: string }[]) => rows.map((row) => row.id);
+    // The chat order keeps a named share with the personal agents, ahead of
+    // the team and organization ones.
+    expect(
+      ids((await get("/api/agents/chat-roster/page?limit=100")).data),
+    ).toEqual([own.id, sharedWithMe.id, teamAgent.id, orgAgent.id]);
+    for (const sortBy of ["name", "createdAt"]) {
+      const listed = ids(
+        (await get(`/api/agents/chat-roster/page?limit=100&sortBy=${sortBy}`))
+          .data,
+      );
+      expect(listed).toContain(sharedWithMe.id);
+      expect(listed).not.toContain(sharedWithSomeoneElse.id);
+      expect(listed).not.toContain(unshared.id);
+    }
+    expect(
+      ids(
+        (await get("/api/agents/chat-roster/page?limit=100&search=shared"))
+          .data,
+      ),
+    ).toEqual([sharedWithMe.id]);
+
+    // An explicit reference (a pin, the saved agent) marks only the named
+    // share as one; the user's own and the team agent are not shares by name.
+    const referenced = async () =>
+      Object.fromEntries(
+        (
+          (await get(
+            `/api/agents/chat-roster?ids=${[own.id, sharedWithMe.id, unshared.id, teamAgent.id].join(",")}`,
+          )) as { id: string; sharedByName: boolean }[]
+        ).map((row) => [row.id, row.sharedByName]),
+      );
+    expect(await referenced()).toEqual({
+      [own.id]: false,
+      [sharedWithMe.id]: true,
+      [teamAgent.id]: false,
+      // An admin still reads the unshared agent through oversight.
+      ...(role === "admin" ? { [unshared.id]: false } : {}),
+    });
+
+    // Once the owner revokes the share, an admin's saved reference still
+    // resolves, but no longer as a share; a member loses it.
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId: ctx.organizationId,
+      resource: "agent",
+      scope: sharedWithMe.id,
+    });
+    await ResourcePermissionPolicyModel.replace({
+      organizationId: ctx.organizationId,
+      resource: "agent",
+      scope: sharedWithMe.id,
+      revision: policy?.revision ?? 0,
+      grants: (policy?.grants ?? []).filter(
+        (grant) => grant.subject.id !== ctx.user.id,
+      ),
+    });
+    expect((await referenced())[sharedWithMe.id]).toBe(
+      role === "admin" ? false : undefined,
+    );
+    expect(
+      ids((await get("/api/agents/chat-roster/page?limit=100")).data),
+    ).not.toContain(sharedWithMe.id);
+  });
   test("resumes the chat order from a rank and name cursor", async ({
     makeMember,
     makeAgent,

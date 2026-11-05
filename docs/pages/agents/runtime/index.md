@@ -116,7 +116,7 @@ Limits protect your cluster and budget by capping runtime duration, idle time, s
 | **Default tier** | Sets the container size for standard runs from your organization's [runtime tiers](/docs/agents/runtime/setup#runtime-tiers). |
 | **Scaleup tier** | Sets the largest tier a run can request. Choose **Disable autoscaling** to disable scaling up. |
 
-When starting a run through [`start_agent_run`](/docs/reference/archestra-mcp-server#start_agent_run) or [`POST /api/agents/{id}/runs`](/docs/reference/api#/Agents/startAgentRun), you can pass custom `limits`. You can request stricter limits or a different tier, either by name or by minimum compute (`min_cpu` and `min_memory_gib`). A tier chosen by minimum compute never has a smaller workspace than the agent's default tier. Requests exceeding the agent's configured limits fail with the allowed tiers named.
+When starting a run through [`start_agent_run`](/docs/reference/archestra-mcp-server#start_agent_run) or [`POST /api/agents/{id}/runs`](/docs/reference/api/agents#tag/agents/POST/api/agents/{id}/runs), you can pass custom `limits`. You can request stricter limits or a different tier, either by name or by minimum compute (`min_cpu` and `min_memory_gib`). A tier chosen by minimum compute never has a smaller workspace than the agent's default tier. Requests exceeding the agent's configured limits fail with the allowed tiers named.
 
 A run that needs more compute starts a new run of the same agent at a larger tier and hands over its workspace. Setting **Scaleup tier** to **Disable autoscaling** disables scaling up. The agent runtime instance receives instructions that scaling is disabled, and scaleup attempts fail with a non-retriable error. A caller outside the agent's runs, such as a CI job, that asks for more than the agent's tier is told which tiers the agent can use. It can then start the run at the agent's tier.
 
@@ -185,7 +185,7 @@ What to know:
 
 - `failure.retriable` is `true` when a new run of the same agent is likely to succeed without a change.
 - `failure` is `null` on a run that did not fail, and on a failed run with no code.
-- Under [Guardrails](/docs/agents/guardrails), [`get_agent_run`](/docs/reference/archestra-mcp-server#get_agent_run) withholds the status reason but still returns the code. [`GET /api/agent-runs/:taskId`](/docs/reference/api#/Agents/getMyAgentRun) also returns `failure.message`, the same text as `statusReason`.
+- Under [Guardrails](/docs/agents/guardrails), [`get_agent_run`](/docs/reference/archestra-mcp-server#get_agent_run) withholds the status reason but still returns the code. [`GET /api/agent-runs/:taskId`](/docs/reference/api/agents#tag/agents/GET/api/agent-runs/{taskId}) also returns `failure.message`, the same text as `statusReason`.
 
 ## Troubleshooting
 

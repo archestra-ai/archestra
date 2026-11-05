@@ -52,9 +52,9 @@ export type SubagentLoadBalancingConfig = z.infer<
 >;
 
 /**
- * Stored representation for reads so rows saved by older or newer versions
- * still parse cleanly.
- */
+   * Stored representation for reads so rows saved by older or newer versions
+   * still parse cleanly.
+   */
 export const StoredSubagentLoadBalancingConfigSchema = z.object({
   enabled: z.boolean().catch(false),
   algorithm: SubagentLoadBalancingAlgorithmSchema.catch("round_robin"),

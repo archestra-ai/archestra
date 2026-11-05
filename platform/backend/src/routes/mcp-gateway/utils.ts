@@ -331,7 +331,10 @@ export async function buildAgentMcpToolList(params: {
     "userId" | "organizationId" | "isSessionAuth" | "serviceAccountId"
   > &
     Partial<
-      Pick<TokenAuthContext, "teamId" | "isOrganizationToken" | "isExternalIdp">
+      Pick<
+        TokenAuthContext,
+        "teamId" | "isOrganizationToken" | "isExternalIdp" | "oauthClientId"
+      >
     >;
   lookups?: RequestLookups;
 }): Promise<{
@@ -482,18 +485,22 @@ export async function buildAgentMcpToolList(params: {
     }
     return isYellToolShortName(shortName) && openappaYellEnabled();
   });
-  const implicitPolicyTools = openappaEnabled()
-    ? getArchestraMcpTools().filter(
-        (tool) =>
-          isImplicitOpenAppaReadToolShortName(
-            archestraMcpBranding.getToolShortName(tool.name),
-          ) &&
-          !isToolIdentityExcluded(
-            { catalogId: ARCHESTRA_MCP_CATALOG_ID, name: tool.name },
-            exclusionSets,
-          ),
-      )
-    : [];
+  const includeImplicitPolicyReads =
+    tokenAuth?.oauthClientId !== AGENT_RUNTIME_OAUTH_CLIENT_ID ||
+    agent.accessAllTools;
+  const implicitPolicyTools =
+    openappaEnabled() && includeImplicitPolicyReads
+      ? getArchestraMcpTools().filter(
+          (tool) =>
+            isImplicitOpenAppaReadToolShortName(
+              archestraMcpBranding.getToolShortName(tool.name),
+            ) &&
+            !isToolIdentityExcluded(
+              { catalogId: ARCHESTRA_MCP_CATALOG_ID, name: tool.name },
+              exclusionSets,
+            ),
+        )
+      : [];
   const implicitAskUserTools = getImplicitAskUserTools();
   const candidateTools = dedupeToolsByName(
     [

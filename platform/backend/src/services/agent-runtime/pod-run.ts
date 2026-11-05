@@ -62,6 +62,7 @@ import {
   runtimeOpenAppaSession,
   stampRuntimeBinding,
 } from "./runtime-identity";
+import { subagentLoadBalancer } from "./subagent-load-balancer";
 import {
   agentRuntimeAllowedTiers,
   organizationAgentRuntimeTiers,
@@ -69,7 +70,6 @@ import {
   resolveRunWorkspaceGiB,
   tierWorkspaceGiB,
 } from "./runtime-tiers";
-import { subagentLoadBalancer } from "./subagent-load-balancer";
 import { generateAgentRunTitle } from "./title";
 import { agentRunTranscriptStore } from "./transcript-store";
 

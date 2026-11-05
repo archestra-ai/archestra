@@ -50,14 +50,12 @@ describe("orderSubagentsByLoadBalancing", () => {
     ).toEqual(["a", "c", "b"]);
 
     const fiveAgents = ["a1", "a2", "a3", "a4", "a5"];
-    const primaries = Array.from(
-      { length: 10 },
-      (_, seed) =>
-        orderSubagentsByLoadBalancing(
-          fiveAgents,
-          { enabled: true, algorithm: "round_robin" },
-          { seed },
-        )[0],
+    const primaries = Array.from({ length: 10 }, (_, seed) =>
+      orderSubagentsByLoadBalancing(
+        fiveAgents,
+        { enabled: true, algorithm: "round_robin" },
+        { seed },
+      )[0],
     );
     expect(primaries).toEqual([
       "a1",

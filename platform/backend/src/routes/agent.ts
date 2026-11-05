@@ -285,7 +285,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               )
               .optional()
               .describe(
-                "Attach each agent's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the agents, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned'.",
+                "Include assigned tools (default: true). Set `includeTools=false` for a smaller response when you only need agents or their counts. `toolsCount` and `subagentsCount` remain available; an empty `tools` array then means tools were omitted, not that none are assigned.",
               ),
             includeTotal: z
               .preprocess(
@@ -683,7 +683,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .preprocess((val) => val !== "false" && val !== false, z.boolean())
             .optional()
             .describe(
-              "Attach the gateway's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the gateway, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned', and `sandboxAvailable` is absent.",
+              "Include assigned tools (default: true). Set `includeTools=false` for a smaller response when you only need the gateway or its counts. `toolsCount` and `subagentsCount` remain available; an empty `tools` array then means tools were omitted, not that none are assigned. `sandboxAvailable` is omitted too.",
             ),
         }),
         response: constructResponseSchema(

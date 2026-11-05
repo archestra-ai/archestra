@@ -132,7 +132,7 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               )
               .optional()
               .describe(
-                "Attach each internal agent's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the agents, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned'.",
+                "Include each internal agent's assigned tools (default: true). Set `includeTools=false` for a smaller response when you only need agents or their counts. `toolsCount` and `subagentsCount` remain available; an empty `tools` array then means tools were omitted, not that none are assigned.",
               ),
           })
           .merge(PaginationQuerySchema)

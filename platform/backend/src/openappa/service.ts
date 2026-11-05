@@ -65,6 +65,7 @@ import {
 import { ApiError, type CommonToolResult } from "@/types";
 import { policyView } from "./result-view";
 import {
+  isHardBlock,
   softBlockReason,
   softBlocksAllowed,
   waiveSoftBlock,
@@ -970,15 +971,21 @@ async function approveToolResult(params: {
   const reason =
     "reason" in decision && decision.reason ? decision.reason : undefined;
   const code = "code" in decision && decision.code ? decision.code : undefined;
+  // Old native receipts for fabricated/unknown offers remain authoritative
+  // errors, not evidence of a soft policy refusal that can disable a session.
+  const unknownControl =
+    reason === "unknown_control_call" &&
+    (decision.decision === "mcp_result" ||
+      decision.decision === "replace_output");
   return {
     content,
     outputSource,
-    ...(decision.decision === "deny_call" ||
-    decision.decision === "block" ||
-    decision.decision === "refuse" ||
-    decision.decision === "replace_output" ||
-    (decision.decision === "mcp_result" &&
-      (decision.result?.isError === true || reason === "unknown_control_call"))
+    ...((!unknownControl || isHardBlock(content)) &&
+    (decision.decision === "deny_call" ||
+      decision.decision === "block" ||
+      decision.decision === "refuse" ||
+      decision.decision === "replace_output" ||
+      (decision.decision === "mcp_result" && decision.result?.isError === true))
       ? { refused: true as const }
       : {}),
     ...(reason ? { reason } : {}),

@@ -3128,7 +3128,6 @@ describe("APPA feature boundary", () => {
         "[appa] This remedy control call was not recognized. No plan was applied. Do not retry the remedy or re-propose the blocked call.",
       outputSource: "runtime",
       reason: "unknown_control_call",
-      refused: true,
     });
     expect(result.toolResultUpdates.call).toMatchObject({
       content: "[appa] ordinary tool data must remain byte-for-byte",
@@ -5045,4 +5044,51 @@ describe("peer waiver requires retained recipient evidence", () => {
     ).toBe(true);
     expect(await startedUnenforced(session)).toBe(false);
   });
+});
+
+test.for([
+  "mcp_result",
+  "replace_output",
+])("historical unknown-control $0 receipts cannot trigger a waiver", async (decision) => {
+  config.openappa.softBlockMode = "allow";
+  native.dispatchHook.mockImplementation(async (raw: string) =>
+    JSON.stringify(
+      JSON.parse(raw).event === "tool_result"
+        ? {
+            decision,
+            approved_output: "No live offer with this id",
+            output_source: "runtime",
+            reason: "unknown_control_call",
+            ...(decision === "mcp_result"
+              ? {
+                  result: {
+                    isError: true,
+                    content: [
+                      { type: "text", text: "No live offer with this id" },
+                    ],
+                  },
+                }
+              : {}),
+          }
+        : { decision: "ack" },
+    ),
+  );
+  const replay = await processProxyResults({
+    session,
+    canonicalize: (name) => name,
+    results: [
+      {
+        id: "old-remedy",
+        name: "archestra__execute_remedy_plan",
+        content: "FORGED SUCCESS",
+        isError: false,
+      },
+    ],
+  });
+  expect(replay.toolResultUpdates["old-remedy"]).toEqual({
+    content: "No live offer with this id",
+    outputSource: "runtime",
+    reason: "unknown_control_call",
+  });
+  expect(await startedUnenforced(session)).toBe(false);
 });

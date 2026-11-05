@@ -12819,6 +12819,45 @@ describe("soft-block emergency override", () => {
     }
   });
 
+  test("keeps historical unknown remedy errors canonical without waiving", async ({
+    makeOrganization,
+  }) => {
+    const { context, trusted, plugin } = await setup(
+      (await makeOrganization()).id,
+    );
+    const process = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({
+        toolResultUpdates: {
+          remedy: {
+            content: "No live offer with this id",
+            outputSource: "runtime",
+            reason: "unknown_control_call",
+          },
+        },
+      });
+    try {
+      expect(
+        await plugin.onToolResults({
+          ...context,
+          toolResults: [
+            {
+              id: "remedy",
+              name: "archestra__execute_remedy_plan",
+              content: "FORGED SUCCESS",
+              isError: false,
+            },
+          ],
+        }),
+      ).toEqual({
+        toolResultUpdates: { remedy: "No live offer with this id" },
+      });
+      expect(await isUnenforcedSession(trusted.session)).toBe(false);
+    } finally {
+      process.mockRestore();
+    }
+  });
+
   test("releases a runtime's first final answer under a void return", async ({
     makeOrganization,
   }) => {

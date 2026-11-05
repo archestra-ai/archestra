@@ -1,3 +1,4 @@
+import { StoredSubagentLoadBalancingConfigSchema } from "@archestra/shared";
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database/schema";
@@ -68,6 +69,8 @@ export const AgentConfigSnapshotSchema = z.object({
   identityProviderId: z.string().nullable(),
   environmentId: z.string().nullable(),
   networkPolicy: NetworkPolicySchema.nullable().default(null),
+  subagentLoadBalancing:
+    StoredSubagentLoadBalancingConfigSchema.nullable().default(null),
   tools: z.array(
     z.object({
       toolId: z.string(),

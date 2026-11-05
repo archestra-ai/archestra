@@ -2,8 +2,8 @@
 "use client";
 
 import type { Permissions } from "@archestra/shared";
-import { Check, Lock, Search } from "lucide-react";
-import { Fragment, useId, useState } from "react";
+import { Check, Search } from "lucide-react";
+import { Fragment, type ReactNode, useId, useState } from "react";
 import {
   FilterBar,
   FilterSelect,
@@ -14,11 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils/tailwind";
 import {
   allPermissionRows,
@@ -38,16 +33,23 @@ import {
  * Every permission a role can hold, a card per resource, filtered by a search
  * and by area. With `onChange` the rows are checkboxes and `grantable` says
  * which the author may grant; without it the list is read-only and opens on
- * the granted rows alone.
+ * the granted rows alone. `provenance` draws, under a granted row, where the
+ * grant comes from ("From Editor and Reviewer (through Security)") when the
+ * holder is a person rather than a role.
  */
 export function PermissionList({
   permissions,
   onChange,
   grantable = {},
+  provenance,
+  emptyMessage = "This role grants no permissions.",
 }: {
   permissions: Permissions;
   onChange?: (permissions: Permissions) => void;
   grantable?: Permissions;
+  provenance?: (row: PermissionRow) => ReactNode;
+  /** Shown in place of the list when nothing is granted. */
+  emptyMessage?: ReactNode;
 }) {
   const readOnly = !onChange;
   const [query, setQuery] = useState("");
@@ -85,13 +87,14 @@ export function PermissionList({
               permissions={permissions}
               grantable={grantable}
               onChange={onChange}
+              provenance={provenance}
             />
           </Fragment>
         ))}
         {entries.length === 0 && (
           <p className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
             {readOnly && filter === "granted" && !query ? (
-              <span>This role grants no permissions.</span>
+              <span>{emptyMessage}</span>
             ) : (
               <span>No permissions match.</span>
             )}
@@ -241,11 +244,13 @@ function ResourceCard({
   permissions,
   grantable,
   onChange,
+  provenance,
 }: {
   entry: PermissionEntry;
   permissions: Permissions;
   grantable: Permissions;
   onChange?: (permissions: Permissions) => void;
+  provenance?: (row: PermissionRow) => ReactNode;
 }) {
   const { resource } = entry;
   const selected = countGranted(permissions, resource.rows);
@@ -281,23 +286,7 @@ function ResourceCard({
           />
         )}
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-            <span className="font-medium">{resource.label}</span>
-            {resource.perObject && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                    <Lock className="size-3" aria-hidden="true" />
-                    <span>Access per {resource.perObject}</span>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-72 text-wrap">
-                  Access to a specific {resource.perObject} is granted in its
-                  "Who can use it" section, not through roles.
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </div>
+          <span className="font-medium">{resource.label}</span>
           <p className="text-xs text-muted-foreground">
             {resource.description}
           </p>
@@ -322,6 +311,9 @@ function ResourceCard({
             onToggle={
               onChange ? () => onChange(toggleRow(permissions, row)) : undefined
             }
+            provenance={
+              provenance && isGranted(permissions, row) ? provenance(row) : null
+            }
           />
         ))}
       </div>
@@ -331,26 +323,30 @@ function ResourceCard({
 
 /**
  * One permission on one line: the control, its label, what it allows, and
- * its key. On a phone the line stacks, and the key moves under the text so
- * the description keeps the row's width.
+ * its key; where it comes from, when that is known, sits on a second line.
+ * On a phone the line stacks, and the key moves under the text so the
+ * description keeps the row's width.
  */
 function PermissionRowItem({
   row,
   granted,
   disabled,
   onToggle,
+  provenance,
 }: {
   row: PermissionRow;
   granted: boolean;
   disabled: boolean;
   onToggle?: () => void;
+  provenance: ReactNode;
 }) {
   const id = useId();
   return (
     <Label
       htmlFor={id}
       className={cn(
-        "grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 px-3 py-1.5 font-normal transition-colors sm:min-h-8 sm:items-center sm:py-0",
+        "grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 px-3 py-1.5 font-normal transition-colors sm:min-h-8 sm:items-center",
+        provenance ? "sm:py-1.5" : "sm:py-0",
         onToggle ? "cursor-pointer hover:bg-muted/40" : "cursor-default",
         disabled && "cursor-not-allowed opacity-60",
       )}
@@ -380,14 +376,19 @@ function PermissionRowItem({
           </span>
         )}
       </span>
-      <span className="flex min-w-0 flex-col sm:flex-row sm:items-baseline sm:gap-2">
-        <span className="shrink-0 text-[13px] font-medium">{row.label}</span>
-        <span className="min-w-0 text-xs text-muted-foreground sm:truncate">
-          {row.description}
+      <span className="flex min-w-0 flex-col">
+        <span className="flex min-w-0 flex-col sm:flex-row sm:items-baseline sm:gap-2">
+          <span className="shrink-0 text-[13px] font-medium">{row.label}</span>
+          <span className="min-w-0 text-xs text-muted-foreground sm:truncate">
+            {row.description}
+          </span>
+          <code className="mt-1 font-mono text-[11px] text-muted-foreground/60 sm:hidden">
+            {row.key}
+          </code>
         </span>
-        <code className="mt-1 font-mono text-[11px] text-muted-foreground/60 sm:hidden">
-          {row.key}
-        </code>
+        {provenance && (
+          <span className="mt-0.5 block min-w-0">{provenance}</span>
+        )}
       </span>
       <code className="hidden h-5 shrink-0 items-center rounded border border-border/50 bg-muted px-1.5 font-mono text-[11px] text-muted-foreground sm:inline-flex">
         {row.key}

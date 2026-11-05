@@ -17254,6 +17254,16 @@ export type GetAgentCatalogResponses = {
                 activationSkillMode: 'all' | 'manual';
                 activationSkillPolicyRevision: number;
                 accessAllSubagents: boolean;
+                subagentLoadBalancing?: {
+                    enabled: boolean;
+                    algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+                    weights?: {
+                        [key: string]: number;
+                    };
+                    retries: number;
+                    fallbackEnabled: boolean;
+                    maxFallbacks?: number | null;
+                } | null;
                 builtInAgentConfig: {
                     name: 'openappa-configuration-agent';
                 } | {
@@ -17645,6 +17655,16 @@ export type GetAgentsResponses = {
             activationSkillMode: 'all' | 'manual';
             activationSkillPolicyRevision: number;
             accessAllSubagents: boolean;
+            subagentLoadBalancing?: {
+                enabled: boolean;
+                algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+                weights?: {
+                    [key: string]: number;
+                };
+                retries: number;
+                fallbackEnabled: boolean;
+                maxFallbacks?: number | null;
+            } | null;
             builtInAgentConfig: {
                 name: 'openappa-configuration-agent';
             } | {
@@ -17792,6 +17812,16 @@ export type CreateAgentData = {
         missingCredentialBehavior?: 'allow' | 'warn' | 'block';
         accessAllTools?: boolean;
         accessAllSubagents?: boolean;
+        subagentLoadBalancing?: {
+            enabled?: boolean;
+            algorithm?: 'round_robin' | 'weighted' | 'random' | 'ordered';
+            weights?: {
+                [key: string]: number;
+            };
+            retries?: number;
+            fallbackEnabled?: boolean;
+            maxFallbacks?: number | null;
+        } | null;
         builtInAgentConfig?: {
             name: 'openappa-configuration-agent';
         } | {
@@ -18073,6 +18103,16 @@ export type CreateAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        subagentLoadBalancing?: {
+            enabled: boolean;
+            algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+            weights?: {
+                [key: string]: number;
+            };
+            retries: number;
+            fallbackEnabled: boolean;
+            maxFallbacks?: number | null;
+        } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
@@ -19337,6 +19377,16 @@ export type GetDefaultMcpGatewayResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        subagentLoadBalancing?: {
+            enabled: boolean;
+            algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+            weights?: {
+                [key: string]: number;
+            };
+            retries: number;
+            fallbackEnabled: boolean;
+            maxFallbacks?: number | null;
+        } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
@@ -19647,6 +19697,16 @@ export type ImportAgentResponses = {
             activationSkillMode: 'all' | 'manual';
             activationSkillPolicyRevision: number;
             accessAllSubagents: boolean;
+            subagentLoadBalancing?: {
+                enabled: boolean;
+                algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+                weights?: {
+                    [key: string]: number;
+                };
+                retries: number;
+                fallbackEnabled: boolean;
+                maxFallbacks?: number | null;
+            } | null;
             builtInAgentConfig: {
                 name: 'openappa-configuration-agent';
             } | {
@@ -19966,6 +20026,16 @@ export type GetAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        subagentLoadBalancing?: {
+            enabled: boolean;
+            algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+            weights?: {
+                [key: string]: number;
+            };
+            retries: number;
+            fallbackEnabled: boolean;
+            maxFallbacks?: number | null;
+        } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
@@ -20102,6 +20172,16 @@ export type UpdateAgentData = {
         missingCredentialBehavior?: 'allow' | 'warn' | 'block';
         accessAllTools?: boolean;
         accessAllSubagents?: boolean;
+        subagentLoadBalancing?: {
+            enabled?: boolean;
+            algorithm?: 'round_robin' | 'weighted' | 'random' | 'ordered';
+            weights?: {
+                [key: string]: number;
+            };
+            retries?: number;
+            fallbackEnabled?: boolean;
+            maxFallbacks?: number | null;
+        } | null;
         builtInAgentConfig?: {
             name: 'openappa-configuration-agent';
         } | {
@@ -20285,6 +20365,16 @@ export type UpdateAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        subagentLoadBalancing?: {
+            enabled: boolean;
+            algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+            weights?: {
+                [key: string]: number;
+            };
+            retries: number;
+            fallbackEnabled: boolean;
+            maxFallbacks?: number | null;
+        } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
@@ -20666,6 +20756,16 @@ export type GetAgentVersionResponses = {
                 allowedDomains: Array<string>;
                 allowedCidrs: Array<string>;
             } | null;
+            subagentLoadBalancing: {
+                enabled: boolean;
+                algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+                weights?: {
+                    [key: string]: number;
+                };
+                retries: number;
+                fallbackEnabled: boolean;
+                maxFallbacks?: number | null;
+            } | null;
             tools: Array<{
                 toolId: string;
                 name: string;
@@ -20876,6 +20976,16 @@ export type RestoreAgentVersionResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        subagentLoadBalancing?: {
+            enabled: boolean;
+            algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+            weights?: {
+                [key: string]: number;
+            };
+            retries: number;
+            fallbackEnabled: boolean;
+            maxFallbacks?: number | null;
+        } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
@@ -21124,6 +21234,16 @@ export type CloneAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        subagentLoadBalancing?: {
+            enabled: boolean;
+            algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+            weights?: {
+                [key: string]: number;
+            };
+            retries: number;
+            fallbackEnabled: boolean;
+            maxFallbacks?: number | null;
+        } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
@@ -23611,6 +23731,16 @@ export type RestoreAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        subagentLoadBalancing?: {
+            enabled: boolean;
+            algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+            weights?: {
+                [key: string]: number;
+            };
+            retries: number;
+            fallbackEnabled: boolean;
+            maxFallbacks?: number | null;
+        } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
@@ -42974,6 +43104,16 @@ export type GetNewChatBootstrapResponses = {
                 activationSkillMode: 'all' | 'manual';
                 activationSkillPolicyRevision: number;
                 accessAllSubagents: boolean;
+                subagentLoadBalancing?: {
+                    enabled: boolean;
+                    algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+                    weights?: {
+                        [key: string]: number;
+                    };
+                    retries: number;
+                    fallbackEnabled: boolean;
+                    maxFallbacks?: number | null;
+                } | null;
                 builtInAgentConfig: {
                     name: 'openappa-configuration-agent';
                 } | {
@@ -43557,6 +43697,16 @@ export type GetConversationBootstrapResponses = {
                     activationSkillMode: 'all' | 'manual';
                     activationSkillPolicyRevision: number;
                     accessAllSubagents: boolean;
+                    subagentLoadBalancing?: {
+                        enabled: boolean;
+                        algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+                        weights?: {
+                            [key: string]: number;
+                        };
+                        retries: number;
+                        fallbackEnabled: boolean;
+                        maxFallbacks?: number | null;
+                    } | null;
                     builtInAgentConfig: {
                         name: 'openappa-configuration-agent';
                     } | {

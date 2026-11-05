@@ -555,6 +555,32 @@ test("rejects a claim pointing at another workspace's Sandbox", async () => {
   ).rejects.toThrow("does not belong");
 });
 
+test("readWorkspaceSandbox reports a terminating SandboxClaim when includeDeletingClaim is true", async () => {
+  server.use(
+    http.get(
+      `${ORIGIN}/apis/agents.x-k8s.io/v1beta1/namespaces/test/sandboxes/workspace`,
+      () => HttpResponse.json({ code: 404 }, { status: 404 }),
+    ),
+    http.get(
+      `${ORIGIN}/apis/extensions.agents.x-k8s.io/v1beta1/namespaces/test/sandboxclaims/workspace`,
+      () =>
+        HttpResponse.json({
+          metadata: {
+            uid: "claim-owner",
+            deletionTimestamp: "2026-11-04T16:00:00Z",
+          },
+        }),
+    ),
+  );
+  const result = await readWorkspaceSandbox({
+    api: api(),
+    namespace: "test",
+    name: "workspace",
+    includeDeletingClaim: true,
+  });
+  expect(result.metadata.deletionTimestamp).toBeDefined();
+});
+
 const ORIGIN = "https://kubernetes.example.test";
 function api() {
   const kubeConfig = new KubeConfig();

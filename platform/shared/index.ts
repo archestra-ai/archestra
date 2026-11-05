@@ -77,6 +77,7 @@ export * from "./slack";
 export * from "./slack-manifest";
 export * from "./sso-template-helpers";
 export * from "./statistics";
+export * from "./subagent-load-balancing";
 export * from "./subscription-credentials";
 export * from "./system-prompt-template";
 export * from "./test-mcp-server";

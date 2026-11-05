@@ -15,6 +15,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { PermissionList } from "./permission-list.ee";
 
+/** What a role grants, as both the edit form and the role's page explain it. */
+export const ROLE_PERMISSIONS_INTRO =
+  "A role grants permissions for every object of a type, such as all agents. Access to one specific object is set on that object itself.";
+
 export type RoleFormValues = {
   name: string;
   description: string;
@@ -90,7 +94,8 @@ export function RolePermissionsSection({
   return (
     <SettingsSection
       title="Permissions"
-      description='Role permissions control feature access across all objects of a resource type. Grant access to an individual object in its "Who can use it" section.'
+      description={ROLE_PERMISSIONS_INTRO}
+      stickyLabel
     >
       <FormField
         control={form.control}

@@ -1,19 +1,15 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import {
   type Action,
-  ManagedResourceSchema,
-  ORGANIZATION_WIDE_RESOURCES,
   type Permissions,
   type Resource,
   resourceCategories,
   resourceDescriptions,
   resourceLabels,
-  scopedResourceNouns,
 } from "@archestra/shared";
 import {
   allAvailableActions,
   permissionDescriptions,
-  roleActionResourceFor,
 } from "@archestra/shared/access-control";
 
 /** One `resource:action` a role can hold. */
@@ -34,7 +30,6 @@ export type PermissionResource = {
    * The singular noun of the objects whose access is also granted one by one,
    * on the object itself ("agent"), or null when the role is the only grant.
    */
-  perObject: string | null;
   rows: PermissionRow[];
 };
 
@@ -178,18 +173,10 @@ export function filterPermissions({
 
 function buildResource(resource: Resource): PermissionResource {
   const label = resourceLabels[resource];
-  // Objects of this resource that carry their own grants; a resource whose
-  // objects are only governed organization-wide gets no per-object note.
-  const scoped = ManagedResourceSchema.options.find(
-    (entry) =>
-      roleActionResourceFor(entry) === resource &&
-      !ORGANIZATION_WIDE_RESOURCES.has(entry),
-  );
   return {
     resource,
     label,
     description: resourceDescriptions[resource],
-    perObject: scoped ? scopedResourceNouns[scoped] : null,
     rows: allAvailableActions[resource].map((action) => ({
       resource,
       action,

@@ -67,7 +67,7 @@ jobs:
           echo "value=$(bash platform/scripts/dev-lite.sh frontend-artifact key)" >> "$GITHUB_OUTPUT"
 
       - name: Authenticate to Google Artifact Registry
-        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        uses: archestra-ai/.github/actions/google-auth@a95549fa3d078185ea8311e30bb36e920124977f # v1.12.0
         with:
           # The development deploy identity, as napi-dev-cache.yml uses it.
           service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}

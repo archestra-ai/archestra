@@ -143,7 +143,7 @@ jobs:
           python3 .github/scripts/check-supply-chain-policy.py
 
       - name: Check new Cargo dependency release ages
-        uses: archestra-ai/.github/actions/cargo-release-age@410c0edb0244ef042e04bfd972ccba90e12db2ed # v1.0.1
+        uses: archestra-ai/.github/actions/cargo-release-age@a95549fa3d078185ea8311e30bb36e920124977f # v1.12.0
         # The action fetches the base SHA, which needs authentication in private
         # mirrors. Keep checkout credentials unpersisted and scope the read-only
         # job token to this pinned action via Git's runtime configuration.
@@ -521,7 +521,7 @@ jobs:
       # download against its pinned manifest and picks the right platform
       # (Linux runners and the mac mini).
       - name: Install cargo-deny
-        uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2.87.30
+        uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
         with:
           tool: cargo-deny@0.20.2
 
@@ -1195,7 +1195,7 @@ jobs:
       # variable (it has actions_variables:write).
       - name: Generate token for the kill switch
         id: generate-token
-        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        uses: archestra-ai/.github/actions/github-app-token@a95549fa3d078185ea8311e30bb36e920124977f # v1.12.0
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}

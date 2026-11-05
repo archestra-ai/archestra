@@ -143,7 +143,7 @@ jobs:
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.auth_provider == 'gar' }}
-        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        uses: archestra-ai/.github/actions/google-auth@a95549fa3d078185ea8311e30bb36e920124977f # v1.12.0
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
@@ -194,7 +194,7 @@ jobs:
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.push_image && inputs.auth_provider == 'gar' }}
-        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        uses: archestra-ai/.github/actions/google-auth@a95549fa3d078185ea8311e30bb36e920124977f # v1.12.0
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
@@ -348,7 +348,7 @@ jobs:
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.auth_provider == 'gar' }}
-        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        uses: archestra-ai/.github/actions/google-auth@a95549fa3d078185ea8311e30bb36e920124977f # v1.12.0
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

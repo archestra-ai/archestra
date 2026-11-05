@@ -269,13 +269,8 @@ export function memberTransport(params: {
               event as Parameters<typeof stream.processChunk>[0],
             );
             if (stream.state.usage) {
-              observedUsage = {
-                ...stream.state.usage,
-                // Match the translated wire: completion tokens include thinking.
-                outputTokens:
-                  stream.state.usage.outputTokens +
-                  (stream.state.usage.reasoningTokens ?? 0),
-              };
+              // Output already includes thinking, as completion tokens do.
+              observedUsage = stream.state.usage;
             }
             return sseToChunks(result.sseData);
           },

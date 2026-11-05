@@ -33,12 +33,16 @@ export function geminiUsageTokens(usage: {
   // Gemini's cachedContentTokenCount is a SUBSET already inside promptTokenCount,
   // so subtract it to get the uncached input and avoid double-counting.
   const cacheRead = usage.cachedContentTokenCount ?? 0;
+  // Thinking tokens are reported beside candidatesTokenCount, not inside it,
+  // and are billed as output. Fold them in so output includes reasoning, as
+  // it does for every other provider.
+  const reasoning = usage.thoughtsTokenCount ?? 0;
   return {
     input: Math.max(0, (usage.promptTokenCount ?? 0) - cacheRead),
-    output: usage.candidatesTokenCount ?? 0,
+    output: (usage.candidatesTokenCount ?? 0) + reasoning,
     cacheRead,
     cacheWrite: 0,
-    reasoning: usage.thoughtsTokenCount ?? 0,
+    reasoning,
   };
 }
 
@@ -93,6 +97,16 @@ export function openAIUsageTokens(usage: OpenAi.Types.Usage) {
     cacheWrite1h: details?.cache_write_1h_tokens,
     reasoning,
   };
+}
+
+/**
+ * xAI speaks the OpenAI wire, but its `completion_tokens` leaves out
+ * `completion_tokens_details.reasoning_tokens` (its `total_tokens` is prompt +
+ * completion + reasoning). Reasoning is billed as output, so fold it in.
+ */
+export function xaiUsageTokens(usage: OpenAi.Types.Usage) {
+  const tokens = openAIUsageTokens(usage);
+  return { ...tokens, output: tokens.output + tokens.reasoning };
 }
 
 export function zhipuaiUsageTokens(usage: Zhipuai.Types.Usage) {

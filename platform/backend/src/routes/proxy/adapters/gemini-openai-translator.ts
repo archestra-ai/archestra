@@ -292,8 +292,8 @@ function openaiEffortToGeminiThinkingConfig(
  * The accumulator normalizes `inputTokens` to *uncached* input and keeps the
  * cache and thinking counts alongside, so the gross figures OpenAI's wire
  * format expects are reassembled here: `prompt_tokens` adds the cache reads
- * back, and `completion_tokens` includes the thinking tokens Gemini reports
- * separately from `candidatesTokenCount`. The details expose that subset.
+ * back. `outputTokens` already includes thinking (see `geminiUsageTokens`), as
+ * `completion_tokens` does; the details expose that subset.
  *
  * Reading the accumulator rather than the streamed adapter's rebuilt response
  * is deliberate: that rebuild reports `promptTokenCount` net of cache, so it
@@ -307,7 +307,7 @@ export function geminiUsageViewToOpenai(
   }
   const promptTokens = usage.inputTokens + (usage.cacheReadTokens ?? 0);
   const reasoningTokens = usage.reasoningTokens ?? 0;
-  const completionTokens = usage.outputTokens + reasoningTokens;
+  const completionTokens = usage.outputTokens;
   return {
     prompt_tokens: promptTokens,
     ...((usage.cacheReadTokens ?? 0) > 0

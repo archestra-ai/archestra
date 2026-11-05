@@ -704,16 +704,14 @@ class GeminiStreamAdapter
     // Handle usage metadata
     if (chunk.usageMetadata) {
       this.trafficType = chunk.usageMetadata.trafficType ?? this.trafficType;
-      const cacheReadTokens = chunk.usageMetadata.cachedContentTokenCount ?? 0;
+      const { input, output, cacheRead, cacheWrite, reasoning } =
+        geminiUsageTokens(chunk.usageMetadata);
       this.state.usage = {
-        inputTokens: Math.max(
-          0,
-          (chunk.usageMetadata.promptTokenCount ?? 0) - cacheReadTokens,
-        ),
-        outputTokens: chunk.usageMetadata.candidatesTokenCount ?? 0,
-        cacheReadTokens,
-        cacheWriteTokens: 0,
-        reasoningTokens: chunk.usageMetadata.thoughtsTokenCount ?? 0,
+        inputTokens: input,
+        outputTokens: output,
+        cacheReadTokens: cacheRead,
+        cacheWriteTokens: cacheWrite,
+        reasoningTokens: reasoning,
       };
     }
 
@@ -987,7 +985,14 @@ class GeminiStreamAdapter
             promptTokenCount:
               this.state.usage.inputTokens +
               (this.state.usage.cacheReadTokens ?? 0),
-            candidatesTokenCount: this.state.usage.outputTokens,
+            // `outputTokens` includes thinking (see geminiUsageTokens); split
+            // it back into Gemini's two fields.
+            candidatesTokenCount:
+              this.state.usage.outputTokens -
+              (this.state.usage.reasoningTokens ?? 0),
+            ...(this.state.usage.reasoningTokens
+              ? { thoughtsTokenCount: this.state.usage.reasoningTokens }
+              : {}),
             totalTokenCount:
               this.state.usage.inputTokens +
               (this.state.usage.cacheReadTokens ?? 0) +

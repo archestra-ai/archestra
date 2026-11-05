@@ -71,6 +71,7 @@ type OpenAiHeaders = OpenAi.Types.ChatCompletionsHeaders;
 type OpenAiStreamChunk = OpenAi.Types.ChatCompletionChunk;
 type OpenAiEmbeddingRequest = OpenAi.Types.EmbeddingRequest;
 type OpenAiEmbeddingResponse = OpenAi.Types.EmbeddingResponse;
+type OpenAiUsageReader = typeof openAIUsageTokens;
 
 type OpenAiToolResultImageBlock = {
   type: "image_url";
@@ -880,14 +881,19 @@ export class OpenAIResponseAdapter
 {
   readonly provider: SupportedProvider;
   private response: OpenAiResponse;
+  private readonly readUsage: OpenAiUsageReader;
 
   constructor(
     response: OpenAiResponse,
     provider: SupportedProvider = "openai",
+    // OpenAI-wire providers that report reasoning outside completion_tokens
+    // (xAI) pass a reader that folds it into output.
+    readUsage: OpenAiUsageReader = openAIUsageTokens,
   ) {
     assertResponseHasChoices(response, provider);
     this.response = response;
     this.provider = provider;
+    this.readUsage = readUsage;
   }
 
   getId(): string {
@@ -954,7 +960,7 @@ export class OpenAIResponseAdapter
       };
     }
     const { input, output, cacheRead, cacheWrite, cacheWrite1h, reasoning } =
-      openAIUsageTokens(this.response.usage);
+      this.readUsage(this.response.usage);
     return withAudioTokenCost(
       {
         inputTokens: input,
@@ -1128,6 +1134,7 @@ export class OpenAIStreamAdapter
   constructor(
     provider: SupportedProvider = "openai",
     clientRequest?: OpenAiStreamUsageRequest,
+    private readonly readUsage: OpenAiUsageReader = openAIUsageTokens,
   ) {
     this.provider = provider;
     this.clientRequestedUsage =
@@ -1167,7 +1174,7 @@ export class OpenAIStreamAdapter
     // when stream_options.include_usage is true
     if (chunk.usage) {
       this.upstreamUsage = chunk.usage;
-      const tokens = openAIUsageTokens(chunk.usage);
+      const tokens = this.readUsage(chunk.usage);
       this.state.usage = withAudioTokenCost(
         {
           inputTokens: tokens.input,

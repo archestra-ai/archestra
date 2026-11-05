@@ -20,6 +20,7 @@ import type {
 } from "openai/resources/chat/completions/completions";
 import config from "@/config";
 import { metrics } from "@/observability";
+import { xaiUsageTokens } from "@/observability/metrics/llm-usage";
 import { stripBearerTransportPrefix } from "@/services/subscription-credential-guard";
 import {
   decodeXaiSubscriptionCredential,
@@ -113,7 +114,11 @@ class XaiResponseAdapter implements LLMResponseAdapter<XaiResponse> {
   private delegate: OpenAIResponseAdapter;
 
   constructor(response: XaiResponse) {
-    this.delegate = new OpenAIResponseAdapter(response);
+    this.delegate = new OpenAIResponseAdapter(
+      response,
+      "openai",
+      xaiUsageTokens,
+    );
   }
 
   getId() {
@@ -157,7 +162,7 @@ class XaiStreamAdapter
   private delegate: OpenAIStreamAdapter;
 
   constructor(request?: XaiRequest) {
-    this.delegate = new OpenAIStreamAdapter("openai", request);
+    this.delegate = new OpenAIStreamAdapter("openai", request, xaiUsageTokens);
   }
 
   get state() {

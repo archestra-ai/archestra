@@ -7,6 +7,7 @@ import {
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
+  TOOL_RUN_TOOL_SHORT_NAME,
   YELL_RESULT_GUARDRAILS_OFF,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -60,7 +61,7 @@ import {
   peerProofAuthorizes,
   verifyPeerProof,
 } from "@/openappa/peer-claims";
-import { displayedReview } from "@/openappa/review-display";
+import { displayedReview, reviewedToolLabel } from "@/openappa/review-display";
 import {
   chatOpenAppaSession,
   executeRemedyByOffer,
@@ -148,6 +149,7 @@ import {
   PreviewOpenAppaValidationChangeSchema,
   PublishOpenAppaValidationChangeSchema,
 } from "@/types/openappa-validation-change";
+import { archestraMcpBranding } from "./branding";
 import { resolveCallerScope } from "./caller-scope";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
 import { getUnassignedDiscoverableTools } from "./dynamic-tools";
@@ -1325,11 +1327,16 @@ const registry = defineArchestraTools([
             if (waivedReview) {
               ruling = "approve";
             } else if (context.mrtr || context.elicitation) {
+              const toolDescription = await reviewedToolDescription({
+                review,
+                context,
+              });
               const stagedReview = {
                 offerId: remedy.offer_id,
                 text: review.text,
                 ...(review.tool ? { tool: review.tool } : {}),
                 ...(review.arguments ? { arguments: review.arguments } : {}),
+                ...(toolDescription ? { toolDescription } : {}),
               };
               const staged = await stageHitlReview({
                 session: reviewSession,
@@ -2015,6 +2022,47 @@ async function precheckReviewedCall(params: {
       .flatMap((part) => (part.type === "text" ? [part.text] : []))
       .join("\n"),
   });
+}
+
+/**
+ * The reviewed tool's own description: a built-in's from the registry, an
+ * assigned gateway tool's from its stored definition. Client-native tools and
+ * the run_tool wrapper have none here. Cards show it only for a call that
+ * carries no description of its own. A failed lookup never holds up the
+ * review; the card then shows the call without it.
+ */
+async function reviewedToolDescription(params: {
+  review: { tool?: string; arguments?: string };
+  context: ArchestraContext;
+}): Promise<string | undefined> {
+  const { review, context } = params;
+  if (!review.tool) return undefined;
+  const name = reviewedToolLabel(review.tool);
+  try {
+    const shortName = archestraMcpBranding.getToolShortName(name);
+    // run_tool's own description would describe the wrapper, not the call.
+    if (shortName === TOOL_RUN_TOOL_SHORT_NAME) return undefined;
+    if (shortName) {
+      // Dynamic import avoids the circular import between this file and
+      // ./index (index.ts imports every tool group, including this one).
+      const { getArchestraMcpTools } = await import("./index");
+      const tool = getArchestraMcpTools().find(
+        (candidate) =>
+          archestraMcpBranding.getToolShortName(candidate.name) === shortName,
+      );
+      return tool?.description?.trim() || undefined;
+    }
+    // Gateway tools are named `<server>__<tool>`; a client's own tool is not.
+    if (!name.includes("__")) return undefined;
+    const tool = await ToolModel.findByNameForAgent(name, context.agent.id);
+    return tool?.description?.trim() || undefined;
+  } catch (error) {
+    logger.warn(
+      { err: error, tool: review.tool },
+      "OpenAPPA review tool description unavailable; staging the review without it",
+    );
+    return undefined;
+  }
 }
 
 function precheckRefusalText(params: { tool: string; detail: string }) {

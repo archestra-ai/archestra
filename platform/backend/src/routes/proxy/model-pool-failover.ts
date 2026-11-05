@@ -141,10 +141,11 @@ export function mayUseModelPool(params: {
 }
 
 /**
- * The plan for a request whose model is a pool's name, or null when model
- * pools are off (a beta feature), no pool has that name, the caller may not
- * use it, or none of its members can answer the client's wire. The session id keeps one conversation on one member
- * while it is healthy, which keeps the provider's prompt cache warm.
+ * Plan a named or explicitly selected pool. Returns null when pools are off,
+ * a named pool does not exist, or the caller cannot use that named pool.
+ * A missing selected pool throws 404; no enabled members or any enabled member
+ * incompatible with the client wire throws 400. Session affinity keeps a
+ * conversation on one healthy member to reuse the provider's prompt cache.
  */
 export async function planModelPool(params: {
   organizationId: string;

@@ -2887,6 +2887,41 @@ for (const inbound of ["gemini", "openai", "anthropic"] as const) {
                 : {}),
             });
             if (stream) {
+              const emitted = response.body
+                .split("\n")
+                .filter(
+                  (line) =>
+                    line.startsWith("data: ") && line !== "data: [DONE]",
+                )
+                .map(
+                  (line) =>
+                    JSON.parse(
+                      line.slice(6),
+                    ) as Gemini.Types.GenerateContentResponse,
+                );
+              const wireUsage = emitted.find(
+                (frame) => frame.usageMetadata,
+              )?.usageMetadata;
+              expect(wireUsage).toMatchObject({
+                promptTokenCount: target === "anthropic" ? 38 : 20,
+                candidatesTokenCount: target === "anthropic" ? 9 : 2,
+                thoughtsTokenCount: target === "anthropic" ? 0 : 7,
+                totalTokenCount: target === "anthropic" ? 47 : 29,
+              });
+              const loggedUsage = (
+                answered?.response as Gemini.Types.GenerateContentResponse
+              ).usageMetadata;
+              expect(loggedUsage).toMatchObject({
+                promptTokenCount: wireUsage?.promptTokenCount,
+                candidatesTokenCount: wireUsage?.candidatesTokenCount,
+                totalTokenCount: wireUsage?.totalTokenCount,
+              });
+              expect(loggedUsage?.thoughtsTokenCount ?? 0).toBe(
+                wireUsage?.thoughtsTokenCount,
+              );
+              expect(loggedUsage?.cachedContentTokenCount ?? 0).toBe(
+                wireUsage?.cachedContentTokenCount,
+              );
               const span = exporter
                 .getFinishedSpans()
                 .find((span) => span.name.startsWith("generate_content "));
@@ -2921,89 +2956,127 @@ for (const inbound of ["gemini", "openai", "anthropic"] as const) {
   }
 }
 
-poolTest(
-  "records billed malformed foreign tool output without invoking another member",
-  async ({ pool, makeSecret, makeLlmProviderApiKey }) => {
-    const key = await makeLlmProviderApiKey(
-      pool.organizationId,
-      (await makeSecret({ secret: { apiKey: "synthetic-openai-key" } })).id,
-      { provider: "openai", baseUrl: "https://openai.pool.test/v1" },
-    );
-    await ModelPoolModel.update({
-      organizationId: pool.organizationId,
-      id: pool.poolId,
-      input: {
-        name: "gemini-pool",
-        members: ["gpt-4.1-mini", "gpt-4.1"].map((modelId, index) => ({
-          providerApiKeyId: key.id,
-          modelId,
-          priority: index + 1,
-          weight: 1,
-          enabled: true,
-        })),
-      },
-    });
-    const credential = await VirtualApiKeyModel.create({
-      organizationId: pool.organizationId,
-      name: "Malformed response proof",
-      ...accessGrants("org"),
-      providerApiKeys: [{ provider: "gemini", providerApiKeyId: pool.keyId }],
-    });
-    let hits = 0;
-    server.use(
-      http.post("https://openai.pool.test/v1/chat/completions", () => {
-        hits++;
-        return HttpResponse.json({
-          id: "invalid",
-          object: "chat.completion",
-          created: 1,
-          model: "gpt-4.1-mini",
-          choices: [
-            {
-              index: 0,
-              message: {
-                role: "assistant",
-                content: null,
-                tool_calls: [
-                  {
-                    type: "function",
-                    id: "broken",
-                    function: { name: "lookup", arguments: '{"broken":' },
-                  },
-                ],
+for (const stream of [false, true]) {
+  poolTest(
+    `records billed malformed foreign tool output without invoking another member (stream=${stream})`,
+    async ({ pool, makeSecret, makeLlmProviderApiKey }) => {
+      const key = await makeLlmProviderApiKey(
+        pool.organizationId,
+        (await makeSecret({ secret: { apiKey: "synthetic-openai-key" } })).id,
+        { provider: "openai", baseUrl: "https://openai.pool.test/v1" },
+      );
+      await ModelPoolModel.update({
+        organizationId: pool.organizationId,
+        id: pool.poolId,
+        input: {
+          name: "gemini-pool",
+          members: ["gpt-4.1-mini", "gpt-4.1"].map((modelId, index) => ({
+            providerApiKeyId: key.id,
+            modelId,
+            priority: index + 1,
+            weight: 1,
+            enabled: true,
+          })),
+        },
+      });
+      const credential = await VirtualApiKeyModel.create({
+        organizationId: pool.organizationId,
+        name: "Malformed response proof",
+        ...accessGrants("org"),
+        providerApiKeys: [{ provider: "gemini", providerApiKeyId: pool.keyId }],
+      });
+      let hits = 0;
+      server.use(
+        http.post("https://openai.pool.test/v1/chat/completions", () => {
+          hits++;
+          const response = {
+            id: "invalid",
+            object: "chat.completion",
+            created: 1,
+            model: "gpt-4.1-mini",
+            choices: [
+              {
+                index: 0,
+                message: {
+                  role: "assistant",
+                  content: null,
+                  tool_calls: [
+                    {
+                      type: "function",
+                      id: "broken",
+                      function: { name: "lookup", arguments: '{"broken":' },
+                    },
+                  ],
+                },
+                finish_reason: "tool_calls",
               },
-              finish_reason: "tool_calls",
+            ],
+            usage: {
+              prompt_tokens: 20,
+              completion_tokens: 9,
+              total_tokens: 29,
             },
-          ],
-          usage: { prompt_tokens: 20, completion_tokens: 9, total_tokens: 29 },
-        });
-      }),
-    );
-    const response = await pool.app.inject({
-      method: "POST",
-      url: `/v1/gemini/${pool.agentId}/v1beta/models/gemini-3.8-flash:generateContent`,
-      headers: {
-        authorization: `Bearer ${credential.value}`,
-        ...internalCallHeader(),
-        [MODEL_POOL_ID_HEADER]: pool.poolId,
-      },
-      payload: {
-        contents: [{ role: "user", parts: [{ text: "Use a tool" }] }],
-      },
-    });
-    expect(response.statusCode, response.body).toBe(502);
-    expect(hits).toBe(1);
-    const rows = await db
-      .select()
-      .from(schema.interactionsTable)
-      .where(eq(schema.interactionsTable.modelPoolId, pool.poolId));
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({
-      attemptOutcome: "failed",
-      model: "gpt-4.1-mini",
-      inputTokens: 20,
-      outputTokens: 9,
-      response: { error: "Upstream returned invalid function arguments" },
-    });
-  },
-);
+          };
+          return stream
+            ? sse([
+                {
+                  id: response.id,
+                  object: "chat.completion.chunk",
+                  created: 1,
+                  model: response.model,
+                  choices: [
+                    {
+                      index: 0,
+                      delta: {
+                        tool_calls: [
+                          {
+                            ...response.choices[0].message.tool_calls[0],
+                            index: 0,
+                          },
+                        ],
+                      },
+                      finish_reason: "tool_calls",
+                    },
+                  ],
+                },
+                {
+                  id: response.id,
+                  object: "chat.completion.chunk",
+                  created: 1,
+                  model: response.model,
+                  choices: [],
+                  usage: response.usage,
+                },
+              ])
+            : HttpResponse.json(response);
+        }),
+      );
+      const response = await pool.app.inject({
+        method: "POST",
+        url: `/v1/gemini/${pool.agentId}/v1beta/models/gemini-3.8-flash:${stream ? "streamGenerateContent?alt=sse" : "generateContent"}`,
+        headers: {
+          authorization: `Bearer ${credential.value}`,
+          ...internalCallHeader(),
+          [MODEL_POOL_ID_HEADER]: pool.poolId,
+        },
+        payload: {
+          contents: [{ role: "user", parts: [{ text: "Use a tool" }] }],
+        },
+      });
+      expect(response.statusCode, response.body).toBe(502);
+      expect(hits).toBe(1);
+      const rows = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.modelPoolId, pool.poolId));
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        attemptOutcome: "failed",
+        model: "gpt-4.1-mini",
+        inputTokens: 20,
+        outputTokens: 9,
+        response: { error: "Upstream returned invalid function arguments" },
+      });
+    },
+  );
+}

@@ -2883,6 +2883,22 @@ async function handleStreaming<
   let firstChunkTime: number | undefined;
   let streamCompleted = false;
   let failedStreamResponse: unknown;
+  let streamFailureMessage: string | undefined;
+  const loggedStreamResponse = () => {
+    const response =
+      failedStreamResponse ??
+      streamAdapter.toLoggedResponse?.() ??
+      streamAdapter.toProviderResponse();
+    if (
+      failedStreamResponse !== undefined ||
+      streamFailureMessage === undefined
+    )
+      return response;
+    // Read lazily after finalization discards unreleased calls. Retain partial
+    // content, but never let observed tokens hide the lifecycle error.
+    const partial = asRecord(response);
+    return { ...partial, error: partial?.error ?? streamFailureMessage };
+  };
   let clientGone = false;
   // Set once a terminal reaches the client, whichever path released it: the
   // stream loop, the policy release, or a failed generation. An error frame
@@ -3177,9 +3193,7 @@ async function handleStreaming<
           request: originalRequest,
           processedRequest: request,
           response: withProviderToolCallIds(
-            failedStreamResponse ??
-              streamAdapter.toLoggedResponse?.() ??
-              streamAdapter.toProviderResponse(),
+            loggedStreamResponse(),
             streamAdapter.state.toolCalls,
           ),
           actualModel,
@@ -3210,9 +3224,7 @@ async function handleStreaming<
       // call must not disappear from interaction history.
       await recordUsagelessInteraction(
         withProviderToolCallIds(
-          failedStreamResponse ??
-            streamAdapter.toLoggedResponse?.() ??
-            streamAdapter.toProviderResponse(),
+          loggedStreamResponse(),
           streamAdapter.state.toolCalls,
         ),
       );
@@ -3372,7 +3384,8 @@ async function handleStreaming<
         const { state } = streamAdapter;
         // Client-wire translation can lose cache writes or separate reasoning
         // from output. Trace the same actual usage used for stored accounting.
-        let usage = observedUsage();
+        const transportUsage = ctx.getUpstreamUsage?.();
+        let usage = transportUsage ?? observedUsage();
         if (usage) {
           const fallbackAdapter =
             provider.createRequestAdapter(originalRequest);
@@ -3383,7 +3396,9 @@ async function handleStreaming<
             tools: fallbackAdapter.getTools(),
             model: actualModel,
           });
-          state.usage = usage;
+          // Actual provider usage may have no lossless representation in the
+          // client's protocol. Keep its adapter state in client-wire units.
+          if (!transportUsage) state.usage = usage;
         }
         if (state.model) {
           llmSpan.setAttribute(ATTR_GENAI_RESPONSE_MODEL, state.model);
@@ -3760,6 +3775,10 @@ async function handleStreaming<
     const lifecycleError = clientDisconnected
       ? new ApiError(499, "Client disconnected during inference")
       : error;
+    streamFailureMessage = upstreamErrorMessage(
+      lifecycleError,
+      provider.extractErrorMessage,
+    );
     if (clientDisconnected) clientGone = true;
     if (
       lifecycleError instanceof CodexResponsesGenerationError &&

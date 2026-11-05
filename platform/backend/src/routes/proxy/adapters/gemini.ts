@@ -1169,10 +1169,14 @@ class GeminiStreamAdapter
               this.state.usage.inputTokens +
               (this.state.usage.cacheReadTokens ?? 0),
             candidatesTokenCount: this.state.usage.outputTokens,
+            ...(this.state.usage.reasoningTokens
+              ? { thoughtsTokenCount: this.state.usage.reasoningTokens }
+              : {}),
             totalTokenCount:
               this.state.usage.inputTokens +
               (this.state.usage.cacheReadTokens ?? 0) +
-              this.state.usage.outputTokens,
+              this.state.usage.outputTokens +
+              (this.state.usage.reasoningTokens ?? 0),
             ...(this.state.usage.cacheReadTokens
               ? { cachedContentTokenCount: this.state.usage.cacheReadTokens }
               : {}),

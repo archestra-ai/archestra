@@ -98,6 +98,64 @@ describe("skillSandboxRuntimeService", () => {
     expect((error as Error).message).toBe(message);
   });
 
+  test("keys each command by its own id, live and on replay", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    // The engine caches by exec definition, so the id is what keeps two
+    // sandboxes running equal commands from sharing one result, and what lets a
+    // replay reuse the live run instead of executing it again.
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const newSandbox = () =>
+      SkillSandboxModel.create({
+        organizationId: org.id,
+        userId: user.id,
+        conversationId: null,
+        defaultCwd: "/home/sandbox",
+      });
+    const first = await newSandbox();
+    const second = await newSandbox();
+    config.skillsSandbox.enabled = true;
+    vi.spyOn(sandboxRuntimeService, "isEnabled", "get").mockReturnValue(true);
+    const runtime = vi
+      .spyOn(sandboxRuntimeService, "runCommand")
+      .mockResolvedValue({
+        stdout: "",
+        stderr: "",
+        exitCode: 0,
+        durationMs: 1,
+        timedOut: false,
+        truncated: false,
+      });
+    const run = (sandboxId: string) =>
+      skillSandboxRuntimeService.runCommand({
+        sandboxId: asSandboxId(sandboxId),
+        caller: { userId: user.id, organizationId: org.id },
+        command: "date +%N",
+      });
+
+    const firstRun = await run(first.id);
+    const secondRun = await run(second.id);
+    await run(first.id);
+
+    const sent = runtime.mock.calls.map(([params]) => params);
+    expect(sent[0]?.commandId).toBe(firstRun.commandId);
+    expect(sent[1]?.commandId).toBe(secondRun.commandId);
+    expect(firstRun.commandId).not.toBe(secondRun.commandId);
+    expect(sent[2]?.replayEntries).toEqual([
+      {
+        kind: "command",
+        command: {
+          id: firstRun.commandId,
+          command: "date +%N",
+          cwd: "/home/sandbox",
+          timeoutSeconds: sent[0]?.timeoutSeconds,
+        },
+      },
+    ]);
+  });
+
   test("exportArtifact rejects with SkillSandboxError while disabled", async () => {
     await expect(
       skillSandboxRuntimeService.exportArtifact({

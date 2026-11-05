@@ -20,6 +20,7 @@ async fn live_command_sees_stdin_and_secret_after_replayed_history() {
         replay_entries: vec![ReplayEntry {
             kind: "command".into(),
             command: Some(ReplayCommand {
+                id: "live-secret-env-history".into(),
                 command: "printf replayed > /home/sandbox/history.txt".into(),
                 cwd: None,
                 timeout_seconds: 30,
@@ -43,6 +44,7 @@ async fn live_command_sees_stdin_and_secret_after_replayed_history() {
             value: SECRET.into(),
         }]),
         stdin: Some("hello".into()),
+        command_id: None,
     };
     let execution = sandbox_core::run_sandbox(input).await.unwrap();
     // stderr is not printed: the command handles the secret, so its stderr may echo it.

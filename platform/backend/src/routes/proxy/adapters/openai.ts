@@ -1145,16 +1145,24 @@ export class OpenAIStreamAdapter
   private readonly clientRequestedUsage: boolean;
 
   private readonly reasoningOutsideCompletion: boolean;
+  private readonly clientReasoningOutsideCompletion: boolean;
 
   constructor({
     provider = "openai",
     clientRequest,
     reasoningOutsideCompletion = false,
+    clientReasoningOutsideCompletion = reasoningOutsideCompletion,
   }: OpenAiAdapterOptions & {
     clientRequest?: OpenAiStreamUsageRequest;
+    /**
+     * The dialect the client reads, when it is not the provider's own: the
+     * model router and the Responses surface give OpenAI's to an xAI turn.
+     */
+    clientReasoningOutsideCompletion?: boolean;
   } = {}) {
     this.provider = provider;
     this.reasoningOutsideCompletion = reasoningOutsideCompletion;
+    this.clientReasoningOutsideCompletion = clientReasoningOutsideCompletion;
     this.clientRequestedUsage =
       clientRequest?.stream_options?.include_usage === true;
     this.state = {
@@ -1183,13 +1191,12 @@ export class OpenAIStreamAdapter
 
     let sseData: string | null = null;
     let isToolCallChunk = false;
-    let isFinal = false;
 
     this.state.responseId = chunk.id;
     this.state.model = chunk.model;
 
-    // Handle usage first - OpenAI sends usage in a final chunk with empty choices[]
-    // when stream_options.include_usage is true
+    // Usage is cumulative metadata, not a terminal signal: some compatible
+    // providers include it on every chunk, including the initial zero counts.
     if (chunk.usage) {
       this.upstreamUsage = chunk.usage;
       const tokens = openAIUsageTokens(chunk.usage, {
@@ -1214,11 +1221,12 @@ export class OpenAIStreamAdapter
     // reading [0] off it unguarded is a crash.
     const choice = chunk.choices?.[0];
     if (!choice) {
-      // If we have usage, this is the final chunk (OpenAI sends usage in a chunk with empty choices)
+      // OpenAI sends terminal usage after finish_reason. An early usage-only
+      // chunk or a heartbeat after earlier usage must not end the stream.
       return {
         sseData: null,
         isToolCallChunk: false,
-        isFinal: this.state.usage !== null,
+        isFinal: !!chunk.usage && this.state.stopReason !== null,
       };
     }
 
@@ -1335,20 +1343,14 @@ export class OpenAIStreamAdapter
       isToolCallChunk = true;
     }
 
-    // Handle finish reason
-    // Note: Don't set isFinal here - OpenAI sends the usage chunk AFTER the finish_reason chunk
-    // when stream_options.include_usage is true (which we always set in executeStream)
+    // A finish chunk can carry cumulative usage that a trailing usage-only
+    // chunk corrects. Keep reading even when both are present; providers that
+    // omit trailing usage complete when the iterator ends normally.
     if (choice.finish_reason) {
       this.state.stopReason = choice.finish_reason;
     }
 
-    // Only mark as final after we've received usage data (which comes in a separate chunk
-    // after the finish_reason chunk when include_usage is enabled)
-    if (this.state.usage !== null) {
-      isFinal = true;
-    }
-
-    return { sseData, isToolCallChunk, isFinal, isResponsePreamble };
+    return { sseData, isToolCallChunk, isFinal: false, isResponsePreamble };
   }
 
   getSSEHeaders(): Record<string, string> {
@@ -1561,17 +1563,17 @@ export class OpenAIStreamAdapter
   }
 
   /**
-   * The wire usage rebuilt from the proxy's counts, in the provider's own
-   * dialect: `state.usage.outputTokens` includes reasoning, so a provider that
-   * reports it outside `completion_tokens` gets it taken back out, and a
-   * streamed turn reports what the same turn would report unstreamed.
+   * The wire usage rebuilt from the proxy's counts, in the client's dialect:
+   * `state.usage.outputTokens` includes reasoning, so a client that reads it
+   * outside `completion_tokens` gets it taken back out, and a streamed turn
+   * reports what the same turn would report unstreamed.
    */
   private rebuiltUsage() {
     const usage = withUpstreamUsageDetails(
       toOpenAiStreamUsageWithCache(this.state.usage),
       this.upstreamUsage,
     );
-    return usage && this.reasoningOutsideCompletion
+    return usage && this.clientReasoningOutsideCompletion
       ? withReasoningOutsideCompletion(usage, true)
       : usage;
   }

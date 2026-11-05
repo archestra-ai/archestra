@@ -114,15 +114,19 @@ describe("LlmProxyPage provider dropdown", () => {
 
     await user.click(mistralOption);
 
-    // Selecting from the search dropdown promotes the provider to its own
-    // active tab and repoints the endpoint at it, same as the tab bar does
-    // for the built-in primary providers.
+    // Selecting from the dropdown repoints the endpoint and shows the choice in
+    // the dropdown itself; the tabs stay as they were.
     expect(
       await screen.findByText("http://localhost:3000/v1/mistral"),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Mistral AI" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Mistral AI" }),
+    ).not.toBeInTheDocument();
+    expect(moreTrigger).toHaveTextContent("Mistral AI");
+
+    // Picking a tab resets the dropdown to its placeholder.
+    await user.click(screen.getByRole("button", { name: "OpenAI" }));
+    expect(moreTrigger).toHaveTextContent(/More providers \(\d+\)/);
   });
 });
 

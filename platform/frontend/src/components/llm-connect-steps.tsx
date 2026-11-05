@@ -106,6 +106,7 @@ export function LlmConnectSteps({
   targetLabel,
   showKeyPools = false,
   pool,
+  offerAutoModel = false,
 }: {
   /** The rail's number for the first of these steps. */
   firstNumber: number;
@@ -120,6 +121,8 @@ export function LlmConnectSteps({
    * keys that can call it, no key created here, and the request asks for it.
    */
   pool?: ModelPool;
+  /** Offer auto routing's `auto` model in the request example. */
+  offerAutoModel?: boolean;
 }) {
   const providerCatalog = useModelProviderCatalog({ fresh: true });
   const isRouter = selected === "model-router";
@@ -605,6 +608,7 @@ export function LlmConnectSteps({
       pools={pool ? [] : requestPools}
       initialModel={pickedModel}
       onModelChange={setPickedModel}
+      offerAutoModel={offerAutoModel && isRouter && !pool}
     />
   );
 

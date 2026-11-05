@@ -96,6 +96,7 @@ export default function LlmProxyPage() {
         auth={effectiveAuth}
         targetLabel={targetLabel}
         showKeyPools
+        offerAutoModel
       />
     </ol>
   );

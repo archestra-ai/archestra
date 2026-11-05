@@ -142,7 +142,7 @@ describe("planModelPool", () => {
     ).resolves.toBeNull();
   });
 
-  test("leaves out members the client's wire cannot reach", async ({
+  test("rejects a pool instead of silently skipping incompatible members", async ({
     makeOrganization,
     makeLlmProviderApiKey,
   }) => {
@@ -175,15 +175,14 @@ describe("planModelPool", () => {
       [zai.id, bedrock.id].sort(),
     );
     // Converse reaches only Converse members.
-    const conversePlan = await planModelPool({
-      organizationId: org.id,
-      name: "glm-5",
-      inbound: "bedrock-converse",
-      caller: { providerApiKeyIds: [zai.id] },
-    });
-    expect(conversePlan?.members.map((m) => m.providerApiKeyId)).toEqual([
-      bedrock.id,
-    ]);
+    await expect(
+      planModelPool({
+        organizationId: org.id,
+        name: "glm-5",
+        inbound: "bedrock-converse",
+        caller: { providerApiKeyIds: [zai.id] },
+      }),
+    ).rejects.toThrow("cannot serve bedrock-converse requests");
   });
 
   test("plans the pool only for callers that may use it", async ({
@@ -847,3 +846,53 @@ function httpError(status: number, headers: Record<string, string> = {}) {
     headers: new Headers(headers),
   });
 }
+
+test("an explicitly selected pool excludes disabled members and cannot disappear into direct routing", async ({
+  makeOrganization,
+  makeLlmProviderApiKey,
+}) => {
+  config.llmProxy.modelPoolsEnabled = true;
+  const org = await makeOrganization();
+  const gemini = await makeLlmProviderApiKey(org.id, null, {
+    provider: "gemini",
+  });
+  const anthropic = await makeLlmProviderApiKey(org.id, null, {
+    provider: "anthropic",
+  });
+  const pool = await ModelPoolModel.create({
+    organizationId: org.id,
+    input: {
+      name: "explicit-selection",
+      members: [
+        { ...member(anthropic.id, "claude-sonnet-4-5", 1), enabled: false },
+        member(gemini.id, "gemini-3.8-flash", 2),
+      ],
+    },
+  });
+  const params = {
+    organizationId: org.id,
+    name: "gemini-3.8-flash",
+    poolId: pool.id,
+    inbound: "gemini" as const,
+    caller: { providerApiKeyIds: [gemini.id] },
+  };
+  const plan = await planModelPool(params);
+  expect(plan?.members.map((member) => member.provider)).toEqual(["gemini"]);
+  await ModelPoolModel.update({
+    organizationId: org.id,
+    id: pool.id,
+    input: {
+      name: "explicit-selection",
+      members: [
+        { ...member(gemini.id, "gemini-3.8-flash", 2), enabled: false },
+      ],
+    },
+  });
+  await expect(planModelPool(params)).rejects.toThrow("no enabled members");
+  await expect(
+    planModelPool({
+      ...params,
+      poolId: "00000000-0000-4000-8000-000000000000",
+    }),
+  ).rejects.toThrow("no longer exists");
+});

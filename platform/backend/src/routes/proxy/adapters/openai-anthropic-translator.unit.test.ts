@@ -79,7 +79,6 @@ describe("anthropicToOpenai", () => {
             description: "Weather for a city",
             input_schema: { type: "object", properties: {} },
           },
-          { type: "web_search_20250305", name: "web_search" },
         ],
         tool_choice: { type: "any" },
       }),
@@ -290,4 +289,12 @@ describe("createOpenaiToAnthropicStreamTranslator", () => {
     translator.translate(chunk({ content: "Hal" }));
     expect(() => translator.finish()).toThrow(/ended before it finished/);
   });
+});
+
+test("rejects Anthropic server tools instead of silently deleting them", () => {
+  expect(() =>
+    anthropicToOpenai(
+      req({ tools: [{ type: "web_search_20250305", name: "web_search" }] }),
+    ),
+  ).toThrow("cannot translate server tools");
 });

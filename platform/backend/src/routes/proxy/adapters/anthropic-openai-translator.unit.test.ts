@@ -176,3 +176,20 @@ describe("openaiToAnthropic — multimodal user content", () => {
     ]);
   });
 });
+
+test("rejects provider file references instead of dropping them on Anthropic fallback", () => {
+  expect(() =>
+    openaiToAnthropic({
+      model: "pool",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Read this" },
+            { type: "file", file: { file_id: "file-source-provider" } },
+          ],
+        },
+      ],
+    } as unknown as Parameters<typeof openaiToAnthropic>[0]),
+  ).toThrow("inline file data");
+});

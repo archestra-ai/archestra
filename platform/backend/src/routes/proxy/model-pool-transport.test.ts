@@ -52,8 +52,8 @@ describe("which members a client's wire reaches", () => {
     expect(canReachMember("anthropic", "gemini")).toBe(true);
     expect(canReachMember("bedrock-converse", "gemini")).toBe(false);
     expect(canReachMember("gemini", "gemini")).toBe(true);
-    expect(canReachMember("gemini", "openai")).toBe(false);
-    expect(canReachMember("gemini", "anthropic")).toBe(false);
+    expect(canReachMember("gemini", "openai")).toBe(true);
+    expect(canReachMember("gemini", "anthropic")).toBe(true);
   });
 });
 
@@ -336,7 +336,7 @@ describe("memberTransport", () => {
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper
 const bedrockServer = useMswServer();
-for (const inbound of ["openai-chat", "anthropic"] as const) {
+for (const inbound of ["openai-chat", "anthropic", "gemini"] as const) {
   for (const stream of [false, true]) {
     test(`normalizes Gemini tool history for a Bedrock fallback (${inbound}, stream=${stream})`, async () => {
       const signedId = `gemsig-${"s".repeat(100)}.call-1`;
@@ -387,49 +387,81 @@ for (const inbound of ["openai-chat", "anthropic"] as const) {
           apiKey: "synthetic-bedrock-key",
         }),
       });
-      const request = {
-        model: "pool",
-        max_tokens: 16,
-        messages:
-          inbound === "openai-chat"
-            ? [
+      const request =
+        inbound === "gemini"
+          ? {
+              contents: [
                 {
-                  role: "assistant",
-                  content: null,
-                  tool_calls: [
+                  role: "model",
+                  parts: [
                     {
-                      id: signedId,
-                      type: "function",
-                      function: { name: "read_value", arguments: "{}" },
-                    },
-                  ],
-                },
-                { role: "tool", tool_call_id: signedId, content: "done" },
-              ]
-            : [
-                {
-                  role: "assistant",
-                  content: [
-                    {
-                      type: "tool_use",
-                      id: signedId,
-                      name: "read_value",
-                      input: {},
+                      functionCall: {
+                        id: signedId,
+                        name: "read_value",
+                        args: {},
+                      },
+                      thoughtSignature: "synthetic",
                     },
                   ],
                 },
                 {
                   role: "user",
-                  content: [
+                  parts: [
                     {
-                      type: "tool_result",
-                      tool_use_id: signedId,
-                      content: "done",
+                      functionResponse: {
+                        id: signedId,
+                        name: "read_value",
+                        response: { content: "done" },
+                      },
                     },
                   ],
                 },
               ],
-      };
+              generationConfig: { maxOutputTokens: 16 },
+            }
+          : {
+              model: "pool",
+              max_tokens: 16,
+              messages:
+                inbound === "openai-chat"
+                  ? [
+                      {
+                        role: "assistant",
+                        content: null,
+                        tool_calls: [
+                          {
+                            id: signedId,
+                            type: "function",
+                            function: { name: "read_value", arguments: "{}" },
+                          },
+                        ],
+                      },
+                      { role: "tool", tool_call_id: signedId, content: "done" },
+                    ]
+                  : [
+                      {
+                        role: "assistant",
+                        content: [
+                          {
+                            type: "tool_use",
+                            id: signedId,
+                            name: "read_value",
+                            input: {},
+                          },
+                        ],
+                      },
+                      {
+                        role: "user",
+                        content: [
+                          {
+                            type: "tool_result",
+                            tool_use_id: signedId,
+                            content: "done",
+                          },
+                        ],
+                      },
+                    ],
+            };
       if (stream) await collect(await transport.executeStream(request));
       else await transport.execute(request);
       expect(bodies).toHaveLength(1);

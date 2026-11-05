@@ -199,6 +199,7 @@ import {
   handleError,
   isRetryableUpstreamConnectionFailure,
   planDispatchModeToolCallRewrites,
+  poolFailoverReason,
   recordBlockedToolCallMetrics,
   reportBillableUsageMetrics,
   shouldForwardAnthropicBeta,
@@ -277,6 +278,7 @@ export interface LLMProxyContext<TRequest> {
   upstreamAttempt: UpstreamAttempt;
   /** The current transport's usage, independent of translated terminal events. */
   getUpstreamStreamUsage?: MemberTransport["getStreamUsage"];
+  getUpstreamUsage?: MemberTransport["getUsage"];
   /** Set when the request's model is a model pool's name. */
   modelPool?: ModelPoolRouting;
   /** Set when a platform call on the organization default was auto routed. */
@@ -1270,8 +1272,8 @@ async function handleObservedLLMProxy<
     requestAdapter.getModel(),
   );
   // A request for a model pool's name is served by the pool's members when
-  // the caller may use the pool (see `mayUseModelPool`). Members on a wire
-  // the client's can't reach are left out of the plan.
+  // the caller may use the pool (see `mayUseModelPool`). Incompatible members
+  // make the selected pool fail explicitly, rather than silently shrinking it.
   const poolWire = openAiCodexPassthrough
     ? null
     : inboundPoolWire(provider.interactionType);
@@ -1284,6 +1286,11 @@ async function handleObservedLLMProxy<
     typeof chatModelPoolHeader === "string" && chatModelPoolHeader
       ? chatModelPoolHeader
       : undefined;
+  if (chatModelPoolId && !poolWire)
+    throw new ApiError(
+      400,
+      "The selected model pool does not support this request format",
+    );
   const modelPoolPlan =
     poolWire && (!internalCall || chatModelPoolId)
       ? await planModelPool({
@@ -3007,6 +3014,7 @@ async function handleStreaming<
   let providerTerminalSeen = false;
   let toolCallsReleased = false;
   const observedUsage = () =>
+    ctx.getUpstreamUsage?.() ??
     (!upstreamFinished ? ctx.getUpstreamStreamUsage?.() : null) ??
     streamAdapter.state.usage;
   const finalizeInteraction = async () => {
@@ -3350,18 +3358,20 @@ async function handleStreaming<
 
         // Set response attributes on span per OTEL GenAI semconv
         const { state } = streamAdapter;
-        // Correct zero-input usage before any consumer (span cost, metrics, the
-        // finally-block cost/persistence) reads it — they all share state.usage.
-        if (state.usage) {
+        // Client-wire translation can lose cache writes or separate reasoning
+        // from output. Trace the same actual usage used for stored accounting.
+        let usage = observedUsage();
+        if (usage) {
           const fallbackAdapter =
             provider.createRequestAdapter(originalRequest);
-          state.usage = applyInputTokenFallback({
-            usage: state.usage,
+          usage = applyInputTokenFallback({
+            usage,
             provider: providerName,
             providerMessages: fallbackAdapter.getProviderMessages(),
             tools: fallbackAdapter.getTools(),
             model: actualModel,
           });
+          state.usage = usage;
         }
         if (state.model) {
           llmSpan.setAttribute(ATTR_GENAI_RESPONSE_MODEL, state.model);
@@ -3369,47 +3379,47 @@ async function handleStreaming<
         if (state.responseId) {
           llmSpan.setAttribute(ATTR_GENAI_RESPONSE_ID, state.responseId);
         }
-        if (state.usage) {
+        if (usage) {
           // Per the GenAI semconv, gen_ai.usage.input_tokens includes cached
-          // tokens. Internally state.usage.inputTokens is uncached-only (cost,
+          // tokens. Internally usage.inputTokens is uncached-only (cost,
           // metrics, and DB depend on that), so add cache read/write back for
           // the span attributes. The uncached value is still derivable as
           // input_tokens - cache_read.input_tokens - cache_creation.input_tokens.
           const totalInputTokens =
-            state.usage.inputTokens +
-            (state.usage.cacheReadTokens ?? 0) +
-            (state.usage.cacheWriteTokens ?? 0);
+            usage.inputTokens +
+            (usage.cacheReadTokens ?? 0) +
+            (usage.cacheWriteTokens ?? 0);
           llmSpan.setAttribute(ATTR_GENAI_USAGE_INPUT_TOKENS, totalInputTokens);
           llmSpan.setAttribute(
             ATTR_GENAI_USAGE_OUTPUT_TOKENS,
-            state.usage.outputTokens,
+            usage.outputTokens,
           );
           llmSpan.setAttribute(
             ATTR_GENAI_USAGE_TOTAL_TOKENS,
-            totalInputTokens + state.usage.outputTokens,
+            totalInputTokens + usage.outputTokens,
           );
-          if (state.usage.cacheReadTokens) {
+          if (usage.cacheReadTokens) {
             llmSpan.setAttribute(
               ATTR_GENAI_USAGE_CACHE_READ_INPUT_TOKENS,
-              state.usage.cacheReadTokens,
+              usage.cacheReadTokens,
             );
           }
-          if (state.usage.cacheWriteTokens) {
+          if (usage.cacheWriteTokens) {
             llmSpan.setAttribute(
               ATTR_GENAI_USAGE_CACHE_CREATION_INPUT_TOKENS,
-              state.usage.cacheWriteTokens,
+              usage.cacheWriteTokens,
             );
           }
-          if (state.usage.cacheWrite1hTokens) {
+          if (usage.cacheWrite1hTokens) {
             llmSpan.setAttribute(
               ATTR_ARCHESTRA_USAGE_CACHE_CREATION_1H_INPUT_TOKENS,
-              state.usage.cacheWrite1hTokens,
+              usage.cacheWrite1hTokens,
             );
           }
-          if (state.usage.reasoningTokens) {
+          if (usage.reasoningTokens) {
             llmSpan.setAttribute(
               ATTR_GENAI_USAGE_REASONING_OUTPUT_TOKENS,
-              state.usage.reasoningTokens,
+              usage.reasoningTokens,
             );
           }
           const cost = await calculateUsageCost({
@@ -3417,7 +3427,7 @@ async function handleStreaming<
             billingEndpoint: ctx.billingEndpoint,
             requestedModel: ctx.requestedModel,
             model: ctx.upstreamAttempt.modelId ?? actualModel,
-            usage: state.usage,
+            usage,
             provider: ctx.upstreamAttempt.provider ?? providerName,
           });
           if (cost !== undefined) {
@@ -4211,7 +4221,9 @@ async function handleNonStreaming<
       }
       const adapter = provider.createResponseAdapter(result, request);
       try {
-        await ctx.throughput?.reconcile(adapter.getUsage());
+        await ctx.throughput?.reconcile(
+          ctx.getUpstreamUsage?.() ?? adapter.getUsage(),
+        );
       } catch (error) {
         // Preserve interaction/spend accounting for the completed provider
         // call before reporting token-meter storage failure to the client.
@@ -4223,7 +4235,7 @@ async function handleNonStreaming<
       // reuse this usage) all see the estimate.
       const fallbackAdapter = provider.createRequestAdapter(originalRequest);
       const usage = applyInputTokenFallback({
-        usage: adapter.getUsage(),
+        usage: ctx.getUpstreamUsage?.() ?? adapter.getUsage(),
         provider: providerName,
         providerMessages: fallbackAdapter.getProviderMessages(),
         tools: fallbackAdapter.getTools(),
@@ -5090,6 +5102,7 @@ async function openUpstream<TRequest, T>(params: {
     ...retry
   } = params;
   ctx.getUpstreamStreamUsage = undefined;
+  ctx.getUpstreamUsage = undefined;
   let dispatched = false;
   const authorizedOpen = async (attemptTransport: MemberTransport) => {
     await ctx.authorizeA2AOAuthAttempt?.();
@@ -5115,6 +5128,7 @@ async function openUpstream<TRequest, T>(params: {
     dispatched = true;
     // Replace on every attempt so a failed member cannot leak usage to its sibling.
     ctx.getUpstreamStreamUsage = attemptTransport.getStreamUsage;
+    ctx.getUpstreamUsage = attemptTransport.getUsage;
     return open(attemptTransport);
   };
   const routed = ctx.autoRoutedTier;
@@ -5129,6 +5143,7 @@ async function openUpstream<TRequest, T>(params: {
         authorizedOpen({
           execute: routedTransport.execute,
           getStreamUsage: routedTransport.getStreamUsage,
+          getUsage: routedTransport.getUsage,
           executeStream: (request) =>
             routedTransport.executeStream(request, onAccepted),
         }),
@@ -5137,11 +5152,19 @@ async function openUpstream<TRequest, T>(params: {
   }
   const pool = ctx.modelPool;
   if (!pool) {
-    return openUpstreamWithRetry({
-      open: () => authorizedOpen(transport),
-      ...retry,
-    });
+    try {
+      return await openUpstreamWithRetry({
+        open: () => authorizedOpen(transport),
+        ...retry,
+      });
+    } catch (error) {
+      ctx.upstreamAttempt.attemptOutcome = "failed";
+      ctx.upstreamAttempt.failureReason =
+        poolFailoverReason(error)?.reason ?? "error";
+      throw error;
+    }
   }
+
   try {
     return await openThroughModelPool({
       plan: pool.plan,
@@ -5150,6 +5173,7 @@ async function openUpstream<TRequest, T>(params: {
       prepareAttempt: (member) => {
         // Preparation can fail before authorizedOpen installs the next getter.
         ctx.getUpstreamStreamUsage = undefined;
+        ctx.getUpstreamUsage = undefined;
         return pool.prepareAttempt(member);
       },
       beforeAttempt: (member) => pool.checkLimits(member),

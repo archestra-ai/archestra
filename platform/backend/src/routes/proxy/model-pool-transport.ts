@@ -6,7 +6,7 @@
  * a request in those shapes and returns a response or chunk stream in those
  * shapes, whatever the member's own provider speaks: the same wire is sent
  * as is with the member's model id, and a different wire goes through a
- * translator. Members a client's wire cannot reach are left out of its plan.
+ * translator. A pool containing incompatible enabled members is rejected.
  */
 import {
   isClaudeOnBedrock,
@@ -16,13 +16,16 @@ import {
   type SupportedProviderDiscriminator,
 } from "@archestra/shared";
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
+import { openAIUsageTokens } from "@/observability/metrics/llm-usage";
 import type {
   Anthropic,
   Bedrock,
+  Gemini,
   LLMProvider,
   OpenAi,
   UsageView,
 } from "@/types";
+import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
 import { UpstreamStreamIncompleteError } from "@/utils/upstream-stream-incomplete-error";
 import {
   anthropicAdapterFactory,
@@ -55,7 +58,12 @@ import {
   openaiToConverse,
 } from "./adapters/bedrock-openai-translator";
 import { makeGeminiOpenaiAdapterFactory } from "./adapters/gemini-openai";
-import { openaiToGemini } from "./adapters/gemini-openai-translator";
+import {
+  createOpenaiToGeminiStreamTranslator,
+  geminiToOpenai,
+  openaiResponseToGemini,
+  openaiToGemini,
+} from "./adapters/gemini-openai-translator";
 import {
   anthropicToOpenai,
   createOpenaiToAnthropicStreamTranslator,
@@ -72,6 +80,8 @@ export type PoolWire =
 
 /** Sends a request in the client's shapes to one member, and answers in them. */
 export interface MemberTransport {
+  /** Actual provider usage when the client wire cannot represent its cache split. */
+  getUsage?: () => UsageView | null;
   /** Observed usage retained even when translation cannot emit a terminal event. */
   getStreamUsage?: () => UsageView | null;
   execute(request: unknown): Promise<unknown>;
@@ -148,8 +158,20 @@ export function memberTransport(params: {
         return { ...(request as object), _model: modelId };
       const body = request as OpenAi.Types.ChatCompletionsRequest &
         Anthropic.Types.MessagesRequest;
+      // The selected OpenAI model may require the modern output-limit field
+      // even when the caller or a translator supplied the legacy one.
+      const { max_tokens, ...openaiBody } = body;
+      const destinationBody =
+        provider === "openai"
+          ? {
+              ...openaiBody,
+              ...(max_tokens != null && body.max_completion_tokens == null
+                ? { max_completion_tokens: max_tokens }
+                : {}),
+            }
+          : body;
       return {
-        ...body,
+        ...destinationBody,
         model: modelId,
         messages:
           target === "anthropic"
@@ -165,7 +187,9 @@ export function memberTransport(params: {
   }
 
   if (inbound === "openai-chat" && target === "anthropic") {
+    let getUsage: (() => UsageView | null) | undefined;
     return {
+      getStreamUsage: () => getUsage?.() ?? null,
       async execute(request) {
         const { anthropicBody, openaiContext } = openaiToAnthropic(
           request as OpenAi.Types.ChatCompletionsRequest,
@@ -195,6 +219,7 @@ export function memberTransport(params: {
           onAccepted,
         );
         const translator = anthropicEventsToOpenAiChunks(openaiContext);
+        getUsage = translator.getUsage;
         return mapStream(events, translator.translate, translator.finish);
       },
     };
@@ -301,6 +326,72 @@ export function memberTransport(params: {
               ...sseToChunks(stream.formatEndSSE()),
             ];
           },
+        );
+      },
+    };
+  }
+
+  if (inbound === "gemini") {
+    const viaOpenai = memberTransport({
+      inbound: "openai-chat",
+      provider,
+      modelId,
+      client,
+    });
+    let usage: UsageView | null = null;
+    const observe = (raw: OpenAi.Types.ChatCompletionChunk["usage"]) => {
+      if (!raw) return;
+      const tokens = openAIUsageTokens(raw);
+      usage = {
+        inputTokens: tokens.input,
+        outputTokens: tokens.output,
+        cacheReadTokens: tokens.cacheRead,
+        cacheWriteTokens: tokens.cacheWrite,
+        cacheWrite1hTokens: tokens.cacheWrite1h,
+        reasoningTokens: tokens.reasoning,
+      };
+    };
+    return {
+      getUsage: () => usage,
+      getStreamUsage: viaOpenai.getStreamUsage,
+      async execute(request) {
+        const response = (await viaOpenai.execute(
+          geminiToOpenai(request as Gemini.Types.GenerateContentRequest),
+        )) as OpenAi.Types.ChatCompletionsResponse;
+        observe(response.usage);
+        try {
+          return openaiResponseToGemini(response);
+        } catch (error) {
+          if (!usage) throw error;
+          throw new ObservedProviderUsageError({
+            original: error,
+            usage,
+            response: {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Upstream response cannot be translated",
+            },
+          });
+        }
+      },
+      async executeStream(request, onAccepted) {
+        const chunks = await viaOpenai.executeStream(
+          {
+            ...geminiToOpenai(request as Gemini.Types.GenerateContentRequest),
+            stream: true,
+          },
+          onAccepted,
+        );
+        const translator = createOpenaiToGeminiStreamTranslator();
+        return mapStream(
+          chunks,
+          (raw) => {
+            const chunk = raw as OpenAi.Types.ChatCompletionChunk;
+            observe(chunk.usage);
+            return translator.translate(chunk);
+          },
+          translator.finish,
         );
       },
     };
@@ -416,6 +507,9 @@ const TRANSLATED = new Set([
   "anthropic>openai-chat",
   "anthropic>bedrock-converse",
   "anthropic>gemini",
+  "gemini>openai-chat",
+  "gemini>anthropic",
+  "gemini>bedrock-converse",
 ]);
 
 function wireOf(provider: SupportedProvider): PoolWire | null {
@@ -440,12 +534,17 @@ function anthropicEventsToOpenAiChunks(ctx: {
   chatcmplId: string;
   createdUnix: number;
   requestedModel: string;
-}): { translate(event: unknown): unknown[]; finish(): unknown[] } {
+}): {
+  translate(event: unknown): unknown[];
+  finish(): unknown[];
+  getUsage(): UsageView | null;
+} {
   // biome-ignore lint/suspicious/noExplicitAny: Anthropic SDK event union
   type Event = any;
   let nextToolIndex = 0;
   let toolIndexByBlock = new Map<number, number>();
   let finishReason: string | null = null;
+  let observedUsage = false;
   let inputTokens = 0;
   let cacheRead = 0;
   let cacheWrite = 0;
@@ -459,11 +558,22 @@ function anthropicEventsToOpenAiChunks(ctx: {
     choices: [{ index: 0, delta, finish_reason: finish }],
   });
   return {
+    getUsage: () =>
+      observedUsage
+        ? {
+            inputTokens,
+            outputTokens,
+            cacheReadTokens: cacheRead,
+            cacheWriteTokens: cacheWrite,
+            cacheWrite1hTokens: cacheWrite1h,
+          }
+        : null,
     translate(raw) {
       const event = raw as Event;
       switch (event?.type) {
         case "message_start": {
           const usage = event.message?.usage ?? {};
+          observedUsage ||= event.message?.usage !== undefined;
           inputTokens = usage.input_tokens ?? 0;
           cacheRead = usage.cache_read_input_tokens ?? 0;
           cacheWrite = usage.cache_creation_input_tokens ?? 0;
@@ -518,6 +628,7 @@ function anthropicEventsToOpenAiChunks(ctx: {
         case "message_delta": {
           finishReason = event.delta?.stop_reason ?? finishReason;
           const usage = event.usage ?? {};
+          observedUsage ||= event.usage !== undefined;
           outputTokens = usage.output_tokens ?? outputTokens;
           inputTokens = usage.input_tokens ?? inputTokens;
           cacheRead = usage.cache_read_input_tokens ?? cacheRead;

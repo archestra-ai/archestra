@@ -215,6 +215,42 @@ test('a child returning as spoken may not read untrusted data', { skip: !databas
   assert.deepEqual(read.offers ?? [], [], 'no remedy lets its free text carry untrusted data to the parent');
 });
 
+// A delegation whose in-process child failed before it returned has no return
+// to carry. The LLM proxy reports its result as a failure, and that closes the
+// spawn: a spawner that is itself a child can still return.
+test('a failed spawn result closes the spawn, so its spawner can still return', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  for (const reported of [false, true]) {
+    const run = family();
+    await startSpawn(run);
+    await run.hook(run.child, { event: 'session_start', spawn_call_id: 's1' });
+    const grandchild = {
+      ...run.child,
+      session_id: `${run.child.session_id}:agent:s1`,
+      parent_id: run.child.session_id,
+    };
+    const nested = { ...run, parent: run.child, child: grandchild };
+    assert.equal((await startSpawn(nested)).call.decision, 'allow_call');
+    await run.hook(grandchild, { event: 'session_start', spawn_call_id: 's1' });
+    if (reported) {
+      const failed = await run.hook(run.child, {
+        event: 'tool_result',
+        tool_call_id: 's1',
+        output: 'CHILD MODEL FAILED',
+        outcome: 'failure',
+      });
+      assert.equal(failed.decision, 'block', 'the failed spawn result is withheld');
+      assert.doesNotMatch(failed.approved_output ?? '', /CHILD MODEL FAILED/);
+    }
+    const returned = await run.hook(run.child, {
+      event: 'child_return',
+      operation_id: 'runtime-return:s1:r1',
+      output: 'no answer from the reader',
+    });
+    assert.equal(returned.decision, reported ? 'ack' : 'block', 'an open spawn holds the return');
+  }
+});
+
 // A child that answers a follow-up returns again under the same spawn call.
 // The LLM proxy approves such a child once, with its newest return, and it
 // accepts the return the spawn call kept. It also ends a turn that has no text

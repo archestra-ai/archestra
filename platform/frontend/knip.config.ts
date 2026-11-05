@@ -10,6 +10,8 @@ const config: KnipConfig = {
     "require-in-the-middle",
     // Used in globals.css via @import
     "tw-animate-css",
+    // Stylesheet for @streamdown/math, imported in globals.css via @import
+    "katex",
     // Used via dynamic import in use-layout-nodes.ts (Knip doesn't detect the pattern)
     "elkjs",
     // Provides tsc, which scripts/type-check.ts runs for `pnpm type-check`.

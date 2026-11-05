@@ -180,36 +180,46 @@ export type ReasoningContentProps = ComponentProps<
 };
 
 export const ReasoningContent = memo(
-  ({ className, children, ...props }: ReasoningContentProps) => (
-    <CollapsibleContent
-      className={cn(
-        "mt-4 text-sm",
-        "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-muted-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
-        className,
-      )}
-      {...props}
-    >
-      {/* Thinking is markdown like any other turn, so it can carry code
-          blocks, long identifiers or URLs that have no break opportunity to
-          shrink at. `grid` sized its single `auto` track from the widest of
-          those, which stretched the whole column — prose included — past the
-          chat and put a horizontal scrollbar on the conversation.
-          `flex-col` keeps the same gap rhythm while leaving every child at the
-          container's width, and `break-words` lets a long token wrap onto the
-          next line so the block reads at the chat's width instead of trading
-          the page's scrollbar for one of its own. Fenced code keeps its own
-          body scroller (`white-space: pre` ignores the wrapping), as it does
-          in a message. `overflow-x-auto` is the backstop for the rest: a wide
-          table scrolls inside the block rather than widening the page. */}
-      {/* Same measure as an assistant turn: MessageContent caps its text at
-          max-w-[80%] of the transcript column, and both sit behind the same
-          pl-2, so thinking wraps on the same line length as the answer under
-          it rather than running ~25% wider. */}
-      <Response className="flex max-w-[80%] flex-col gap-2 overflow-x-auto break-words">
-        {children}
-      </Response>
-    </CollapsibleContent>
-  ),
+  ({ className, children, ...props }: ReasoningContentProps) => {
+    // Reasoning streams like any other reply, and Response picks its code-region
+    // strategy from this: without it a growing thought block takes the finished
+    // reply's full-parse path on every token.
+    const { isStreaming } = useReasoning();
+
+    return (
+      <CollapsibleContent
+        className={cn(
+          "mt-4 text-sm",
+          "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-muted-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
+          className,
+        )}
+        {...props}
+      >
+        {/* Thinking is markdown like any other turn, so it can carry code
+            blocks, long identifiers or URLs that have no break opportunity to
+            shrink at. `grid` sized its single `auto` track from the widest of
+            those, which stretched the whole column — prose included — past the
+            chat and put a horizontal scrollbar on the conversation.
+            `flex-col` keeps the same gap rhythm while leaving every child at the
+            container's width, and `break-words` lets a long token wrap onto the
+            next line so the block reads at the chat's width instead of trading
+            the page's scrollbar for one of its own. Fenced code keeps its own
+            body scroller (`white-space: pre` ignores the wrapping), as it does
+            in a message. `overflow-x-auto` is the backstop for the rest: a wide
+            table scrolls inside the block rather than widening the page. */}
+        {/* Same measure as an assistant turn: MessageContent caps its text at
+            max-w-[80%] of the transcript column, and both sit behind the same
+            pl-2, so thinking wraps on the same line length as the answer under
+            it rather than running ~25% wider. */}
+        <Response
+          className="flex max-w-[80%] flex-col gap-2 overflow-x-auto break-words"
+          isStreaming={isStreaming}
+        >
+          {children}
+        </Response>
+      </CollapsibleContent>
+    );
+  },
 );
 
 Reasoning.displayName = "Reasoning";

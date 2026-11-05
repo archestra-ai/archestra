@@ -1,6 +1,7 @@
 "use client";
 
 import { code } from "@streamdown/code";
+import { math } from "@streamdown/math";
 import { type ComponentProps, memo, useMemo } from "react";
 import remarkBreaks from "remark-breaks";
 import {
@@ -9,6 +10,7 @@ import {
   Streamdown,
 } from "streamdown";
 import { cn } from "@/lib/utils/tailwind";
+import { prepareMathDelimiters } from "./preprocess-latex";
 import { isSameOriginUrl } from "./response";
 
 export type ResponseProps = ComponentProps<typeof Streamdown> & {
@@ -67,6 +69,14 @@ const REMARK_PLUGINS_WITH_BREAKS: ResponseProps["remarkPlugins"] = [
   remarkBreaks,
 ];
 
+// KaTeX rendering. Its stylesheet is imported in globals.css — streamdown only
+// reports the path via getStyles(), it never injects it. singleDollarTextMath
+// stays off (the plugin default) so prices in prose are not read as math;
+// normalize-math.ts rewrites bracket delimiters to `$$` to suit. Streamdown
+// appends the plugin's rehype stage after REHYPE_PLUGINS below, so the two
+// compose.
+const PLUGINS: ResponseProps["plugins"] = { code, math };
+
 // Scrollable code regions must be reachable and scrollable by keyboard
 // (WCAG 2.1.1). Streamdown spreads a fenced block's <pre> properties onto its
 // code-block wrapper div, so tagging the hast node makes the rendered scroll
@@ -102,14 +112,44 @@ const REHYPE_PLUGINS: ResponseProps["rehypePlugins"] = [
   rehypeFocusablePre,
 ];
 
+// Streamdown completes half-written markdown while streaming (`remend`), and its
+// KaTeX handler closes a dangling `$$` so a formula renders as it arrives. That
+// runs *after* the passes below, so it reinstates exactly what they decline:
+// "Save $$ on your bill." gains a closer and becomes a formula. Its `$$` counter
+// also reaches inside fenced code, so a shell snippet echoing `$$` appends a
+// stray delimiter to the whole message. Off, display math stays literal until
+// its own closer arrives — the same fail-safe direction as the rest of this file.
+// Module scope because it feeds a `useMemo` inside Streamdown.
+const REMEND_OPTIONS = { katex: false };
+
 const ResponseMarkdown = memo(
   ({
     className,
     linkSafety,
     isStreaming = false,
     preserveLineBreaks = false,
+    children,
     ...props
   }: ResponseProps) => {
+    // Streamdown has no preprocess hook, so math delimiters are rewritten on
+    // the way in — `$$` is the only form remark-math parses here. See
+    // preprocess-latex.ts for the passes and the order they run in.
+    //
+    // `isStreaming` is a dependency, not just an argument: at the end of a
+    // stream the last token has already arrived, so `children` is final and
+    // unchanged. Without it here the memo never recomputes and the finished
+    // reply keeps the streaming pass's cheaper, more approximate code regions.
+    // Any surface that streams must pass it for the same reason it exists: the
+    // finished path parses the whole string, which over 200 incremental updates
+    // of a 13k-char reply measured 2.4s against 33ms for the streaming scan.
+    const normalizedChildren = useMemo(
+      () =>
+        typeof children === "string"
+          ? prepareMathDelimiters(children, isStreaming)
+          : children,
+      [children, isStreaming],
+    );
+
     const mergedLinkSafety = useMemo(
       () => ({
         enabled: true,
@@ -126,6 +166,7 @@ const ResponseMarkdown = memo(
     return (
       <Streamdown
         mode={isStreaming ? "streaming" : "static"}
+        remend={REMEND_OPTIONS}
         isAnimating={isStreaming}
         animated={isStreaming ? { animation: "fadeIn", sep: "word" } : false}
         caret={isStreaming ? "block" : undefined}
@@ -133,7 +174,7 @@ const ResponseMarkdown = memo(
           code: { copy: true, download: true },
           table: { copy: true, download: true },
         }}
-        plugins={{ code }}
+        plugins={PLUGINS}
         className={cn(
           "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
           // Add proper list styling
@@ -194,7 +235,9 @@ const ResponseMarkdown = memo(
         rehypePlugins={REHYPE_PLUGINS}
         linkSafety={mergedLinkSafety}
         {...props}
-      />
+      >
+        {normalizedChildren}
+      </Streamdown>
     );
   },
   (prevProps, nextProps) =>

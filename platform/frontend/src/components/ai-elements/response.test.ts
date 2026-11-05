@@ -4,15 +4,19 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { isSameOriginUrl, preloadResponseMarkdown, Response } from "./response";
 
 // The renderer is a lazy chunk; once loaded it renders in the same pass.
-beforeAll(() => preloadResponseMarkdown());
+beforeAll(() => preloadResponseMarkdown(), 30_000);
 
 const APP_ID = "7b0839a1-4663-4371-a739-e5dac7f8c33e";
 
 // linkSafety off makes Streamdown render a real <a href> we can read, instead of
 // the safe-link <button> whose target lives in an onClick closure.
-function renderResponse(markdown: string) {
+function renderResponse(markdown: string, isStreaming = false) {
   return render(
-    createElement(Response, { linkSafety: { enabled: false } }, markdown),
+    createElement(
+      Response,
+      { linkSafety: { enabled: false }, isStreaming },
+      markdown,
+    ),
   );
 }
 
@@ -168,5 +172,316 @@ describe("Response app-link canonicalization", () => {
   it("does not rewrite the pattern inside a code span", () => {
     const { container } = renderResponse(`\`a/${APP_ID}\``);
     expect(container.querySelector("code")?.textContent).toBe(`a/${APP_ID}`);
+  });
+});
+
+// Renders through the real Streamdown pipeline, so this covers what the unit
+// tests for the delimiter rewrite cannot: that the math plugin is wired up, its
+// rehype stage survives rehype-harden, and display vs inline is preserved.
+describe("Response math rendering", () => {
+  it("renders bracket display math as a centered formula", () => {
+    const { container } = renderResponse(
+      "\\[ x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a} \\]",
+    );
+    expect(container.querySelector(".katex-display")).not.toBeNull();
+    // The reported bug is delimiters shown verbatim; the TeX source itself
+    // legitimately survives in KaTeX's MathML <annotation>, so assert on the
+    // delimiters and on the visual layer rather than on the whole subtree.
+    expect(container.textContent).not.toContain("\\[");
+    expect(container.querySelector(".katex-html")?.textContent).not.toContain(
+      "\\",
+    );
+  });
+
+  it("renders bracket inline math inside the surrounding paragraph", () => {
+    const { container } = renderResponse(
+      "Pythagoras says \\(a^2 + b^2\\) holds",
+    );
+    const paragraph = container.querySelector("p");
+    expect(paragraph?.querySelector(".katex")).not.toBeNull();
+    expect(container.querySelector(".katex-display")).toBeNull();
+    expect(paragraph?.textContent).toContain("Pythagoras says");
+  });
+
+  it("renders dollar-delimited math that models already emit correctly", () => {
+    const { container } = renderResponse("$$\nE = mc^2\n$$");
+    expect(container.querySelector(".katex-display")).not.toBeNull();
+  });
+
+  // Single-dollar math stays disabled precisely so prices survive untouched.
+  it("leaves prices in prose alone", () => {
+    const { container } = renderResponse(
+      "The plan costs $5 and the add-on $10",
+    );
+    expect(container.querySelector(".katex")).toBeNull();
+    expect(container.textContent).toContain("$5");
+    expect(container.textContent).toContain("$10");
+  });
+
+  // The normalized string looks harmless in isolation; only a render shows the
+  // damage. Display math indented inside a list item must not break out of the
+  // item and swallow the following content into the math block.
+  it("keeps a list intact around indented display math", () => {
+    const { container } = renderResponse(
+      "1. First:\n\n   \\[ x^2 \\]\n\n2. Second",
+    );
+    expect(container.querySelectorAll("li")).toHaveLength(2);
+    expect(container.querySelector(".katex")).not.toBeNull();
+    expect(container.querySelector(".katex-error")).toBeNull();
+    expect(container.textContent).toContain("Second");
+  });
+
+  it("does not render math inside a code block", () => {
+    const { container } = renderResponse("```\n\\[ x^2 \\]\n```");
+    expect(container.querySelector(".katex")).toBeNull();
+    expect(container.textContent).toContain("\\[ x^2 \\]");
+  });
+
+  // Single-dollar math is the form models reach for most often, and it reaches
+  // the renderer only because preprocess-latex.ts promotes it. These cases are
+  // taken from real replies that showed raw TeX on screen.
+  it("renders single-dollar math inside bold and heading text", () => {
+    const { container } = renderResponse(
+      "**Second Moment $E[X_i^2]$**: $$E[X_i^2] = p$$",
+    );
+    expect(container.querySelectorAll(".katex").length).toBe(2);
+    expect(container.textContent).not.toContain("$E[X_i^2]$");
+  });
+
+  it("renders a single-dollar macro that KaTeX supports", () => {
+    const { container } = renderResponse("The count is $\\binom{n}{k}$ ways.");
+    expect(container.querySelector(".katex")).not.toBeNull();
+    expect(container.querySelector(".katex-error")).toBeNull();
+  });
+
+  it("keeps a price and inline math apart on the same line", () => {
+    const { container } = renderResponse("Costs $5, and $x^2$ is the formula");
+    expect(container.querySelector(".katex")).not.toBeNull();
+    expect(container.textContent).toContain("$5");
+  });
+
+  // Dollar and bracket math in one reply: each pass has to leave the other's
+  // work alone.
+  it("renders dollar and bracket math in the same reply", () => {
+    const { container } = renderResponse(
+      "Let $q = 1 - p$, so \\[ \\text{Var}(X) = npq \\] follows.",
+    );
+    expect(container.querySelectorAll(".katex").length).toBe(2);
+    expect(container.querySelector(".katex-error")).toBeNull();
+  });
+});
+
+// Promoting `$…$` is the one rewrite that can turn ordinary prose into a
+// formula, and the damage is invisible in the normalized string — only a render
+// shows text being swallowed. These assert on the rendered output for that
+// reason, and are kept as a corpus because the rule is a balance of several
+// lookarounds: a change that fixes one shape tends to regress another.
+describe("Response dollar-sign safety", () => {
+  it.each([
+    // prices
+    "The plan costs $5 and the addon is $10.",
+    "Revenue grew from $20,000 and $30,000 last year.",
+    "Egress is $0.02/GB and storage is $0.01/GB.",
+    "It runs $203/month vs $150/month.",
+    "Pricing tiers: $5-$10 per seat.",
+    "Costs $50/$60 depending on region.",
+    "Item A ($5) and Item B ($10).",
+    "We charge US$100 and CA$200.",
+    "Between $1 million and $2 million in ARR.",
+    "He paid 5$ and I paid 10$.",
+    "Budget: $1,250.50 today, $3.2M next year.",
+    "Item A ($5) and Item B ($x).",
+    "Rates: ($5)/($x) per unit.",
+    "Tiers ($10)-($n) apply.",
+    // shell and ticker prose
+    "Set $HOME and $PATH before running.",
+    "Export $USER then check $SHELL.",
+    "Use $HOME/$USER as the target directory.",
+    "Prepend $PATH:$HOME to the search path.",
+    'Set PS1="$USER@$HOST" in your profile.',
+    "Check $JAVA_HOME and $MAVEN_HOME are set.",
+    "Compare $HOME,$PATH ordering.",
+    "Try $FOO;$BAR in one line.",
+    "The var $A and the var $B differ.",
+    "The ticker is $AAPL and $MSFT today.",
+    "Use $1 and $2 as positional args in bash.",
+    "Save $$ on your bill.",
+    // Shapes a blacklist of closing punctuation kept missing: the closer is a
+    // whitelist now, and adjacency alone must not pair two variables.
+    "Run $FOO$BAR to see the value.",
+    "Run $A$B to see the value.",
+    "Set $FOO=$BAR in the env file.",
+    "Use $HOME+$USER as the key.",
+    "Compare $A*$B and $C^$D here.",
+    "In PHP, $foo.$bar concatenates.",
+    // `${` opens an interpolation, never a formula. These are prose *about*
+    // interpolation, so the literal syntax is the point of the case.
+    // biome-ignore-start lint/suspicious/noTemplateCurlyInString: the interpolation syntax is the input under test
+    "Use ${HOME}${USER} as the target.",
+    "Use ${a}${b} in the template string.",
+    // biome-ignore-end lint/suspicious/noTemplateCurlyInString: the interpolation syntax is the input under test
+  ])("renders no math in: %s", (markdown) => {
+    const { container } = renderResponse(markdown);
+    expect(container.querySelector(".katex")).toBeNull();
+  });
+
+  it.each([
+    "The value $x$ is positive.",
+    "We know $a + b$ equals the total.",
+    "Let $x^2$ denote the square.",
+    "Here $\\frac{1}{2}$ is one half.",
+    "Given $n$ items and $k$ buckets.",
+    "Then $\\alpha$ and $\\beta$ are angles.",
+    "Consider $f(x)$ over the interval.",
+    "Segment $AB$ meets triangle $ABC$.",
+    "Solve $x = y$ for x.",
+    "The bound is $O(n \\log n)$ overall.",
+    "Let $v_i$ be the i-th vector.",
+    "Where $5x$ is the coefficient term.",
+    "The answer is $42$ exactly.",
+    "The ratio $a:b$ is fixed.",
+    "Compute $a/b$ directly.",
+    "Vector $\\vec{v}$ has norm $|v|$.",
+    "Then $P(A \\cap B)$ is the joint.",
+    "Let $x_1, x_2$ be the roots.",
+    "The interval $[0, 1]$ is closed.",
+    "Sum $\\sum_{i=1}^{n} i$ over all i.",
+    "If $x$ is the price then $x = 5$ dollars.",
+    "A $5 fee applies when $n$ exceeds the cap.",
+  ])("renders math in: %s", (markdown) => {
+    const { container } = renderResponse(markdown);
+    expect(container.querySelector(".katex")).not.toBeNull();
+    expect(container.querySelector(".katex-error")).toBeNull();
+  });
+
+  // The prices above must survive as readable text, not just avoid becoming a
+  // formula — the currency pass escapes them, and `\$` has to render as `$`.
+  it("shows an escaped price as a plain dollar amount", () => {
+    const { container } = renderResponse(
+      "The plan costs $5 and the addon $10.",
+    );
+    expect(container.textContent).toBe("The plan costs $5 and the addon $10.");
+  });
+
+  // The stray-`$$` case: promoting under an open display delimiter let the
+  // opener pair with the promoted one and swallow the prose between them.
+  it("keeps prose intact next to a stray display delimiter", () => {
+    const { container } = renderResponse("Save $$ when $x$ is high.");
+    expect(container.textContent).toBe("Save $$ when $x$ is high.");
+  });
+});
+
+// Rewriting inside a code block is the one failure this component cannot have:
+// a shell snippet that mentions `$HOME` is not a formula, and a developer
+// copying it out must get back what the model wrote. Both render paths are
+// exercised because they find code regions differently — a finished reply is
+// parsed, a streaming one is scanned — and a shape can pass in one and fail in
+// the other.
+// Every shape runs against every delimiter form. The dollar and bracket passes
+// used to disagree about what counts as code — the bracket pass knew only ```
+// fences and single-backtick spans — so a tilde fence containing `\[x\]` had
+// its delimiters rewritten while the same fence containing `$x$` was left
+// alone. Both now ask the same module, and this matrix is what holds them to it.
+const MATH_FORMS: Array<[string, string]> = [
+  ["dollar", "$x$"],
+  ["display brackets", "\\[x\\]"],
+  ["inline brackets", "\\(x\\)"],
+];
+
+const CODE_SHAPES: Array<[string, (math: string) => string]> = [
+  ["a fenced block", (m) => `\`\`\`sh\ncost = ${m} and $5\n\`\`\``],
+  [
+    "a fence with a blank line",
+    (m) => `\`\`\`py\na = 1\n\ncost = ${m}\n\`\`\``,
+  ],
+  ["a tilde fence", (m) => `~~~sh\ncost = ${m} and $5\n~~~`],
+  ["an inline span", (m) => `Run \`cost = ${m}\` verbatim.`],
+  ["a double-backtick span", (m) => `Run \`\`cost = ${m}\`\` verbatim.`],
+  [
+    "a longer fence around a shorter one",
+    (m) => `\`\`\`\`md\n\`\`\`\ncost = ${m}\n\`\`\`\n\`\`\`\``,
+  ],
+  ["a fence that has not closed yet", (m) => `\`\`\`py\ncost = ${m} and $5`],
+];
+
+describe.each([
+  ["finished", false],
+  ["streaming", true],
+])("Response code-region safety (%s)", (_label, isStreaming) => {
+  describe.each(MATH_FORMS)("%s math", (_form, math) => {
+    it.each(CODE_SHAPES)("leaves %s untouched", (_shape, build) => {
+      const { container } = renderResponse(build(math), isStreaming);
+      const code = container.querySelector("code");
+
+      expect(code).not.toBeNull();
+      expect(code?.textContent).toContain(math);
+      expect(code?.textContent).not.toContain("$$");
+      expect(code?.textContent).not.toContain("\\$");
+      expect(container.querySelector(".katex")).toBeNull();
+    });
+  });
+});
+
+// Indented code is finished-path only: the streaming scanner works on backtick
+// and tilde runs, and mid-stream a four-space indent is not distinguishable
+// from a deep list continuation without block context. See the known-limitation
+// pin below for what that costs while a reply is still arriving.
+describe.each(
+  MATH_FORMS,
+)("Response code-region safety (indented block, %s)", (_form, math) => {
+  it("leaves an indented code block untouched once the reply is finished", () => {
+    const { container } = renderResponse(`text:\n\n    cost = ${math} and $5`);
+    const code = container.querySelector("code");
+
+    expect(code?.textContent).toContain(math);
+    expect(code?.textContent).not.toContain("$$");
+    expect(code?.textContent).not.toContain("\\$");
+    expect(container.querySelector(".katex")).toBeNull();
+  });
+});
+
+// Shapes that are still wrong, pinned so the behaviour is visible in the diff if
+// it ever changes. Each needs a content gate — a rule about what a formula may
+// contain — which is a larger change than the delimiter rules above and buys
+// only these cases.
+describe("Response known limitations", () => {
+  // `$$` twice in one line pairs natively in remark-math, before any of our
+  // passes see it. Every markdown-math parser tested has this bug: markdown-it
+  // -dollarmath, marked-katex, @vscode/markdown-it-katex and remark-math all
+  // render it as a formula.
+  it("still reads doubled money slang as display math", () => {
+    const { container } = renderResponse("Save $$ today, spend $$ tomorrow.");
+    expect(container.querySelector(".katex")).not.toBeNull();
+  });
+
+  // normalize-math rewrites bracket delimiters with no test of what is between
+  // them, so escaped brackets in prose become formulas.
+  it.each([
+    "Escaped \\[brackets\\] in markdown.",
+    "See footnote \\[1\\] for details.",
+    "The class \\[a-z\\] matches letters.",
+    "Escaped \\(parens\\) in markdown.",
+  ])("still reads %s as math", (markdown) => {
+    const { container } = renderResponse(markdown);
+    expect(container.querySelector(".katex")).not.toBeNull();
+  });
+
+  // The streaming scanner has no notion of indented code, so a four-space block
+  // is rewritten for as long as the reply is still arriving and corrects itself
+  // when the parse takes over. Teaching the scanner the rule would need block
+  // context it does not have mid-stream, and a crude four-space test would
+  // suppress math inside nested list items — a live case in this suite.
+  it("still rewrites an indented code block while streaming", () => {
+    const { container } = renderResponse("text:\n\n    cost = $x$\n", true);
+    expect(container.querySelector("code")?.textContent).toContain("$$x$$");
+  });
+
+  // The closer may not be followed by a letter, which is what stops `$FOO$BAR`
+  // from pairing. `$n$th` is the price: VS Code and marked-katex make the same
+  // trade.
+  it("no longer renders the $n$th idiom as math", () => {
+    const { container } = renderResponse("The $n$th term follows.");
+    expect(container.querySelector(".katex")).toBeNull();
+    expect(container.textContent).toBe("The $n$th term follows.");
   });
 });

@@ -76,7 +76,6 @@ describe("SubagentLoadBalancingSection", () => {
       algorithm: "round_robin",
       retries: 1,
       fallbackEnabled: true,
-      maxFallbacks: null,
     });
 
     await user.click(toggle);
@@ -94,7 +93,6 @@ describe("SubagentLoadBalancingSection", () => {
       algorithm: "weighted",
       retries: 1,
       fallbackEnabled: true,
-      maxFallbacks: null,
     });
 
     const claudeWeightInput = screen.getByLabelText(
@@ -112,16 +110,6 @@ describe("SubagentLoadBalancingSection", () => {
     });
     expect(SubagentLoadBalancingConfigSchema.safeParse(latest).success).toBe(
       true,
-    );
-
-    const maxFallbacksInput = screen.getByLabelText(
-      "Maximum fallback subagents",
-    );
-    fireEvent.change(maxFallbacksInput, { target: { value: "2" } });
-    expect(onChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        maxFallbacks: 2,
-      }),
     );
 
     const fallbackSwitch = screen.getByRole("switch", {
@@ -173,7 +161,6 @@ describe("SubagentLoadBalancingSection", () => {
         algorithm: "weighted",
         retries: 1,
         fallbackEnabled: true,
-        maxFallbacks: null,
       },
       [],
       { isGateway: false, isAllSubagentsMode: true },
@@ -195,7 +182,6 @@ describe("SubagentLoadBalancingSection", () => {
       algorithm: "round_robin",
       retries: 5,
       fallbackEnabled: true,
-      maxFallbacks: null,
     });
     expect(parsed.retries).toBe(3);
   });

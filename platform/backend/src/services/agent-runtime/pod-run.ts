@@ -69,10 +69,13 @@ import {
   resolveRunWorkspaceGiB,
   tierWorkspaceGiB,
 } from "./runtime-tiers";
+import { subagentLoadBalancer } from "./subagent-load-balancer";
 import { generateAgentRunTitle } from "./title";
 import { agentRunTranscriptStore } from "./transcript-store";
 
 export interface SubagentExecutionPolicy {
+  /** Calling gateway or orchestrator agent ID for distributed load-balancer state updates. */
+  callerAgentId?: string;
   /** Number of automatic retries on the same subagent for retriable failures (0–3). */
   retries?: number;
   /** Ordered fallback runtime subagent IDs to try if the current subagent fails. */
@@ -618,14 +621,21 @@ export async function runTaskInAgentRuntime(params: {
     modelId: string | null;
     llmApiKeyId: string | null;
   };
-  let nextFallbackIndex = 0;
+  let remainingFallbackIds = [...fallbackAgentIds];
   let prefetchedFallback: CandidateConfig | null = null;
 
   const peekNextFallbackCandidate =
     async (): Promise<CandidateConfig | null> => {
       if (prefetchedFallback) return prefetchedFallback;
-      while (nextFallbackIndex < fallbackAgentIds.length) {
-        const fallbackAgentId = fallbackAgentIds[nextFallbackIndex++];
+      if (remainingFallbackIds.length === 0) return null;
+      remainingFallbackIds =
+        await subagentLoadBalancer.orderRemainingCandidates({
+          callerAgentId: policy?.callerAgentId,
+          remainingCandidateIds: remainingFallbackIds,
+        });
+      while (remainingFallbackIds.length > 0) {
+        const fallbackAgentId = remainingFallbackIds.shift();
+        if (!fallbackAgentId) break;
         const nextAgent = await AgentModel.findById(fallbackAgentId);
         if (!nextAgent || nextAgent.organizationId !== params.organizationId) {
           continue;
@@ -781,6 +791,12 @@ export async function runTaskInAgentRuntime(params: {
     }
     prefetchedFallback = null;
     currentCandidate = nextCandidate;
+    if (policy?.callerAgentId) {
+      await subagentLoadBalancer.recordCandidateClaimed({
+        callerAgentId: policy.callerAgentId,
+        claimedAgentId: currentCandidate.agentId,
+      });
+    }
     await A2ATaskModel.updateAgentId(params.taskId, currentCandidate.agentId);
   }
 

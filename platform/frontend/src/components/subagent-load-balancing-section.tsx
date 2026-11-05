@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  SUBAGENT_LOAD_BALANCING_MAX_FALLBACKS,
   SUBAGENT_LOAD_BALANCING_MAX_RETRIES,
   SUBAGENT_LOAD_BALANCING_MAX_WEIGHT,
   SUBAGENT_LOAD_BALANCING_MIN_WEIGHT,
@@ -30,7 +29,6 @@ const DEFAULT_LOAD_BALANCING_CONFIG: SubagentLoadBalancingConfig = {
   algorithm: "round_robin",
   retries: 1,
   fallbackEnabled: true,
-  maxFallbacks: null,
 };
 
 function getAlgorithmOptions(targetLabel: string): ReadonlyArray<{
@@ -55,12 +53,6 @@ function getAlgorithmOptions(targetLabel: string): ReadonlyArray<{
       label: "Random",
       description:
         "Select an assigned subagent uniformly at random for each incoming request.",
-    },
-    {
-      value: "ordered",
-      label: "Priority order",
-      description:
-        "Always route requests starting from the first assigned subagent, using the rest in order as fallbacks.",
     },
   ];
 }
@@ -101,7 +93,6 @@ export function SubagentLoadBalancingSection({
   const algorithmSelectId = useId();
   const retriesSelectId = useId();
   const fallbackSwitchId = useId();
-  const maxFallbacksInputId = useId();
 
   const targetLabel = isGateway ? "this gateway" : "this agent";
   const algorithmOptions = getAlgorithmOptions(targetLabel);
@@ -165,21 +156,6 @@ export function SubagentLoadBalancingSection({
     updateConfig({
       weights: Object.keys(nextWeights).length > 0 ? nextWeights : undefined,
     });
-  };
-
-  const handleMaxFallbacksChange = (rawValue: string) => {
-    const trimmed = rawValue.trim();
-    if (!trimmed) {
-      updateConfig({ maxFallbacks: null });
-      return;
-    }
-    const parsed = Number.parseInt(trimmed, 10);
-    if (Number.isNaN(parsed)) return;
-    const clamped = Math.max(
-      0,
-      Math.min(SUBAGENT_LOAD_BALANCING_MAX_FALLBACKS, parsed),
-    );
-    updateConfig({ maxFallbacks: clamped });
   };
 
   return (
@@ -355,8 +331,8 @@ export function SubagentLoadBalancingSection({
                   <FieldDescription>
                     <span>
                       When a subagent fails after exhausting its retries,
-                      automatically route the request to the next assigned
-                      subagent.
+                      automatically route the request through all remaining
+                      assigned subagents until one succeeds.
                     </span>
                   </FieldDescription>
                 </div>
@@ -370,37 +346,6 @@ export function SubagentLoadBalancingSection({
                   }
                 />
               </div>
-
-              {currentConfig.fallbackEnabled && (
-                <div className="space-y-1.5 pt-1">
-                  <Label htmlFor={maxFallbacksInputId}>
-                    <span>Maximum fallback subagents</span>
-                  </Label>
-                  <Input
-                    id={maxFallbacksInputId}
-                    type="number"
-                    min={0}
-                    max={SUBAGENT_LOAD_BALANCING_MAX_FALLBACKS}
-                    placeholder="All remaining subagents"
-                    value={
-                      currentConfig.maxFallbacks != null
-                        ? String(currentConfig.maxFallbacks)
-                        : ""
-                    }
-                    disabled={readOnly}
-                    onChange={(event) =>
-                      handleMaxFallbacksChange(event.target.value)
-                    }
-                    className="max-w-xs text-xs"
-                  />
-                  <FieldDescription>
-                    <span>
-                      Leave empty to try all remaining assigned subagents before
-                      reporting a failure.
-                    </span>
-                  </FieldDescription>
-                </div>
-              )}
             </div>
           </div>
         )}

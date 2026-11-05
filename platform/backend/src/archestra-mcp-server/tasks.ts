@@ -1,8 +1,6 @@
 import path from "node:path";
 import {
   DEFAULT_APP_NAME,
-  nextGatewayRoundRobinSeed,
-  orderSubagentsByLoadBalancing,
   TOOL_CANCEL_AGENT_RUN_SHORT_NAME,
   TOOL_DELETE_WORKSPACE_SHORT_NAME,
   TOOL_GET_AGENT_RUN_SHORT_NAME,
@@ -78,6 +76,7 @@ import {
   cancelDetachedAgentTask,
   startDetachedAgentTask,
 } from "@/services/agent-runtime/start-task";
+import { subagentLoadBalancer } from "@/services/agent-runtime/subagent-load-balancer";
 import { accessAgentWorkspaceFile } from "@/services/agent-runtime/workspace-files";
 import { deleteAgentWorkspace } from "@/services/agent-runtime/workspace-lifecycle";
 import {
@@ -233,8 +232,29 @@ export async function startDelegatedTask(params: {
   limits?: AgentRunLimitsRequest;
   context: ArchestraContext;
 }) {
+  const callerAgent = params.context.agent?.id
+    ? await AgentModel.findById(params.context.agent.id)
+    : null;
+  const lbConfig = callerAgent?.subagentLoadBalancing ?? null;
   const explicitAgentId = params.agentId?.trim();
-  if (explicitAgentId) {
+
+  const assignedIds = callerAgent
+    ? await resolveCandidateRuntimeSubagentIds({
+        callerAgent,
+        actorUserId: params.context.userId,
+      })
+    : [];
+  const assignedSet = new Set(assignedIds);
+
+  // When subagent load balancing is disabled (or when the caller specified an
+  // agent_id outside the caller's load-balanced pool so access checks can report
+  // the exact refusal), dispatch directly to explicitAgentId. When load balancing
+  // is enabled and explicitAgentId belongs to the caller's pool, route
+  // programmatically through the load balancer across all assigned candidates.
+  if (
+    explicitAgentId &&
+    (!lbConfig?.enabled || !assignedSet.has(explicitAgentId))
+  ) {
     let ephemeralCredentials: Record<string, string> | undefined;
     if (params.credentialGrantIds && params.credentialGrantIds.length > 0) {
       let actor: A2AActor;
@@ -268,10 +288,6 @@ export async function startDelegatedTask(params: {
       ephemeralCredentials = resolved.envForAgent(explicitAgentId);
     }
 
-    const callerAgent = params.context.agent?.id
-      ? await AgentModel.findById(params.context.agent.id)
-      : null;
-    const lbConfig = callerAgent?.subagentLoadBalancing ?? null;
     const retries = lbConfig?.enabled ? (lbConfig.retries ?? 0) : 0;
 
     const { result, outcome } = await launchDelegatedTask({
@@ -292,9 +308,6 @@ export async function startDelegatedTask(params: {
     return result;
   }
 
-  const callerAgent = params.context.agent?.id
-    ? await AgentModel.findById(params.context.agent.id)
-    : null;
   if (!callerAgent) {
     const { result, outcome } = failedLaunch(
       "refused",
@@ -304,10 +317,6 @@ export async function startDelegatedTask(params: {
     return result;
   }
 
-  const assignedIds = await resolveCandidateRuntimeSubagentIds({
-    callerAgent,
-    actorUserId: params.context.userId,
-  });
   if (assignedIds.length === 0) {
     const { result, outcome } = failedLaunch(
       "refused",
@@ -317,20 +326,11 @@ export async function startDelegatedTask(params: {
     return result;
   }
 
-  const lbConfig = callerAgent.subagentLoadBalancing ?? null;
   const fallbackEnabled = lbConfig?.fallbackEnabled ?? true;
-  const maxFallbacks =
-    lbConfig?.maxFallbacks != null
-      ? Math.max(0, lbConfig.maxFallbacks)
-      : Math.max(0, assignedIds.length - 1);
-  const assignedSet = new Set(assignedIds);
   const excludedSet = new Set(
     (params.excludeAgentIds ?? []).filter((id) => assignedSet.has(id)),
   );
-  if (
-    excludedSet.size > 0 &&
-    (!fallbackEnabled || excludedSet.size > maxFallbacks)
-  ) {
+  if (excludedSet.size > 0 && !fallbackEnabled) {
     const { result, outcome } = failedLaunch(
       "refused",
       errorResult(
@@ -341,13 +341,13 @@ export async function startDelegatedTask(params: {
     return result;
   }
 
-  const orderedIds = orderSubagentsByLoadBalancing(assignedIds, lbConfig, {
-    seed:
-      lbConfig?.enabled && lbConfig.algorithm === "round_robin"
-        ? nextGatewayRoundRobinSeed(callerAgent.id)
-        : undefined,
-  });
-  const candidateIds = orderedIds.filter((id) => !excludedSet.has(id));
+  const { candidateIds, claimedPrimaryAgentId } =
+    await subagentLoadBalancer.planCandidates({
+      callerAgentId: callerAgent.id,
+      assignedAgentIds: assignedIds,
+      excludedAgentIds: excludedSet,
+      config: lbConfig,
+    });
   if (candidateIds.length === 0) {
     const { result, outcome } = failedLaunch(
       "refused",
@@ -358,11 +358,9 @@ export async function startDelegatedTask(params: {
     if (outcome) await recordRuntimeLaunch(params.context, outcome);
     return result;
   }
-  const remainingFallbacks = fallbackEnabled
-    ? Math.max(0, maxFallbacks - excludedSet.size)
-    : 0;
-  const maxCandidates = Math.min(candidateIds.length, 1 + remainingFallbacks);
-  const activeCandidates = candidateIds.slice(0, maxCandidates);
+  const activeCandidates = fallbackEnabled
+    ? candidateIds
+    : candidateIds.slice(0, 1);
 
   let ephemeralCredentialsByAgentId:
     | Record<string, Record<string, string>>
@@ -372,6 +370,11 @@ export async function startDelegatedTask(params: {
     try {
       actor = requireActor(params.context);
     } catch (error) {
+      await subagentLoadBalancer.releaseUnlaunchedClaim({
+        callerAgentId: callerAgent.id,
+        claimedPrimaryAgentId,
+        config: lbConfig,
+      });
       const { result, outcome } = failedLaunch(
         "refused",
         error instanceof ApiError
@@ -389,6 +392,11 @@ export async function startDelegatedTask(params: {
       candidateAgentIds: activeCandidates,
     });
     if (!resolved.ok) {
+      await subagentLoadBalancer.releaseUnlaunchedClaim({
+        callerAgentId: callerAgent.id,
+        claimedPrimaryAgentId,
+        config: lbConfig,
+      });
       const { result, outcome } = failedLaunch(
         "refused",
         errorResult(resolved.message),
@@ -402,6 +410,8 @@ export async function startDelegatedTask(params: {
   }
 
   const retries = lbConfig?.enabled ? (lbConfig.retries ?? 0) : 0;
+  const trackDistributedRotation =
+    lbConfig?.enabled === true && lbConfig.algorithm === "round_robin";
 
   let lastAttempt: {
     result: CallToolResult;
@@ -416,6 +426,7 @@ export async function startDelegatedTask(params: {
       credentialGrantIds: params.credentialGrantIds,
       ephemeralCredentials: ephemeralCredentialsByAgentId?.[candidateId],
       subagentExecutionPolicy: {
+        ...(trackDistributedRotation ? { callerAgentId: callerAgent.id } : {}),
         retries,
         fallbackAgentIds,
         requestedLimits: params.limits,
@@ -425,17 +436,37 @@ export async function startDelegatedTask(params: {
       },
     });
     lastAttempt = attempt;
+    if (attempt.outcome?.kind === "launched") {
+      if (index > 0 && trackDistributedRotation) {
+        await subagentLoadBalancer.recordCandidateClaimed({
+          callerAgentId: callerAgent.id,
+          claimedAgentId: candidateId,
+          assignedAgentIds: assignedIds,
+        });
+      }
+      await recordRuntimeLaunch(params.context, attempt.outcome);
+      return attempt.result;
+    }
     if (
-      attempt.outcome?.kind === "launched" ||
-      (attempt.outcome?.kind === "failed" &&
-        (attempt.outcome.reason === "refused" ||
-          attempt.outcome.reason === "agent_not_found" ||
-          attempt.outcome.reason === "credentials_misconfigured"))
+      attempt.outcome?.kind === "failed" &&
+      (attempt.outcome.reason === "refused" ||
+        attempt.outcome.reason === "agent_not_found" ||
+        attempt.outcome.reason === "credentials_misconfigured")
     ) {
+      await subagentLoadBalancer.releaseUnlaunchedClaim({
+        callerAgentId: callerAgent.id,
+        claimedPrimaryAgentId,
+        config: lbConfig,
+      });
       await recordRuntimeLaunch(params.context, attempt.outcome);
       return attempt.result;
     }
   }
+  await subagentLoadBalancer.releaseUnlaunchedClaim({
+    callerAgentId: callerAgent.id,
+    claimedPrimaryAgentId,
+    config: lbConfig,
+  });
   if (lastAttempt?.outcome) {
     await recordRuntimeLaunch(params.context, lastAttempt.outcome);
   }
@@ -657,7 +688,10 @@ async function launchDelegatedTask(params: {
     }
 
     // The first turn's task id is the run's stable id (its workspace id).
-    const run = runSummary({ row: taskRow, runId: taskRow.id });
+    const run = {
+      ...runSummary({ row: taskRow, runId: taskRow.id }),
+      agent_name: agent.name,
+    };
     const state = RuntimeLaunchStateSchema.safeParse(run.state);
     const reportsToThread = completionTarget !== undefined;
     return {
@@ -714,6 +748,11 @@ const RunSummarySchema = z.object({
       "submitted | working | input-required | completed | canceled | failed",
     ),
   agent_id: z.string().nullable().describe("The agent doing the work."),
+  agent_name: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("Display name of the agent doing the work, when known."),
   status_reason: z
     .string()
     .nullable()

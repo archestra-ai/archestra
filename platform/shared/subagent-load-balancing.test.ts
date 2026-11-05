@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { orderSubagentsByLoadBalancing } from "./subagent-load-balancing";
+import {
+  orderSubagentsByLoadBalancing,
+  StoredSubagentLoadBalancingConfigSchema,
+  SubagentLoadBalancingConfigSchema,
+} from "./subagent-load-balancing";
 
 describe("orderSubagentsByLoadBalancing", () => {
   const agents = ["a", "b", "c"];
@@ -14,7 +18,7 @@ describe("orderSubagentsByLoadBalancing", () => {
     ).toEqual(agents);
   });
 
-  it("rotates by seed for round_robin", () => {
+  it("rotates primary and fallback order by seed for round_robin across any agent count", () => {
     expect(
       orderSubagentsByLoadBalancing(
         agents,
@@ -36,6 +40,37 @@ describe("orderSubagentsByLoadBalancing", () => {
         { seed: 2 },
       ),
     ).toEqual(["c", "a", "b"]);
+    // Next full cycle (round 1): primary is "a" again, and fallback tail rotates so "c" is first fallback
+    expect(
+      orderSubagentsByLoadBalancing(
+        agents,
+        { enabled: true, algorithm: "round_robin" },
+        { seed: 3 },
+      ),
+    ).toEqual(["a", "c", "b"]);
+
+    const fiveAgents = ["a1", "a2", "a3", "a4", "a5"];
+    const primaries = Array.from(
+      { length: 10 },
+      (_, seed) =>
+        orderSubagentsByLoadBalancing(
+          fiveAgents,
+          { enabled: true, algorithm: "round_robin" },
+          { seed },
+        )[0],
+    );
+    expect(primaries).toEqual([
+      "a1",
+      "a2",
+      "a3",
+      "a4",
+      "a5",
+      "a1",
+      "a2",
+      "a3",
+      "a4",
+      "a5",
+    ]);
   });
 
   it("samples without replacement according to weights for weighted", () => {
@@ -52,19 +87,33 @@ describe("orderSubagentsByLoadBalancing", () => {
     expect([...ordered].sort()).toEqual(agents);
   });
 
-  it("shuffles for random and preserves order for ordered", () => {
-    expect(
-      orderSubagentsByLoadBalancing(agents, {
-        enabled: true,
-        algorithm: "ordered",
-      }),
-    ).toEqual(agents);
-
+  it("shuffles for random and normalizes legacy stored configs", () => {
     const shuffled = orderSubagentsByLoadBalancing(
       agents,
       { enabled: true, algorithm: "random" },
       { random: () => 0 },
     );
     expect([...shuffled].sort()).toEqual(agents);
+
+    expect(
+      SubagentLoadBalancingConfigSchema.safeParse({
+        enabled: true,
+        algorithm: "ordered",
+      }).success,
+    ).toBe(false);
+
+    const parsedLegacy = StoredSubagentLoadBalancingConfigSchema.parse({
+      enabled: true,
+      algorithm: "ordered",
+      retries: 2,
+      fallbackEnabled: true,
+      maxFallbacks: 1,
+    });
+    expect(parsedLegacy).toEqual({
+      enabled: true,
+      algorithm: "round_robin",
+      retries: 2,
+      fallbackEnabled: true,
+    });
   });
 });

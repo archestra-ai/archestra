@@ -4,7 +4,6 @@ export const SUBAGENT_LOAD_BALANCING_ALGORITHMS = [
   "round_robin",
   "weighted",
   "random",
-  "ordered",
 ] as const;
 
 export const SubagentLoadBalancingAlgorithmSchema = z.enum(
@@ -17,10 +16,9 @@ export type SubagentLoadBalancingAlgorithm = z.infer<
 export const SUBAGENT_LOAD_BALANCING_MIN_WEIGHT = 1;
 export const SUBAGENT_LOAD_BALANCING_MAX_WEIGHT = 1000;
 export const SUBAGENT_LOAD_BALANCING_MAX_RETRIES = 3;
-export const SUBAGENT_LOAD_BALANCING_MAX_FALLBACKS = 100;
 
 export const SubagentLoadBalancingConfigSchema = z.object({
-  /** Whether load balancing is enabled for subagents assigned to this MCP gateway. */
+  /** Whether load balancing is enabled for subagents assigned to this agent or MCP gateway. */
   enabled: z.boolean().default(false),
   /** How incoming requests are distributed among assigned subagents when enabled. */
   algorithm: SubagentLoadBalancingAlgorithmSchema.default("round_robin"),
@@ -47,17 +45,6 @@ export const SubagentLoadBalancingConfigSchema = z.object({
     .default(1),
   /** Whether failed subagent requests fall back to alternative assigned subagents. */
   fallbackEnabled: z.boolean().default(true),
-  /**
-   * Maximum number of alternative subagents to try after a failure.
-   * Null or omitted tries all remaining assigned subagents.
-   */
-  maxFallbacks: z
-    .number()
-    .int()
-    .min(0)
-    .max(SUBAGENT_LOAD_BALANCING_MAX_FALLBACKS)
-    .nullable()
-    .optional(),
 });
 
 export type SubagentLoadBalancingConfig = z.infer<
@@ -82,35 +69,13 @@ export const StoredSubagentLoadBalancingConfigSchema = z.object({
     .max(SUBAGENT_LOAD_BALANCING_MAX_RETRIES)
     .catch(SUBAGENT_LOAD_BALANCING_MAX_RETRIES),
   fallbackEnabled: z.boolean().catch(true),
-  maxFallbacks: z
-    .number()
-    .int()
-    .min(0)
-    .max(100)
-    .nullable()
-    .optional()
-    .catch(null),
 });
 
-const gatewayRoundRobinCounters = new Map<string, number>();
-
 /**
- * Returns the next round-robin counter for `gatewayId` (0, 1, 2, ...).
- */
-export function nextGatewayRoundRobinSeed(gatewayId: string): number {
-  const current = gatewayRoundRobinCounters.get(gatewayId) ?? 0;
-  gatewayRoundRobinCounters.set(gatewayId, (current + 1) % 1_000_000_000);
-  return current;
-}
-
-export function resetGatewayRoundRobinSeeds(): void {
-  gatewayRoundRobinCounters.clear();
-}
-
-/**
- * Orders assigned subagent IDs according to the gateway's load-balancing policy.
- * - Disabled or `ordered`: preserves assignment order.
- * - `round_robin`: rotates the list starting at `seed mod N`.
+ * Orders assigned subagent IDs according to the load-balancing policy.
+ * - Disabled: preserves assignment order.
+ * - `round_robin`: rotates primary selection at `seed mod N` and rotates
+ *   fallback order across full rounds so no single neighbor absorbs all failovers.
  * - `random`: uniform random permutation.
  * - `weighted`: weighted sampling without replacement using configured weights (default 1).
  */
@@ -128,15 +93,27 @@ export function orderSubagentsByLoadBalancing(
 ): string[] {
   const n = agentIds.length;
   if (n <= 1) return [...agentIds];
-  if (!config || !config.enabled || config.algorithm === "ordered") {
+  if (!config || !config.enabled) {
     return [...agentIds];
   }
   const random = options?.random ?? Math.random;
   if (config.algorithm === "round_robin") {
-    const seed =
-      options?.seed !== undefined ? options.seed : Math.floor(random() * n);
-    const start = ((seed % n) + n) % n;
-    return [...agentIds.slice(start), ...agentIds.slice(0, start)];
+    const rawSeed =
+      options?.seed !== undefined
+        ? Math.trunc(options.seed)
+        : Math.floor(random() * n);
+    const start = ((rawSeed % n) + n) % n;
+    const tail = [...agentIds.slice(start + 1), ...agentIds.slice(0, start)];
+    if (tail.length <= 1) {
+      return [agentIds[start], ...tail];
+    }
+    const round = Math.floor(Math.max(0, rawSeed) / n);
+    const tailShift = round % tail.length;
+    return [
+      agentIds[start],
+      ...tail.slice(tailShift),
+      ...tail.slice(0, tailShift),
+    ];
   }
   if (config.algorithm === "random") {
     const result = [...agentIds];

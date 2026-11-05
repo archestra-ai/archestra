@@ -361,20 +361,32 @@ export async function handleDelegation(
   // A fork is a copy of the running caller, so it always runs in this process.
   const targetAgent = await AgentModel.findById(target.id);
   if (!selfFork && targetAgent && resolveAgentRuntime(targetAgent)) {
+    const callerAgent = await AgentModel.findById(agentId);
+    const loadBalancingEnabled =
+      callerAgent?.subagentLoadBalancing?.enabled === true;
     logger.info(
       {
         agentId,
         targetAgentId: target.id,
         targetAgentName: target.name,
+        loadBalancingEnabled,
         organizationId,
         userId: userId || "system",
       },
       "Starting background task from agent delegation",
     );
     return startDelegatedTask({
-      agentId: target.id,
+      ...(loadBalancingEnabled ? {} : { agentId: target.id }),
       message,
-      context,
+      context: context.agent
+        ? context
+        : {
+            ...context,
+            agent: {
+              id: agentId,
+              name: callerAgent?.name ?? agentId,
+            },
+          },
     });
   }
 

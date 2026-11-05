@@ -63131,8 +63131,7 @@
                                         "enum": [
                                           "round_robin",
                                           "weighted",
-                                          "random",
-                                          "ordered"
+                                          "random"
                                         ]
                                       },
                                       "weights": {
@@ -63152,13 +63151,6 @@
                                       "fallbackEnabled": {
                                         "default": true,
                                         "type": "boolean"
-                                      },
-                                      "maxFallbacks": {
-                                        "default": null,
-                                        "nullable": true,
-                                        "type": "integer",
-                                        "minimum": 0,
-                                        "maximum": 100
                                       }
                                     },
                                     "required": [
@@ -64964,8 +64956,7 @@
                                 "enum": [
                                   "round_robin",
                                   "weighted",
-                                  "random",
-                                  "ordered"
+                                  "random"
                                 ]
                               },
                               "weights": {
@@ -64985,13 +64976,6 @@
                               "fallbackEnabled": {
                                 "default": true,
                                 "type": "boolean"
-                              },
-                              "maxFallbacks": {
-                                "default": null,
-                                "nullable": true,
-                                "type": "integer",
-                                "minimum": 0,
-                                "maximum": 100
                               }
                             },
                             "required": [
@@ -66092,8 +66076,7 @@
                         "enum": [
                           "round_robin",
                           "weighted",
-                          "random",
-                          "ordered"
+                          "random"
                         ]
                       },
                       "weights": {
@@ -66113,12 +66096,6 @@
                       "fallbackEnabled": {
                         "default": true,
                         "type": "boolean"
-                      },
-                      "maxFallbacks": {
-                        "nullable": true,
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 100
                       }
                     }
                   },
@@ -67041,8 +67018,7 @@
                           "enum": [
                             "round_robin",
                             "weighted",
-                            "random",
-                            "ordered"
+                            "random"
                           ]
                         },
                         "weights": {
@@ -67062,13 +67038,6 @@
                         "fallbackEnabled": {
                           "default": true,
                           "type": "boolean"
-                        },
-                        "maxFallbacks": {
-                          "default": null,
-                          "nullable": true,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 100
                         }
                       },
                       "required": [
@@ -72400,8 +72369,7 @@
                           "enum": [
                             "round_robin",
                             "weighted",
-                            "random",
-                            "ordered"
+                            "random"
                           ]
                         },
                         "weights": {
@@ -72421,13 +72389,6 @@
                         "fallbackEnabled": {
                           "default": true,
                           "type": "boolean"
-                        },
-                        "maxFallbacks": {
-                          "default": null,
-                          "nullable": true,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 100
                         }
                       },
                       "required": [
@@ -73922,8 +73883,7 @@
                               "enum": [
                                 "round_robin",
                                 "weighted",
-                                "random",
-                                "ordered"
+                                "random"
                               ]
                             },
                             "weights": {
@@ -73943,13 +73903,6 @@
                             "fallbackEnabled": {
                               "default": true,
                               "type": "boolean"
-                            },
-                            "maxFallbacks": {
-                              "default": null,
-                              "nullable": true,
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 100
                             }
                           },
                           "required": [
@@ -75117,8 +75070,7 @@
                           "enum": [
                             "round_robin",
                             "weighted",
-                            "random",
-                            "ordered"
+                            "random"
                           ]
                         },
                         "weights": {
@@ -75138,13 +75090,6 @@
                         "fallbackEnabled": {
                           "default": true,
                           "type": "boolean"
-                        },
-                        "maxFallbacks": {
-                          "default": null,
-                          "nullable": true,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 100
                         }
                       },
                       "required": [
@@ -76223,8 +76168,7 @@
                         "enum": [
                           "round_robin",
                           "weighted",
-                          "random",
-                          "ordered"
+                          "random"
                         ]
                       },
                       "weights": {
@@ -76244,12 +76188,6 @@
                       "fallbackEnabled": {
                         "default": true,
                         "type": "boolean"
-                      },
-                      "maxFallbacks": {
-                        "nullable": true,
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 100
                       }
                     }
                   },
@@ -76861,8 +76799,7 @@
                           "enum": [
                             "round_robin",
                             "weighted",
-                            "random",
-                            "ordered"
+                            "random"
                           ]
                         },
                         "weights": {
@@ -76882,13 +76819,6 @@
                         "fallbackEnabled": {
                           "default": true,
                           "type": "boolean"
-                        },
-                        "maxFallbacks": {
-                          "default": null,
-                          "nullable": true,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 100
                         }
                       },
                       "required": [
@@ -78721,8 +78651,7 @@
                               "enum": [
                                 "round_robin",
                                 "weighted",
-                                "random",
-                                "ordered"
+                                "random"
                               ]
                             },
                             "weights": {
@@ -78742,13 +78671,6 @@
                             "fallbackEnabled": {
                               "default": true,
                               "type": "boolean"
-                            },
-                            "maxFallbacks": {
-                              "default": null,
-                              "nullable": true,
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 100
                             }
                           },
                           "required": [
@@ -79746,8 +79668,7 @@
                           "enum": [
                             "round_robin",
                             "weighted",
-                            "random",
-                            "ordered"
+                            "random"
                           ]
                         },
                         "weights": {
@@ -79767,13 +79688,6 @@
                         "fallbackEnabled": {
                           "default": true,
                           "type": "boolean"
-                        },
-                        "maxFallbacks": {
-                          "default": null,
-                          "nullable": true,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 100
                         }
                       },
                       "required": [
@@ -81058,8 +80972,7 @@
                           "enum": [
                             "round_robin",
                             "weighted",
-                            "random",
-                            "ordered"
+                            "random"
                           ]
                         },
                         "weights": {
@@ -81079,13 +80992,6 @@
                         "fallbackEnabled": {
                           "default": true,
                           "type": "boolean"
-                        },
-                        "maxFallbacks": {
-                          "default": null,
-                          "nullable": true,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 100
                         }
                       },
                       "required": [
@@ -89181,8 +89087,7 @@
                           "enum": [
                             "round_robin",
                             "weighted",
-                            "random",
-                            "ordered"
+                            "random"
                           ]
                         },
                         "weights": {
@@ -89202,13 +89107,6 @@
                         "fallbackEnabled": {
                           "default": true,
                           "type": "boolean"
-                        },
-                        "maxFallbacks": {
-                          "default": null,
-                          "nullable": true,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 100
                         }
                       },
                       "required": [
@@ -161348,8 +161246,7 @@
                                   "enum": [
                                     "round_robin",
                                     "weighted",
-                                    "random",
-                                    "ordered"
+                                    "random"
                                   ]
                                 },
                                 "weights": {
@@ -161369,13 +161266,6 @@
                                 "fallbackEnabled": {
                                   "default": true,
                                   "type": "boolean"
-                                },
-                                "maxFallbacks": {
-                                  "default": null,
-                                  "nullable": true,
-                                  "type": "integer",
-                                  "minimum": 0,
-                                  "maximum": 100
                                 }
                               },
                               "required": [
@@ -164667,8 +164557,7 @@
                                       "enum": [
                                         "round_robin",
                                         "weighted",
-                                        "random",
-                                        "ordered"
+                                        "random"
                                       ]
                                     },
                                     "weights": {
@@ -164688,13 +164577,6 @@
                                     "fallbackEnabled": {
                                       "default": true,
                                       "type": "boolean"
-                                    },
-                                    "maxFallbacks": {
-                                      "default": null,
-                                      "nullable": true,
-                                      "type": "integer",
-                                      "minimum": 0,
-                                      "maximum": 100
                                     }
                                   },
                                   "required": [

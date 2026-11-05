@@ -74,6 +74,10 @@ export const TOOL_DELETE_LIMIT_SHORT_NAME = "delete_limit";
 export const TOOL_GET_AGENT_TOKEN_USAGE_SHORT_NAME = "get_agent_token_usage";
 export const TOOL_GET_LLM_PROXY_TOKEN_USAGE_SHORT_NAME =
   "get_llm_proxy_token_usage";
+export const TOOL_LIST_LLM_INTERACTIONS_SHORT_NAME = "list_llm_interactions";
+export const TOOL_GET_LLM_INTERACTION_SHORT_NAME = "get_llm_interaction";
+export const TOOL_LIST_LLM_SESSIONS_SHORT_NAME = "list_llm_sessions";
+export const TOOL_GET_LLM_SESSION_LOGS_SHORT_NAME = "get_llm_session_logs";
 export const TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_SHORT_NAME =
   "bulk_assign_tools_to_agents";
 export const TOOL_BULK_REMOVE_TOOLS_FROM_AGENTS_SHORT_NAME =
@@ -314,6 +318,10 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_DELETE_LIMIT_SHORT_NAME,
   TOOL_GET_AGENT_TOKEN_USAGE_SHORT_NAME,
   TOOL_GET_LLM_PROXY_TOKEN_USAGE_SHORT_NAME,
+  TOOL_LIST_LLM_INTERACTIONS_SHORT_NAME,
+  TOOL_GET_LLM_INTERACTION_SHORT_NAME,
+  TOOL_LIST_LLM_SESSIONS_SHORT_NAME,
+  TOOL_GET_LLM_SESSION_LOGS_SHORT_NAME,
   TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_SHORT_NAME,
   TOOL_BULK_REMOVE_TOOLS_FROM_AGENTS_SHORT_NAME,
   TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_SHORT_NAME,
@@ -432,6 +440,7 @@ export const ARCHESTRA_TOOL_GROUPS = [
   { id: "mcp_servers", label: "MCP Servers" },
   { id: "teams", label: "Teams" },
   { id: "limits", label: "Limits" },
+  { id: "logs", label: "Logs" },
   { id: "tool_assignment", label: "Tool Assignment" },
   { id: "knowledge_management", label: "Knowledge Management" },
   { id: "chat", label: "Chat" },
@@ -540,6 +549,10 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   delete_limit: "limits",
   get_agent_token_usage: "limits",
   get_llm_proxy_token_usage: "limits",
+  list_llm_interactions: "logs",
+  get_llm_interaction: "logs",
+  list_llm_sessions: "logs",
+  get_llm_session_logs: "logs",
 
   bulk_assign_tools_to_agents: "tool_assignment",
   bulk_remove_tools_from_agents: "tool_assignment",

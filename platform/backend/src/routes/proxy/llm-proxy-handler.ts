@@ -2730,7 +2730,10 @@ async function handleObservedLLMProxy<
         outputTokens: provider.unavailableUsageAccounting ? null : 0,
         // A pool member that failed before answering is free, like the
         // attempts before it.
-        ...(upstreamAttempt.attemptOutcome === "failed" ? { cost: "0" } : {}),
+        ...(upstreamAttempt.modelPoolId &&
+        upstreamAttempt.attemptOutcome === "failed"
+          ? { cost: "0" }
+          : {}),
       };
       await persistProxyInteraction({
         record,

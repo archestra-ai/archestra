@@ -549,7 +549,7 @@ function anthropicEventsToOpenAiChunks(ctx: {
   let inputTokens = 0;
   let cacheRead = 0;
   let cacheWrite = 0;
-  let cacheWrite1h = 0;
+  let cacheWrite1h: number | undefined;
   let outputTokens = 0;
   const chunk = (delta: Record<string, unknown>, finish: string | null) => ({
     id: ctx.chatcmplId,
@@ -578,7 +578,8 @@ function anthropicEventsToOpenAiChunks(ctx: {
           inputTokens = usage.input_tokens ?? 0;
           cacheRead = usage.cache_read_input_tokens ?? 0;
           cacheWrite = usage.cache_creation_input_tokens ?? 0;
-          cacheWrite1h = usage.cache_creation?.ephemeral_1h_input_tokens ?? 0;
+          cacheWrite1h =
+            usage.cache_creation?.ephemeral_1h_input_tokens ?? undefined;
           outputTokens = usage.output_tokens ?? 0;
           toolIndexByBlock = new Map();
           return [chunk({ role: "assistant" }, null)];
@@ -669,7 +670,7 @@ function anthropicEventsToOpenAiChunks(ctx: {
                     ...(cacheWrite > 0
                       ? { cache_write_tokens: cacheWrite }
                       : {}),
-                    ...(cacheWrite1h > 0
+                    ...((cacheWrite1h ?? 0) > 0
                       ? { cache_write_1h_tokens: cacheWrite1h }
                       : {}),
                   },

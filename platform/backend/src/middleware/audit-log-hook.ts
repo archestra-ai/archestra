@@ -1,13 +1,13 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import logger from "@/logging";
 import AuditLogModel from "@/models/audit-log";
 import UserTokenModel from "@/models/user-token";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
-import type { FastifyInstanceWithZod } from "@/server";
 import type { AuditActorType, AuditEventName, AuditOutcome } from "@/types";
+import type { AuditableRouteConfig } from "@/types/audit-route-config";
 import { trackBackgroundWork } from "@/utils/background-work";
 import {
-  type AuditableRouteConfig,
   deriveAction,
   resolveAuditableRouteConfig,
 } from "./audit-log-registry";

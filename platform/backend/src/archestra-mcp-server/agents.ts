@@ -3,9 +3,11 @@ import {
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_EDIT_AGENT_SHORT_NAME,
   TOOL_GET_AGENT_SHORT_NAME,
+  TOOL_GET_AGENT_SKILL_POLICY_SHORT_NAME,
   TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME,
   TOOL_LIST_AGENTS_SHORT_NAME,
   TOOL_LIST_LLM_MODELS_SHORT_NAME,
+  TOOL_PATCH_AGENT_SKILL_POLICY_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
@@ -13,7 +15,9 @@ import { z } from "zod";
 import {
   getAgentTypePermissionChecker,
   isAgentTypeAdmin,
+  requireAgentModifyPermission,
 } from "@/auth/agent-type-permissions";
+import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
 import logger from "@/logging";
 import {
@@ -24,9 +28,15 @@ import {
   LlmProviderApiKeyModelLinkModel,
   TeamModel,
 } from "@/models";
+import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import {
+  AgentActivationSkillPolicyResponseSchema,
   AgentScopeSchema,
+  ApiError,
   InsertAgentSchemaBase,
+  NetworkPolicyDomainPresetSchema,
+  NetworkPolicyEgressModeSchema,
+  PatchAgentActivationSkillPolicySchema,
   ToolExposureModeSchema,
   UpdateAgentSchemaBase,
   UuidIdSchema,
@@ -63,8 +73,37 @@ import {
   resourceSharedWithToolArg,
   toolAccessSelection,
 } from "./resource-access-tool-arg";
+import type { ArchestraContext } from "./types";
 
 // === Constants ===
+
+// Plain object (no transform) so it renders as a tool JSON schema; the handler
+// validates and normalizes it with the API's own network policy schema.
+const AgentNetworkPolicyToolInputSchema = z
+  .object({
+    egressMode: NetworkPolicyEgressModeSchema.describe(
+      "unrestricted allows all outbound traffic, restricted allows only the listed destinations, off blocks all outbound traffic.",
+    ),
+    domainPreset: NetworkPolicyDomainPresetSchema.optional().describe(
+      "Restricted mode only: a built-in domain allowlist to add (none, common_dependencies, package_managers).",
+    ),
+    allowedDomains: z
+      .array(z.string())
+      .max(500)
+      .optional()
+      .describe(
+        "Restricted mode only: extra allowed domains, e.g. api.github.com or *.example.com.",
+      ),
+    allowedCidrs: z
+      .array(z.string())
+      .max(500)
+      .optional()
+      .describe("Allowed IP ranges in CIDR notation, e.g. 10.0.0.0/8."),
+  })
+  .strict()
+  .describe(
+    "The agent's own outbound network policy for its Agent Runtime and code sandbox. It replaces the policy of the agent's environment. Requires permission to update environments.",
+  );
 
 const AgentCreateToolArgsSchema = CreateBaseToolArgsSchema.extend({
   description: InsertAgentSchemaBase.shape.description
@@ -93,6 +132,7 @@ const AgentCreateToolArgsSchema = CreateBaseToolArgsSchema.extend({
       "Explicit tool assignments to create immediately after the agent is created.",
     ),
   runtime: AgentRuntimeToolInputSchema.optional(),
+  networkPolicy: AgentNetworkPolicyToolInputSchema.optional(),
   llmApiKeyId: AgentModelToolInputSchemas.llmApiKeyId.optional(),
   modelId: AgentModelToolInputSchemas.modelId.optional(),
 }).strict();
@@ -203,6 +243,11 @@ const EditAgentToolArgsSchema = z
           .optional()
           .describe(
             `${AgentRuntimeToolInputSchema.description} Replaces the whole runtime: pass every field to keep. Pass null to return the agent to the built-in chat harness.`,
+          ),
+        networkPolicy: AgentNetworkPolicyToolInputSchema.nullable()
+          .optional()
+          .describe(
+            `${AgentNetworkPolicyToolInputSchema.description} Replaces the whole policy. Pass null to inherit the environment's policy again.`,
           ),
         llmApiKeyId: AgentModelToolInputSchemas.llmApiKeyId
           .nullable()
@@ -550,6 +595,68 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
+    shortName: TOOL_GET_AGENT_SKILL_POLICY_SHORT_NAME,
+    title: "Get Agent Skill Policy",
+    description:
+      "Read an internal agent's skill allowlist, exclusions and current revision. Requires permission to read both the agent and skills. Use the revision with patch_agent_skill_policy.",
+    schema: z
+      .object({
+        id: UuidIdSchema.describe("The ID of the internal agent."),
+      })
+      .strict(),
+    outputSchema: AgentActivationSkillPolicyResponseSchema,
+    async handler({ args, context }) {
+      try {
+        const principal = await requireSkillPolicyAccess(
+          args.id,
+          context,
+          "read",
+        );
+        const policy = await agentActivationSkillPolicyService.getPolicy({
+          agentId: args.id,
+          ...principal,
+        });
+        return structuredSuccessResult(policy);
+      } catch (error) {
+        if (error instanceof ApiError) return errorResult(error.message);
+        return catchError(error, "reading agent skill policy");
+      }
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_PATCH_AGENT_SKILL_POLICY_SHORT_NAME,
+    title: "Patch Agent Skill Policy",
+    description:
+      "Change an internal agent's skill activation mode, allowlist or exclusions using its current expectedRevision from get_agent_skill_policy. Requires permission to update the agent and read skills; only skills the caller can access may be added. Other agent settings are unchanged.",
+    schema: z
+      .object({
+        id: UuidIdSchema.describe("The ID of the internal agent."),
+        patch: PatchAgentActivationSkillPolicySchema.describe(
+          "The policy changes, guarded by the revision returned by get_agent_skill_policy.",
+        ),
+      })
+      .strict(),
+    outputSchema: AgentActivationSkillPolicyResponseSchema,
+    async handler({ args, context }) {
+      try {
+        const principal = await requireSkillPolicyAccess(
+          args.id,
+          context,
+          "update",
+        );
+        const result = await agentActivationSkillPolicyService.patchPolicy({
+          agentId: args.id,
+          ...principal,
+          patch: args.patch,
+        });
+        return structuredSuccessResult(result.policy);
+      } catch (error) {
+        if (error instanceof ApiError) return errorResult(error.message);
+        return catchError(error, "updating agent skill policy");
+      }
+    },
+  }),
+  defineArchestraTool({
     shortName: TOOL_LIST_LLM_MODELS_SHORT_NAME,
     title: "List LLM Models",
     description: `List the provider API keys the caller can use and the models linked to each. Pass a key's id as llmApiKeyId and one of its models' id as modelId to ${TOOL_CREATE_AGENT_SHORT_NAME} or ${TOOL_EDIT_AGENT_SHORT_NAME}.`,
@@ -612,3 +719,45 @@ export const toolEntries = registry.toolEntries;
 // === Exports ===
 
 export const tools = registry.tools;
+
+async function requireSkillPolicyAccess(
+  id: string,
+  context: ArchestraContext,
+  action: "read" | "update",
+) {
+  if (!context.userId || !context.organizationId) {
+    throw new ApiError(401, "user/organization context not available");
+  }
+  const checker = await getAgentTypePermissionChecker({
+    userId: context.userId,
+    organizationId: context.organizationId,
+  });
+  const agent = await AgentModel.findById(
+    id,
+    context.userId,
+    checker.isAdmin("agent"),
+  );
+  if (
+    !agent ||
+    agent.organizationId !== context.organizationId ||
+    agent.agentType !== "agent"
+  ) {
+    throw new ApiError(404, "Agent not found");
+  }
+  checker.require("agent", { action, scope: id });
+  if (action === "update") {
+    requireAgentModifyPermission({
+      agentId: id,
+      action,
+      checker,
+      agentType: "agent",
+    });
+  }
+  const skills = await getSkillPermissionChecker({
+    userId: context.userId,
+    organizationId: context.organizationId,
+  });
+  if (!skills.canRead)
+    throw new ApiError(403, "Permission to read skills is required");
+  return { userId: context.userId, organizationId: context.organizationId };
+}

@@ -14,15 +14,14 @@ import {
 
 vi.mock("sonner");
 
-vi.mock("@archestra/shared", () => ({
-  archestraApiSdk: {
-    getLimits: vi.fn(),
-    getLimit: vi.fn(),
-    createLimit: vi.fn(),
-    updateLimit: vi.fn(),
-    deleteLimit: vi.fn(),
-    bulkDeleteLimits: vi.fn(),
-  },
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getLimits: vi.fn(),
+  getLimit: vi.fn(),
+  createLimit: vi.fn(),
+  updateLimit: vi.fn(),
+  deleteLimit: vi.fn(),
+  bulkDeleteLimits: vi.fn(),
 }));
 
 const limitRow = {

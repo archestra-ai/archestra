@@ -74,6 +74,7 @@ import {
   appStatisticsFor,
   appUsageFor,
   costStatisticsFor,
+  llmUsageFor,
   modelUsageFor,
   myStatisticsFor,
   myUsageBreakdownFor,
@@ -395,6 +396,11 @@ export const handlers: HttpHandler[] = [
     enabled: false,
     featureEnabled: false,
     active: false,
+    unsupportedClientAction: "bypass",
+    breakTheGlassEnabled: true,
+    humanApprovalMode: "block",
+    unapprovableBlockMode: "refuse",
+    environmentOverrides: [],
   }),
   ...getJson("/health", healthSeed),
   ...getJson("/ready", {
@@ -814,7 +820,7 @@ export const handlers: HttpHandler[] = [
   ),
 
   // LLM proxy logs (/llm/logs list and the session detail page).
-  ...getJson("/api/interactions/sessions/:sessionId/lineage", {
+  ...getJson("/api/llm-proxy-logs/sessions/:sessionId/lineage", {
     forkedFrom: null,
     forks: [],
     forksTruncated: false,
@@ -824,7 +830,7 @@ export const handlers: HttpHandler[] = [
   // filter specs genuinely exercise the request wiring rather than asserting
   // against a pre-baked body. Specs needing other data still override it via
   // `mswControl.use(...)` (overrides take precedence).
-  ...paths("/api/interactions/sessions").map((url) =>
+  ...paths("/api/llm-proxy-logs/sessions").map((url) =>
     http.get(url, ({ request }) => {
       const params = new URL(request.url).searchParams;
       const sessionId = params.get("sessionId");
@@ -846,10 +852,10 @@ export const handlers: HttpHandler[] = [
       return HttpResponse.json(paginated(data));
     }),
   ),
-  ...getJson("/api/interactions/user-ids", []),
-  ...getJson("/api/interactions/external-agent-ids", []),
-  ...getJson("/api/interactions", paginated(llmLogsInteractionsSeed)),
-  ...getJson("/api/interactions/:interactionId", makeInteraction()),
+  ...getJson("/api/llm-proxy-logs/user-ids", []),
+  ...getJson("/api/llm-proxy-logs/external-agent-ids", []),
+  ...getJson("/api/llm-proxy-logs", paginated(llmLogsInteractionsSeed)),
+  ...getJson("/api/llm-proxy-logs/:interactionId", makeInteraction()),
 
   // /connection probes the org's default gateway + the single LLM Proxy
   ...getJson("/api/mcp-gateways/default", makeAgent()),
@@ -964,6 +970,7 @@ export const handlers: HttpHandler[] = [
   ...statisticsJson("/api/statistics/app-usage", appUsageFor),
   ...statisticsJson("/api/statistics/skill-usage", skillUsageFor),
   ...statisticsJson("/api/statistics/mcp-tool-calls", toolCallUsageFor),
+  ...statisticsJson("/api/statistics/llm-usage", llmUsageFor),
   ...statisticsJson("/api/statistics/apps", appStatisticsFor),
   ...statisticsJson("/api/statistics/skills", skillStatisticsFor),
   ...statisticsJson("/api/statistics/me", myStatisticsFor),

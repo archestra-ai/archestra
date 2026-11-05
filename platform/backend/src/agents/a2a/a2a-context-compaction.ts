@@ -23,7 +23,6 @@ import { authorizeA2AModel } from "@/agents/a2a/oauth-model";
 import logger from "@/logging";
 import { A2AContextCompactionModel, ModelModel } from "@/models";
 import { TOKEN_ESTIMATE } from "@/routes/chat/normalization/estimate-message-tokens";
-import type { A2AOAuthExecution } from "@/routes/mcp-gateway/utils";
 import { resolveCompactionLlm } from "@/services/compaction-llm";
 import {
   CONTEXT_COMPACTION_RECENT_KEEP_RATIO,
@@ -36,6 +35,7 @@ import {
   uiMessageTranscriptEntries,
 } from "@/services/context-compaction";
 import type { A2AMessage } from "@/types";
+import type { A2AOAuthExecution } from "@/types/a2a-actor";
 import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
 
 export interface A2AContextCompactionEvent {

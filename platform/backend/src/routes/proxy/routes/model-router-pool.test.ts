@@ -10,6 +10,7 @@ import {
 } from "@/fastify-instance";
 import { ModelPoolModel, VirtualApiKeyModel } from "@/models";
 import { initializeLlmProxyMetrics } from "@/observability/metrics/llm-proxy";
+import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-providers";
 import { accessGrants, beforeEach, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
@@ -34,10 +35,11 @@ const poolTest = test.extend<{
   router: {
     app: FastifyInstanceWithZod;
     agentId: string;
+    organizationId: string;
     token: string;
     /** A virtual key in the same org that maps no member key and has no grant. */
     ungrantedToken: string;
-    /** A virtual key that maps a member's key, as a Connect key does. */
+    /** A virtual key that maps a member's key but wasn't given the pool. */
     memberKeyToken: string;
     poolId: string;
     zaiKeyId: string;
@@ -121,6 +123,7 @@ const poolTest = test.extend<{
       await use({
         app,
         agentId: agent.id,
+        organizationId: org.id,
         token: virtual.value,
         ungrantedToken: ungranted.value,
         memberKeyToken: memberKey.value,
@@ -186,7 +189,7 @@ poolTest(
 );
 
 poolTest(
-  "serves the pool to a virtual key that maps a member's key",
+  "keeps the pool from a virtual key that only maps a member's key",
   async ({ router }) => {
     server.use(
       http.post(`${zaiOrigin}/chat/completions`, () =>
@@ -211,15 +214,69 @@ poolTest(
       url: `/v1/model-router/${router.agentId}/models`,
       headers: { authorization: `Bearer ${router.memberKeyToken}` },
     });
-    expect(models.json().data[0]).toMatchObject({
-      id: "glm-5",
-      owned_by: "model-pool",
-    });
+    expect(models.statusCode, models.body).toBe(200);
+    expect(
+      models
+        .json()
+        .data.filter((m: { owned_by: string }) => m.owned_by === "model-pool"),
+    ).toEqual([]);
 
     const response = await router.app.inject({
       method: "POST",
       url: `/v1/model-router/${router.agentId}/chat/completions`,
       headers: { authorization: `Bearer ${router.memberKeyToken}` },
+      payload: {
+        model: "glm-5",
+        messages: [{ role: "user", content: "hello" }],
+      },
+    });
+    expect(response.headers["x-archestra-pool"]).toBeUndefined();
+  },
+);
+
+poolTest(
+  "serves a granted pool to a key that resolves to no provider key",
+  async ({ router }) => {
+    server.use(
+      http.post(`${zaiOrigin}/chat/completions`, () =>
+        HttpResponse.json({
+          id: "chatcmpl-1",
+          object: "chat.completion",
+          created: 1,
+          model: "glm-5",
+          choices: [
+            {
+              index: 0,
+              message: { role: "assistant", content: "hi" },
+              finish_reason: "stop",
+            },
+          ],
+          usage: { prompt_tokens: 9, completion_tokens: 2, total_tokens: 11 },
+        }),
+      ),
+    );
+    // Current and future providers, in an org whose keys aren't primaries:
+    // the key resolves to no provider key and only has the pool.
+    const automatic = await VirtualApiKeyModel.create({
+      organizationId: router.organizationId,
+      name: "Pool-only automatic key",
+      ...accessGrants("org"),
+      providerApiKeys: [],
+      includeFutureProviders: true,
+    });
+    await ModelPoolModel.setPoolsForVirtualApiKey({
+      organizationId: router.organizationId,
+      virtualApiKeyId: automatic.virtualKey.id,
+      poolIds: [router.poolId],
+    });
+    expect(
+      await resolveVirtualKeyProviderMappings(automatic.virtualKey.id),
+    ).toEqual([]);
+
+    const response = await router.app.inject({
+      method: "POST",
+      url: `/v1/model-router/${router.agentId}/chat/completions`,
+      headers: { authorization: `Bearer ${automatic.value}` },
       payload: {
         model: "glm-5",
         messages: [{ role: "user", content: "hello" }],

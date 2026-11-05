@@ -67,7 +67,7 @@ class AnthropicOpenaiResponseAdapter
   }
 
   getOriginalResponse(): AnthropicResponse {
-    // The model router's external wire format is OpenAI, so the handler should
+    // The unified model API's external wire format is OpenAI, so the handler should
     // send the translated response even though this adapter wraps Anthropic.
     return anthropicResponseToOpenai(
       this.inner.getOriginalResponse(),
@@ -244,10 +244,12 @@ class AnthropicOpenaiStreamAdapter
     this.inner.prepareResponseReplacement?.();
   }
 
+  getOpenAiFinishReason(): string {
+    return mapStopReason(this.inner.toProviderResponse().stop_reason);
+  }
+
   formatEndSSE(): string {
-    const finishReason = mapStopReason(
-      this.inner.toProviderResponse().stop_reason,
-    );
+    const finishReason = this.getOpenAiFinishReason();
     const suffix =
       this.getTextSuffix &&
       this.replacedText === null &&

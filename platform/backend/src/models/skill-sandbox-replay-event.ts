@@ -67,8 +67,12 @@ type SkillSandboxReplayEntry =
  */
 class SkillSandboxReplayEventModel {
   /** Insert a command and record it as the next ordered replay event. */
+  /**
+   * `id` is optional: the runtime passes the id it already handed the sandbox
+   * engine as the live run's cache key, so replaying this row reuses that run.
+   */
   static async appendCommand(
-    command: InsertSkillSandboxCommand,
+    command: InsertSkillSandboxCommand & { id?: string },
   ): Promise<SkillSandboxCommand> {
     // A command that pipes binary to stdout (e.g. `curl <url> | head`,
     // `cat image.png`) embeds NUL bytes that a Postgres `text` column rejects

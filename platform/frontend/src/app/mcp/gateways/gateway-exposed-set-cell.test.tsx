@@ -6,13 +6,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ExposedSetCell, ExposedSetNames } from "./gateway-exposed-set-cell";
 import { gatewaySubagentNames, gatewayToolNames } from "./gateway-tools";
 
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: { ...actual.archestraApiSdk, getAgents: vi.fn() },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getAgents: vi.fn(),
+}));
 vi.mock("sonner");
 
 const getAgents = vi.mocked(archestraApiSdk.getAgents);

@@ -218,33 +218,38 @@ describe("getAgentRuntimeModelCompatibility", () => {
   });
 
   test("allows only Claude Bedrock models for the maintained Claude Code runtime", () => {
-    const runtime = {
-      inferenceProtocol: "anthropic" as const,
-      runtimeCommand: ["archestra-claude-code"],
-      provider: "bedrock" as const,
-    };
+    for (const runtimeCommand of [
+      ["archestra-claude-code"],
+      ["archestra-claude-code-runtime"],
+    ] as const) {
+      const runtime = {
+        inferenceProtocol: "anthropic" as const,
+        runtimeCommand,
+        provider: "bedrock" as const,
+      };
 
-    // Key filtering has no selected model yet, so Bedrock remains available
-    // until its model-specific eligibility is evaluated.
-    expect(getAgentRuntimeProviderCompatibility(runtime)).toEqual({
-      compatible: true,
-    });
-    for (const modelId of [
-      "anthropic.claude-sonnet-4-6",
-      "us.anthropic.claude-sonnet-4-6",
-      "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-sonnet-4-6",
-    ]) {
-      expect(
-        getAgentRuntimeModelCompatibility({ ...runtime, modelId }),
-      ).toEqual({ compatible: true });
-    }
-    for (const modelId of ["amazon.nova-pro-v1:0", "google.gemini-2.5-pro"]) {
-      expect(
-        getAgentRuntimeModelCompatibility({ ...runtime, modelId }),
-      ).toMatchObject({
-        compatible: false,
-        message: expect.stringContaining("requires a Claude model"),
+      // Key filtering has no selected model yet, so Bedrock remains available
+      // until its model-specific eligibility is evaluated.
+      expect(getAgentRuntimeProviderCompatibility(runtime)).toEqual({
+        compatible: true,
       });
+      for (const modelId of [
+        "anthropic.claude-sonnet-4-6",
+        "us.anthropic.claude-sonnet-4-6",
+        "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-sonnet-4-6",
+      ]) {
+        expect(
+          getAgentRuntimeModelCompatibility({ ...runtime, modelId }),
+        ).toEqual({ compatible: true });
+      }
+      for (const modelId of ["amazon.nova-pro-v1:0", "google.gemini-2.5-pro"]) {
+        expect(
+          getAgentRuntimeModelCompatibility({ ...runtime, modelId }),
+        ).toMatchObject({
+          compatible: false,
+          message: expect.stringContaining("requires a Claude model"),
+        });
+      }
     }
   });
 

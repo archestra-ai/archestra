@@ -4,7 +4,7 @@ import {
   createUpdateSchema,
 } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 
 /**
  * ACL entry type for knowledge base documents and chunks.
@@ -22,14 +22,15 @@ export type AclEntry =
   | `principal:${string}`
   | `team:${string}`
   | `user_email:${string}`
+  | `oauth_client:${string}`
   | `group:${string}`
   | `container:${string}`;
 
 export const AclEntrySchema = z
   .string()
   .regex(
-    /^(org:\*|team:.+|user_email:.+|group:.+|container:.+)$/,
-    "ACL entry must match org:*, team:<id>, user_email:<email>, group:<id>, or container:<connectorId>:<key>",
+    /^(org:\*|team:.+|user_email:.+|oauth_client:.+|group:.+|container:.+)$/,
+    "ACL entry must match org:*, team:<id>, user_email:<email>, oauth_client:<id>, group:<id>, or container:<connectorId>:<key>",
   );
 
 export const EmbeddingStatusSchema = z.enum([

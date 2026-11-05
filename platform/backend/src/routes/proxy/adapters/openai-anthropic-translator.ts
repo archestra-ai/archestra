@@ -12,6 +12,7 @@
  * text some of them stream has no signature to replay.
  */
 import { randomUUID } from "node:crypto";
+import { ApiError } from "@archestra/shared/types";
 import type { Anthropic, OpenAi } from "@/types";
 import { parseJsonObject } from "./openai-translator-utils";
 
@@ -38,6 +39,18 @@ export function anthropicToOpenai(req: AnthropicRequest): {
   anthropicContext: OpenaiAnthropicContext;
 } {
   const loose = req as Loose;
+  if (loose.output_config?.format || loose.output_format)
+    throw new ApiError(
+      400,
+      "Cross-provider Anthropic pools cannot translate structured output",
+    );
+  if (
+    (loose.tools ?? []).some((tool: Loose) => tool.input_schema === undefined)
+  )
+    throw new ApiError(
+      400,
+      "Cross-provider Anthropic pools cannot translate server tools",
+    );
   const messages: Array<Record<string, unknown>> = [];
 
   const system = systemText(loose.system);
@@ -52,6 +65,18 @@ export function anthropicToOpenai(req: AnthropicRequest): {
       ? message.content
       : [];
     if (message.role === "assistant") {
+      if (
+        blocks.some(
+          (block) =>
+            !["text", "tool_use", "thinking", "redacted_thinking"].includes(
+              block.type,
+            ),
+        )
+      )
+        throw new ApiError(
+          400,
+          "Cross-provider Anthropic pools cannot translate this assistant content",
+        );
       const text = blocks
         .filter((block) => block.type === "text")
         .map((block) => block.text)
@@ -79,11 +104,22 @@ export function anthropicToOpenai(req: AnthropicRequest): {
     const parts: Array<Record<string, unknown>> = [];
     for (const block of blocks) {
       if (block.type === "tool_result") {
+        const result = toolResultContent(block);
         messages.push({
           role: "tool",
           tool_call_id: block.tool_use_id,
-          content: toolResultContent(block),
+          content: result.text,
         });
+        // Chat Completions accepts media only in user turns. Preserve the
+        // originating call while keeping every parallel tool result adjacent.
+        if (result.media.length)
+          parts.push(
+            {
+              type: "text",
+              text: `Tool result ${block.tool_use_id} attachments:`,
+            },
+            ...result.media,
+          );
         continue;
       }
       const part = blockToOpenAiPart(block);
@@ -303,16 +339,23 @@ function systemText(system: unknown): string {
     .join("\n\n");
 }
 
-function toolResultContent(block: Loose): unknown {
+function toolResultContent(block: Loose): {
+  text: string;
+  media: Record<string, unknown>[];
+} {
   const prefix = block.is_error ? "Error: " : "";
-  if (typeof block.content === "string") return `${prefix}${block.content}`;
+  if (typeof block.content === "string")
+    return { text: `${prefix}${block.content}`, media: [] };
   const parts = (Array.isArray(block.content) ? block.content : [])
     .map(blockToOpenAiPart)
     .filter((part: unknown) => part !== null);
-  if (parts.every((part: Loose) => part.type === "text")) {
-    return `${prefix}${parts.map((part: Loose) => part.text).join("")}`;
-  }
-  return prefix ? [{ type: "text", text: prefix }, ...parts] : parts;
+  return {
+    text: `${prefix}${parts
+      .filter((part: Loose) => part.type === "text")
+      .map((part: Loose) => part.text)
+      .join("")}`,
+    media: parts.filter((part: Loose) => part.type !== "text"),
+  };
 }
 
 function blockToOpenAiPart(block: Loose): Record<string, unknown> | null {
@@ -329,7 +372,24 @@ function blockToOpenAiPart(block: Loose): Record<string, unknown> | null {
       return { type: "image_url", image_url: { url: source.url } };
     }
   }
-  return null;
+  if (
+    block?.type === "document" &&
+    block.source?.type === "base64" &&
+    block.source.media_type === "application/pdf"
+  )
+    return {
+      type: "file",
+      file: {
+        filename: "document.pdf",
+        file_data: `data:application/pdf;base64,${block.source.data}`,
+      },
+    };
+  if (block?.type === "document" && block.source?.type === "text")
+    return { type: "text", text: block.source.data };
+  throw new ApiError(
+    400,
+    "Cross-provider Anthropic pools cannot translate this user or tool-result content",
+  );
 }
 
 function toOpenAiToolChoice(choice: Loose): unknown {
@@ -346,6 +406,7 @@ function mapFinishReason(
 ): AnthropicResponse["stop_reason"] {
   if (reason === "length") return "max_tokens";
   if (reason === "tool_calls" || reason === "function_call") return "tool_use";
+  if (reason === "content_filter") return "refusal";
   return "end_turn";
 }
 

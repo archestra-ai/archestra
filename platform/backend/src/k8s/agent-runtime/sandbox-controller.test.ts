@@ -1,6 +1,8 @@
 import { KubeConfig } from "@kubernetes/client-node";
 import { HttpResponse, http } from "msw";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import config from "@/config";
+import { classifyAgentRunFailure } from "@/services/agent-runtime/run-failure";
 import { useMswServer } from "@/test/msw";
 import manager from "./manager";
 import { agentSandboxApi } from "./sandbox-api";
@@ -96,6 +98,273 @@ test("re-checks a negative answer once it is stale and flips without a restart",
   expect(agentSandboxApi.isInstalled).toBe(true);
   await expect(agentSandboxApi.refresh()).resolves.toBe(true);
   expect(discoveryRequests).toBe(afterInstall);
+});
+
+test("launch on retry waits for a Sandbox whose first read has no deletionTimestamp yet until it finishes deleting", async () => {
+  serveController({ installed: true });
+  await expect(manager.assertSandboxApiInstalled()).resolves.toBeUndefined();
+
+  let sandboxReads = 0;
+  const cacheControlHeaders: Array<string | null> = [];
+  let createdSandboxName: string | undefined;
+
+  server.use(
+    http.get(
+      `${origin}/apis/rbac.authorization.k8s.io/v1/namespaces/test/roles/archestra-agent-runtime`,
+      () => HttpResponse.json({ code: 404 }, { status: 404 }),
+    ),
+    http.get(
+      `${origin}/apis/agents.x-k8s.io/v1beta1/namespaces/test/sandboxes/workspace`,
+      ({ request }) => {
+        sandboxReads += 1;
+        cacheControlHeaders.push(request.headers.get("cache-control"));
+        if (sandboxReads === 1) {
+          // Simulate a cached Sandbox snapshot that does not yet carry deletionTimestamp.
+          return HttpResponse.json({
+            apiVersion: "agents.x-k8s.io/v1beta1",
+            kind: "Sandbox",
+            metadata: {
+              name: "workspace",
+              namespace: "test",
+            },
+            spec: {},
+          });
+        }
+        if (sandboxReads === 2) {
+          return HttpResponse.json({
+            apiVersion: "agents.x-k8s.io/v1beta1",
+            kind: "Sandbox",
+            metadata: {
+              name: "workspace",
+              namespace: "test",
+              deletionTimestamp: "2026-11-04T16:00:00Z",
+            },
+            spec: {},
+          });
+        }
+        return HttpResponse.json({ code: 404 }, { status: 404 });
+      },
+    ),
+    http.get(
+      `${origin}/apis/extensions.agents.x-k8s.io/v1beta1/namespaces/test/sandboxclaims/workspace`,
+      () => HttpResponse.json({ code: 404 }, { status: 404 }),
+    ),
+    http.post(`${origin}/api/v1/namespaces/test/secrets`, () =>
+      HttpResponse.json({}, { status: 201 }),
+    ),
+    http.get(`${origin}/apis/cilium.io/v2`, () =>
+      HttpResponse.json({ code: 404 }, { status: 404 }),
+    ),
+    http.get(`${origin}/apis/crd.projectcalico.org/v1`, () =>
+      HttpResponse.json({ code: 404 }, { status: 404 }),
+    ),
+    http.get(`${origin}/api/v1/namespaces/kube-system/services/kube-dns`, () =>
+      HttpResponse.json({ spec: { clusterIP: "10.96.0.10" } }),
+    ),
+    http.get(`${origin}/api/v1/namespaces/default/services/kubernetes`, () =>
+      HttpResponse.json({ spec: { ipFamilies: ["IPv4"] } }),
+    ),
+    http.get(`${origin}/api/v1/namespaces/:ns/services/:svc`, () =>
+      HttpResponse.json({ code: 404 }, { status: 404 }),
+    ),
+    http.post(
+      `${origin}/apis/networking.k8s.io/v1/namespaces/test/networkpolicies`,
+      () => HttpResponse.json({}, { status: 201 }),
+    ),
+    http.patch(
+      `${origin}/apis/networking.k8s.io/v1/namespaces/test/networkpolicies/:name`,
+      () => HttpResponse.json({}, { status: 200 }),
+    ),
+    http.post(
+      `${origin}/apis/agents.x-k8s.io/v1beta1/namespaces/test/sandboxes`,
+      async ({ request }) => {
+        const body = (await request.json()) as { metadata?: { name?: string } };
+        createdSandboxName = body.metadata?.name;
+        return HttpResponse.json(body, { status: 201 });
+      },
+    ),
+  );
+
+  await manager.launch({
+    taskId: "task-1",
+    agentRuntimeId: "agent-1",
+    frozenName: "workspace",
+    runtimeScope: "test",
+    image: "runtime:v1",
+    command: ["echo", "hello"],
+    privileged: false,
+    resources: { cpuRequest: "500m", memoryRequest: "1Gi" },
+    tier: null,
+    warmTiers: [],
+    env: {},
+    secretEnv: {},
+    inputFileCount: 0,
+    activeDeadlineSeconds: 600,
+    nodeSelector: {},
+    imagePullSecrets: [],
+    effectiveNetworkPolicy: { source: "built_in", policy: null },
+    replacePriorAttempt: true,
+  });
+
+  expect(sandboxReads).toBe(3);
+  expect(cacheControlHeaders).toEqual(["no-cache", "no-cache", "no-cache"]);
+  expect(createdSandboxName).toBe("workspace");
+});
+
+test("keeps the terminating-sandbox marker after a deletion timeout so a later launch never adopts the timed-out Sandbox and only creates once it is gone", async () => {
+  serveController({ installed: true });
+  await expect(manager.assertSandboxApiInstalled()).resolves.toBeUndefined();
+
+  const originalTimeout = config.agentRuntime.podStartTimeoutSeconds;
+  config.agentRuntime.podStartTimeoutSeconds = 0;
+
+  let sandboxReads = 0;
+  let sandboxDeletedInCluster = false;
+  let sandboxCreateCount = 0;
+  const cacheControlHeaders: Array<string | null> = [];
+
+  try {
+    server.use(
+      http.get(
+        `${origin}/apis/rbac.authorization.k8s.io/v1/namespaces/test/roles/archestra-agent-runtime`,
+        () => HttpResponse.json({ code: 404 }, { status: 404 }),
+      ),
+      http.delete(
+        `${origin}/apis/agents.x-k8s.io/v1beta1/namespaces/test/sandboxes/workspace`,
+        () => HttpResponse.json({}, { status: 200 }),
+      ),
+      http.delete(`${origin}/api/v1/namespaces/test/secrets/:name`, () =>
+        HttpResponse.json({ code: 404 }, { status: 404 }),
+      ),
+      http.delete(
+        `${origin}/apis/networking.k8s.io/v1/namespaces/test/networkpolicies/:name`,
+        () => HttpResponse.json({ code: 404 }, { status: 404 }),
+      ),
+      http.delete(
+        `${origin}/apis/:group/:version/namespaces/test/:plural/:name`,
+        () => HttpResponse.json({ code: 404 }, { status: 404 }),
+      ),
+      http.get(
+        `${origin}/apis/agents.x-k8s.io/v1beta1/namespaces/test/sandboxes/workspace`,
+        ({ request }) => {
+          sandboxReads += 1;
+          cacheControlHeaders.push(request.headers.get("cache-control"));
+          if (sandboxDeletedInCluster) {
+            return HttpResponse.json({ code: 404 }, { status: 404 });
+          }
+          return HttpResponse.json({
+            apiVersion: "agents.x-k8s.io/v1beta1",
+            kind: "Sandbox",
+            metadata: {
+              name: "workspace",
+              namespace: "test",
+            },
+            spec: {},
+          });
+        },
+      ),
+      http.get(
+        `${origin}/apis/extensions.agents.x-k8s.io/v1beta1/namespaces/test/sandboxclaims/workspace`,
+        () => HttpResponse.json({ code: 404 }, { status: 404 }),
+      ),
+      http.post(
+        `${origin}/api/v1/namespaces/test/secrets`,
+        async ({ request }) => {
+          const body = await request.json();
+          return HttpResponse.json(body, { status: 201 });
+        },
+      ),
+      http.get(
+        `${origin}/api/v1/namespaces/kube-system/services/kube-dns`,
+        () =>
+          HttpResponse.json({
+            spec: { clusterIP: "10.96.0.10", clusterIPs: ["10.96.0.10"] },
+          }),
+      ),
+      http.get(`${origin}/apis/networking.k8s.io/v1`, () =>
+        HttpResponse.json({
+          kind: "APIResourceList",
+          apiVersion: "v1",
+          groupVersion: "networking.k8s.io/v1",
+          resources: [{ name: "networkpolicies", kind: "NetworkPolicy" }],
+        }),
+      ),
+      http.post(
+        `${origin}/apis/networking.k8s.io/v1/namespaces/test/networkpolicies`,
+        async ({ request }) => {
+          const body = await request.json();
+          return HttpResponse.json(body, { status: 201 });
+        },
+      ),
+      http.post(
+        `${origin}/apis/agents.x-k8s.io/v1beta1/namespaces/test/sandboxes`,
+        async ({ request }) => {
+          sandboxCreateCount += 1;
+          const body = await request.json();
+          return HttpResponse.json(body, { status: 201 });
+        },
+      ),
+    );
+
+    await manager.deleteWorkspace({
+      id: "run-1",
+      runtimeScope: "test",
+      workloadName: "workspace",
+    });
+
+    const launchSpec = {
+      taskId: "task-timeout",
+      agentRuntimeId: "agent-1",
+      frozenName: "workspace",
+      runtimeScope: "test",
+      image: "runtime:v1",
+      command: ["echo", "hello"],
+      privileged: false,
+      resources: { cpuRequest: "500m", memoryRequest: "1Gi" },
+      tier: null,
+      warmTiers: [],
+      env: {},
+      secretEnv: {},
+      inputFileCount: 0,
+      activeDeadlineSeconds: 600,
+      nodeSelector: {},
+      imagePullSecrets: [],
+      effectiveNetworkPolicy: { source: "built_in" as const, policy: null },
+    };
+
+    let firstTimedOutError: unknown;
+    try {
+      await manager.launch(launchSpec);
+    } catch (error) {
+      firstTimedOutError = error;
+    }
+    expect(classifyAgentRunFailure(firstTimedOutError)?.code).toBe(
+      "launch.capacity_timeout",
+    );
+
+    // While the previous Sandbox is still present (even without deletionTimestamp
+    // and without replacePriorAttempt), a second launch must NOT adopt it.
+    let secondTimedOutError: unknown;
+    try {
+      await manager.launch(launchSpec);
+    } catch (error) {
+      secondTimedOutError = error;
+    }
+    expect(classifyAgentRunFailure(secondTimedOutError)?.code).toBe(
+      "launch.capacity_timeout",
+    );
+    expect(sandboxCreateCount).toBe(0);
+
+    // Once the old Sandbox finishes deleting and returns NotFound, the next launch
+    // clears the marker and creates a fresh Sandbox.
+    sandboxDeletedInCluster = true;
+    await expect(manager.launch(launchSpec)).resolves.toBeUndefined();
+    expect(sandboxReads).toBe(3);
+    expect(cacheControlHeaders).toEqual(["no-cache", "no-cache", "no-cache"]);
+    expect(sandboxCreateCount).toBe(1);
+  } finally {
+    config.agentRuntime.podStartTimeoutSeconds = originalTimeout;
+  }
 });
 
 // === Internal helpers ===

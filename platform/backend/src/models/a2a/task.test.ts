@@ -21,10 +21,17 @@ describe("A2ATaskModel", () => {
       const context = await createContext();
       const originalUpdatedAt = context.updatedAt;
 
-      const task = await A2ATaskModel.create({
-        contextId: context.id,
-        state: A2AProtocolTaskState.Submitted,
-      });
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(originalUpdatedAt.getTime() + 1000));
+      let task: Awaited<ReturnType<typeof A2ATaskModel.create>>;
+      try {
+        task = await A2ATaskModel.create({
+          contextId: context.id,
+          state: A2AProtocolTaskState.Submitted,
+        });
+      } finally {
+        vi.useRealTimers();
+      }
 
       expect(task.id).toBeDefined();
       expect(task.contextId).toBe(context.id);

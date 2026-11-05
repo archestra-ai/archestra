@@ -1,8 +1,11 @@
 import { describe, expect, test } from "vitest";
 import {
   describeMemoryKill,
+  MEMORY_EVENTS_SEPARATOR,
   memoryKillBetween,
   parseMemoryEvents,
+  parseMemoryQuantity,
+  splitTurnPoll,
 } from "./memory-kill";
 
 const GIB = 1024 ** 3;
@@ -15,17 +18,32 @@ describe("parseMemoryEvents", () => {
       ),
     ).toEqual({
       oomKills: 1,
+      wardenStops: 0,
       limitHits: 3,
       peakBytes: 8 * GIB,
       limitBytes: 8 * GIB,
     });
   });
 
+  test("reads the memory warden's stops", () => {
+    expect(
+      parseMemoryEvents(
+        "oom 0\noom_kill 0\npeak 4294967296\nlimit 4294967296\nwarden_stop 2\n",
+      ),
+    ).toMatchObject({ oomKills: 0, wardenStops: 2 });
+  });
+
   test("keeps the limit and peak open when the kernel does not give them", () => {
     // memory.events' own "max" counter is not the limit.
     expect(
       parseMemoryEvents("max 1203\noom_kill 2\npeak \nlimit max\n"),
-    ).toEqual({ oomKills: 2, limitHits: 0, peakBytes: null, limitBytes: null });
+    ).toEqual({
+      oomKills: 2,
+      wardenStops: 0,
+      limitHits: 0,
+      peakBytes: null,
+      limitBytes: null,
+    });
   });
 
   test("is null without a counter (no cgroup v2, an older image shell)", () => {
@@ -34,28 +52,88 @@ describe("parseMemoryEvents", () => {
   });
 });
 
+describe("splitTurnPoll", () => {
+  test("separates the turn's result from the counters read after it", () => {
+    expect(
+      splitTurnPoll(
+        `75\n{"code":"runtime.pane_exited"}\n${MEMORY_EVENTS_SEPARATOR}\nlow 0\nmax 4\noom 1\noom_kill 1\npeak ${8 * GIB}\nlimit ${8 * GIB}\n`,
+      ),
+    ).toEqual({
+      memory: {
+        oomKills: 1,
+        wardenStops: 0,
+        limitHits: 1,
+        peakBytes: 8 * GIB,
+        limitBytes: 8 * GIB,
+      },
+      result: '75\n{"code":"runtime.pane_exited"}',
+    });
+  });
+
+  test("gives back the result exactly as the script printed it", () => {
+    // The separator starts on a line of its own: a failure envelope has no
+    // trailing newline, a bare status has one.
+    expect(
+      splitTurnPoll(`7\n\n${MEMORY_EVENTS_SEPARATOR}\noom_kill 0\n`),
+    ).toMatchObject({
+      result: "7\n",
+    });
+    expect(
+      splitTurnPoll(`\n${MEMORY_EVENTS_SEPARATOR}\noom_kill 0\n`),
+    ).toMatchObject({
+      result: "",
+    });
+  });
+
+  test("has no counters but keeps the result when the container has none", () => {
+    // No cgroup v2: the cat finds nothing, only peak and limit are printed.
+    expect(
+      splitTurnPoll(`0\n\n${MEMORY_EVENTS_SEPARATOR}\npeak \nlimit \n`),
+    ).toEqual({ memory: null, result: "0\n" });
+  });
+
+  test("reads output without the separator as the result alone", () => {
+    expect(splitTurnPoll("0\n")).toEqual({ memory: null, result: "0\n" });
+  });
+});
+
 describe("memoryKillBetween", () => {
   const before = {
     oomKills: 1,
+    wardenStops: 0,
     limitHits: 1,
     peakBytes: null,
     limitBytes: 8 * GIB,
   };
-  test("is the later reading when a kill happened in between, with whether the limit caused it", () => {
+  test("is the later reading when a kill happened in between, with how many and whether the limit caused it", () => {
     const atLimit = {
       ...before,
-      oomKills: 2,
+      oomKills: 3,
+      wardenStops: 0,
       limitHits: 2,
       peakBytes: 8 * GIB,
     };
     expect(memoryKillBetween(before, atLimit)).toEqual({
       events: atLimit,
+      killed: 2,
+      stopped: 0,
       atLimit: true,
     });
     // The node's OOM killer: the cgroup never hit its own limit.
     const nodeOom = { ...before, oomKills: 2, peakBytes: 3 * GIB };
     expect(memoryKillBetween(before, nodeOom)).toEqual({
       events: nodeOom,
+      killed: 1,
+      stopped: 0,
+      atLimit: false,
+    });
+  });
+  test("counts the commands the memory warden stopped near the limit", () => {
+    const stopped = { ...before, wardenStops: 2, peakBytes: 7.8 * GIB };
+    expect(memoryKillBetween(before, stopped)).toEqual({
+      events: stopped,
+      killed: 0,
+      stopped: 2,
       atLimit: false,
     });
   });
@@ -68,39 +146,73 @@ describe("memoryKillBetween", () => {
 });
 
 describe("describeMemoryKill", () => {
-  test("names the limit, the peak and a larger tier for a container that hit its limit", () => {
-    expect(
-      describeMemoryKill(
-        {
-          events: {
-            oomKills: 1,
-            limitHits: 1,
-            peakBytes: 7.5 * GIB,
-            limitBytes: 8 * GIB,
-          },
-          atLimit: true,
+  const where = { container: "agent-runtime", tier: "S" };
+  test("names the limit, the tier, the peak and what to do for a container that hit its limit", () => {
+    const description = describeMemoryKill(
+      {
+        events: {
+          oomKills: 1,
+          wardenStops: 0,
+          limitHits: 1,
+          peakBytes: 7.97 * GIB,
+          limitBytes: 8 * GIB,
         },
-        "agent-runtime",
-      ),
-    ).toBe(
-      "The run ran out of memory. The agent-runtime container reached its memory limit of 8 GiB (peak usage 7.5 GiB), and the kernel killed the run's processes. Start the run again at a larger tier.",
+        killed: 1,
+        stopped: 0,
+        atLimit: true,
+      },
+      where,
     );
+    expect(description).toBe(
+      "The run ran out of memory. The agent-runtime container reached its memory limit of 8 GiB at tier S (peak usage 8 GiB), and the kernel killed a process of the run. Start the run again at a larger tier, or have the agent run memory-heavy commands, such as type checks, test suites and builds, one at a time and with fewer workers.",
+    );
+    // code-review-action reads the killed run's size from the reason with
+    // this pattern (src/sizes.ts) to ask for a larger tier.
+    expect(
+      description.match(
+        /memory limit(?: of)? (\d+(?:\.\d+)?) ?(GiB|Gi|MiB|Mi)\b/i,
+      )?.[1],
+    ).toBe("8");
     expect(
       describeMemoryKill(
         {
           events: {
-            oomKills: 1,
+            oomKills: 3,
+            wardenStops: 0,
             limitHits: 1,
             peakBytes: null,
             limitBytes: null,
           },
+          killed: 3,
+          stopped: 0,
           atLimit: true,
         },
-        "agent-runtime",
+        { container: "agent-runtime", tier: null },
       ),
-    ).toBe(
-      "The run ran out of memory. The agent-runtime container hit its memory limit, and the kernel killed the run's processes. Start the run again at a larger tier.",
+    ).toMatch(
+      /^The run ran out of memory\. The agent-runtime container hit its memory limit, and the kernel killed 3 processes of the run\. Start the run again at a larger tier/,
     );
+  });
+
+  test("rounds a limit down, never up", () => {
+    // memory.max of a container limited to 8G: 8,000,000,000 bytes, 7.45 GiB.
+    expect(
+      describeMemoryKill(
+        {
+          events: {
+            oomKills: 1,
+            wardenStops: 0,
+            limitHits: 1,
+            peakBytes: 8_000_000_000,
+            limitBytes: 8_000_000_000,
+          },
+          killed: 1,
+          stopped: 0,
+          atLimit: true,
+        },
+        where,
+      ),
+    ).toContain("reached its memory limit of 7.4 GiB at tier S");
   });
 
   test("blames the node, not the size, when the container stayed under its limit", () => {
@@ -109,32 +221,70 @@ describe("describeMemoryKill", () => {
         {
           events: {
             oomKills: 1,
+            wardenStops: 0,
             limitHits: 0,
             peakBytes: 3 * GIB,
             limitBytes: 8 * GIB,
           },
+          killed: 1,
+          stopped: 0,
           atLimit: false,
         },
-        "agent-runtime",
+        where,
       ),
     ).toBe(
-      "The kernel killed the run's processes because the node ran out of memory; the agent-runtime container did not hit its 8 GiB limit (peak usage 3 GiB). Start the run again.",
+      "The kernel killed a process of the run because the node ran out of memory; the agent-runtime container did not reach its 8 GiB limit at tier S (peak usage 3 GiB). Start the run again.",
     );
     expect(
       describeMemoryKill(
         {
           events: {
             oomKills: 1,
+            wardenStops: 0,
             limitHits: 0,
             peakBytes: null,
             limitBytes: null,
           },
+          killed: 1,
+          stopped: 0,
           atLimit: false,
         },
-        "agent-runtime",
+        { container: "agent-runtime", tier: null },
       ),
     ).toBe(
-      "The kernel killed the run's processes because the node ran out of memory; the agent-runtime container has no memory limit of its own. Start the run again.",
+      "The kernel killed a process of the run because the node ran out of memory; the agent-runtime container has no memory limit of its own. Start the run again.",
+    );
+  });
+});
+
+describe("parseMemoryQuantity", () => {
+  test("reads binary and decimal quantities and plain bytes", () => {
+    expect(parseMemoryQuantity("8Gi")).toBe(8 * GIB);
+    expect(parseMemoryQuantity("14336Mi")).toBe(14 * GIB);
+    expect(parseMemoryQuantity("8G")).toBe(8 * 1000 ** 3);
+    expect(parseMemoryQuantity("8589934592")).toBe(8 * GIB);
+    expect(parseMemoryQuantity("lots")).toBeNull();
+    expect(parseMemoryQuantity(undefined)).toBeNull();
+  });
+  test("says the warden stopped a command, and what to do, when the kernel killed nothing", () => {
+    expect(
+      describeMemoryKill(
+        {
+          events: {
+            oomKills: 0,
+            wardenStops: 1,
+            limitHits: 0,
+            peakBytes: 3.9 * GIB,
+            limitBytes: 4 * GIB,
+          },
+          killed: 0,
+          stopped: 1,
+          atLimit: false,
+        },
+        { container: "agent-runtime", tier: "S" },
+      ),
+    ).toBe(
+      "The run ran short of memory. The agent-runtime container neared its memory limit of 4 GiB at tier S (peak usage 3.9 GiB), and the memory warden stopped one of the agent's commands so the kernel would not stop every process. Start the run again at a larger tier, or have the agent run memory-heavy commands, such as type checks, test suites and builds, one at a time and with fewer workers.",
     );
   });
 });

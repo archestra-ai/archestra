@@ -13,6 +13,7 @@ import { buildKnowledgeSourcesDescription } from "./knowledge-sources-descriptio
 export async function buildKnowledgeSearchInstruction(params: {
   agentId: string;
   userId?: string;
+  oauthClientId?: string;
   organizationId?: string;
   /** Names on the caller's already permission-filtered, advertised surface. */
   toolNames: string[];
@@ -45,6 +46,7 @@ export async function buildKnowledgeSearchInstruction(params: {
         toolName: knowledgeTool,
         agentId: params.agentId,
         userId: params.userId,
+        oauthClientId: params.oauthClientId,
         organizationId: params.organizationId,
         lookups: params.lookups,
       }))
@@ -56,7 +58,11 @@ export async function buildKnowledgeSearchInstruction(params: {
   const description = await buildKnowledgeSourcesDescription(
     params.agentId,
     params.organizationId
-      ? { userId: params.userId, organizationId: params.organizationId }
+      ? {
+          userId: params.userId,
+          oauthClientId: params.oauthClientId,
+          organizationId: params.organizationId,
+        }
       : undefined,
     params.lookups,
   );

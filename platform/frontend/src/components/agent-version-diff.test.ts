@@ -36,6 +36,8 @@ function makeSnapshot(
     llmApiKey: null,
     identityProviderId: null,
     environmentId: null,
+    networkPolicy: null,
+    subagentLoadBalancing: null,
     tools: [
       {
         toolId: "t1",
@@ -654,6 +656,8 @@ const SNAPSHOT_KEY_HOMES: Record<
   incomingEmailAllowedDomain: { field: "Email allowed domain" },
   identityProviderId: { field: "Identity provider" },
   environmentId: { field: "Environment" },
+  networkPolicy: { field: "Network egress" },
+  subagentLoadBalancing: { field: "Subagent load balancing" },
   builtInAgentConfig: { field: "Built-in configuration" },
   systemPrompt: { section: "system-prompt" },
   tools: { section: "tools" },
@@ -679,6 +683,18 @@ describe("snapshot coverage", () => {
     llmApiKey: { id: "k1", name: "prod", provider: "anthropic" },
     identityProviderId: "idp1",
     environmentId: "env1",
+    networkPolicy: {
+      egressMode: "restricted",
+      domainPreset: "none",
+      allowedDomains: ["api.example.com"],
+      allowedCidrs: [],
+    },
+    subagentLoadBalancing: {
+      enabled: true,
+      algorithm: "round_robin",
+      retries: 1,
+      fallbackEnabled: true,
+    },
     excludedTools: [{ toolId: "t9", name: "danger__wipe" }],
     excludedSubagents: [{ agentId: "a9", name: "Old bot" }],
     suggestedPrompts: [{ summaryTitle: "Ideas", prompt: "Give me ideas" }],

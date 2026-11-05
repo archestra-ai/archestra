@@ -4,6 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import Fastify from "fastify";
 import ts from "typescript";
+import { internalCallHeader } from "../clients/internal-call";
 import config, { validateShutdownPodGrace } from "../config";
 import {
   beginLlmProxyDrain,
@@ -14,6 +15,7 @@ import {
   drainBackgroundWork,
   trackBackgroundWork,
 } from "../utils/background-work";
+import { withDrainScope } from "../utils/drain-scope";
 
 const opts = JSON.parse(process.argv[2]);
 validateShutdownPodGrace(
@@ -102,6 +104,27 @@ const stop = () => {};
 const shutdown = async () => {};
 const noopService = new Proxy({}, { get: () => stop });
 const asyncService = new Proxy({}, { get: () => shutdown });
+let acceptingChatOps = true;
+process.on("message", (message) => {
+  if (message !== "socket-turn") return;
+  if (!acceptingChatOps) {
+    emit("socket-declined");
+    return;
+  }
+  const work = withDrainScope(async () => {
+    emit("admitted", { route: "socket" });
+    await wait(opts.durationMs);
+    const response = await fetch(`${url}/v1/openai/json`, {
+      headers: internalCallHeader(),
+    });
+    emit("socket-completed", {
+      status: response.status,
+      body: await response.text(),
+      dependencyClosed,
+    });
+  });
+  trackBackgroundWork(work);
+});
 const source = readFileSync("src/server.ts", "utf8");
 // Execute the production coordinator without booting live application services.
 const functionSource = source.slice(
@@ -153,9 +176,15 @@ const context = {
   mcpGatewayTaskReaper: noopService,
   instanceAnalyticsService: noopService,
   rumExporter: asyncService,
-  metrics: { activeUsers: { activeUsersMetricCollector: noopService } },
+  activeUsersMetricCollector: noopService,
   cleanupEmailProvider: shutdown,
-  chatOpsManager: asyncService,
+  chatOpsManager: {
+    beginShutdown: async () => {
+      acceptingChatOps = false;
+      emit("chatops-stopped");
+    },
+    cleanup: shutdown,
+  },
   ngrokTunnelManager: asyncService,
 };
 const register = vm.runInNewContext(

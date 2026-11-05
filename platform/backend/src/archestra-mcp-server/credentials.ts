@@ -10,7 +10,9 @@ import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   declarePersonalRuntimeCredential,
   transferPersonalRuntimeCredential,
+  validateEphemeralRuntimeCredential,
 } from "@/services/agent-runtime/credentials";
+import { ephemeralCredentialGrantManager } from "@/services/agent-runtime/ephemeral-credential-grants";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import {
   createRuntimeCredentialDefinition,
@@ -35,7 +37,11 @@ import {
   errorResult,
   structuredSuccessResult,
 } from "./helpers";
-import { requireActor } from "./tasks";
+import {
+  checkCallerSubagentAccess,
+  requireActor,
+  resolveCandidateRuntimeSubagentIds,
+} from "./tasks";
 
 /**
  * The secret-bearing argument reuses the catalog tools' `environment` shape on
@@ -82,6 +88,31 @@ const TransferCredentialOutputSchema = z.object({
     .describe(
       "Where the person pastes the value. Null when this call already stored one.",
     ),
+  urls: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "All per-subagent setup links when declaring a credential across multiple subagents.",
+    ),
+  ephemeral: z
+    .boolean()
+    .optional()
+    .describe(
+      "True when the credential was minted as a short-lived one-time grant instead of stored in the database.",
+    ),
+  credential_grant_id: z
+    .string()
+    .uuid()
+    .nullable()
+    .optional()
+    .describe(
+      "One-time credential grant handle to pass to start_agent_run when ephemeral is true.",
+    ),
+  expires_in_seconds: z
+    .number()
+    .int()
+    .optional()
+    .describe("Seconds until the ephemeral credential grant expires."),
   availability: z
     .string()
     .describe("When a run can read the value, in plain words."),
@@ -277,7 +308,12 @@ const registry = defineArchestraTools([
       "An administrator can stop an Agent accepting a transferred value in its Agent Runtime settings. Declaring stays available, because it carries no secret. " +
       "A stored value reaches the workspace on the Agent's NEXT turn, not one already running.",
     schema: z.object({
-      agent_id: z.string().describe("The Agent to give the credential to."),
+      agent_id: z
+        .string()
+        .optional()
+        .describe(
+          "The Agent to give the credential to. Omit when calling through an MCP gateway to transfer the credential to all runtime subagents assigned to the gateway.",
+        ),
       environment: z
         .array(TransferCredentialEnvVarSchema)
         .min(1)
@@ -292,74 +328,218 @@ const registry = defineArchestraTools([
         .describe(
           "Human-readable name shown in the Agent's credential list. Defaults to the key.",
         ),
+      ephemeral: z
+        .boolean()
+        .optional()
+        .describe(
+          "When true, mints a short-lived one-time credential_grant_id handle instead of persisting the secret in the database or mutating subagent declarations. Pass the returned credential_grant_id to start_agent_run so the secret is bound only to the single winning subagent pod.",
+        ),
+      ttl_seconds: z
+        .number()
+        .int()
+        .min(30)
+        .max(3600)
+        .optional()
+        .describe(
+          "Optional TTL in seconds (30–3600, default 300) for an ephemeral credential grant. Implies ephemeral: true.",
+        ),
     }),
     outputSchema: TransferCredentialOutputSchema,
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
-        const agent = await AgentModel.findById(args.agent_id);
-        if (!agent || agent.organizationId !== actor.organizationId) {
-          return errorResult("Agent not found");
-        }
-        // SPDX-SnippetBegin
-        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        if (
-          !(await ResourcePermissions.allows({
-            organizationId: actor.organizationId,
-            userId: actor.id,
-            resource: "agent",
-            scope: agent.id,
-            action: "read",
-          }))
-        ) {
-          return errorResult("Agent not found");
-        }
-        // SPDX-SnippetEnd
-
-        const runtime = resolveAgentRuntime(agent);
-        if (!runtime) {
+        const explicitAgentId = args.agent_id?.trim();
+        const callerAgent =
+          !explicitAgentId && context.agent?.id
+            ? await AgentModel.findById(context.agent.id)
+            : null;
+        const candidateAgentIds = explicitAgentId
+          ? [explicitAgentId]
+          : callerAgent
+            ? await resolveCandidateRuntimeSubagentIds({
+                callerAgent,
+                actorUserId: actor.id,
+              })
+            : [];
+        if (!explicitAgentId && candidateAgentIds.length === 0) {
           return errorResult(
-            "This Agent has no Agent Runtime configured, so it has no workspace to receive a credential.",
+            callerAgent
+              ? "No runtime subagents are assigned to this gateway."
+              : "agent_id is required.",
           );
         }
+
+        const targets: {
+          agent: NonNullable<Awaited<ReturnType<typeof AgentModel.findById>>>;
+          runtime: NonNullable<ReturnType<typeof resolveAgentRuntime>>;
+        }[] = [];
+
+        for (const candidateId of candidateAgentIds) {
+          const agent = await AgentModel.findById(candidateId);
+          if (!agent || agent.organizationId !== actor.organizationId) {
+            if (explicitAgentId) return errorResult("Agent not found");
+            continue;
+          }
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          if (
+            !(await ResourcePermissions.allows({
+              organizationId: actor.organizationId,
+              userId: actor.id,
+              resource: "agent",
+              scope: agent.id,
+              action: "read",
+            }))
+          ) {
+            if (explicitAgentId) return errorResult("Agent not found");
+            continue;
+          }
+          // SPDX-SnippetEnd
+          const subagentAccess = await checkCallerSubagentAccess(
+            context.agent.id,
+            agent,
+          );
+          if (!subagentAccess.allowed) {
+            if (explicitAgentId) {
+              return errorResult(
+                subagentAccess.reason === "agent_not_found"
+                  ? "Agent not found"
+                  : subagentAccess.message,
+              );
+            }
+            continue;
+          }
+
+          const runtime = resolveAgentRuntime(agent);
+          if (!runtime) {
+            if (explicitAgentId) {
+              return errorResult(
+                "This Agent has no Agent Runtime configured, so it has no workspace to receive a credential.",
+              );
+            }
+            continue;
+          }
+          targets.push({ agent, runtime });
+        }
+
+        if (targets.length === 0) {
+          return errorResult("Agent not found");
+        }
+
         const [entry] = args.environment;
+        const isEphemeral =
+          args.ephemeral === true || args.ttl_seconds !== undefined;
 
-        // The gate governs storing a client-supplied secret. Declaring carries
-        // none, so it stays available on an Agent where storing is turned off —
-        // that Agent is exactly where the person should paste the value instead.
-        // Only an explicit `false` refuses: an Agent stored before this field
-        // existed has no value at all, and those must keep working.
-        if (
-          entry.value !== undefined &&
-          runtime.allowAgentSuppliedCredentialValues === false
-        ) {
+        if (isEphemeral && entry.value === undefined) {
           return errorResult(
-            `"${agent.name}" does not accept credential values from a connected client. An administrator turned that off for this Agent in its Agent Runtime settings. Call this tool again without \`value\` to declare "${entry.key}" and get a link the person can paste it into.`,
+            "Ephemeral credential grants require a `value`. Omit `ephemeral` and `ttl_seconds` to declare the credential without a value.",
           );
         }
 
-        // Checked here as well as in the service so the caller gets the real
-        // reason: `catchError` deliberately flattens thrown errors to a generic
-        // message, which would hide why the transfer was refused.
-        const declared = runtime.credentials?.find(
-          ({ key }) => key === entry.key,
-        );
-        if (declared?.scope === "shared") {
-          return errorResult(
-            `"${entry.key}" is declared as a shared credential on "${agent.name}". A shared value applies to every user's runs of this Agent, so it is set in Settings rather than transferred from a client.`,
+        for (const { agent, runtime } of targets) {
+          // The gate governs storing a client-supplied secret. Declaring carries
+          // none, so it stays available on an Agent where storing is turned off —
+          // that Agent is exactly where the person should paste the value instead.
+          // Only an explicit `false` refuses: an Agent stored before this field
+          // existed has no value at all, and those must keep working.
+          if (
+            entry.value !== undefined &&
+            runtime.allowAgentSuppliedCredentialValues === false
+          ) {
+            return errorResult(
+              `"${agent.name}" does not accept credential values from a connected client. An administrator turned that off for this Agent in its Agent Runtime settings. Call this tool again without \`value\` to declare "${entry.key}" and get a link the person can paste it into.`,
+            );
+          }
+
+          // Checked here as well as in the service so the caller gets the real
+          // reason: `catchError` deliberately flattens thrown errors to a generic
+          // message, which would hide why the transfer was refused.
+          const declared = runtime.credentials?.find(
+            ({ key }) => key === entry.key,
+          );
+          if (declared?.scope === "shared") {
+            return errorResult(
+              `"${entry.key}" is declared as a shared credential on "${agent.name}". A shared value applies to every user's runs of this Agent, so it is set in Settings rather than transferred from a client.`,
+            );
+          }
+        }
+
+        const targetNamesLabel = targets
+          .map(({ agent }) => `"${agent.name}"`)
+          .join(", ");
+
+        if (isEphemeral && entry.value !== undefined) {
+          for (const { runtime } of targets) {
+            await validateEphemeralRuntimeCredential({
+              runtime,
+              organizationId: actor.organizationId,
+              userId: actor.id,
+              key: entry.key,
+              label: args.label,
+            });
+          }
+          const { grantId, expiresInSeconds } =
+            await ephemeralCredentialGrantManager.createGrant({
+              organizationId: actor.organizationId,
+              userId: actor.id,
+              callerAgentId: context.agent.id,
+              allowedAgentIds: targets.map(({ agent }) => agent.id),
+              key: entry.key,
+              value: entry.value,
+              ttlSeconds: args.ttl_seconds,
+            });
+          const availability = `Bound to one-time grant ${grantId} (expires in ${expiresInSeconds}s). Pass credential_grant_ids: ["${grantId}"] to start_agent_run so the credential is injected only into the single winning subagent pod.`;
+          return structuredSuccessResult(
+            {
+              key: entry.key,
+              scope: "personal" as const,
+              declarationCreated: false,
+              valueStored: true,
+              url: null,
+              ephemeral: true,
+              credential_grant_id: grantId,
+              expires_in_seconds: expiresInSeconds,
+              availability,
+            },
+            [
+              `Minted ephemeral credential grant ${grantId} for ${entry.key} on ${targetNamesLabel}.`,
+              "Scope: personal & ephemeral — never written to the database; consumed once by start_agent_run.",
+              availability,
+            ].join("\n"),
           );
         }
 
         if (entry.value === undefined) {
-          const { declarationCreated } = await declarePersonalRuntimeCredential(
-            {
-              runtime,
-              key: entry.key,
-              label: args.label,
-            },
+          let anyDeclarationCreated = false;
+          const completedNames: string[] = [];
+          try {
+            for (const { agent, runtime } of targets) {
+              const { declarationCreated } =
+                await declarePersonalRuntimeCredential({
+                  runtime,
+                  key: entry.key,
+                  label: args.label,
+                });
+              if (declarationCreated) anyDeclarationCreated = true;
+              completedNames.push(`"${agent.name}"`);
+            }
+          } catch (error) {
+            const response = catchError(error, "transferring the credential");
+            if (
+              completedNames.length > 0 &&
+              response.content?.[0]?.type === "text"
+            ) {
+              return errorResult(
+                `${response.content[0].text} (Already declared on: ${completedNames.join(", ")}.)`,
+              );
+            }
+            return response;
+          }
+          const urls = targets.map(({ agent }) =>
+            agentCredentialSetupUrl(agent.id, [entry.key]),
           );
-          const url = agentCredentialSetupUrl(agent.id, [entry.key]);
+          const url = urls[0];
           const availability =
             "Nothing is stored yet. A run can read it once the person saves a value, from that Agent's next turn onward.";
           // Question forms show a link as plain text, so the model must hand
@@ -372,29 +552,52 @@ const registry = defineArchestraTools([
             {
               key: entry.key,
               scope: "personal" as const,
-              declarationCreated,
+              declarationCreated: anyDeclarationCreated,
               valueStored: false,
               url,
+              ...(urls.length > 1 ? { urls } : {}),
               availability,
               next_step: nextStep,
             },
             [
-              `Declared ${entry.key} on "${agent.name}". No value is stored.`,
-              `Put this link in your reply text, never inside a question form, so the person can paste it: ${url}`,
+              `Declared ${entry.key} on ${targetNamesLabel}. No value is stored.`,
+              urls.length > 1
+                ? `Put these links in your reply text, never inside a question form, so the person can paste it:\n${urls.map((u, idx) => `- ${targets[idx].agent.name}: ${u}`).join("\n")}`
+                : `Put this link in your reply text, never inside a question form, so the person can paste it: ${url}`,
               "Scope: personal — whatever they save applies to every run they start on this Agent, and to no one else's runs.",
               availability,
             ].join("\n"),
           );
         }
 
-        const { declarationCreated } = await transferPersonalRuntimeCredential({
-          runtime,
-          organizationId: actor.organizationId,
-          userId: actor.id,
-          key: entry.key,
-          value: entry.value,
-          label: args.label,
-        });
+        let anyDeclarationCreated = false;
+        const completedNames: string[] = [];
+        try {
+          for (const { agent, runtime } of targets) {
+            const { declarationCreated } =
+              await transferPersonalRuntimeCredential({
+                runtime,
+                organizationId: actor.organizationId,
+                userId: actor.id,
+                key: entry.key,
+                value: entry.value,
+                label: args.label,
+              });
+            if (declarationCreated) anyDeclarationCreated = true;
+            completedNames.push(`"${agent.name}"`);
+          }
+        } catch (error) {
+          const response = catchError(error, "transferring the credential");
+          if (
+            completedNames.length > 0 &&
+            response.content?.[0]?.type === "text"
+          ) {
+            return errorResult(
+              `${response.content[0].text} (Already stored on: ${completedNames.join(", ")}.)`,
+            );
+          }
+          return response;
+        }
 
         const availability =
           "Available to the next turn of this Agent. A run already in progress keeps the environment it started with, so steer or continue the run to use it.";
@@ -403,13 +606,13 @@ const registry = defineArchestraTools([
           {
             key: entry.key,
             scope: "personal" as const,
-            declarationCreated,
+            declarationCreated: anyDeclarationCreated,
             valueStored: true,
             url: null,
             availability,
           },
           [
-            `Stored ${entry.key} for you on "${agent.name}".`,
+            `Stored ${entry.key} for you on ${targetNamesLabel}.`,
             "Scope: personal — it applies to every run you start on this Agent, and to no one else's runs.",
             availability,
           ].join("\n"),

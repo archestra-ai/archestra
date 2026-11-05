@@ -3,6 +3,7 @@ import { ApiError } from "@archestra/shared/types";
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
 import type { Bedrock, OpenAi, StreamAccumulatorState } from "@/types";
 import { assertModelRouterCacheControls } from "../model-router-cache-controls";
+import { assertUnstructuredResponseFormat } from "../translated-response-format";
 import type { OpenAiStreamUsage } from "./openai-sse-chunk";
 import { parseJsonObject } from "./openai-translator-utils";
 
@@ -40,6 +41,7 @@ type Loose = any;
  * entire LLM-proxy pipeline sees Converse shapes.
  */
 export function openaiToConverse(req: OpenAiRequest): OpenaiToConverseResult {
+  assertUnstructuredResponseFormat(req, "the Bedrock Converse translation");
   assertModelRouterCacheControls("bedrock", req);
   const loose = req as Loose;
   const system: NonNullable<BedrockRequest["system"]> = [];
@@ -250,6 +252,7 @@ export function mapStopReason(
     case "tool_use":
       return "tool_calls";
     case "max_tokens":
+    case "model_context_window_exceeded":
       return "length";
     case "guardrail_intervened":
     case "content_filtered":

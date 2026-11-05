@@ -25,6 +25,7 @@ global.IntersectionObserver =
   MockIntersectionObserver as unknown as typeof IntersectionObserver;
 
 Object.defineProperty(window, "matchMedia", {
+  configurable: true,
   writable: true,
   value: vi.fn().mockImplementation((query: string) => ({
     matches: false,

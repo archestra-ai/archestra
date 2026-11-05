@@ -20,6 +20,7 @@ import { and, desc, eq, inArray, like, notExists, sql } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
+import { assertModelTrioTiers } from "@/agents/subagent-tiers";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { hasPermission } from "@/auth";
 import { getPermissionsForUserContext, isGlobalAdmin } from "@/auth/utils";
@@ -27,7 +28,6 @@ import { describeOrganizationDefaultModel } from "@/auto-routing/organization-de
 import { writeOrganizationTrio } from "@/auto-routing/settings";
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
-import { syncBuiltInSkillsForOrganization } from "@/database/seed";
 import {
   enterpriseTier,
   // SPDX-SnippetBegin
@@ -66,6 +66,7 @@ import { knowledgeSettingsService } from "@/services/knowledge-settings";
 import { removeMemberTarget } from "@/services/member-removal";
 import { reconcileManagedPlaywrightSetting } from "@/services/playwright-runtime";
 import { ResourcePermissions } from "@/services/resource-permissions";
+import { syncBuiltInSkillsForOrganization } from "@/services/seed";
 import {
   AgentRuntimeTiersResponseSchema,
   ApiError,
@@ -90,7 +91,7 @@ import {
   UpdateSecuritySettingsSchema,
   UpdateSkillsSettingsSchema,
 } from "@/types";
-import { assertModelTrioTiers } from "@/utils/llm-resolution";
+import { trackBackgroundWork } from "@/utils/background-work";
 
 const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -339,7 +340,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetAgentRuntimeTiers,
         description:
-          "The organization's Agent Runtime tiers in effect, smallest first: each tier's name, CPU, the memory its CPU gives it, the spares it keeps ready, and the default tier",
+          "The organization's Agent Runtime tiers in effect, smallest first: each tier's name, CPU, memory, the spares it keeps ready, and the default tier",
         tags: ["Organization"],
         response: constructResponseSchema(AgentRuntimeTiersResponseSchema),
       },
@@ -745,6 +746,14 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await daggerEnvironmentRuntimeManager.teardownOrganizationDefaultEngine(
           organization,
           currentOrganization?.defaultEnvironmentNamespace ?? null,
+        );
+        // Unbound agents with their own network policy run their engine in
+        // the default namespace too; move them along in the background, as a
+        // move waits for each old engine to stop.
+        trackBackgroundWork(
+          daggerEnvironmentRuntimeManager.reconcileAgentEngines({
+            organizationId,
+          }),
         );
       }
 

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Cohere, OpenAi } from "@/types";
 import { assertModelRouterCacheControls } from "../model-router-cache-controls";
+import { assertUnstructuredResponseFormat } from "../translated-response-format";
 import {
   normalizeOpenAiContentParts,
   stringifyTextContent,
@@ -35,6 +36,7 @@ export function openaiToCohere(req: OpenAiRequest): {
   cohereBody: CohereRequest;
   openaiContext: CohereOpenaiContext;
 } {
+  assertUnstructuredResponseFormat(req, "the Cohere translation");
   assertModelRouterCacheControls("cohere", req);
   const loose = req as OpenAiRequest & {
     frequency_penalty?: number | null;
@@ -196,9 +198,11 @@ export function cohereResponseToOpenai(
 export function mapCohereFinishReason(
   reason: CohereResponse["finish_reason"] | string | null | undefined,
 ): "stop" | "length" | "tool_calls" | "content_filter" {
-  if (reason === "MAX_TOKENS") return "length";
+  // TIMEOUT cuts the answer off like MAX_TOKENS does. ERROR_TOXIC comes from
+  // Cohere's older API, outside the v2 enum.
+  if (reason === "MAX_TOKENS" || reason === "TIMEOUT") return "length";
   if (reason === "TOOL_CALL") return "tool_calls";
-  if (reason === "ERROR") return "content_filter";
+  if (reason === "ERROR" || reason === "ERROR_TOXIC") return "content_filter";
   return "stop";
 }
 

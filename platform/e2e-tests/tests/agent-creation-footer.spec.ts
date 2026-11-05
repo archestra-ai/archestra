@@ -39,7 +39,7 @@ for (const viewport of [
       await page.setViewportSize(viewport);
       await goToPage(page, `${family.path}/new`);
       const fromScratch = page.getByRole("button", {
-        name: /^New .* agent/,
+        name: /Built into .* for chat\./,
       });
       const nameField = page.getByRole("textbox", { name: /^Name\b/ });
       await expect(nameField.or(fromScratch)).toBeVisible();

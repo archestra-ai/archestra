@@ -1,6 +1,7 @@
 {
   "$comment": "Redirects for moved/renamed/deleted docs pages, merged into the archestra-website redirect table at build. URL = /docs/<path below docs/pages, without .md; a folder's index.md is the folder URL>. On move/rename/delete, append { source, destination, permanent: true } pointing at the final URL (no chains); if there is no equivalent, let it 404.",
   "redirects": [
+    {"source": "/docs/llm-proxy/model-router", "destination": "/docs/llm-proxy/unified-model", "permanent": true},
     {"source": "/docs/integrations/claude-code", "destination": "/docs/integrations/ai-clients/claude-code", "permanent": true},
     {"source": "/docs/integrations/claude-desktop", "destination": "/docs/integrations/ai-clients/claude-desktop", "permanent": true},
     {"source": "/docs/integrations/foundry", "destination": "/docs/integrations/ai-clients/foundry", "permanent": true},

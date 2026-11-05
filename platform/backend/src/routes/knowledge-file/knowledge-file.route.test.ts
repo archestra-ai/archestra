@@ -762,7 +762,7 @@ describe("knowledge file routes", () => {
       });
     });
 
-    test("a directory selection only indexes files the caller can see", async ({
+    test("a directory selection only indexes files the caller can see and share", async ({
       makeMember,
       makeUser,
     }) => {
@@ -774,15 +774,25 @@ describe("knowledge file routes", () => {
       const directoryId = directory.json().id;
 
       await MemberModel.updateRole(user.id, organizationId, "admin");
+      const colleague = await makeUser({ email: "limited@test.com" });
+      await makeMember(colleague.id, organizationId, { role: "editor" });
       await upload({
         filename: "shared.txt",
+        directoryId,
+        initialGrants: [
+          {
+            subject: { type: "user", id: colleague.id },
+            actions: ["read", "use", "update", "delete", "manage-permissions"],
+          },
+        ],
+      });
+      await upload({
+        filename: "readonly.txt",
         directoryId,
         initialGrants: everyone,
       });
       await upload({ filename: "secret.txt", directoryId });
 
-      const colleague = await makeUser({ email: "limited@test.com" });
-      await makeMember(colleague.id, organizationId, { role: "editor" });
       await bootAs(colleague, organizationId);
       const response = await app.inject({
         method: "POST",
@@ -796,6 +806,32 @@ describe("knowledge file routes", () => {
       expect(response.json().indexed).toBe(1);
       const documents = await db.select().from(schema.kbDocumentsTable);
       expect(documents.map((doc) => doc.title)).toEqual(["shared.txt"]);
+    });
+
+    test("rejects indexing an explicitly selected file when the caller lacks manage-permissions", async ({
+      makeMember,
+      makeUser,
+    }) => {
+      await MemberModel.updateRole(user.id, organizationId, "admin");
+      const uploaded = await upload({
+        filename: "readonly.txt",
+        initialGrants: everyone,
+      });
+      const fileId = uploaded.json().id;
+
+      const colleague = await makeUser({ email: "readonly@test.com" });
+      await makeMember(colleague.id, organizationId, { role: "editor" });
+      await bootAs(colleague, organizationId);
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/knowledge-files/index",
+        payload: {
+          fileIds: [fileId],
+          newKnowledgeBaseName: "Widen attempt",
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
     });
 
     test("rejects a knowledge base from another organization", async ({

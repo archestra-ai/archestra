@@ -8,6 +8,7 @@ import {
   OPENCODE_CLIENT_FILTER,
   OPENCODE_CLIENT_ID,
 } from "@archestra/shared";
+import { eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -300,6 +301,76 @@ describe("interaction routes", () => {
     expect(detail.json().durationMs).toBe(1240);
     expect(response.json().data[0]).not.toHaveProperty("request");
     expect(response.json().data[0]).not.toHaveProperty("response");
+  });
+
+  test("ranks a session's request at the stored precision", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+    });
+    const create = (toolCallId: string | null) =>
+      InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "rank-session",
+        model: "gpt-4",
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "rank-response",
+          object: "chat.completion",
+          created: 0,
+          model: "gpt-4",
+          choices: toolCallId
+            ? [
+                {
+                  index: 0,
+                  finish_reason: "tool_calls",
+                  logprobs: null,
+                  message: {
+                    role: "assistant",
+                    content: null,
+                    refusal: null,
+                    tool_calls: [
+                      {
+                        id: toolCallId,
+                        type: "function",
+                        function: { name: "exec_command", arguments: "{}" },
+                      },
+                    ],
+                  },
+                },
+              ]
+            : [],
+        },
+        type: "openai:chatCompletions",
+      });
+    const rows = [
+      await create(null),
+      await create("call_shell"),
+      await create(null),
+    ];
+    // All three share one millisecond, in the reverse of their id order:
+    // only the stored microseconds rank them.
+    const byIdDesc = [...rows].sort((a, b) => (a.id < b.id ? 1 : -1));
+    for (const [i, row] of byIdDesc.entries()) {
+      await db
+        .update(schema.interactionsTable)
+        .set({
+          createdAt: sql`'2026-01-01T00:00:00.000Z'::timestamptz + make_interval(secs => ${(i + 1) * 0.0001})`,
+        })
+        .where(eq(schema.interactionsTable.id, row.id));
+    }
+
+    const before = await Promise.all(
+      byIdDesc.map((row) =>
+        app.inject({
+          method: "GET",
+          url: `/api/interactions/summaries?sessionId=rank-session&beforeId=${row.id}&limit=1&offset=0`,
+        }),
+      ),
+    );
+    expect(before.map((r) => r.json().pagination.total)).toEqual([0, 1, 2]);
   });
 
   test("lists interactions whose response carries a non-standard finish_reason", async ({

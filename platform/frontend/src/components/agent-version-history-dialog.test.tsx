@@ -79,6 +79,8 @@ const snapshot = (
   llmApiKey: null,
   identityProviderId: null,
   environmentId: null,
+  networkPolicy: null,
+  subagentLoadBalancing: null,
   tools: [],
   excludedTools: [],
   excludedSubagents: [],

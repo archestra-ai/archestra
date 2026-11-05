@@ -1,6 +1,7 @@
 import type {
   GitHubActionsAccess,
   IncomingEmailSecurityMode,
+  SubagentLoadBalancingConfig,
 } from "@archestra/shared";
 import { type SQL, sql } from "drizzle-orm";
 import {
@@ -25,6 +26,7 @@ import type {
 } from "@/types/agent";
 import type { AgentActivationSkillMode } from "@/types/agent-activation-skill-policy";
 import type { AgentRuntime } from "@/types/agent-runtime";
+import type { NetworkPolicy } from "@/types/environment";
 import environmentsTable from "./environment";
 import identityProvidersTable from "./identity-provider";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
@@ -165,6 +167,14 @@ const agentsTable = softDeletablePgTable(
     ),
 
     /**
+     * Optional egress policy for this agent's own runtimes (Agent Runtime pods,
+     * their warm pools, and its Code Sandbox engine). Null inherits the
+     * environment's policy, then the organization default. MCP servers keep
+     * following their environment.
+     */
+    networkPolicy: jsonb("network_policy").$type<NetworkPolicy>(),
+
+    /**
      * Optional dedicated runtime for durable and delegated work. Invocation
      * surfaces decide whether to use the foreground loop or start a run.
      */
@@ -259,6 +269,15 @@ const agentsTable = softDeletablePgTable(
     accessAllSubagents: boolean("access_all_subagents")
       .notNull()
       .default(false),
+
+    /**
+     * MCP gateways: how incoming requests are load-balanced across the
+     * subagents assigned to the gateway, including algorithm, per-subagent
+     * weights, and retry/fallback policy for failed subagent requests.
+     */
+    subagentLoadBalancing: jsonb(
+      "subagent_load_balancing",
+    ).$type<SubagentLoadBalancingConfig>(),
 
     /** JSONB config for built-in agents (null for user-created agents) */
     builtInAgentConfig: jsonb(

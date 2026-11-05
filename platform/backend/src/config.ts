@@ -75,7 +75,16 @@ export type FileStorageS3Config = {
  * This is a bit of a hack for now to avoid having to have a duplicate .env file in the backend subdirectory
  */
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
+// Tests read .env.example, as CI does (it copies .env.example to .env): a
+// developer's own settings, such as API keys, URLs or a kubeconfig, would
+// make tests behave differently locally than in CI.
+dotenv.config({
+  path: path.resolve(
+    __dirname,
+    process.env.VITEST ? "../../.env.example" : "../../.env",
+  ),
+  quiet: true,
+});
 
 const sentryDsn = process.env.ARCHESTRA_SENTRY_BACKEND_DSN || "";
 const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
@@ -2127,7 +2136,11 @@ export function parseOpenAppaConfig({
   reviewSummaryProvider,
   reviewSummaryModel,
   authSecret,
+  humanApprovalMode,
+  softBlockMode,
 }: {
+  humanApprovalMode?: string;
+  softBlockMode?: string;
   yellEnabled?: string;
   yellForwardingEnabled?: string;
   offerSigningSecret?: string;
@@ -2159,6 +2172,23 @@ export function parseOpenAppaConfig({
       "OpenAPPA is enabled without a signing key. Signed delegation, history-based trajectory recovery, and peer inbox calls are unavailable. Set ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET or configure an auth secret to use those paths.",
     );
   }
+  // Release 1.4 sets these two Break the glass settings only here. While one
+  // is set it overrides the stored setting, so a cluster upgraded from 1.4
+  // keeps the behaviour it was configured for.
+  const breakTheGlassOverrides = {
+    ...optionalChoice(
+      "humanApprovalMode",
+      "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE",
+      humanApprovalMode,
+      ["block", "unattended", "everywhere"] as const,
+    ),
+    ...optionalChoice(
+      "unapprovableBlockMode",
+      "ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE",
+      softBlockMode,
+      ["refuse", "allow"] as const,
+    ),
+  };
   const reviewSummary = parseOpenAppaReviewSummary({
     provider: reviewSummaryProvider,
     model: reviewSummaryModel,
@@ -2175,7 +2205,28 @@ export function parseOpenAppaConfig({
     // Omitted (not `undefined`) when disabled so exact-shape consumers and
     // tests do not observe a key for a feature that is off.
     ...(reviewSummary ? { reviewSummary } : {}),
+    ...(Object.keys(breakTheGlassOverrides).length > 0
+      ? { breakTheGlassOverrides }
+      : {}),
   };
+}
+
+/** An unset or empty variable sets nothing; any other value must be a choice. */
+function optionalChoice<
+  K extends string,
+  const T extends readonly [string, ...string[]],
+>(
+  key: K,
+  name: string,
+  value: string | undefined,
+  choices: T,
+): { [P in K]?: T[number] } {
+  const trimmed = value?.trim() ?? "";
+  if (trimmed === "") return {};
+  if (!choices.includes(trimmed)) {
+    throw new Error(`${name} must be one of: ${choices.join(", ")}`);
+  }
+  return { [key]: trimmed } as { [P in K]?: T[number] };
 }
 
 function deriveOfferSigningSecret(authSecret: string | undefined): string {
@@ -2294,6 +2345,8 @@ const authSessionSecret =
 
 const openappa = parseOpenAppaConfig({
   yellEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_ENABLED,
+  humanApprovalMode: process.env.ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE,
+  softBlockMode: process.env.ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE,
   yellForwardingEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED,
   offerSigningSecret: process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
   postgresMaxConnections:
@@ -2535,6 +2588,14 @@ const config = {
         process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG?.trim() ||
         getAgentCatalogImageTag(appVersion),
     }),
+    /**
+     * Pre-pull the whole catalog onto every runtime node at startup and on
+     * each platform version, so a cold-started Agent does not wait on a
+     * multi-GB pull. Off in local development (Tilt), where it would pull
+     * every image for every release onto a laptop.
+     */
+    imagePrefetchEnabled:
+      process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_PREFETCH_ENABLED !== "false",
     /** Fallback lifetime cap for Agent Runtime runs whose agent sets none. */
     defaultTtlHours: parsePositiveInt(
       process.env.ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS,
@@ -3591,7 +3652,7 @@ const config = {
   environment,
   llmProxy: {
     // BETA gate for model pools: hides the page and its API, and keeps the
-    // proxy and the Model Router from resolving a model name to a pool. Off
+    // proxy and the Unified Model API from resolving a model name to a pool. Off
     // by default; a blank value falls back to the ARCHESTRA_BETA master switch
     // (see betaFeatureEnabled).
     modelPoolsEnabled: betaFeatureEnabled(
@@ -3617,7 +3678,7 @@ const config = {
     ),
   },
   autoRouting: {
-    /** ALPHA gate for the Model Router's "auto" model; off by default, follows ARCHESTRA_BETA when blank. */
+    /** ALPHA gate for the Unified Model API's "auto" model; off by default, follows ARCHESTRA_BETA when blank. */
     enabled: betaFeatureEnabled(process.env.ARCHESTRA_AUTO_ROUTING_ENABLED),
     /** Budget (ms) for one session-scoring call before the router falls back. */
     scorerTimeoutMs: parsePositiveInt(

@@ -204,7 +204,7 @@ it("logs source: labels a saved user outside the capped list and searches on the
   ];
   const requests: URLSearchParams[] = [];
   server.use(
-    http.get(`${origin}/api/interactions/user-ids`, ({ request }) => {
+    http.get(`${origin}/api/llm-proxy-logs/user-ids`, ({ request }) => {
       const params = new URL(request.url).searchParams;
       requests.push(params);
       const ids = params.get("ids")?.split(",");
@@ -257,7 +257,7 @@ it("logs source: labels a saved user outside the capped list and searches on the
 
 it("labels a newly picked user right away, before the lookup by id returns", async () => {
   server.use(
-    http.get(`${origin}/api/interactions/user-ids`, async ({ request }) => {
+    http.get(`${origin}/api/llm-proxy-logs/user-ids`, async ({ request }) => {
       if (new URL(request.url).searchParams.has("ids")) await delay("infinite");
       return HttpResponse.json([{ id: "rare-90", name: "Rare Reviewer" }]);
     }),

@@ -343,12 +343,14 @@ describe("sandbox tools (runtime enabled)", () => {
     async function boundAgentCtx(
       makeAgent: (o: Record<string, unknown>) => Promise<Agent>,
       assignTools: (id: string) => Promise<unknown>,
-      environmentId: string,
+      environmentId: string | null,
+      overrides: Record<string, unknown> = {},
     ): Promise<ArchestraContext> {
       const bound = await makeAgent({
         name: "Bound Agent",
         organizationId,
         environmentId,
+        ...overrides,
       });
       await assignTools(bound.id);
       const conversation = await ConversationModel.create({
@@ -410,6 +412,112 @@ describe("sandbox tools (runtime enabled)", () => {
       expect(runSpy).toHaveBeenCalledWith(
         expect.objectContaining({ environment: envTarget }),
       );
+    });
+
+    // An agent's own policy differs from its environment's, so neither the
+    // environment's engine nor a shared one may run its code.
+    test("an agent with its own network policy runs on its own engine in its environment's namespace", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
+      const environment = await EnvironmentModel.create({
+        organizationId,
+        name: "Open",
+        namespace: "env-ns",
+      });
+      const ctx = await boundAgentCtx(
+        makeAgent,
+        seedAndAssignArchestraTools,
+        environment.id,
+        { networkPolicy: { egressMode: "off" } },
+      );
+      const runSpy = stubRunCommand("sbx-1");
+      (config.daggerRuntime as { runnerHost?: string }).runnerHost =
+        "tcp://byo:1234";
+      const envSpy = vi.spyOn(
+        daggerEnvironmentRuntimeManager,
+        "environmentTargetForEnvironment",
+      );
+      const agentTarget = {
+        environmentId: "44444444-4444-4444-8444-444444444444",
+        namespace: "env-ns",
+      };
+      const agentSpy = vi
+        .spyOn(daggerEnvironmentRuntimeManager, "agentTarget")
+        .mockReturnValue(agentTarget);
+
+      await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi" },
+        ctx,
+      );
+
+      expect(envSpy).not.toHaveBeenCalled();
+      expect(agentSpy).toHaveBeenCalledWith({
+        id: ctx.agent.id,
+        namespace: "env-ns",
+      });
+      expect(runSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ environment: agentTarget }),
+      );
+    });
+
+    test("an unbound agent with its own network policy skips the BYO runner host for its own engine", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
+      const ctx = await boundAgentCtx(
+        makeAgent,
+        seedAndAssignArchestraTools,
+        null,
+        { networkPolicy: { egressMode: "off" } },
+      );
+      const runSpy = stubRunCommand("sbx-1");
+      (config.daggerRuntime as { runnerHost?: string }).runnerHost =
+        "tcp://byo:1234";
+      const agentTarget = {
+        environmentId: "33333333-3333-4333-8333-333333333333",
+        namespace: "org-ns",
+      };
+      vi.spyOn(daggerEnvironmentRuntimeManager, "agentTarget").mockReturnValue(
+        agentTarget,
+      );
+
+      await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi" },
+        ctx,
+      );
+
+      expect(runSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ environment: agentTarget }),
+      );
+    });
+
+    test("an agent with its own network policy refuses to run when its engine cannot be resolved", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
+      const ctx = await boundAgentCtx(
+        makeAgent,
+        seedAndAssignArchestraTools,
+        null,
+        { networkPolicy: { egressMode: "off" } },
+      );
+      const runSpy = stubRunCommand("sbx-1");
+      vi.spyOn(daggerEnvironmentRuntimeManager, "agentTarget").mockReturnValue(
+        undefined,
+      );
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi" },
+        ctx,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("refusing to run on the shared runtime");
+      expect(runSpy).not.toHaveBeenCalled();
     });
 
     // findByIdForOrganization scopes by org, so a cross-tenant environment id

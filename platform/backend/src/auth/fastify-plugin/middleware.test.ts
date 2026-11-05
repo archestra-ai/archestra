@@ -167,7 +167,7 @@ describe("Authnz", () => {
       }
     });
 
-    test("should skip auth for model router proxy routes", async () => {
+    test("should skip session auth for both unified model API paths", async () => {
       const modelRouterPaths = [
         "/v1/model-router/models",
         "/v1/model-router/chat/completions",
@@ -179,7 +179,12 @@ describe("Authnz", () => {
         "/v1/model-router/some-agent-id/embeddings",
       ];
 
-      for (const url of modelRouterPaths) {
+      for (const url of [
+        ...modelRouterPaths,
+        ...modelRouterPaths.map((path) =>
+          path.replace("model-router", "unified-model"),
+        ),
+      ]) {
         const mockRequest = {
           url,
           method: "POST",
@@ -507,7 +512,7 @@ describe("Authnz", () => {
     });
 
     test("sets authMethod=session when session auth succeeds", async () => {
-      const { betterAuth } = await import("@/auth");
+      const { auth: betterAuth } = await import("@/auth/better-auth");
       const { UserModel } = await import("@/models");
       const { requiredEndpointPermissionsMap } = await import(
         "@archestra/shared/access-control"
@@ -565,7 +570,7 @@ describe("Authnz", () => {
     });
 
     test("sets authMethod=api_key when API key auth succeeds", async () => {
-      const { betterAuth } = await import("@/auth");
+      const { auth: betterAuth } = await import("@/auth/better-auth");
       const { UserModel } = await import("@/models");
       const { requiredEndpointPermissionsMap } = await import(
         "@archestra/shared/access-control"

@@ -15,12 +15,14 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
-
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import { McpGatewayTaskModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import mcpGatewayRoutes from "./index";
+
+setupTestCacheManager();
 
 const TOOL_NAME = "tracker__slow_report";
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

@@ -6,6 +6,7 @@ import {
   MAX_SKILL_COMPATIBILITY_LENGTH,
   MAX_SKILL_DESCRIPTION_LENGTH,
 } from "@archestra/shared";
+import { chatgptConnectionPluginFiles } from "@archestra/shared/chatgpt-plugin";
 import { composeManifest } from "@/lib/skills/manifest-compose";
 
 type Skill = archestraApiTypes.GetSkillResponses["200"];
@@ -13,10 +14,12 @@ type Skill = archestraApiTypes.GetSkillResponses["200"];
 export async function buildChatgptPlugin({
   appName,
   gatewayUrl,
+  frontendUrl,
   skills,
 }: {
   appName: string;
   gatewayUrl: string;
+  frontendUrl: string;
   skills: Skill[];
 }) {
   validateChatgptGatewayUrl(gatewayUrl);
@@ -40,52 +43,29 @@ export async function buildChatgptPlugin({
       .slice(0, 40)
       .replace(/-$/g, "") || "gateway"
   }-connect-${endpointId}`;
-  zip.file(
-    "plugin.json",
-    JSON.stringify(
-      {
-        $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-        name,
-        version: `1.0.${Math.floor(Date.now() / 1000)}`,
-        description: `MCP tools and skills from ${appName}`,
-        extensions: {
-          "com.openai": {
-            interface: {
-              displayName: appName,
-              shortDescription: "Your team's tools and skills",
-              developerName: appName,
-              category: "Productivity",
-            },
-          },
-        },
-      },
-      null,
-      2,
-    ),
-  );
-  zip.file(
-    "mcp.json",
-    JSON.stringify(
-      {
-        $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
-        mcpServers: {
-          gateway: {
-            type: "streamable-http",
-            url: gatewayUrl,
-            extensions: {
-              "com.openai": {
-                auth: { type: "oauth", client: { mode: "dcr" } },
-              },
-            },
-          },
-        },
-      },
-      null,
-      2,
-    ),
-  );
+  // Keep the onboarding skill separate from every selected shared skill.
+  const setupBase = `gateway-setup-${endpointId}`;
+  let setupName = setupBase;
+  for (
+    let suffix = 2;
+    skills.some((skill) => skill.name === setupName);
+    suffix++
+  )
+    setupName = `${setupBase}-${suffix}`;
+  for (const file of chatgptConnectionPluginFiles({
+    name,
+    version: `1.0.${Math.floor(Date.now() / 1000)}`,
+    appName,
+    gatewayUrl,
+    serverName: "gateway",
+    frontendUrl,
+    setupName,
+  })) {
+    zip.file(file.path, file.content);
+  }
   const names = new Set<string>();
   const omitted: string[] = [];
+  const unportable: string[] = [];
   let byteCount = 0;
   for (const skill of skills) {
     // These require Archestra activation semantics, not a portable SKILL.md.
@@ -93,10 +73,14 @@ export async function buildChatgptPlugin({
       omitted.push(skill.name);
       continue;
     }
-    if (!isSpecCompliantSkillName(skill.name) || names.has(skill.name)) {
-      throw new Error(
-        `Skill names must be unique portable names: ${skill.name}`,
-      );
+    // Archestra accepts any name; a SKILL.md name must be portable. The skills
+    // marketplace leaves these skills out too.
+    if (!isSpecCompliantSkillName(skill.name)) {
+      unportable.push(skill.name);
+      continue;
+    }
+    if (names.has(skill.name)) {
+      throw new Error(`Skill names must be unique: ${skill.name}`);
     }
     if (!isSpecCompliantSkillDescription(skill.description)) {
       throw new Error(
@@ -158,6 +142,7 @@ export async function buildChatgptPlugin({
     filename: `${name}.zip`,
     skillCount: names.size,
     omitted,
+    unportable,
   };
 }
 

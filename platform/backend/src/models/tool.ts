@@ -96,6 +96,7 @@ import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpServerModel from "./mcp-server";
 import OrganizationModel from "./organization";
+import { port } from "./ports";
 
 /**
  * Max tool-name length accepted by the OpenAI/Anthropic tool-calling APIs and
@@ -1243,9 +1244,9 @@ class ToolModel {
     // App-runtime-only built-ins never become tool rows: no row means no agent
     // assignment, no search_tools hit, no gateway listing. They dispatch
     // in-process through the app MCP proxy alone.
-    // Lazy: the built-in tool registry imports the whole service layer, which
-    // would otherwise make every model importer load it too.
-    const { getArchestraMcpTools } = await import("@/archestra-mcp-server");
+    // Through a port: the built-in tool registry sits above the models and
+    // loads on first use.
+    const { getArchestraMcpTools } = await port("archestraToolCatalog");
     const archestraTools = getArchestraMcpTools().filter((t) => {
       // Branding-aware parse: seeding runs on rebranded names, so the shared
       // strict `archestra__` parser could miss a white-labeled prefix here.

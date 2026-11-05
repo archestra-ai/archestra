@@ -1,4 +1,5 @@
 import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic";
+import type { LanguageModel } from "ai";
 import { GoogleAuth } from "google-auth-library";
 import config from "@/config";
 import {
@@ -14,7 +15,10 @@ class AnthropicVertexClient {
     return config.llm.anthropic.vertexAi.enabled;
   }
 
-  createModel(params: { modelId: string; fetch?: typeof globalThis.fetch }) {
+  createModel(params: {
+    modelId: string;
+    fetch?: typeof globalThis.fetch;
+  }): VertexAnthropicModel {
     const { project, location, credentialsFile } = this.getConfig();
     const provider = createVertexAnthropic({
       project,
@@ -99,3 +103,12 @@ class AnthropicVertexClient {
 }
 
 export const anthropicVertexClient = new AnthropicVertexClient();
+
+// ===== Internal types =====
+
+/**
+ * A model instance, never a gateway model id. Named from `ai`, a backend
+ * dependency, so the emitted declaration names no provider package; the only
+ * caller hands it to the AI SDK as an opaque model.
+ */
+type VertexAnthropicModel = Exclude<LanguageModel, string>;

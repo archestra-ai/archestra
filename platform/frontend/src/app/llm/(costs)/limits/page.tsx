@@ -129,7 +129,7 @@ type UsageSummary = {
 const canBulkDeleteLimit = (limit: LimitData) => limit.entityType !== "user";
 
 const ORG_SET_LIMIT_HINT =
-  "Set by your organization. Ask someone who manages organization limits to change it.";
+  "Your team’s ceiling is managed by an organization limit manager or a parent team admin.";
 
 type LimitFormState = {
   behavior: "hard" | "soft";
@@ -278,7 +278,7 @@ export default function LimitsPage() {
   });
   const teams =
     access.globalCreate || access.globalRead ? allTeams : access.teams;
-  const createTeams = access.globalCreate ? allTeams : access.teams;
+  const createTeams = access.globalCreate ? allTeams : access.managedTeams;
   const { data: organization } = useOrganization();
   const { data: members = EMPTY_ENTITY_OPTIONS } = useMemberOptionsReferences({
     ids: limits
@@ -422,11 +422,11 @@ export default function LimitsPage() {
     setFormState({
       ...DEFAULT_FORM_STATE,
       entityType: access.globalCreate ? "organization" : "team",
-      entityId: access.globalCreate ? "" : (access.teams[0]?.id ?? ""),
+      entityId: access.globalCreate ? "" : (access.managedTeams[0]?.id ?? ""),
       labels: [],
     });
     setIsCreateDialogOpen(true);
-  }, [closeEditDialog, access.globalCreate, access.teams[0]?.id]);
+  }, [closeEditDialog, access.globalCreate, access.managedTeams[0]?.id]);
 
   useEffect(() => {
     setActionButton(
@@ -671,7 +671,7 @@ export default function LimitsPage() {
                   {access.isLocked(limit) && (
                     <EntityNote
                       icon={Lock}
-                      label="Set by your organization"
+                      label="Managed ceiling"
                       text={ORG_SET_LIMIT_HINT}
                     />
                   )}

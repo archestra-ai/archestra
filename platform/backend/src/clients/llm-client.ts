@@ -12,6 +12,8 @@ import { createXai } from "@ai-sdk/xai";
 import type { InteractionSource } from "@archestra/shared";
 import {
   APP_ID_HEADER,
+  APPA_PARENT_HEADER,
+  APPA_SESSION_HEADER,
   AUTO_ROUTABLE_HEADER,
   anthropicThinksByDefault,
   CHAT_API_KEY_ID_HEADER,
@@ -33,10 +35,10 @@ import {
   type SupportedProvider,
   type SupportedProviderEndpoint,
   subscriptionKindFromCredential,
+  UNATTENDED_HEADER,
   USER_ID_HEADER,
 } from "@archestra/shared";
 import type { AzureModelEvidence } from "@archestra/shared/azure-models";
-
 import { context, propagation } from "@opentelemetry/api";
 import {
   extractReasoningMiddleware,
@@ -63,10 +65,8 @@ import {
   getBedrockRegion,
   isBedrockIamAuthEnabled,
 } from "@/clients/bedrock-credentials";
-import {
-  isVertexAiEnabled,
-  resolveVertexLocation,
-} from "@/clients/gemini-client";
+import { resolveVertexLocation } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import {
   guardrailCallHeader,
   internalCallHeader,
@@ -76,19 +76,20 @@ import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import { createResponseHealingFetch } from "@/clients/openrouter-response-healing";
 import config from "@/config";
 import { ENCRYPTED_CHAT_KEY_HEADER } from "@/content-encryption/encrypted-chat";
+import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import ModelModel from "@/models/model";
 import UserTokenModel from "@/models/user-token";
-import {
-  APPA_PARENT_HEADER,
-  APPA_SESSION_HEADER,
-  openappaEnabled,
-} from "@/openappa/service";
 import { APPA_SUBAGENT_BINDING_HEADER } from "@/openappa/subagent-binding";
 import {
   type AzureModelCapabilities,
   resolveAzureModelCapabilities,
 } from "@/services/azure-model-capabilities";
+import {
+  fireworksModelAliases,
+  isFireworksEndpoint,
+  resolveFireworksModel,
+} from "@/services/fireworks-model";
 import { ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
@@ -185,6 +186,23 @@ export function createDirectLLMModel({
     resolvedBaseUrl && cfg.proxiedPathSuffix
       ? `${resolvedBaseUrl}${cfg.proxiedPathSuffix}`
       : resolvedBaseUrl;
+  const upstreamFetch =
+    provider === "openrouter" ? createResponseHealingFetch() : globalThis.fetch;
+  const availableFetch: typeof globalThis.fetch = async (input, init) => {
+    const resolved = await resolveFireworksModel({
+      provider,
+      model: modelName,
+      baseUrl: baseURL,
+    });
+    await ModelModel.assertAvailable({
+      provider,
+      modelId: resolved.model,
+      aliases: isFireworksEndpoint(baseURL)
+        ? fireworksModelAliases(resolved.model)
+        : undefined,
+    });
+    return upstreamFetch(input, init);
+  };
   return withCatalogOutputBudget(
     cfg.createModel({
       apiKey,
@@ -193,8 +211,7 @@ export function createDirectLLMModel({
       headers: providerHeaders(cfg),
       // Direct OpenRouter models bypass the proxy adapter, so heal the request
       // body here; the wrapper no-ops for non-healable requests.
-      fetch:
-        provider === "openrouter" ? createResponseHealingFetch() : undefined,
+      fetch: availableFetch,
       direct: true,
     }),
     { provider, modelName, chatApiKeyId },
@@ -216,6 +233,8 @@ export function createLLMModel(params: {
   appaParentId?: string;
   /** Signed binding of an in-process subagent run to its child trajectory. */
   appaSubagentToken?: string;
+  /** No person is there to answer: sends UNATTENDED_HEADER. */
+  unattended?: boolean;
   source?: InteractionSource;
   baseUrl: string | null;
   chatApiKeyId?: string;
@@ -274,13 +293,14 @@ export function createLLMModel(params: {
     clientHeaders[SESSION_ID_HEADER] = sessionId;
     // A platform guardrail call is filed under the chat's session for logs,
     // but must not become a turn of that chat's OpenAPPA trajectory.
-    if (openappaEnabled() && !params.internalCall)
+    if (enterpriseTier.isOpenappaActive() && !params.internalCall)
       clientHeaders[APPA_SESSION_HEADER] = sessionId;
   }
-  if (openappaEnabled() && params.appaParentId)
+  if (enterpriseTier.isOpenappaActive() && params.appaParentId)
     clientHeaders[APPA_PARENT_HEADER] = params.appaParentId;
-  if (openappaEnabled() && params.appaSubagentToken)
+  if (enterpriseTier.isOpenappaActive() && params.appaSubagentToken)
     clientHeaders[APPA_SUBAGENT_BINDING_HEADER] = params.appaSubagentToken;
+  if (params.unattended) clientHeaders[UNATTENDED_HEADER] = "1";
   if (source) {
     clientHeaders[SOURCE_HEADER] = source;
   }
@@ -367,6 +387,8 @@ export async function createLLMModelForAgent(params: {
   encryptedChatKey?: Buffer | null;
   /** Signed binding of an in-process subagent run to its child trajectory. */
   appaSubagentToken?: string;
+  /** No person is there to answer: sends UNATTENDED_HEADER. */
+  unattended?: boolean;
 }): Promise<{
   model: LLMModel;
   provider: SupportedProvider;
@@ -521,6 +543,7 @@ export async function createLLMModelForAgent(params: {
     autoRoutable: params.autoRoutable,
     encryptedChatKey: params.encryptedChatKey,
     appaSubagentToken: params.appaSubagentToken,
+    unattended: params.unattended,
     supportedEndpoints,
     azureCapabilities:
       azureCapabilities?.status === "known" ? azureCapabilities : undefined,
@@ -911,7 +934,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       name: "archestra",
       // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
       missingBaseUrlMessage: "Archestra base URL is required.",
-      // The upstream is another Archestra model router, which forwards
+      // The upstream is another Archestra unified model API, which forwards
       // `response_format: json_schema` the same way the strict openai client
       // sent it before. Without this the compatible client downgrades
       // generateObject flows (KB reranker and other subagents) to a schema-less
@@ -1105,7 +1128,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
         : baseURL;
 
       // Azure Chat Completions can reject function tools with reasoning on OpenAI
-      // deployments. Use native Responses, as the model router does, and resend
+      // deployments. Use native Responses, as the unified model API does, and resend
       // conversation contents instead of server-stored item references.
       // Foundry-hosted open models
       // (DeepSeek-R1, gpt-oss, ...) stream thinking in a `reasoning_content`
@@ -1224,9 +1247,9 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   // --- Special providers ---
 
   gemini: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
-      // Proxied path (headers/fetch provided): always use GoogleGenerativeAI
-      if (headers || fetch) {
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch, direct }) => {
+      // Proxy calls always use the Google wire, even when the server uses Vertex.
+      if (!direct) {
         return createGoogleGenerativeAI({
           apiKey: apiKey || "vertex-ai-mode",
           baseURL,
@@ -1238,6 +1261,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       if (isVertexAiEnabled()) {
         const { vertexAi } = config.llm.gemini;
         return createVertex({
+          fetch,
           project: vertexAi.project,
           location: resolveVertexLocation(modelName),
           googleAuthOptions: {
@@ -1255,7 +1279,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
           "Gemini API key is required when Vertex AI is not enabled. Please configure GEMINI_API_KEY or enable Vertex AI.",
         );
       }
-      return createGoogleGenerativeAI({ apiKey, baseURL })(modelName);
+      return createGoogleGenerativeAI({ apiKey, baseURL, fetch })(modelName);
     },
     defaultBaseUrl: undefined, // GoogleGenerativeAI has its own default
     // apiKeyRequiredMessage is undefined — validation is inside createModel (Vertex AI special case)

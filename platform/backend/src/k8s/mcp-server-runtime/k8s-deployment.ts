@@ -20,6 +20,8 @@ import {
   constructLegacyMcpDeploymentName,
   constructLegacyMultitenantMcpDeploymentName,
   ensureStringIsRfc1123Compliant,
+} from "@/k8s/deployment-names";
+import {
   isK8sConflictError,
   isK8sNotFoundError,
   isTransientK8sApiError,

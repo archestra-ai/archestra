@@ -26,7 +26,7 @@ import {
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { sanitizeSvg } from "@/utils/sanitize-svg";
 import { ConnectionSetupClientIdSchema } from "./connection-setup";
 import {
@@ -744,7 +744,7 @@ function isValidHttpUrl(value: string): boolean {
   }
 }
 
-/** One Agent Runtime tier in effect, with the memory its CPU gives it. */
+/** One Agent Runtime tier in effect, including any explicit memory overrides. */
 export const AgentRuntimeTierSizeSchema = z.object({
   name: z.string(),
   cpuRequest: z.number(),
@@ -755,6 +755,20 @@ export const AgentRuntimeTierSizeSchema = z.object({
     .describe("Whether the tier keeps spare containers ready for its runs"),
   memoryRequestMiB: z.number().int(),
   memoryLimitMiB: z.number().int(),
+  memoryRequestMiBOverride: z
+    .number()
+    .int()
+    .optional()
+    .describe(
+      "Explicit memory request in MiB; absent when the request follows CPU",
+    ),
+  memoryLimitMiBOverride: z
+    .number()
+    .int()
+    .optional()
+    .describe(
+      "Explicit memory limit in MiB; absent when the limit follows CPU",
+    ),
   workspaceGiB: z
     .number()
     .int()

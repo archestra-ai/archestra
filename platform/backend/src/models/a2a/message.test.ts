@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   A2AProtocolRole,
   A2AProtocolTaskState,
@@ -41,12 +41,19 @@ describe("A2AMessageModel", () => {
       const context = await createContext();
       const originalUpdatedAt = context.updatedAt;
 
-      const message = await A2AMessageModel.create({
-        contextId: context.id,
-        role: A2AProtocolRole.User,
-        parts: makeTextParts("Hello"),
-        content: makeContent("message-1", A2AProtocolRole.User, "Hello"),
-      });
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(originalUpdatedAt.getTime() + 1000));
+      let message: Awaited<ReturnType<typeof A2AMessageModel.create>>;
+      try {
+        message = await A2AMessageModel.create({
+          contextId: context.id,
+          role: A2AProtocolRole.User,
+          parts: makeTextParts("Hello"),
+          content: makeContent("message-1", A2AProtocolRole.User, "Hello"),
+        });
+      } finally {
+        vi.useRealTimers();
+      }
 
       expect(message.id).toBeDefined();
       expect(message.contextId).toBe(context.id);
@@ -95,20 +102,36 @@ describe("A2AMessageModel", () => {
       const original1 = context1.updatedAt;
       const original2 = context2.updatedAt;
 
-      await A2AMessageModel.bulkCreate([
-        {
-          contextId: context1.id,
-          role: A2AProtocolRole.User,
-          parts: makeTextParts("Message 1"),
-          content: makeContent("message-1", A2AProtocolRole.User, "Message 1"),
-        },
-        {
-          contextId: context2.id,
-          role: A2AProtocolRole.Agent,
-          parts: makeTextParts("Message 2"),
-          content: makeContent("message-2", A2AProtocolRole.Agent, "Message 2"),
-        },
-      ]);
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(
+        new Date(Math.max(original1.getTime(), original2.getTime()) + 1000),
+      );
+      try {
+        await A2AMessageModel.bulkCreate([
+          {
+            contextId: context1.id,
+            role: A2AProtocolRole.User,
+            parts: makeTextParts("Message 1"),
+            content: makeContent(
+              "message-1",
+              A2AProtocolRole.User,
+              "Message 1",
+            ),
+          },
+          {
+            contextId: context2.id,
+            role: A2AProtocolRole.Agent,
+            parts: makeTextParts("Message 2"),
+            content: makeContent(
+              "message-2",
+              A2AProtocolRole.Agent,
+              "Message 2",
+            ),
+          },
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
 
       const [updated1] = await db
         .select()
@@ -229,7 +252,13 @@ describe("A2AMessageModel", () => {
         A2AProtocolRole.User,
         "Updated",
       );
-      await A2AMessageModel.updateContent(message.id, updatedContent);
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(beforeUpdate.updatedAt.getTime() + 1000));
+      try {
+        await A2AMessageModel.updateContent(message.id, updatedContent);
+      } finally {
+        vi.useRealTimers();
+      }
 
       const [updatedMessage] = await db
         .select()
@@ -269,4 +298,75 @@ describe("A2AMessageModel", () => {
       expect(await A2AMessageModel.getTotalCount()).toBe(originalCount);
     });
   });
+});
+
+test("task previews return only the earliest user message with deterministic ties", async () => {
+  const context = await createContext();
+  const first = await createTask(context.id);
+  const second = await createTask(context.id);
+  const empty = await createTask(context.id);
+  const when = new Date("2026-01-01T00:00:00Z");
+  const ids = [
+    "00000000-0000-4000-8000-000000000001",
+    "00000000-0000-4000-8000-000000000002",
+  ];
+  await db.insert(schema.a2aMessagesTable).values([
+    {
+      id: ids[1],
+      contextId: context.id,
+      taskId: first.id,
+      role: A2AProtocolRole.User,
+      parts: makeTextParts("later tie"),
+      content: {},
+      createdAt: when,
+    },
+    {
+      id: ids[0],
+      contextId: context.id,
+      taskId: first.id,
+      role: A2AProtocolRole.User,
+      parts: makeTextParts("first"),
+      content: {},
+      createdAt: when,
+    },
+    {
+      contextId: context.id,
+      taskId: first.id,
+      role: A2AProtocolRole.Agent,
+      parts: makeTextParts("ignore"),
+      content: {},
+      createdAt: new Date(0),
+    },
+    {
+      contextId: context.id,
+      taskId: second.id,
+      role: A2AProtocolRole.User,
+      parts: makeTextParts("second task"),
+      content: {},
+    },
+    {
+      contextId: context.id,
+      taskId: empty.id,
+      role: A2AProtocolRole.Agent,
+      parts: makeTextParts("no user"),
+      content: {},
+    },
+  ]);
+  expect(
+    await A2AMessageModel.findFirstUserPartsByTaskIds([
+      first.id,
+      second.id,
+      empty.id,
+      first.id,
+      crypto.randomUUID(),
+    ]),
+  ).toEqual(
+    new Map([
+      [first.id, makeTextParts("first")],
+      [second.id, makeTextParts("second task")],
+    ]),
+  );
+  expect(await A2AMessageModel.findFirstUserPartsByTaskIds([])).toEqual(
+    new Map(),
+  );
 });

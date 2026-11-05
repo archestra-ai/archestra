@@ -299,18 +299,21 @@ jobs:
       # The release tag fetch feeds the released-tag upgrade replay matrix
       # (backend test:migration-upgrades), which migrates a database with each
       # active stable line's latest released history before upgrading it to
-      # this PR's history.
+      # this PR's history. It fetches only those tags: every platform-v* tag at
+      # depth 1 is one full tree per historical release (400+), which took
+      # ~90s of this job on every queue entry.
       - name: Fetch base ref and release tags for migration checks
         env:
           GH_TOKEN: ${{ github.token }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
+          set -euo pipefail
           git -c credential.helper= \
               -c credential.helper='!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f' \
               fetch --depth=1 origin \
               "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}" \
-              "+refs/heads/release/*:refs/remotes/origin/release/*" \
-              "+refs/tags/platform-v*:refs/tags/platform-v*"
+              "+refs/heads/release/*:refs/remotes/origin/release/*"
+          ../.github/scripts/fetch-release-upgrade-tags.sh origin
 
       # The private development mirror does not publish stable release tracks.
       # Test its changes against the actual released public histories, keeping
@@ -318,19 +321,10 @@ jobs:
       - name: Fetch canonical release histories in the private mirror
         if: github.repository == 'archestra-ai/archestra-private'
         run: |
-          git fetch --depth=1 https://github.com/archestra-ai/archestra.git \
-            "+refs/heads/release/*:refs/remotes/origin/release/*" \
-            "+refs/tags/platform-v*:refs/tags/platform-v*"
-
-      # The private development mirror does not publish stable release tracks.
-      # Test its changes against the actual released public histories, keeping
-      # origin/main above tied to this PR's own repository.
-      - name: Fetch canonical release histories in the private mirror
-        if: github.repository == 'archestra-ai/archestra-private'
-        run: |
-          git fetch --depth=1 https://github.com/archestra-ai/archestra.git \
-            "+refs/heads/release/*:refs/remotes/origin/release/*" \
-            "+refs/tags/platform-v*:refs/tags/platform-v*"
+          set -euo pipefail
+          canonical=https://github.com/archestra-ai/archestra.git
+          git fetch --depth=1 "$canonical" "+refs/heads/release/*:refs/remotes/origin/release/*"
+          GH_TOKEN='' ../.github/scripts/fetch-release-upgrade-tags.sh "$canonical"
 
       - name: Check migration upgrade paths across release tracks
         env:
@@ -342,10 +336,14 @@ jobs:
       # Backend unit tests run in the parallel sharded "Backend Unit Tests"
       # jobs below; here the backend runs check:commit (same checks minus
       # vitest) so this job stops being serialized behind the largest suite.
+      # The Dagger version sync reads the Dockerfile, backend, quickstart and
+      # Rust pins, so it runs here on every queue entry rather than in the
+      # Rust checks, which skip when no Rust input changed.
       - name: Fast static and copy checks
         run: |
           pnpm exec turbo check:commit --filter=@backend
           pnpm check:white-label
+          ./scripts/check-dagger-version-sync.sh
 
       # Cold Rust NAPI builds invoke cargo. Sync the
       # pinned toolchain (rust-toolchain.toml) serially first — otherwise
@@ -481,8 +479,11 @@ jobs:
 
   platform-rust-checks:
     name: Platform Rust Checks
-    needs: dagger-sdk-integration
-    if: always() && github.event_name == 'merge_group'
+    needs: [dagger-sdk-integration, changed-inputs]
+    # Skips only when the classification succeeded, found no Rust input, and
+    # the Dagger SDK integration this job enforces passed. Any other outcome
+    # runs it, so a failed SDK integration still fails this required check.
+    if: always() && github.event_name == 'merge_group' && (needs.changed-inputs.result != 'success' || needs.changed-inputs.outputs.platform_rust != 'false' || needs.dagger-sdk-integration.result != 'success')
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubicloud-standard-8-ubuntu-2404' }} # zizmor: ignore[self-hosted-runner] merge-queue only, behind the MAC_MINI_CI kill switch.
     timeout-minutes: 15
     permissions:
@@ -532,9 +533,6 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y musl-tools
 
-      - name: Verify Dagger version sync
-        run: ./scripts/check-dagger-version-sync.sh
-
       - name: Rust workspace checks and musl compile check
         working-directory: ./platform/archestra-rs
         env:
@@ -559,8 +557,11 @@ jobs:
   # quietly passing again.
   openappa-native-tests:
     name: OpenAPPA Native Tests
+    needs: [changed-inputs]
     # Release bumps need the real runtime/ledger checks before human review.
-    if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'openappa-archestra-updater[bot]' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'chore/openappa-v'))
+    # In the queue it follows the backend inputs (which include the Rust
+    # crates and migrations), running whenever the classification failed.
+    if: ${{ !cancelled() && ((github.event_name == 'merge_group' && (needs.changed-inputs.result != 'success' || needs.changed-inputs.outputs.backend != 'false')) || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'openappa-archestra-updater[bot]' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'chore/openappa-v'))) }}
     runs-on: ubicloud-standard-8-ubuntu-2404
     # The napi build dominates: ~3 min cold, an incremental no-op against the
     # warm cargo cache the backend shards maintain.
@@ -637,6 +638,14 @@ jobs:
           ARCHESTRA_DATABASE_URL: postgresql://archestra:archestra_ci_password@localhost:5432/archestra_openappa_test
         run: pnpm test:agent-transcripts:postgres
 
+      - name: Real PostgreSQL model cleanup tests
+        working-directory: ./platform/backend
+        env:
+          NODE_ENV: test
+          ARCHESTRA_DATABASE_POOL_MAX: "16"
+          ARCHESTRA_DATABASE_URL: postgresql://archestra:archestra_ci_password@localhost:5432/archestra_openappa_test
+        run: pnpm test:model-cleanup:postgres
+
       - name: Build the native addon
         run: pnpm exec turbo build --filter=@archestra/openappa-rs
 
@@ -652,8 +661,9 @@ jobs:
 
   ai-labs-rust-checks:
     name: AI Labs Rust Checks
-    needs: supply-chain-policy
-    if: github.event_name == 'merge_group'
+    needs: [supply-chain-policy, changed-inputs]
+    # Skips only when the classification succeeded and found no ai-labs input.
+    if: ${{ !cancelled() && github.event_name == 'merge_group' && needs.supply-chain-policy.result == 'success' && (needs.changed-inputs.result != 'success' || needs.changed-inputs.outputs.ai_labs != 'false') }}
     # mac-mini routing (see comment above platform-rust-checks)
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubicloud-standard-8-ubuntu-2404' }} # zizmor: ignore[self-hosted-runner] merge-queue only, behind the MAC_MINI_CI kill switch.
     timeout-minutes: 15
@@ -704,24 +714,24 @@ jobs:
       - name: Rust tests
         run: cargo test --workspace --locked
 
-  # Decides whether the queued merge group can change a backend unit test
-  # result. merge_group events do not support `paths:` filters, so this diffs
-  # the group's base and head commits itself. Deliberately a SKIP list, not a
-  # run list: the shards are skipped only when every changed file sits under a
-  # path the backend suite never reads (frontend, docs prose, e2e specs, the
-  # MCP catalog, ai-labs, agent instructions). Anything else — backend,
-  # shared, archestra-rs, lockfiles, Dockerfiles, helm, .github, the e2e
-  # fixtures the backend tests import (e2e-tests/fixtures/**), and
-  # docs/openapi.json, which the codegen writes — runs them.
-  backend-test-inputs:
-    name: Detect Backend Test Inputs
+  # Decides which queue jobs the merge group can affect, so jobs whose inputs
+  # are untouched skip instead of allocating paid runners. merge_group events
+  # do not support `paths:` filters, so this diffs the group's base and head
+  # commits itself; .github/scripts/queue-job-inputs.py holds the per-family
+  # rules. A failed or cancelled classification never licenses a skip: every
+  # consumer below runs (or its gate fails) unless this job succeeded.
+  changed-inputs:
+    name: Detect Changed Inputs
     if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read # Required to checkout the repository and fetch the merge group base.
     outputs:
-      run: ${{ steps.diff.outputs.run }}
+      backend: ${{ steps.diff.outputs.backend }}
+      frontend: ${{ steps.diff.outputs.frontend }}
+      platform_rust: ${{ steps.diff.outputs.platform_rust }}
+      ai_labs: ${{ steps.diff.outputs.ai_labs }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -743,25 +753,10 @@ jobs:
           git -c credential.helper= \
               -c credential.helper='!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f' \
               fetch --depth=1 origin "${BASE_SHA}"
-          changed=$(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")
-          run=false
-          while IFS= read -r file; do
-            [ -z "${file}" ] && continue
-            case "${file}" in
-              docs/openapi.json | platform/e2e-tests/fixtures/*)
-                ;;
-              platform/frontend/* | platform/e2e-tests/* | docs/* | mcp-catalog/* | ai-labs/* | .agents/* | .claude/* | .codex/*)
-                continue
-                ;;
-            esac
-            echo "Backend test input changed: ${file}"
-            run=true
-            break
-          done <<< "${changed}"
-          if [ "${run}" = "false" ]; then
-            echo "No backend test inputs changed; backend unit test shards will be skipped."
-          fi
-          echo "run=${run}" >> "${GITHUB_OUTPUT}"
+          decisions=$(python3 .github/scripts/queue-job-inputs.py "${BASE_SHA}" "${HEAD_SHA}")
+          echo "${decisions}"
+          echo "${decisions}" >> "${GITHUB_OUTPUT}"
+          { echo '### Queue jobs for this merge group'; echo '```'; echo "${decisions}"; echo '```'; } >> "${GITHUB_STEP_SUMMARY}"
 
   # Restore/build native dependencies once before allocating test shards.
   # Use the same Ubicloud image as the main-branch native cache publisher;
@@ -769,8 +764,8 @@ jobs:
   # Keep this on Ubuntu 24.04 x64, matching the consumers' glibc/architecture.
   backend-test-dependencies:
     name: Prepare Backend Test Dependencies
-    needs: [backend-test-inputs]
-    if: github.event_name == 'merge_group' && needs.backend-test-inputs.outputs.run == 'true'
+    needs: [changed-inputs]
+    if: github.event_name == 'merge_group' && needs.changed-inputs.outputs.backend == 'true'
     runs-on: ubicloud-standard-8-ubuntu-2404
     timeout-minutes: 30
     permissions:
@@ -875,8 +870,8 @@ jobs:
   # of test-gate latency for much lower runner usage than the eight-job layout.
   backend-unit-tests:
     name: Backend Unit Tests (shard ${{ matrix.shard }}/2)
-    needs: [backend-test-inputs, backend-test-dependencies]
-    if: github.event_name == 'merge_group' && needs.backend-test-inputs.outputs.run == 'true'
+    needs: [changed-inputs, backend-test-dependencies]
+    if: github.event_name == 'merge_group' && needs.changed-inputs.outputs.backend == 'true'
     runs-on: ubicloud-standard-16-ubuntu-2404
     # A merge-queue shard can take about 15 minutes, including setup and
     # cleanup. Leave room for cold caches while bounding hung test workers.
@@ -969,13 +964,13 @@ jobs:
     # failed, cancelled, or skipped shards turn the gate red — except shards
     # skipped because the input check found no backend changes.
     if: always() && github.event_name == 'merge_group'
-    needs: [backend-test-inputs, backend-test-dependencies, backend-unit-tests]
+    needs: [changed-inputs, backend-test-dependencies, backend-unit-tests]
     permissions: {}
     steps:
       - name: Check shard results
         env:
-          INPUTS_RESULT: ${{ needs.backend-test-inputs.result }}
-          RUN_SHARDS: ${{ needs.backend-test-inputs.outputs.run }}
+          INPUTS_RESULT: ${{ needs.changed-inputs.result }}
+          RUN_SHARDS: ${{ needs.changed-inputs.outputs.backend }}
           DEPENDENCIES_RESULT: ${{ needs.backend-test-dependencies.result }}
           SHARDS_RESULT: ${{ needs.backend-unit-tests.result }}
         run: |
@@ -996,7 +991,8 @@ jobs:
 
   frontend-integration-tests:
     name: Frontend Integration Tests (MSW runner)
-    if: github.event_name == 'merge_group'
+    needs: [changed-inputs]
+    if: ${{ !cancelled() && github.event_name == 'merge_group' && (needs.changed-inputs.result != 'success' || needs.changed-inputs.outputs.frontend != 'false') }}
     # mac-mini routing (see comment above platform-rust-checks)
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubicloud-standard-16-ubuntu-2404' }} # zizmor: ignore[self-hosted-runner] merge-queue only, behind the MAC_MINI_CI kill switch.
     permissions:
@@ -1151,13 +1147,21 @@ jobs:
     name: Frontend Integration Tests (MSW)
     runs-on: ubuntu-latest
     if: always() && github.event_name == 'merge_group'
-    needs: [frontend-integration-tests]
+    needs: [changed-inputs, frontend-integration-tests]
     permissions: {}
     steps:
       - name: Check integration test results
         env:
+          INPUTS_RESULT: ${{ needs.changed-inputs.result }}
+          RUN_FRONTEND: ${{ needs.changed-inputs.outputs.frontend }}
           TESTS_RESULT: ${{ needs.frontend-integration-tests.result }}
         run: |
+          # Only a successful classification that found no frontend input
+          # licenses a skip; anything else must have run and passed.
+          if [ "$INPUTS_RESULT" = "success" ] && [ "$RUN_FRONTEND" = "false" ] && [ "$TESTS_RESULT" = "skipped" ]; then
+            echo "✅ No frontend integration inputs changed in this merge group; tests skipped."
+            exit 0
+          fi
           if [ "$TESTS_RESULT" != "success" ]; then
             echo "::error::Frontend integration tests failed (result: $TESTS_RESULT)."
             exit 1

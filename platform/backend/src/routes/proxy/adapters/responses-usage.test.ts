@@ -186,12 +186,32 @@ describe("translated Responses complete after the policy verdict", () => {
       cacheReadTokens: 8000,
       cacheWriteTokens: 1000,
     };
-    const upstreamFinal = adapter.processChunk({
+    const upstreamFinish = adapter.processChunk({
       id: "chatcmpl_test",
       object: "chat.completion.chunk",
       created: 0,
       model: "test",
       choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+    });
+    expect(upstreamFinish.isFinal).toBe(false);
+    expect(upstreamFinish.sseData ?? "").not.toContain("response.completed");
+    expect(upstreamFinish.sseData ?? "").not.toContain("call_original");
+    const terminalUsage = {
+      prompt_tokens: 9012,
+      completion_tokens: 3,
+      total_tokens: 9015,
+      prompt_tokens_details: {
+        cached_tokens: 8000,
+        cache_write_tokens: 1000,
+      },
+    };
+    const upstreamFinal = adapter.processChunk({
+      id: "chatcmpl_test",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "test",
+      choices: [],
+      usage: terminalUsage,
     });
     expect(upstreamFinal.isFinal).toBe(true);
     expect(upstreamFinal.sseData ?? "").not.toContain("response.completed");

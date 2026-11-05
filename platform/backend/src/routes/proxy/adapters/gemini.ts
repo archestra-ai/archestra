@@ -16,6 +16,7 @@ import { createGoogleGenAIClient } from "@/clients/gemini-client";
 import config from "@/config";
 import logger from "@/logging";
 import { metrics } from "@/observability";
+import { geminiUsageTokens } from "@/observability/metrics/llm-usage";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -492,9 +493,63 @@ function convertMcpImageBlocksToGeminiResponse(
 // RESPONSE ADAPTER
 // =============================================================================
 
+// Policy may remove or reorder calls, but cannot invent a provider call or
+// change the candidate/signature to which it belongs.
+function approvedGeminiCalls(
+  originals: readonly { id: string }[],
+  approved: StreamAccumulatorState["toolCalls"],
+): Map<string, StreamAccumulatorState["toolCalls"][number]> {
+  // An empty approved batch needs no association, including during cleanup
+  // of a provider response whose own ids were ambiguous.
+  if (approved.length === 0) return new Map();
+  const originalIds = new Set(originals.map((call) => call.id));
+  const result = new Map(approved.map((call) => [call.id, call]));
+  if (
+    originalIds.size !== originals.length ||
+    result.size !== approved.length ||
+    approved.some((call) => !originalIds.has(call.id))
+  )
+    throw new Error(
+      "Cannot associate approved Gemini tool calls with provider calls",
+    );
+  return result;
+}
+
+function rewriteGeminiCalls(
+  response: GeminiResponse,
+  originals: readonly { id: string }[],
+  approved: Map<string, StreamAccumulatorState["toolCalls"][number]>,
+): GeminiResponse {
+  let next = 0;
+  return {
+    ...response,
+    candidates: response.candidates?.map((candidate) => {
+      if (!candidate.content?.parts) return candidate;
+      const parts = candidate.content.parts.flatMap((part) => {
+        if (!("functionCall" in part) || !part.functionCall) return [part];
+        const original = originals[next++];
+        const rewritten = original && approved.get(original.id);
+        if (!rewritten) return [];
+        return [
+          {
+            ...part,
+            functionCall: {
+              ...part.functionCall,
+              name: rewritten.name,
+              args: parseArgs(rewritten.arguments),
+            },
+          },
+        ];
+      });
+      return { ...candidate, content: { ...candidate.content, parts } };
+    }),
+  };
+}
+
 class GeminiResponseAdapter implements LLMResponseAdapter<GeminiResponse> {
   readonly provider = "gemini" as const;
   private response: GeminiResponse;
+  private readonly callIdSeed = Date.now();
 
   constructor(response: GeminiResponse) {
     this.response = response;
@@ -520,12 +575,10 @@ class GeminiResponseAdapter implements LLMResponseAdapter<GeminiResponse> {
   }
 
   getToolCalls(): CommonToolCall[] {
-    const candidate = this.response.candidates?.[0];
-    if (!candidate?.content?.parts) return [];
-
-    return candidate.content.parts
+    return (this.response.candidates ?? [])
+      .flatMap((candidate) => candidate.content?.parts ?? [])
       .filter((part) => "functionCall" in part && part.functionCall)
-      .map((part) => {
+      .map((part, index) => {
         const functionCall = (
           part as {
             functionCall: {
@@ -537,7 +590,8 @@ class GeminiResponseAdapter implements LLMResponseAdapter<GeminiResponse> {
         ).functionCall;
         return {
           id:
-            functionCall.id ?? `gemini-call-${functionCall.name}-${Date.now()}`,
+            functionCall.id ??
+            `gemini-call-${functionCall.name}-${this.callIdSeed + index}`,
           name: functionCall.name,
           arguments: functionCall.args ?? {},
         };
@@ -545,11 +599,10 @@ class GeminiResponseAdapter implements LLMResponseAdapter<GeminiResponse> {
   }
 
   hasToolCalls(): boolean {
-    const candidate = this.response.candidates?.[0];
-    if (!candidate?.content?.parts) return false;
-
-    return candidate.content.parts.some(
-      (part) => "functionCall" in part && part.functionCall,
+    return (this.response.candidates ?? []).some((candidate) =>
+      candidate.content?.parts?.some(
+        (part) => "functionCall" in part && part.functionCall,
+      ),
     );
   }
 
@@ -562,9 +615,8 @@ class GeminiResponseAdapter implements LLMResponseAdapter<GeminiResponse> {
         cacheWriteTokens: 0,
       };
     }
-    const { input, output, cacheRead, cacheWrite, reasoning } = getUsageTokens(
-      this.response.usageMetadata,
-    );
+    const { input, output, cacheRead, cacheWrite, reasoning } =
+      geminiUsageTokens(this.response.usageMetadata);
     return {
       inputTokens: input,
       outputTokens: output,
@@ -586,31 +638,12 @@ class GeminiResponseAdapter implements LLMResponseAdapter<GeminiResponse> {
   withRewrittenToolCalls(
     toolCalls: Array<{ id: string; name: string; arguments: string }>,
   ): GeminiResponse {
-    // Positional: one rewritten entry per call this response carries, in
-    // order, so ids the client correlates by are untouched.
-    const candidate = this.response.candidates?.[0];
-    if (!candidate?.content?.parts) return this.response;
-    let next = 0;
-    const parts = candidate.content.parts.map((part) => {
-      if (!("functionCall" in part) || !part.functionCall) return part;
-      const rewritten = toolCalls[next++];
-      if (!rewritten) return part;
-      return {
-        ...part,
-        functionCall: {
-          ...part.functionCall,
-          name: rewritten.name,
-          args: parseArgs(rewritten.arguments),
-        },
-      };
-    });
-    return {
-      ...this.response,
-      candidates: [
-        { ...candidate, content: { ...candidate.content, parts } },
-        ...(this.response.candidates?.slice(1) ?? []),
-      ],
-    };
+    const originals = this.getToolCalls();
+    return rewriteGeminiCalls(
+      this.response,
+      originals,
+      approvedGeminiCalls(originals, toolCalls),
+    );
   }
 
   toRefusalResponse(
@@ -651,10 +684,19 @@ class GeminiStreamAdapter
   private model: string = "";
   private trafficType: TrafficType | undefined;
   private inlineDataParts: Gemini.Types.MessagePart[] = [];
+  private candidateParts = new Map<
+    number,
+    {
+      candidate: NonNullable<GeminiResponse["candidates"]>[number];
+      parts: Array<{ part: Gemini.Types.MessagePart; toolCallIndex?: number }>;
+    }
+  >();
   // Set to the refusal text when the streamed response was replaced by a policy
   // refusal, so toProviderResponse persists the refusal (finishReason STOP, no
   // function calls) instead of the blocked tool calls.
   private replacedText: string | null = null;
+  private readonly originalToolCalls: StreamAccumulatorState["toolCalls"] = [];
+  private readonly callIdSeed = Date.now();
 
   // Gemini 3 requires thoughtSignature on all model parts when they are
   // sent back as conversation history. Track signatures during streaming
@@ -683,6 +725,15 @@ class GeminiStreamAdapter
 
   processChunk(chunk: GeminiStreamChunk): ChunkProcessingResult {
     chunk = this.toolNameCodec.decodeResponse(chunk);
+    // Assign fallback indexes before splitting a chunk into visible/held
+    // subsets, so a candidate keeps its original position in both frames.
+    chunk = {
+      ...chunk,
+      candidates: chunk.candidates?.map((candidate, index) => ({
+        ...candidate,
+        index: candidate.index ?? index,
+      })),
+    } as GeminiStreamChunk;
     if (this.state.timing.firstChunkTime === null) {
       this.state.timing.firstChunkTime = Date.now();
     }
@@ -704,21 +755,19 @@ class GeminiStreamAdapter
     // Handle usage metadata
     if (chunk.usageMetadata) {
       this.trafficType = chunk.usageMetadata.trafficType ?? this.trafficType;
-      const cacheReadTokens = chunk.usageMetadata.cachedContentTokenCount ?? 0;
+      const { input, output, cacheRead, cacheWrite, reasoning } =
+        geminiUsageTokens(chunk.usageMetadata);
       this.state.usage = {
-        inputTokens: Math.max(
-          0,
-          (chunk.usageMetadata.promptTokenCount ?? 0) - cacheReadTokens,
-        ),
-        outputTokens: chunk.usageMetadata.candidatesTokenCount ?? 0,
-        cacheReadTokens,
-        cacheWriteTokens: 0,
-        reasoningTokens: chunk.usageMetadata.thoughtsTokenCount ?? 0,
+        inputTokens: input,
+        outputTokens: output,
+        cacheReadTokens: cacheRead,
+        cacheWriteTokens: cacheWrite,
+        reasoningTokens: reasoning,
       };
     }
 
-    const candidate = chunk.candidates?.[0];
-    if (!candidate) {
+    const candidates = chunk.candidates ?? [];
+    if (candidates.length === 0) {
       const hasProtocolMetadata = Boolean(
         chunk.promptFeedback || chunk.usageMetadata,
       );
@@ -731,8 +780,34 @@ class GeminiStreamAdapter
       };
     }
 
-    // Process parts
-    for (const part of candidate.content?.parts ?? []) {
+    // Keep the signed parts associated with their candidate for audit records.
+    // Tool indexes follow arrival order, just like the shared policy batch.
+    let toolCallIndex = this.state.toolCalls.length;
+    for (const [position, candidate] of (
+      sdkResponseToRestResponse(chunk, this.model).candidates ?? []
+    ).entries()) {
+      const index = candidate.index ?? position;
+      const previous = this.candidateParts.get(index);
+      const parts = previous?.parts ?? [];
+      for (const part of candidate.content?.parts ?? []) {
+        parts.push({
+          part,
+          ...("functionCall" in part && part.functionCall
+            ? { toolCallIndex: toolCallIndex++ }
+            : {}),
+        });
+      }
+      this.candidateParts.set(index, {
+        candidate: { ...previous?.candidate, ...candidate, index },
+        parts,
+      });
+    }
+
+    // Every candidate must participate in policy evaluation before its calls
+    // can reach the client.
+    for (const part of candidates.flatMap(
+      (candidate) => candidate.content?.parts ?? [],
+    )) {
       // Handle text content
       if (part.text) {
         // Track thought vs output text separately for proper signature preservation.
@@ -772,32 +847,73 @@ class GeminiStreamAdapter
         const toolCallIndex = this.state.toolCalls.length;
         this.state.toolCalls.push({
           id:
-            functionCall.id ?? `gemini-call-${functionCall.name}-${Date.now()}`,
+            functionCall.id ??
+            `gemini-call-${functionCall.name}-${this.callIdSeed + toolCallIndex}`,
           name: functionCall.name ?? "",
           arguments: JSON.stringify(functionCall.args ?? {}),
         });
+        this.originalToolCalls.push({ ...this.state.toolCalls[toolCallIndex] });
         // Track thoughtSignature for function call parts (required by Gemini 3)
         if (part.thoughtSignature) {
           this.toolCallSignatures.set(toolCallIndex, part.thoughtSignature);
         }
-        this.state.rawToolCallEvents.push(chunk);
         isToolCallChunk = true;
       }
     }
 
-    // Check finish reason
-    if (
-      candidate.finishReason &&
-      candidate.finishReason !== "FINISH_REASON_UNSPECIFIED"
-    ) {
-      this.state.stopReason = candidate.finishReason;
-      isFinal = true;
-
-      // Gemini can send terminal metadata without a renderable content part.
-      if (!sseData && !isToolCallChunk) {
-        const restChunk = sdkResponseToRestResponse(chunk, this.model);
-        sseData = `data: ${JSON.stringify(restChunk)}\n\n`;
+    if (isToolCallChunk) {
+      sseData = null;
+      // Split every candidate, preserving its index and signed parts. A frame
+      // is held once regardless of how many calls or candidates it contains.
+      const heldCandidates = candidates.flatMap((candidate) => {
+        const parts =
+          candidate.content?.parts?.filter((part) => part.functionCall) ?? [];
+        return parts.length
+          ? [{ ...candidate, content: { ...candidate.content, parts } }]
+          : [];
+      });
+      this.state.rawToolCallEvents.push({
+        ...chunk,
+        candidates: heldCandidates,
+      });
+      const visibleCandidates = candidates.flatMap((candidate) => {
+        const parts =
+          candidate.content?.parts?.filter((part) => !part.functionCall) ?? [];
+        const hasCalls = candidate.content?.parts?.some(
+          (part) => part.functionCall,
+        );
+        if (!hasCalls) return [candidate];
+        return parts.length
+          ? [
+              {
+                ...candidate,
+                content: { ...candidate.content, parts },
+                finishReason: undefined,
+              },
+            ]
+          : [];
+      });
+      if (visibleCandidates.length > 0) {
+        const visibleChunk = {
+          ...chunk,
+          candidates: visibleCandidates,
+        } as GeminiStreamChunk;
+        sseData = `data: ${JSON.stringify(sdkResponseToRestResponse(visibleChunk, this.model))}\n\n`;
       }
+    }
+
+    for (const candidate of candidates) {
+      if (
+        candidate.finishReason &&
+        candidate.finishReason !== "FINISH_REASON_UNSPECIFIED"
+      ) {
+        this.state.stopReason = candidate.finishReason;
+        isFinal = true;
+      }
+    }
+    // Gemini can send terminal metadata without a renderable content part.
+    if (isFinal && !sseData && !isToolCallChunk) {
+      sseData = `data: ${JSON.stringify(sdkResponseToRestResponse(chunk, this.model))}\n\n`;
     }
 
     return { sseData, isToolCallChunk, isFinal };
@@ -839,34 +955,30 @@ class GeminiStreamAdapter
   }
 
   formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
-    // One REST-shaped chunk carrying every call as a functionCall part —
-    // exactly how the upstream delivers whole (non-incremental) calls, so the
-    // client accumulates it the same way. No finishReason: formatEndSSE closes
-    // the turn.
-    const chunk: GeminiResponse = {
-      candidates: [
-        {
-          content: {
-            parts: toolCalls.map((toolCall, index) => {
-              const thoughtSignature = this.toolCallSignatures.get(index);
-              return {
-                functionCall: {
-                  id: toolCall.id,
-                  name: toolCall.name,
-                  args: parseArgs(toolCall.arguments),
-                },
-                ...(thoughtSignature ? { thoughtSignature } : {}),
-              };
-            }),
-            role: "model",
-          },
-          index: 0,
-        },
-      ],
-      modelVersion: this.state.model || this.model,
-      responseId: this.state.responseId || `gemini-${Date.now()}`,
-    };
-    return [`data: ${JSON.stringify(chunk)}\n\n`];
+    const approved = approvedGeminiCalls(this.originalToolCalls, toolCalls);
+    let offset = 0;
+    return this.state.rawToolCallEvents.map((event) => {
+      const response = sdkResponseToRestResponse(
+        event as GeminiStreamChunk,
+        this.model,
+      );
+      const count =
+        response.candidates?.reduce(
+          (total, candidate) =>
+            total +
+            (candidate.content?.parts?.filter(
+              (part) => "functionCall" in part && part.functionCall,
+            ).length ?? 0),
+          0,
+        ) ?? 0;
+      const rewritten = rewriteGeminiCalls(
+        response,
+        this.originalToolCalls.slice(offset, offset + count),
+        approved,
+      );
+      offset += count;
+      return `data: ${JSON.stringify(rewritten)}\n\n`;
+    });
   }
 
   formatCompleteTextSSE(text: string): string[] {
@@ -930,8 +1042,18 @@ class GeminiStreamAdapter
     // held back and never reached the client, so recording them would describe
     // a turn that did not happen — and would leave a record owing function
     // responses that nothing will ever send.
+    const approved = approvedGeminiCalls(
+      this.originalToolCalls,
+      this.state.toolCalls,
+    );
+    // Native frames retain provider order even when policy reorders its batch.
     const emittedToolCalls =
-      this.replacedText === null ? this.state.toolCalls : [];
+      this.replacedText === null
+        ? this.originalToolCalls.flatMap((original) => {
+            const call = approved.get(original.id);
+            return call ? [call] : [];
+          })
+        : [];
     for (let i = 0; i < emittedToolCalls.length; i++) {
       const toolCall = emittedToolCalls[i];
       let parsedArgs: Record<string, unknown> = {};
@@ -941,7 +1063,11 @@ class GeminiStreamAdapter
         // Keep empty object if parse fails
       }
 
-      const signature = this.toolCallSignatures.get(i);
+      const signature = this.toolCallSignatures.get(
+        this.originalToolCalls.findIndex(
+          (original) => original.id === toolCall.id,
+        ),
+      );
       parts.push({
         functionCall: {
           id: toolCall.id,
@@ -961,8 +1087,61 @@ class GeminiStreamAdapter
       parts.push({ text: this.replacedText });
     }
 
+    const separateCandidates =
+      this.candidateParts.size > 1 ||
+      (this.candidateParts.size === 1 && !this.candidateParts.has(0))
+        ? [...this.candidateParts.entries()].map(
+            ([index, { candidate, parts }]) => {
+              const candidateParts = parts.flatMap(
+                ({ part, toolCallIndex }) => {
+                  if (toolCallIndex === undefined) return [part];
+                  if (this.replacedText !== null) return [];
+                  const call = approved.get(
+                    this.originalToolCalls[toolCallIndex].id,
+                  );
+                  if (!call) return []; // Disconnect cleanup discarded this held call.
+                  return [
+                    {
+                      ...part,
+                      functionCall: {
+                        ...("functionCall" in part ? part.functionCall : {}),
+                        name: call.name,
+                        args: parseArgs(call.arguments),
+                      },
+                    },
+                  ];
+                },
+              );
+              if (index === 0 && this.replacedText !== null)
+                candidateParts.push({ text: this.replacedText });
+              return {
+                ...candidate,
+                content: {
+                  ...candidate.content,
+                  role: "model",
+                  parts: candidateParts,
+                },
+                ...(this.replacedText !== null
+                  ? { finishReason: "STOP" as const }
+                  : {}),
+              };
+            },
+          )
+        : null;
+    if (
+      separateCandidates &&
+      this.replacedText !== null &&
+      !this.candidateParts.has(0)
+    ) {
+      separateCandidates.unshift({
+        index: 0,
+        content: { role: "model", parts: [{ text: this.replacedText }] },
+        finishReason: "STOP",
+      });
+    }
+
     return {
-      candidates: [
+      candidates: separateCandidates ?? [
         {
           content: {
             parts,
@@ -987,7 +1166,14 @@ class GeminiStreamAdapter
             promptTokenCount:
               this.state.usage.inputTokens +
               (this.state.usage.cacheReadTokens ?? 0),
-            candidatesTokenCount: this.state.usage.outputTokens,
+            // `outputTokens` includes thinking (see geminiUsageTokens); split
+            // it back into Gemini's two fields.
+            candidatesTokenCount:
+              this.state.usage.outputTokens -
+              (this.state.usage.reasoningTokens ?? 0),
+            ...(this.state.usage.reasoningTokens
+              ? { thoughtsTokenCount: this.state.usage.reasoningTokens }
+              : {}),
             totalTokenCount:
               this.state.usage.inputTokens +
               (this.state.usage.cacheReadTokens ?? 0) +
@@ -1006,28 +1192,6 @@ class GeminiStreamAdapter
 // =============================================================================
 // ADAPTER FACTORY
 // =============================================================================
-
-// =============================================================================
-// USAGE TOKEN HELPERS
-// =============================================================================
-
-export function getUsageTokens(usage: {
-  promptTokenCount?: number;
-  candidatesTokenCount?: number;
-  cachedContentTokenCount?: number;
-  thoughtsTokenCount?: number;
-}) {
-  // Gemini's cachedContentTokenCount is a SUBSET already inside promptTokenCount,
-  // so subtract it to get the uncached input and avoid double-counting.
-  const cacheRead = usage.cachedContentTokenCount ?? 0;
-  return {
-    input: Math.max(0, (usage.promptTokenCount ?? 0) - cacheRead),
-    output: usage.candidatesTokenCount ?? 0,
-    cacheRead,
-    cacheWrite: 0,
-    reasoning: usage.thoughtsTokenCount ?? 0,
-  };
-}
 
 // =============================================================================
 // GEMINI FORMAT CONVERSION UTILITIES
@@ -1154,6 +1318,7 @@ function sdkPartToRestPart(sdkPart: Part): Gemini.Types.MessagePart {
  */
 function sdkCandidateToRestCandidate(
   sdkCandidate: Candidate,
+  position = 0,
 ): Gemini.Types.Candidate {
   return {
     content: {
@@ -1192,7 +1357,7 @@ function sdkCandidateToRestCandidate(
     groundingMetadata: sdkCandidate.groundingMetadata,
     avgLogprobs: sdkCandidate.avgLogprobs,
     logprobsResult: sdkCandidate.logprobsResult,
-    index: sdkCandidate.index ?? 0,
+    index: sdkCandidate.index ?? position,
     finishMessage: sdkCandidate.finishMessage,
   } as Gemini.Types.Candidate;
 }
@@ -1387,10 +1552,7 @@ export const geminiAdapterFactory: LLMProvider<
 
   spanName: "generate_content",
 
-  createClient(
-    apiKey: string | undefined,
-    options: CreateClientOptions,
-  ): GoogleGenAI {
+  createClient(apiKey: string | undefined, options: CreateClientOptions) {
     const client = createGoogleGenAIClient(
       apiKey,
       "[GeminiProxyV2]",
@@ -1400,15 +1562,32 @@ export const geminiAdapterFactory: LLMProvider<
       options.defaultHeaders,
     );
 
-    // Wrap with observability for request duration metrics
-    if (options.agent) {
-      return metrics.llm.getObservableGenAI(
-        client,
-        options.agent,
-        options.source,
-      );
-    }
-    return client;
+    const observed = options.agent
+      ? metrics.llm.getObservableGenAI(client, options.agent, options.source)
+      : client;
+    const withSignal = (
+      params: GenerateContentParameters,
+    ): GenerateContentParameters => ({
+      ...params,
+      config: {
+        ...params.config,
+        abortSignal:
+          options.abortSignal && params.config?.abortSignal
+            ? AbortSignal.any([options.abortSignal, params.config.abortSignal])
+            : (options.abortSignal ?? params.config?.abortSignal),
+      },
+    });
+    const generateContent = observed.models.generateContent.bind(
+      observed.models,
+    );
+    const generateContentStream = observed.models.generateContentStream.bind(
+      observed.models,
+    );
+    observed.models.generateContent = (params) =>
+      generateContent(withSignal(params));
+    observed.models.generateContentStream = (params) =>
+      generateContentStream(withSignal(params));
+    return observed;
   },
 
   async execute(

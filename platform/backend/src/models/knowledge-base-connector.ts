@@ -1209,33 +1209,66 @@ async function buildVisibilityFilter(params: {
     scopeColumn: table.id,
     action: params.scope === "query" ? ("use" as const) : ("read" as const),
   };
-  const reach = or(
-    params.userId
-      ? ResourcePermissionPolicyModel.grantConditionForAny({
-          ...context,
-          organizationColumn: table.organizationId,
-          principals: params.principal
-            ? [params.principal]
-            : await ResourcePermissionSubjectModel.resolvePrincipals({
-                userId: params.userId,
-                organizationId: params.organizationId,
-              }),
-        })
+  const principals =
+    params.principal || params.userId
+      ? params.principal
+        ? [params.principal]
+        : await ResourcePermissionSubjectModel.resolvePrincipals({
+            userId: params.userId ?? "",
+            organizationId: params.organizationId,
+          })
+      : undefined;
+  const kbContext = {
+    organizationId: table.organizationId,
+    resource: "knowledgeBase" as const,
+    scopeColumn: sql`permission_kb_assignment.knowledge_base_id`,
+    action: "use" as const,
+  };
+  const grantReach = (targetContext: typeof context | typeof kbContext) =>
+    principals
+      ? params.userId
+        ? ResourcePermissionPolicyModel.grantConditionForAny({
+            ...targetContext,
+            organizationColumn: table.organizationId,
+            principals,
+          })
+        : or(
+            ResourcePermissionPolicyModel.grantConditionForAny({
+              ...targetContext,
+              organizationColumn: table.organizationId,
+              principals,
+            }),
+            ResourcePermissionPolicyModel.organizationAccessCondition(
+              targetContext,
+            ),
+          )
       : // A caller with no user of its own reaches what is published to the
         // organization at large, plus what its teams were granted.
         or(
-          ResourcePermissionPolicyModel.organizationAccessCondition(context),
+          ResourcePermissionPolicyModel.organizationAccessCondition(
+            targetContext,
+          ),
           ResourcePermissionPolicyModel.grantsReadToAnyTeam({
-            ...context,
+            ...targetContext,
             teamIds: params.teamIds ?? [],
           }),
-        ),
-    // Queries span every auto-sync connector and every file-upload connector:
-    // per-chunk ACLs and per-file grants decide what a caller retrieves.
+        );
+  const reach = or(
+    grantReach(context),
+    // Queries span every auto-sync connector, every file-upload connector, and
+    // every connector assigned to a knowledge base the caller holds Can use on.
     params.scope === "query"
       ? or(
           eq(table.syncPermissionsFromSource, true),
           eq(table.connectorType, "file_upload"),
+          sql`EXISTS (
+            SELECT 1 FROM ${schema.knowledgeBaseConnectorAssignmentsTable} permission_kb_assignment
+            INNER JOIN ${schema.knowledgeBasesTable} permission_kb
+              ON permission_kb.id = permission_kb_assignment.knowledge_base_id
+              AND permission_kb.deleted_at IS NULL
+            WHERE permission_kb_assignment.connector_id = ${table.id}
+              AND ${grantReach(kbContext)}
+          )`,
         )
       : undefined,
   );

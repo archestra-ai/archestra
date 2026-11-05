@@ -15,6 +15,7 @@ This reference is for custom image authors. For maintained image targets and bui
 | Machine description | Optional. `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT` already says which files persist and which ports the user can forward. Describe what your image installs, and where to work, in your client's instructions. The maintained launchers append `/etc/archestra/agent-environment.md` for this. |
 | Output | Write progress and the final result to stdout or stderr. Archestra streams and retains that output as the run log. Do not print credentials. |
 | Completion | Exit `0` only after the turn is complete. Any non-zero exit marks the run failed. The workspace supervisor does not replay an interrupted turn after Pod replacement. |
+| Memory limits | Optional. Give the agent's shell commands the highest OOM score, 1000, and leave the client at the container's own. A process with score 1000 is one of the agent's commands. On a node that kills one process at a container's memory limit, the kernel then kills the command, and the client sees it fail instead of being killed. The maintained launchers do this with `archestra-command-oom-score.sh`; see the [image README](README.md#memory-limits). |
 | Storage | `/home/node` and `/var/run/archestra` are persisted on a workspace PVC. Privileged runtimes also persist `/var/lib/docker` there. Other container paths are ephemeral. Export final deliverables before the workspace's retention deadline. |
 
 The initial task is supplied in `ARCHESTRA_AGENT_RUNTIME_TASK`. When `ARCHESTRA_AGENT_RUNTIME_CONTINUE=1` and the mode is `interactive`, an absent or empty task means reopen the saved conversation without submitting a prompt. The Agent system prompt is supplied in `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT`. A custom client decides how to combine them. It should read `ARCHESTRA_AGENT_RUNTIME_MODE`: `interactive` means expose its input loop and remain available for follow-ups, while `one_shot` means finish the supplied task and exit. Images that support only unattended work can ignore interactive mode, but they will not provide a useful Chat terminal.
@@ -141,7 +142,9 @@ Archestra supplies the applicable variables below when launching a run. You do n
 | Variable | Purpose |
 | --- | --- |
 | `ARCHESTRA_AGENT_RUNTIME_AGENT_ID`, `ARCHESTRA_AGENT_RUNTIME_AGENT_NAME` | Durable Agent identity. |
-| `ARCHESTRA_AGENT_RUNTIME_TASK_ID` | Durable run identifier. |
+| `ARCHESTRA_AGENT_RUNTIME_RUN_ID` | The run's ID, the same on every turn. The run page is `/chat/runs/<id>`, and the run tools take it as `run_id`. |
+| `ARCHESTRA_AGENT_RUNTIME_RUN_URL` | The run's page in Archestra, the same on every turn. |
+| `ARCHESTRA_AGENT_RUNTIME_TASK_ID` | This turn's ID. The first turn's equals the run's ID. |
 | `ARCHESTRA_AGENT_RUNTIME_DIR` | Runtime-owned control and artifact directory. Defaults to `/var/run/archestra`. |
 | `ARCHESTRA_AGENT_RUNTIME_CREDENTIALS_FILE` | Managed JSON credential bundle, reread before authenticating. Each entry has `value` and Unix-millisecond `expiresAt`; the bundle is scoped by `taskId`. |
 | `ARCHESTRA_AGENT_RUNTIME_MODE` | `interactive` for a Chat-owned live terminal; `one_shot` for unattended delegation that must exit when complete. |
@@ -180,7 +183,9 @@ With Guardrails v2, the platform rejects a runtime credential that names a diffe
 
 Claude Code, Codex, and OpenCode children retain separate trajectories when the client supplies native child identity. Signed lineage binds nested children to the same workspace. A custom client without child identity cannot create isolated child-return boundaries by sharing the workspace header.
 
-Human-review remedies use `ask_user` with the exact signed offer IDs. Runtime reviews appear on the run page. Only the run's user owner can approve or deny them. Native permission settings and plain-text answers do not approve an OpenAPPA offer. A run without an eligible human reviewer stays blocked.
+Human-review remedies use `ask_user` with the exact signed offer IDs. Runtime reviews appear on the run page. Only the run's user owner can approve or deny them. Native permission settings and plain-text answers do not approve an OpenAPPA offer.
+
+The platform knows a run from its runtime credential, whatever image it runs, and treats it as unattended. With **Human approval** = **Waive in unattended sessions** (one of the Break the glass settings in Guardrails), the LLM Proxy lets a call that waits for human approval through, and the gateway approves a remedy plan's review itself. Each records a yell, and by default the yell also turns Guardrails off for the run's session. With the default, **Human approval** = **Block until approved**, a run without an eligible human reviewer stays blocked.
 
 Pending reviews and rulings expire after ten minutes. They use the platform's shared PostgreSQL-backed cache, whose state can be lost on restart. Expiry or missing state never approves an action; the runtime must request a fresh review for a live exact offer before proceeding.
 

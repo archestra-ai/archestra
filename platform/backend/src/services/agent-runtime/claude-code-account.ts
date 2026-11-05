@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import logger from "@/logging";
-import { EnvironmentModel, OrganizationModel } from "@/models";
+import {
+  AgentRunModel,
+  AgentWorkspaceModel,
+  EnvironmentModel,
+  OrganizationModel,
+} from "@/models";
 import ClaudeCodeAccountModel from "@/models/claude-code-account";
 import { secretManager } from "@/secrets-manager";
 import {
@@ -184,6 +189,61 @@ class ClaudeCodeAccountManager {
             "Sign in with your own Claude account in the native runtime.",
         },
       ]);
+    return this.readToken(account.secretId);
+  }
+
+  /**
+   * Resolve the connected Claude subscription token for an Agent Runtime run's
+   * one-off virtual key. The key must belong to an open run, or to the current
+   * turn of a retained workspace, for the acting user and agent; otherwise
+   * returns null so non-run passthrough keys cannot resolve the stored token.
+   */
+  async resolveProxyToken(params: {
+    virtualKeyId: string;
+    organizationId: string;
+    userId: string;
+    agentId?: string;
+  }): Promise<string | null> {
+    if (!params.agentId) return null;
+    const run = await AgentRunModel.findByVirtualApiKeyId(params.virtualKeyId);
+    if (
+      !run ||
+      run === "ambiguous" ||
+      run.organizationId !== params.organizationId ||
+      run.actorKind !== "user" ||
+      run.actorUserId !== params.userId ||
+      run.agentId !== params.agentId
+    ) {
+      return null;
+    }
+    if (run.endedAt !== null) {
+      const workspace = await AgentWorkspaceModel.findByWorkloadName(
+        run.workloadName,
+      );
+      if (
+        !workspace ||
+        workspace.organizationId !== run.organizationId ||
+        workspace.agentId !== run.agentId ||
+        workspace.actorKind !== "user" ||
+        workspace.actorId !== run.actorUserId ||
+        (workspace.activeTaskId !== run.taskId &&
+          workspace.lastTaskId !== run.taskId) ||
+        (workspace.state !== "idle" && workspace.state !== "active") ||
+        workspace.expiresAt.getTime() <= Date.now()
+      ) {
+        return null;
+      }
+    }
+    const account = await ClaudeCodeAccountModel.find({
+      organizationId: params.organizationId,
+      userId: params.userId,
+    });
+    if (!account?.secretId || isExpired(account.expiresAt)) {
+      throw new ApiError(
+        401,
+        "Your Claude Code subscription is not connected or has expired. Reconnect your Claude account and try again.",
+      );
+    }
     return this.readToken(account.secretId);
   }
 

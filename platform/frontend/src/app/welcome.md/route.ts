@@ -47,14 +47,16 @@ present them as things you can do here.
    servers: that is the list. Otherwise, group your tools from the gateway by
    the MCP server behind them. One line per group or server: what it lets you
    do here, in plain words.
-2. List the shared skills you have from the gateway, one line each. A skill
+2. List the installed shared skills from your local skill catalog, one line each.
+   Do not call remote list_skills when those skills are already installed. A skill
    acts only through the tools in step 1. If a skill's work needs tools that
    step 1 does not list, say so in its line.
-3. Pick the two or three of the gateway's servers or capability groups that
-   look most useful for this user. Make one read-only call on each, through
-   the gateway, to find something real: recent channels, open pull requests,
-   this week's tickets. Call only tools that search_tools returned or that are
+3. If a live example is useful, choose one capability group and make at most
+   one discovery call and one read-only example call through the gateway. Call only tools that search_tools returned or that are
    in your tool list. Never send, create, edit or delete anything.
+   If Guardrails refuses a call without a remedy, stop that lookup and explain
+   the restriction briefly. Do not retry through another wrapper, change policy,
+   or invoke diagnostic or break-glass tools to bypass a refusal.
 4. From what you found, suggest three to five prompts the user could paste
    next. Each must work with the tools in step 1. Make them specific to what
    you saw, not generic.

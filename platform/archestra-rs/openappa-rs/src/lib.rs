@@ -16,6 +16,7 @@ mod metrics;
 mod peer;
 mod policy;
 mod replay;
+mod retained_refusal;
 mod sealed;
 
 use appa_eventlog::{
@@ -623,6 +624,11 @@ where
         .await
         .map_err(|refusal| match refusal {
             deployments::DeploymentError::Superseded => policy_moved(),
+            deployments::DeploymentError::Diverged => Fault::binding(
+                BindingFailure::InvalidInput,
+                "OpenAPPA was handed two policy documents under one composition; the organization's deployment is unchanged",
+            )
+            .into(),
             deployments::DeploymentError::Failed(fault) => fault.into(),
         })?;
     match work(state.pinned(&deployment)).await {
@@ -1766,6 +1772,25 @@ pub struct OfferReviewOutput {
     /// JSONB, so key order and spacing can differ from the proposal; the
     /// values cannot.
     pub arguments: Option<String>,
+}
+
+/// Reads an offer's original refusal from authenticated, host-scoped journal
+/// records, including encrypted and escaped decisions. Executes no remedy.
+#[napi(js_name = "retainedOfferRefusal")]
+pub fn retained_offer_refusal(
+    input: String,
+    encryption: Option<ContentEncryption>,
+) -> napi::Result<Option<String>> {
+    std::panic::catch_unwind(AssertUnwindSafe(|| {
+        let input = serde_json::from_str(&input).map_err(invalid_input)?;
+        let cipher = match encryption {
+            Some(encryption) => StorageCipher::encrypted(encryption.key.as_ref(), encryption.scope)
+                .map_err(invalid_input)?,
+            None => StorageCipher::Plain,
+        };
+        retained_refusal::find(input, &cipher).map_err(invalid_input)
+    }))
+    .map_err(|_| panicked("OpenAPPA retained refusal lookup failed"))?
 }
 
 /// Loads the review entry for an offer from the retained DenyCall in PostgreSQL.

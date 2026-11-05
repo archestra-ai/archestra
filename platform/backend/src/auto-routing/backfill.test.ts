@@ -5,6 +5,11 @@ import {
 } from "@archestra/shared";
 import { eq, inArray, sql } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
+import { vi } from "vitest";
+import logger from "@/logging";
+
+vi.mock("@/logging");
+
 import config from "@/config";
 import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
@@ -277,6 +282,105 @@ describe("auto routing backfill", () => {
     });
   });
 
+  test("scores independent auxiliary sessions when there is no main turn", async () => {
+    await turn("short", "hello", {
+      sessionSource: "claude_code_header",
+      type: "anthropic:messages",
+    });
+    await turn("subagent", "Inspect the API types", {
+      sessionSource: "kilo_session",
+      source: "kilo:subagent",
+    });
+    await turn("no-task", "Review the patch", {
+      sessionSource: "kilo_session",
+      source: "model_router",
+    });
+    await turn(
+      "title-only",
+      "Please write a 5-10 word title for this conversation",
+      { sessionSource: "claude_code_header", type: "anthropic:messages" },
+    );
+    await scanAndScore({});
+    expect(prompts.sort()).toEqual(
+      [
+        "hello",
+        "Inspect the API types",
+        "Review the patch",
+        "Please write a 5-10 word title for this conversation",
+      ].sort(),
+    );
+    expect(await readings()).toEqual({
+      short: "scored",
+      subagent: "scored",
+      "no-task": "scored",
+      "title-only": "scored",
+    });
+  });
+
+  test("keeps looking for a main turn beyond the first page before using the fallback", async () => {
+    for (let i = 0; i < 21; i++) {
+      await turn("paged", "Summarize the changes", {
+        sessionSource: "kilo_session",
+        source: "kilo:subagent",
+        createdAt: new Date(Date.now() - 4 * DAY_MS + i * 1000),
+      });
+    }
+    await turn("paged", "Implement pagination", {
+      sessionSource: "kilo_session",
+      source: "kilo:main",
+    });
+    await scanAndScore({});
+    expect(prompts).toEqual(["Implement pagination"]);
+  });
+
+  test("logs why unreadable or empty sessions were skipped without calling the scorer", async () => {
+    await turn("metadata", "", {
+      request: logContentNotStored() as unknown as InteractionRequest,
+    });
+    await turn("empty", "   ");
+    await turn("sealed", "Unavailable", {
+      encryptedChatConversationId: randomUUID(),
+    });
+    await scanAndScore({});
+    expect(prompts).toEqual([]);
+    expect(
+      (await describeBackfill(organizationId)).backfill?.progress,
+    ).toMatchObject({ noText: 3 });
+    const reasons = vi
+      .mocked(logger.info)
+      .mock.calls.flatMap(([fields, message]) =>
+        message === "[AutoRouting] Backfill session skipped"
+          ? [(fields as { reason: string }).reason]
+          : [],
+      );
+    expect(reasons.sort()).toEqual([
+      "content_unavailable",
+      "content_unavailable",
+      "empty_user_text",
+    ]);
+  });
+
+  test("persists scorer tokens in features and calculates cost from usage", async () => {
+    server.use(
+      http.post(JEV_ENDPOINT, () =>
+        HttpResponse.json({
+          ...ANSWERS,
+          usage: { input_tokens: 1_000_000, output_tokens: 20 },
+        }),
+      ),
+    );
+    await turn("priced", "Implement input validation");
+    await scanAndScore({});
+    const [score] = await db.select().from(schema.routingHistoryScoresTable);
+    expect(score).toMatchObject({
+      features: { scorerUsage: { inputTokens: 1_000_000, outputTokens: 20 } },
+    });
+    expect(Number(score.scorerCost)).toBeCloseTo(0.042);
+    expect((await describeBackfill(organizationId)).backfill).toMatchObject({
+      spentCostUsd: 0.042,
+    });
+  });
+
   test("re-scores the system and tools stored on the opening request across API shapes", async () => {
     const states: Record<string, string>[] = [];
     server.use(
@@ -351,7 +455,7 @@ describe("auto routing backfill", () => {
       expect(state).toEqual({
         prompt: "Review this migration",
         system_prompt: system,
-        tools: "Available tools: 1\ninspect_schema: Read table metadata.",
+        tools: "Available tools: 1\ninspect_schema",
       });
     }
   });
@@ -494,6 +598,33 @@ describe("auto routing backfill", () => {
       },
       scoreOffer: { remaining: 1 },
     });
+  });
+
+  test("oversized tool names fail terminally without spending the scorer budget", async () => {
+    await turn("oversized", "Review this oversized agent", {
+      request: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Review this oversized agent" }],
+        tools: Array.from({ length: 10_000 }, (_, index) => ({
+          type: "function" as const,
+          function: { name: `tool_${index}`, parameters: { type: "object" } },
+        })),
+      },
+    });
+    await turn("valid", "Review this valid agent");
+
+    await scanAndScore({ maxSessions: 2, maxCostUsd: 0.002 });
+
+    expect(prompts).toEqual(["Review this valid agent"]);
+    expect(await readings()).toEqual({ oversized: "failed", valid: "scored" });
+    expect((await describeBackfill(organizationId)).backfill).toMatchObject({
+      status: "done",
+      spentCostUsd: 0.001,
+      progress: { scored: 1 },
+    });
+    await runBackfill();
+    expect(prompts).toHaveLength(1);
+    expect(await readings()).toEqual({ oversized: "failed", valid: "scored" });
   });
 
   test("stops at the cost ceiling and still lets the next fit read what it scored", async () => {
@@ -965,6 +1096,57 @@ describe("auto routing backfill", () => {
         (row) => row.id,
       ),
     ).toEqual([waiting?.id]);
+  });
+
+  test("score cleanup retains current, organization and active-backfill scorers across batches", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    await sessions(1);
+    await scanAndScore({});
+    const keep = (await activeSourceVersion()).id;
+    const [own, foreign, unused, anotherUnused, active] = await Promise.all(
+      Array.from({ length: 5 }, () => makeScorerVersion()),
+    );
+    const ownAgent = await makeAgent({ organizationId });
+    const foreignAgent = await makeAgent({
+      organizationId: (await makeOrganization()).id,
+    });
+    for (const [agent, scorer] of [
+      [ownAgent, own],
+      [foreignAgent, foreign],
+    ]) {
+      await db
+        .update(schema.agentsTable)
+        .set({ autoRoutingScorerVersionId: scorer.id })
+        .where(eq(schema.agentsTable.id, agent.id));
+    }
+    const [session] = await db
+      .select()
+      .from(schema.routingHistorySessionsTable);
+    await db.insert(schema.routingHistoryScoresTable).values(
+      [own, foreign, unused, anotherUnused, active].map((scorer) => ({
+        historySessionId: session.id,
+        scorerVersionId: scorer.id,
+        status: "no_text" as const,
+      })),
+    );
+    await db
+      .update(schema.routingBackfillsTable)
+      .set({ status: "scanned", scorerVersionId: active.id })
+      .where(eq(schema.routingBackfillsTable.id, session.backfillId));
+
+    expect(
+      await RoutingHistoryModel.purgeExpired({
+        windowStart: new Date(Date.now() - 35 * DAY_MS),
+        keepScorerVersionId: keep,
+        batchSize: 1,
+      }),
+    ).toEqual({ sessions: 0, scores: 3, backfills: 0 });
+    const remaining = await db.select().from(schema.routingHistoryScoresTable);
+    expect(remaining.map((score) => score.scorerVersionId).sort()).toEqual(
+      [keep, own.id, active.id].sort(),
+    );
   });
 
   test("a late settlement from a reclaimed lease counts its call once and leaves the successor's reservation", async () => {

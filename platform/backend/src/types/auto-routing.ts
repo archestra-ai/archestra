@@ -1,7 +1,7 @@
 import type { SupportedProvider } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 
 export const RoutingDecisionReasonSchema = z.enum([
   "planned",
@@ -55,6 +55,13 @@ export const JevSessionSignalSchema = z.object({
 export const RoutingDecisionFeaturesSchema = z.object({
   signals: z.object({ "jev-session": JevSessionSignalSchema }),
   client: z.string(),
+  /** Scorer billing metadata; absent on readings stored before usage accounting. */
+  scorerUsage: z
+    .object({
+      inputTokens: z.number().int().nonnegative().nullable(),
+      outputTokens: z.number().int().nonnegative().nullable(),
+    })
+    .optional(),
 });
 export type RoutingDecisionFeatures = z.infer<
   typeof RoutingDecisionFeaturesSchema
@@ -258,7 +265,7 @@ export const RoutingHistoryScoreStatusSchema = z.enum([
   /** A paid call is under way or its reading did not land; read again until the attempts run out. */
   "pending",
   "scored",
-  /** No opening text to score: withheld, encrypted, a delta suffix, or no main turn. */
+  /** No readable opening text; structured logs distinguish the reason. */
   "no_text",
   /** The scorer answered something unusable, or every paid attempt was spent; not retried for this version. */
   "failed",

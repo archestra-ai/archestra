@@ -2,20 +2,20 @@
 title: Limits
 description: Cap spend, tokens, and requests across your organization, teams, virtual keys, users, agents, OAuth clients, and environments
 order: 2
-lastUpdated: 2026-10-30
+lastUpdated: 2026-11-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Set budgets and rate limits in **Costs & Limits → Limits** so a busy key, runaway agent loop, or shared credential stops when it hits its allowance instead of running up your provider bill. Organization-wide access to limits requires [`llmLimit:read`](/docs/reference/permissions#llmLimit:read); creating, editing, or deleting them requires [`llmLimit:create`](/docs/reference/permissions#llmLimit:create), [`llmLimit:update`](/docs/reference/permissions#llmLimit:update), or [`llmLimit:delete`](/docs/reference/permissions#llmLimit:delete). Team admins can also manage their own team's limits through **Settings → Teams**.
+Set budgets and rate limits in **Limits** so a busy key, runaway agent loop, or shared credential stops when it hits its allowance instead of running up your provider bill. Organization-wide access to limits requires [`llmLimit:read`](/docs/reference/permissions#llmLimit:read); creating, editing, or deleting them requires [`llmLimit:create`](/docs/reference/permissions#llmLimit:create), [`llmLimit:update`](/docs/reference/permissions#llmLimit:update), or [`llmLimit:delete`](/docs/reference/permissions#llmLimit:delete). Team admins can also manage their child teams' allocations.
 
-![Costs & Limits → Limits listing active spend, token, and request limits](/docs/automated_screenshots/llm-proxy_limits.webp)
+![Limits showing a team budget](/docs/automated_screenshots/llm-proxy_limits.webp)
 
 <span id="usage-limits"></span><span id="set-a-budget"></span><span id="limit-spend"></span><span id="limit-requests-and-tokens-per-minute"></span>
 
 ## Create a Limit
 
-1. Go to **Costs & Limits → Limits** and click **Create limit**.
+1. Go to **Limits** and click **Add Limit**.
 2. Under **Apply to**, choose the scope (**Organization**, **Team**, **Virtual key**, **User**, **Agent**, **LLM OAuth client**, or **Environment**) and select the target entity.
 3. Under **Select models**, keep **All models** so every model shares one pool, or pick specific models to cap only those models.
 4. Enter a whole-number **Limit value**, choose the **Limit kind** (**Spend**, **Tokens**, or **Requests**), and pick the reset **Interval**.
@@ -37,17 +37,19 @@ When more than one rule matches a call, every matching hard rule must allow it:
 - **Every matching scope must allow the request.** A virtual key with remaining allowance is still blocked if its billing team or the organization has reached its cap.
 - **Model-specific and all-models rules both apply.** A call to `claude-sonnet-4-6` checks both any rule targeting `claude-sonnet-4-6` and any rule set to **All models** on the same scope.
 - **Multi-model rules share one pool.** Selecting multiple models on a single rule caps their combined spend, tokens, or requests together.
-- **A team limit counts only that team's calls.** A call counts toward a team when its credential bills that team, or when the signed-in person is in the team, directly or through a sub-team, and the agent is shared with it. Another team's limit on a shared agent never blocks you.
+- **Team budgets include child teams.** A request billed to a team counts against that team and every parent team. Without a billing team, it counts toward teams the person belongs to, directly or through a child team, and the agent is shared with.
 
 <span id="team-limits-and-spend"></span>
 
 ### Team Limits
 
-Open **Limits** in the sidebar to view usage against limits and manage spend, token and request limits for teams you administer. Use **Add Limit** and select your team. Without organization cost or limit permissions, this page shows only your administered teams; ordinary team members have no automatic limit-management access. See [team member and admin roles](/docs/admin/access-control#team-roles).
+Open **Limits** in the sidebar to view usage for teams you administer and their child teams. Use **Add Limit** and select a child team to give it an allowance. See [team member and admin roles](/docs/admin/access-control#team-roles).
 
-Limits someone with organization limit permissions set on your team show **Set by your organization**: you see their usage, but cannot change or delete them. Your own limits on the team stack with them.
+You can create, edit, delete, and reset child-team limits, including allocations set by your organization. Your own team's ceiling stays read-only unless you also administer one of its parent teams. A child with allowance left is still blocked when a parent reaches its limit.
 
-Limits for organization, users, virtual keys, OAuth clients, agents, and environments still require the organization `llmLimit` permissions above. Organization-wide spend requires [`llmCost:read`](/docs/reference/permissions#llmCost:read).
+In **Virtual Keys**, you can create [keys](/docs/llm-proxy/authentication#standard-virtual-keys) and manage spend caps for members of your team and its child teams. Choose a billing team under **Who pays for this key?**, then select an eligible **Key owner**. Team admins cannot manage members' keys without a billing team, and only the owner can copy a key created for them.
+
+Other limit scopes still require the organization permissions above. Organization-wide spend requires [`llmCost:read`](/docs/reference/permissions#llmCost:read).
 
 ## Limit Behavior
 
@@ -75,13 +77,13 @@ Unblock a spend limit before its next scheduled reset. In **Explicit limits**, c
 
 - A **Calendar** interval keeps its schedule. A **Rolling** interval next resets one full interval after your reset.
 - Token, request, and per-minute limits have no **Reset usage**. They recover on their own schedule.
-- Resetting a limit needs [`llmLimit:update`](/docs/reference/permissions#llmLimit:update). Team admins can also reset the limits they set on their own team.
+- Resetting a limit needs [`llmLimit:update`](/docs/reference/permissions#llmLimit:update). Team admins can also reset child-team allocations. Resetting a child does not reset its parents' usage.
 
 ## Default User Spend Limits
 
 <span id="default-user-limits"></span>
 
-At the top of **Costs & Limits → Limits**, the **Default user limit** card sets a baseline per-user spend allowance without creating a separate rule for every member. Click **Set default** (or **Edit**), enter a **Limit per user ($)**, choose an **Interval**, and pick **All models** or specific models. Every user gets their own individual counter of that size, while any matching organization, team, virtual key, agent, OAuth client, or environment rules in **Explicit limits** still apply on top.
+At the top of **Limits**, the **Default user limit** card sets a baseline per-user spend allowance without creating a separate rule for every member. Click **Set default** (or **Edit**), enter a **Limit per user ($)**, choose an **Interval**, and pick **All models** or specific models. Every user gets their own individual counter of that size, while any matching organization, team, virtual key, agent, OAuth client, or environment rules in **Explicit limits** still apply on top.
 
 - **Environment override:** click **Environment override** (or **N environment overrides → Add environment override**) on the card to set a different default per-user cap for a specific [Environment](/docs/admin/environments).
 - **Custom limit for one user:** under **Who's affected**, click **All N** to open **Users and their limits**, open a user's actions menu (**...**), and select **Set custom limit** (or create a **User** spend limit in **Explicit limits**). You can include an optional **Reason** note that appears in the drawer and table. A hard custom user limit overrides any environment override and the organization default, and starts its own counter at `$0`. A soft custom user limit observes usage alongside the hard default allowance.

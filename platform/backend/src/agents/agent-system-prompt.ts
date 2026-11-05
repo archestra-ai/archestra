@@ -152,6 +152,10 @@ export function quoteUntrusted(value: string): string {
   return JSON.stringify(value).replace(INVISIBLE_CHARACTERS, escapeCodeUnits);
 }
 
+/** @public — canonical instruction text when subagent load balancing is enabled. */
+export const SUBAGENT_LOAD_BALANCING_INSTRUCTION =
+  'Subagent load balancing is enabled on this agent. Runtime subagent selection and failover are handled programmatically by the platform across your assigned runtime subagents. Ignore any instructions above that ask the user to choose a runtime or subagent before delegating (such as asking "Claude Code or Codex?") or that route to a specific runtime subagent — delegate new runtime tasks immediately in a single delegation call without asking for a runtime, and use the `run.agent_name` and `run.agent_id` returned by the tool result when reporting which runtime took the task.';
+
 /**
  * Compose an agent's system prompt: render its base prompt (with Handlebars
  * user context when needed), eagerly list its loadable skills, and append the
@@ -163,10 +167,12 @@ export async function buildAgentSystemPrompt(params: {
   agent: {
     systemPrompt: string | null;
     toolExposureMode: ToolExposureMode;
+    subagentLoadBalancing?: { enabled: boolean } | null;
   };
   mcpTools: Record<string, Tool>;
   organizationId: string;
   userId: string;
+  oauthClientId?: string;
   agentId: string;
   /**
    * Pre-resolved invoking user. The chat path has it in hand; the A2A path
@@ -207,6 +213,7 @@ export async function buildAgentSystemPrompt(params: {
     mcpTools,
     organizationId,
     userId,
+    oauthClientId,
     agentId,
     user,
     hookSessionContext,
@@ -259,6 +266,7 @@ export async function buildAgentSystemPrompt(params: {
   const knowledgeSearchInstruction = await buildKnowledgeSearchInstruction({
     agentId,
     userId,
+    oauthClientId,
     organizationId,
     toolNames: Object.keys(mcpTools),
   });
@@ -293,10 +301,16 @@ export async function buildAgentSystemPrompt(params: {
     ? buildProjectFilesInstruction(projectFileNames, mcpTools)
     : null;
 
+  const subagentLoadBalancingInstruction =
+    !isFork && agent.subagentLoadBalancing?.enabled === true
+      ? SUBAGENT_LOAD_BALANCING_INSTRUCTION
+      : null;
+
   return (
     [
       toolLoadingInstructions,
       renderedPrompt,
+      subagentLoadBalancingInstruction,
       isFork ? FORK_RUN_INSTRUCTION : null,
       projectInstructionsPrompt,
       projectFilesPrompt,

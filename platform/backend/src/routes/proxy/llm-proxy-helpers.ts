@@ -49,6 +49,7 @@ import { metrics } from "@/observability";
 import type { ProxyRequestFailure } from "@/observability/llm-proxy-request";
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import type { SpanTeamInfo, SpanUserInfo } from "@/observability/tracing";
+import { toolCallArgumentsText } from "@/openappa/tool-call-arguments";
 import type { LlmProxyToolCallRefusal } from "@/proxy/plugins/registry";
 import { getTokenizer } from "@/tokenizers";
 import type {
@@ -130,9 +131,10 @@ export function normalizeToolCallsForPolicy(
     let args: unknown;
     let argsString: string;
     if (typeof tc.arguments === "string") {
+      const text = toolCallArgumentsText(tc.arguments);
       try {
-        args = JSON.parse(tc.arguments);
-        argsString = tc.arguments;
+        args = JSON.parse(text);
+        argsString = text;
       } catch {
         args = undefined;
         argsString = JSON.stringify({ raw: tc.arguments });
@@ -279,7 +281,7 @@ export function planDispatchModeToolCallRewrites(params: {
     // shape and dispatch something the model did not ask for.
     let toolArgs: unknown;
     try {
-      toolArgs = JSON.parse(toolCall.arguments || "{}");
+      toolArgs = JSON.parse(toolCallArgumentsText(toolCall.arguments));
     } catch {
       return toolCall;
     }
@@ -368,6 +370,8 @@ export async function calculateUsageCost(params: {
   usage: UsageView;
   provider: SupportedProvider;
   providerApiKeyId?: string;
+  billingEndpoint?: "fireworks" | "other";
+  requestedModel?: string;
 }): Promise<number | undefined> {
   const { model, usage, provider } = params;
   if (usage.usageUnavailable || usage.costUnavailable) return undefined;
@@ -379,6 +383,8 @@ export async function calculateUsageCost(params: {
         provider,
         mode: "enforce",
         providerApiKeyId: params.providerApiKeyId,
+        billingEndpoint: params.billingEndpoint,
+        requestedModel: params.requestedModel,
       })
     ).cost,
   );
@@ -399,6 +405,8 @@ export async function calculateInteractionCosts(params: {
   usage: UsageView;
   providerName: SupportedProvider;
   providerApiKeyId?: string;
+  billingEndpoint?: "fireworks" | "other";
+  requestedModel?: string;
   autoRouting?: AutoRoutingRequestContext;
 }): Promise<{
   billingUsage?: PricedBillingUsage;
@@ -422,6 +430,8 @@ export async function calculateInteractionCosts(params: {
     provider: params.providerName,
     mode: "enforce",
     providerApiKeyId: params.providerApiKeyId,
+    billingEndpoint: params.billingEndpoint,
+    requestedModel: params.requestedModel,
   });
   const actualCost = Number(billingUsage.cost);
   const componentsCache = billingUsage.components.map(componentCacheCosts);
@@ -629,6 +639,8 @@ export async function estimateCutOffAttemptUsage(params: {
     provider?: SupportedProvider;
     modelId?: string;
     providerApiKeyId?: string;
+    billingEndpoint?: "fireworks" | "other";
+    requestedModel?: string;
   };
 }): Promise<{ inputTokens: number; cost: string | null } | undefined> {
   const { member } = params;
@@ -649,6 +661,8 @@ export async function estimateCutOffAttemptUsage(params: {
     usage: { inputTokens, outputTokens: 0 },
     provider: member.provider,
     providerApiKeyId: member.providerApiKeyId,
+    billingEndpoint: member.billingEndpoint,
+    requestedModel: member.requestedModel,
   });
   return { inputTokens, cost: cost?.toFixed(10) ?? null };
 }

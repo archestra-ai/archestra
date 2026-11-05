@@ -57,6 +57,17 @@ const SHELL_AGENTS: Record<
 > = {
   "claude-code": claudeCodeSetup,
   codex: codexSetup,
+  chatgpt: {
+    ...codexSetup,
+    label: "ChatGPT",
+    ending: (ctx) => ({
+      ...codexSetup.ending(ctx),
+      launch: null,
+      notes: [
+        "Restart ChatGPT, then start a new local Work or Codex conversation.",
+      ],
+    }),
+  },
   "copilot-cli": copilotCliSetup,
   cursor: cursorSetup,
   opencode: opencodeSetup,

@@ -136,8 +136,11 @@ function walk(dir: string): string[] {
   for (const entry of entries) {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) {
+      // .tsbuild holds the declarations the type check writes
+      // (backend/tsconfig.json), copies of sources checked here already.
       if (
         entry === "node_modules" ||
+        entry === ".tsbuild" ||
         entry === "__mocks__" ||
         entry === "mocks"
       )

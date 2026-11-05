@@ -23,8 +23,15 @@
  *
  * Needs the same DB env as the server, plus both encryption secrets.
  */
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
 import config from "@/config";
+import { assertPortsBound } from "@/models/ports";
 import { reencryptStoredSecrets } from "@/secrets-manager/reencrypt";
+
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
+assertPortsBound();
 
 async function main(): Promise<void> {
   const nextSecret = config.secretsManager.encryptionSecret;

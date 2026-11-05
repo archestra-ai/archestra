@@ -1,4 +1,6 @@
 // @vitest-environment node
+
+import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import {
   buildCreateConversationInput,
@@ -61,6 +63,20 @@ describe("resolveInitialAgentState", () => {
 });
 
 describe("resolveInitialAgentSelection", () => {
+  test("allows the built-in SRE agent as a pinned project default", () => {
+    const sre = {
+      id: "sre",
+      builtIn: true,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.SRE },
+    };
+    expect(
+      resolveInitialAgentSelection({
+        agents: [sre],
+        projectDefaultAgentId: sre.id,
+        canUseSavedAgent: true,
+      }),
+    ).toMatchObject({ agent: sre, source: "project" });
+  });
   test("a fresh chat prefers the personal assistant over the built-in and organization agents", () => {
     const personal = { id: "personal", scope: "personal", builtIn: false };
     expect(

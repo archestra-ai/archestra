@@ -16,16 +16,38 @@ RUN apt-get update -qq \
       --rev 3530f2e0a2c2678f892f43b938a4f2516d94e8b9 \
       nitpicker --locked --features otel
 
-FROM node:24-bookworm-slim AS agent-base
-ARG TARGETARCH
+# Upstream gh 2.103.2 and 2.103.3 embed x/net 0.60.0 (CVE-2026-78661).
+# Rebuild the existing CLI release with the fixed module until upstream ships it.
+FROM golang:1.27.3-bookworm@sha256:d9b6a1beb9474adc2a1ce842573639b44b2a0dd49b6669f51d3821baf9ec37c9 AS gh-build
+WORKDIR /src
+RUN curl -fsSL --retry 3 \
+      https://codeload.github.com/cli/cli/tar.gz/4f2cfe92e3499f8581bf39db77e0a1431fa7b55c \
+      -o /tmp/gh-source.tar.gz \
+ && echo '0eda9a553f1e191d7d63214dd1373f184a8f922b221387af510e63252c1d5419  /tmp/gh-source.tar.gz' | sha256sum -c - \
+ && tar -xzf /tmp/gh-source.tar.gz --strip-components=1 \
+ && rm /tmp/gh-source.tar.gz \
+ && go get golang.org/x/net@v0.62.0 \
+ && go mod verify \
+ && CGO_ENABLED=0 go build -trimpath \
+      -ldflags='-s -w -X github.com/cli/cli/v2/internal/build.Version=2.103.2 -X github.com/cli/cli/v2/internal/build.Date=2026-10-23' \
+      -o /out/gh ./cmd/gh \
+ && go version -m /out/gh \
+ && /out/gh --version \
+ && /out/gh api --help >/dev/null \
+ && /out/gh auth git-credential --help >/dev/null
 
-# Require fixed OpenSSL and Cyrus SASL packages and refresh cached apt layers.
-# CVE-2026-84782 (OpenSSL), CVE-2026-107161 (Cyrus SASL).
+FROM node:24-bookworm-slim AS agent-base
+
+# Require fixed apt, OpenSSL and Cyrus SASL packages and refresh cached apt layers.
+# CVE-2026-109518 (apt), CVE-2026-84782 (OpenSSL), CVE-2026-107161 (Cyrus SASL).
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends \
-      build-essential ca-certificates curl ffmpeg fonts-dejavu-core git jq less \
+      apt libapt-pkg6.0 build-essential ca-certificates curl ffmpeg fonts-dejavu-core git jq less \
       libsasl2-2 libsasl2-modules-db libssl-dev libssl3 \
       openssh-client openssl pkg-config procps python3 python3-venv ripgrep tmux \
+ && for package in apt libapt-pkg6.0; do \
+      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '2.6.2' || exit 1; \
+    done \
  && for package in openssl libssl3; do \
       dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '3.0.22-1~deb12u2' || exit 1; \
     done \
@@ -56,18 +78,7 @@ ENV PATH=/home/node/.local/bin:/home/node/.cargo/bin:/usr/local/cargo/bin:/usr/l
 # Keep the real CLI at /usr/bin/gh: /usr/local/bin/gh is the managed credential
 # reader, including when Git invokes its credential helper. Debian's old CLI
 # queries retired Projects fields during PR edits.
-RUN case "$TARGETARCH" in \
-      amd64) checksum=62ccf747115ddc61237efffdde66a3c8f70ba249433dc64f70801089b59c59c8 ;; \
-      arm64) checksum=4c3e99a50bd8b181a3fe9d69b25dd978bac768148d88f01507c6b4d1ef61a443 ;; \
-      *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
-    esac \
- && curl -fsSL --retry 3 \
-      "https://github.com/cli/cli/releases/download/v2.103.2/gh_2.103.2_linux_${TARGETARCH}.tar.gz" \
-      -o /tmp/gh.tar.gz \
- && echo "$checksum  /tmp/gh.tar.gz" | sha256sum -c - \
- && tar -xzOf /tmp/gh.tar.gz "gh_2.103.2_linux_${TARGETARCH}/bin/gh" > /usr/bin/gh \
- && chmod 0755 /usr/bin/gh \
- && rm /tmp/gh.tar.gz
+COPY --from=gh-build /out/gh /usr/bin/gh
 
 COPY --from=uv /uv /uvx /usr/local/bin/
 COPY --from=nitpicker-build /usr/local/cargo/bin/nitpicker /usr/local/bin/nitpicker

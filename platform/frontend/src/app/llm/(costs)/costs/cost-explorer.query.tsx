@@ -9,6 +9,7 @@ import { useEffect, useMemo } from "react";
 import { useSetCostsAction } from "@/app/llm/(costs)/layout";
 import { useStatisticsTimeRange } from "@/components/time-range-picker/statistics-time-range";
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
+import { statisticsRefresh } from "@/lib/statistics.query";
 import { throwOnApiError } from "@/lib/utils/api";
 
 export type ToolCallUsageDimension = NonNullable<
@@ -274,8 +275,7 @@ export function useCostStatistics({
       return data;
     },
     enabled,
-    staleTime: 30_000,
-    refetchInterval: 30_000,
+    ...statisticsRefresh(timeframe),
   });
 }
 

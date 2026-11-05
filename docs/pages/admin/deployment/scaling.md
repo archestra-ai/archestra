@@ -13,13 +13,14 @@ Start from the row closest to your organization, then adjust from what you measu
 
 | Size | Typical Use | Web Pods | Worker Pods | PostgreSQL | Connection Budget | Max Connections |
 | --- | --- | ---: | ---: | --- | ---: | ---: |
-| Small | One team or a pilot, up to about 100 people | 2–5 | 2 | 2 vCPU, 8 GiB, 100 GiB | 200 | 250 |
-| Medium | Several teams, up to about 1,000 people | 3–8 | 2 | 4 vCPU, 16 GiB, 250 GiB | 400 | 500 |
-| Large | Organization-wide | 4–16 | 4 | 8 vCPU, 32–64 GiB, 500 GiB | 800 | 1,000 |
+| Small | One team or a pilot, up to about 100 people | 2–5 | 2 | 2 vCPU, 8 GiB, 100 GiB | 550 | 700 |
+| Medium | Several teams, up to about 1,000 people | 3–8 | 2 | 4 vCPU, 16 GiB, 250 GiB | 750 | 950 |
+| Large | Organization-wide | 4–16 | 4 | 8 vCPU, 32–64 GiB, 500 GiB | 1,500 | 1,900 |
 
 - **Web Pods** is the horizontal pod autoscaler's range, from `minReplicas` to `maxReplicas`.
 - **PostgreSQL** is vCPU, memory, and storage.
-- **Connection Budget** is the chart's `archestra.database.connectionBudget`, and **Max Connections** is PostgreSQL's `max_connections`.
+- **Connection Budget** is the chart's `archestra.database.connectionBudget`. Each budget leaves every pod about 20 query connections at the peak of a rollout.
+- **Max Connections** is PostgreSQL's `max_connections`.
 
 Keep the chart's pod resources: 2 vCPU and 2 GiB requested per web pod, 2 vCPU and 1 GiB per worker pod. At the Small minimum, that is 8 vCPU and 6 GiB before PostgreSQL, MCP servers, and agent runtimes; leave room for rollout overlap and a lost node. [Cloud Recommendations](/docs/admin/deployment/database#cloud-recommendations) turns each PostgreSQL size into an instance class on AWS, Google Cloud, and Azure.
 
@@ -36,7 +37,7 @@ archestra:
   worker:
     replicaCount: 2
   database:
-    connectionBudget: 200
+    connectionBudget: 550
   podDisruptionBudget:
     enabled: true
     maxUnavailable: 1

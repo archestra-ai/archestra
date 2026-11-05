@@ -50,7 +50,7 @@ Cloud SQL for PostgreSQL fits every size. Enterprise Plus edition has shorter ma
 - **Backups:** turn on automated backups and point-in-time recovery.
 - **Extensions:** the `postgres` user can create `vector` and `pg_trgm`.
 - **Storage:** keep automatic storage increases on. Cloud SQL sets IOPS and throughput from the machine type and disk size, so grow the disk to raise them.
-- **Connections:** Cloud SQL sets `max_connections` from instance memory, which covers the Small and Medium sizes. For Large, set the `max_connections` flag to at least 1,000.
+- **Connections:** set the `max_connections` flag to the size's [Max Connections](/docs/admin/deployment/scaling#pick-a-size). The memory-based default can be lower.
 - **Network:** connect over private IP from the cluster's VPC.
 @tab Azure
 Azure Database for PostgreSQL flexible server fits every size. Use the General Purpose tier, and Memory Optimized for a large knowledge base.
@@ -112,7 +112,9 @@ The chart applies these mounts to web pods, worker pods, and the migration Job. 
 
 ## Connection Capacity
 
-Set `archestra.database.connectionBudget` to the connections Archestra may use, and the chart divides it among pods. Each pod gets the budget divided by the peak pod count: the web HPA maximum and the worker count, each plus rollout surge (25% by default). Each peak pod needs at least 13 budgeted connections; the chart rejects smaller budgets.
+Set `archestra.database.connectionBudget` to the connections Archestra may use, and the chart divides it among pods. Each pod gets the budget divided by the peak pod count. During a rolling update, each Deployment can run its full new revision, an old revision that is still terminating, and the surge (25% by default, rounded up). With the web HPA maximum at 5 and 2 workers, that is 12 web and 5 worker pods, so 17 peak pods.
+
+Each pod keeps 12 of its share for caching and notifications and uses the rest as its query pool. A share under 13 leaves no query connection, and the chart rejects that budget.
 
 - Set PostgreSQL `max_connections` about 25% above the budget. Each pod opens a few connections the budget does not count, and migrations and monitoring need their own. [Pick a Size](/docs/admin/deployment/scaling#pick-a-size) gives a budget for each size.
 - A fixed `archestra.database.poolMax` or [`ARCHESTRA_DATABASE_POOL_MAX`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_POOL_MAX) overrides budget sizing. Finish one rollout before starting another.

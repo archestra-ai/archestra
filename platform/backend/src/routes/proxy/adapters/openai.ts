@@ -1163,8 +1163,8 @@ export class OpenAIStreamAdapter
     this.state.responseId = chunk.id;
     this.state.model = chunk.model;
 
-    // Handle usage first - OpenAI sends usage in a final chunk with empty choices[]
-    // when stream_options.include_usage is true
+    // Usage is cumulative metadata, not a terminal signal: some compatible
+    // providers include it on every chunk, including the initial zero counts.
     if (chunk.usage) {
       this.upstreamUsage = chunk.usage;
       const tokens = openAIUsageTokens(chunk.usage);
@@ -1187,11 +1187,12 @@ export class OpenAIStreamAdapter
     // reading [0] off it unguarded is a crash.
     const choice = chunk.choices?.[0];
     if (!choice) {
-      // If we have usage, this is the final chunk (OpenAI sends usage in a chunk with empty choices)
+      // OpenAI sends terminal usage after finish_reason. An early usage-only
+      // chunk or a heartbeat after earlier usage must not end the stream.
       return {
         sseData: null,
         isToolCallChunk: false,
-        isFinal: this.state.usage !== null,
+        isFinal: !!chunk.usage && this.state.stopReason !== null,
       };
     }
 
@@ -1315,9 +1316,9 @@ export class OpenAIStreamAdapter
       this.state.stopReason = choice.finish_reason;
     }
 
-    // Only mark as final after we've received usage data (which comes in a separate chunk
-    // after the finish_reason chunk when include_usage is enabled)
-    if (this.state.usage !== null) {
+    // A provider can attach final usage to its finish chunk. Usage from an
+    // earlier chunk is not enough: keep reading for the final accounting.
+    if (chunk.usage && choice.finish_reason) {
       isFinal = true;
     }
 

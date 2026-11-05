@@ -914,6 +914,111 @@ describe("GitHub Copilot long-context accounting", () => {
     };
   }
 
+  test("per-chunk usage preserves the full reply and settles final tokens and spend", async ({
+    makeOrganization,
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const c = await setup({
+      makeOrganization,
+      makeAgent,
+      makeUser,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const model = "claude-haiku-5.5";
+    const envelope = {
+      id: "cumulative-usage",
+      object: "chat.completion.chunk",
+      created: 1,
+      model,
+    };
+    const usage = (prompt: number, completion: number) => ({
+      prompt_tokens: prompt,
+      completion_tokens: completion,
+      total_tokens: prompt + completion,
+    });
+    const chunks = [
+      {
+        ...envelope,
+        choices: [
+          {
+            index: 0,
+            delta: {
+              role: "assistant",
+              content: null,
+              reasoning_text: "Thinking",
+            },
+            finish_reason: null,
+          },
+        ],
+        usage: usage(0, 0),
+      },
+      {
+        ...envelope,
+        choices: [
+          { index: 0, delta: { content: "Hello" }, finish_reason: null },
+        ],
+        usage: usage(0, 0),
+      },
+      {
+        ...envelope,
+        choices: [
+          { index: 0, delta: { content: " world" }, finish_reason: null },
+        ],
+        usage: usage(12, 2),
+      },
+      {
+        ...envelope,
+        choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+        usage: usage(20, 4),
+      },
+    ];
+    server.use(
+      http.post(
+        COPILOT_CHAT_COMPLETIONS_URL,
+        () =>
+          new HttpResponse(
+            `${chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("")}data: [DONE]\n\n`,
+            { headers: { "content-type": "text/event-stream" } },
+          ),
+      ),
+    );
+    const response = await c.send(model, 20, { stream: true });
+    expect(response.statusCode, response.body).toBe(200);
+    const frames = response.body
+      .split("\n\n")
+      .filter((frame) => frame.startsWith("data: {"))
+      .map((frame) => JSON.parse(frame.slice(6)));
+    expect(
+      frames.map((frame) => frame.choices?.[0]?.delta?.content ?? "").join(""),
+    ).toBe("Hello world");
+    expect(frames.at(-1).usage).toMatchObject({
+      prompt_tokens: 20,
+      completion_tokens: 4,
+    });
+    expect(response.body.match(/data: \[DONE\]/g)).toHaveLength(1);
+    const [log] = await db
+      .select()
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.profileId, c.agent.id));
+    expect(log).toMatchObject({ inputTokens: 20, outputTokens: 4 });
+    expect(log.response).toMatchObject({
+      choices: [{ message: { content: "Hello world" } }],
+    });
+    expect(Number(log.cost)).toBeGreaterThan(0);
+    const [receipt] = await InteractionBillingModel.findMany([log.id]);
+    expect(receipt.usage).toMatchObject({ status: "complete", cost: log.cost });
+    expect(
+      (await LimitModel.getModelUsageBreakdowns([c.cap.id])).get(c.cap.id)?.[0]
+        .cost,
+    ).toBeCloseTo(Number(log.cost), 10);
+  });
+
   const boundaryCases = [
     {
       model: "claude-haiku-5.5",

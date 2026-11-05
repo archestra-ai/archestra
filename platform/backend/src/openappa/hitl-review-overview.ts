@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { dump as dumpYaml } from "js-yaml";
 import { isCommandExecutionTool } from "./command-normalization";
+import { withoutProxyCopies } from "./derived-arguments";
 import {
   displayedReview,
   parseReviewedArguments,
@@ -374,9 +375,7 @@ function cardArguments(
   if (!review.tool) return undefined;
   const args = parseReviewedArguments(review.arguments);
   if (!args) return review.arguments;
-  return isCommandExecutionTool(review.tool) && args.cmd === args.command
-    ? without(args, ["cmd"])
-    : args;
+  return withoutProxyCopies(review.tool, args);
 }
 
 /**
@@ -715,12 +714,16 @@ function argumentsFullText(review: HitlInspectableReview): string {
   }
   if (!args || Object.keys(args).length === 0)
     return "This call has no arguments.";
+  const own = review.tool ? withoutProxyCopies(review.tool, args) : args;
   return Object.entries(args)
     .map(([key, value]) => {
       // The proxy mirrors a command tool's value under both names; show it
       // once, naming both.
       if (key === "cmd" && typeof value === "string" && args.command === value)
         return undefined;
+      // Other copies the proxy rules the call with (a derived share or
+      // transfer mode) are not shown.
+      if (key !== "cmd" && !Object.hasOwn(own, key)) return undefined;
       const label =
         key === "command" && typeof value === "string" && args.cmd === value
           ? "command and cmd (identical values)"

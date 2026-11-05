@@ -129,4 +129,4 @@ Choose **Make owner** on another person's row in the permissions editor. You nee
 
 The new owner receives **Full access**. The previous owner keeps their grant until you remove it separately. An owner's grant cannot be removed while they still own the resource.
 
-For request and audit-log access, see [Logs and Auditing](/docs/admin/logs#who-can-read-them). For automated permission changes, use the [Permissions API](/docs/reference/api#/Permissions/getResourcePermissions).
+For request and audit-log access, see [Logs and Auditing](/docs/admin/logs#who-can-read-them). For automated permission changes, use the [Permissions API](/docs/reference/api/organization).

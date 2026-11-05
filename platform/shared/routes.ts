@@ -261,7 +261,7 @@ export const RouteId = {
   GetTools: "getTools",
   GetToolsWithAssignments: "getToolsWithAssignments",
 
-  // Interaction Routes
+  // Legacy interaction route IDs remain for backwards-compatible URLs.
   GetInteractions: "getInteractions",
   GetInteractionSummaries: "getInteractionSummaries",
   GetInteraction: "getInteraction",
@@ -270,6 +270,16 @@ export const RouteId = {
   GetInteractionSessionLineage: "getInteractionSessionLineage",
   GetUniqueExternalAgentIds: "getUniqueExternalAgentIds",
   GetUniqueUserIds: "getUniqueUserIds",
+
+  // LLM Proxy Logs
+  GetLlmProxyLogs: "getLlmProxyLogs",
+  GetLlmProxyLogSummaries: "getLlmProxyLogSummaries",
+  GetLlmProxyLog: "getLlmProxyLog",
+  GetLlmProxyLogAutoRouting: "getLlmProxyLogAutoRouting",
+  GetLlmProxyLogSessions: "getLlmProxyLogSessions",
+  GetLlmProxyLogSessionLineage: "getLlmProxyLogSessionLineage",
+  GetLlmProxyLogExternalAgentIds: "getLlmProxyLogExternalAgentIds",
+  GetLlmProxyLogUserIds: "getLlmProxyLogUserIds",
 
   // MCP Tool Call Routes
   GetMcpToolCalls: "getMcpToolCalls",

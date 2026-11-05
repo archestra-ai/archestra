@@ -131,7 +131,8 @@ describe("Archestra tools under the composed default policy", () => {
       "refused",
       "-/-",
       "-/trusted+internal",
-      "-/-",
+      // A link declares the key to every reader of the target agent.
+      "-/internal",
       "-/trusted+internal",
       "-/trusted+internal",
     ]);

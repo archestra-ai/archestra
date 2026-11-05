@@ -588,16 +588,31 @@ export function isChatCompletionsOnlyRouterProvider(
   );
 }
 
+/** Whether a runtime command invokes the maintained Claude Code runtime or wrapper. */
+export function isClaudeCodeRuntimeCommand(command?: string | null): boolean {
+  return (
+    command === "archestra-claude-code" ||
+    command === "archestra-claude-code-runtime"
+  );
+}
+
+/** Whether a runtime command invokes the maintained Codex runtime or wrapper. */
+export function isCodexRuntimeCommand(command?: string | null): boolean {
+  return command === "archestra-codex" || command === "archestra-codex-runtime";
+}
+
 /** Protocols supported by the maintained runtime entrypoint, or all for custom images. */
 export function getAgentRuntimeAllowedProtocols(
   runtimeCommand?: readonly string[] | null,
 ): readonly ("openai_responses" | "openai_chat" | "anthropic")[] {
-  switch (runtimeCommand?.[0]) {
-    case "archestra-claude-code":
-    case "archestra-claude-code-runtime":
-      return ["anthropic"];
-    case "archestra-codex":
-      return ["openai_responses", "openai_chat"];
+  const command = runtimeCommand?.[0];
+  if (isClaudeCodeRuntimeCommand(command)) {
+    return ["anthropic"];
+  }
+  if (isCodexRuntimeCommand(command)) {
+    return ["openai_responses", "openai_chat"];
+  }
+  switch (command) {
     // These wrappers use Chat Completions on a custom model endpoint.
     case "archestra-grok":
     case "archestra-kimi":
@@ -620,10 +635,7 @@ export function getAgentRuntimeProviderCompatibility(params: {
   provider: SupportedProvider;
 }): { compatible: true } | { compatible: false; message: string } {
   const runtimeCommand = params.runtimeCommand?.[0];
-  if (
-    runtimeCommand === "archestra-claude-code" ||
-    runtimeCommand === "archestra-claude-code-runtime"
-  ) {
+  if (isClaudeCodeRuntimeCommand(runtimeCommand)) {
     if (
       !getAgentRuntimeAllowedProtocols(params.runtimeCommand).includes(
         params.inferenceProtocol,
@@ -643,7 +655,7 @@ export function getAgentRuntimeProviderCompatibility(params: {
       message: `The maintained Claude Code runtime requires an Anthropic model or a Claude model on AWS Bedrock, but the Agent's selected model uses ${providerDisplayNames[params.provider]}.`,
     };
   }
-  if (runtimeCommand === "archestra-codex" && params.provider !== "openai") {
+  if (isCodexRuntimeCommand(runtimeCommand) && params.provider !== "openai") {
     return {
       compatible: false,
       message: `The maintained Codex runtime requires an OpenAI model, but the Agent's selected model uses ${providerDisplayNames[params.provider]}.`,
@@ -702,8 +714,7 @@ export function getAgentRuntimeModelCompatibility(params: {
   if (!providerCompatibility.compatible) return providerCompatibility;
 
   if (
-    (params.runtimeCommand?.[0] === "archestra-claude-code" ||
-      params.runtimeCommand?.[0] === "archestra-claude-code-runtime") &&
+    isClaudeCodeRuntimeCommand(params.runtimeCommand?.[0]) &&
     params.provider === "bedrock" &&
     params.modelId &&
     !isClaudeOnBedrock(params.modelId)

@@ -48,7 +48,8 @@ import { cn } from "@/lib/utils/tailwind";
  * 3. "Owner": objects authored by a picked person.
  *
  * The selection lives in the `access`, `sharedWith` and `owner` URL
- * parameters (plus `builtIn` on Agents); read it with
+ * parameters (plus `builtIn=true` for a mixed Agents view or
+ * `scope=built_in` for Built-in only); read it with
  * {@link useResourceAccessParam}.
  */
 export function ResourceAccessFilter({
@@ -64,7 +65,7 @@ export function ResourceAccessFilter({
   resource: ScopedResource;
   /** Plural, lower-case name of the listed objects, e.g. "agents". */
   noun: string;
-  /** Agents page only: offer the "Built-in" option, kept in the `builtIn` URL parameter. */
+  /** Agents page only: offer "Built-in" via `builtIn=true` or `scope=built_in`. */
   offerBuiltIn?: boolean;
   /**
    * Off for objects nobody authors (synced models): no "Mine" option and no

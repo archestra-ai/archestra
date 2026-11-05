@@ -110,7 +110,10 @@ import {
 import { openappaEnabled, openappaYellEnabled } from "@/openappa/service";
 import { sanitizeGeminiToolSchema } from "@/routes/proxy/adapters/gemini-schema";
 import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
-import { AGENT_RUNTIME_OAUTH_CLIENT_ID } from "@/services/agent-runtime/runtime-contract";
+import {
+  AGENT_RUNTIME_OAUTH_CLIENT_ID,
+  isAgentRunGatewayToken,
+} from "@/services/agent-runtime/runtime-contract";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
 import {
   agentToolExclusionsService,
@@ -333,7 +336,11 @@ export async function buildAgentMcpToolList(params: {
     Partial<
       Pick<
         TokenAuthContext,
-        "teamId" | "isOrganizationToken" | "isExternalIdp" | "oauthClientId"
+        | "tokenId"
+        | "teamId"
+        | "isOrganizationToken"
+        | "isExternalIdp"
+        | "oauthClientId"
       >
     >;
   lookups?: RequestLookups;
@@ -486,8 +493,7 @@ export async function buildAgentMcpToolList(params: {
     return isYellToolShortName(shortName) && openappaYellEnabled();
   });
   const includeImplicitPolicyReads =
-    tokenAuth?.oauthClientId !== AGENT_RUNTIME_OAUTH_CLIENT_ID ||
-    agent.accessAllTools;
+    !isAgentRunGatewayToken(tokenAuth) || agent.accessAllTools;
   const implicitPolicyTools =
     openappaEnabled() && includeImplicitPolicyReads
       ? getArchestraMcpTools().filter(

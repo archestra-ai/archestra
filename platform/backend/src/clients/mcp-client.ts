@@ -409,7 +409,7 @@ export type TargetInstallCaller = InstallCallerContext &
   Partial<
     Pick<
       TokenAuthContext,
-      "isOrganizationToken" | "isExternalIdp" | "oauthClientId"
+      "tokenId" | "isOrganizationToken" | "isExternalIdp" | "oauthClientId"
     >
   >;
 

@@ -303,7 +303,9 @@ export function LlmConnectSteps({
     />
   );
 
-  const hasProviderKey = targetProviderKeys.length > 0;
+  // Pool grants authorize their member keys independently of which provider
+  // keys the viewer can read directly.
+  const hasProviderKey = !!pool || targetProviderKeys.length > 0;
   const [addProviderKeyOpen, setAddProviderKeyOpen] = useState(false);
   // A new key starts with the primary key of each provider this target
   // serves; the create dialog shows and changes them.

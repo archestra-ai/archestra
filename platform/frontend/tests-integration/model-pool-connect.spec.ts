@@ -264,65 +264,31 @@ test.describe("Model pool Connect tab", () => {
     await expect(dialog.getByLabel("Model", { exact: true })).toHaveCount(0);
   });
 
-  test("creates a provider key without submitting pending pool edits", async ({
+  test("shows the granted pool request without visible provider keys", async ({
     page,
     mswControl,
     request,
   }) => {
     await mockPool({ mswControl, request });
-    await mswControl.registerMany([
-      { method: "get", url: "/api/llm-provider-api-keys", body: [] },
-      { method: "post", url: "/api/llm-provider-api-keys", body: openaiKey },
-      { method: "put", url: `/api/model-pools/${pool.id}`, body: pool },
-    ]);
-    const poolUpdates: string[] = [];
-    page.on("request", (req) => {
-      if (
-        req.method() === "PUT" &&
-        new URL(req.url()).pathname.endsWith(`/api/model-pools/${pool.id}`)
-      ) {
-        poolUpdates.push(req.postData() ?? "");
-      }
-    });
-    const dialog = await openConnectTab(page);
-    await dialog.getByRole("button", { name: "Pool", exact: true }).click();
-    await dialog
-      .getByRole("textbox", { name: "Timeout", exact: true })
-      .fill("42");
-    await dialog.getByRole("button", { name: "Connect", exact: true }).click();
-    await dialog
-      .getByRole("button", { name: "Add provider key", exact: true })
-      .click();
-    const createDialog = page.getByRole("dialog", {
-      name: "Add provider key",
-      exact: true,
-    });
-    await expect(createDialog).toBeVisible();
-    await createDialog.getByRole("combobox", { name: "Provider" }).click();
-    await page.getByRole("option", { name: "OpenAI", exact: true }).click();
-    await createDialog.getByLabel(/^Name/).fill(openaiKey.name);
-    await createDialog
-      .getByRole("textbox", { name: /API Key/i })
-      .fill("sk-test-pool-connect");
     await mswControl.use({
       method: "get",
       url: "/api/llm-provider-api-keys",
-      body: [openaiKey],
+      body: [],
     });
-    const created = page.waitForResponse(
-      (response) =>
-        response.request().method() === "POST" &&
-        new URL(response.url()).pathname.endsWith("/api/llm-provider-api-keys"),
-    );
-    await createDialog.getByRole("button", { name: "Test & Create" }).click();
-    expect((await created).ok()).toBe(true);
-    await expect(createDialog).toBeHidden();
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole("button", { name: "Pool", exact: true }).click();
+    const dialog = await openConnectTab(page);
     await expect(
-      dialog.getByRole("textbox", { name: "Timeout", exact: true }),
-    ).toHaveValue("42");
-    expect(poolUpdates).toEqual([]);
+      dialog.getByRole("combobox", { name: "Virtual key" }),
+    ).toBeVisible();
+    await expect(
+      dialog.getByRole("combobox", { name: "Virtual key" }),
+    ).toContainText("Listed by the pool");
+    await expect(dialog.getByText('"model": "fast-chat"')).toBeVisible();
+    await expect(
+      dialog.getByText("/chat/completions", { exact: false }),
+    ).toBeVisible();
+    await expect(
+      dialog.getByRole("button", { name: "Add provider key" }),
+    ).toHaveCount(0);
   });
 
   test("explains how to grant access when no virtual key has the pool", async ({
@@ -346,38 +312,6 @@ test.describe("Model pool Connect tab", () => {
       dialog.getByRole("combobox", { name: "Virtual key" }),
     ).toHaveCount(0);
   });
-});
-
-test("adding a provider key from the Connect tab doesn't save the pool", async ({
-  page,
-  mswControl,
-  request,
-}) => {
-  await mockPool({ mswControl, request });
-  await mswControl.use({
-    method: "get",
-    url: "/api/llm-provider-api-keys",
-    body: [],
-  });
-  const poolUpdates: string[] = [];
-  page.on("request", (sent) => {
-    if (sent.method() === "PUT" && sent.url().includes("/api/model-pools/")) {
-      poolUpdates.push(sent.url());
-    }
-  });
-  const dialog = await openConnectTab(page);
-
-  await dialog.getByRole("button", { name: "Add provider key" }).click();
-  const keyDialog = page.getByRole("dialog", { name: "Add provider key" });
-  await expect(keyDialog).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(keyDialog).toHaveCount(0);
-
-  await expect(dialog).toBeVisible();
-  await expect(
-    dialog.getByRole("heading", { name: "Provider key" }),
-  ).toBeVisible();
-  expect(poolUpdates).toEqual([]);
 });
 
 test.describe("LLM Proxy pool discovery", () => {

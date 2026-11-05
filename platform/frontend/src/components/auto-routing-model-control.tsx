@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import type { AutoRoutingOffer } from "@/components/use-auto-routing-offer";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { cn } from "@/lib/utils/tailwind";
@@ -66,40 +67,40 @@ export function AutoRoutingLabelAction({
   );
 }
 
-/** Stands in for the model picker while the request asks for `auto`. */
+/**
+ * Stands in for the model picker while the request asks for `auto`, with a
+ * link to configure auto routing for viewers who can.
+ */
 export function AutoModelField({ id }: { id: string }) {
+  const { data: canConfigure = false } = useHasPermissions({
+    llmProxy: ["update"],
+  });
   return (
     <div
       id={id}
-      className="flex h-9 w-full items-center gap-2 rounded-md border bg-muted/40 px-3 font-mono text-sm"
+      className="flex h-9 w-full items-center gap-2 rounded-md border bg-muted/40 px-3 text-sm"
     >
       <Shuffle className="size-4 text-muted-foreground" aria-hidden="true" />
-      auto
+      <span className="font-mono">auto</span>
+      {canConfigure && (
+        <Link
+          href={AUTO_ROUTING_URL}
+          className="ml-auto text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+        >
+          Configure auto routing
+        </Link>
+      )}
     </div>
   );
 }
 
-/** Under the field: where auto routing is configured, or why it can't be used. */
-export function AutoRoutingFootnote({
+/** Under the field, when auto routing is on: why this credential can't use it. */
+export function AutoRoutingUnreachableHint({
   offer,
-  isAuto,
 }: {
   offer: AutoRoutingOffer;
-  isAuto: boolean;
 }) {
   const providerCatalog = useModelProviderCatalog();
-  if (isAuto) {
-    return (
-      <p className="text-xs">
-        <Link
-          href={AUTO_ROUTING_URL}
-          className="text-muted-foreground underline underline-offset-2"
-        >
-          Configure auto routing
-        </Link>
-      </p>
-    );
-  }
   if (offer.kind !== "unreachable") return null;
   const tiers = offer.missing.map(({ tier }) => tier).join(" or ");
   const providers = [...new Set(offer.missing.map((m) => m.provider))]

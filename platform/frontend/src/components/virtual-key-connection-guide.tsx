@@ -25,8 +25,8 @@ import { useId, useMemo, useState } from "react";
 import { PROVIDER_ORIGINAL_URLS } from "@/app/connection/proxy-client-instructions";
 import {
   AutoModelField,
-  AutoRoutingFootnote,
   AutoRoutingLabelAction,
+  AutoRoutingUnreachableHint,
 } from "@/components/auto-routing-model-control";
 import { SecretCopyButton } from "@/components/secret-copy-button";
 import {
@@ -796,9 +796,7 @@ export function RequestExample({
           )}
         </div>
       )}
-      {!fixedModel && (
-        <AutoRoutingFootnote offer={autoRouting} isAuto={isAuto} />
-      )}
+      {!fixedModel && <AutoRoutingUnreachableHint offer={autoRouting} />}
       {selectedImageOperation === "edit" && (
         <p className="text-xs text-muted-foreground">
           Save your input image as <InlineCode>edit.png</InlineCode> in the

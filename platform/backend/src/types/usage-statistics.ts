@@ -27,6 +27,15 @@ export type AppUsageDimension = (typeof APP_USAGE_DIMENSIONS)[number];
 export const SKILL_USAGE_DIMENSIONS = ["day", "skillId", "userId"] as const;
 export type SkillUsageDimension = (typeof SKILL_USAGE_DIMENSIONS)[number];
 
+export const LLM_USAGE_DIMENSIONS = [
+  "day",
+  "teamId",
+  "credentialId",
+  "provider",
+  "model",
+] as const;
+export type LlmUsageDimension = (typeof LLM_USAGE_DIMENSIONS)[number];
+
 // ===== Rows =====
 
 const DayField = z
@@ -123,6 +132,66 @@ export const SkillUsageTotalsSchema = SkillUsageRowSchema.pick({
   users: true,
 });
 
+export const LlmUsageRowSchema = z.object({
+  day: DayField.optional(),
+  teamId: z
+    .string()
+    .optional()
+    .describe(
+      "Team the usage is attributed to: the credential's billing team, otherwise each team the agent is shared with (the same attribution as GET /api/statistics/teams). Present when grouped by teamId.",
+    ),
+  teamName: z.string().optional(),
+  authMethod: z
+    .string()
+    .optional()
+    .describe(
+      "How the request authenticated, e.g. virtual_key. Present when grouped by credentialId.",
+    ),
+  credentialId: z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      "Virtual key, passthrough key or OAuth client that made the requests. Null when the access method has no individual credential. Present when grouped by credentialId.",
+    ),
+  credentialName: z.string().nullable().optional(),
+  provider: z
+    .string()
+    .optional()
+    .describe(
+      "LLM provider, e.g. anthropic. Present when grouped by provider.",
+    ),
+  model: z
+    .string()
+    .optional()
+    .describe(
+      "Billed model. A request that billed several models counts its tokens and spend under each one, and its request under the model it asked for. Present when grouped by model.",
+    ),
+  requests: z.number(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
+  totalTokens: z
+    .number()
+    .describe("Newly processed input, cache writes and output."),
+  billedCost: z.number().describe("Spend on metered API keys."),
+  subscriptionCost: z
+    .number()
+    .describe("Subscription usage valued at API rates; not a bill."),
+});
+
+export const LlmUsageTotalsSchema = LlmUsageRowSchema.pick({
+  requests: true,
+  inputTokens: true,
+  outputTokens: true,
+  cacheReadTokens: true,
+  cacheWriteTokens: true,
+  totalTokens: true,
+  billedCost: true,
+  subscriptionCost: true,
+});
+
 // ===== Responses =====
 
 export const McpToolCallUsageResponseSchema = createPaginatedResponseSchema(
@@ -137,6 +206,10 @@ export const SkillUsageResponseSchema = createPaginatedResponseSchema(
   SkillUsageRowSchema,
 ).extend({ totals: SkillUsageTotalsSchema });
 
+export const LlmUsageResponseSchema = createPaginatedResponseSchema(
+  LlmUsageRowSchema,
+).extend({ totals: LlmUsageTotalsSchema });
+
 export type McpToolCallUsageRow = z.infer<typeof McpToolCallUsageRowSchema>;
 export type McpToolCallUsageResponse = z.infer<
   typeof McpToolCallUsageResponseSchema
@@ -145,3 +218,4 @@ export type AppUsageRow = z.infer<typeof AppUsageRowSchema>;
 export type AppUsageResponse = z.infer<typeof AppUsageResponseSchema>;
 export type SkillUsageRow = z.infer<typeof SkillUsageRowSchema>;
 export type SkillUsageResponse = z.infer<typeof SkillUsageResponseSchema>;
+export type LlmUsageResponse = z.infer<typeof LlmUsageResponseSchema>;

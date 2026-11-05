@@ -142692,6 +142692,187 @@ export type GetMcpToolCallUsageResponses = {
 
 export type GetMcpToolCallUsageResponse = GetMcpToolCallUsageResponses[keyof GetMcpToolCallUsageResponses];
 
+export type GetLlmUsageData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        limit?: number;
+        offset?: number;
+        /**
+         * Comma-separated dimensions to group by: day, teamId, credentialId, provider, model. Defaults to teamId,provider,model.
+         */
+        groupBy?: Array<'day' | 'teamId' | 'credentialId' | 'provider' | 'model'>;
+        /**
+         * Only this team's usage.
+         */
+        teamId?: string;
+        /**
+         * Only this virtual key, passthrough key or OAuth client.
+         */
+        credentialId?: string;
+        /**
+         * Only this provider, e.g. anthropic.
+         */
+        provider?: string;
+        /**
+         * Only this billed model.
+         */
+        model?: string;
+    };
+    url: '/api/statistics/llm-usage';
+};
+
+export type GetLlmUsageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetLlmUsageError = GetLlmUsageErrors[keyof GetLlmUsageErrors];
+
+export type GetLlmUsageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            /**
+             * UTC calendar day (YYYY-MM-DD). Present when grouped by day.
+             */
+            day?: string;
+            /**
+             * Team the usage is attributed to: the credential's billing team, otherwise each team the agent is shared with (the same attribution as GET /api/statistics/teams). Present when grouped by teamId.
+             */
+            teamId?: string;
+            teamName?: string;
+            /**
+             * How the request authenticated, e.g. virtual_key. Present when grouped by credentialId.
+             */
+            authMethod?: string;
+            /**
+             * Virtual key, passthrough key or OAuth client that made the requests. Null when the access method has no individual credential. Present when grouped by credentialId.
+             */
+            credentialId?: string | null;
+            credentialName?: string | null;
+            /**
+             * LLM provider, e.g. anthropic. Present when grouped by provider.
+             */
+            provider?: string;
+            /**
+             * Billed model. A request that billed several models counts its tokens and spend under each one, and its request under the model it asked for. Present when grouped by model.
+             */
+            model?: string;
+            requests: number;
+            inputTokens: number;
+            outputTokens: number;
+            cacheReadTokens: number;
+            cacheWriteTokens: number;
+            /**
+             * Newly processed input, cache writes and output.
+             */
+            totalTokens: number;
+            /**
+             * Spend on metered API keys.
+             */
+            billedCost: number;
+            /**
+             * Subscription usage valued at API rates; not a bill.
+             */
+            subscriptionCost: number;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+        totals: {
+            requests: number;
+            inputTokens: number;
+            outputTokens: number;
+            cacheReadTokens: number;
+            cacheWriteTokens: number;
+            /**
+             * Newly processed input, cache writes and output.
+             */
+            totalTokens: number;
+            /**
+             * Spend on metered API keys.
+             */
+            billedCost: number;
+            /**
+             * Subscription usage valued at API rates; not a bill.
+             */
+            subscriptionCost: number;
+        };
+    };
+};
+
+export type GetLlmUsageResponse = GetLlmUsageResponses[keyof GetLlmUsageResponses];
+
 export type GetAppUsageData = {
     body?: never;
     path?: never;

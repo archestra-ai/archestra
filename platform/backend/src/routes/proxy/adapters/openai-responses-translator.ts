@@ -121,6 +121,32 @@ export function responsesToOpenaiChat(
   };
 }
 
+/**
+ * How a Chat Completions turn ends, in Responses terms. Responses has no
+ * finish_reason: a turn cut off by its token budget or by a content filter is
+ * `incomplete` with a reason, and clients read `completed` as a whole answer.
+ */
+export function responsesEndingFromFinishReason(
+  finishReason: string | null | undefined,
+): {
+  status: "completed" | "incomplete";
+  incomplete_details: { reason: "max_output_tokens" | "content_filter" } | null;
+} {
+  if (finishReason === "length") {
+    return {
+      status: "incomplete",
+      incomplete_details: { reason: "max_output_tokens" },
+    };
+  }
+  if (finishReason === "content_filter") {
+    return {
+      status: "incomplete",
+      incomplete_details: { reason: "content_filter" },
+    };
+  }
+  return { status: "completed", incomplete_details: null };
+}
+
 export function chatCompletionToResponses(
   response: OpenAiResponse,
   ctx: OpenaiResponsesContext,
@@ -133,6 +159,7 @@ export function chatCompletionToResponses(
     };
   };
   const choice = response.choices[0];
+  const ending = responsesEndingFromFinishReason(choice?.finish_reason);
   const output: ResponsesResponse["output"] = [];
 
   if (choice?.message) {
@@ -154,7 +181,7 @@ export function chatCompletionToResponses(
         id: `msg_${randomUUID()}`,
         type: "message",
         role: "assistant",
-        status: "completed",
+        status: ending.status,
         content: messageContent,
       } as unknown as ResponsesResponse["output"][number]);
     }
@@ -177,7 +204,7 @@ export function chatCompletionToResponses(
     object: "response",
     created_at: ctx.createdUnix,
     model: ctx.requestedModel,
-    status: "completed",
+    ...ending,
     output,
     usage: response.usage
       ? toResponsesUsage({

@@ -346,6 +346,7 @@ function mapFinishReason(
 ): AnthropicResponse["stop_reason"] {
   if (reason === "length") return "max_tokens";
   if (reason === "tool_calls" || reason === "function_call") return "tool_use";
+  if (reason === "content_filter") return "refusal";
   return "end_turn";
 }
 

@@ -252,6 +252,7 @@ export function mapStopReason(
     case "tool_use":
       return "tool_calls";
     case "max_tokens":
+    case "model_context_window_exceeded":
       return "length";
     case "guardrail_intervened":
     case "content_filtered":

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import config from "@/config";
+import { resolveVendorPublishedPrices } from "@/services/vendor-published-pricing";
 import type { AutoRoutingScorerState } from "@/types/auto-routing-api";
 import { DecisionsResponseSchema } from "@/types/llm-providers/jev/api";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
@@ -18,8 +19,10 @@ export interface JevSessionReading {
   tierNeeded: [number, number, number];
   /** Probability that the session's context grows past the long-context threshold. */
   pLong: number;
-  /** Upstream-reported cost of the scoring call, when the endpoint reports one. */
+  /** Reported cost, or token-priced cost on the first-party endpoint; null if unknown. */
   costUsd: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
 }
 
 // State template v5: full sorted tool names, without descriptions or a first-N cutoff.
@@ -115,10 +118,29 @@ export class JevSessionSource
       );
     }
     const { tier_needed, long_context } = parsed.data.answers;
+    const inputTokens = parsed.data.usage?.input_tokens ?? null;
+    const outputTokens = parsed.data.usage?.output_tokens ?? null;
+    // A custom endpoint may charge a different rate. Only the first-party
+    // endpoint can use TypeSafe's published rate when no cost is reported.
+    const prices =
+      (baseUrl ?? config.llm.jev.baseUrl) ===
+      "https://api.typesafe.ai/v1/systemone"
+        ? resolveVendorPublishedPrices({
+            provider: "jev",
+            modelId: this.spec.model,
+          })
+        : null;
+    const calculatedCost =
+      inputTokens !== null && prices
+        ? inputTokens * Number(prices.promptPricePerToken) +
+          (outputTokens ?? 0) * Number(prices.completionPricePerToken)
+        : null;
     return {
       tierNeeded: tierDistribution(tier_needed.probabilities),
       pLong: long_context.noul,
-      costUsd: parsed.data.usage?.cost ?? null,
+      costUsd: parsed.data.usage?.cost ?? calculatedCost,
+      inputTokens,
+      outputTokens,
     };
   }
 }

@@ -548,6 +548,10 @@ async function scoreSession(params: {
   const opening = await findOpening(session);
   const text = openingText(opening);
   if (text === null) {
+    logger.info(
+      { backfillId: backfill.id, reason: openingSkipReason(opening) },
+      "[AutoRouting] Backfill session skipped",
+    );
     await withDbTransaction(async (tx) => {
       if (!(await RoutingBackfillModel.lockOwned(lease, tx))) return;
       await RoutingHistoryModel.recordScore(
@@ -710,13 +714,31 @@ async function findOpening(
   session: RoutingHistorySession,
 ): Promise<OpeningRow | null> {
   let after: OpeningRow | null = null;
+  let fallback: OpeningRow | null = null;
+  let first: OpeningRow | null = null;
   for (;;) {
     const page = await RoutingHistoryModel.openingRows(session, after);
+    first ??= page.rows[0] ?? null;
+    fallback ??= page.rows.find((row) => openingText(row) !== null) ?? null;
     const opening = page.rows.find((row) => isSessionMainTurn(row));
     if (opening) return opening;
-    if (page.last) return null;
+    if (page.last) return fallback ?? first;
     after = page.rows[page.rows.length - 1];
   }
+}
+
+function openingSkipReason(
+  opening: OpeningRow | null,
+): "no_main_turn" | "content_unavailable" | "empty_user_text" {
+  if (!opening) return "no_main_turn";
+  if (
+    opening.encrypted ||
+    opening.parentId !== null ||
+    isLogContentNotStored(opening.request)
+  ) {
+    return "content_unavailable";
+  }
+  return "empty_user_text";
 }
 
 type Reading =

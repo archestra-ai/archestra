@@ -39,6 +39,10 @@ export function decisionFeatures(params: {
       },
     },
     client: params.input.client ?? "unknown",
+    scorerUsage: {
+      inputTokens: params.reading.inputTokens,
+      outputTokens: params.reading.outputTokens,
+    },
   };
 }
 

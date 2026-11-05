@@ -75299,6 +75299,10 @@ export type GetLlmProxyLogAutoRoutingResponses = {
                     };
                 };
                 client: string;
+                scorerUsage?: {
+                    inputTokens: number | null;
+                    outputTokens: number | null;
+                };
             } | null;
             scorerCost: string | null;
             featuresSchemaVersion: number;

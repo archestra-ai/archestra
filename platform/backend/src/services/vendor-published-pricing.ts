@@ -29,6 +29,8 @@ const PUBLISHED_PRICES: Record<
   string,
   { in: number; cachedIn: number; out: number } | undefined
 > = {
+  // TypeSafe: https://help.typesafe.ai/articles/5187202169-how-much-does-jev-cost
+  "jev-1.13.0": { in: 0.042, cachedIn: 0, out: 0 },
   // OpenAI, standard tier: https://developers.openai.com/api/docs/pricing
   //
   // A bare id, not a typo: OpenAI lists the ChatGPT-latest alias under this
@@ -62,7 +64,11 @@ const PUBLISHED_PRICES: Record<
  * A reseller is excluded: it republishes these models at its own margin, and its
  * registry entry already carries that price.
  */
-const PUBLISHING_PROVIDERS = new Set<SupportedProvider>(["openai", "gemini"]);
+const PUBLISHING_PROVIDERS = new Set<SupportedProvider>([
+  "openai",
+  "gemini",
+  "jev",
+]);
 
 /**
  * Published prices for a model served by the vendor that makes it, or null when

@@ -49,9 +49,9 @@ export const DecisionsRequestSchema = z
 
 const DecisionsUsageSchema = z
   .object({
-    input_tokens: z.number().optional(),
-    output_tokens: z.number().optional(),
-    cost: z.number().optional(),
+    input_tokens: z.number().int().nonnegative().optional(),
+    output_tokens: z.number().int().nonnegative().optional(),
+    cost: z.number().nonnegative().optional(),
   })
   .passthrough();
 

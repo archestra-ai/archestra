@@ -16047,13 +16047,18 @@
             "type": "object",
             "properties": {
               "input_tokens": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "output_tokens": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "cost": {
-                "type": "number"
+                "type": "number",
+                "minimum": 0
               }
             },
             "additionalProperties": {}
@@ -44605,13 +44610,18 @@
             "type": "object",
             "properties": {
               "input_tokens": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "output_tokens": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "cost": {
-                "type": "number"
+                "type": "number",
+                "minimum": 0
               }
             },
             "additionalProperties": {}
@@ -289451,6 +289461,28 @@
                             },
                             "client": {
                               "type": "string"
+                            },
+                            "scorerUsage": {
+                              "type": "object",
+                              "properties": {
+                                "inputTokens": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "outputTokens": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "inputTokens",
+                                "outputTokens"
+                              ],
+                              "additionalProperties": false
                             }
                           },
                           "required": [

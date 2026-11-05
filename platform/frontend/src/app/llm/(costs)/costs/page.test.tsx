@@ -305,7 +305,14 @@ describe("OrganizationCostsPage", () => {
     fireEvent.keyDown(screen.getByRole("button", { name: "by Model" }), {
       key: "Enter",
     });
-    for (const name of ["Team", "Agent", "Model", "Person", "App", "Key"])
+    for (const name of [
+      "Team",
+      "Agent",
+      "Model",
+      "Person",
+      "App",
+      "Credential",
+    ])
       expect(await screen.findByRole("menuitem", { name })).toBeVisible();
     expect(screen.queryByTestId("my-usage-summary")).not.toBeInTheDocument();
   });
@@ -716,7 +723,7 @@ describe("OrganizationCostsPage", () => {
     await waitFor(() =>
       expect(screen.getByRole("table")).toHaveTextContent("Example person"),
     );
-    await group("Key");
+    await group("Credential");
     await waitFor(() =>
       expect(screen.getByRole("table")).toHaveTextContent("Pipeline key"),
     );

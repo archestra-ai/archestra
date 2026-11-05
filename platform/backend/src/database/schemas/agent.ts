@@ -1,6 +1,7 @@
 import type {
   GitHubActionsAccess,
   IncomingEmailSecurityMode,
+  SubagentLoadBalancingConfig,
 } from "@archestra/shared";
 import { type SQL, sql } from "drizzle-orm";
 import {
@@ -268,6 +269,15 @@ const agentsTable = softDeletablePgTable(
     accessAllSubagents: boolean("access_all_subagents")
       .notNull()
       .default(false),
+
+    /**
+     * MCP gateways: how incoming requests are load-balanced across the
+     * subagents assigned to the gateway, including algorithm, per-subagent
+     * weights, and retry/fallback policy for failed subagent requests.
+     */
+    subagentLoadBalancing: jsonb(
+      "subagent_load_balancing",
+    ).$type<SubagentLoadBalancingConfig>(),
 
     /** JSONB config for built-in agents (null for user-created agents) */
     builtInAgentConfig: jsonb(

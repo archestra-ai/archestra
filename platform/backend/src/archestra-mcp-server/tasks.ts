@@ -1,6 +1,8 @@
 import path from "node:path";
 import {
   DEFAULT_APP_NAME,
+  nextGatewayRoundRobinSeed,
+  orderSubagentsByLoadBalancing,
   TOOL_CANCEL_AGENT_RUN_SHORT_NAME,
   TOOL_DELETE_WORKSPACE_SHORT_NAME,
   TOOL_GET_AGENT_RUN_SHORT_NAME,
@@ -40,11 +42,15 @@ import {
   resolveAgentRuntimeBackendDriver,
 } from "@/services/agent-runtime/backends";
 import { preflightAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
+import { ephemeralCredentialGrantManager } from "@/services/agent-runtime/ephemeral-credential-grants";
 import {
   pendingExports,
   pendingFileNotice,
 } from "@/services/agent-runtime/pending-exports";
-import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
+import {
+  resolveAgentRuntime,
+  type SubagentExecutionPolicy,
+} from "@/services/agent-runtime/pod-run";
 import {
   agentRunUrl,
   submittedRunNextStep,
@@ -164,20 +170,279 @@ export async function checkCallerSubagentAccess(
 }
 
 /**
+ * Resolve all runtime subagent IDs eligible for pool routing on `callerAgent`.
+ *
+ * Supports both "All agents" (`accessAllSubagents: true`, excluding
+ * `agent_excluded_subagents`) and "Manual" (`accessAllSubagents: false`,
+ * explicit `delegateToAgentId` assignments).
+ */
+export async function resolveCandidateRuntimeSubagentIds(params: {
+  callerAgent: Pick<
+    Agent,
+    "id" | "organizationId" | "environmentId" | "accessAllSubagents"
+  >;
+  actorUserId?: string | null;
+}): Promise<string[]> {
+  const { callerAgent, actorUserId } = params;
+  if (
+    callerAgent.accessAllSubagents &&
+    actorUserId &&
+    actorUserId !== "system"
+  ) {
+    const isAgentAdmin = await ResourcePermissions.allows({
+      userId: actorUserId,
+      organizationId: callerAgent.organizationId,
+      resource: "agent",
+      scope: "*",
+      action: "update",
+    });
+    const [targets, excludedIds] = await Promise.all([
+      AgentModel.findAccessibleDelegationTargets({
+        userId: actorUserId,
+        isAdmin: isAgentAdmin,
+        organizationId: callerAgent.organizationId,
+        excludeAgentId: callerAgent.id,
+        includeDetails: false,
+        environmentId: callerAgent.environmentId,
+      }),
+      AgentExcludedSubagentModel.findTargetAgentIdsByAgent(callerAgent.id),
+    ]);
+    const excluded = new Set(excludedIds);
+    return targets
+      .filter((target) => target.hasRuntime && !excluded.has(target.id))
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+      .map((target) => target.id);
+  }
+  return AgentModel.findAssignedRuntimeSubagentIds(
+    callerAgent.id,
+    callerAgent.environmentId,
+  );
+}
+
+/**
  * Start a durable delegated run through the same lifecycle used by the MCP
  * run tools. Agent delegation uses this when the target has Background run
  * configured, so every delegation surface selects the same runtime.
  */
 export async function startDelegatedTask(params: {
-  agentId: string;
+  agentId?: string;
+  excludeAgentIds?: string[];
+  credentialGrantIds?: string[];
   message: string;
   attachments?: A2AAttachment[];
   limits?: AgentRunLimitsRequest;
   context: ArchestraContext;
 }) {
-  const { result, outcome } = await launchDelegatedTask(params);
-  if (outcome) await recordRuntimeLaunch(params.context, outcome);
-  return result;
+  const explicitAgentId = params.agentId?.trim();
+  if (explicitAgentId) {
+    let ephemeralCredentials: Record<string, string> | undefined;
+    if (params.credentialGrantIds && params.credentialGrantIds.length > 0) {
+      let actor: A2AActor;
+      try {
+        actor = requireActor(params.context);
+      } catch (error) {
+        const { result, outcome } = failedLaunch(
+          "refused",
+          error instanceof ApiError
+            ? errorResult(error.message)
+            : catchError(error, "starting the run"),
+        );
+        if (outcome) await recordRuntimeLaunch(params.context, outcome);
+        return result;
+      }
+      const resolved = await ephemeralCredentialGrantManager.resolveGrants({
+        grantIds: params.credentialGrantIds,
+        organizationId: actor.organizationId,
+        userId: actor.id,
+        callerAgentId: params.context.agent.id,
+        candidateAgentIds: [explicitAgentId],
+      });
+      if (!resolved.ok) {
+        const { result, outcome } = failedLaunch(
+          "refused",
+          errorResult(resolved.message),
+        );
+        if (outcome) await recordRuntimeLaunch(params.context, outcome);
+        return result;
+      }
+      ephemeralCredentials = resolved.envForAgent(explicitAgentId);
+    }
+
+    const callerAgent = params.context.agent?.id
+      ? await AgentModel.findById(params.context.agent.id)
+      : null;
+    const lbConfig = callerAgent?.subagentLoadBalancing ?? null;
+    const retries = lbConfig?.enabled ? (lbConfig.retries ?? 0) : 0;
+
+    const { result, outcome } = await launchDelegatedTask({
+      ...params,
+      agentId: explicitAgentId,
+      credentialGrantIds: params.credentialGrantIds,
+      ephemeralCredentials,
+      ...(retries > 0
+        ? {
+            subagentExecutionPolicy: {
+              retries,
+              requestedLimits: params.limits,
+            },
+          }
+        : {}),
+    });
+    if (outcome) await recordRuntimeLaunch(params.context, outcome);
+    return result;
+  }
+
+  const callerAgent = params.context.agent?.id
+    ? await AgentModel.findById(params.context.agent.id)
+    : null;
+  if (!callerAgent) {
+    const { result, outcome } = failedLaunch(
+      "refused",
+      errorResult("agent_id is required."),
+    );
+    if (outcome) await recordRuntimeLaunch(params.context, outcome);
+    return result;
+  }
+
+  const assignedIds = await resolveCandidateRuntimeSubagentIds({
+    callerAgent,
+    actorUserId: params.context.userId,
+  });
+  if (assignedIds.length === 0) {
+    const { result, outcome } = failedLaunch(
+      "refused",
+      errorResult("No runtime subagents are assigned to this gateway."),
+    );
+    if (outcome) await recordRuntimeLaunch(params.context, outcome);
+    return result;
+  }
+
+  const lbConfig = callerAgent.subagentLoadBalancing ?? null;
+  const fallbackEnabled = lbConfig?.fallbackEnabled ?? true;
+  const maxFallbacks =
+    lbConfig?.maxFallbacks != null
+      ? Math.max(0, lbConfig.maxFallbacks)
+      : Math.max(0, assignedIds.length - 1);
+  const assignedSet = new Set(assignedIds);
+  const excludedSet = new Set(
+    (params.excludeAgentIds ?? []).filter((id) => assignedSet.has(id)),
+  );
+  if (
+    excludedSet.size > 0 &&
+    (!fallbackEnabled || excludedSet.size > maxFallbacks)
+  ) {
+    const { result, outcome } = failedLaunch(
+      "refused",
+      errorResult(
+        "No remaining fallback subagents are available on this gateway.",
+      ),
+    );
+    if (outcome) await recordRuntimeLaunch(params.context, outcome);
+    return result;
+  }
+
+  const orderedIds = orderSubagentsByLoadBalancing(assignedIds, lbConfig, {
+    seed:
+      lbConfig?.enabled && lbConfig.algorithm === "round_robin"
+        ? nextGatewayRoundRobinSeed(callerAgent.id)
+        : undefined,
+  });
+  const candidateIds = orderedIds.filter((id) => !excludedSet.has(id));
+  if (candidateIds.length === 0) {
+    const { result, outcome } = failedLaunch(
+      "refused",
+      errorResult(
+        "No remaining fallback subagents are available on this gateway.",
+      ),
+    );
+    if (outcome) await recordRuntimeLaunch(params.context, outcome);
+    return result;
+  }
+  const remainingFallbacks = fallbackEnabled
+    ? Math.max(0, maxFallbacks - excludedSet.size)
+    : 0;
+  const maxCandidates = Math.min(candidateIds.length, 1 + remainingFallbacks);
+  const activeCandidates = candidateIds.slice(0, maxCandidates);
+
+  let ephemeralCredentialsByAgentId:
+    | Record<string, Record<string, string>>
+    | undefined;
+  if (params.credentialGrantIds && params.credentialGrantIds.length > 0) {
+    let actor: A2AActor;
+    try {
+      actor = requireActor(params.context);
+    } catch (error) {
+      const { result, outcome } = failedLaunch(
+        "refused",
+        error instanceof ApiError
+          ? errorResult(error.message)
+          : catchError(error, "starting the run"),
+      );
+      if (outcome) await recordRuntimeLaunch(params.context, outcome);
+      return result;
+    }
+    const resolved = await ephemeralCredentialGrantManager.resolveGrants({
+      grantIds: params.credentialGrantIds,
+      organizationId: actor.organizationId,
+      userId: actor.id,
+      callerAgentId: callerAgent.id,
+      candidateAgentIds: activeCandidates,
+    });
+    if (!resolved.ok) {
+      const { result, outcome } = failedLaunch(
+        "refused",
+        errorResult(resolved.message),
+      );
+      if (outcome) await recordRuntimeLaunch(params.context, outcome);
+      return result;
+    }
+    ephemeralCredentialsByAgentId = Object.fromEntries(
+      activeCandidates.map((id) => [id, resolved.envForAgent(id)]),
+    );
+  }
+
+  const retries = lbConfig?.enabled ? (lbConfig.retries ?? 0) : 0;
+
+  let lastAttempt: {
+    result: CallToolResult;
+    outcome?: RuntimeLaunchOutcome;
+  } | null = null;
+  for (let index = 0; index < activeCandidates.length; index++) {
+    const candidateId = activeCandidates[index];
+    const fallbackAgentIds = activeCandidates.slice(index + 1);
+    const attempt = await launchDelegatedTask({
+      ...params,
+      agentId: candidateId,
+      credentialGrantIds: params.credentialGrantIds,
+      ephemeralCredentials: ephemeralCredentialsByAgentId?.[candidateId],
+      subagentExecutionPolicy: {
+        retries,
+        fallbackAgentIds,
+        requestedLimits: params.limits,
+        ...(ephemeralCredentialsByAgentId
+          ? { ephemeralCredentialsByAgentId }
+          : {}),
+      },
+    });
+    lastAttempt = attempt;
+    if (
+      attempt.outcome?.kind === "launched" ||
+      (attempt.outcome?.kind === "failed" &&
+        (attempt.outcome.reason === "refused" ||
+          attempt.outcome.reason === "agent_not_found" ||
+          attempt.outcome.reason === "credentials_misconfigured"))
+    ) {
+      await recordRuntimeLaunch(params.context, attempt.outcome);
+      return attempt.result;
+    }
+  }
+  if (lastAttempt?.outcome) {
+    await recordRuntimeLaunch(params.context, lastAttempt.outcome);
+  }
+  return (
+    lastAttempt?.result ??
+    errorResult("No runtime subagents are assigned to this gateway.")
+  );
 }
 
 async function launchDelegatedTask(params: {
@@ -185,6 +450,9 @@ async function launchDelegatedTask(params: {
   message: string;
   attachments?: A2AAttachment[];
   limits?: AgentRunLimitsRequest;
+  credentialGrantIds?: string[];
+  ephemeralCredentials?: Record<string, string>;
+  subagentExecutionPolicy?: SubagentExecutionPolicy;
   context: ArchestraContext;
 }): Promise<{ result: CallToolResult; outcome?: RuntimeLaunchOutcome }> {
   const { agentId, message, context } = params;
@@ -199,6 +467,7 @@ async function launchDelegatedTask(params: {
       ),
     );
   }
+  let restoreConsumedGrants: (() => Promise<void>) | undefined;
   try {
     const actor = requireActor(context);
     const agent = await AgentModel.findById(agentId);
@@ -294,6 +563,7 @@ async function launchDelegatedTask(params: {
       runtime,
       organizationId: actor.organizationId,
       userId: actor.id,
+      ephemeralCredentials: params.ephemeralCredentials,
     });
     if (preflight.missing.length > 0) {
       return credentialsNeededLaunch(agent.id, preflight.missing);
@@ -307,6 +577,23 @@ async function launchDelegatedTask(params: {
             .join(", ")}`,
         ),
       );
+    }
+
+    if (params.credentialGrantIds && params.credentialGrantIds.length > 0) {
+      const consumed = await ephemeralCredentialGrantManager.consumeGrants({
+        grantIds: params.credentialGrantIds,
+        organizationId: actor.organizationId,
+        userId: actor.id,
+        callerAgentId: context.agent.id,
+        candidateAgentIds: [
+          agent.id,
+          ...(params.subagentExecutionPolicy?.fallbackAgentIds ?? []),
+        ],
+      });
+      if (!consumed.ok) {
+        return failedLaunch("refused", errorResult(consumed.message));
+      }
+      restoreConsumedGrants = consumed.restore;
     }
 
     const completionTarget =
@@ -334,6 +621,22 @@ async function launchDelegatedTask(params: {
         completionTarget,
         runtimeLimits: limits,
         ...(crossing ? { runtimeCrossing: crossing } : {}),
+        ...(params.ephemeralCredentials
+          ? { ephemeralCredentials: params.ephemeralCredentials }
+          : {}),
+        ...(restoreConsumedGrants
+          ? { onRuntimeLaunchFailed: restoreConsumedGrants }
+          : {}),
+        ...(params.subagentExecutionPolicy || restoreConsumedGrants
+          ? {
+              subagentExecutionPolicy: {
+                ...params.subagentExecutionPolicy,
+                ...(restoreConsumedGrants
+                  ? { onLaunchFailed: restoreConsumedGrants }
+                  : {}),
+              },
+            }
+          : {}),
       },
     });
 
@@ -372,6 +675,7 @@ async function launchDelegatedTask(params: {
       },
     };
   } catch (error) {
+    await restoreConsumedGrants?.();
     const needed = missingCredentialsFrom(error);
     if (needed) {
       return credentialsNeededLaunch(needed.agentId, needed.missing);
@@ -898,7 +1202,26 @@ const registry = defineArchestraTools([
       "For files sent after startup through transfer_workspace_file, instruct the Agent to prepare and stop before task work. Transfer the files, then continue with steer_agent_run. " +
       "Don't call get_agent_run in the turn that started the run.",
     schema: z.object({
-      agent_id: z.string().describe("The agent to do the work."),
+      agent_id: z
+        .string()
+        .optional()
+        .describe(
+          "The agent to do the work. Omit when calling through an MCP gateway to select an assigned runtime subagent using the gateway's load-balancing policy.",
+        ),
+      exclude_agent_ids: z
+        .array(z.string().uuid())
+        .max(100)
+        .optional()
+        .describe(
+          "Runtime subagents that already failed on a previous attempt for this request, to skip when selecting a fallback on an MCP gateway.",
+        ),
+      credential_grant_ids: z
+        .array(z.string().uuid())
+        .max(10)
+        .optional()
+        .describe(
+          "One-time credential_grant_id handles minted by transfer_credential({ ephemeral: true }). Consumed at launch and bound only to the winning runtime pod.",
+        ),
       message: z
         .string()
         .trim()
@@ -939,6 +1262,8 @@ const registry = defineArchestraTools([
     handler: ({ args, context }) =>
       startDelegatedTask({
         agentId: args.agent_id,
+        excludeAgentIds: args.exclude_agent_ids,
+        credentialGrantIds: args.credential_grant_ids,
         message: args.message,
         attachments: args.attachments,
         ...(args.limits

@@ -7,6 +7,7 @@
  * `test` preserves Vitest's CLI arguments, including watch mode. `ci` runs the
  * finite test suite after static checks; `commit` omits tests.
  */
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,6 +16,7 @@ import {
   heavyLaneActive,
 } from "../vitest.resources.ts";
 import { runWorkspaceChecks, type WorkspaceCheck } from "./check-sequence.ts";
+import { commitScope } from "./commit-scope.ts";
 
 const SCRIPT = fileURLToPath(import.meta.url);
 export function runWorkspaceCommand(input: string[]): number {
@@ -30,6 +32,39 @@ export function runWorkspaceCommand(input: string[]): number {
     "all-build": "build",
     "all-lint": "lint",
   };
+  if (mode === "staged-commit") {
+    // The pre-commit hook: only the packages the staged paths can affect.
+    // `check:commit` (all-commit) keeps checking every package.
+    if (manifest.name !== "archestra-platform") {
+      throw new Error("Run workspace-wide checks from platform/.");
+    }
+    const scope = commitScope({
+      stagedPaths: git([
+        "diff",
+        "--cached",
+        "--name-only",
+        "--no-renames",
+        "-z",
+      ])
+        .split("\0")
+        .filter(Boolean),
+      platformPrefix: git(["rev-parse", "--show-prefix"]).trim(),
+      packages: workspacePackages(),
+    });
+    if (scope.kind === "none") {
+      console.log(
+        "check: no staged change reaches a workspace check; skipping them",
+      );
+      return 0;
+    }
+    return runWorkspaceCommand([
+      "all-commit",
+      ...(scope.kind === "packages"
+        ? scope.names.map((name) => `--filter=...${name}`)
+        : []),
+      ...args,
+    ]);
+  }
   const rootTask = rootTasks[mode];
   if (rootTask) {
     if (manifest.name !== "archestra-platform") {
@@ -132,6 +167,24 @@ export function runWorkspaceCommand(input: string[]): number {
 }
 
 // ===== Internal helpers =====
+
+function git(args: string[]): string {
+  return execFileSync("git", args, { encoding: "utf8" });
+}
+
+/** The workspace packages pnpm-workspace.yaml lists, with their names. */
+function workspacePackages(): { dir: string; name: string }[] {
+  const dirs = [
+    ...readFileSync("pnpm-workspace.yaml", "utf8")
+      .split(/^\S.*$/m)[1]
+      .matchAll(/^\s+-\s+["']?([^"'\s]+)["']?\s*$/gm),
+  ].map((match) => match[1]);
+  return dirs.map((dir) => ({
+    dir,
+    name: JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8"))
+      .name as string,
+  }));
+}
 
 function nodeCheck(
   workspace: string,

@@ -2,15 +2,16 @@
  * The name a pool goes by for a provider's model id. Providers that resell
  * other vendors' models prefix them: Bedrock with a vendor and, for
  * cross-region inference profiles, a region (`us.zai.glm-5.3`), plus a version
- * suffix (`-v1:0`); OpenRouter with a vendor path (`z-ai/glm-4.6`). The name
- * drops those, so one model reads the same whichever key lists it.
+ * suffix (`-v1:0`, or `-1:0` on OpenAI's); OpenRouter with a vendor path
+ * (`z-ai/glm-4.6`). The name drops those, so one model reads the same
+ * whichever key lists it.
  */
 export function poolModelName(provider: string, modelId: string): string {
   if (provider === "bedrock") {
     return modelId
       .replace(BEDROCK_REGION_PREFIX, "")
       .replace(/^[a-z0-9-]+\./, "")
-      .replace(/-v\d+(:\d+)?$/, "");
+      .replace(/-v\d+(:\d+)?$|-\d+:\d+$/, "");
   }
   if (provider === "openrouter") return modelId.replace(/^[^/]+\//, "");
   return modelId;

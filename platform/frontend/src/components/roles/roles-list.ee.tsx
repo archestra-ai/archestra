@@ -7,12 +7,16 @@ import {
 } from "@archestra/shared";
 
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
-import { Download, Eye, Pencil, Plus, Trash2 } from "lucide-react";
+import { Download, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { useSetSettingsAction } from "@/app/settings/layout";
+import {
+  openRowOnPlainClick,
+  RowClickShield,
+} from "@/components/agent-pages/row-click-shield";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   CollectionFilters,
@@ -171,12 +175,14 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
         const description = role.description || predefinedDescription;
         return (
           <div>
-            <Link
-              href={`/settings/roles/${role.id}`}
-              className="font-medium capitalize hover:underline"
-            >
-              {role.name}
-            </Link>
+            <RowClickShield className="contents">
+              <Link
+                href={`/settings/roles/${role.id}`}
+                className="font-medium capitalize"
+              >
+                {role.name}
+              </Link>
+            </RowClickShield>
             {description && (
               <div className="text-xs text-muted-foreground">{description}</div>
             )}
@@ -190,39 +196,22 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
       enableSorting: false,
       cell: ({ row }) => {
         const role = row.original;
-        const view: TableRowAction = {
-          icon: <Eye className="h-4 w-4" />,
-          label: "View role",
-          onClick: () => router.push(`/settings/roles/${role.id}`),
-        };
         const exportRole: TableRowAction = {
           icon: <Download className="h-4 w-4" />,
           label: "Export role",
           onClick: () => downloadRoleAsJson(role),
         };
-
-        if (role.predefined) {
-          return (
-            <TableRowActions
-              actions={[view]}
-              dropdownActions={[exportRole]}
-              itemName={role.name}
-            />
-          );
-        }
-
-        return (
-          <TableRowActions
-            actions={[
+        // The row itself opens the role, so there is no View here; Edit and
+        // Delete exist only for custom roles.
+        const actions: TableRowAction[] = role.predefined
+          ? [exportRole]
+          : [
               {
                 icon: <Pencil className="h-4 w-4" />,
                 label: "Edit role",
                 permissions: { ac: ["update"] },
                 onClick: () => router.push(`/settings/roles/${role.id}/edit`),
               },
-            ]}
-            dropdownActions={[
-              view,
               exportRole,
               {
                 icon: <Trash2 className="h-4 w-4" />,
@@ -231,10 +220,8 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
                 variant: "destructive",
                 onClick: () => setRoleToDelete(role),
               },
-            ]}
-            itemName={role.name}
-          />
-        );
+            ];
+        return <TableRowActions actions={actions} itemName={role.name} />;
       },
     },
   ];
@@ -300,6 +287,11 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
             <DataTable
               columns={columns}
               data={allRoles}
+              onRowClick={(role, event) =>
+                openRowOnPlainClick(event, () =>
+                  router.push(`/settings/roles/${role.id}`),
+                )
+              }
               getRowId={(row) => row.id}
               rowSelection={effectiveRowSelection}
               onRowSelectionChange={onRowSelectionChange}

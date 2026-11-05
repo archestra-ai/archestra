@@ -116,7 +116,8 @@ describe("skillSandboxRuntimeService", () => {
       });
     const first = await newSandbox();
     const second = await newSandbox();
-    enableService();
+    config.skillsSandbox.enabled = true;
+    vi.spyOn(sandboxRuntimeService, "isEnabled", "get").mockReturnValue(true);
     const runtime = vi
       .spyOn(sandboxRuntimeService, "runCommand")
       .mockResolvedValue({

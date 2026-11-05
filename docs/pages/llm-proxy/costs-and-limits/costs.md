@@ -41,9 +41,9 @@ Below the headline cards, use the cost explorer to break down usage by any dimen
 
 1. Choose **Show** to pick the metric: **Billed spend**, **Subscription estimate**, **Requests**, **Tokens**, **Cache reads**, **Cache writes**, **Net cache savings**, **Tool calls**, **App runs**, or **Skill activations**.
 2. Choose **by** to group rows by **Credential** (virtual key, OAuth client, or other sign-in), **Team**, **Agent**, **Model**, **Provider**, **Person**, **App**, **Skill**, **MCP server**, **MCP tool**, or **Label**.
-3. Optionally choose **split by** to break each row down by a second dimension, such as **Team** split by **Model** or **Label** split by **Team**.
+3. Optionally choose **split by** to break each row down by a second dimension. **Team**, **Credential**, **Provider**, and **Model** split by each other, so you can see which providers and models each team or virtual key used and what they cost. The **Team spend by model** and **Credential spend by provider** presets open two of these.
 
-Switch between **Summary** (ranked totals, share of total, and period-over-period trend) and **Pivot** (a heat-shaded matrix with time buckets or split values as columns). Click any row to isolate it in the chart, click **Copy as CSV** to export the current table, or click **Show ... limits** in the toolbar to jump to [Limits](/docs/llm-proxy/costs-and-limits/limits) filtered to the selected scope or row.
+Switch between **Summary** (ranked totals, share of total, and period-over-period trend) and **Pivot** (a heat-shaded matrix with time buckets or split values as columns). Click any row to isolate it in the chart, click **Export CSV** to download the current table, or click **Show ... limits** in the toolbar to jump to [Limits](/docs/llm-proxy/costs-and-limits/limits) filtered to the selected scope or row.
 
 ## Group Proxy Costs by Label
 
@@ -82,5 +82,6 @@ What to know:
 
 ## What to Know
 
-- **Query the same data via API:** the footer of the cost explorer shows the exact [`GET /api/statistics/costs`](/docs/reference/api#/Statistics/getCostStatistics) or [`GET /api/statistics/llm-proxy`](/docs/reference/api#/Statistics/getProxyCostStatistics) request behind the current view so you can copy it for scripts or internal billing pipelines.
+- **A split exports every metric:** the CSV of a split **Summary** has one line per row and split value, with requests, tokens, billed spend, and subscription estimate side by side.
+- **Query the same data via API:** the footer of the cost explorer shows the exact request behind the current view, so you can copy it for scripts or internal billing pipelines. [`GET /api/statistics/llm-usage`](/docs/reference/api#/Statistics/getLlmUsage) groups requests, tokens, and spend by any mix of day, team, credential, provider, and model.
 - **Export to Prometheus and Grafana:** for real-time scraping and alerting, use the LLM cost and token counters in [Prometheus Metrics](/docs/admin/observability/metrics/llm).

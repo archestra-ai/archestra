@@ -2,7 +2,7 @@
 // one result: headline, chart, sortable summary or heat-shaded pivot, CSV,
 // and the REST call that returns the same data.
 
-import { ArrowRight, ClipboardCopy, Info, X } from "lucide-react";
+import { ArrowRight, Download, Info, X } from "lucide-react";
 import Link from "next/link";
 import {
   type SetStateAction,
@@ -49,7 +49,8 @@ import {
 import {
   ApiLine,
   ChartKindToggle,
-  copyCsv,
+  csvFilename,
+  exportCsv,
   PivotChart,
   PivotTable,
   QueryChip,
@@ -95,10 +96,12 @@ export default function CostExplorer() {
     timeframe,
   });
   const { focus, view, pivotCols } = explorer;
-  // A shared link may name a grouping or model drill-down a team admin
-  // cannot read; fall back to spend by model.
-  const query =
-    teamScoped && (!canGroup(explorer.query.group) || explorer.query.model)
+  // A shared link may name a grouping, breakdown or model drill-down a team
+  // admin cannot read (breakdowns come from the organization-wide usage
+  // endpoint); fall back to spend by model, or drop the breakdown.
+  const query = !teamScoped
+    ? explorer.query
+    : !canGroup(explorer.query.group) || explorer.query.model
       ? {
           ...explorer.query,
           metric: supports("model", explorer.query.metric)
@@ -108,7 +111,9 @@ export default function CostExplorer() {
           split: "none" as const,
           model: undefined,
         }
-      : explorer.query;
+      : explorer.query.split !== "none"
+        ? { ...explorer.query, split: "none" as const }
+        : explorer.query;
   const setQ = useCallback(
     (value: SetStateAction<PivotQuery>) => setExplorer("query", value),
     [setExplorer],
@@ -216,9 +221,9 @@ export default function CostExplorer() {
     q.group === "label"
       ? { label: q.labelKey ?? "Label", plural: "label values" }
       : DIMS[q.group];
-  const splits = (q.model ? [] : splitOptions(q.metric, q.group)).filter(
-    (d) => d !== "method" && canGroup(d) && d !== q.group,
-  );
+  const splits = (
+    q.model || teamScoped ? [] : splitOptions(q.metric, q.group)
+  ).filter((d) => d !== "method" && canGroup(d) && d !== q.group);
   const hasSplit = q.split !== "none";
   const activeView = SAVED_VIEWS.find(
     (v) =>
@@ -674,17 +679,29 @@ export default function CostExplorer() {
               className="ml-auto"
               disabled={cube.rows.length === 0}
               onClick={() =>
-                copyCsv({
+                exportCsv({
                   cube,
                   metric: q.metric,
                   dimLabel: dim.label,
                   view,
                   bySplit: pivotBySplit,
+                  filename: csvFilename({
+                    scope: "costs",
+                    parts: [
+                      view === "summary" && cube.exportTable
+                        ? null
+                        : metric.label,
+                      `by ${dim.label}`,
+                      hasSplit ? `and ${DIMS[q.split as DimId].label}` : null,
+                      q.model,
+                    ],
+                    timeframe: String(timeframe),
+                  }),
                 })
               }
             >
-              <ClipboardCopy />
-              Copy as CSV
+              <Download />
+              <span>Export CSV</span>
             </Button>
           </div>
           <div className="border-t">

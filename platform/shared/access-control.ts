@@ -1498,6 +1498,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetMcpToolCallUsage]: {
     llmCost: ["read"],
   },
+  // Same organization-wide totals as GetTeamStatistics and
+  // GetProxyCostStatistics, cut finer; it names no person.
+  [RouteId.GetLlmUsage]: {
+    llmCost: ["read"],
+  },
   [RouteId.GetAppUsage]: {
     llmCost: ["read"],
     app: ["read"],

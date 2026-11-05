@@ -9,6 +9,7 @@ import { useEffect, useMemo } from "react";
 import { useSetCostsAction } from "@/app/llm/(costs)/layout";
 import { useStatisticsTimeRange } from "@/components/time-range-picker/statistics-time-range";
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
+import { statisticsRefresh } from "@/lib/statistics.query";
 import { throwOnApiError } from "@/lib/utils/api";
 
 export type ToolCallUsageDimension = NonNullable<
@@ -19,6 +20,9 @@ export type AppUsageDimension = NonNullable<
 >[number];
 export type SkillUsageDimension = NonNullable<
   NonNullable<archestraApiTypes.GetSkillUsageData["query"]>["groupBy"]
+>[number];
+export type LlmUsageDimension = NonNullable<
+  NonNullable<archestraApiTypes.GetLlmUsageData["query"]>["groupBy"]
 >[number];
 type UsageFilters = {
   timeframe: StatisticsTimeFrame;
@@ -65,6 +69,31 @@ export function useToolCallUsage({
       collectPages(async (offset) => {
         const { data, error } = await archestraApiSdk.getMcpToolCallUsage({
           query: { ...filters, groupBy, mcpServerName, limit: 100, offset },
+          querySerializer,
+        });
+        throwOnApiError(error, { toastOnError: false });
+        if (!data) throw new Error("No usage response received");
+        return data;
+      }),
+    enabled,
+  });
+}
+
+export function useLlmUsage({
+  timeframe,
+  groupBy,
+  enabled = true,
+}: {
+  timeframe: StatisticsTimeFrame;
+  groupBy: LlmUsageDimension[];
+  enabled?: boolean;
+}) {
+  return useQuery({
+    queryKey: ["usage-statistics", "getLlmUsage", groupBy, timeframe],
+    queryFn: () =>
+      collectPages(async (offset) => {
+        const { data, error } = await archestraApiSdk.getLlmUsage({
+          query: { timeframe, groupBy, limit: 100, offset },
           querySerializer,
         });
         throwOnApiError(error, { toastOnError: false });
@@ -248,8 +277,7 @@ export function useCostStatistics({
       return data;
     },
     enabled,
-    staleTime: 30_000,
-    refetchInterval: 30_000,
+    ...statisticsRefresh(timeframe),
   });
 }
 

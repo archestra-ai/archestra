@@ -74,6 +74,11 @@ type HitlInspectableReview = {
   remedyArguments?: Record<string, unknown>;
   text: string;
   summary?: string;
+  /**
+   * The reviewed tool's own definition text, shown when the call carries no
+   * description of its own.
+   */
+  toolDescription?: string;
 };
 
 /** Binds an inspection state and its issued cards to the exact staged payload. */
@@ -88,6 +93,11 @@ export function hitlInspectionDigest(review: HitlInspectableReview): string {
         review.remedyArguments ?? null,
         review.text,
         review.summary ?? null,
+        // Absent for reviews staged before tool descriptions were shown, so
+        // their cards keep resolving.
+        ...(review.toolDescription === undefined
+          ? []
+          : [review.toolDescription]),
       ]),
     )
     .digest("base64url");
@@ -137,12 +147,14 @@ export function hitlReviewCard(params: {
     // Even an unusually large tool label must not turn inspection into a
     // proxy error or make an incomplete card approvable.
     approve = false;
-    preview = paneText(
-      wrap(
-        "This call does not fit this card. Inspect shows it in full.",
-        "",
-      ).join("\n"),
-    );
+    const notice = wrap(
+      "This call does not fit this card. Inspect shows it in full.",
+      "",
+    ).join("\n");
+    // What the call does stays above the notice when it fits.
+    const lead = layout.lead.flatMap((entry) => entry.full).join("\n");
+    const withLead = paneText(lead ? `${lead}\n\n${notice}` : notice);
+    preview = fitsPane(withLead) ? withLead : paneText(notice);
   }
   if (inspected && !approve) {
     approve = true;
@@ -178,7 +190,18 @@ export function renderHitlReviewText(staged: HitlInspectableReview): string {
     ].join("\n\n"),
   ];
   if (review.tool) {
-    sections.push(["### Tool", chatText(review.tool)].join("\n\n"));
+    sections.push(
+      [
+        "### Tool",
+        chatText(review.tool),
+        ...(review.toolDescription
+          ? [
+              "Tool description, from the tool's definition:",
+              chatText(review.toolDescription),
+            ]
+          : []),
+      ].join("\n\n"),
+    );
   }
   const scope = policyScope(review.text);
   if (scope.parsed) {
@@ -222,6 +245,18 @@ export function renderHitlReviewText(staged: HitlInspectableReview): string {
   return sections.join("\n\n");
 }
 
+/**
+ * The tool's description as one line for a card without Inspect:
+ * `Tool description: <first sentence>`, or nothing when that sentence is too
+ * long to show in full.
+ */
+export function toolDescriptionLine(text: string): string | undefined {
+  const sentence = toolDescriptionSentence(text);
+  if (!sentence || [...sentence].length > TOOL_DESCRIPTION_LIMIT)
+    return undefined;
+  return `Tool description: ${safeText(sentence)}`;
+}
+
 const ALLOW_LABEL = "Allow";
 const DENY_LABEL = "Deny";
 
@@ -235,6 +270,8 @@ const QUESTION_LIMIT = 120;
  * neither wraps nor fits longer lines.
  */
 const PANE_WIDTH = 34;
+/** A longer tool description sentence shows as a pointer to Inspect. */
+const TOOL_DESCRIPTION_LIMIT = 240;
 /** Values longer than this many lines are the first to give way to a pointer. */
 const LONG_VALUE_LINES = 8;
 /** A line may also break after one of these; the character stays on the line. */
@@ -261,8 +298,9 @@ type CardLayout = {
   /** The tool, only when the question could not hold its name. */
   title: string[];
   /**
-   * A command's description, drawn above the values. It gives way before
-   * them, so the command is never the one shortened to keep it.
+   * What the call does, drawn above the values: a command's description, or
+   * the tool's own description when the call has none. The values give way
+   * first; the lead is shortened only when it cannot fit the pane by itself.
    */
   lead: CardEntry[];
   values: CardEntry[];
@@ -368,6 +406,9 @@ function cardLayout(
     if (values.length === 0)
       values = [{ full: ["No arguments."], use: "full" }];
   }
+  // A call that carries no description of its own shows its tool's.
+  if (lead.length === 0 && review.toolDescription?.trim())
+    lead = [toolDescriptionEntry(review.toolDescription)];
   return {
     title,
     lead,
@@ -435,13 +476,41 @@ function summaryEntry(summary: string): CardEntry {
 }
 
 /**
+ * The first sentence of a tool's definition text, whitespace collapsed. A
+ * common abbreviation such as "e.g." does not end it.
+ */
+function toolDescriptionSentence(text: string): string {
+  const collapsed = text.replace(/\s+/g, " ").trim();
+  return (
+    /^.+?(?<!\b(?:e\.g|i\.e|etc|vs|cf))[.!?](?= |$)/i.exec(collapsed)?.[0] ??
+    collapsed
+  );
+}
+
+/** `Tool description: <sentence>`, or a pointer when the sentence is long. */
+function toolDescriptionEntry(description: string): CardEntry {
+  const sentence = toolDescriptionSentence(description);
+  const pointer = wrap(
+    `Tool description: (${count(sentence)} characters, see Inspect)`,
+  );
+  if ([...sentence].length > TOOL_DESCRIPTION_LIMIT)
+    return { full: pointer, use: "full" };
+  return {
+    full: wrap(`Tool description: ${safeText(sentence)}`),
+    pointer,
+    use: "full",
+  };
+}
+
+/**
  * Gives values way to pointers until the Allow preview fits: the summary
- * first, then the lead whatever its length, then long values from the end,
- * then any value a pointer shortens. The summary and the lead come back once
- * the values have made room. Returns false when even that leaves no room for
- * the scope; entries are then hidden, the lead first and the values from the
- * end, and counted where they were. It sets `use` on the layout's own
- * entries, so a layout is fitted once and then rendered.
+ * first, then long values from the end, then any value a pointer shortens.
+ * The summary comes back once the values have made room. The lead keeps its
+ * full text unless it cannot fit the pane by itself. Returns false when even
+ * that leaves no room for the scope; the values are then hidden from the end
+ * and counted where they were, and the lead only as the last resort. It sets
+ * `use` on the layout's own entries, so a layout is fitted once and then
+ * rendered.
  */
 function fitLayout(layout: CardLayout): boolean {
   const fits = (withScope: boolean) =>
@@ -449,6 +518,16 @@ function fitLayout(layout: CardLayout): boolean {
   const shorter = (entry: CardEntry) =>
     (entry.pointer ?? entry.full).join("\n").length <
     entry.full.join("\n").length;
+  const leadAlone = {
+    title: [],
+    lead: layout.lead,
+    values: [],
+    change: [],
+    scope: [],
+  };
+  if (paneText(render(leadAlone, false)).length > PREVIEW_LIMIT)
+    for (const entry of layout.lead)
+      if (entry.pointer && shorter(entry)) entry.use = "pointer";
   if (!fits(true) && layout.summary?.pointer) layout.summary.use = "pointer";
   const give = (
     entries: readonly CardEntry[],
@@ -461,22 +540,22 @@ function fitLayout(layout: CardLayout): boolean {
     }
   };
   const values = [...layout.values, ...layout.change].reverse();
-  give(layout.lead, shorter);
   give(values, (entry) => entry.full.length > LONG_VALUE_LINES);
   give(values, shorter);
-  // A short summary or lead comes back once the values have made room.
-  for (const entry of [
-    ...(layout.summary ? [layout.summary] : []),
-    ...layout.lead,
-  ]) {
-    if (entry.use !== "pointer") continue;
-    entry.use = "full";
-    if (!fits(true)) entry.use = "pointer";
+  // A short summary comes back once the values have made room.
+  if (layout.summary?.use === "pointer") {
+    layout.summary.use = "full";
+    if (!fits(true)) layout.summary.use = "pointer";
   }
   if (fits(true)) return true;
-  for (const entry of [...layout.lead, ...[...layout.values].reverse()]) {
+  for (const entry of [...layout.values].reverse()) {
     if (fits(false)) break;
     entry.use = "hidden";
+  }
+  for (const entry of layout.lead) {
+    if (fits(false)) break;
+    if (entry.pointer && shorter(entry)) entry.use = "pointer";
+    if (!fits(false)) entry.use = "hidden";
   }
   return false;
 }

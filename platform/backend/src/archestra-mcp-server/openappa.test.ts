@@ -14,6 +14,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
+import ToolModel from "@/models/tool";
 import { openappaActor, scopedSessionId } from "@/openappa/actor";
 import { rememberUnattendedSession } from "@/openappa/break-the-glass";
 import { currentTrajectory } from "@/openappa/current-trajectory";
@@ -2004,6 +2005,112 @@ describe("OpenAPPA tool execution", () => {
     ).toMatchObject({
       question: "Approve this action?",
       remedy_offer_ids: ["offer-hitl"],
+    });
+  });
+
+  describe("the staged review carries the tool's own description", () => {
+    const stage = async (review: { tool: string; arguments: string }) => {
+      vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+        offer_id: "offer-hitl",
+        text: "Approve this action?",
+        session_id: "session-1",
+        ...review,
+      });
+      const result = await executeArchestraTool(
+        toolFullName,
+        { offer_id: "offer-hitl", trajectory: trajectory(), plan: "Review" },
+        {
+          ...mockContext,
+          currentToolCallId: "described-call",
+          mrtr: { enabled: true, clientCapabilities: { elicitation: {} } },
+        },
+      );
+      expect(result.structuredContent).toMatchObject({
+        outcome: "review_required",
+      });
+      return hitlReview.getHitlReview({
+        session: { organization_id: orgId, session_id: "session-1" },
+        offerId: "offer-hitl",
+      });
+    };
+
+    test("a built-in tool's description from the registry", async () => {
+      const staged = await stage({
+        tool: "archestra__todo_write",
+        arguments: VALID_TODO,
+      });
+      const definition = getAllArchestraMcpTools().find((tool) =>
+        tool.name.endsWith("__todo_write"),
+      );
+      expect(definition?.description).toBeTruthy();
+      expect(staged?.toolDescription).toBe(definition?.description?.trim());
+    });
+
+    test("an assigned gateway tool's stored description", async ({
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const tool = await makeTool({
+        name: "github__create_issue",
+        description: "Create an issue in a repository.",
+      });
+      await makeAgentTool(mockContext.agent.id, tool.id);
+      const staged = await stage({
+        tool: "mcp/github/create_issue",
+        arguments: JSON.stringify({ title: "Flaky test" }),
+      });
+      expect(staged?.toolDescription).toBe("Create an issue in a repository.");
+    });
+
+    test("also for a call with a description argument, which the card weighs", async ({
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const tool = await makeTool({
+        name: "github__create_issue",
+        description: "Create an issue in a repository.",
+      });
+      await makeAgentTool(mockContext.agent.id, tool.id);
+      // Here `description` is the issue body, not what the call does.
+      const staged = await stage({
+        tool: "mcp/github/create_issue",
+        arguments: JSON.stringify({ title: "T", description: "Body" }),
+      });
+      expect(staged?.toolDescription).toBe("Create an issue in a repository.");
+    });
+
+    test("none for the run_tool wrapper", async () => {
+      const staged = await stage({
+        tool: "archestra__run_tool",
+        arguments: JSON.stringify({
+          tool_name: "archestra__todo_write",
+          tool_args: {},
+        }),
+      });
+      expect(staged).toBeDefined();
+      expect(staged).not.toHaveProperty("toolDescription");
+    });
+
+    test("none for a client's own tool", async () => {
+      const staged = await stage({
+        tool: "Bash",
+        arguments: JSON.stringify({ command: "ls" }),
+      });
+      expect(staged).toBeDefined();
+      expect(staged).not.toHaveProperty("toolDescription");
+    });
+
+    test("a failed lookup stages the review without it", async () => {
+      const lookup = vi
+        .spyOn(ToolModel, "findByNameForAgent")
+        .mockRejectedValue(new Error("database unavailable"));
+      const staged = await stage({
+        tool: "mcp/github/create_issue",
+        arguments: JSON.stringify({ title: "Flaky test" }),
+      });
+      expect(lookup).toHaveBeenCalled();
+      expect(staged).toBeDefined();
+      expect(staged).not.toHaveProperty("toolDescription");
     });
   });
 

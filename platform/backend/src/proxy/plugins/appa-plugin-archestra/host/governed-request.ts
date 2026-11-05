@@ -1,6 +1,11 @@
 import logger from "@/logging";
 import { prepareAppaRequest } from "@/openappa/request";
 import {
+  refuseSoftBlock,
+  softBlocksAllowed,
+  waiveSoftBlock,
+} from "@/openappa/soft-block";
+import {
   echoedCallsMessage,
   GovernedThread,
   readThreadRequest,
@@ -35,7 +40,43 @@ import { ApiError } from "@/types";
  * thread continue the proxy cannot resume makes the client replay the
  * whole thread instead.
  */
-export async function prepareOpenappaRequest(params: {
+export async function prepareOpenappaRequest(
+  params: Parameters<typeof governedRequest>[0],
+): Promise<PreparedOpenappaRequest> {
+  if (!(await softBlocksAllowed()) || params.admission.kind !== "governed")
+    return governedRequest(params);
+  const original = structuredClone(params.body);
+  try {
+    const result = await governedRequest(params);
+    if (result.kind === "replay")
+      await refuseSoftBlock("OpenAPPA could not continue the provider thread");
+    return result;
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !(await waiveSoftBlock(
+        params.admission.session,
+        "request_preparation",
+        error.message,
+      ))
+    )
+      throw error;
+    if (
+      params.body &&
+      typeof params.body === "object" &&
+      original &&
+      typeof original === "object"
+    ) {
+      for (const key of Object.keys(params.body))
+        delete (params.body as Record<string, unknown>)[key];
+      Object.assign(params.body, original);
+    }
+    params.context.resources.delete(APPA_PLUGIN_TRUSTED_CONTEXT);
+    return { kind: "prepared" };
+  }
+}
+
+async function governedRequest(params: {
   admission: Exclude<OpenappaAdmission, { kind: "ungoverned" }>;
   context: LlmProxyRequestContext;
   body: unknown;

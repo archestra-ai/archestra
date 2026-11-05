@@ -416,6 +416,15 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
    */
   readonly clientResponse?: { id: string; model: string };
 
+  /**
+   * The Chat Completions `finish_reason` this turn ends with, for an adapter
+   * that translates another provider's stream into Chat Completions. A wrapper
+   * that serves another wire reads it to tell a cut-off or filtered turn from a
+   * finished one. Adapters whose `state.stopReason` already is a Chat
+   * Completions finish reason leave it unset.
+   */
+  getOpenAiFinishReason?(): string;
+
   // ---------------------------------------------------------------------------
   // Chunk Processing
   // ---------------------------------------------------------------------------

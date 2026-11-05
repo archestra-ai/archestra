@@ -313,8 +313,18 @@ test("a setting an environment variable sets is shown, locked, with how to unloc
   expect(locked).toHaveTextContent("Block until approved");
   expect(locked).toBeDisabled();
   expect(locked).toHaveAccessibleDescription(
-    "Unset ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE to edit this setting.",
+    "Unset the environment variable to edit this setting.",
   );
+  expect(
+    screen.getByText(
+      (_, element) =>
+        element?.tagName === "CODE" &&
+        element.textContent === "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE=block",
+    ),
+  ).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: "Human approval environment values" }),
+  ).toBeEnabled();
   // The settings no variable sets stay editable.
   expect(
     screen.getByRole("combobox", { name: "Other blocked calls" }),

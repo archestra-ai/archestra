@@ -657,7 +657,7 @@ for (const wire of ["openai", "anthropic"] as const) {
       expect(response.body).toContain(
         wire === "openai"
           ? '"finish_reason":"content_filter"'
-          : '"stop_reason":"end_turn"',
+          : '"stop_reason":"refusal"',
       );
       expect(hits).toBe(1);
       const rows = await db

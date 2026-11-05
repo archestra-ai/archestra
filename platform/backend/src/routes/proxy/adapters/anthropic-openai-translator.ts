@@ -411,8 +411,10 @@ function buildOpenAiUsage(params: {
 export function mapStopReason(
   reason: AnthropicResponse["stop_reason"],
 ): "stop" | "length" | "tool_calls" | "content_filter" {
-  if (reason === "max_tokens") return "length";
+  if (reason === "max_tokens" || reason === "model_context_window_exceeded")
+    return "length";
   if (reason === "tool_use") return "tool_calls";
+  if (reason === "refusal") return "content_filter";
   if (reason === "stop_sequence" || reason === "end_turn") return "stop";
   return "stop";
 }

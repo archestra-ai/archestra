@@ -2,7 +2,7 @@
 
 import { E2eTestId, getRoleDisplayName } from "@archestra/shared";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
 import {
   Copy,
   Eye,

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   DEFAULT_APP_NAME,
   followAgentCatalogImage,
+  nextLargerAgentRuntimeTier,
   toPlaceholderTitle,
 } from "@archestra/shared";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
@@ -19,6 +20,7 @@ import {
   AgentModel,
   AgentRunInputModel,
   AgentRunModel,
+  AgentTeamModel,
   AgentWorkspaceModel,
   EnvironmentModel,
   LimitModel,
@@ -29,11 +31,14 @@ import {
   reportAgentRuntimeStarted,
   reportAgentRuntimeTerminated,
 } from "@/observability/metrics/agent-runtime";
+import { updateActiveChatSpanAgent } from "@/observability/tracing/chat";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
 import type {
   Agent,
   AgentRunCompletionTarget,
+  AgentRunLimitsRequest,
   AgentRunRecord,
+  AgentType,
   ResolvedAgentRuntime,
 } from "@/types";
 import { type AgentRunLimits, ApiError } from "@/types";
@@ -42,8 +47,10 @@ import {
   prepareAgentRuntimeBackendDriver,
   resolveAgentRuntimeBackendDriver,
 } from "./backends";
+import { preflightAgentRuntimeCredentials } from "./credentials";
 import { buildAgentRunLaunchSpec } from "./launch-spec";
 import { AgentRuntimeOutputCapture } from "./output-capture";
+import { canLaunchAgentRuntimeModel } from "./preflight";
 import {
   agentRunFailure,
   classifyAgentRunFailure,
@@ -61,12 +68,34 @@ import {
   stampRuntimeBinding,
 } from "./runtime-identity";
 import {
+  agentRuntimeAllowedTiers,
   organizationAgentRuntimeTiers,
   resolveAgentRunLimits,
   resolveRunWorkspaceGiB,
+  tierWorkspaceGiB,
 } from "./runtime-tiers";
+import { subagentLoadBalancer } from "./subagent-load-balancer";
 import { generateAgentRunTitle } from "./title";
 import { agentRunTranscriptStore } from "./transcript-store";
+
+export interface SubagentExecutionPolicy {
+  /** Calling gateway or orchestrator agent ID for distributed load-balancer state updates. */
+  callerAgentId?: string;
+  /** Assigned runtime subagent pool on the caller for distributed queue reconciliation. */
+  assignedAgentIds?: string[];
+  /** Dispatch counter value when this run was planned, used to detect intervening claims. */
+  plannedDispatchCount?: number | null;
+  /** Number of automatic retries on the same subagent for retriable failures (0–3). */
+  retries?: number;
+  /** Ordered fallback runtime subagent IDs to try if the current subagent fails. */
+  fallbackAgentIds?: string[];
+  /** Original requested limits from the caller, used when resolving limits on a fallback subagent. */
+  requestedLimits?: AgentRunLimitsRequest;
+  /** Ephemeral credentials scoped per subagent ID. */
+  ephemeralCredentialsByAgentId?: Record<string, Record<string, string>>;
+  /** Called if all launch attempts fail without starting a runtime session. */
+  onLaunchFailed?: () => Promise<void>;
+}
 
 /**
  * Start one delegated A2A task through its configured run backend.
@@ -99,6 +128,12 @@ async function startAgentRunSession(params: {
   titleUserId?: string;
   resumeFromTaskId?: string;
   runtimeCrossing?: RuntimeCrossing;
+  ephemeralCredentials?: Record<string, string>;
+  settleTaskOnFailure?: boolean;
+  shouldSettleLaunchFailure?: (failure: unknown) => Promise<boolean> | boolean;
+  replacePriorAttempt?: boolean;
+  boundContract?: { resolved: boolean; contract?: string };
+  abortSignal?: AbortSignal;
 }): Promise<AgentRunRecord> {
   const backend = await prepareAgentRuntimeBackendDriver(
     params.runtime.backend,
@@ -151,17 +186,25 @@ async function startAgentRunSession(params: {
 
   let task = params.task;
   if (params.runtimeCrossing && !params.resumeFromTaskId) {
-    const agent = await AgentModel.findById(params.agentId);
-    if (!agent) throw new ApiError(404, "Agent not found");
-    const contract = await bindRuntimeChild({
-      crossing: params.runtimeCrossing,
-      organizationId: params.organizationId,
-      workspaceId: params.taskId,
-      workloadName: constructStableRunName(agent.name, params.taskId),
-      actorKind: params.actor.kind,
-      actorId: params.actor.id,
-    });
-    task = promptWithContract(task, contract);
+    if (params.boundContract?.resolved) {
+      task = promptWithContract(task, params.boundContract.contract);
+    } else {
+      const agent = await AgentModel.findById(params.agentId);
+      if (!agent) throw new ApiError(404, "Agent not found");
+      const contract = await bindRuntimeChild({
+        crossing: params.runtimeCrossing,
+        organizationId: params.organizationId,
+        workspaceId: params.taskId,
+        workloadName: constructStableRunName(agent.name, params.taskId),
+        actorKind: params.actor.kind,
+        actorId: params.actor.id,
+      });
+      if (params.boundContract) {
+        params.boundContract.resolved = true;
+        params.boundContract.contract = contract;
+      }
+      task = promptWithContract(task, contract);
+    }
   }
 
   // A continuation keeps the first turn's tier and limits; its workspace
@@ -197,6 +240,7 @@ async function startAgentRunSession(params: {
       task,
       runMode: params.runMode,
       inputFiles,
+      ephemeralCredentials: params.ephemeralCredentials,
       ...(workspace
         ? {
             workspaceId: workspace.id,
@@ -223,9 +267,16 @@ async function startAgentRunSession(params: {
   // The image sends this value as X-Archestra-Session-Id; it is the key of
   // the run's LLM session (see agentRunLlmSessionId).
   spec.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID = spec.frozenName;
+  if (params.replacePriorAttempt) {
+    spec.replacePriorAttempt = true;
+  }
 
   // The row lands before the workload: it is what teardown reads to find the
   // objects, so a crash between the two must leave a record, not an orphan.
+  // On a retry or failover (`replacePriorAttempt: true`), `AgentRunModel.create`
+  // deletes the previous attempt's `agent_workspaces` and `agent_runs` rows in
+  // the same transaction that inserts `session`, and `AgentWorkspaceModel.create`
+  // below inserts the next workspace only after that transaction commits.
   const resumeWithoutPrompt = Boolean(priorRun && !params.task?.trim());
   const placeholderTitle =
     params.title ??
@@ -250,6 +301,7 @@ async function startAgentRunSession(params: {
     virtualApiKeyId,
     gatewayTokenId,
     completionTarget: params.completionTarget,
+    replacePriorAttempt: params.replacePriorAttempt,
   });
 
   if (params.title === undefined && !resumeWithoutPrompt) {
@@ -324,6 +376,9 @@ async function startAgentRunSession(params: {
       });
       await backend.continueRun({ session, spec });
     } else {
+      // Inserted after AgentRunModel.create commits so any prior attempt's
+      // agent_workspaces row (whether from launch failure or post-launch
+      // waitForCompletion failure) was already removed in that transaction.
       createdWorkspace = await AgentWorkspaceModel.create({
         // The initial public run URL is the permanent session URL.
         id: params.taskId,
@@ -355,13 +410,18 @@ async function startAgentRunSession(params: {
     }
   } catch (error) {
     const launchFailure = describeLaunchFailure(error);
+    const shouldSettle = params.shouldSettleLaunchFailure
+      ? await params.shouldSettleLaunchFailure(launchFailure)
+      : params.settleTaskOnFailure !== false && !params.abortSignal?.aborted;
     // Settle the task before cleanup is visible: the reconciler cancels any
     // unfinished task whose workspace is being deleted, which would otherwise
     // replace this launch error with a generic reason.
-    await recordLaunchFailure({
-      taskId: params.taskId,
-      failure: launchFailure,
-    });
+    if (shouldSettle) {
+      await recordLaunchFailure({
+        taskId: params.taskId,
+        failure: launchFailure,
+      });
+    }
     // A publication can succeed before its exec connection fails. Keep the
     // claim until stopping that possibly-running turn has been acknowledged.
     try {
@@ -376,7 +436,8 @@ async function startAgentRunSession(params: {
             taskId: session.taskId,
             suspended,
           });
-      } else {
+        await AgentRunModel.close({ id: session.id });
+      } else if (shouldSettle || params.abortSignal?.aborted) {
         if (createdWorkspace)
           await AgentWorkspaceModel.transition({
             id: createdWorkspace.id,
@@ -390,8 +451,23 @@ async function startAgentRunSession(params: {
             from: "deleting",
             to: "deleted",
           });
+        await AgentRunModel.close({ id: session.id });
+      } else {
+        // A retry or fallback will continue using this taskId. Tear down the
+        // failed attempt and mark its workspace deleted without entering
+        // "deleting" while the task is still working (so the reconciler never
+        // cancels the task), and close the run row rather than deleting it so
+        // the orphan reaper still sees an agent_runs row until the next
+        // attempt's AgentRunModel.create transaction replaces it.
+        await backend.teardown(session);
+        if (createdWorkspace)
+          await AgentWorkspaceModel.transition({
+            id: createdWorkspace.id,
+            from: "active",
+            to: "deleted",
+          });
+        await AgentRunModel.close({ id: session.id });
       }
-      await AgentRunModel.close({ id: session.id });
     } catch (cleanupError) {
       // Leave the session open for terminal reconciliation, including failed
       // stop/revoke attempts. Never release another task's workspace claim.
@@ -436,6 +512,39 @@ export function resolveAgentRuntime(
 }
 
 /**
+ * Tear down a failed attempt's workload and close its run/workspace rows while
+ * keeping the closed `agent_runs` row in place until the next attempt's
+ * `AgentRunModel.create` transaction atomically replaces it (so the orphan
+ * reaper never observes a working task without an `agent_runs` row).
+ */
+async function cleanupFailedAttemptForRetry(taskId: string): Promise<void> {
+  const existingRun = await AgentRunModel.findByTaskId(taskId);
+  if (!existingRun) return;
+  const workspace = await AgentWorkspaceModel.findById(taskId);
+  if (!existingRun.endedAt || (workspace && workspace.state !== "deleted")) {
+    try {
+      const backend = resolveAgentRuntimeBackendDriver(existingRun.backend);
+      await backend.teardown(existingRun);
+    } catch (error) {
+      logger.warn(
+        { error, taskId, sessionId: existingRun.id },
+        "Could not tear down failed Agent Runtime attempt before retry",
+      );
+    }
+  }
+  if (workspace && workspace.state !== "deleted") {
+    await AgentWorkspaceModel.transition({
+      id: workspace.id,
+      from: workspace.state,
+      to: "deleted",
+    });
+  }
+  if (!existingRun.endedAt) {
+    await AgentRunModel.close({ id: existingRun.id });
+  }
+}
+
+/**
  * Run one delegated A2A task to completion, shaped as the lifecycle's
  * `executeRun`.
  *
@@ -463,26 +572,290 @@ export async function runTaskInAgentRuntime(params: {
   titleUserId?: string;
   resumeFromTaskId?: string;
   runtimeCrossing?: RuntimeCrossing;
+  ephemeralCredentials?: Record<string, string>;
+  subagentExecutionPolicy?: SubagentExecutionPolicy;
+  onLaunchFailed?: () => Promise<void>;
   onTextDelta?: (delta: string) => void;
   abortSignal?: AbortSignal;
 }): Promise<A2AExecuteResult> {
-  const launchedAt = Date.now();
-  try {
-    const session = await startAgentRunSession(params);
-    return await followAgentRun({
-      session,
-      launchedAt,
-      onTextDelta: params.onTextDelta,
-      abortSignal: params.abortSignal,
+  const notifyLaunchFailed = async () => {
+    const callback =
+      params.onLaunchFailed ?? params.subagentExecutionPolicy?.onLaunchFailed;
+    await callback?.().catch((error) => {
+      logger.warn(
+        { error, taskId: params.taskId },
+        "Failed to run onLaunchFailed callback after Agent Runtime launch failure",
+      );
     });
-  } catch (error) {
-    await recordRunFailure({
-      taskId: params.taskId,
-      failure: error,
-      abortSignal: params.abortSignal,
-    });
-    throw error;
+  };
+  if (params.resumeFromTaskId) {
+    const launchedAt = Date.now();
+    let sessionLaunched = false;
+    try {
+      const session = await startAgentRunSession(params);
+      sessionLaunched = true;
+      return await followAgentRun({
+        session,
+        launchedAt,
+        onTextDelta: params.onTextDelta,
+        abortSignal: params.abortSignal,
+      });
+    } catch (error) {
+      if (!sessionLaunched) {
+        await notifyLaunchFailed();
+      }
+      await recordRunFailure({
+        taskId: params.taskId,
+        failure: error,
+        abortSignal: params.abortSignal,
+      });
+      throw error;
+    }
   }
+
+  const policy = params.subagentExecutionPolicy;
+  const maxRetries = Math.max(0, Math.min(3, policy?.retries ?? 0));
+  const maxOomEscalations = 2;
+  const fallbackAgentIds = params.runtimeCrossing
+    ? []
+    : (policy?.fallbackAgentIds ?? []);
+  const boundContract: { resolved: boolean; contract?: string } = {
+    resolved: false,
+  };
+
+  type CandidateConfig = {
+    agentId: string;
+    agentName?: string;
+    agentType?: AgentType;
+    labels?: { key: string; value: string }[];
+    runtime: ResolvedAgentRuntime;
+    limits: AgentRunLimits | null | undefined;
+    modelId: string | null;
+    llmApiKeyId: string | null;
+  };
+  let remainingFallbackIds = [...fallbackAgentIds];
+  let currentPlannedDispatchCount = policy?.plannedDispatchCount ?? null;
+  let prefetchedFallback: CandidateConfig | null = null;
+
+  const peekNextFallbackCandidate =
+    async (): Promise<CandidateConfig | null> => {
+      if (prefetchedFallback) return prefetchedFallback;
+      while (remainingFallbackIds.length > 0) {
+        const claimed = await subagentLoadBalancer.claimNextFallbackCandidate({
+          callerAgentId: policy?.callerAgentId,
+          remainingCandidateIds: remainingFallbackIds,
+          assignedAgentIds: policy?.assignedAgentIds,
+          plannedDispatchCount: currentPlannedDispatchCount,
+        });
+        remainingFallbackIds = claimed.remainingCandidateIds;
+        currentPlannedDispatchCount = claimed.dispatchCount;
+        const fallbackAgentId = claimed.claimedAgentId;
+        if (!fallbackAgentId) break;
+        const nextAgent = await AgentModel.findById(fallbackAgentId);
+        if (!nextAgent || nextAgent.organizationId !== params.organizationId) {
+          continue;
+        }
+        const nextRuntime = resolveAgentRuntime(nextAgent);
+        if (!nextRuntime) {
+          continue;
+        }
+        try {
+          const nextEphemeralCredentials =
+            policy?.ephemeralCredentialsByAgentId?.[nextAgent.id] ??
+            params.ephemeralCredentials;
+          const nextCredentials = await preflightAgentRuntimeCredentials({
+            runtime: nextRuntime,
+            organizationId: params.organizationId,
+            userId: params.actor.kind === "user" ? params.actor.id : null,
+            ephemeralCredentials: nextEphemeralCredentials,
+          });
+          if (
+            nextCredentials.missing.length > 0 ||
+            nextCredentials.misconfigured.length > 0
+          ) {
+            continue;
+          }
+          const nextModelReady = await canLaunchAgentRuntimeModel({
+            runtime: nextRuntime,
+            agent: nextAgent,
+            actor: params.actor,
+          });
+          if (!nextModelReady) {
+            continue;
+          }
+          const tiers = await organizationAgentRuntimeTiers(
+            params.organizationId,
+          );
+          const nextLimits = resolveAgentRunLimits({
+            runtime: nextRuntime,
+            requested: policy?.requestedLimits,
+            tiers,
+          });
+          prefetchedFallback = {
+            agentId: nextAgent.id,
+            agentName: nextAgent.name,
+            agentType: nextAgent.agentType ?? undefined,
+            labels: nextAgent.labels,
+            runtime: nextRuntime,
+            limits: nextLimits,
+            modelId: nextAgent.modelId,
+            llmApiKeyId: nextAgent.llmApiKeyId,
+          };
+          return prefetchedFallback;
+        } catch {}
+      }
+      return null;
+    };
+
+  let currentCandidate: CandidateConfig | null = {
+    agentId: params.agentId,
+    runtime: params.runtime,
+    limits: params.limits,
+    modelId: params.modelId,
+    llmApiKeyId: params.llmApiKeyId,
+  };
+  let lastError: unknown;
+  let hasPriorAttempt = false;
+  let anySessionLaunched = false;
+
+  while (currentCandidate) {
+    const candidateAgentId = currentCandidate.agentId;
+    const currentRuntime = currentCandidate.runtime;
+    let currentLimits = currentCandidate.limits;
+    const currentModelId = currentCandidate.modelId;
+    const currentLlmApiKeyId = currentCandidate.llmApiKeyId;
+
+    const candidateEphemeralCredentials =
+      policy?.ephemeralCredentialsByAgentId?.[candidateAgentId] ??
+      params.ephemeralCredentials;
+
+    let retryCount = 0;
+    let oomEscalations = 0;
+
+    while (true) {
+      const isRetryAttempt = hasPriorAttempt;
+      if (isRetryAttempt) {
+        await cleanupFailedAttemptForRetry(params.taskId);
+      }
+      hasPriorAttempt = true;
+
+      const resolveNextOomEscalationLimits =
+        async (): Promise<AgentRunLimits | null> => {
+          if (oomEscalations >= maxOomEscalations) return null;
+          const tiers = await organizationAgentRuntimeTiers(
+            params.organizationId,
+          );
+          const baseLimits =
+            currentLimits ??
+            resolveAgentRunLimits({ runtime: currentRuntime, tiers });
+          const allowedTiers = agentRuntimeAllowedTiers(currentRuntime, tiers);
+          const nextTier = baseLimits.tier
+            ? nextLargerAgentRuntimeTier(allowedTiers, baseLimits.tier)
+            : undefined;
+          if (!nextTier) return null;
+          return {
+            ...baseLimits,
+            tier: nextTier.name,
+            workspaceGiB: tierWorkspaceGiB(nextTier),
+          };
+        };
+
+      const launchedAt = Date.now();
+      try {
+        const session = await startAgentRunSession({
+          ...params,
+          agentId: candidateAgentId,
+          runtime: currentRuntime,
+          limits: currentLimits,
+          modelId: currentModelId,
+          llmApiKeyId: currentLlmApiKeyId,
+          ephemeralCredentials: candidateEphemeralCredentials,
+          replacePriorAttempt: isRetryAttempt,
+          shouldSettleLaunchFailure: async (launchFailure) => {
+            if (params.abortSignal?.aborted) return false;
+            const classified = classifyAgentRunFailure(launchFailure);
+            if (
+              classified?.code === "pod.oom_killed" &&
+              (await resolveNextOomEscalationLimits()) !== null
+            ) {
+              return false;
+            }
+            const willRetryCurrent =
+              classified?.retriable === true && retryCount < maxRetries;
+            if (willRetryCurrent) return false;
+            const nextCandidate = await peekNextFallbackCandidate();
+            return nextCandidate === null;
+          },
+          boundContract,
+        });
+        anySessionLaunched = true;
+        return await followAgentRun({
+          session,
+          launchedAt,
+          onTextDelta: params.onTextDelta,
+          abortSignal: params.abortSignal,
+        });
+      } catch (error) {
+        lastError = error;
+        if (params.abortSignal?.aborted) {
+          break;
+        }
+
+        const classified = classifyAgentRunFailure(error);
+
+        // Automatic OOM tier escalation on the same subagent up to its maxTier.
+        if (classified?.code === "pod.oom_killed") {
+          const escalatedLimits = await resolveNextOomEscalationLimits();
+          if (escalatedLimits) {
+            oomEscalations += 1;
+            currentLimits = escalatedLimits;
+            continue;
+          }
+        }
+
+        // Automatic retry on the same subagent for retriable failures.
+        if (classified?.retriable === true && retryCount < maxRetries) {
+          retryCount += 1;
+          continue;
+        }
+
+        break;
+      }
+    }
+
+    if (params.abortSignal?.aborted) {
+      break;
+    }
+    const nextCandidate = await peekNextFallbackCandidate();
+    if (!nextCandidate) {
+      break;
+    }
+    prefetchedFallback = null;
+    currentCandidate = nextCandidate;
+    await A2ATaskModel.updateAgentId(params.taskId, currentCandidate.agentId);
+    if (currentCandidate.agentName) {
+      const teams = await AgentTeamModel.getTeamLabelInfoForAgent(
+        currentCandidate.agentId,
+      );
+      updateActiveChatSpanAgent({
+        agentId: currentCandidate.agentId,
+        agentName: currentCandidate.agentName,
+        agentType: currentCandidate.agentType,
+        labels: currentCandidate.labels,
+        teams,
+      });
+    }
+  }
+
+  if (!anySessionLaunched) {
+    await notifyLaunchFailed();
+  }
+  await recordRunFailure({
+    taskId: params.taskId,
+    failure: lastError,
+    abortSignal: params.abortSignal,
+  });
+  throw lastError;
 }
 
 /**

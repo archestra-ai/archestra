@@ -1,3 +1,4 @@
+import AnthropicSDK from "@anthropic-ai/sdk";
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
 import { HttpResponse, http } from "msw";
@@ -470,6 +471,77 @@ for (const inbound of ["openai-chat", "anthropic", "gemini"] as const) {
       expect(use).toMatch(/^[a-zA-Z0-9_-]{1,64}$/);
       expect(result).toBe(use);
       expect(use).not.toBe(signedId);
+    });
+  }
+}
+
+for (const [stopReason, expected] of [
+  ["refusal", "SAFETY"],
+  ["model_context_window_exceeded", "MAX_TOKENS"],
+] as const) {
+  for (const stream of [false, true]) {
+    test(`preserves Anthropic ${stopReason} for a native Gemini fallback (stream=${stream})`, async () => {
+      const base = {
+        id: "stop-reason",
+        type: "message",
+        role: "assistant",
+        model: "claude-haiku-4-5",
+        content: [],
+        usage: { input_tokens: 2, output_tokens: 0 },
+        stop_reason: stopReason,
+        stop_sequence: null,
+      };
+      bedrockServer.use(
+        http.post("https://anthropic.pool.test/v1/messages", () =>
+          stream
+            ? new HttpResponse(
+                [
+                  {
+                    type: "message_start",
+                    message: { ...base, stop_reason: null },
+                  },
+                  {
+                    type: "message_delta",
+                    delta: { stop_reason: stopReason, stop_sequence: null },
+                    usage: { output_tokens: 0 },
+                  },
+                  { type: "message_stop" },
+                ]
+                  .map(
+                    (event) =>
+                      `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+                  )
+                  .join(""),
+                { headers: { "content-type": "text/event-stream" } },
+              )
+            : HttpResponse.json(base),
+        ),
+      );
+      const transport = memberTransport({
+        inbound: "gemini",
+        provider: "anthropic",
+        modelId: "claude-haiku-4-5",
+        client: new AnthropicSDK({
+          apiKey: "synthetic-key",
+          baseURL: "https://anthropic.pool.test",
+          maxRetries: 0,
+        }),
+      });
+      const request = {
+        contents: [{ role: "user", parts: [{ text: "synthetic request" }] }],
+        generationConfig: { maxOutputTokens: 32 },
+      };
+      const responses = (
+        stream
+          ? await collect(await transport.executeStream(request))
+          : [await transport.execute(request)]
+      ) as { candidates?: { finishReason?: string }[] }[];
+      expect(
+        responses
+          .flatMap((response) => response.candidates ?? [])
+          .map((candidate) => candidate.finishReason)
+          .filter(Boolean),
+      ).toEqual([expected]);
     });
   }
 }

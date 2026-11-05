@@ -13,7 +13,10 @@ import {
 import { afterEach, expect, test, vi } from "@/test";
 import type { Agent, ResolvedAgentRuntime } from "@/types";
 import { kubernetesAgentRuntimeBackendDriver } from "./backends/kubernetes";
-import { preflightAgentRuntimeModelCompatibility } from "./model-compatibility";
+import {
+  getClaudeCodeCloudProvider,
+  preflightAgentRuntimeModelCompatibility,
+} from "./model-compatibility";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -295,6 +298,15 @@ test("uses provider credentials after switching away from the Claude Code runtim
       selectedModel: model.modelId,
     },
   });
+  expect(
+    getClaudeCodeCloudProvider({
+      runtime: {
+        command: ["archestra-claude-code-runtime"],
+        claudeCode: { authentication: "provider" },
+      },
+      provider: "bedrock",
+    }),
+  ).toBe("bedrock");
 });
 
 async function createModelSelection(params: {

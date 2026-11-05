@@ -326,7 +326,7 @@ export function EditVirtualKeyDialog({
         </AdvancedSection>
       </div>
       {!isPassthrough && (
-        <div hidden={activeSection !== "keys"} className="space-y-3">
+        <div hidden={activeSection !== "keys"} className="space-y-4">
           <p className="text-sm text-muted-foreground">
             <span>Choose which providers this virtual key can use.</span>
           </p>

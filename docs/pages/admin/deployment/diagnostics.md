@@ -1,7 +1,7 @@
 ---
 title: Diagnostics
 description: Investigate an installation with the SRE agent and collect a support bundle
-order: 7
+order: 8
 lastUpdated: 2026-11-03
 ---
 

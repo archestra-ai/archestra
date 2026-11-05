@@ -171,7 +171,7 @@ export function RequestContent({
 // Internal helpers
 // ============================================================================
 
-type InteractionRecord = archestraApiTypes.GetInteractionResponses["200"];
+type InteractionRecord = archestraApiTypes.GetLlmProxyLogResponses["200"];
 
 const CONTENT_VIEWS = [
   { value: "conversation", label: "Conversation" },

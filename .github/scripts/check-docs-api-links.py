@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Require every platform API route mentioned in the docs to deep-link to its operation in
-the API reference, and every API reference deep link to name a real operation.
+the grouped API reference, and every API reference deep link to name a real operation.
 
 A mention is inline code with an HTTP method and an /api path, such as `GET /api/agents`
 or `PUT /api/knowledge-files/:fileId/content`. It must be written as a link to
-/docs/reference/api#/<tag>/<operationId>, the deep link the reference's Swagger UI opens.
+/docs/reference/api/<topic>#tag/<tag>/<method><path>, the deep link the reference opens.
 Mentions inside fenced code blocks, headings, and HTML comments are exempt.
 
 Operations come from docs/openapi.json. A route without an operationId cannot be
@@ -20,17 +20,19 @@ import json
 from pathlib import Path
 import re
 import sys
-from urllib.parse import quote, unquote
+from urllib.parse import unquote
 
 PAGES_DIR = Path("docs/pages")
 OPENAPI = Path("docs/openapi.json")
 REFERENCE_URL = "/docs/reference/api"
+GROUPS = Path("docs/api-reference-groups.json")
 
 METHODS = ("get", "post", "put", "patch", "delete")
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 # Inline-code route that is not already the text of a link.
 MENTION = re.compile(r"(?<!\[)`(GET|POST|PUT|PATCH|DELETE) (/api/[^`\s?]*)[^`]*`(?!\]\()")
-DEEP_LINK = re.compile(re.escape(REFERENCE_URL) + r"#(/[^)\s\"']+)")
+DEEP_LINK = re.compile(re.escape(REFERENCE_URL) + r"/[a-z0-9/-]+#tag/[^)\s\"']+")
+LINKED_MENTION = re.compile(r"\[`(GET|POST|PUT|PATCH|DELETE) (/api/[^`\s?]*)[^`]*`\]\((/docs/reference/api[^)\s]*)\)")
 PATH_PARAM = re.compile(r"\{[^}]+\}|<[^>]+>|:[A-Za-z_][A-Za-z0-9_]*")
 
 
@@ -43,15 +45,30 @@ def main() -> int:
         print(f"error: {OPENAPI} not found (run from the repo root)", file=sys.stderr)
         return 2
     operations = load_operations()
-    deep_links = {link for link, _ in operations.values() if link}
+    deep_links = {REFERENCE_URL + link for link, _ in operations.values() if link}
 
     violations: list[str] = []
     for page in sorted(PAGES_DIR.rglob("*.md")):
         text = page.read_text(encoding="utf-8")
         for number, line in enumerate(text.split("\n"), start=1):
             for match in DEEP_LINK.finditer(line):
-                if match.group(1) not in deep_links:
-                    violations.append(f"{page.as_posix()}:{number}: no API operation for {REFERENCE_URL}#{match.group(1)}")
+                if match.group(0) not in deep_links:
+                    violations.append(f"{page.as_posix()}:{number}: no API operation for {match.group(0)}")
+        if args.fix:
+            def update_link(match: re.Match[str]) -> str:
+                operation = find_operation(operations, match.group(1), match.group(2))
+                if not operation or not operation[0]:
+                    return match.group(0)
+                return match.group(0).replace(match.group(3), REFERENCE_URL + operation[0])
+
+            text = LINKED_MENTION.sub(update_link, text)
+            page.write_text(text, encoding="utf-8")
+        else:
+            for number, line in enumerate(text.split("\n"), start=1):
+                for match in LINKED_MENTION.finditer(line):
+                    operation = find_operation(operations, match.group(1), match.group(2))
+                    if operation and operation[0] and match.group(3) != REFERENCE_URL + operation[0]:
+                        violations.append(f"{page.as_posix()}:{number}: link `{match.group(1)} {match.group(2)}` to {REFERENCE_URL}{operation[0]}")
         fixed, found, unknown = link_mentions(text, operations)
         for number, route in unknown:
             violations.append(f"{page.as_posix()}:{number}: `{route}` is not a documented API operation with an operationId")
@@ -61,7 +78,7 @@ def main() -> int:
             page.write_text(fixed, encoding="utf-8")
             print(f"Linked {len(found)} API route mention(s) in {page.as_posix()}")
         else:
-            violations.extend(f"{page.as_posix()}:{number}: link `{route}` to {REFERENCE_URL}#{link}" for number, route, link in found)
+            violations.extend(f"{page.as_posix()}:{number}: link `{route}` to {REFERENCE_URL}{link}" for number, route, link in found)
 
     if not violations:
         if not args.fix:
@@ -76,6 +93,8 @@ def main() -> int:
 def load_operations() -> dict[tuple[str, str], tuple[str | None, str]]:
     """Map (METHOD, normalized path) to (deep link fragment or None, spec path)."""
     spec = json.loads(OPENAPI.read_text(encoding="utf-8"))
+    groups = json.loads(GROUPS.read_text(encoding="utf-8"))
+    tag_groups = {tag: group for group, tags in groups.items() for tag in tags}
     operations: dict[tuple[str, str], tuple[str | None, str]] = {}
     for path, item in spec.get("paths", {}).items():
         for method in METHODS:
@@ -84,14 +103,15 @@ def load_operations() -> dict[tuple[str, str], tuple[str | None, str]]:
                 continue
             tags = operation.get("tags") or ["default"]
             operation_id = operation.get("operationId")
-            link = deep_link(tags[0], operation_id) if operation_id else None
+            link = deep_link(tag_groups[tags[0]], tags[0], method, path) if operation_id else None
             operations[(method.upper(), normalize(path))] = (link, path)
     return operations
 
 
-def deep_link(tag: str, operation_id: str) -> str:
-    """The fragment Swagger UI's deepLinking writes: spaces become %20."""
-    return f"/{quote(tag, safe='')}/{quote(operation_id, safe='')}"
+def deep_link(group: str, tag: str, method: str, path: str) -> str:
+    """The topic page and fragment Scalar writes for an operation."""
+    tag_slug = re.sub(r"[^a-z0-9]+", "-", tag.lower()).strip("-")
+    return f"/{group}#tag/{tag_slug}/{method.upper()}{path}"
 
 
 def normalize(path: str) -> str:
@@ -148,7 +168,7 @@ def link_mentions(
                 unknown.append((number, route))
                 return match.group(0)
             found.append((number, route, operation[0]))
-            return f"[{match.group(0)}]({REFERENCE_URL}#{operation[0]})"
+            return f"[{match.group(0)}]({REFERENCE_URL}{operation[0]})"
 
         out.append(MENTION.sub(link, line))
     return "\n".join(out), found, unknown

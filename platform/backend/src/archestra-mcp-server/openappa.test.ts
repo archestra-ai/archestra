@@ -12,8 +12,10 @@ import { sql } from "drizzle-orm";
 import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
+import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
-import { scopedSessionId } from "@/openappa/actor";
+import ToolModel from "@/models/tool";
+import { openappaActor, scopedSessionId } from "@/openappa/actor";
 import { rememberUnattendedSession } from "@/openappa/break-the-glass";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import { openappaDeclarations } from "@/openappa/declarations";
@@ -669,6 +671,183 @@ describe("OpenAPPA tool execution", () => {
     );
     expect(stolen.isError).toBe(true);
     expect(executeSpy).not.toHaveBeenCalled();
+  });
+
+  async function retainRemedyDenial(params: {
+    sessionId: string;
+    parentId?: string;
+    feedback: string;
+    offerId: string;
+  }) {
+    const root = openappaActor(params.sessionId);
+    const callerId = `user:${mockContext.userId}`;
+    await db.insert(schema.openappaSessionsTable).values({
+      organizationId: orgId,
+      callerId,
+      sessionId: params.sessionId,
+      actor: root,
+      root,
+      parentId: params.parentId ?? null,
+      startDecision: { decision: "ack" },
+    });
+    await db.insert(schema.openappaOperationsTable).values({
+      organizationId: orgId,
+      callerId,
+      sessionId: params.sessionId,
+      operationId: "call:protected-operation",
+      root,
+      status: "complete",
+      input: { semantic: { event: "tool_call", tool: "protected_tool" } },
+      decision: {
+        decision: "deny_call",
+        feedback: params.feedback,
+        offers: [{ offer_id: params.offerId }],
+      },
+    });
+  }
+
+  test.each([
+    "invented-offer",
+    "retained-hard-offer",
+  ])("a remedy %s cannot bypass a retained hard denial", async (offerId) => {
+    config.openappa.breakTheGlassOverrides = {
+      ...config.openappa.breakTheGlassOverrides,
+      unapprovableBlockMode: "allow",
+    };
+    const callerId = `user:${mockContext.userId}`;
+    const sessionId = scopedSessionId(callerId, "hard-denied-session");
+    const session = {
+      organization_id: orgId,
+      caller_id: callerId,
+      session_id: sessionId,
+    };
+    await retainRemedyDenial({
+      sessionId,
+      feedback: "requires attention: blocked",
+      offerId: "retained-hard-offer",
+    });
+    const execute = vi.spyOn(openappaService, "executeRemedyByOffer");
+    const result = await executeArchestraTool(
+      toolFullName,
+      {
+        offer_id: offerId,
+        plan: "Review",
+        trajectory: trajectory({ session_id: sessionId }),
+      },
+      { ...mockContext, openappaSession: session },
+    );
+    expect(result.isError).toBe(true);
+    expect(execute).not.toHaveBeenCalled();
+    expect(await isUnenforcedSession(session)).toBe(false);
+    expect(
+      await db.select().from(schema.openappaUnenforcedSessionsTable),
+    ).toEqual([]);
+    // A replay still reads the original denial; no remedy execution or
+    // session bypass has replaced it with permission to run the operation.
+    const replay = await OpenAppaSessionModel.recordedToolCallDecisions({
+      organizationId: orgId,
+      sessionId,
+      callerId,
+      toolCallIds: ["protected-operation"],
+    });
+    expect(replay.get("protected-operation")).toMatchObject({
+      decision: "deny_call",
+      feedback: "requires attention: blocked",
+    });
+  });
+
+  test.each([
+    "scoped",
+    "unscoped",
+  ] as const)("a fabricated offer cannot waive another user's %s session", async (kind) => {
+    config.openappa.breakTheGlassOverrides = {
+      ...config.openappa.breakTheGlassOverrides,
+      unapprovableBlockMode: "allow",
+    };
+    const sessionId =
+      kind === "scoped"
+        ? "user:other-user|known-session"
+        : "22222222-2222-4222-8222-222222222222";
+    const callerId = `user:${mockContext.userId}`;
+    // The gateway scopes even a header naming the victim's bare Chat ID
+    // to the authenticated caller before constructing this context.
+    const currentSession = openappaService.sessionFromHeaders({
+      headers: { "x-appa-session-id": sessionId },
+      organizationId: orgId,
+      callerId,
+      scope: callerId,
+    });
+    const result = await executeArchestraTool(
+      toolFullName,
+      {
+        offer_id: "fabricated-offer",
+        plan: "Review",
+        trajectory: trajectory({ session_id: sessionId }),
+      },
+      { ...mockContext, openappaSession: currentSession },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(
+      await isUnenforcedSession({
+        organization_id: orgId,
+        caller_id: "user:other-user",
+        session_id: sessionId,
+      }),
+    ).toBe(false);
+    expect(await db.select().from(schema.openappaYellsTable)).toEqual([]);
+  });
+
+  test.each([
+    "scoped",
+    "child",
+    "current",
+    "chat",
+  ] as const)("an owned %s session can waive a retained soft offer without executing it", async (kind) => {
+    config.openappa.breakTheGlassOverrides = {
+      ...config.openappa.breakTheGlassOverrides,
+      unapprovableBlockMode: "allow",
+    };
+    const callerId = `user:${mockContext.userId}`;
+    const parentId = scopedSessionId(callerId, "owned-session");
+    const sessionId =
+      kind === "scoped"
+        ? parentId
+        : kind === "child"
+          ? `${parentId}:child`
+          : "22222222-2222-4222-8222-222222222222";
+    const session = {
+      organization_id: orgId,
+      caller_id: callerId,
+      session_id: sessionId,
+    };
+    await retainRemedyDenial({
+      sessionId,
+      ...(kind === "child" ? { parentId } : {}),
+      feedback: "Original soft refusal requiring a review",
+      offerId: "expired-offer",
+    });
+    const result = await executeArchestraTool(
+      toolFullName,
+      {
+        offer_id: "expired-offer",
+        plan: "Review",
+        trajectory: trajectory({
+          session_id: sessionId,
+          ...(kind === "child" ? { parent_id: parentId } : {}),
+        }),
+      },
+      {
+        ...mockContext,
+        ...(kind === "current" ? { openappaSession: session } : {}),
+        ...(kind === "chat" ? { conversationId: sessionId } : {}),
+      },
+    );
+
+    expect(result.structuredContent).toMatchObject({
+      outcome: "guardrails_disabled",
+    });
+    expect(await isUnenforcedSession(session)).toBe(true);
   });
 
   test("declares a subagent's return ahead of its spawn with no offer and no review", async () => {
@@ -1826,6 +2005,112 @@ describe("OpenAPPA tool execution", () => {
     ).toMatchObject({
       question: "Approve this action?",
       remedy_offer_ids: ["offer-hitl"],
+    });
+  });
+
+  describe("the staged review carries the tool's own description", () => {
+    const stage = async (review: { tool: string; arguments: string }) => {
+      vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+        offer_id: "offer-hitl",
+        text: "Approve this action?",
+        session_id: "session-1",
+        ...review,
+      });
+      const result = await executeArchestraTool(
+        toolFullName,
+        { offer_id: "offer-hitl", trajectory: trajectory(), plan: "Review" },
+        {
+          ...mockContext,
+          currentToolCallId: "described-call",
+          mrtr: { enabled: true, clientCapabilities: { elicitation: {} } },
+        },
+      );
+      expect(result.structuredContent).toMatchObject({
+        outcome: "review_required",
+      });
+      return hitlReview.getHitlReview({
+        session: { organization_id: orgId, session_id: "session-1" },
+        offerId: "offer-hitl",
+      });
+    };
+
+    test("a built-in tool's description from the registry", async () => {
+      const staged = await stage({
+        tool: "archestra__todo_write",
+        arguments: VALID_TODO,
+      });
+      const definition = getAllArchestraMcpTools().find((tool) =>
+        tool.name.endsWith("__todo_write"),
+      );
+      expect(definition?.description).toBeTruthy();
+      expect(staged?.toolDescription).toBe(definition?.description?.trim());
+    });
+
+    test("an assigned gateway tool's stored description", async ({
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const tool = await makeTool({
+        name: "github__create_issue",
+        description: "Create an issue in a repository.",
+      });
+      await makeAgentTool(mockContext.agent.id, tool.id);
+      const staged = await stage({
+        tool: "mcp/github/create_issue",
+        arguments: JSON.stringify({ title: "Flaky test" }),
+      });
+      expect(staged?.toolDescription).toBe("Create an issue in a repository.");
+    });
+
+    test("also for a call with a description argument, which the card weighs", async ({
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const tool = await makeTool({
+        name: "github__create_issue",
+        description: "Create an issue in a repository.",
+      });
+      await makeAgentTool(mockContext.agent.id, tool.id);
+      // Here `description` is the issue body, not what the call does.
+      const staged = await stage({
+        tool: "mcp/github/create_issue",
+        arguments: JSON.stringify({ title: "T", description: "Body" }),
+      });
+      expect(staged?.toolDescription).toBe("Create an issue in a repository.");
+    });
+
+    test("none for the run_tool wrapper", async () => {
+      const staged = await stage({
+        tool: "archestra__run_tool",
+        arguments: JSON.stringify({
+          tool_name: "archestra__todo_write",
+          tool_args: {},
+        }),
+      });
+      expect(staged).toBeDefined();
+      expect(staged).not.toHaveProperty("toolDescription");
+    });
+
+    test("none for a client's own tool", async () => {
+      const staged = await stage({
+        tool: "Bash",
+        arguments: JSON.stringify({ command: "ls" }),
+      });
+      expect(staged).toBeDefined();
+      expect(staged).not.toHaveProperty("toolDescription");
+    });
+
+    test("a failed lookup stages the review without it", async () => {
+      const lookup = vi
+        .spyOn(ToolModel, "findByNameForAgent")
+        .mockRejectedValue(new Error("database unavailable"));
+      const staged = await stage({
+        tool: "mcp/github/create_issue",
+        arguments: JSON.stringify({ title: "Flaky test" }),
+      });
+      expect(lookup).toHaveBeenCalled();
+      expect(staged).toBeDefined();
+      expect(staged).not.toHaveProperty("toolDescription");
     });
   });
 

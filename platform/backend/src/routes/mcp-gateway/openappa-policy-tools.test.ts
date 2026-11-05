@@ -13,13 +13,28 @@ import {
   preflightArchestraToolCall,
 } from "@/archestra-mcp-server";
 import config from "@/config";
-import { AgentExcludedToolModel, AgentModel, ToolModel } from "@/models";
+import {
+  AgentExcludedToolModel,
+  AgentModel,
+  AgentToolModel,
+  OAuthAccessTokenModel,
+  OAuthClientModel,
+  ToolModel,
+} from "@/models";
+import {
+  AGENT_RUNTIME_OAUTH_CLIENT_ID,
+  agentRunGatewayTokenId,
+} from "@/services/agent-runtime/runtime-contract";
 import {
   syncBuiltInAgents,
   syncOpenAppaConfigAgentCapabilities,
 } from "@/services/seed";
 import { beforeEach, describe, expect, test } from "@/test";
-import { createAgentServer } from "./utils";
+import {
+  createAgentServer,
+  type TokenAuthResult,
+  validateMCPGatewayToken,
+} from "./utils";
 
 type ListHandler = (request: unknown) => Promise<ListToolsResult>;
 type SearchResult = { tools: Array<{ toolName: string }> };
@@ -41,7 +56,7 @@ beforeEach(() => {
   config.openappa.enabled = true;
 });
 
-function userToken(organizationId: string, userId: string) {
+function userToken(organizationId: string, userId: string): TokenAuthResult {
   return {
     tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
     teamId: null,
@@ -52,22 +67,52 @@ function userToken(organizationId: string, userId: string) {
   };
 }
 
+async function mintValidatedRuntimeToken(params: {
+  agentId: string;
+  userId: string;
+}): Promise<TokenAuthResult> {
+  await OAuthClientModel.ensurePlatformIssuedClient({
+    id: AGENT_RUNTIME_OAUTH_CLIENT_ID,
+    clientId: AGENT_RUNTIME_OAUTH_CLIENT_ID,
+    name: "Agent Runtime",
+  });
+  const rawToken = `runtime-token-${crypto.randomUUID()}`;
+  const tokenHash = OAuthAccessTokenModel.hashTokenForLookup(rawToken);
+  await OAuthAccessTokenModel.create({
+    id: agentRunGatewayTokenId(crypto.randomUUID()),
+    tokenHash,
+    clientId: AGENT_RUNTIME_OAUTH_CLIENT_ID,
+    userId: params.userId,
+    referenceId: `mcp-resource:${params.agentId}`,
+    scopes: ["mcp"],
+    expiresAt: new Date(Date.now() + 3_600_000),
+  });
+  const validated = await validateMCPGatewayToken(params.agentId, rawToken);
+  if (!validated) {
+    throw new Error("Expected runtime OAuth token to validate");
+  }
+  return validated;
+}
+
 async function listed(params: {
   agentId: string;
   organizationId: string;
   userId?: string;
+  tokenAuth?: TokenAuthResult;
 }): Promise<string[]> {
   const { server } = await createAgentServer({
     agentId: params.agentId,
-    tokenAuth: params.userId
-      ? userToken(params.organizationId, params.userId)
-      : {
-          tokenId: crypto.randomUUID(),
-          teamId: null,
-          isOrganizationToken: false,
-          organizationId: params.organizationId,
-          serviceAccountId: crypto.randomUUID(),
-        },
+    tokenAuth:
+      params.tokenAuth ??
+      (params.userId
+        ? userToken(params.organizationId, params.userId)
+        : {
+            tokenId: crypto.randomUUID(),
+            teamId: null,
+            isOrganizationToken: false,
+            organizationId: params.organizationId,
+            serviceAccountId: crypto.randomUUID(),
+          }),
   });
   const handler = (
     server.server as unknown as { _requestHandlers: Map<string, ListHandler> }
@@ -93,6 +138,23 @@ type Admission = "admitted" | "not_assigned" | "denied";
 
 const SAMPLE_ARGS: Record<string, Record<string, unknown>> = {
   [GET_POLICY]: {},
+  [archestraMcpBranding.getToolName("list_guardrails_battery_fits")]: {},
+  [archestraMcpBranding.getToolName("inspect_guardrails_server")]: {
+    mcpServerId: ARCHESTRA_MCP_CATALOG_ID,
+  },
+  [archestraMcpBranding.getToolName("validate_guardrails_policy")]: {
+    content: "x",
+  },
+  [archestraMcpBranding.getToolName("preview_guardrails_policy_change")]: {
+    content: "x",
+    expectedRevision: 0,
+  },
+  [archestraMcpBranding.getToolName("get_guardrails_policy_change_status")]: {
+    number: 1,
+  },
+  [archestraMcpBranding.getToolName("get_openappa_yell")]: {
+    id: ARCHESTRA_MCP_CATALOG_ID,
+  },
   [UPDATE_POLICY]: { content: "x", expectedRevision: 0 },
 };
 
@@ -265,6 +327,104 @@ describe("implicit OpenAPPA policy read tools", () => {
     await expect(
       executeArchestraTool(GET_POLICY, {}, delegated),
     ).rejects.toMatchObject({ code: -32601 });
+  });
+
+  test("an Agent Runtime OAuth token on an unassigned agent requires explicit assignment or accessAllTools for policy reads", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organizationId, userId } = await contextFor({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      role: "admin",
+    });
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+    const restrictedAgent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      accessAllTools: false,
+      toolExposureMode: "search_and_run_only",
+    });
+    const restrictedTokenAuth = await mintValidatedRuntimeToken({
+      agentId: restrictedAgent.id,
+      userId,
+    });
+    expect(restrictedTokenAuth).not.toHaveProperty("oauthClientId");
+
+    const restrictedContext: ArchestraContext = {
+      agent: { id: restrictedAgent.id, name: restrictedAgent.name },
+      agentId: restrictedAgent.id,
+      organizationId,
+      userId,
+      tokenAuth: restrictedTokenAuth,
+    };
+
+    const restrictedListed = await listed({
+      agentId: restrictedAgent.id,
+      organizationId,
+      tokenAuth: restrictedTokenAuth,
+    });
+    const restrictedSearched = await searched(restrictedContext);
+    for (const read of READ) {
+      expect(restrictedListed).not.toContain(read);
+      expect(restrictedSearched).not.toContain(read);
+      expect(await admission(restrictedContext, read)).toBe("not_assigned");
+    }
+
+    const [getPolicyToolId] = await ToolModel.findBuiltInToolIdsByNames([
+      GET_POLICY,
+    ]);
+    if (!getPolicyToolId) throw new Error("Expected seeded GET_POLICY tool");
+    await AgentToolModel.create(restrictedAgent.id, getPolicyToolId);
+
+    const assignedListed = await listed({
+      agentId: restrictedAgent.id,
+      organizationId,
+      tokenAuth: restrictedTokenAuth,
+    });
+    const assignedSearched = await searched(restrictedContext);
+    expect(assignedListed).toContain(GET_POLICY);
+    expect(assignedSearched).toContain(GET_POLICY);
+    expect(await admission(restrictedContext, GET_POLICY)).toBe("admitted");
+    for (const read of READ.filter((name) => name !== GET_POLICY)) {
+      expect(assignedListed).not.toContain(read);
+      expect(assignedSearched).not.toContain(read);
+      expect(await admission(restrictedContext, read)).toBe("not_assigned");
+    }
+
+    const autoAgent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      accessAllTools: true,
+      toolExposureMode: "search_and_run_only",
+    });
+    await AgentExcludedToolModel.replaceForAgent(autoAgent.id, []);
+    const autoTokenAuth = await mintValidatedRuntimeToken({
+      agentId: autoAgent.id,
+      userId,
+    });
+    const autoContext: ArchestraContext = {
+      agent: { id: autoAgent.id, name: autoAgent.name },
+      agentId: autoAgent.id,
+      organizationId,
+      userId,
+      tokenAuth: autoTokenAuth,
+    };
+    const autoListed = await listed({
+      agentId: autoAgent.id,
+      organizationId,
+      tokenAuth: autoTokenAuth,
+    });
+    const autoSearched = await searched(autoContext);
+    for (const read of READ) {
+      expect(autoListed).toContain(read);
+      expect(autoSearched).toContain(read);
+      expect(await admission(autoContext, read)).toBe("admitted");
+    }
   });
 
   test("a caller without a user, or without guardrailsPolicy:read, neither lists nor runs policy reads", async ({

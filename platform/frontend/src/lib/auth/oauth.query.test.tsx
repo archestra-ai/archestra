@@ -7,16 +7,10 @@ const { mockInitiateOAuth } = vi.hoisted(() => ({
   mockInitiateOAuth: vi.fn(),
 }));
 
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      initiateOAuth: (...args: unknown[]) => mockInitiateOAuth(...args),
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  initiateOAuth: (...args: unknown[]) => mockInitiateOAuth(...args),
+}));
 
 import { useInitiateOAuth } from "./oauth.query";
 

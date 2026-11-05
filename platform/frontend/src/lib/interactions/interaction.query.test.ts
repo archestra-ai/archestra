@@ -7,17 +7,11 @@ vi.mock("sonner");
 
 const getInteractionsMock = vi.hoisted(() => vi.fn());
 const getUniqueUserIdsMock = vi.hoisted(() => vi.fn());
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      getInteractions: getInteractionsMock,
-      getUniqueUserIds: getUniqueUserIdsMock,
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getLlmProxyLogs: getInteractionsMock,
+  getLlmProxyLogUserIds: getUniqueUserIdsMock,
+}));
 
 import {
   isSessionId,

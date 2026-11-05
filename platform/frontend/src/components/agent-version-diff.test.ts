@@ -37,6 +37,7 @@ function makeSnapshot(
     identityProviderId: null,
     environmentId: null,
     networkPolicy: null,
+    subagentLoadBalancing: null,
     tools: [
       {
         toolId: "t1",
@@ -656,6 +657,7 @@ const SNAPSHOT_KEY_HOMES: Record<
   identityProviderId: { field: "Identity provider" },
   environmentId: { field: "Environment" },
   networkPolicy: { field: "Network egress" },
+  subagentLoadBalancing: { field: "Subagent load balancing" },
   builtInAgentConfig: { field: "Built-in configuration" },
   systemPrompt: { section: "system-prompt" },
   tools: { section: "tools" },
@@ -686,6 +688,12 @@ describe("snapshot coverage", () => {
       domainPreset: "none",
       allowedDomains: ["api.example.com"],
       allowedCidrs: [],
+    },
+    subagentLoadBalancing: {
+      enabled: true,
+      algorithm: "round_robin",
+      retries: 1,
+      fallbackEnabled: true,
     },
     excludedTools: [{ toolId: "t9", name: "danger__wipe" }],
     excludedSubagents: [{ agentId: "a9", name: "Old bot" }],

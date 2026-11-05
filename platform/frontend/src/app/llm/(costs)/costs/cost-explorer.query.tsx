@@ -9,6 +9,7 @@ import { useEffect, useMemo } from "react";
 import { useSetCostsAction } from "@/app/llm/(costs)/layout";
 import { useStatisticsTimeRange } from "@/components/time-range-picker/statistics-time-range";
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
+import { statisticsRefresh } from "@/lib/statistics.query";
 import { throwOnApiError } from "@/lib/utils/api";
 
 export type ToolCallUsageDimension = NonNullable<
@@ -19,6 +20,9 @@ export type AppUsageDimension = NonNullable<
 >[number];
 export type SkillUsageDimension = NonNullable<
   NonNullable<archestraApiTypes.GetSkillUsageData["query"]>["groupBy"]
+>[number];
+export type LlmUsageDimension = NonNullable<
+  NonNullable<archestraApiTypes.GetLlmUsageData["query"]>["groupBy"]
 >[number];
 type UsageFilters = {
   timeframe: StatisticsTimeFrame;
@@ -65,6 +69,31 @@ export function useToolCallUsage({
       collectPages(async (offset) => {
         const { data, error } = await archestraApiSdk.getMcpToolCallUsage({
           query: { ...filters, groupBy, mcpServerName, limit: 100, offset },
+          querySerializer,
+        });
+        throwOnApiError(error, { toastOnError: false });
+        if (!data) throw new Error("No usage response received");
+        return data;
+      }),
+    enabled,
+  });
+}
+
+export function useLlmUsage({
+  timeframe,
+  groupBy,
+  enabled = true,
+}: {
+  timeframe: StatisticsTimeFrame;
+  groupBy: LlmUsageDimension[];
+  enabled?: boolean;
+}) {
+  return useQuery({
+    queryKey: ["usage-statistics", "getLlmUsage", groupBy, timeframe],
+    queryFn: () =>
+      collectPages(async (offset) => {
+        const { data, error } = await archestraApiSdk.getLlmUsage({
+          query: { timeframe, groupBy, limit: 100, offset },
           querySerializer,
         });
         throwOnApiError(error, { toastOnError: false });
@@ -230,35 +259,38 @@ async function collectPages<
 /** Shared by headline tiles and the default chart; TanStack deduplicates callers. */
 export function useCostStatistics({
   timeframe,
+  teamId,
   enabled,
 }: {
   timeframe: StatisticsTimeFrame;
+  teamId?: string;
   enabled: boolean;
 }) {
   return useQuery({
-    queryKey: ["statistics", "costs", timeframe],
+    queryKey: ["statistics", "costs", timeframe, teamId],
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getCostStatistics({
-        query: { timeframe },
+        query: { timeframe, teamId },
       });
       throwOnApiError(error, { toastOnError: false });
       if (!data) throw new Error("No cost statistics response received");
       return data;
     },
     enabled,
-    staleTime: 30_000,
-    refetchInterval: 30_000,
+    ...statisticsRefresh(timeframe),
   });
 }
 
 export function useKpis({
   timeframe,
+  teamId,
   enabled,
 }: {
   timeframe: StatisticsTimeFrame;
+  teamId?: string;
   enabled: boolean;
 }) {
-  const statistics = useCostStatistics({ timeframe, enabled });
+  const statistics = useCostStatistics({ timeframe, teamId, enabled });
 
   return useMemo(() => {
     const ts = statistics.data?.costSavings.timeSeries ?? [];

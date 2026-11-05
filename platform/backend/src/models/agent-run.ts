@@ -64,14 +64,62 @@ class AgentRunModel {
   }
 
   static async create(
-    run: InsertAgentRunRecord & { id?: AgentRunRecord["id"] },
+    run: InsertAgentRunRecord & {
+      id?: AgentRunRecord["id"];
+      replacePriorAttempt?: boolean;
+    },
   ): Promise<AgentRunRecord> {
+    const { replacePriorAttempt, ...values } = run;
     // A run is governed by its policy from the moment it exists: the actor's
     // grant is what lets them open the share editor and share it.
     return db.transaction(async (tx) => {
+      if (replacePriorAttempt) {
+        const existingRuns = await tx
+          .select({
+            id: schema.agentRunsTable.id,
+            workloadName: schema.agentRunsTable.workloadName,
+          })
+          .from(schema.agentRunsTable)
+          .where(eq(schema.agentRunsTable.taskId, values.taskId));
+        const workloadNames = existingRuns.map(
+          (existing) => existing.workloadName,
+        );
+        // Delete the previous attempt's agent_workspaces row in the same
+        // transaction that inserts the replacement agent_runs row, so the row
+        // is gone before startAgentRunSession inserts the next workspace with
+        // id: taskId (including after a post-launch failure in followAgentRun).
+        await tx
+          .delete(schema.agentWorkspacesTable)
+          .where(
+            or(
+              eq(schema.agentWorkspacesTable.id, values.taskId),
+              eq(schema.agentWorkspacesTable.activeTaskId, values.taskId),
+              eq(schema.agentWorkspacesTable.lastTaskId, values.taskId),
+              ...(workloadNames.length > 0
+                ? [
+                    inArray(
+                      schema.agentWorkspacesTable.workloadName,
+                      workloadNames,
+                    ),
+                  ]
+                : []),
+            ),
+          );
+        await tx
+          .delete(schema.agentRunsTable)
+          .where(eq(schema.agentRunsTable.taskId, values.taskId));
+        await tx
+          .delete(schema.resourcePermissionPoliciesTable)
+          .where(
+            and(
+              eq(schema.resourcePermissionPoliciesTable.resource, "agentRun"),
+              eq(schema.resourcePermissionPoliciesTable.scope, values.taskId),
+            ),
+          );
+      }
       const [created] = await tx
         .insert(schema.agentRunsTable)
-        .values(run)
+        .values(values)
         .returning();
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -99,6 +147,51 @@ class AgentRunModel {
       .where(eq(schema.agentRunsTable.taskId, taskId))
       .limit(1);
     return run ?? null;
+  }
+
+  /**
+   * Remove a failed attempt's run record, workspace row, and initial permission
+   * policy before the supervisor retries or fails over the same task.
+   */
+  static async deleteAttemptByTaskId(taskId: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      const existingRuns = await tx
+        .select({
+          id: schema.agentRunsTable.id,
+          workloadName: schema.agentRunsTable.workloadName,
+        })
+        .from(schema.agentRunsTable)
+        .where(eq(schema.agentRunsTable.taskId, taskId));
+      const workloadNames = existingRuns.map((run) => run.workloadName);
+      await tx
+        .delete(schema.agentWorkspacesTable)
+        .where(
+          or(
+            eq(schema.agentWorkspacesTable.id, taskId),
+            eq(schema.agentWorkspacesTable.activeTaskId, taskId),
+            eq(schema.agentWorkspacesTable.lastTaskId, taskId),
+            ...(workloadNames.length > 0
+              ? [
+                  inArray(
+                    schema.agentWorkspacesTable.workloadName,
+                    workloadNames,
+                  ),
+                ]
+              : []),
+          ),
+        );
+      await tx
+        .delete(schema.agentRunsTable)
+        .where(eq(schema.agentRunsTable.taskId, taskId));
+      await tx
+        .delete(schema.resourcePermissionPoliciesTable)
+        .where(
+          and(
+            eq(schema.resourcePermissionPoliciesTable.resource, "agentRun"),
+            eq(schema.resourcePermissionPoliciesTable.scope, taskId),
+          ),
+        );
+    });
   }
 
   /**

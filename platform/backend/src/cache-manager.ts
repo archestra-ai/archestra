@@ -198,6 +198,15 @@ export const CacheKey = {
    * or API call, redeemed by whichever one the public content URL reaches.
    */
   AgentWorkspaceTransferTicket: "agent-workspace-transfer-ticket-v1",
+  /**
+   * Short-lived one-time credential grants minted by transfer_credential({ ephemeral: true })
+   * and redeemed by start_agent_run on whichever replica handles the request.
+   */
+  EphemeralCredentialGrant: "ephemeral-credential-grant-v1",
+  /**
+   * Distributed per-caller subagent load-balancer rotation state shared across backend pods.
+   */
+  SubagentLoadBalancer: "subagent-load-balancer-v1",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

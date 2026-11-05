@@ -8,9 +8,9 @@ import { useRoles } from "@/lib/role.query";
 
 vi.mock("sonner");
 
-vi.mock("@archestra/shared", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@archestra/shared")>()),
-  archestraApiSdk: { getRoles: vi.fn() },
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getRoles: vi.fn(),
 }));
 
 const getRoles = vi.mocked(archestraApiSdk.getRoles);

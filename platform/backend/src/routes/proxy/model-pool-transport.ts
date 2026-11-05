@@ -49,6 +49,7 @@ import {
 import { withAnthropicToolCallIds } from "./adapters/anthropic";
 import {
   anthropicResponseToOpenai,
+  mapStopReason,
   openaiToAnthropic,
 } from "./adapters/anthropic-openai-translator";
 import { withBedrockToolCallIds } from "./adapters/bedrock";
@@ -543,7 +544,7 @@ function anthropicEventsToOpenAiChunks(ctx: {
   type Event = any;
   let nextToolIndex = 0;
   let toolIndexByBlock = new Map<number, number>();
-  let finishReason: string | null = null;
+  let finishReason: Anthropic.Types.MessagesResponse["stop_reason"] = null;
   let observedUsage = false;
   let inputTokens = 0;
   let cacheRead = 0;
@@ -650,14 +651,7 @@ function anthropicEventsToOpenAiChunks(ctx: {
       }
       const prompt = inputTokens + cacheRead + cacheWrite;
       return [
-        chunk(
-          {},
-          finishReason === "max_tokens"
-            ? "length"
-            : finishReason === "tool_use"
-              ? "tool_calls"
-              : "stop",
-        ),
+        chunk({}, mapStopReason(finishReason)),
         {
           id: ctx.chatcmplId,
           object: "chat.completion.chunk",

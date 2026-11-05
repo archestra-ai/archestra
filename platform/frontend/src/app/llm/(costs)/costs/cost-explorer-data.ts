@@ -3,13 +3,11 @@
 // combinations the API can answer, and a hook that turns whichever endpoint
 // answers into one normalized cube (rows × time buckets, optional split).
 
-import {
-  archestraApiSdk,
-  type archestraApiTypes,
-  type StatisticsTimeFrame,
-  type SupportedProvider,
+import type {
+  archestraApiTypes,
+  StatisticsTimeFrame,
+  SupportedProvider,
 } from "@archestra/shared";
-import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useProxyLabelCosts } from "@/lib/proxy-label-costs.query";
@@ -18,17 +16,18 @@ import {
   useProxyCostStatistics,
   useTeamStatistics,
 } from "@/lib/statistics.query";
-import { throwOnApiError } from "@/lib/utils/api";
 import {
   type AppUsageDimension,
   formatCompact,
   formatCost,
   formatInt,
+  type LlmUsageDimension,
   type SkillUsageDimension,
   type ToolCallUsageDimension,
   useAppCostAttribution,
   useAppUsage,
   useCostStatistics,
+  useLlmUsage,
   useSkillCostAttribution,
   useSkillUsage,
   useToolCallUsage,
@@ -55,6 +54,7 @@ export const DIM_IDS = [
   "team",
   "agent",
   "model",
+  "provider",
   "person",
   "app",
   "skill",
@@ -141,13 +141,14 @@ export const DIMS: Record<DimId, { label: string; plural: string }> = {
   team: { label: "Team", plural: "teams" },
   agent: { label: "Agent", plural: "agents" },
   model: { label: "Model", plural: "models" },
+  provider: { label: "Provider", plural: "providers" },
   person: { label: "Person", plural: "people" },
   app: { label: "App", plural: "apps" },
   skill: { label: "Skill", plural: "skills" },
   server: { label: "MCP server", plural: "servers" },
   tool: { label: "Tool", plural: "tools" },
   method: { label: "Access method", plural: "access methods" },
-  key: { label: "Key", plural: "keys" },
+  key: { label: "Credential", plural: "credentials" },
   providerKey: { label: "Provider key", plural: "provider keys" },
   pool: { label: "Model pool", plural: "model pools" },
   label: { label: "Label", plural: "label values" },
@@ -167,6 +168,7 @@ const SUPPORT: Record<DimId, MetricId[]> = {
   team: LLM_METRICS,
   agent: [...LLM_METRICS, "toolCalls"],
   model: LLM_METRICS,
+  provider: LLM_METRICS,
   person: METRIC_IDS.filter((metric) => metric !== "cacheSavings"),
   app: ["billed", "requests", "tokens", "toolCalls", "appRuns"],
   skill: ["tokens", "skillActivations"],
@@ -197,6 +199,8 @@ export function splitOptions(metric: MetricId, group: DimId): DimId[] {
     if (metric === "skillActivations") return ["skill"];
     return ["model"];
   }
+  if (LLM_METRICS.includes(metric) && BREAKDOWN_DIMS.includes(group))
+    return BREAKDOWN_DIMS.filter((d) => d !== group);
   return [];
 }
 
@@ -213,6 +217,9 @@ export function normalize(q: PivotQuery): PivotQuery {
       : "none";
   return { ...q, group, split };
 }
+
+/** LLM dimensions that combine through GET /api/statistics/llm-usage. */
+const BREAKDOWN_DIMS: DimId[] = ["team", "key", "provider", "model"];
 
 const PREFERRED_GROUP: Partial<Record<MetricId, DimId>> = {
   cacheSavings: "time",
@@ -263,8 +270,18 @@ export const SAVED_VIEWS: { id: string; label: string; q: PivotQuery }[] = [
     q: { metric: "toolCalls", group: "server", split: "tool", chart: "bars" },
   },
   {
+    id: "team-model",
+    label: "Team spend by model",
+    q: { metric: "billed", group: "team", split: "model", chart: "table" },
+  },
+  {
+    id: "key-provider",
+    label: "Credential spend by provider",
+    q: { metric: "billed", group: "key", split: "provider", chart: "table" },
+  },
+  {
     id: "keys",
-    label: "Keys by spend",
+    label: "Credentials by spend",
     q: { metric: "billed", group: "key", split: "none", chart: "table" },
   },
   {
@@ -395,13 +412,31 @@ export type Cube = {
   notice?: string;
   retry: () => void;
   total: number;
+  /**
+   * Per-bucket totals that count each request once, set when rows overlap
+   * (a team admin's teams, where a sub-team's spend also counts toward its
+   * parent). The trend and pivot column totals use these over row sums.
+   */
+  bucketTotals?: number[];
+  /**
+   * Every metric per group and split, for the CSV export. Set by sources
+   * that return them all at once; others export the metric on screen.
+   */
+  exportTable?: { header: string[]; rows: (string | number)[][] };
 };
 
 export function usePivotCube(
   q: PivotQuery,
   timeframe: StatisticsTimeFrame,
   enabled: boolean,
+  scope: {
+    /** Only this team's requests; answered for the team and time groupings. */
+    teamId?: string;
+    /** A team admin's view: team rows can overlap, so totals come from costs. */
+    teamScoped?: boolean;
+  } = {},
 ): Cube {
+  const { teamId, teamScoped = false } = scope;
   const src = resolveSource(q);
   const on = (kind: Source["kind"]) => enabled && src.kind === kind;
 
@@ -449,11 +484,13 @@ export function usePivotCube(
     groupBy: ["skillId"],
     enabled: on("skill") && q.group === "skill",
   });
-  const teamQ = useTeamStatistics({ timeframe, enabled: on("team") });
+  const teamQ = useTeamStatistics({ timeframe, teamId, enabled: on("team") });
   const agentQ = useProfileStatistics({ timeframe, enabled: on("agent") });
+  const dedupeTeams = teamScoped && src.kind === "team";
   const modelQ = useCostStatistics({
     timeframe,
-    enabled: on("model") || on("time"),
+    teamId,
+    enabled: on("model") || on("time") || (on("team") && dedupeTeams),
   });
   const userQ = useUsersForPivot({
     timeframe,
@@ -471,55 +508,41 @@ export function usePivotCube(
     limit: 50,
     ...(q.group === "providerKey" ? { includeProviderKeys: "true" } : {}),
     ...(q.group === "pool" ? { includeModelPools: "true" } : {}),
+    // Each row's trend comes back with the page instead of one request per row.
+    includeGroupTimeSeries: "true",
     enabled: on("proxy") && q.group !== "label",
+  });
+  const llmQ = useLlmUsage({
+    timeframe,
+    groupBy: src.kind === "llm" ? src.dims : ["day"],
+    enabled: on("llm"),
   });
   const providerCatalog = useModelProviderCatalog();
   const labelQ = useProxyLabelCosts({
     timeframe,
     labelKey: q.labelKey,
+    includeGroupTimeSeries: "true",
     enabled: on("proxy") && q.group === "label",
   });
 
   const proxyBy = src.kind === "proxy" ? src.by : null;
-  const proxyItems = useMemo(() => {
+  const proxyItems = useMemo((): ProxyItem[] => {
     if (proxyBy === "label") {
       if (!q.labelKey) return [];
       return (labelQ.data?.groups ?? []).map(({ value, ...totals }) => ({
         key: value === null ? "missing" : `value:${value}`,
         label: value ?? "Unassigned (label missing)",
-        sub: undefined as string | undefined,
         tag: value === null ? "Label missing" : undefined,
         totals,
-        filter: {
-          labelKey: q.labelKey,
-          ...(value === null
-            ? { labelUnassigned: "true" }
-            : { labelValue: value }),
-        } as ProxyFilter,
       }));
     }
     return proxyBy && proxyQ.data
       ? proxyItemsFor(proxyBy, proxyQ.data, providerCatalog.label)
       : [];
   }, [proxyBy, proxyQ.data, labelQ.data, q.labelKey, providerCatalog]);
-  const itemQs = useQueries({
-    queries: proxyItems.map((item) => ({
-      queryKey: ["cost-explorer", "proxy-item", timeframe, item.filter],
-      queryFn: async () => {
-        const { data, error } = await archestraApiSdk.getProxyCostStatistics({
-          query: { timeframe, limit: 1, ...(item.filter ?? {}) },
-        });
-        throwOnApiError(error, { toastOnError: false });
-        return data ?? null;
-      },
-      enabled: enabled && src.kind === "proxy" && item.filter !== null,
-      staleTime: 60_000,
-    })),
-  });
-  const itemStamp = itemQs.map((r) => r.dataUpdatedAt).join(",");
 
   const tf = String(timeframe);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: itemStamp tracks itemQs
+  // biome-ignore lint/correctness/useExhaustiveDependencies: lists the query fields the cube reads; the query objects themselves change on every render
   return useMemo(() => {
     const metric = q.metric;
     const primary =
@@ -531,31 +554,33 @@ export function usePivotCube(
             : appQ
           : src.kind === "skill"
             ? skillQ
-            : src.kind === "team"
-              ? teamQ
-              : src.kind === "agent"
-                ? agentQ
-                : src.kind === "model" || src.kind === "time"
-                  ? modelQ
-                  : src.kind === "user"
-                    ? userQ
-                    : q.group === "label"
-                      ? labelQ
-                      : proxyQ;
+            : src.kind === "llm"
+              ? llmQ
+              : src.kind === "team"
+                ? teamQ
+                : src.kind === "agent"
+                  ? agentQ
+                  : src.kind === "model" || src.kind === "time"
+                    ? modelQ
+                    : src.kind === "user"
+                      ? userQ
+                      : q.group === "label"
+                        ? labelQ
+                        : proxyQ;
     const failed = [
       primary,
-      ...(src.kind === "proxy" ? itemQs : []),
       ...(src.kind === "skill" && q.group === "skill"
         ? [skillReachQ, skillCostQ]
         : []),
+      ...(dedupeTeams ? [modelQ] : []),
     ].find((query) => query.isError);
     const base = {
-      api: apiFor(src, tf, q),
+      api: apiFor(src, tf, q, teamId),
       isLoading: false,
       error: failed?.error,
       retry: () => {
         void primary.refetch();
-        for (const query of itemQs) void query.refetch();
+        if (dedupeTeams) void modelQ.refetch();
         if (src.kind === "skill") {
           void skillReachQ.refetch();
           void skillCostQ.refetch();
@@ -784,6 +809,28 @@ export function usePivotCube(
               : [],
         };
       }
+      case "llm": {
+        const rows = llmQ.data?.data ?? [];
+        const describe = (dim: DimId | SplitId, row: LlmUsageRow) =>
+          llmDimValue(dim, row, providerCatalog.label);
+        const facts: Fact[] = rows.map((row) => {
+          const g = describe(q.group, row);
+          const s = q.split === "none" ? null : describe(q.split, row);
+          return {
+            ...g,
+            s: s?.g,
+            sLabel: s?.gLabel,
+            b: row.day ?? "",
+            v: pointValue(metric, row),
+          };
+        });
+        return {
+          ...assemble(facts),
+          ...base,
+          isLoading: llmQ.isLoading,
+          exportTable: llmExportTable(rows, q, describe),
+        };
+      }
       case "team":
       case "agent":
       case "model": {
@@ -792,7 +839,7 @@ export function usePivotCube(
             ? (teamQ.data ?? []).map((t) => ({
                 key: t.teamId,
                 label: t.teamName,
-                sub: `${t.members} members`,
+                sub: `${t.members} ${t.members === 1 ? "member" : "members"}`,
                 series: t.timeSeries,
                 totals: t,
               }))
@@ -841,14 +888,47 @@ export function usePivotCube(
         );
         const loading =
           src.kind === "team"
-            ? teamQ.isLoading
+            ? teamQ.isLoading || (dedupeTeams && modelQ.isLoading)
             : src.kind === "agent"
               ? agentQ.isLoading
               : modelQ.isLoading;
+        const cube = { ...assemble(facts, { totals, meta }), ...base };
+        if (!dedupeTeams) return { ...cube, isLoading: loading };
+        // Without the scope's costs, the overlapping rows have no honest
+        // total: keep loading, or show the error (the failed list has it).
+        if (!modelQ.data)
+          return { ...cube, total: 0, isLoading: !modelQ.isError };
+        // A sub-team's spend also counts toward its parent team, as it does
+        // for spend limits, so these rows overlap. The scope's per-model
+        // costs count each request once: the total, trend and column totals
+        // come from them.
+        const scoped = modelQ.data.models;
+        const byBucket = new Map<string, number>();
+        for (const m of scoped)
+          for (const p of m.timeSeries)
+            byBucket.set(
+              p.timestamp,
+              (byBucket.get(p.timestamp) ?? 0) + pointValue(metric, p),
+            );
         return {
-          ...assemble(facts, { totals, meta }),
-          ...base,
+          ...cube,
           isLoading: loading,
+          total: scoped.reduce(
+            (sum, m) =>
+              sum +
+              (metric === "billed"
+                ? m.cost
+                : metric === "subscription"
+                  ? m.timeSeries.reduce((t, p) => t + pointValue(metric, p), 0)
+                  : pointValue(metric, m)),
+            0,
+          ),
+          bucketTotals: cube.buckets.map((b) => byBucket.get(b) ?? 0),
+          notice:
+            cube.notice ??
+            (teamId
+              ? undefined
+              : "A sub-team's spend also counts toward its parent team, as it does for spend limits, so rows can add up to more than the total."),
         };
       }
       case "user": {
@@ -894,7 +974,7 @@ export function usePivotCube(
         const totals = new Map<string, number>();
         const meta = new Map<string, Omit<Fact, "b" | "v">>();
         const failedOver = new Map<string, number>();
-        proxyItems.forEach((item, i) => {
+        for (const item of proxyItems) {
           totals.set(item.key, pointValue(metric, item.totals));
           failedOver.set(item.key, item.totals.failedOverAttempts);
           meta.set(item.key, {
@@ -902,21 +982,20 @@ export function usePivotCube(
             gLabel: item.label,
             gSub: item.sub,
             gTag: item.tag,
-            limitTarget: "limitTarget" in item ? item.limitTarget : undefined,
+            limitTarget: item.limitTarget,
           });
-          const series = itemQs[i]?.data?.timeSeries ?? [];
-          for (const p of series) {
+          for (const p of item.totals.timeSeries ?? []) {
             facts.push({
               g: item.key,
               gLabel: item.label,
               gSub: item.sub,
               gTag: item.tag,
-              limitTarget: "limitTarget" in item ? item.limitTarget : undefined,
+              limitTarget: item.limitTarget,
               b: p.timestamp,
               v: pointValue(metric, p),
             });
           }
-        });
+        }
         const cube = assemble(facts, { totals, meta });
         // A pool that failed over wrote one request per attempt; show how
         // many of the requests were attempts the client never saw.
@@ -934,8 +1013,7 @@ export function usePivotCube(
           extraCols: showFailedOver
             ? [{ id: "failedOver", label: "Failed over", format: formatInt }]
             : [],
-          isLoading:
-            primary.isLoading || itemQs.some((query) => query.isLoading),
+          isLoading: primary.isLoading,
         };
       }
     }
@@ -983,7 +1061,12 @@ export function usePivotCube(
     proxyQ.data,
     proxyQ.isLoading,
     proxyItems,
-    itemStamp,
+    teamId,
+    dedupeTeams,
+    llmQ.data,
+    llmQ.error,
+    llmQ.isLoading,
+    providerCatalog,
   ]);
 }
 
@@ -997,6 +1080,7 @@ type Source =
   | { kind: "agent" }
   | { kind: "model" }
   | { kind: "user"; models: boolean }
+  | { kind: "llm"; dims: LlmUsageDimension[] }
   | { kind: "proxy"; by: ProxyGroup };
 
 function resolveSource(q: PivotQuery): Source {
@@ -1031,6 +1115,24 @@ function resolveSource(q: PivotQuery): Source {
     }
     return { kind: "skill", dims };
   }
+  // A provider, or a team, credential or model broken down by another of
+  // them, comes from the grouped LLM usage endpoint.
+  if (
+    LLM_METRICS.includes(q.metric) &&
+    (q.group === "provider" ||
+      (BREAKDOWN_DIMS.includes(q.group) &&
+        split !== null &&
+        BREAKDOWN_DIMS.includes(split)))
+  ) {
+    const dims: LlmUsageDimension[] = ["day"];
+    for (const d of [q.group, split]) {
+      if (d === "team") dims.push("teamId");
+      if (d === "key") dims.push("credentialId");
+      if (d === "provider") dims.push("provider");
+      if (d === "model") dims.push("model");
+    }
+    return { kind: "llm", dims };
+  }
   if (q.group === "team") return { kind: "team" };
   if (q.group === "agent") return { kind: "agent" };
   if (q.group === "model") return { kind: "model" };
@@ -1045,22 +1147,24 @@ function resolveSource(q: PivotQuery): Source {
   return { kind: "user", models: split === "model" };
 }
 
-function apiFor(src: Source, tf: string, q: PivotQuery) {
+function apiFor(src: Source, tf: string, q: PivotQuery, teamId?: string) {
+  const team = teamId ? `&teamId=${encodeURIComponent(teamId)}` : "";
   switch (src.kind) {
-    case "time":
-      return `GET /api/statistics/costs?timeframe=${tf}`;
     case "tool":
       return `GET /api/statistics/mcp-tool-calls?groupBy=${src.dims.join(",")}&timeframe=${tf}`;
     case "app":
       return `GET /api/statistics/app-usage?groupBy=${src.dims.join(",")}&timeframe=${tf}`;
     case "skill":
       return `GET /api/statistics/skill-usage?groupBy=${src.dims.join(",")}&timeframe=${tf}`;
+    case "llm":
+      return `GET /api/statistics/llm-usage?groupBy=${src.dims.join(",")}&timeframe=${tf}`;
     case "team":
-      return `GET /api/statistics/teams?timeframe=${tf}`;
+      return `GET /api/statistics/teams?timeframe=${tf}${team}`;
     case "agent":
       return `GET /api/statistics/agents?timeframe=${tf}`;
+    case "time":
     case "model":
-      return `GET /api/statistics/models?timeframe=${tf}`;
+      return `GET /api/statistics/costs?timeframe=${tf}${team}`;
     case "user":
       return `GET /api/statistics/users?includeTimeSeries=true${src.models ? "&includeModels=true&includeModelTimeSeries=true" : ""}&timeframe=${tf}`;
     case "proxy":
@@ -1237,19 +1341,21 @@ function assemble(
 
 type ProxyData = archestraApiTypes.GetProxyCostStatisticsResponses["200"];
 type ProxyGroup = "method" | "key" | "providerKey" | "pool" | "label";
-type ProxyFilter =
-  | { credentialId: string }
-  | { providerApiKeyId: string }
-  | { modelPoolId: string }
-  | { authMethod: ProxyData["methods"][number]["authMethod"] }
-  | { labelKey: string; labelValue: string }
-  | { labelKey: string; labelUnassigned: "true" };
+/** One row of a proxy breakdown, with its trend when the page carried one. */
+type ProxyItem = {
+  key: string;
+  label: string;
+  sub?: string;
+  tag?: string;
+  limitTarget?: CubeRow["limitTarget"];
+  totals: Omit<ProxyData["methods"][number], "authMethod">;
+};
 
 function proxyItemsFor(
   by: Exclude<ProxyGroup, "label">,
   data: ProxyData,
   providerLabel: (provider: SupportedProvider) => string,
-) {
+): ProxyItem[] {
   if (by === "providerKey") {
     return (data.providerKeys ?? []).map((k) => ({
       key: k.providerApiKeyId ?? "none",
@@ -1263,9 +1369,6 @@ function proxyItemsFor(
         ? providerLabel(k.provider as SupportedProvider)
         : undefined,
       totals: k,
-      filter: k.providerApiKeyId
-        ? ({ providerApiKeyId: k.providerApiKeyId } as ProxyFilter)
-        : null,
     }));
   }
   if (by === "pool") {
@@ -1273,36 +1376,18 @@ function proxyItemsFor(
       key: p.modelPoolId ?? "none",
       label: p.modelPoolName ?? (p.modelPoolId ? "Deleted pool" : "Not pooled"),
       sub: p.modelPoolId ? `ID ${p.modelPoolId}` : undefined,
-      tag: undefined as string | undefined,
       totals: p,
-      filter: p.modelPoolId
-        ? ({ modelPoolId: p.modelPoolId } as ProxyFilter)
-        : null,
     }));
   }
   if (by === "method") {
     return data.methods.map((m) => ({
       key: m.authMethod,
       label: METHOD_NAMES[m.authMethod] ?? m.authMethod,
-      sub: undefined as string | undefined,
-      tag: undefined as string | undefined,
-      limitTarget: undefined as CubeRow["limitTarget"],
       totals: m,
-      filter: { authMethod: m.authMethod } as ProxyFilter | null,
     }));
   }
-  const perMethod = new Map<string, number>();
-  for (const c of data.credentials)
-    perMethod.set(c.authMethod, (perMethod.get(c.authMethod) ?? 0) + 1);
   return data.credentials.map((c, i) => {
     const method = METHOD_NAMES[c.authMethod] ?? c.authMethod;
-    // A row without a credential id can only be trended when it is the
-    // method's only row; otherwise its trend is unknowable.
-    const filter: ProxyFilter | null = c.credentialId
-      ? { credentialId: c.credentialId }
-      : perMethod.get(c.authMethod) === 1
-        ? { authMethod: c.authMethod }
-        : null;
     return {
       key: c.credentialId ?? `${c.authMethod}#${i}`,
       limitTarget:
@@ -1314,13 +1399,105 @@ function proxyItemsFor(
       label: c.credentialName ?? method,
       sub: c.credentialId
         ? `ID ${c.credentialId}`
-        : "No individual key identifier recorded",
+        : "No individual credential identifier recorded",
       tag: method,
       totals: c,
-      filter,
     };
   });
 }
+
+type LlmUsageRow =
+  archestraApiTypes.GetLlmUsageResponses["200"]["data"][number];
+
+function llmDimValue(
+  dim: DimId | SplitId,
+  row: LlmUsageRow,
+  providerLabel: (provider: SupportedProvider) => string,
+): Omit<Fact, "b" | "v"> {
+  switch (dim) {
+    case "team":
+      return { g: row.teamId ?? "?", gLabel: row.teamName ?? "Unknown team" };
+    case "provider":
+      return {
+        g: row.provider ?? "?",
+        gLabel: row.provider
+          ? providerLabel(row.provider as SupportedProvider)
+          : "Unknown",
+      };
+    case "key": {
+      const method = row.authMethod ?? "unknown";
+      const methodName = METHOD_NAMES[method] ?? method;
+      return {
+        g: row.credentialId ?? method,
+        gLabel: row.credentialName ?? methodName,
+        gSub: row.credentialId ? `ID ${row.credentialId}` : undefined,
+        gTag: methodName,
+        limitTarget:
+          row.credentialId &&
+          (method === "virtual_key" || method === "passthrough_virtual_key")
+            ? { entityType: "virtual_key", entityId: row.credentialId }
+            : undefined,
+      };
+    }
+    default:
+      return { g: row.model ?? "?", gLabel: row.model ?? "Unknown" };
+  }
+}
+
+/** One line per group and split, summed over days, with every metric. */
+function llmExportTable(
+  rows: LlmUsageRow[],
+  q: PivotQuery,
+  describe: (dim: DimId | SplitId, row: LlmUsageRow) => Omit<Fact, "b" | "v">,
+): NonNullable<Cube["exportTable"]> {
+  const dims = (q.split === "none" ? [q.group] : [q.group, q.split]).map(
+    (d) => d as DimId,
+  );
+  const sums = new Map<string, { labels: string[]; values: number[] }>();
+  for (const row of rows) {
+    const parts = dims.map((d) => describe(d, row));
+    const id = parts.map((p) => p.g).join("\u0000");
+    const entry = sums.get(id) ?? {
+      labels: parts.flatMap((p, i) =>
+        dims[i] === "key"
+          ? [p.gLabel, p.gTag ?? "", row.credentialId ?? ""]
+          : [p.gLabel],
+      ),
+      values: EXPORT_METRICS.map(() => 0),
+    };
+    EXPORT_METRICS.forEach(([, field], i) => {
+      entry.values[i] += row[field];
+    });
+    sums.set(id, entry);
+  }
+  return {
+    header: [
+      ...dims.flatMap((d) =>
+        d === "key"
+          ? [DIMS.key.label, "Access method", "Credential ID"]
+          : [DIMS[d].label],
+      ),
+      ...EXPORT_METRICS.map(([label]) => label),
+    ],
+    rows: [...sums.values()]
+      .sort((a, b) => b.values[EXPORT_BILLED] - a.values[EXPORT_BILLED])
+      .map((entry) => [...entry.labels, ...entry.values]),
+  };
+}
+
+const EXPORT_METRICS = [
+  ["Requests", "requests"],
+  ["Input tokens", "inputTokens"],
+  ["Output tokens", "outputTokens"],
+  ["Cache read tokens", "cacheReadTokens"],
+  ["Cache write tokens", "cacheWriteTokens"],
+  ["Total tokens", "totalTokens"],
+  ["Billed spend (USD)", "billedCost"],
+  ["Subscription estimate (USD)", "subscriptionCost"],
+] as const satisfies readonly (readonly [string, keyof LlmUsageRow])[];
+const EXPORT_BILLED = EXPORT_METRICS.findIndex(
+  ([, field]) => field === "billedCost",
+);
 
 function useUsersForPivot({
   timeframe,

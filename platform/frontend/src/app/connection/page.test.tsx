@@ -124,16 +124,10 @@ vi.mock("@/lib/mcp/use-mcp-registry-rows-by-ids", () => ({
   },
 }));
 vi.mock("@/lib/organization.query");
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      getSkills: vi.fn(async () => ({ data: null })),
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getSkills: vi.fn(async () => ({ data: null })),
+}));
 vi.mock("@/components/page-layout", () => ({
   PageLayout: ({
     children,

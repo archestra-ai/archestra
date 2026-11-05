@@ -13,6 +13,7 @@ import type {
 import {
   chatCompletionToResponses,
   type OpenaiResponsesContext,
+  responsesEndingFromFinishReason,
 } from "./openai-responses-translator";
 import {
   carriesResponsesTerminal,
@@ -315,7 +316,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
     });
     frames.push(
       toSse({
-        type: "response.completed",
+        type: this.terminalEventType(),
         sequence_number: this.nextSequenceNumber(),
         response: {
           ...this.buildResponsesResponse(toolCalls),
@@ -438,7 +439,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
           id: this.itemId,
           type: "message",
           role: "assistant",
-          status: "completed",
+          status: this.ending().status,
           content: [
             {
               type: "output_text",
@@ -449,7 +450,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
         },
       }),
       toSse({
-        type: "response.completed",
+        type: this.terminalEventType(),
         sequence_number: this.nextSequenceNumber(),
         // The builder omits usage entirely for an unobserved turn, which is
         // fine for the non-streaming body but not here: a terminal frame
@@ -477,7 +478,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
         id: this.itemId,
         type: "message",
         role: "assistant",
-        status: "completed",
+        status: this.ending().status,
         content: [
           {
             type: "output_text",
@@ -508,10 +509,27 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
       object: "response",
       created_at: this.ctx.createdUnix,
       model: this.ctx.requestedModel,
-      status: "completed",
+      ...this.ending(),
       output,
       usage: this.state.usage ? this.getResponsesUsage() : undefined,
     };
+  }
+
+  // A turn the model did not finish (token budget, content filter) ends as
+  // `incomplete`, as the non-streamed translation does. A policy refusal that
+  // replaced the response is a finished answer.
+  private ending() {
+    return responsesEndingFromFinishReason(
+      this.replacedText !== null
+        ? "stop"
+        : (this.inner.getOpenAiFinishReason?.() ?? this.state.stopReason),
+    );
+  }
+
+  private terminalEventType() {
+    return this.ending().status === "incomplete"
+      ? "response.incomplete"
+      : "response.completed";
   }
 
   private getResponsesUsage() {

@@ -111,29 +111,30 @@ export interface ModelPoolCaller {
   virtualKeyId?: string;
   /** Provider keys the caller may already use. */
   providerApiKeyIds: string[];
-  /** Pools an OAuth client was granted outright. */
+  /**
+   * Pools an OAuth client calling as the app was given, the only ones it may
+   * use. Unset for a caller that has no list of its own.
+   */
   modelPoolIds?: string[];
 }
 
 /**
- * Whether a caller may spend a pool's member keys: when it already uses one of
- * them, since the admin who put that key in the pool chose the other members
- * as its backups. That is what puts a user who connected through Connect on
- * the pool without knowing it. A virtual key or an OAuth client can also be
- * granted the pool outright, for one that maps none of the members.
+ * Whether a caller may spend a pool's member keys. A virtual key, or an OAuth
+ * client calling as the app, may only when the pool was added to it, whatever
+ * provider keys it maps. A caller with no pools of its own (a signed-in user,
+ * an identity provider's token) may when it already uses one of the members'
+ * keys, since the admin who put that key in the pool chose the other members
+ * as its backups.
  */
 export function mayUseModelPool(params: {
   pool: Pick<ModelPool, "id" | "members" | "virtualApiKeyIds">;
   caller: ModelPoolCaller;
 }): boolean {
   const { pool, caller } = params;
-  if (
-    (caller.virtualKeyId &&
-      pool.virtualApiKeyIds.includes(caller.virtualKeyId)) ||
-    caller.modelPoolIds?.includes(pool.id)
-  ) {
-    return true;
+  if (caller.virtualKeyId) {
+    return pool.virtualApiKeyIds.includes(caller.virtualKeyId);
   }
+  if (caller.modelPoolIds) return caller.modelPoolIds.includes(pool.id);
   return pool.members.some((member) =>
     caller.providerApiKeyIds.includes(member.providerApiKeyId),
   );

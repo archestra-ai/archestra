@@ -5,6 +5,9 @@ export {
   ATTR_ARCHESTRA_COST,
   ATTR_ARCHESTRA_EXTERNAL_AGENT_ID,
   ATTR_ARCHESTRA_RUN_ID,
+  ATTR_ARCHESTRA_SUBAGENT_FAILOVER_COUNT,
+  ATTR_ARCHESTRA_SUBAGENT_INITIAL_AGENT_ID,
+  ATTR_ARCHESTRA_SUBAGENT_INITIAL_AGENT_NAME,
   ATTR_ARCHESTRA_TRIGGER_SOURCE,
   ATTR_ARCHESTRA_USAGE_CACHE_CREATION_1H_INPUT_TOKENS,
   ATTR_ARCHESTRA_USER_EMAIL,
@@ -59,7 +62,7 @@ export {
   setTeamAttributes,
   setUserAttributes,
 } from "./attributes";
-export { startActiveChatSpan } from "./chat";
+export { startActiveChatSpan, updateActiveChatSpanAgent } from "./chat";
 export { startActiveLlmSpan } from "./llm";
 export {
   recordBlockedToolSpans,

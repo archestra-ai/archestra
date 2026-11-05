@@ -1,6 +1,21 @@
 import { z } from "zod";
 
-export const GUARDRAILS_POLICY_MAX_LENGTH = 262144;
+/** In UTF-8 bytes: the size Git sync accepts, so a saved policy stays syncable. */
+export const GUARDRAILS_POLICY_MAX_LENGTH = 1024 * 1024;
+
+export function guardrailsPolicyBytes(text: string): number {
+  return Buffer.byteLength(text, "utf8");
+}
+
+export const GuardrailsPolicyContentSchema = z
+  .string()
+  .max(GUARDRAILS_POLICY_MAX_LENGTH)
+  .refine(
+    (text) => guardrailsPolicyBytes(text) <= GUARDRAILS_POLICY_MAX_LENGTH,
+    {
+      message: `The policy is over the ${GUARDRAILS_POLICY_MAX_LENGTH} byte limit.`,
+    },
+  );
 
 const GuardrailsPolicyEditSchema = z.strictObject({
   oldText: z
@@ -23,13 +38,9 @@ const GuardrailsPolicyEditSchema = z.strictObject({
  * models in strict function-calling mode fill the unused one with "", [] or null.
  */
 export const ProposedGuardrailsPolicySchema = z.strictObject({
-  content: z
-    .string()
-    .max(GUARDRAILS_POLICY_MAX_LENGTH)
-    .nullish()
-    .describe(
-      "The complete policy text. Use it only for a first policy or a full rewrite. Leave it empty when you send edits.",
-    ),
+  content: GuardrailsPolicyContentSchema.nullish().describe(
+    "The complete policy text. Use it only for a first policy or a full rewrite. Leave it empty when you send edits.",
+  ),
   edits: z
     .array(GuardrailsPolicyEditSchema)
     .max(50)

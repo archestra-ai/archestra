@@ -470,7 +470,14 @@ class UsageStatisticsModel {
       groupBy.includes("credentialId") || params.credentialId !== undefined;
 
     const billed = billedModelJoins();
-    const teamAssignments = AgentTeamModel.readAssignments(organizationId);
+    // Expand team grants only for agents with traffic in the window, not for
+    // every agent in the organization.
+    const teamAssignments = AgentTeamModel.readAssignments(organizationId, {
+      agentIds: db
+        .selectDistinct({ id: i.profileId })
+        .from(i)
+        .where(and(...StatisticsModel.timeframeConditions(params.timeframe))),
+    });
     const method = sql<string>`COALESCE(${i.authMethod}, 'unknown')`;
     const credential = sql<string | null>`CASE
       WHEN ${method} = 'virtual_key' THEN ${i.virtualKeyId}::text

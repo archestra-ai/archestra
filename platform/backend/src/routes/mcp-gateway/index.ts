@@ -778,6 +778,8 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
       schema: {
         operationId: "mcpGatewayGet",
         tags: ["MCP Gateway"],
+        description:
+          "Open an MCP Gateway SSE stream for a client that requests one. Other GET requests return 405 because the gateway does not offer a standalone stream for them.",
         params: z.object({
           profileId: UuidOrSlugSchema,
         }),
@@ -933,6 +935,8 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
       schema: {
         operationId: "mcpGatewaySseMessage",
         tags: ["MCP Gateway"],
+        description:
+          "Send a JSON-RPC message for a legacy HTTP+SSE session. The gateway sends the result on the SSE stream opened by GET, not in this response.",
         params: z.object({
           profileId: UuidOrSlugSchema,
         }),
@@ -1033,6 +1037,8 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
       schema: {
         operationId: "reportAgentRuntimeStatus",
         tags: ["MCP Gateway"],
+        description:
+          "Update the attention state of a native agent run using its MCP Gateway credential. This does not change the run's lifecycle state.",
         params: z.object({ profileId: UuidOrSlugSchema }),
         body: z.object({
           taskId: z.string().uuid(),
@@ -1094,6 +1100,8 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         operationId: "mcpGatewayPost",
         response: { default: z.unknown(), ...rateLimitResponses },
         tags: ["MCP Gateway"],
+        description:
+          "Send an MCP JSON-RPC request through the gateway for the specified agent profile. Authenticate with a platform-managed bearer token or agent ID.",
         params: z.object({
           profileId: UuidOrSlugSchema,
         }),

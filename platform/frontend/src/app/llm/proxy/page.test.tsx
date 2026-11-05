@@ -22,7 +22,8 @@ import {
 } from "@/lib/organization.query";
 import LlmProxyPage from "./page";
 
-const API_ORIGIN = "http://localhost:9000";
+// Keep a missing MSW handler away from the developer's running backend.
+const API_ORIGIN = "http://127.0.0.1:1";
 
 // The credential picker is a Radix Select, which needs pointer capture and
 // scrollIntoView that jsdom lacks.
@@ -571,8 +572,11 @@ describe("LlmProxyPage connect steps", () => {
       http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
         HttpResponse.json([JEV_PROVIDER_KEY]),
       ),
-      http.get(`${API_ORIGIN}/api/llm-oauth-clients`, () =>
-        HttpResponse.json(
+      http.get(`${API_ORIGIN}/api/oauth-clients`, ({ request }) => {
+        expect(new URL(request.url).searchParams.get("capability")).toBe(
+          "llm:proxy",
+        );
+        return HttpResponse.json(
           page([
             {
               id: "oc-batch",
@@ -581,10 +585,13 @@ describe("LlmProxyPage connect steps", () => {
               grantType: "client_credentials",
               authorId: "someone-else",
               providerApiKeys: JUDGE_KEY.providerApiKeys,
+              includeFutureProviders: false,
+              scopes: ["llm:proxy"],
+              modelPoolIds: [],
             },
           ]),
-        ),
-      ),
+        );
+      }),
     );
     const user = userEvent.setup();
     renderPage();

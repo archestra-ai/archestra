@@ -9,8 +9,8 @@ const getInteractionsMock = vi.hoisted(() => vi.fn());
 const getUniqueUserIdsMock = vi.hoisted(() => vi.fn());
 vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
-  getInteractions: getInteractionsMock,
-  getUniqueUserIds: getUniqueUserIdsMock,
+  getLlmProxyLogs: getInteractionsMock,
+  getLlmProxyLogUserIds: getUniqueUserIdsMock,
 }));
 
 import {

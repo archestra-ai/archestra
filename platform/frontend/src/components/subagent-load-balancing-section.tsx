@@ -190,9 +190,14 @@ export function SubagentLoadBalancingSection({
       <div className="min-w-0 flex-1 space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
-            <Label htmlFor={enableSwitchId}>
-              <span>Load balancing &amp; failover</span>
-            </Label>
+            <div className="flex items-center gap-2">
+              <Label htmlFor={enableSwitchId}>
+                <span>Load balancing &amp; failover</span>
+              </Label>
+              <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                Beta
+              </Badge>
+            </div>
             <FieldDescription>
               <span>
                 Control how incoming requests are distributed across the

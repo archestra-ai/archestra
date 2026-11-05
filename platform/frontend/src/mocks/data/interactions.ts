@@ -12,8 +12,8 @@ import {
 } from "@archestra/shared/interactions/client";
 
 type SessionSummary =
-  archestraApiTypes.GetInteractionSessionsResponses["200"]["data"][number];
-type Interaction = archestraApiTypes.GetInteractionResponses["200"];
+  archestraApiTypes.GetLlmProxyLogSessionsResponses["200"]["data"][number];
+type Interaction = archestraApiTypes.GetLlmProxyLogResponses["200"];
 // The factory builds the OpenAI chat-completions member of the interaction
 // union, which keeps `request`/`response` overrides cleanly typed.
 type OpenAiInteraction = Extract<

@@ -103,7 +103,7 @@ function makePagination() {
 }
 
 type SessionSummary =
-  archestraApiTypes.GetInteractionSessionsResponses["200"]["data"][number];
+  archestraApiTypes.GetLlmProxyLogSessionsResponses["200"]["data"][number];
 
 function makeSessionSummary(
   overrides: Partial<SessionSummary> = {},

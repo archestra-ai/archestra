@@ -8,11 +8,11 @@ import LlmProxyLogsPageServer from "./page";
 // anyway. It pins the server component to prefetching nothing at all.
 
 const getAgents = vi.hoisted(() => vi.fn());
-const getInteractions = vi.hoisted(() => vi.fn());
+const getLlmProxyLogs = vi.hoisted(() => vi.fn());
 vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
   getAgents,
-  getInteractions,
+  getLlmProxyLogs,
 }));
 
 vi.mock("@/lib/utils/server", () => ({
@@ -26,11 +26,11 @@ vi.mock("./page.client", () => ({
 describe("LlmProxyLogsPageServer (T-1015)", () => {
   it("prefetches nothing server-side — no interactions, no agent roster", async () => {
     getAgents.mockResolvedValue({ data: [] });
-    getInteractions.mockResolvedValue({ data: { data: [] } });
+    getLlmProxyLogs.mockResolvedValue({ data: { data: [] } });
 
     LlmProxyLogsPageServer();
 
     expect(getAgents).not.toHaveBeenCalled();
-    expect(getInteractions).not.toHaveBeenCalled();
+    expect(getLlmProxyLogs).not.toHaveBeenCalled();
   });
 });

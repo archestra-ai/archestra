@@ -45,8 +45,8 @@ function mapping(key: typeof openaiKey) {
   };
 }
 
-// The pool's members use the OpenAI and Anthropic keys and it lists one
-// virtual key directly; anything mapping only the Gemini key can't call it.
+// Provider-key mappings alone do not grant pool access. Only the virtual
+// keys and app OAuth clients with an explicit pool grant can call it.
 const pool: ModelPool = {
   id: "pool-fast-chat",
   organizationId: "test-org",
@@ -100,10 +100,9 @@ const virtualKeys = [
     id: "vk-listed",
     name: "Listed by the pool",
     tokenStart: "archestra_lst",
-    providerApiKeys: [mapping(geminiKey)],
+    providerApiKeys: [],
+    includeFutureProviders: true,
   }),
-  // On the Anthropic endpoint this key calls through its non-member
-  // Anthropic key, so only the Model Router reaches the pool with it.
   makeVirtualKey({
     id: "vk-mixed",
     name: "Other Anthropic key",
@@ -156,7 +155,8 @@ const oauthClients = [
     id: "oauth-granted",
     clientId: "granted-client",
     name: "Granted the pool",
-    providerApiKeys: [mapping(geminiKey)],
+    providerApiKeys: [],
+    includeFutureProviders: true,
     modelPoolIds: [pool.id],
   }),
   oauthClient({
@@ -170,9 +170,11 @@ const oauthClients = [
 async function mockPool({
   mswControl,
   request,
+  poolOverrides = {},
 }: {
   mswControl: MswControl;
   request: APIRequestContext;
+  poolOverrides?: Partial<ModelPool>;
 }) {
   const config = await (
     await request.get("/internal-test/api/api/config")
@@ -186,7 +188,11 @@ async function mockPool({
         features: { ...config.features, llmModelPoolsEnabled: true },
       },
     },
-    { method: "get", url: "/api/model-pools", body: [pool] },
+    {
+      method: "get",
+      url: "/api/model-pools",
+      body: [{ ...pool, ...poolOverrides }],
+    },
     {
       method: "get",
       url: "/api/llm-provider-api-keys",
@@ -197,11 +203,11 @@ async function mockPool({
       url: "/api/llm-virtual-keys",
       body: makeVirtualKeysList({ keys: virtualKeys }),
     },
-    // The LLM Proxy page lists clients from the first, the pool dialog from
-    // the second, which carries each client's pool grants.
-    ...["/api/llm-oauth-clients", "/api/oauth-clients"].map((url) => ({
-      method: "get" as const,
-      url,
+    // The managed list exposes automatic access; keep the LLM capability filter.
+    {
+      method: "get",
+      url: "/api/oauth-clients",
+      query: { capability: "llm:proxy" },
       body: {
         data: oauthClients,
         pagination: {
@@ -213,158 +219,322 @@ async function mockPool({
           hasPrev: false,
         },
       },
-    })),
+    },
   ]);
 }
 
-async function openConnectDialog(page: Page) {
+async function openConnectTab(page: Page) {
   await page.goto("/llm/model-pools");
-  await page.getByRole("button", { name: `Connect ${POOL_NAME}` }).click();
-  const dialog = page.getByRole("dialog", {
-    name: `Connect to ${POOL_NAME}`,
-  });
+  await page.getByText(POOL_NAME, { exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: POOL_NAME, exact: true });
   await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Connect", exact: true }).click();
   return dialog;
 }
 
-test.describe("Model pool Connect dialog", () => {
-  for (const { label, granted, member, memberKey } of [
-    {
-      label: "Virtual key",
-      granted: "Listed by the pool",
-      member: "Maps a member key",
-      memberKey: openaiKey.name,
-    },
-    {
-      label: "OAuth client",
-      granted: "Granted the pool",
-      member: "CI pipeline",
-      memberKey: anthropicKey.name,
-    },
-  ]) {
-    test(`explains pool-only access for a selected ${label}`, async ({
-      page,
-      mswControl,
-      request,
-    }) => {
-      await mockPool({ mswControl, request });
-      const dialog = await openConnectDialog(page);
-      if (label === "OAuth client") {
-        await dialog.getByText(label, { exact: true }).click();
-      }
-      const grantDetail = dialog.getByText(`Granted access to ${POOL_NAME}`);
-      await expect(grantDetail).toHaveCount(0);
-      await expect(dialog.getByText(memberKey, { exact: false })).toBeVisible();
-
-      await dialog.getByRole("combobox", { name: label }).click();
-      await page.getByRole("option").filter({ hasText: granted }).click();
-      await expect(grantDetail).toBeVisible();
-      await expect(
-        dialog.getByText(geminiKey.name, { exact: false }),
-      ).toHaveCount(0);
-
-      // Browser translation replaces text nodes with its own elements.
-      await grantDetail.evaluate((detail) => {
-        for (const node of Array.from(detail.childNodes)) {
-          if (node.nodeType !== Node.TEXT_NODE) continue;
-          const translated = document.createElement("font");
-          translated.textContent = node.textContent;
-          detail.replaceChild(translated, node);
-        }
-      });
-      await dialog.getByRole("combobox", { name: label }).click();
-      await page.getByRole("option").filter({ hasText: member }).click();
-      await expect(grantDetail).toHaveCount(0);
-      await expect(dialog.getByText(memberKey, { exact: false })).toBeVisible();
-    });
-  }
-
-  test("offers only virtual keys that can call the pool and asks for it by name", async ({
+test.describe("Model pool Connect tab", () => {
+  test("offers only explicitly granted virtual keys and asks for the pool by name", async ({
     page,
     mswControl,
     request,
   }) => {
     await mockPool({ mswControl, request });
-    const dialog = await openConnectDialog(page);
-
+    const dialog = await openConnectTab(page);
     await expect(
-      dialog.getByRole("heading", { name: "Set up virtual key" }),
+      dialog.getByRole("heading", { name: "Choose a virtual key" }),
     ).toBeVisible();
     await dialog.getByRole("combobox", { name: "Virtual key" }).click();
     const options = page.getByRole("option");
     await expect(
-      options.filter({ hasText: "Maps a member key" }),
-    ).toBeVisible();
-    await expect(
       options.filter({ hasText: "Listed by the pool" }),
     ).toBeVisible();
-    await expect(
-      options.filter({ hasText: "Other Anthropic key" }),
-    ).toBeVisible();
-    await expect(options.filter({ hasText: "Gemini only" })).toHaveCount(0);
+    for (const name of [
+      "Maps a member key",
+      "Other Anthropic key",
+      "Gemini only",
+    ]) {
+      await expect(options.filter({ hasText: name })).toHaveCount(0);
+    }
+    await expect(page.getByText("+ Create new key")).toHaveCount(0);
     await page.keyboard.press("Escape");
-
+    await expect(dialog.getByText("Create new virtual key")).toHaveCount(0);
     await expect(dialog.getByText('"model": "fast-chat"')).toBeVisible();
-    // The pool is the model, so there's no model to pick.
+    await expect(
+      dialog.getByText("/chat/completions", { exact: false }),
+    ).toBeVisible();
     await expect(dialog.getByLabel("Model", { exact: true })).toHaveCount(0);
   });
 
-  test("shows where the OAuth access token comes from", async ({
+  test("shows the granted pool request without visible provider keys", async ({
     page,
     mswControl,
     request,
   }) => {
     await mockPool({ mswControl, request });
-    const dialog = await openConnectDialog(page);
-
-    await dialog.getByText("OAuth client", { exact: true }).click();
-    await dialog.getByRole("combobox", { name: "OAuth client" }).click();
-    await expect(
-      page.getByRole("option").filter({ hasText: "CI pipeline" }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("option").filter({ hasText: "Granted the pool" }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("option").filter({ hasText: "Gemini batch" }),
-    ).toHaveCount(0);
-    await page.keyboard.press("Escape");
-
-    await expect(dialog.getByText("client_id=pool-ci-client")).toBeVisible();
-    await expect(
-      dialog.getByText(
-        "$ARCHESTRA_LLM_ACCESS_TOKEN is the access_token from the token request above.",
-      ),
-    ).toBeVisible();
-    await expect(dialog.getByText('"model": "fast-chat"')).toBeVisible();
-  });
-
-  test("on the Anthropic endpoint, offers keys that reach a member and asks for no Anthropic key", async ({
-    page,
-    mswControl,
-    request,
-  }) => {
-    await mockPool({ mswControl, request });
-    // The Anthropic member's key belongs to someone else.
     await mswControl.use({
       method: "get",
       url: "/api/llm-provider-api-keys",
-      body: [openaiKey, geminiKey],
+      body: [],
     });
-    const dialog = await openConnectDialog(page);
-
-    await dialog.getByText("Anthropic API", { exact: true }).click();
+    const dialog = await openConnectTab(page);
     await expect(
-      dialog.getByRole("button", { name: /Add Anthropic key/ }),
-    ).toHaveCount(0);
-    await dialog.getByRole("combobox", { name: "Virtual key" }).click();
-    await expect(
-      page.getByRole("option").filter({ hasText: "Maps a member key" }),
+      dialog.getByRole("combobox", { name: "Virtual key" }),
     ).toBeVisible();
     await expect(
-      page.getByRole("option").filter({ hasText: "Other Anthropic key" }),
-    ).toHaveCount(0);
-    await page.keyboard.press("Escape");
+      dialog.getByRole("combobox", { name: "Virtual key" }),
+    ).toContainText("Listed by the pool");
     await expect(dialog.getByText('"model": "fast-chat"')).toBeVisible();
+    await expect(
+      dialog.getByText("/chat/completions", { exact: false }),
+    ).toBeVisible();
+    await expect(
+      dialog.getByRole("button", { name: "Add provider key" }),
+    ).toHaveCount(0);
   });
+
+  test("explains how to grant access when no virtual key has the pool", async ({
+    page,
+    mswControl,
+    request,
+  }) => {
+    await mockPool({
+      mswControl,
+      request,
+      poolOverrides: { virtualApiKeyIds: [] },
+    });
+    const dialog = await openConnectTab(page);
+    await expect(
+      dialog.getByText(
+        `No virtual key can call ${POOL_NAME} yet. Add the pool to a key from Virtual Keys.`,
+      ),
+    ).toBeVisible();
+    await expect(dialog.getByText("Create new virtual key")).toHaveCount(0);
+    await expect(
+      dialog.getByRole("combobox", { name: "Virtual key" }),
+    ).toHaveCount(0);
+  });
+});
+
+test.describe("LLM Proxy pool discovery", () => {
+  test("defaults a pool-only app OAuth client to its pool rather than the viewer catalog", async ({
+    page,
+    mswControl,
+    request,
+  }) => {
+    await mockPool({ mswControl, request });
+    // These personal keys are visible to the viewer but cannot become the
+    // client's automatic shared-primary provider mappings.
+    await mswControl.registerMany([
+      { method: "get", url: "/api/llm-provider-api-keys", body: [openaiKey] },
+      {
+        method: "get",
+        url: "/api/llm-models/available",
+        body: [
+          {
+            id: "gpt-4o",
+            dbId: "personal-model",
+            displayName: "GPT-4o",
+            provider: "openai",
+            isFree: false,
+          },
+        ],
+      },
+    ]);
+    await page.goto("/llm/proxy");
+    await page.getByText("OAuth client", { exact: true }).click();
+    await page
+      .getByRole("combobox", { name: "OAuth client", exact: true })
+      .click();
+    await page
+      .getByRole("option")
+      .filter({ hasText: "Granted the pool" })
+      .click();
+    await expect(page.getByText('"model": "fast-chat"')).toBeVisible();
+    await page.getByRole("combobox", { name: "Model", exact: true }).click();
+    await expect(
+      page.getByRole("option").filter({ hasText: POOL_NAME }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("option").filter({ hasText: "openai:gpt-4o" }),
+    ).toHaveCount(0);
+  });
+
+  test("keeps shared-primary model examples for an automatic app OAuth client", async ({
+    page,
+    mswControl,
+    request,
+  }) => {
+    await mockPool({ mswControl, request });
+    const sharedKey = makeLlmProviderApiKey({
+      ...openaiKey,
+      id: "shared-openai",
+      scope: "org",
+      userId: null,
+    });
+    await mswControl.registerMany([
+      {
+        method: "get",
+        url: "/api/llm-provider-api-keys",
+        body: [openaiKey, sharedKey],
+      },
+      {
+        method: "get",
+        url: "/api/llm-models/available",
+        body: [
+          {
+            id: "gpt-4o",
+            dbId: "personal-model",
+            displayName: "GPT-4o",
+            provider: "openai",
+            isFree: false,
+          },
+        ],
+      },
+      {
+        method: "get",
+        url: "/api/llm-models",
+        body: [
+          {
+            id: "shared-model",
+            modelId: "gpt-4.1",
+            provider: "openai",
+            ignored: false,
+            embeddingDimensions: null,
+            inputModalities: ["text"],
+            outputModalities: ["text"],
+            apiKeys: [sharedKey],
+          },
+          {
+            id: "personal-model",
+            modelId: "gpt-4o",
+            provider: "openai",
+            ignored: false,
+            embeddingDimensions: null,
+            inputModalities: ["text"],
+            outputModalities: ["text"],
+            apiKeys: [openaiKey],
+          },
+        ],
+      },
+    ]);
+    await page.goto("/llm/proxy");
+    await page.getByText("OAuth client", { exact: true }).click();
+    await page
+      .getByRole("combobox", { name: "OAuth client", exact: true })
+      .click();
+    await page
+      .getByRole("option")
+      .filter({ hasText: "Granted the pool" })
+      .click();
+    await expect(page.getByText('"model": "openai:gpt-4.1"')).toBeVisible();
+    await page.getByRole("combobox", { name: "Model", exact: true }).click();
+    await expect(
+      page.getByRole("option").filter({ hasText: POOL_NAME }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("option").filter({ hasText: "openai:gpt-4.1" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("option").filter({ hasText: "openai:gpt-4o" }),
+    ).toHaveCount(0);
+  });
+
+  for (const { label, granted, ungranted, noun } of [
+    {
+      label: "Virtual key",
+      granted: "Listed by the pool",
+      ungranted: "Maps a member key",
+      noun: "key",
+    },
+    {
+      label: "OAuth client",
+      granted: "Granted the pool",
+      ungranted: "CI pipeline",
+      noun: "client",
+    },
+  ]) {
+    test(`does not count a disabled pool as provider access for a ${label}`, async ({
+      page,
+      mswControl,
+      request,
+    }) => {
+      await mockPool({
+        mswControl,
+        request,
+        poolOverrides: {
+          members: pool.members.map((member) => ({
+            ...member,
+            enabled: false,
+          })),
+        },
+      });
+      await mswControl.use({
+        method: "get",
+        url: "/api/llm-provider-api-keys",
+        body: [],
+      });
+      await page.goto("/llm/proxy");
+      if (label === "OAuth client") {
+        await page.getByText(label, { exact: true }).click();
+      }
+      await expect(
+        page.getByRole("button", { name: "Add provider key" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("combobox", { name: label, exact: true }),
+      ).toHaveCount(0);
+      await expect(page.getByText('"model": "fast-chat"')).toHaveCount(0);
+    });
+
+    for (const visibleProviderKeys of [true, false]) {
+      test(`shows granted pools for an automatic ${label} without stored mappings and ${visibleProviderKeys ? "visible" : "no visible"} provider keys`, async ({
+        page,
+        mswControl,
+        request,
+      }) => {
+        await mockPool({ mswControl, request });
+        if (!visibleProviderKeys) {
+          await mswControl.use({
+            method: "get",
+            url: "/api/llm-provider-api-keys",
+            body: [],
+          });
+        }
+        await page.goto("/llm/proxy");
+        if (label === "OAuth client") {
+          await page.getByText(label, { exact: true }).click();
+        }
+        const picker = page.getByRole("combobox", { name: label, exact: true });
+        await picker.click();
+        await page.getByRole("option").filter({ hasText: granted }).click();
+        await page
+          .getByRole("button", { name: `1 pool on this ${noun}` })
+          .click();
+        await expect(
+          page.getByRole("listitem").filter({ hasText: /^fast-chat$/ }),
+        ).toBeVisible();
+        await page
+          .getByRole("combobox", { name: "Model", exact: true })
+          .click();
+        await page.getByRole("option").filter({ hasText: POOL_NAME }).click();
+        await expect(page.getByText('"model": "fast-chat"')).toBeVisible();
+        if (label === "OAuth client") {
+          await expect(
+            page.getByText("client_id=granted-client"),
+          ).toBeVisible();
+          await expect(
+            page.getByText(
+              "$ARCHESTRA_LLM_ACCESS_TOKEN is the access_token from the token request above.",
+            ),
+          ).toBeVisible();
+        }
+        await picker.click();
+        await page.getByRole("option").filter({ hasText: ungranted }).click();
+        await expect(page.getByText(`No pools on this ${noun}`)).toBeVisible();
+        // These credentials have no matching models in the catalog fixture;
+        // switching away from the grant must also remove the pool request.
+        await expect(page.getByText('"model": "fast-chat"')).toHaveCount(0);
+      });
+    }
+  }
 });

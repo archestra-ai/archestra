@@ -81,6 +81,11 @@ export function buildCurlExample(params: {
   model: string;
   supportedEndpoints?: readonly string[] | null;
   imageOperation?: ImageExampleOperation;
+  /**
+   * The model is a pool's name, served on Chat Completions whatever it looks
+   * like (a pool may be named `openai:gpt-5.6`).
+   */
+  isPool?: boolean;
 }): string | null {
   const {
     connectionBaseUrl,
@@ -90,6 +95,7 @@ export function buildCurlExample(params: {
     model,
     supportedEndpoints,
     imageOperation,
+    isPool,
   } = params;
   const baseUrl = getProxyBaseUrl(connectionBaseUrl, target);
   const passthrough = keyType === "passthrough";
@@ -106,9 +112,10 @@ export function buildCurlExample(params: {
     const [provider, ...modelIdParts] = model.split(":");
     const modelId = modelIdParts.join(":");
     const useResponses =
-      (provider === "openai" && requiresOpenAiResponsesApi(modelId)) ||
-      (provider === "github-copilot" &&
-        requiresResponsesApi(supportedEndpoints));
+      !isPool &&
+      ((provider === "openai" && requiresOpenAiResponsesApi(modelId)) ||
+        (provider === "github-copilot" &&
+          requiresResponsesApi(supportedEndpoints)));
     return curl(
       `${baseUrl}/${useResponses ? "responses" : "chat/completions"}`,
       [`Authorization: Bearer ${keyValue}`, "Content-Type: application/json"],

@@ -66,6 +66,8 @@ class StatisticsModel {
     timeframe: StatisticsTimeFrame;
     organizationId: string;
     userId?: string;
+    /** Only usage by this service account. */
+    serviceAccountId?: string;
     limit: number;
     offset: number;
   }): Promise<PaginatedResult<ModelUsageRow>> {
@@ -127,6 +129,9 @@ class StatisticsModel {
       interactionBelongsToOrganization(params.organizationId),
       eq(billedModel, params.model),
       params.userId ? eq(i.userId, params.userId) : undefined,
+      params.serviceAccountId
+        ? eq(i.serviceAccountId, params.serviceAccountId)
+        : undefined,
     );
     const aggregates = {
       requests: modelRequests,
@@ -267,6 +272,11 @@ class StatisticsModel {
       offset: number;
       /** Only this person's usage. */
       userId?: string;
+      /**
+       * Only this service account's usage, in addition to the
+       * `serviceAccountId` filter in the query.
+       */
+      ownServiceAccountId?: string;
     },
   ): Promise<ProxyCostStatistics> {
     const { timeframe, organizationId, limit, offset } = params;
@@ -289,6 +299,9 @@ class StatisticsModel {
       eq(a.organizationId, organizationId),
       inArray(a.agentType, ["llm_proxy", "profile"]),
       params.userId ? eq(i.userId, params.userId) : undefined,
+      params.ownServiceAccountId
+        ? eq(i.serviceAccountId, params.ownServiceAccountId)
+        : undefined,
       params.authMethod ? eq(method, params.authMethod) : undefined,
       params.credentialId ? eq(credential, params.credentialId) : undefined,
       params.providerApiKeyId
@@ -949,8 +962,10 @@ class StatisticsModel {
     organizationId: string;
     /** Only this person's usage of each agent. */
     userId?: string;
+    /** Only this service account's usage of each agent. */
+    serviceAccountId?: string;
   }): Promise<AgentStatistics[]> {
-    const { timeframe, organizationId, userId } = params;
+    const { timeframe, organizationId, userId, serviceAccountId } = params;
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
 
     const teamAssignments = AgentTeamModel.readAssignments(organizationId);
@@ -995,6 +1010,9 @@ class StatisticsModel {
           ...StatisticsModel.timeframeConditions(timeframe),
           eq(schema.agentsTable.organizationId, organizationId),
           userId ? eq(schema.interactionsTable.userId, userId) : undefined,
+          serviceAccountId
+            ? eq(schema.interactionsTable.serviceAccountId, serviceAccountId)
+            : undefined,
         ),
       )
       .groupBy(
@@ -1985,16 +2003,16 @@ class StatisticsModel {
   static async getOverviewStatistics(params: {
     timeframe: StatisticsTimeFrame;
     organizationId: string;
-    /** Pick the top agent from only this person's usage. */
-    agentUserId?: string;
+    /** Pick the top agent from only this caller's usage. */
+    topAgentScope?: { userId?: string; serviceAccountId?: string };
   }): Promise<OverviewStatistics> {
-    const { timeframe, organizationId, agentUserId } = params;
+    const { timeframe, organizationId, topAgentScope } = params;
     const [teamStats, agentStats, modelStats] = await Promise.all([
       StatisticsModel.getTeamStatistics({ timeframe, organizationId }),
       StatisticsModel.getAgentStatistics({
         timeframe,
         organizationId,
-        userId: agentUserId,
+        ...topAgentScope,
       }),
       StatisticsModel.getModelStatistics({ timeframe, organizationId }),
     ]);

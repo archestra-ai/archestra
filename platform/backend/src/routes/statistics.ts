@@ -122,7 +122,7 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         includeModelPools:
           query.includeModelPools && config.llmProxy.modelPoolsEnabled,
         organizationId,
-        userId: await ownUsageOnlyUserId(request),
+        ...(await ownProxyUsageScope(request)),
       });
     },
   );
@@ -166,7 +166,7 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await StatisticsModel.getAgentStatistics({
           timeframe: request.query.timeframe,
           organizationId: request.organizationId,
-          userId: await ownUsageOnlyUserId(request),
+          ...(await ownUsageScope(request)),
         }),
       );
     },
@@ -411,7 +411,7 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await StatisticsModel.getOverviewStatistics({
           timeframe: request.query.timeframe,
           organizationId: request.organizationId,
-          agentUserId: await ownUsageOnlyUserId(request),
+          topAgentScope: await ownUsageScope(request),
         }),
       );
     },
@@ -624,7 +624,7 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return StatisticsModel.getModelUsage({
           ...query,
           organizationId,
-          userId: own ? user.id : await ownUsageOnlyUserId(request),
+          ...(own ? { userId: user.id } : await ownUsageScope(request)),
         });
       },
     );
@@ -668,30 +668,50 @@ function groupByQuerySchema<const D extends readonly [string, ...string[]]>(
  * per-user statistics — it requires `member:read`; without it the results
  * narrow to the caller's own usage.
  */
-async function usageScope(
-  request: FastifyRequest,
-): Promise<{ restrictToUserId?: string }> {
-  const userId = await ownUsageOnlyUserId(request);
-  return userId ? { restrictToUserId: userId } : {};
-}
-
-/**
- * The caller's id when they lack `member:read`, so a breakdown must cover
- * only their own usage; `undefined` when they may see everyone's. Breakdowns
- * by agent or credential count here too: an agent or virtual key can be one
- * person's own, and its row would then be that person's spend.
- */
-async function ownUsageOnlyUserId({
+async function usageScope({
   user,
   organizationId,
   headers,
   serviceAccount,
-}: FastifyRequest): Promise<string | undefined> {
+}: FastifyRequest): Promise<{ restrictToUserId?: string }> {
+  const { success: canReadAllUsers } = await hasPermission(
+    { member: ["read"] },
+    headers,
+    serviceAccount,
+    { userId: user.id, organizationId },
+  );
+  return canReadAllUsers ? {} : { restrictToUserId: user.id };
+}
+
+/**
+ * Narrows a breakdown to the caller's own usage when they lack `member:read`;
+ * empty when they may see everyone's. Breakdowns by agent or credential count
+ * here too: an agent or virtual key can be one person's own, and its row would
+ * then be that person's spend. A service account's own usage is recorded
+ * against the account, not a user, so it is matched by account.
+ */
+async function ownUsageScope({
+  user,
+  organizationId,
+  headers,
+  serviceAccount,
+}: FastifyRequest): Promise<{ userId?: string; serviceAccountId?: string }> {
   const { success } = await hasPermission(
     { member: ["read"] },
     headers,
     serviceAccount,
     { userId: user.id, organizationId },
   );
-  return success ? undefined : user.id;
+  if (success) return {};
+  return serviceAccount
+    ? { serviceAccountId: serviceAccount.id }
+    : { userId: user.id };
+}
+
+/** {@link ownUsageScope}, keeping the proxy query's own `serviceAccountId` filter. */
+async function ownProxyUsageScope(
+  request: FastifyRequest,
+): Promise<{ userId?: string; ownServiceAccountId?: string }> {
+  const { userId, serviceAccountId } = await ownUsageScope(request);
+  return { userId, ownServiceAccountId: serviceAccountId };
 }

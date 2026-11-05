@@ -178,6 +178,10 @@ export function setAgentAttributes(span: Span, agent: SpanAgentInfo): void {
   }
 }
 
+export function teamLabelKeyPrefix(scope: TeamScope): string {
+  return `archestra.${scope}.team.label.`;
+}
+
 /**
  * Set team span attributes for a principal under `archestra.<scope>.team.*`:
  * `.ids` and `.names` (array-valued, since a principal can belong to multiple
@@ -188,10 +192,17 @@ export function setTeamAttributes(
   span: Span,
   teams: SpanTeamInfo[] | null | undefined,
   scope: TeamScope,
+  options?: { writeEmpty?: boolean },
 ): void {
-  if (!teams || teams.length === 0) return;
-
   const base = `archestra.${scope}.team`;
+  if (!teams || teams.length === 0) {
+    if (options?.writeEmpty) {
+      span.setAttribute(`${base}.ids`, []);
+      span.setAttribute(`${base}.names`, []);
+    }
+    return;
+  }
+
   span.setAttribute(
     `${base}.ids`,
     teams.map((team) => team.id),
@@ -211,8 +222,9 @@ export function setTeamAttributes(
       valuesByKey.set(label.key, values);
     }
   }
+  const labelPrefix = teamLabelKeyPrefix(scope);
   for (const [key, values] of valuesByKey) {
-    span.setAttribute(`${base}.label.${key}`, [...values]);
+    span.setAttribute(`${labelPrefix}${key}`, [...values]);
   }
 }
 

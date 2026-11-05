@@ -662,13 +662,7 @@ async function launchDelegatedTask(params: {
         ),
       );
     }
-    try {
-      await preflightAgentRuntimeModelReadiness({ runtime, agent, actor });
-    } catch (error) {
-      if (error instanceof ApiError)
-        return failedLaunch("refused", errorResult(error.message));
-      throw error;
-    }
+    await preflightAgentRuntimeModelReadiness({ runtime, agent, actor });
 
     if (params.credentialGrantIds && params.credentialGrantIds.length > 0) {
       const consumed = await ephemeralCredentialGrantManager.consumeGrants({
@@ -776,6 +770,9 @@ async function launchDelegatedTask(params: {
     }
     const refused = crossingRefusal(error);
     if (refused) return failedLaunch("refused", errorResult(refused));
+    if (error instanceof ApiError) {
+      return failedLaunch("refused", errorResult(error.message));
+    }
     return failedLaunch("failed", catchError(error, "starting the run"));
   }
 }

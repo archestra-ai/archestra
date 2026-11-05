@@ -28,6 +28,7 @@ import {
   setSpanError,
   setTeamAttributes,
   setUserAttributes,
+  teamLabelKeyPrefix,
 } from "./attributes";
 import { sessionContext } from "./session";
 
@@ -42,6 +43,8 @@ const activeChatSpanState = new WeakMap<
   }
 >();
 
+// OpenTelemetry's public Span interface has no attribute-deletion method; this
+// intentionally mutates the SDK span's internal attributes map (pinned by session.test.ts).
 function deleteSpanAttribute(span: Span, key: string): void {
   const mutableAttributes = (
     span as unknown as { attributes?: Record<string, unknown> }
@@ -119,20 +122,13 @@ export function updateActiveChatSpanAgent(params: {
   }
   if (params.teams !== undefined) {
     if (state) {
+      const labelPrefix = teamLabelKeyPrefix("agent");
       for (const key of state.agentTeamLabelKeys) {
-        deleteSpanAttribute(span, `archestra.agent.team.label.${key}`);
+        deleteSpanAttribute(span, `${labelPrefix}${key}`);
       }
       state.agentTeamLabelKeys.clear();
     }
-    span.setAttribute(
-      "archestra.agent.team.ids",
-      params.teams.map((team) => team.id),
-    );
-    span.setAttribute(
-      "archestra.agent.team.names",
-      params.teams.map((team) => team.name),
-    );
-    setTeamAttributes(span, params.teams, "agent");
+    setTeamAttributes(span, params.teams, "agent", { writeEmpty: true });
     if (state) {
       for (const key of collectTeamLabelKeys(params.teams)) {
         state.agentTeamLabelKeys.add(key);

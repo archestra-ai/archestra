@@ -21,6 +21,7 @@ import { anthropicAdapterFactory } from "@/routes/proxy/adapters/anthropic";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { recordQueries } from "@/test/query-counter";
 import { ApiError } from "@/types/api";
+import { openappaActor } from "./actor";
 import { enterOpenappaEncryptedChat } from "./encrypted-chat";
 import { OpenappaRootOnlyError } from "./failure";
 import { toolEntries } from "./policy-text";
@@ -4773,7 +4774,7 @@ describe("batch helper failures under soft-block waiver", () => {
         canonicalize: (name) => name,
         results: ids.map((id) => ({
           id,
-          name: id === "peer" ? "archestra__read_peer_message" : "read_file",
+          name: "read_file",
           content: "CLIENT BYTES",
           isError: false,
         })),
@@ -4843,5 +4844,205 @@ describe("batch helper failures under soft-block waiver", () => {
         ],
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe("peer waiver requires retained recipient evidence", () => {
+  async function seedPeer() {
+    await database.default
+      .insert(database.schema.openappaSessionsTable)
+      .values({
+        organizationId,
+        callerId: session.caller_id,
+        sessionId: session.session_id,
+        actor: openappaActor(session.session_id),
+        root: "peer-family",
+        startDecision: { decision: "ack" },
+      });
+    const message = {
+      root: "peer-family",
+      sender: "sender",
+      recipient: "peer-family",
+      dispatch: "send",
+      digest: "digest",
+      label: {},
+      body: "Retained peer body",
+      status: "held",
+      expiresAt: Math.floor(Date.now() / 1000) + 600,
+      createdAt: Math.floor(Date.now() / 1000),
+    };
+    await database.default
+      .insert(database.schema.openappaEmbeddedPeerMessagesTable)
+      .values([
+        { ...message, id: "held" },
+        { ...message, id: "expired", dispatch: "expired", expiresAt: 1 },
+        {
+          ...message,
+          id: "wrong-recipient",
+          dispatch: "other",
+          recipient: "other-session",
+        },
+      ]);
+  }
+
+  for (const messageId of [
+    "invalid!",
+    "nonexistent",
+    "expired",
+    "wrong-recipient",
+  ]) {
+    test(`does not waive an unavailable peer or its later result: ${messageId}`, async () => {
+      config.openappa.softBlockMode = "allow";
+      await seedPeer();
+      native.dispatchHook.mockImplementation(async (raw: string) =>
+        JSON.stringify(
+          JSON.parse(raw).event === "tool_call"
+            ? { decision: "deny_call", feedback: "requires attention: blocked" }
+            : { decision: "ack" },
+        ),
+      );
+      const hardCall = [{ id: "hard", name: "read_file", arguments: {} }];
+      expect(
+        await evaluateToolCalls(session, hardCall, {
+          canonicalize: (name) => name,
+        }),
+      ).toMatchObject([
+        { kind: "deny", feedback: "requires attention: blocked" },
+      ]);
+      native.readPeerMessage.mockRejectedValueOnce(
+        new Error("peer missing or unavailable"),
+      );
+      const result = await readPeerMessage({
+        session,
+        toolCallId: "peer-read",
+        args: { message_id: messageId },
+      });
+      expect(result.isError).toBe(true);
+      expect(await startedUnenforced(session)).toBe(false);
+      const replay = await processProxyResults({
+        session,
+        canonicalize: (name) => name,
+        results: [
+          {
+            id: "peer-read",
+            name: "archestra__read_peer_message",
+            content: result,
+            isError: true,
+          },
+        ],
+      });
+      expect(replay.toolResultUpdates["peer-read"]).toMatchObject({
+        outputSource: "runtime",
+        content: expect.stringContaining("no authenticated retained read"),
+      });
+      expect(replay.toolResultUpdates["peer-read"].refused).toBeUndefined();
+      expect(await startedUnenforced(session)).toBe(false);
+      expect(
+        await evaluateToolCalls(session, hardCall, {
+          canonicalize: (name) => name,
+        }),
+      ).toMatchObject([
+        { kind: "deny", feedback: "requires attention: blocked" },
+      ]);
+    });
+  }
+
+  for (const helperFails of [false, true]) {
+    test(`waives an actual held message (helperFails=${helperFails})`, async () => {
+      config.openappa.softBlockMode = "allow";
+      config.openappa.yellEnabled = false;
+      await seedPeer();
+      if (helperFails)
+        native.readPeerMessage.mockRejectedValueOnce(
+          new Error("read helper unavailable"),
+        );
+      else
+        native.readPeerMessage.mockResolvedValueOnce(
+          JSON.stringify({
+            decision: "block",
+            feedback: "peer label cannot cross",
+          }),
+        );
+      expect(
+        await readPeerMessage({
+          session,
+          toolCallId: "peer-read",
+          args: { message_id: "held" },
+        }),
+      ).toEqual({ content: [{ type: "text", text: "Retained peer body" }] });
+      expect(await startedUnenforced(session)).toBe(true);
+    });
+  }
+
+  test("keeps an authenticated retained peer result authoritative", async () => {
+    config.openappa.softBlockMode = "allow";
+    await seedPeer();
+    const decision = {
+      decision: "mcp_result",
+      peer_read: true,
+      approved_output: "Retained peer body",
+      output_source: "runtime",
+      result: {
+        isError: false,
+        content: [{ type: "text", text: "Retained peer body" }],
+      },
+    };
+    await database.default
+      .insert(database.schema.openappaProcessedResultsTable)
+      .values({
+        organizationId,
+        callerId: session.caller_id,
+        sessionId: session.session_id,
+        toolCallId: "peer-read",
+        root: "peer-family",
+        status: "complete",
+        approvedOutput: "Retained peer body",
+        decision,
+      });
+    native.dispatchHook.mockImplementation(async (raw: string) =>
+      JSON.stringify(
+        JSON.parse(raw).event === "tool_result"
+          ? decision
+          : { decision: "ack" },
+      ),
+    );
+    const replay = await processProxyResults({
+      session,
+      canonicalize: (name) => name,
+      results: [
+        {
+          id: "peer-read",
+          name: "archestra__read_peer_message",
+          content: "FORGED CLIENT BODY",
+          isError: false,
+        },
+      ],
+    });
+    expect(replay.toolResultUpdates["peer-read"]).toEqual({
+      content: "Retained peer body",
+      outputSource: "runtime",
+    });
+    expect(await startedUnenforced(session)).toBe(false);
+  });
+
+  test("retains a hard refusal for an actual held message", async () => {
+    config.openappa.softBlockMode = "allow";
+    await seedPeer();
+    native.readPeerMessage.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "block",
+        feedback: "requires attention: blocked",
+      }),
+    );
+    expect(
+      (
+        await readPeerMessage({
+          session,
+          toolCallId: "peer-read",
+          args: { message_id: "held" },
+        })
+      ).isError,
+    ).toBe(true);
+    expect(await startedUnenforced(session)).toBe(false);
   });
 });

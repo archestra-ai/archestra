@@ -1129,6 +1129,32 @@ export async function processProxyResults(params: {
       const reportingName = archestraMcpBranding.getToolShortName(
         params.canonicalize(result.name, result.namespace),
       );
+      if (softBlocksAllowed() && reportingName === "read_peer_message") {
+        // A missing/invalid message must not become a waiver on the next turn
+        // when native result admission reports that no read was recorded.
+        // Never trust the client's claimed result as evidence of a held read.
+        let retained: Awaited<
+          ReturnType<typeof OpenAppaSessionModel.retainedPeerReadReceipt>
+        >;
+        try {
+          retained = await OpenAppaSessionModel.retainedPeerReadReceipt({
+            organizationId: params.session.organization_id,
+            sessionId: params.session.session_id,
+            callerId: params.session.caller_id,
+            toolCallId: result.id,
+          });
+        } catch {
+          retained = null;
+        }
+        if (!retained) {
+          updates[result.id] = {
+            content:
+              "[appa] Peer message unavailable: no authenticated retained read was found.",
+            outputSource: "runtime",
+          };
+          continue;
+        }
+      }
       const reportingResult = ["yell", "run_tool"].some(
         (name) => name === reportingName,
       )
@@ -2184,39 +2210,37 @@ export async function readPeerMessage(params: {
   args: { message_id: string };
 }): Promise<CallToolResult> {
   let result: CallToolResult;
+  let reason: string;
   try {
     result = await governedReadPeerMessage(params);
     if (!result.isError) return result;
+    reason = result.content
+      .filter((item) => item.type === "text")
+      .map((item) => item.text)
+      .join("\n");
   } catch (error) {
-    if (
-      !(await waiveSoftBlock(
-        params.session,
-        "peer_read",
-        error instanceof Error ? error.message : String(error),
-      ))
-    )
-      throw error;
+    if (!softBlocksAllowed()) throw error;
+    reason = error instanceof Error ? error.message : String(error);
     result = {
       isError: true,
       content: [{ type: "text", text: "Peer message unavailable" }],
     };
   }
-  const reason = result.content
-    .filter((item) => item.type === "text")
-    .map((item) => item.text)
-    .join("\n");
+  if (!softBlocksAllowed() || !params.session.caller_id) return result;
+  // Establish recipient ownership and expiry before a refusal can disable the
+  // session. Invalid/nonexistent IDs are not evidence of a held peer crossing.
+  const body = await OpenAppaSessionModel.waivedPeerBody({
+    organizationId: params.session.organization_id,
+    callerId: params.session.caller_id,
+    sessionId: params.session.session_id,
+    parentId: params.session.parent_id,
+    messageId: params.args.message_id,
+  });
   if (
-    params.session.caller_id &&
+    body !== null &&
     (await waiveSoftBlock(params.session, "peer_read", reason))
   ) {
-    const body = await OpenAppaSessionModel.waivedPeerBody({
-      organizationId: params.session.organization_id,
-      callerId: params.session.caller_id,
-      sessionId: params.session.session_id,
-      parentId: params.session.parent_id,
-      messageId: params.args.message_id,
-    });
-    if (body !== null) return { content: [{ type: "text", text: body }] };
+    return { content: [{ type: "text", text: body }] };
   }
   return result;
 }

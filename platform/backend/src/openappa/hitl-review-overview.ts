@@ -515,7 +515,8 @@ function toolDescriptionEntry(description: string): CardEntry {
   if ([...sentence].length > TOOL_DESCRIPTION_LIMIT)
     return {
       full: pointer,
-      use: "full",
+      pointer,
+      use: "pointer",
       hiddenNote: wrap("(tool description, see Inspect)"),
     };
   return {
@@ -637,7 +638,10 @@ function entries(args: Record<string, unknown>): CardEntry[] {
   return Object.entries(args).map(([name, value]) => valueEntry(name, value));
 }
 
-/** `name: value`, or `name:` over an indented block; a pointer past the limit. */
+/**
+ * `name: value`, or `name:` over an indented block. A value past the limit
+ * starts as its pointer, so the card knows it is not shown.
+ */
 function valueEntry(name: string, value: unknown, code = false): CardEntry {
   const label = /^[\w.$@/-]+$/.test(name) ? name : escapedLiteral(name);
   const size =
@@ -647,7 +651,7 @@ function valueEntry(name: string, value: unknown, code = false): CardEntry {
   const pointer = wrap(
     `${label}: (${size.toLocaleString("en-US")} characters, see Inspect)`,
   );
-  if (size > PREVIEW_LIMIT) return { full: pointer, use: "full" };
+  if (size > PREVIEW_LIMIT) return { full: pointer, pointer, use: "pointer" };
   return { full: valueLines(label, value, code), pointer, use: "full" };
 }
 

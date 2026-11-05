@@ -472,6 +472,30 @@ describe("hitlReviewCard", () => {
     expect(preview).not.toContain("description: (");
   });
 
+  test("offers Allow only after Inspect for a described command too long for the pane", () => {
+    const command = `echo ${"payload ".repeat(260)}end`;
+    expect(command.length).toBeGreaterThan(2000);
+    const review = {
+      tool: "Bash",
+      arguments: JSON.stringify({
+        command,
+        description: "List the files in the build folder",
+      }),
+      text: COVERAGE,
+    };
+    const { card: unread, approve: unreadApprove } = cardFor(review);
+    expect(unreadApprove).toBe(false);
+    expect(unread.options.map((option) => option.label)).toEqual([
+      "Inspect",
+      "Deny",
+    ]);
+    expect(unread.callPreview).toBe(
+      `description: List the files in the\n    build folder\ncommand: (${command.length.toLocaleString("en-US")} characters, see\n    Inspect)`,
+    );
+    const { approve } = cardFor({ ...review, inspected: true });
+    expect(approve).toBe(true);
+  });
+
   test("keeps a description of a few lines in full and shortens a long command", () => {
     const description = "Rebuild and push the branch. ".repeat(6).trim();
     const command = `echo ${"payload ".repeat(195)}end`;

@@ -356,12 +356,20 @@ class KbFileModel {
     if (params.knowledgeBaseIds.length === 0) return [];
     const hasUse = (resource: ScopedResource, scopeColumn: SQLWrapper) =>
       params.principal
-        ? ResourcePermissionPolicyModel.grantCondition({
-            ...params.principal,
-            resource,
-            scopeColumn,
-            action: "use",
-          })
+        ? or(
+            ResourcePermissionPolicyModel.grantCondition({
+              ...params.principal,
+              resource,
+              scopeColumn,
+              action: "use",
+            }),
+            ResourcePermissionPolicyModel.organizationAccessCondition({
+              organizationId: params.organizationId,
+              resource,
+              scopeColumn,
+              action: "use",
+            }),
+          )
         : ResourcePermissionPolicyModel.organizationAccessCondition({
             organizationId: params.organizationId,
             resource,
@@ -746,14 +754,10 @@ class KbFileModel {
           eq(schema.kbDocumentsTable.organizationId, params.organizationId),
         ),
       );
-    await Promise.all(
-      rows.map((row) =>
-        KbFileModel.refreshDocumentAcl({
-          fileId: row.kbFileId,
-          organizationId: params.organizationId,
-        }),
-      ),
-    );
+    await KbFileModel.refreshDocumentAclBatch({
+      fileIds: rows.map((row) => row.kbFileId),
+      organizationId: params.organizationId,
+    });
   }
 
   /**
@@ -774,14 +778,28 @@ class KbFileModel {
         ),
       )
       .where(eq(schema.kbDocumentsTable.organizationId, params.organizationId));
-    await Promise.all(
-      rows.map((row) =>
-        KbFileModel.refreshDocumentAcl({
-          fileId: row.kbFileId,
-          organizationId: params.organizationId,
-        }),
-      ),
-    );
+    await KbFileModel.refreshDocumentAclBatch({
+      fileIds: rows.map((row) => row.kbFileId),
+      organizationId: params.organizationId,
+    });
+  }
+
+  private static async refreshDocumentAclBatch(params: {
+    fileIds: string[];
+    organizationId: string;
+  }): Promise<void> {
+    const batchSize = 25;
+    for (let i = 0; i < params.fileIds.length; i += batchSize) {
+      const batch = params.fileIds.slice(i, i + batchSize);
+      await Promise.all(
+        batch.map((fileId) =>
+          KbFileModel.refreshDocumentAcl({
+            fileId,
+            organizationId: params.organizationId,
+          }),
+        ),
+      );
+    }
   }
 
   static async linkDocument(params: {

@@ -412,6 +412,56 @@ test("uploaded file grants follow the knowledge base it sits in and include OAut
       bypassAcl: false,
     }),
   ).toBeNull();
+  // Removing the file's indexed document from the knowledge base (or moving it
+  // to a different knowledge base) immediately revokes the OAuth client's
+  // inherited grant from the original knowledge base.
+  const regrantPolicy = await ResourcePermissionPolicyModel.find({
+    organizationId: org.id,
+    resource: "knowledgeBase",
+    scope: kb.id,
+  });
+  await ResourcePermissions.updatePolicy({
+    organizationId: org.id,
+    userId: admin.id,
+    resource: "knowledgeBase",
+    scope: kb.id,
+    revision: regrantPolicy?.revision ?? 0,
+    grants: [
+      {
+        subject: { type: "oauthClient", id: oauthClient.id },
+        actions: ["read", "use"],
+      },
+    ],
+  });
+  expect(
+    await KbDocumentModel.findByIdForAcl({
+      documentId: document.id,
+      organizationId: org.id,
+      userAcl: ["org:*", `oauth_client:${oauthClient.id}`],
+      bypassAcl: false,
+    }),
+  ).toMatchObject({ id: document.id });
+
+  const privateTargetKb = await makeKnowledgeBase(org.id, {
+    access: "personal",
+  });
+  await indexFilesIntoKnowledgeBase({
+    organizationId: org.id,
+    knowledgeBaseId: privateTargetKb.id,
+    fileIds: [file.id],
+  });
+  await KbDocumentModel.delete(document.id);
+  const [targetConnector] =
+    await KnowledgeBaseConnectorModel.findByKnowledgeBaseId(
+      privateTargetKb.id,
+      { canReadAll: true },
+    );
+  const movedDocument = await KbDocumentModel.findBySourceId({
+    connectorId: targetConnector.id,
+    sourceId: file.id,
+  });
+  expect(movedDocument).not.toBeNull();
+  if (!movedDocument) throw new Error("Expected moved document");
   expect(
     await KbDocumentModel.findByIdForAcl({
       documentId: document.id,
@@ -420,6 +470,51 @@ test("uploaded file grants follow the knowledge base it sits in and include OAut
       bypassAcl: false,
     }),
   ).toBeNull();
+  expect(
+    await KbDocumentModel.findByIdForAcl({
+      documentId: movedDocument.id,
+      organizationId: org.id,
+      userAcl: ["org:*", `oauth_client:${oauthClient.id}`],
+      bypassAcl: false,
+    }),
+  ).toBeNull();
+
+  // Wildcard knowledgeBase or knowledgeFile policy updates refresh document ACLs across the organization.
+  const wildcardKbPolicy = await ResourcePermissionPolicyModel.find({
+    organizationId: org.id,
+    resource: "knowledgeBase",
+    scope: "*",
+  });
+  await ResourcePermissions.updatePolicy({
+    organizationId: org.id,
+    userId: admin.id,
+    resource: "knowledgeBase",
+    scope: "*",
+    revision: wildcardKbPolicy?.revision ?? 0,
+    grants: [
+      ...(wildcardKbPolicy?.grants ?? []),
+      {
+        subject: { type: "oauthClient", id: oauthClient.id },
+        actions: ["read", "use"],
+      },
+    ],
+  });
+  const movedChunksAfterWildcard = await KbChunkModel.findByDocument(
+    movedDocument.id,
+  );
+  expect(
+    movedChunksAfterWildcard.every((chunk) =>
+      chunk.acl.includes(`oauth_client:${oauthClient.id}`),
+    ),
+  ).toBe(true);
+  expect(
+    await KbDocumentModel.findByIdForAcl({
+      documentId: movedDocument.id,
+      organizationId: org.id,
+      userAcl: ["org:*", `oauth_client:${oauthClient.id}`],
+      bypassAcl: false,
+    }),
+  ).toMatchObject({ id: movedDocument.id });
 });
 
 test("connectors attached to a knowledge base inherit Can use from the knowledge base and propagate OAuth client upstream ACLs through the client creator", async ({

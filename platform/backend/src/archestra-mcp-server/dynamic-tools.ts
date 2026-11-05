@@ -468,16 +468,14 @@ async function agentHasSearchableKnowledgeConnectorsForNonUser(params: {
       : Promise.resolve(null),
     AgentExcludedConnectorModel.findConnectorIdsByAgent(agentId),
   ]);
-  const { connectors } =
-    await knowledgeSourceAccessControlService.findQueryableOrganizationConnectorsForNonUser(
-      {
-        organizationId,
-        environmentId,
-        excludedConnectorIds,
-        principal: oauthPrincipal ?? undefined,
-      },
-    );
-  return connectors.length > 0;
+  return knowledgeSourceAccessControlService.hasQueryableOrganizationConnectorsForNonUser(
+    {
+      organizationId,
+      environmentId,
+      excludedConnectorIds,
+      principal: oauthPrincipal ?? undefined,
+    },
+  );
 }
 
 // Whether a sandbox-group tool is enabled for discovery/dynamic dispatch under

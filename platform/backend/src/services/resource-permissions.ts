@@ -684,7 +684,12 @@ export class ResourcePermissions {
     });
     // Read once: the recipient checks and the response both need them, and
     // the write does not change who the caller is.
-    const actorSubjects = await ResourcePermissions.getSubjects(params);
+    const [actorSubjects, priorPolicy] = await Promise.all([
+      ResourcePermissions.getSubjects(params),
+      params.resource === "knowledgeFile" || params.resource === "knowledgeBase"
+        ? ResourcePermissionPolicyModel.find(params)
+        : Promise.resolve(undefined),
+    ]);
     const policy = await ResourcePermissions.replace({
       ...params,
       authority: effective.grants,
@@ -698,8 +703,13 @@ export class ResourcePermissions {
       });
     }
     // A file's indexed documents carry its audience and its knowledge base's as
-    // ACL tokens, so they follow an edit on either, a revocation included.
-    if (params.resource === "knowledgeFile") {
+    // ACL tokens, so they follow an edit on either when `use` grants or the
+    // legacy organization audience marker change, a revocation included.
+    const aclInputsChanged =
+      priorPolicy?.legacyOrganizationAudience !==
+        policy.legacyOrganizationAudience ||
+      !haveSameUseGrants(priorPolicy?.grants ?? [], policy.grants);
+    if (aclInputsChanged && params.resource === "knowledgeFile") {
       if (params.scope === "*") {
         await KbFileModel.refreshDocumentAclForOrganization({
           organizationId: params.organizationId,
@@ -710,7 +720,7 @@ export class ResourcePermissions {
           organizationId: params.organizationId,
         });
       }
-    } else if (params.resource === "knowledgeBase") {
+    } else if (aclInputsChanged && params.resource === "knowledgeBase") {
       if (params.scope === "*") {
         await KbFileModel.refreshDocumentAclForOrganization({
           organizationId: params.organizationId,
@@ -1297,6 +1307,20 @@ function roleAssignmentBlockedError(params: {
 
 function subjectKey(subject: PermissionSubject): string {
   return JSON.stringify([subject.type, subject.id]);
+}
+
+function haveSameUseGrants(
+  current: readonly ResourcePermissionGrant[],
+  next: readonly ResourcePermissionGrant[],
+): boolean {
+  const collectUseSubjectKeys = (grants: readonly ResourcePermissionGrant[]) =>
+    grants
+      .filter((grant) => grant.actions.includes("use"))
+      .map((grant) => subjectKey(grant.subject))
+      .sort();
+  const a = collectUseSubjectKeys(current);
+  const b = collectUseSubjectKeys(next);
+  return a.length === b.length && a.every((key, index) => key === b[index]);
 }
 
 /** Everyone, or a role: a grant to either makes an object org-wide. */

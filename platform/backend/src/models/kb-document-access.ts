@@ -92,6 +92,7 @@ export default class KbDocumentAccessModel {
       scopeColumn: params.connectorId,
     };
     const principals = params.grantPrincipals;
+    const hasUserPrincipal = Boolean(principalOf(params.userAcl));
     const access = (
       context:
         | typeof fileContext
@@ -100,12 +101,22 @@ export default class KbDocumentAccessModel {
         | typeof connectorContext,
     ) =>
       principals
-        ? ResourcePermissionPolicyModel.grantConditionForAny({
-            ...context,
-            principals,
-            organizationColumn: params.organizationId,
-            action: "use",
-          })
+        ? hasUserPrincipal
+          ? ResourcePermissionPolicyModel.grantConditionForAny({
+              ...context,
+              principals,
+              organizationColumn: params.organizationId,
+              action: "use",
+            })
+          : sql`(${ResourcePermissionPolicyModel.grantConditionForAny({
+              ...context,
+              principals,
+              organizationColumn: params.organizationId,
+              action: "use",
+            })} OR ${ResourcePermissionPolicyModel.organizationAccessCondition({
+              ...context,
+              action: "use",
+            })})`
         : ResourcePermissionPolicyModel.organizationAccessCondition({
             ...context,
             action: "use",
@@ -121,7 +132,6 @@ export default class KbDocumentAccessModel {
           AND ${access(assignedKnowledgeBaseContext)}
       )
     )`;
-    const hasUserPrincipal = Boolean(principalOf(params.userAcl));
     return sql`CASE
       WHEN EXISTS (SELECT 1 FROM kb_file_document permission_file WHERE permission_file.kb_document_id = ${params.documentId})
       THEN (

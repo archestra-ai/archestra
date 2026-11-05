@@ -12,6 +12,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useMemberOptionsReferences } from "@/lib/member-options.query";
+import { useOauthClients } from "@/lib/oauth-clients.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { CollapsedBadgeList } from "./collapsed-badge-list";
 import {
@@ -51,6 +52,14 @@ export function AclBadges({
       .filter((entry) => entry.startsWith("user_email:"))
       .map((entry) => entry.slice("user_email:".length)),
   });
+  const hasOauthClientAcl = acl.some((entry) =>
+    entry.startsWith("oauth_client:"),
+  );
+  const { data: oauthClientsPage } = useOauthClients({
+    limit: 100,
+    enabled: hasOauthClientAcl,
+    toastOnError: false,
+  });
 
   if (acl.length === 0) {
     return (
@@ -81,6 +90,7 @@ export function AclBadges({
           groupNamesByToken,
           noun,
           orgMembers,
+          oauthClients: oauthClientsPage?.data,
         });
         return {
           id: entry,
@@ -108,12 +118,16 @@ function formatAclEntry({
   groupNamesByToken,
   noun,
   orgMembers,
+  oauthClients,
 }: {
   entry: string;
   teams: { id: string; name: string }[] | undefined;
   groupNamesByToken: Map<string, string> | undefined;
   noun: RosterNoun;
   orgMembers: { name: string; email: string }[] | undefined;
+  oauthClients:
+    | { id: string; name: string | null; clientId: string }[]
+    | undefined;
 }): { label: string; icon: LucideIcon; className: string } {
   if (entry === "org:*") {
     return {
@@ -156,8 +170,10 @@ function formatAclEntry({
     };
   }
   if (entry.startsWith("oauth_client:")) {
+    const oauthClientId = entry.slice("oauth_client:".length);
+    const client = oauthClients?.find(({ id }) => id === oauthClientId);
     return {
-      label: `OAuth client: ${entry.slice("oauth_client:".length)}`,
+      label: `OAuth client: ${client?.name || client?.clientId || oauthClientId}`,
       icon: UserIcon,
       className: scopeStyles.personal,
     };

@@ -327,11 +327,21 @@ class KnowledgeSourceAccessControlService {
     action: "read" | "use";
     principal?: GrantPrincipal;
   }): Promise<T[]> {
-    if (params.principal) {
-      const grants = await ResourcePermissions.resolveAll({
-        ...params.principal,
-        resources: [params.resource],
+    const publishedPromise =
+      ResourcePermissionPolicyModel.findOrganizationWideScopes({
+        organizationId: params.organizationId,
+        resource: params.resource,
+        scopes: params.sources.map((source) => source.id),
+        action: params.action,
       });
+    if (params.principal) {
+      const [grants, published] = await Promise.all([
+        ResourcePermissions.resolveAll({
+          ...params.principal,
+          resources: [params.resource],
+        }),
+        publishedPromise,
+      ]);
       const permitted = grants.filter(
         (grant) =>
           grant.resource === params.resource && grant.action === params.action,
@@ -341,20 +351,17 @@ class KnowledgeSourceAccessControlService {
           (source) => source.organizationId === params.organizationId,
         );
       }
-      const permittedIds = new Set(permitted.map((grant) => grant.scope));
+      const permittedIds = new Set([
+        ...permitted.map((grant) => grant.scope),
+        ...published,
+      ]);
       return params.sources.filter(
         (source) =>
           source.organizationId === params.organizationId &&
           permittedIds.has(source.id),
       );
     }
-    const published =
-      await ResourcePermissionPolicyModel.findOrganizationWideScopes({
-        organizationId: params.organizationId,
-        resource: params.resource,
-        scopes: params.sources.map((source) => source.id),
-        action: params.action,
-      });
+    const published = await publishedPromise;
     return params.sources.filter(
       (source) =>
         source.organizationId === params.organizationId &&
@@ -455,6 +462,45 @@ class KnowledgeSourceAccessControlService {
       knowledgeBases: visibleKbs,
       queryableCount: queryableConnectors.length,
     };
+  }
+
+  /**
+   * Bounded probe for tool-listing: whether a caller without a user identity
+   * can search at least one non-excluded connector in the organization.
+   */
+  async hasQueryableOrganizationConnectorsForNonUser(params: {
+    organizationId: string;
+    environmentId: string | null;
+    excludedConnectorIds: string[];
+    principal?: GrantPrincipal;
+  }): Promise<boolean> {
+    const excluded = new Set(params.excludedConnectorIds);
+    const bounded = await KnowledgeBaseConnectorModel.findByOrganization({
+      organizationId: params.organizationId,
+      canReadAll: false,
+      viewerPrincipal: params.principal,
+      visibilityScope: "query",
+      environmentId: params.environmentId,
+      limit: params.excludedConnectorIds.length + 1,
+    });
+    const nonUpload = bounded.filter(
+      (connector) =>
+        connector.connectorType !== "file_upload" &&
+        !excluded.has(connector.id),
+    );
+    if (nonUpload.length > 0) {
+      const published = await this.filterPublishedToOrganization({
+        organizationId: params.organizationId,
+        resource: "knowledgeConnector",
+        sources: nonUpload,
+        action: "use",
+        principal: params.principal,
+      });
+      if (published.length > 0) return true;
+    }
+    const { connectors } =
+      await this.findQueryableOrganizationConnectorsForNonUser(params);
+    return connectors.length > 0;
   }
   // SPDX-SnippetEnd
 

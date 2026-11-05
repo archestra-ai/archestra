@@ -3148,6 +3148,16 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
       });
+      // Assigning a connector to a knowledge base shares its documents with
+      // the knowledge base's audience, so the caller must hold permission to
+      // share the connector.
+      await ResourcePermissions.require({
+        organizationId,
+        userId: user.id,
+        resource: "knowledgeConnector",
+        scope: id,
+        action: "manage-permissions",
+      });
 
       for (const kbId of body.knowledgeBaseIds) {
         await findKnowledgeBaseOrThrow({
@@ -3182,6 +3192,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id,
         organizationId,
         userId: user.id,
+      });
+      await ResourcePermissions.require({
+        organizationId,
+        userId: user.id,
+        resource: "knowledgeConnector",
+        scope: id,
+        action: "manage-permissions",
       });
       await findKnowledgeBaseOrThrow({
         id: kbId,

@@ -1224,22 +1224,37 @@ async function buildVisibilityFilter(params: {
     scopeColumn: sql`permission_kb_assignment.knowledge_base_id`,
     action: "use" as const,
   };
-  const reach = or(
+  const grantReach = (targetContext: typeof context | typeof kbContext) =>
     principals
-      ? ResourcePermissionPolicyModel.grantConditionForAny({
-          ...context,
-          organizationColumn: table.organizationId,
-          principals,
-        })
+      ? params.userId
+        ? ResourcePermissionPolicyModel.grantConditionForAny({
+            ...targetContext,
+            organizationColumn: table.organizationId,
+            principals,
+          })
+        : or(
+            ResourcePermissionPolicyModel.grantConditionForAny({
+              ...targetContext,
+              organizationColumn: table.organizationId,
+              principals,
+            }),
+            ResourcePermissionPolicyModel.organizationAccessCondition(
+              targetContext,
+            ),
+          )
       : // A caller with no user of its own reaches what is published to the
         // organization at large, plus what its teams were granted.
         or(
-          ResourcePermissionPolicyModel.organizationAccessCondition(context),
+          ResourcePermissionPolicyModel.organizationAccessCondition(
+            targetContext,
+          ),
           ResourcePermissionPolicyModel.grantsReadToAnyTeam({
-            ...context,
+            ...targetContext,
             teamIds: params.teamIds ?? [],
           }),
-        ),
+        );
+  const reach = or(
+    grantReach(context),
     // Queries span every auto-sync connector, every file-upload connector, and
     // every connector assigned to a knowledge base the caller holds Can use on.
     params.scope === "query"
@@ -1252,23 +1267,7 @@ async function buildVisibilityFilter(params: {
               ON permission_kb.id = permission_kb_assignment.knowledge_base_id
               AND permission_kb.deleted_at IS NULL
             WHERE permission_kb_assignment.connector_id = ${table.id}
-              AND ${
-                principals
-                  ? ResourcePermissionPolicyModel.grantConditionForAny({
-                      ...kbContext,
-                      organizationColumn: table.organizationId,
-                      principals,
-                    })
-                  : or(
-                      ResourcePermissionPolicyModel.organizationAccessCondition(
-                        kbContext,
-                      ),
-                      ResourcePermissionPolicyModel.grantsReadToAnyTeam({
-                        ...kbContext,
-                        teamIds: params.teamIds ?? [],
-                      }),
-                    )
-              }
+              AND ${grantReach(kbContext)}
           )`,
         )
       : undefined,

@@ -161,7 +161,7 @@ class KbChunkModel {
     const hasMetadataFilter = hasUsableMetadataFilter(metadataFilter);
 
     const col = sql.raw(getEmbeddingColumnName(dimensions));
-    const vectorCast = sql.raw("::vector");
+    const vectorCast = sql.raw(`::vector(${dimensions})`);
     const rows = await executeWithSearchTimeout(
       sql`
       SELECT
@@ -601,7 +601,8 @@ class KbChunkModel {
     const col = getEmbeddingColumnName(dimensions);
     const values = updates
       .map(
-        (u) => `('${u.chunkId}'::uuid, '[${u.embedding.join(",")}]'::vector)`,
+        (u) =>
+          `('${u.chunkId}'::uuid, '[${u.embedding.join(",")}]'::vector(${dimensions}))`,
       )
       .join(", ");
 

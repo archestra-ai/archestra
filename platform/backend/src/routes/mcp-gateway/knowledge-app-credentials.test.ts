@@ -580,6 +580,33 @@ describe("knowledge search without an acting user", () => {
     expect(JSON.stringify(afterUnassignRun)).toContain("OWNER_UPSTREAM_OAUTH");
     expect(JSON.stringify(afterUnassignRun)).not.toContain("CONNECTOR_OAUTH");
 
+    // Removing the indexed file from the knowledge base (and moving it into a
+    // separate private knowledge base) immediately revokes the OAuth client's
+    // inherited grant from the original knowledge base.
+    const privateMoveBase = await makeKnowledgeBase(org.id, {
+      name: "Private move destination",
+      access: "personal",
+    });
+    await indexKnowledgeFile({
+      organizationId: org.id,
+      knowledgeBaseId: privateMoveBase.id,
+      uploadedBy: admin.id,
+      content: "The uploaded launch code is FILE_OAUTH.",
+      published: false,
+    });
+    const { KbDocumentModel } = await import("@/models");
+    await KbDocumentModel.delete(upload.document.id);
+    const afterFileMoveRun = await grantedAutoGateway.callTool("run_tool", {
+      tool_name: KNOWLEDGE_TOOL,
+      tool_args: { query: "launch code" },
+    });
+    expect(
+      afterFileMoveRun.isError,
+      JSON.stringify(afterFileMoveRun),
+    ).toBeFalsy();
+    expect(JSON.stringify(afterFileMoveRun)).toContain("OWNER_UPSTREAM_OAUTH");
+    expect(JSON.stringify(afterFileMoveRun)).not.toContain("FILE_OAUTH");
+
     const otherSearch = await otherAutoGateway.callTool("search_tools", {
       query: "knowledge",
     });
@@ -591,6 +618,35 @@ describe("knowledge search without an acting user", () => {
       tool_args: { query: "launch code" },
     });
     expect(otherAutoRun.isError).toBe(true);
+
+    // An OAuth client also reaches organization-wide knowledge bases and connectors
+    // from the upgrade cutover (legacyOrganizationAudience = true with role grants).
+    const cutoverBase = await makeKnowledgeBase(org.id, {
+      name: "Cutover org base",
+      access: "org",
+    });
+    const cutoverConnector = await makeKnowledgeBaseConnector(
+      cutoverBase.id,
+      org.id,
+      {
+        name: "Cutover org connector",
+        access: "org",
+        syncPermissionsFromSource: false,
+      },
+    );
+    await indexKnowledgeDocument({
+      organizationId: org.id,
+      connectorId: cutoverConnector.id,
+      content: "The cutover launch code is CUTOVER_ORG_OAUTH.",
+      acl: ["org:*"],
+    });
+    const cutoverRun = await otherAutoGateway.callTool("run_tool", {
+      tool_name: KNOWLEDGE_TOOL,
+      tool_args: { query: "launch code" },
+    });
+    expect(cutoverRun.isError, JSON.stringify(cutoverRun)).toBeFalsy();
+    expect(JSON.stringify(cutoverRun)).toContain("CUTOVER_ORG_OAUTH");
+    expect(JSON.stringify(cutoverRun)).not.toContain("OWNER_UPSTREAM_OAUTH");
 
     await ManagedOauthClientModel.delete({
       id: grantedApp.id,

@@ -1594,6 +1594,15 @@ async function handleAssignKnowledgeConnectorToKnowledgeBase(params: {
     if (!connector) {
       return knowledgeConnectorNotFound(args.connector_id);
     }
+    if (context.userId) {
+      await ResourcePermissions.require({
+        organizationId: context.organizationId,
+        userId: context.userId,
+        resource: "knowledgeConnector",
+        scope: args.connector_id,
+        action: "manage-permissions",
+      });
+    }
     const knowledgeBase = await KnowledgeBaseModel.findById(
       args.knowledge_base_id,
     );
@@ -1639,6 +1648,15 @@ async function handleUnassignKnowledgeConnectorFromKnowledgeBase(params: {
     });
     if (!connector) {
       return knowledgeConnectorNotFound(args.connector_id);
+    }
+    if (context.userId) {
+      await ResourcePermissions.require({
+        organizationId: context.organizationId,
+        userId: context.userId,
+        resource: "knowledgeConnector",
+        scope: args.connector_id,
+        action: "manage-permissions",
+      });
     }
     const kbIds = await KnowledgeBaseConnectorModel.getKnowledgeBaseIds(
       args.connector_id,

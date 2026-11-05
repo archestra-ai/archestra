@@ -71,6 +71,7 @@ import {
   parseTrajectoryStamp,
   stampToolCallId,
 } from "@/openappa/trajectory-stamp";
+import { superyellSession } from "@/openappa/unenforced";
 import { createAppaLlmProxyPlugin } from "@/proxy/plugins/appa-plugin-archestra";
 import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { issueRuntimeBinding } from "@/services/agent-runtime/runtime-identity";
@@ -7681,6 +7682,112 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     }
   }
 
+  // A request the platform bound to a runtime workspace cannot leave it by
+  // claiming to review another session: a Codex auto-review in the workspace
+  // is bound to the workspace session, and follows that session alone.
+  test("a runtime-bound request that claims to be a Codex auto-review stays in its workspace session", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    config.openappa.offerSigningSecret = "runtime-binding-test-secret";
+    const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+    const providerKey = await makeLlmProviderApiKey(
+      agent.organizationId,
+      secret.id,
+      { provider: "anthropic" },
+    );
+    const { value: key, virtualKey } = await VirtualApiKeyModel.create({
+      organizationId: agent.organizationId,
+      name: "runtime-review",
+      scope: "org",
+      authorId: null,
+      providerApiKeys: [
+        { provider: providerKey.provider, providerApiKeyId: providerKey.id },
+      ],
+    });
+    const context = await A2AContextModel.create({
+      actorKind: "organization",
+      actorId: agent.organizationId,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    const workloadName = `runtime-review-${task.id.slice(0, 8)}`;
+    const workspace = await AgentWorkspaceModel.create({
+      organizationId: agent.organizationId,
+      agentId: agent.id,
+      actorKind: "organization",
+      actorId: agent.organizationId,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      workloadName,
+      state: "active",
+      activeTaskId: task.id,
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    await AgentRunModel.create({
+      organizationId: agent.organizationId,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "organization",
+      actorId: agent.organizationId,
+      actorUserId: null,
+      workloadName,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      virtualApiKeyId: virtualKey.id,
+    });
+    const binding = issueRuntimeBinding({
+      secret: config.openappa.offerSigningSecret,
+      organizationId: agent.organizationId,
+      workspaceId: workspace.id,
+      workloadName,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "organization",
+      actorId: agent.organizationId,
+      expiresAt: Date.now() + 600_000,
+    });
+    if (!binding) throw new Error("The fixture has no signed binding");
+    // Another session in the workspace's scope, out of OpenAPPA.
+    await superyellSession({
+      organization_id: agent.organizationId,
+      session_id: `agent-workspace:${workspace.id}|elsewhere`,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "203.0.113.20",
+      headers: {
+        authorization: `Bearer ${key}`,
+        "anthropic-version": "2023-06-01",
+        "x-appa-session-id": workloadName,
+        "x-archestra-runtime-binding": binding,
+        "user-agent": "codex_cli_rs/0.164.0",
+        "x-openai-subagent": "guardian",
+        "x-codex-turn-metadata": JSON.stringify({
+          session_id: "elsewhere",
+          thread_id: "review-thread",
+          parent_thread_id: "elsewhere",
+          turn_trigger: "guardian_review",
+        }),
+      },
+      payload: payload(false) as Record<string, unknown>,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    // Governed: OpenAPPA saw the workspace session's turn.
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        session_id: `agent-workspace:${workspace.id}|${workloadName}`,
+      }),
+    );
+  });
+
   test("refuses a Chat request that names no user, instead of binding it unchecked", async () => {
     await allowUnauthenticatedCallers();
     const { "x-archestra-user-id": _user, ...noUser } =
@@ -13627,6 +13734,910 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(providerRequests).toHaveLength(1);
       expect(providerRequests[0]).toMatchObject({
         input: expect.arrayContaining(mailbox),
+      });
+    });
+
+    // Codex runs an auto-review (approvals_reviewer = "auto_review") in a
+    // thread of its own. Each review copies the requester's history, which
+    // includes a message from a subagent. The review was its own root, so a
+    // requester out of OpenAPPA left the review governed, and with no tools to
+    // recover, a refusal there blocked every command that needed an approval.
+    test.for([
+      {
+        state: "the requester was superyelled",
+        requester: "root-thread",
+        setup: "superyell root",
+        passes: true,
+      },
+      {
+        state: "the requester started while enforcement was off",
+        requester: "root-thread",
+        setup: "root starts while enforcement is off",
+        passes: true,
+      },
+      {
+        state: "the root of the subagent requester was superyelled",
+        requester: "worker-thread",
+        setup: "superyell root, then the subagent runs",
+        passes: true,
+      },
+      {
+        state: "the subagent requester was superyelled",
+        requester: "worker-thread",
+        setup: "superyell subagent",
+        passes: true,
+      },
+      {
+        state: "the root of a governed subagent requester was superyelled",
+        requester: "worker-thread",
+        setup: "governed subagent, then superyell root",
+        passes: true,
+      },
+      {
+        state: "a nested subagent requester was superyelled",
+        requester: "helper-thread",
+        setup: "superyell nested subagent",
+        passes: true,
+      },
+      {
+        state: "OpenAPPA governs the requester",
+        requester: "root-thread",
+        setup: "governed root",
+        passes: false,
+      },
+      {
+        state: "another user superyelled a session with the requester's id",
+        requester: "root-thread",
+        setup: "superyell another user's root",
+        passes: false,
+      },
+      {
+        state: "two sessions under the root end with the requester's id",
+        requester: "helper-thread",
+        setup: "superyell two sessions with the requester's id",
+        passes: false,
+      },
+      {
+        state: "the requester is recorded under another root",
+        requester: "worker-thread",
+        setup: "superyell a subagent of another root",
+        passes: false,
+      },
+      {
+        state: "the requester's id only ends a recorded subagent's own id",
+        requester: "1",
+        setup: "superyell subagents whose ids end with the requester's",
+        passes: false,
+      },
+      {
+        state: "a thread that is not a review shares the superyelled root",
+        requester: undefined,
+        setup: "superyell root",
+        passes: false,
+      },
+    ] as const)("a Codex auto-review is out of OpenAPPA only while the session it reviews is: $state", async ({
+      requester,
+      setup,
+      passes,
+    }) => {
+      await ModelModel.upsert({
+        externalId: "openai/gpt-5.5",
+        provider: "openai",
+        modelId: "gpt-5.5",
+        inputModalities: null,
+        outputModalities: null,
+        lastSyncedAt: new Date(),
+      });
+      await app.register(openAiProxyRoutes);
+      const verdict = {
+        id: "msg_review",
+        type: "message",
+        role: "assistant",
+        status: "completed",
+        content: [
+          { type: "output_text", text: '{"outcome":"allow"}', annotations: [] },
+        ],
+      };
+      vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockReturnValue({
+        responses: {
+          create: async (params: unknown) => {
+            providerRequests.push(structuredClone(params));
+            return codexResponseStream("resp_review", [verdict]);
+          },
+        },
+      } as never);
+      const send = (
+        turn: Record<string, string>,
+        input: unknown[],
+        review: boolean,
+      ) =>
+        app.inject({
+          method: "POST",
+          url: `/v1/openai/${agent.id}/responses`,
+          remoteAddress: "127.0.0.1",
+          headers: {
+            ...internalCallHeader(),
+            authorization: "Bearer test-key",
+            "x-archestra-virtual-key": platformKey,
+            "content-type": "application/json",
+            "user-agent": "codex_cli_rs/0.164.0",
+            "x-archestra-user-id": userId,
+            "x-codex-turn-metadata": JSON.stringify(turn),
+            ...(review ? { "x-openai-subagent": "guardian" } : {}),
+          },
+          payload: {
+            model: "gpt-5.5",
+            stream: true,
+            input,
+            // An auto-review declares no tools and asks for a verdict.
+            ...(review
+              ? {
+                  tools: [],
+                  text: {
+                    format: {
+                      type: "json_schema",
+                      name: "codex_output_schema",
+                      strict: true,
+                      schema: {
+                        type: "object",
+                        properties: {},
+                        additionalProperties: false,
+                      },
+                    },
+                  },
+                }
+              : {}),
+          },
+        });
+      const scoped = (id: string) => `user:${userId}|${id}`;
+      const root = { session_id: "root-thread", thread_id: "root-thread" };
+
+      const superyell = (id: string, parent?: string) =>
+        superyellSession({
+          organization_id: agent.organizationId,
+          session_id: scoped(id),
+          ...(parent ? { parent_id: scoped(parent) } : {}),
+        });
+      const opened = [{ role: "user", content: "Go" }];
+      switch (setup) {
+        case "superyell root":
+          await superyell("root-thread");
+          break;
+        case "root starts while enforcement is off": {
+          await GuardrailsDeploymentModel.setEnabled(false);
+          const first = await send(root, opened, false);
+          expect(first.statusCode, first.body).toBe(200);
+          await GuardrailsDeploymentModel.setEnabled(true);
+          break;
+        }
+        case "superyell root, then the subagent runs": {
+          // The subagent's own request records it under the root it follows.
+          await superyell("root-thread");
+          const worker = await send(
+            {
+              session_id: "root-thread",
+              thread_id: "worker-thread",
+              parent_thread_id: "root-thread",
+            },
+            opened,
+            false,
+          );
+          expect(worker.statusCode, worker.body).toBe(200);
+          break;
+        }
+        case "superyell subagent":
+          await superyell("root-thread:worker-thread", "root-thread");
+          break;
+        case "governed subagent, then superyell root": {
+          // The runtime's own rows: the root, and the subagent it governs.
+          const rootId = scoped("root-thread");
+          for (const [id, parent] of [
+            [rootId, undefined],
+            [scoped("root-thread:worker-thread"), rootId],
+          ] as const)
+            await db.insert(database.schema.openappaSessionsTable).values({
+              actor: openappaActor(id),
+              root: openappaActor(rootId),
+              organizationId: agent.organizationId,
+              callerId: `user:${userId}`,
+              sessionId: id,
+              ...(parent ? { parentId: parent } : {}),
+              startDecision: { decision: "ack" },
+            });
+          await superyell("root-thread");
+          break;
+        }
+        case "superyell nested subagent":
+          await superyell(
+            "root-thread:worker-thread:helper-thread",
+            "root-thread:worker-thread",
+          );
+          break;
+        case "governed root": {
+          const first = await send(root, opened, false);
+          expect(first.statusCode, first.body).toBe(200);
+          break;
+        }
+        case "superyell another user's root":
+          await superyellSession({
+            organization_id: agent.organizationId,
+            session_id: `user:${crypto.randomUUID()}|root-thread`,
+          });
+          break;
+        case "superyell two sessions with the requester's id":
+          await superyell("root-thread:helper-thread", "root-thread");
+          await superyell(
+            "root-thread:worker-thread:helper-thread",
+            "root-thread:worker-thread",
+          );
+          break;
+        case "superyell a subagent of another root":
+          await superyell("other-root:worker-thread", "other-root");
+          break;
+        case "superyell subagents whose ids end with the requester's":
+          // `worker-1`, and `a:1`: an id can hold a colon, so its parent
+          // decides where it starts.
+          await superyell("root-thread:worker-1", "root-thread");
+          await superyell("root-thread:a:1", "root-thread");
+          break;
+      }
+      providerRequests.length = 0;
+
+      // The item shape of the reported Codex 0.164 session.
+      const mail = {
+        type: "agent_message",
+        author: "/root/final_review",
+        recipient: "/root",
+        content: [
+          {
+            type: "input_text",
+            text: "Message Type: MESSAGE\nTask name: /root\nSender: /root/final_review\nPayload:\n",
+          },
+          {
+            type: "encrypted_content",
+            encrypted_content: "gAAAA_opaque_message",
+          },
+        ],
+      };
+      const history = [
+        {
+          role: "user",
+          content:
+            "The following is the Codex agent history added since your last approval assessment.",
+        },
+        mail,
+        { role: "user", content: "[412] tool exec_command call: {}" },
+      ];
+      const turn = await send(
+        requester
+          ? {
+              session_id: "root-thread",
+              thread_id: "review-thread",
+              parent_thread_id: requester,
+              request_kind: "turn",
+              turn_trigger: "guardian_review",
+              thread_source: "guardian_review",
+              subagent_kind: "guardian",
+            }
+          : { session_id: "root-thread", thread_id: "other-thread" },
+        history,
+        requester !== undefined,
+      );
+
+      expect(turn.statusCode, turn.body).toBe(200);
+      expect(providerRequests).toHaveLength(1);
+      if (!passes) {
+        // Governed, the review reads no message OpenAPPA has no record of:
+        // the copy goes on with its text hidden.
+        const forwarded = JSON.stringify(providerRequests[0]);
+        expect(forwarded).not.toContain("gAAAA_opaque_message");
+        expect(forwarded).toContain(
+          "[appa] Message withheld: this message has no record of crossing from its sender into this session, so its text is hidden.",
+        );
+        return;
+      }
+      expect(providerRequests[0]).toMatchObject({
+        input: expect.arrayContaining([mail]),
+      });
+    });
+
+    // Codex agents message each other with collaboration.send_message, and
+    // the recipient gets a `Message Type: MESSAGE` mailbox item carrying the
+    // same bytes, often ciphertext. A governed session refused every request
+    // that held one. It now crosses as a peer message: the runtime records the
+    // sender's send and admits the arrival by the sender and exact bytes.
+    describe("Codex messages between agents", () => {
+      const cipher = "gAAAAB_interim_note_ciphertext==";
+      const scoped = (id: string) => `user:${userId}|${id}`;
+      const callerId = () => `user:${userId}`;
+      const mail = (author: string, recipient: string) => ({
+        type: "agent_message",
+        id: "amsg_interim",
+        author,
+        recipient,
+        content: [
+          {
+            type: "input_text",
+            text: `Message Type: MESSAGE\nTask name: ${recipient}\nSender: ${author}\nPayload:\n`,
+          },
+          { type: "encrypted_content", encrypted_content: cipher },
+        ],
+      });
+      const sendMessageCall = (target: string) => ({
+        type: "function_call",
+        id: "fc_send",
+        call_id: "call_send",
+        name: "send_message",
+        namespace: "collaboration",
+        arguments: JSON.stringify({ target, message: cipher }),
+        status: "completed",
+      });
+      const tools = [
+        {
+          type: "namespace",
+          name: "collaboration",
+          tools: ["spawn_agent", "wait_agent", "send_message"].map((name) => ({
+            type: "function",
+            name,
+            parameters: { type: "object", properties: {} },
+          })),
+        },
+      ];
+      let output: Record<string, unknown>[] = [];
+      const send = (params: {
+        thread: string;
+        parent?: string;
+        agentName: string;
+        input: unknown[];
+      }) => {
+        const turn = {
+          session_id: "root-thread",
+          thread_id: params.thread,
+          agent_name: params.agentName,
+          ...(params.parent ? { parent_thread_id: params.parent } : {}),
+        };
+        return app.inject({
+          method: "POST",
+          url: `/v1/openai/${agent.id}/responses`,
+          remoteAddress: "127.0.0.1",
+          headers: {
+            ...internalCallHeader(),
+            authorization: "Bearer test-key",
+            "x-archestra-virtual-key": platformKey,
+            "content-type": "application/json",
+            "user-agent": "codex_cli_rs/0.164.0",
+            "x-archestra-user-id": userId,
+            "x-codex-turn-metadata": JSON.stringify(turn),
+          },
+          payload: {
+            model: "gpt-5.5",
+            stream: true,
+            input: params.input,
+            tools,
+            client_metadata: {
+              thread_id: params.thread,
+              session_id: "root-thread",
+              "x-codex-turn-metadata": JSON.stringify(turn),
+            },
+          },
+        });
+      };
+      /** What the runtime stores for the root, its allowed spawn, and the child that spawn started. */
+      const recordFamily = async () => {
+        const root = scoped("root-thread");
+        const child = scoped("root-thread:worker-thread");
+        await db.insert(database.schema.openappaSessionsTable).values([
+          {
+            actor: openappaActor(root),
+            root: openappaActor(root),
+            organizationId: agent.organizationId,
+            callerId: callerId(),
+            sessionId: root,
+            startDecision: { decision: "ack" },
+          },
+          {
+            actor: openappaActor(child),
+            root: openappaActor(root),
+            organizationId: agent.organizationId,
+            callerId: callerId(),
+            sessionId: child,
+            parentId: root,
+            startDecision: { decision: "ack" },
+          },
+        ]);
+        await db.insert(database.schema.openappaOperationsTable).values([
+          {
+            organizationId: agent.organizationId,
+            callerId: callerId(),
+            sessionId: root,
+            operationId: "call:call_spawn_worker",
+            root: openappaActor(root),
+            status: "complete",
+            input: {
+              semantic: {
+                event: "tool_call",
+                tool: "spawn_agent",
+                spawn: true,
+                arguments: { task_name: "worker", message: "gAAAA_task" },
+              },
+            },
+            decision: { decision: "allow_call" },
+          },
+          {
+            organizationId: agent.organizationId,
+            callerId: callerId(),
+            sessionId: child,
+            operationId: "call:call_earlier",
+            root: openappaActor(root),
+            status: "complete",
+            input: {
+              semantic: {
+                event: "tool_call",
+                tool: "wait_agent",
+                spawn_call_id: "call_spawn_worker",
+                child_native_id: "worker-thread",
+              },
+            },
+            decision: { decision: "allow_call" },
+          },
+        ]);
+      };
+
+      beforeEach(async () => {
+        await ModelModel.upsert({
+          externalId: "openai/gpt-5.5",
+          provider: "openai",
+          modelId: "gpt-5.5",
+          inputModalities: null,
+          outputModalities: null,
+          lastSyncedAt: new Date(),
+        });
+        await app.register(openAiProxyRoutes);
+        output = [
+          {
+            id: "msg_ok",
+            type: "message",
+            role: "assistant",
+            status: "completed",
+            content: [{ type: "output_text", text: "Noted", annotations: [] }],
+          },
+        ];
+        vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockReturnValue(
+          {
+            responses: {
+              create: async (params: unknown) => {
+                providerRequests.push(structuredClone(params));
+                return codexResponseStream("resp_relay", output);
+              },
+            },
+          } as never,
+        );
+        native.loadChildReturns.mockImplementation(async () => []);
+        native.loadChildAddresses.mockImplementation(async () => []);
+        vi.spyOn(appaService, "sendPeerMessage").mockResolvedValue({
+          kind: "released",
+          messageId: "6f9619ff-8b86-4d11-b42d-00c04fc964ff",
+        });
+        vi.spyOn(appaService, "admitPeerMessage").mockResolvedValue({
+          kind: "unverified",
+        });
+      });
+
+      test("a subagent's message to its parent is a peer send, released byte for byte", async () => {
+        await recordFamily();
+        output = [sendMessageCall("/root")];
+        const response = await send({
+          thread: "worker-thread",
+          parent: "root-thread",
+          agentName: "/root/worker",
+          input: [{ role: "user", content: "Report back" }],
+        });
+
+        expect(response.statusCode, response.body).toBe(200);
+        expect(appaService.sendPeerMessage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            operationId: "peer_send:call_send",
+            recipientSessionId: scoped("root-thread"),
+            value: cipher,
+          }),
+        );
+        const released = response.body
+          .split("\n")
+          .filter(
+            (line) => line.startsWith("data: ") && !line.includes("[DONE]"),
+          )
+          .map((line) => JSON.parse(line.slice(6)))
+          .findLast((frame) => frame.type === "response.completed")
+          .response.output.find(
+            (item: { type?: string }) => item.type === "function_call",
+          );
+        expect(JSON.parse(released.arguments)).toEqual({
+          target: "/root",
+          message: cipher,
+        });
+      });
+
+      test.for([
+        { answer: "admitted", reads: "the message" },
+        { answer: "unverified", reads: "a notice" },
+        { answer: "held", reads: "a held notice" },
+      ] as const)("a parent reads its subagent's message only as the runtime admits it: $answer", async ({
+        answer,
+      }) => {
+        await recordFamily();
+        vi.mocked(appaService.admitPeerMessage).mockResolvedValue(
+          answer === "admitted"
+            ? { kind: "admitted", messageId: "m-1", value: cipher }
+            : answer === "held"
+              ? {
+                  kind: "held",
+                  notices: [
+                    {
+                      messageId: "6f9619ff-8b86-4d11-b42d-00c04fc964ff",
+                      senderSessionId: scoped("root-thread:worker-thread"),
+                      recipientSessionId: scoped("root-thread"),
+                      digest: "0".repeat(64),
+                      expiresAt: "",
+                    },
+                  ],
+                }
+              : { kind: "unverified" },
+        );
+        const message = mail("/root/worker", "/root");
+        const response = await send({
+          thread: "root-thread",
+          agentName: "/root",
+          input: [
+            { role: "user", content: "Coordinate" },
+            structuredClone(message),
+          ],
+        });
+
+        expect(response.statusCode, response.body).toBe(200);
+        expect(appaService.admitPeerMessage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            session: expect.objectContaining({
+              session_id: scoped("root-thread"),
+            }),
+            senderSessionId: scoped("root-thread:worker-thread"),
+            value: cipher,
+          }),
+        );
+        const forwarded = (providerRequests.at(-1) as { input: unknown[] })
+          .input;
+        const item = forwarded.find(
+          (entry) => (entry as { type?: string }).type === "agent_message",
+        );
+        if (answer === "admitted") {
+          expect(item).toEqual(message);
+          return;
+        }
+        expect(JSON.stringify(forwarded)).not.toContain(cipher);
+        expect(JSON.stringify(item)).toContain(
+          answer === "held" ? "[appa] Message held." : "[appa]",
+        );
+      });
+
+      test("a message from an agent outside the session's tree is hidden, not refused", async () => {
+        await recordFamily();
+        const response = await send({
+          thread: "root-thread",
+          agentName: "/root",
+          input: [
+            { role: "user", content: "Coordinate" },
+            mail("/elsewhere/agent", "/root"),
+          ],
+        });
+
+        expect(response.statusCode, response.body).toBe(200);
+        expect(appaService.admitPeerMessage).not.toHaveBeenCalled();
+        const forwarded = JSON.stringify(providerRequests.at(-1));
+        expect(forwarded).not.toContain(cipher);
+        expect(forwarded).toContain(
+          "[appa] Message withheld: this message has no record of crossing from its sender into this session, so its text is hidden.",
+        );
+      });
+
+      /**
+       * What the runtime stores for a tree of agents: each agent's session,
+       * the allowed spawn of each child in its parent, and a child event that
+       * binds that spawn. `started: false` records only the allowed spawn.
+       */
+      const recordTree = async (
+        agents: Array<{
+          id: string;
+          parent?: string;
+          taskName?: string;
+          spawnCallId?: string;
+          started?: boolean;
+        }>,
+      ) => {
+        const root = scoped("root-thread");
+        for (const entry of agents) {
+          const started = entry.started !== false;
+          if (started)
+            await db.insert(database.schema.openappaSessionsTable).values({
+              actor: openappaActor(scoped(entry.id)),
+              root: openappaActor(root),
+              organizationId: agent.organizationId,
+              callerId: callerId(),
+              sessionId: scoped(entry.id),
+              ...(entry.parent ? { parentId: scoped(entry.parent) } : {}),
+              startDecision: { decision: "ack" },
+            });
+          if (!entry.parent || !entry.spawnCallId) continue;
+          await db.insert(database.schema.openappaOperationsTable).values({
+            organizationId: agent.organizationId,
+            callerId: callerId(),
+            sessionId: scoped(entry.parent),
+            operationId: `call:${entry.spawnCallId}`,
+            root: openappaActor(root),
+            status: "complete",
+            input: {
+              semantic: {
+                event: "tool_call",
+                tool: "spawn_agent",
+                spawn: true,
+                arguments: { task_name: entry.taskName, message: "gAAAA" },
+              },
+            },
+            decision: { decision: "allow_call" },
+          });
+          if (started)
+            await db.insert(database.schema.openappaOperationsTable).values({
+              organizationId: agent.organizationId,
+              callerId: callerId(),
+              sessionId: scoped(entry.id),
+              operationId: `call:${entry.spawnCallId}-first`,
+              root: openappaActor(root),
+              status: "complete",
+              input: {
+                semantic: {
+                  event: "tool_call",
+                  tool: "wait_agent",
+                  spawn_call_id: entry.spawnCallId,
+                },
+              },
+              decision: { decision: "allow_call" },
+            });
+        }
+      };
+
+      test("a sender's sibling and its own child of the same name stay apart", async () => {
+        await recordTree([
+          { id: "root-thread" },
+          {
+            id: "root-thread:b-thread",
+            parent: "root-thread",
+            taskName: "b",
+            spawnCallId: "call_b",
+          },
+          {
+            id: "root-thread:a-thread",
+            parent: "root-thread",
+            taskName: "a",
+            spawnCallId: "call_a",
+          },
+          {
+            id: "root-thread:b-thread:ba-thread",
+            parent: "root-thread:b-thread",
+            taskName: "a",
+            spawnCallId: "call_ba",
+          },
+        ]);
+        for (const [target, recipient] of [
+          ["/root/a", "root-thread:a-thread"],
+          ["a", "root-thread:b-thread:ba-thread"],
+        ] as const) {
+          vi.mocked(appaService.sendPeerMessage).mockClear();
+          output = [sendMessageCall(target)];
+          const response = await send({
+            thread: "b-thread",
+            parent: "root-thread",
+            agentName: "/root/b",
+            input: [{ role: "user", content: `Tell ${target}` }],
+          });
+          expect(response.statusCode, response.body).toBe(200);
+          expect(appaService.sendPeerMessage).toHaveBeenCalledWith(
+            expect.objectContaining({ recipientSessionId: scoped(recipient) }),
+          );
+        }
+        // The sibling's message is the sibling's, not the child's.
+        const response = await send({
+          thread: "b-thread",
+          parent: "root-thread",
+          agentName: "/root/b",
+          input: [
+            { role: "user", content: "Read" },
+            mail("/root/a", "/root/b"),
+          ],
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(appaService.admitPeerMessage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            senderSessionId: scoped("root-thread:a-thread"),
+          }),
+        );
+      });
+
+      test("a subagent named like a lead's envelope is still a subagent", async () => {
+        await recordTree([
+          { id: "root-thread" },
+          {
+            id: "root-thread:main-thread",
+            parent: "root-thread",
+            taskName: "main",
+            spawnCallId: "call_main",
+          },
+        ]);
+        const response = await send({
+          thread: "root-thread",
+          agentName: "/root",
+          input: [
+            { role: "user", content: "Read" },
+            mail("/root/main", "/root"),
+          ],
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(appaService.admitPeerMessage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            senderSessionId: scoped("root-thread:main-thread"),
+          }),
+        );
+      });
+
+      test("a task name spawned again names the child that started", async () => {
+        await recordTree([
+          { id: "root-thread" },
+          {
+            id: "root-thread:never-thread",
+            parent: "root-thread",
+            taskName: "worker",
+            spawnCallId: "call_failed_launch",
+            started: false,
+          },
+          {
+            id: "root-thread:worker-thread",
+            parent: "root-thread",
+            taskName: "worker",
+            spawnCallId: "call_worker",
+          },
+        ]);
+        output = [sendMessageCall("worker")];
+        const response = await send({
+          thread: "root-thread",
+          agentName: "/root",
+          input: [{ role: "user", content: "Tell the worker" }],
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(appaService.sendPeerMessage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            recipientSessionId: scoped("root-thread:worker-thread"),
+          }),
+        );
+      });
+
+      test("no message is sent to a subagent out of OpenAPPA, and a malformed one is refused", async () => {
+        await recordFamily();
+        await superyellSession({
+          organization_id: agent.organizationId,
+          session_id: scoped("root-thread:worker-thread"),
+          parent_id: scoped("root-thread"),
+        });
+        for (const call of [
+          sendMessageCall("worker"),
+          {
+            ...sendMessageCall("worker"),
+            arguments: JSON.stringify({ target: "worker" }),
+          },
+        ]) {
+          output = [call];
+          const response = await send({
+            thread: "root-thread",
+            agentName: "/root",
+            input: [{ role: "user", content: "Tell the worker" }],
+          });
+          expect(response.statusCode, response.body).toBe(200);
+          expect(response.body).not.toContain('"name":"send_message"');
+        }
+        expect(appaService.sendPeerMessage).not.toHaveBeenCalled();
+      });
+
+      test.for([
+        { result: "a report", output: "Agent finished: unchecked report" },
+        {
+          result: "a failed send's text",
+          output: "unchecked report",
+          is_error: true,
+        },
+        {
+          result: "a recorded report with another part",
+          output: [
+            { type: "input_text", text: "WORKER-RETURN" },
+            {
+              type: "input_text",
+              text: "",
+              encrypted_content: "unchecked report",
+            },
+          ],
+        },
+        {
+          result: "a receipt part with a payload",
+          output: [
+            {
+              type: "input_text",
+              text: " ",
+              encrypted_content: "unchecked report",
+            },
+          ],
+        },
+      ])("a send_message result other than its empty receipt is withheld: $result", async ({
+        output,
+        is_error,
+      }) => {
+        await recordFamily();
+        // The worker's return is on record: only its text is covered.
+        native.loadChildReturns.mockImplementation(async () => [
+          {
+            childSessionId: scoped("root-thread:worker-thread"),
+            spawnCallId: "call_spawn_worker",
+            childNativeId: "worker-thread",
+            value: "WORKER-RETURN",
+          },
+        ]);
+        const response = await send({
+          thread: "root-thread",
+          agentName: "/root",
+          input: [
+            { role: "user", content: "Tell the worker" },
+            sendMessageCall("worker"),
+            {
+              type: "function_call_output",
+              call_id: "call_send",
+              output,
+              ...(is_error ? { is_error } : {}),
+            },
+          ],
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        const forwarded = JSON.stringify(providerRequests.at(-1));
+        expect(forwarded).not.toContain("unchecked report");
+      });
+
+      test("a hidden message keeps none of the fields the client added", async () => {
+        await recordFamily();
+        const response = await send({
+          thread: "root-thread",
+          agentName: "/root",
+          input: [
+            { role: "user", content: "Coordinate" },
+            { ...mail("/root/worker", "/root"), note: "unchecked note" },
+          ],
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        const forwarded = JSON.stringify(providerRequests.at(-1));
+        expect(forwarded).not.toContain(cipher);
+        expect(forwarded).not.toContain("unchecked note");
+      });
+
+      test("a parent's message to its subagent names the child its spawn started", async () => {
+        await recordFamily();
+        output = [sendMessageCall("worker")];
+        const response = await send({
+          thread: "root-thread",
+          agentName: "/root",
+          input: [{ role: "user", content: "Tell the worker" }],
+        });
+
+        expect(response.statusCode, response.body).toBe(200);
+        expect(appaService.sendPeerMessage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            recipientSessionId: scoped("root-thread:worker-thread"),
+            recipientParentId: scoped("root-thread"),
+            recipientNativeId: "worker-thread",
+            value: cipher,
+          }),
+        );
       });
     });
 

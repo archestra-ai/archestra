@@ -1507,6 +1507,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetMcpToolCallUsage]: {
     llmCost: ["read"],
   },
+  // Same organization-wide totals as GetTeamStatistics and
+  // GetProxyCostStatistics, cut finer; it names no person.
+  [RouteId.GetLlmUsage]: {
+    llmCost: ["read"],
+  },
   [RouteId.GetAppUsage]: {
     llmCost: ["read"],
     app: ["read"],
@@ -2200,6 +2205,9 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/users": { member: ["read"] },
   "/settings/teams": { team: ["read"] },
   "/settings/roles": { ac: ["read"] },
+  "/settings/roles/new": { ac: ["create"] },
+  "/settings/roles/[id]": { ac: ["read"] },
+  "/settings/roles/[id]/edit": { ac: ["update"] },
   // Type-wide grants are an access decision, not a role definition, so the
   // page answers to the same permission that opens the roles screen.
   "/settings/identity-providers": { identityProvider: ["read"] },

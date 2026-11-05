@@ -54,6 +54,31 @@ class RequiredResultTests(unittest.TestCase):
                 ).returncode, 0)
         self.assertNotEqual(self.backend(RUN_SHARDS="").returncode, 0)
 
+    def frontend(self, **overrides):
+        return subprocess.run(
+            ["bash", "-e", "-c", gate_script("on-pull-requests.yml", "frontend-integration-tests-gate")],
+            env=os.environ | {
+                "INPUTS_RESULT": "success", "RUN_FRONTEND": "true", "TESTS_RESULT": "success",
+            } | overrides,
+            capture_output=True, text=True,
+        )
+
+    def test_frontend_requires_passing_tests_when_inputs_changed(self):
+        self.assertEqual(self.frontend().returncode, 0)
+        for result in ("failure", "cancelled", "skipped", ""):
+            with self.subTest(result=result):
+                self.assertNotEqual(self.frontend(TESTS_RESULT=result).returncode, 0)
+
+    def test_frontend_skip_requires_explicit_input_decision(self):
+        self.assertEqual(self.frontend(RUN_FRONTEND="false", TESTS_RESULT="skipped").returncode, 0)
+        for result in ("failure", "cancelled", "skipped", ""):
+            with self.subTest(result=result):
+                self.assertNotEqual(self.frontend(
+                    INPUTS_RESULT=result, RUN_FRONTEND="false", TESTS_RESULT="skipped",
+                ).returncode, 0)
+        self.assertNotEqual(self.frontend(RUN_FRONTEND="", TESTS_RESULT="skipped").returncode, 0)
+        self.assertNotEqual(self.frontend(RUN_FRONTEND="false", TESTS_RESULT="failure").returncode, 0)
+
     def e2e(self, **overrides):
         return subprocess.run(
             ["bash", "-e", "-c", gate_script("platform-e2e-tests.yml", "platform-e2e-merge-reports")],

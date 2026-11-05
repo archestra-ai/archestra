@@ -80,6 +80,7 @@ const snapshot = (
   identityProviderId: null,
   environmentId: null,
   networkPolicy: null,
+  subagentLoadBalancing: null,
   tools: [],
   excludedTools: [],
   excludedSubagents: [],

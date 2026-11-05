@@ -3,6 +3,8 @@ import type { FastifyRequest } from "fastify";
 import config from "@/config";
 import logger from "@/logging";
 import { ConversationModel } from "@/models";
+import OpenAppaSessionModel from "@/models/openappa-session";
+import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import type { RuntimeIdentitySnapshot } from "@/models/proxy-request-context";
 import { scopedSessionId } from "@/openappa/actor";
 import { forkedSession } from "@/openappa/lineage";
@@ -19,7 +21,7 @@ import {
   verifySubagentBinding,
 } from "@/openappa/subagent-binding";
 import { stampedSessions } from "@/openappa/trajectory-stamp";
-import { startedUnenforced } from "@/openappa/unenforced";
+import { isUnenforcedSession, startedUnenforced } from "@/openappa/unenforced";
 import {
   type AppaSessionIdentity,
   type AppaWireFamily,
@@ -29,11 +31,13 @@ import {
 import type { OpenappaIngress } from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
 import {
   APPA_CLIENT_ADAPTERS,
+  appaReviewedSession,
   appaTrajectory,
   extractAppaSessionIdentity,
   nativeSpawnParentId,
 } from "@/proxy/plugins/appa-plugin-archestra/session-identity";
 import type { AppaTrustedContext } from "@/proxy/plugins/appa-plugin-archestra/types";
+import { withCallerScope } from "@/proxy/plugins/appa-plugin-archestra/utils";
 import type { GatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
 import {
   RUNTIME_BINDING_HEADER,
@@ -519,28 +523,46 @@ export async function admitOpenappaRequest(params: {
         "OpenAPPA bound a fallback root because the client reported no session",
       );
     }
-    if (
-      await startedUnenforced(
-        appaTrajectory({
-          adapters: APPA_CLIENT_ADAPTERS,
-          headers,
-          requestBody: params.originalRequest,
-          trustedContext: {
-            session,
-            profileId: agent.id,
-            toolIdentity: params.toolIdentity,
-            request: lineageRequest(identity),
-            ...facts,
-          },
-        }).session,
-      )
-    ) {
+    const trajectory = appaTrajectory({
+      adapters: APPA_CLIENT_ADAPTERS,
+      headers,
+      requestBody: params.originalRequest,
+      trustedContext: {
+        session,
+        profileId: agent.id,
+        toolIdentity: params.toolIdentity,
+        request: lineageRequest(identity),
+        ...facts,
+      },
+    });
+    if (await startedUnenforced(trajectory.session)) {
       // The session started while enforcement was off, or a person
       // superyelled it. OpenAPPA never governs it: the request goes on as
       // if enforcement were off.
       logger.info(
         { sessionId: session.session_id },
         "OpenAPPA ignores a session that started while Guardrails enforcement was off or was superyelled",
+      );
+      return { kind: "ungoverned" };
+    }
+    // A side review, such as a Codex auto-review, copies the history of the
+    // session it reviews into a thread of its own. When that session is out
+    // of OpenAPPA, its review is too: governed, it would be refused for what
+    // it copied, and the session could not continue. The review follows only
+    // the one session the runtime recorded for the agent that asked for it.
+    // A session the platform bound, a runtime workspace or a delegated run, is
+    // not the caller's to name, and its review is bound to that same session.
+    const reviewed =
+      runtimeSession || subagentBinding
+        ? undefined
+        : await recordedReviewedSession(trajectory);
+    if (reviewed && (await isUnenforcedSession(reviewed))) {
+      logger.info(
+        {
+          sessionId: session.session_id,
+          reviewedSessionId: reviewed.session_id,
+        },
+        "OpenAPPA ignores a side review of a session that started while Guardrails enforcement was off or was superyelled",
       );
       return { kind: "ungoverned" };
     }
@@ -783,4 +805,48 @@ function firstHeaderValue(
   value: string | string[] | undefined,
 ): string | undefined {
   return Array.isArray(value) ? value[0] : value;
+}
+
+/**
+ * The session a side review assesses, as the runtime recorded it: the root
+ * of the review's tree, or the one child under that root whose own id is the
+ * requester's. Any other review, and one whose requester fits no recorded
+ * session or several, assesses none.
+ */
+async function recordedReviewedSession(
+  trajectory: ReturnType<typeof appaTrajectory>,
+): Promise<OpenAppaSession | undefined> {
+  const { session } = trajectory;
+  const reviewed = appaReviewedSession(trajectory);
+  if (!reviewed) return undefined;
+  const scope = {
+    organization_id: session.organization_id,
+    ...(session.caller_id ? { caller_id: session.caller_id } : {}),
+  };
+  const requester = withCallerScope(session, reviewed.requesterId);
+  if (requester === reviewed.rootSessionId)
+    return { ...scope, session_id: reviewed.rootSessionId };
+  const query = {
+    organizationId: session.organization_id,
+    rootSessionId: reviewed.rootSessionId,
+    nativeId: reviewed.requesterId,
+  };
+  const [governed, unenforced] = await Promise.all([
+    OpenAppaSessionModel.familyMembersByNativeId(query),
+    OpenAppaUnenforcedModel.findFamilyMembers(query),
+  ]);
+  const members = new Map(
+    [...governed, ...unenforced].map((row) => [
+      `${row.sessionId}\u0000${row.parentId ?? ""}`,
+      row,
+    ]),
+  );
+  if (members.size !== 1) return undefined;
+  const [member] = members.values();
+  if (!member) return undefined;
+  return {
+    ...scope,
+    session_id: member.sessionId,
+    ...(member.parentId ? { parent_id: member.parentId } : {}),
+  };
 }

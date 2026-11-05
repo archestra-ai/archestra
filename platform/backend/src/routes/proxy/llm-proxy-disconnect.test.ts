@@ -349,7 +349,7 @@ for (const provider of [
               customPricePerMillionInput: "1",
               customPricePerMillionOutput: "1",
             });
-            await ModelPoolModel.create({
+            const pool = await ModelPoolModel.create({
               organizationId: agent.organizationId,
               input: {
                 name: "budget-disconnect-pool",
@@ -363,6 +363,11 @@ for (const provider of [
                   },
                 ],
               },
+            });
+            await ModelPoolModel.setPoolsForVirtualApiKey({
+              organizationId: agent.organizationId,
+              virtualApiKeyId: virtualKey.id,
+              poolIds: [pool.id],
             });
             const budget = await LimitModel.create({
               entityType: "virtual_key",

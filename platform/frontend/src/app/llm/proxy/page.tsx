@@ -89,6 +89,7 @@ export default function LlmProxyPage() {
         selected={selected}
         auth={effectiveAuth}
         targetLabel={targetLabel}
+        showKeyPools
       />
     </ol>
   );
@@ -322,7 +323,7 @@ function endpointHint(
   label: string,
 ) {
   if (selected === "model-router") {
-    return "OpenAI-compatible. Prefix the model with its provider, like openai:gpt-5.4.";
+    return "OpenAI-compatible. Prefix the model with its provider, like openai:gpt-5.4, or ask for a model pool by its name.";
   }
   if (selected === "jev") return "Decisions only: one endpoint, no chat.";
   return `Keep your ${label} SDK and change only the base URL.`;

@@ -59,6 +59,50 @@ import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
 import { interactionBelongsToOrganization } from "./log-organization";
 
+/**
+ * The receipt joins that split each request into the models it billed, and the
+ * billed-model expression they produce. Join `receipt` with `receiptOn`, then
+ * `facts` on `true`, before grouping by `model`.
+ */
+export function billedModelJoins() {
+  return {
+    receipt: schema.interactionBillingTable,
+    receiptOn: billingReceiptJoin,
+    facts: billingModelFacts,
+    model: billedModel,
+  };
+}
+
+/**
+ * Request, token and spend aggregates over interactions. With
+ * `perBilledModel`, the numbers come from each receipt's per-model components
+ * (as on the Models view), so the query must apply {@link billedModelJoins}.
+ */
+export function llmUsageAggregates(perBilledModel: boolean) {
+  const i = schema.interactionsTable;
+  return perBilledModel
+    ? {
+        requests: modelRequests,
+        inputTokens: sql<number>`CAST(${modelInput} AS DOUBLE PRECISION)`,
+        outputTokens: sql<number>`CAST(${modelOutput} AS DOUBLE PRECISION)`,
+        cacheReadTokens: sql<number>`CAST(${modelCacheRead} AS DOUBLE PRECISION)`,
+        cacheWriteTokens: sql<number>`CAST(${modelCacheWrite} AS DOUBLE PRECISION)`,
+        totalTokens: sql<number>`CAST(${modelReportedTokens} AS DOUBLE PRECISION)`,
+        billedCost: modelBilledCost,
+        subscriptionCost: modelSubscriptionCost,
+      }
+    : {
+        requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+        inputTokens: tokenSum(i.inputTokens),
+        outputTokens: tokenSum(i.outputTokens),
+        cacheReadTokens: tokenSum(i.cacheReadTokens),
+        cacheWriteTokens: tokenSum(i.cacheWriteTokens),
+        totalTokens: reportedTokens(i),
+        billedCost: billedSum(i.cost, "DOUBLE PRECISION"),
+        subscriptionCost: subscriptionCostSum("DOUBLE PRECISION"),
+      };
+}
+
 class StatisticsModel {
   static async getModelUsage(params: {
     model: string;
@@ -66,6 +110,8 @@ class StatisticsModel {
     timeframe: StatisticsTimeFrame;
     organizationId: string;
     userId?: string;
+    /** Only usage by this service account. */
+    serviceAccountId?: string;
     limit: number;
     offset: number;
   }): Promise<PaginatedResult<ModelUsageRow>> {
@@ -127,6 +173,9 @@ class StatisticsModel {
       interactionBelongsToOrganization(params.organizationId),
       eq(billedModel, params.model),
       params.userId ? eq(i.userId, params.userId) : undefined,
+      params.serviceAccountId
+        ? eq(i.serviceAccountId, params.serviceAccountId)
+        : undefined,
     );
     const aggregates = {
       requests: modelRequests,
@@ -265,6 +314,13 @@ class StatisticsModel {
       organizationId: string;
       limit: number;
       offset: number;
+      /** Only this person's usage. */
+      userId?: string;
+      /**
+       * Only this service account's usage, in addition to the
+       * `serviceAccountId` filter in the query.
+       */
+      ownServiceAccountId?: string;
     },
   ): Promise<ProxyCostStatistics> {
     const { timeframe, organizationId, limit, offset } = params;
@@ -286,6 +342,10 @@ class StatisticsModel {
       ...StatisticsModel.timeframeConditions(timeframe),
       eq(a.organizationId, organizationId),
       inArray(a.agentType, ["llm_proxy", "profile"]),
+      params.userId ? eq(i.userId, params.userId) : undefined,
+      params.ownServiceAccountId
+        ? eq(i.serviceAccountId, params.ownServiceAccountId)
+        : undefined,
       params.authMethod ? eq(method, params.authMethod) : undefined,
       params.credentialId ? eq(credential, params.credentialId) : undefined,
       params.providerApiKeyId
@@ -944,8 +1004,12 @@ class StatisticsModel {
   static async getAgentStatistics(params: {
     timeframe: StatisticsTimeFrame;
     organizationId: string;
+    /** Only this person's usage of each agent. */
+    userId?: string;
+    /** Only this service account's usage of each agent. */
+    serviceAccountId?: string;
   }): Promise<AgentStatistics[]> {
-    const { timeframe, organizationId } = params;
+    const { timeframe, organizationId, userId, serviceAccountId } = params;
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
 
     const teamAssignments = AgentTeamModel.readAssignments(organizationId);
@@ -989,6 +1053,10 @@ class StatisticsModel {
         and(
           ...StatisticsModel.timeframeConditions(timeframe),
           eq(schema.agentsTable.organizationId, organizationId),
+          userId ? eq(schema.interactionsTable.userId, userId) : undefined,
+          serviceAccountId
+            ? eq(schema.interactionsTable.serviceAccountId, serviceAccountId)
+            : undefined,
         ),
       )
       .groupBy(
@@ -1979,11 +2047,17 @@ class StatisticsModel {
   static async getOverviewStatistics(params: {
     timeframe: StatisticsTimeFrame;
     organizationId: string;
+    /** Pick the top agent from only this caller's usage. */
+    topAgentScope?: { userId?: string; serviceAccountId?: string };
   }): Promise<OverviewStatistics> {
-    const { timeframe, organizationId } = params;
+    const { timeframe, organizationId, topAgentScope } = params;
     const [teamStats, agentStats, modelStats] = await Promise.all([
       StatisticsModel.getTeamStatistics({ timeframe, organizationId }),
-      StatisticsModel.getAgentStatistics({ timeframe, organizationId }),
+      StatisticsModel.getAgentStatistics({
+        timeframe,
+        organizationId,
+        ...topAgentScope,
+      }),
       StatisticsModel.getModelStatistics({ timeframe, organizationId }),
     ]);
 

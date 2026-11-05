@@ -1294,6 +1294,10 @@ async function handleObservedLLMProxy<
           caller: {
             virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
             providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
+            // An app OAuth client's own pools were checked at sign-in and come
+            // back as `grantedPoolId`; it may use no other.
+            modelPoolIds:
+              authMethod === "oauth_client_credentials" ? [] : undefined,
           },
           grantedPoolId: authOverride?.modelPoolId ?? grantedPoolId,
           sessionId,

@@ -1602,6 +1602,73 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
     ).toBeUndefined();
   });
 
+  test("names the session a Codex auto-review assesses", () => {
+    const review = (turn: Record<string, string>) => ({
+      headers: {
+        "user-agent": "codex_cli_rs/0.164.0",
+        "x-openai-subagent": "guardian",
+        "x-codex-turn-metadata": JSON.stringify(turn),
+      },
+      requestBody: { model: "gpt-5.5", tools: [] },
+    });
+    // The root thread asked for the review.
+    expect(
+      codex.reviewedSession(
+        review({
+          session_id: "t0",
+          thread_id: "review",
+          parent_thread_id: "t0",
+        }),
+      ),
+    ).toEqual({ rootId: "t0", requesterId: "t0" });
+    // A subagent asked: the proxy finds it under the root as recorded.
+    expect(
+      codex.reviewedSession(
+        review({
+          session_id: "t0",
+          thread_id: "review",
+          parent_thread_id: "t2",
+        }),
+      ),
+    ).toEqual({ rootId: "t0", requesterId: "t2" });
+    // Body metadata alone also names the requester, taken for a root.
+    expect(
+      codex.reviewedSession({
+        headers: { "user-agent": "codex_cli_rs/0.164.0" },
+        requestBody: {
+          model: "codex-auto-review",
+          client_metadata: {
+            thread_id: "review",
+            "x-codex-parent-thread-id": "t0",
+          },
+        },
+      }),
+    ).toEqual({ rootId: "t0", requesterId: "t0" });
+    // A review never stands for itself, and an id is one thread, not a path.
+    for (const turn of [
+      { session_id: "review", thread_id: "review", parent_thread_id: "" },
+      { session_id: "t0", thread_id: "review", parent_thread_id: "review" },
+      { session_id: "t0", thread_id: "review", parent_thread_id: "t1:t2" },
+      { session_id: "t0|x", thread_id: "review", parent_thread_id: "t2" },
+    ]) {
+      expect(codex.reviewedSession(review(turn))).toBeUndefined();
+    }
+    // A request that is not a review, such as a subagent's, names none.
+    expect(
+      codex.reviewedSession({
+        headers: {
+          "user-agent": "codex_cli_rs/0.164.0",
+          "x-codex-turn-metadata": JSON.stringify({
+            session_id: "t0",
+            thread_id: "t1",
+            parent_thread_id: "t0",
+          }),
+        },
+        requestBody: { model: "gpt-5.5" },
+      }),
+    ).toBeUndefined();
+  });
+
   test("mints OpenCode child ids from the child session under the parent session", () => {
     const context = {
       headers: {

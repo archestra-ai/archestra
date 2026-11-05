@@ -751,6 +751,48 @@ describe("OrganizationCostsPage", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Research agent")).not.toBeInTheDocument();
   });
+  it("totals a team admin's overlapping team rows once", async () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.llmCost,
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useTeamLimitAccess).mockReturnValue({
+      isTeamAdmin: true,
+      canRead: true,
+      teams: [
+        { id: "parent", name: "Platform" },
+        { id: "child", name: "Platform Search" },
+      ],
+    } as ReturnType<typeof useTeamLimitAccess>);
+    const row = (teamId: string, teamName: string, cost: number) => ({
+      teamId,
+      teamName,
+      members: 1,
+      agents: 1,
+      requests: 1,
+      inputTokens: 10,
+      outputTokens: 5,
+      cost,
+      timeSeries: [],
+    });
+    // The parent's row already includes the child's billed spend.
+    teams = [
+      row("parent", "Platform", 8.25),
+      row("child", "Platform Search", 2),
+    ];
+    search = new URLSearchParams("group=team&metric=billed");
+    show();
+    const table = await screen.findByRole("table");
+    await within(table).findByText("Platform Search");
+    // The headline is the scope's total (8.25), not the rows' sum (10.25).
+    expect(screen.queryByText("$10.25")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/rows can add up to more than the total/),
+    ).toBeVisible();
+  });
   it("limits a team admin without organization cost access to their teams' groupings", async () => {
     vi.mocked(useHasPermissions).mockImplementation(
       (permissions) =>

@@ -1044,53 +1044,57 @@ class StatisticsModel {
           .groupBy(schema.teamsTable.id, schema.teamsTable.name, bucket)
           .orderBy(bucket)
       : await db
-      .with(usage)
-      .select({
-        teamId: schema.teamsTable.id,
-        teamName: schema.teamsTable.name,
-        timeBucket: usage.timeBucket,
-        requests: sql<number>`CAST(SUM(${usage.requests}) AS INTEGER)`,
-        inputTokens: sql<number>`CAST(COALESCE(SUM(${usage.inputTokens}), 0) AS DOUBLE PRECISION)`,
-        outputTokens: sql<number>`CAST(COALESCE(SUM(${usage.outputTokens}), 0) AS DOUBLE PRECISION)`,
-        cacheReadTokens: sql<number>`CAST(COALESCE(SUM(${usage.cacheReadTokens}), 0) AS DOUBLE PRECISION)`,
-        cacheWriteTokens: sql<number>`CAST(COALESCE(SUM(${usage.cacheWriteTokens}), 0) AS DOUBLE PRECISION)`,
-        totalTokens: sql<number>`CAST(
+          .with(usage)
+          .select({
+            teamId: schema.teamsTable.id,
+            teamName: schema.teamsTable.name,
+            timeBucket: usage.timeBucket,
+            requests: sql<number>`CAST(SUM(${usage.requests}) AS INTEGER)`,
+            inputTokens: sql<number>`CAST(COALESCE(SUM(${usage.inputTokens}), 0) AS DOUBLE PRECISION)`,
+            outputTokens: sql<number>`CAST(COALESCE(SUM(${usage.outputTokens}), 0) AS DOUBLE PRECISION)`,
+            cacheReadTokens: sql<number>`CAST(COALESCE(SUM(${usage.cacheReadTokens}), 0) AS DOUBLE PRECISION)`,
+            cacheWriteTokens: sql<number>`CAST(COALESCE(SUM(${usage.cacheWriteTokens}), 0) AS DOUBLE PRECISION)`,
+            totalTokens: sql<number>`CAST(
           COALESCE(SUM(${usage.reportedInputTokens}), 0)
           + COALESCE(SUM(${usage.outputTokens}), 0)
           + COALESCE(SUM(${usage.cacheWriteTokens}), 0)
           AS DOUBLE PRECISION)`,
-        cost: sql<number>`CAST(COALESCE(SUM(${usage.cost}), 0) AS DOUBLE PRECISION)`,
-      })
-      .from(usage)
-      .innerJoin(
-        schema.agentsTable,
-        and(
-          eq(usage.agentId, schema.agentsTable.id),
-          notDeleted(schema.agentsTable),
-        ),
-      )
-      .leftJoin(
-        teamAssignments,
-        and(
-          isNull(usage.billingTeamId),
-          eq(teamAssignments.agentId, schema.agentsTable.id),
-        ),
-      )
-      .innerJoin(
-        schema.teamsTable,
-        eq(
-          schema.teamsTable.id,
-          sql`COALESCE(${usage.billingTeamId}, ${teamAssignments.teamId})`,
-        ),
-      )
-      .where(
-        and(
-          eq(schema.agentsTable.organizationId, organizationId),
-          eq(schema.teamsTable.organizationId, organizationId),
-        ),
-      )
-      .groupBy(schema.teamsTable.id, schema.teamsTable.name, usage.timeBucket)
-      .orderBy(usage.timeBucket);
+            cost: sql<number>`CAST(COALESCE(SUM(${usage.cost}), 0) AS DOUBLE PRECISION)`,
+          })
+          .from(usage)
+          .innerJoin(
+            schema.agentsTable,
+            and(
+              eq(usage.agentId, schema.agentsTable.id),
+              notDeleted(schema.agentsTable),
+            ),
+          )
+          .leftJoin(
+            teamAssignments,
+            and(
+              isNull(usage.billingTeamId),
+              eq(teamAssignments.agentId, schema.agentsTable.id),
+            ),
+          )
+          .innerJoin(
+            schema.teamsTable,
+            eq(
+              schema.teamsTable.id,
+              sql`COALESCE(${usage.billingTeamId}, ${teamAssignments.teamId})`,
+            ),
+          )
+          .where(
+            and(
+              eq(schema.agentsTable.organizationId, organizationId),
+              eq(schema.teamsTable.organizationId, organizationId),
+            ),
+          )
+          .groupBy(
+            schema.teamsTable.id,
+            schema.teamsTable.name,
+            usage.timeBucket,
+          )
+          .orderBy(usage.timeBucket);
 
     const timeSeriesData = StatisticsModel.groupTimeSeries(
       rawTimeSeriesData,
@@ -1100,7 +1104,9 @@ class StatisticsModel {
 
     // Member and agent counts only for the teams that had usage, side by
     // side; a range with no team usage needs neither.
-    const resultTeamIds = [...new Set(rawTimeSeriesData.map((row) => row.teamId))];
+    const resultTeamIds = [
+      ...new Set(rawTimeSeriesData.map((row) => row.teamId)),
+    ];
     const countedAssignments = AgentTeamModel.readAssignments(organizationId, {
       teamIds: resultTeamIds,
     });

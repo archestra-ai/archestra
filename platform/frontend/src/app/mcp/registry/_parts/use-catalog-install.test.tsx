@@ -300,9 +300,11 @@ describe("useCatalogInstall — local install completion", () => {
 
     await user.click(await screen.findByTestId("install-dialog-confirm"));
 
-    expect(toast.success).toHaveBeenCalledWith(
-      "Successfully installed Playwright Browser",
-    );
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith(
+        "Successfully installed Playwright Browser",
+      );
+    });
   });
 });
 

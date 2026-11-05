@@ -1076,6 +1076,151 @@ describe("model-facing runtime tools", () => {
 });
 
 describe("crossRuntimeOutput", () => {
+  test("waives a failed first return lookup and retrieves the raw output with yell disabled", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    config.openappa.enabled = true;
+    config.openappa.breakTheGlassOverrides = {
+      ...config.openappa.breakTheGlassOverrides,
+      unapprovableBlockMode: "allow",
+    };
+    config.openappa.yellEnabled = false;
+    await GuardrailsDeploymentModel.setEnabled(true);
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    await db.insert(schema.a2aArtifactsTable).values({
+      taskId: seeded.task.id,
+      name: "agent-response",
+      parts: [{ text: "RAW RETURN AFTER LOOKUP FAILURE" }],
+    });
+    const lookup = vi
+      .spyOn(openappa, "loadChildReturns")
+      .mockRejectedValue(new Error("Native return lookup unavailable"));
+
+    const result = await executeArchestraTool(
+      TOOL_GET_AGENT_RUN_FULL_NAME,
+      { run_id: seeded.task.id },
+      seeded.context,
+    );
+
+    expect(lookup).toHaveBeenCalledOnce();
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      output: "RAW RETURN AFTER LOOKUP FAILURE",
+    });
+    expect(
+      await OpenAppaUnenforcedModel.findSessions({
+        organizationId: seeded.organizationId,
+        sessionIds: [PARENT],
+      }),
+    ).toHaveLength(1);
+  });
+
+  test.for([
+    null,
+    "another-parent",
+  ])("waived runtime access releases raw output with parent %s", async (parentId, {
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    config.openappa.breakTheGlassOverrides = {
+      ...config.openappa.breakTheGlassOverrides,
+      unapprovableBlockMode: "allow",
+    };
+    config.openappa.yellEnabled = false;
+    config.openappa.enabled = true;
+    await GuardrailsDeploymentModel.setEnabled(true);
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+      parentId,
+    });
+    await db.insert(schema.a2aArtifactsTable).values({
+      taskId: seeded.task.id,
+      name: "agent-response",
+      parts: [{ text: "WAIVED OUTPUT" }],
+    });
+    const result = await executeArchestraTool(
+      TOOL_GET_AGENT_RUN_FULL_NAME,
+      { run_id: seeded.task.id },
+      seeded.context,
+    );
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({ output: "WAIVED OUTPUT" });
+    expect(
+      await OpenAppaUnenforcedModel.findSessions({
+        organizationId: seeded.organizationId,
+        sessionIds: [PARENT],
+      }),
+    ).toHaveLength(1);
+  });
+
+  test.for([
+    { mode: "refuse" as const, reason: "Native return lookup unavailable" },
+    {
+      mode: "allow" as const,
+      reason: "requires attention: policy hard-block",
+    },
+  ])("preserves return lookup failure in $mode mode for $reason", async ({
+    mode,
+    reason,
+  }, {
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    config.openappa.breakTheGlassOverrides = {
+      ...config.openappa.breakTheGlassOverrides,
+      unapprovableBlockMode: mode,
+    };
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    const error = new Error(reason);
+    vi.spyOn(openappa, "loadChildReturns").mockRejectedValue(error);
+    const call = seeded.context.openappaRuntimeCall;
+
+    await expect(
+      crossRuntimeOutput({
+        organizationId: seeded.organizationId,
+        workspaceId: seeded.task.id,
+        taskId: seeded.task.id,
+        crossing: {
+          source: call.session,
+          callId: call.toolCallId,
+          spawn: false,
+        },
+      }),
+    ).rejects.toBe(error);
+    expect(
+      await OpenAppaUnenforcedModel.findSessions({
+        organizationId: seeded.organizationId,
+        sessionIds: [PARENT],
+      }),
+    ).toHaveLength(0);
+  });
+
   test("returns the latest admitted value and narrows the native lookup to this child and task", async ({
     makeAgent,
     makeMember,

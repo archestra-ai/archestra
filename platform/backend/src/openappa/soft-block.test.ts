@@ -47,6 +47,13 @@ for (const reports of [true, false]) {
         eq(schema.openappaYellsTable.organizationId, session.organization_id),
       );
     expect(yells).toHaveLength(reports ? 1 : 0);
+    if (reports) {
+      expect(yells[0].message).toContain("Original refusal:\nvoid return");
+      expect(yells[0].message).toContain(
+        "Guardrails enforcement off for session first-return",
+      );
+      expect(yells[0].message).toContain("Technical boundary: child_return");
+    }
   });
 }
 

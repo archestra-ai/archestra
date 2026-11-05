@@ -125,7 +125,9 @@ import {
 import {
   isHardBlock,
   refuseSoftBlock,
+  softBlockReason,
   softBlocksAllowed,
+  softBlockTools,
   waiveSoftBlock,
 } from "@/openappa/soft-block";
 import {
@@ -420,7 +422,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         throw trustedContext.childReturnRefusal;
       childReturns = await approveChildReturnCarriers({ binding, results });
     } catch (error) {
-      if (error instanceof Error) refuseSoftBlock(error.message);
+      if (error instanceof Error) refuseSoftBlock(softBlockReason(error));
       const family = appaWireFamily(context.interactionType);
       const recovery =
         (error instanceof ChildReturnRefusal ||
@@ -723,7 +725,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       (await waiveSoftBlock(
         binding.session,
         "onToolResults",
-        refusedResults.map(([, value]) => value.content).join("\n"),
+        refusedResults
+          .map(([, value]) => value.diagnostic ?? value.content)
+          .join("\n"),
+        toolResults
+          .filter((result) => refusedResults.some(([id]) => id === result.id))
+          .map((result) => result.name),
       ))
     ) {
       for (const [id] of refusedResults) delete result.toolResultUpdates[id];
@@ -1249,6 +1256,20 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         : [];
     });
     if (held.length === 0) return { decision: "release" };
+    const hostedRefusals = decisions.flatMap((decision) =>
+      decision.kind === "hold"
+        ? [
+            ("diagnostic" in decision ? decision.diagnostic : undefined) ??
+              decision.feedback,
+          ]
+        : [],
+    );
+    if (!hostedRefusals.some(isHardBlock)) {
+      refuseSoftBlock(
+        hostedRefusals.join("\n"),
+        held.map(({ call }) => call.name),
+      );
+    }
     // The client must run the notices, so the turn stays open.
     binding.turnOpen = true;
     const notices = held.map(({ call, feedback }) => ({
@@ -1555,10 +1576,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
 
     const refusals = [...decisionById.values()].flatMap((decision) =>
-      decision.kind === "deny" ? [decision.feedback] : [],
+      decision.kind === "deny"
+        ? [decision.diagnostic ?? decision.feedback]
+        : [],
     );
     if (refusals.length && !refusals.some(isHardBlock))
-      refuseSoftBlock(refusals.join("\n"));
+      refuseSoftBlock(
+        refusals.join("\n"),
+        context.toolCalls
+          .filter((call) => decisionById.get(call.id)?.kind === "deny")
+          .map((call) => call.name),
+      );
     const notice = binding.request.tools?.notice;
     // Only the ordinary calls the runtime ruled on here can be waived.
     const evaluatedIds = new Set(rest.map((call) => call.id));
@@ -2102,7 +2130,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       async () => {
         const result = await this.guardedToolCalls(context);
         if (result?.decision === "refuse")
-          refuseSoftBlock(result.refusal.reason);
+          refuseSoftBlock(result.refusal.refusalMessage, [
+            result.refusal.blockedToolName,
+          ]);
         if (
           result?.decision === "allow" &&
           result.blocked?.length &&
@@ -2110,6 +2140,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         )
           refuseSoftBlock(
             result.blocked.map((block) => block.reason).join("\n"),
+            result.blocked.map((block) => block.name),
           );
         return result;
       },
@@ -2131,6 +2162,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         )
           refuseSoftBlock(
             result.blocked.map((block) => block.reason).join("\n"),
+            result.blocked.map((block) => block.name),
           );
         return result;
       },
@@ -2162,7 +2194,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       async () => {
         const result = await this.guardedPrepareToolCalls(context);
         if (result?.decision === "refuse")
-          refuseSoftBlock(result.refusal.reason);
+          refuseSoftBlock(result.refusal.refusalMessage, [
+            result.refusal.blockedToolName,
+          ]);
         return result;
       },
       () => ({ decision: "allow", toolCalls: context.toolCalls }),
@@ -2212,7 +2246,25 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       const trusted = getTrustedContext(context.resources);
       const session =
         this.bindings.get(context.resources)?.session ?? trusted?.session;
-      if (!session || !(await waiveSoftBlock(session, boundary, error.message)))
+      const attributedTools = softBlockTools(error);
+      const contextTools =
+        "toolCalls" in context && Array.isArray(context.toolCalls)
+          ? context.toolCalls.map((call) => call.name)
+          : "toolResults" in context && Array.isArray(context.toolResults)
+            ? context.toolResults.map((result) => result.name)
+            : "hostedToolCalls" in context &&
+                Array.isArray(context.hostedToolCalls)
+              ? context.hostedToolCalls.map((call) => call.name)
+              : [];
+      if (
+        !session ||
+        !(await waiveSoftBlock(
+          session,
+          boundary,
+          softBlockReason(error),
+          attributedTools.length ? attributedTools : contextTools,
+        ))
+      )
         throw error;
       restoreSoftBlockRequest(context.requestBody, originalBody);
       restoreSoftBlockRequest(providerRequest, originalRequest);

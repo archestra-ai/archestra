@@ -64,7 +64,11 @@ import {
 } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
 import { policyView } from "./result-view";
-import { softBlocksAllowed, waiveSoftBlock } from "./soft-block";
+import {
+  softBlockReason,
+  softBlocksAllowed,
+  waiveSoftBlock,
+} from "./soft-block";
 import { toolCallArgumentsText } from "./tool-call-arguments";
 import { isUnenforcedSession } from "./unenforced";
 import type { DeclaredToolSpelling } from "./wire";
@@ -215,6 +219,7 @@ type NativeOutputDecision = Extract<
 >;
 type ProcessedToolResult = {
   content: string;
+  diagnostic?: string;
   outputSource: OutputSource;
   /** A native refusal, distinct from a successful authoritative replacement. */
   refused?: true;
@@ -1175,6 +1180,7 @@ export async function processProxyResults(params: {
       if (!canRetainBatchFailure(error)) throw error;
       updates[result.id] = {
         content: error.message,
+        diagnostic: softBlockReason(error),
         outputSource: "runtime",
         refused: true,
       };
@@ -1203,6 +1209,7 @@ type AppaCallDecision =
   | {
       kind: "deny";
       feedback: string;
+      diagnostic?: string;
       offers?: string[];
       review?: Array<{ offer_id: string; text: string }>;
       /**
@@ -1456,6 +1463,7 @@ export async function evaluateToolCalls(
         : {
             kind: "deny",
             feedback: (result.reason as Error).message,
+            diagnostic: softBlockReason(result.reason as Error),
             unanswered: true,
           },
     );
@@ -1503,7 +1511,7 @@ function isJson(text: string): boolean {
 
 type AppaHostedCallDecision =
   | { kind: "release" }
-  | { kind: "hold"; feedback: string };
+  | { kind: "hold"; feedback: string; diagnostic?: string };
 
 /**
  * Rules on calls the provider ran inside the inference call. Nothing can stop
@@ -1543,7 +1551,11 @@ export async function evaluateHostedToolCalls(
     );
     return decisions.map((decision) =>
       decision.kind === "deny"
-        ? { kind: "hold", feedback: decision.feedback }
+        ? {
+            kind: "hold",
+            feedback: decision.feedback,
+            ...(decision.diagnostic ? { diagnostic: decision.diagnostic } : {}),
+          }
         : { kind: "release" },
     );
   }
@@ -1567,7 +1579,11 @@ export async function evaluateHostedToolCalls(
       );
     } catch (error) {
       if (!canRetainBatchFailure(error)) throw error;
-      verdicts.push({ kind: "hold", feedback: error.message });
+      verdicts.push({
+        kind: "hold",
+        feedback: error.message,
+        diagnostic: softBlockReason(error),
+      });
     }
   }
   return verdicts;

@@ -12,7 +12,31 @@ import { isUnenforcedSession, superyellSession } from "./unenforced";
  * Never manufacture an engine admission: after recording the waiver the host
  * releases those bytes outside enforcement instead.
  */
-class SoftBlockRefusal extends Error {}
+class SoftBlockRefusal extends Error {
+  constructor(
+    message: string,
+    readonly tools: string[] = [],
+  ) {
+    super(message);
+  }
+}
+
+/** Preserve the native cause for diagnostics without recording URL credentials. */
+export function softBlockReason(error: Error): string {
+  const messages: string[] = [];
+  const seen = new Set<Error>();
+  let current: unknown = error;
+  while (current instanceof Error && !seen.has(current) && seen.size < 8) {
+    seen.add(current);
+    if (!messages.includes(current.message)) messages.push(current.message);
+    current = current.cause;
+  }
+  return messages.join("\nCaused by: ").replace(/\/\/[^/\s@]+@/g, "//");
+}
+
+export function softBlockTools(error: Error): string[] {
+  return error instanceof SoftBlockRefusal ? error.tools : [];
+}
 
 export function softBlocksAllowed(): boolean {
   return config.openappa.softBlockMode === "allow";
@@ -27,6 +51,7 @@ export async function waiveSoftBlock(
   session: OpenAppaSession,
   boundary: string,
   reason: string,
+  tools: readonly string[] = [],
 ): Promise<boolean> {
   if (!softBlocksAllowed() || isHardBlock(reason)) return false;
   // A failed diagnostics write must never veto the operator's waiver.
@@ -55,8 +80,13 @@ export async function waiveSoftBlock(
         callerId: session.caller_id ?? session.session_id,
         sessionId: session.session_id,
         kind: "block_waived",
-        tool: boundary,
-        message: `Guardrails waived ${boundary} under ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE=allow and turned enforcement off for this session.`,
+        tool: tools.length ? [...new Set(tools)].join(", ") : boundary,
+        message: [
+          `Affected tools: ${tools.length ? [...new Set(tools)].join(", ") : "Not attributed (session operation)"}.`,
+          `Original refusal:\n${reason}`,
+          `Result: ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE=allow turned Guardrails enforcement off for session ${session.session_id}. Subsequent operations in this session bypass Guardrails.`,
+          `Technical boundary: ${boundary}.`,
+        ].join("\n\n"),
         superyell: true,
       });
     } catch (error) {
@@ -70,9 +100,9 @@ export async function waiveSoftBlock(
 }
 
 /** Raise before a host replaces or discards the original value. */
-export function refuseSoftBlock(reason: string): void {
+export function refuseSoftBlock(reason: string, tools: string[] = []): void {
   if (softBlocksAllowed() && !isHardBlock(reason))
-    throw new SoftBlockRefusal(reason);
+    throw new SoftBlockRefusal(reason, tools);
 }
 
 /** Process-local fallback when the durable bypass store is unavailable. */

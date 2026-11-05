@@ -12332,6 +12332,90 @@ describe("soft-block emergency override", () => {
     return { context, trusted, plugin };
   }
 
+  test("waiver diagnostics name the failed tool and preserve its native cause", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const { context, trusted, plugin } = await setup(organizationId);
+    config.openappa.yellEnabled = true;
+    const failure = new ApiError(
+      503,
+      "OpenAPPA could not safely complete this operation",
+    );
+    failure.cause = new Error("tool ToolSearch is not declared in this policy");
+    const evaluate = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockRejectedValue(failure);
+    try {
+      const calls = [{ id: "search", name: "ToolSearch", arguments: {} }];
+      expect(
+        await plugin.onToolCalls({ ...context, toolCalls: calls }),
+      ).toEqual({
+        decision: "allow",
+        toolCalls: calls,
+      });
+      const reports = (
+        await OpenAppaYellModel.list({
+          organizationId,
+          status: "all",
+          limit: 20,
+        })
+      ).data;
+      expect(reports).toHaveLength(1);
+      expect(reports[0].message).toContain("Affected tools: ToolSearch");
+      expect(reports[0].message).toContain(
+        "tool ToolSearch is not declared in this policy",
+      );
+      expect(reports[0].message).toContain("Technical boundary: onToolCalls");
+      expect(reports[0].message).toContain(
+        `Guardrails enforcement off for session ${trusted.session.session_id}`,
+      );
+      expect(await isUnenforcedSession(trusted.session)).toBe(true);
+    } finally {
+      evaluate.mockRestore();
+    }
+  });
+
+  test("waiver diagnostics identify only denied tools in a mixed batch", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const { context, plugin } = await setup(organizationId);
+    config.openappa.yellEnabled = true;
+    const evaluate = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([
+        { kind: "allow" },
+        {
+          kind: "deny",
+          feedback: "Full original refusal: the requested output was withheld.",
+        },
+      ]);
+    try {
+      await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          { id: "safe", name: "read_file", arguments: {} },
+          { id: "blocked", name: "ToolSearch", arguments: {} },
+        ],
+      });
+      const reports = (
+        await OpenAppaYellModel.list({
+          organizationId,
+          status: "all",
+          limit: 20,
+        })
+      ).data;
+      expect(reports[0].message).toContain("Affected tools: ToolSearch.");
+      expect(reports[0].message).not.toContain("Affected tools: read_file");
+      expect(reports[0].message).toContain(
+        "Full original refusal: the requested output was withheld.",
+      );
+    } finally {
+      evaluate.mockRestore();
+    }
+  });
+
   test("waives a cached child contract before the provider sees empty-answer instructions", async ({
     makeOrganization,
   }) => {

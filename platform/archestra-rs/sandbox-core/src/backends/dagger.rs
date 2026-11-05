@@ -46,7 +46,11 @@ use crate::{
 pub const DEFAULT_BASE_IMAGE: &str = "ghcr.io/astral-sh/uv:0.13.4-python3.14-trixie-slim";
 
 /// layered on top of the base on first warm; the toolbelt every sandbox can rely on.
+const APT_SECURITY_FLOOR: &str = "3.0.4";
+
 pub const DEFAULT_APT_PACKAGES: &[&str] = &[
+    "apt",
+    "libapt-pkg7.0",
     "bash",
     "coreutils",
     "curl",
@@ -671,7 +675,7 @@ fn warm_base_root_setup(prebuilt: bool) -> String {
         false => {
             let apt_packages = DEFAULT_APT_PACKAGES.join(" ");
             format!(
-                "apt-get update -qq && apt-get install -y --no-install-recommends {apt_packages} && rm -rf /var/lib/apt/lists/* && mkdir -p {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && chown -R 1000:1000 {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && {PIP_SHIM_SETUP} && {STDLIB_BYTECODE_SETUP}"
+                "apt-get update -qq && apt-get install -y --no-install-recommends {apt_packages} && for package in apt libapt-pkg7.0; do dpkg --compare-versions \"$(dpkg-query -W -f='${{Version}}' \"$package\")\" ge {APT_SECURITY_FLOOR} || exit 1; done && rm -rf /var/lib/apt/lists/* && mkdir -p {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && chown -R 1000:1000 {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && {PIP_SHIM_SETUP} && {STDLIB_BYTECODE_SETUP}"
             )
         }
     }
@@ -1781,6 +1785,9 @@ mod tests {
         for pkg in DEFAULT_APT_PACKAGES {
             assert!(cmd.contains(pkg), "missing apt package: {pkg}");
         }
+        assert!(cmd.contains(&format!(
+            "for package in apt libapt-pkg7.0; do dpkg --compare-versions \"$(dpkg-query -W -f='${{Version}}' \"$package\")\" ge {APT_SECURITY_FLOOR} || exit 1; done"
+        )));
         assert!(cmd.contains(&format!(
             "mkdir -p {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT}"
         )));

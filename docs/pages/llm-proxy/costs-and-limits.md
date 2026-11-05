@@ -2,7 +2,7 @@
 title: Costs & Limits
 description: Track LLM spend by team, agent, model, and person, and set usage limits
 order: 3
-lastUpdated: 2026-10-27
+lastUpdated: 2026-11-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -18,7 +18,7 @@ Archestra records the cost of every model request from chat, agents, and the [LL
 
 ## Review Prompt Caching
 
-In the explorer’s **Show** menu, choose **Cache reads**, **Cache writes**, or **Net cache savings**. The **Cache reads by model** and **Prompt cache savings** presets open these views directly.
+In the explorer’s **Show** menu, choose **Cache reads**, **Cache writes**, or **Net cache savings**. The **Cache reads by model** and **Cache savings over time** presets open these views directly.
 
 On **Costs**, cache tokens include all billing modes. Net savings cover metered usage only and are available **by Time** across the organization.
 
@@ -34,7 +34,7 @@ Savings compare cached input with full input pricing after cache-write surcharge
 
 Go to **Costs & Limits → Costs** and pick a timeframe. You need [`llmCost:read`](/docs/reference/permissions#llmCost:read). The five summary boxes show metered API spend, subscription usage estimates, requests, tokens, and active people.
 
-1. Pick a saved view, such as **Spend by model** or **Who is using it**, or choose a metric and grouping yourself.
+1. Pick a saved view, such as **Spend by model** or **Tokens by agent and person**, or choose a metric and grouping yourself. Team, agent, person, credential, provider, and model can each be split by another, so you can see who uses each agent.
 2. Click rows to compare their trends in the chart. **Summary** sorts totals; **Pivot** compares time buckets or a secondary breakdown.
 3. Use **Copy as CSV** to export the result. The API call below the table identifies the source endpoint.
 

@@ -117,11 +117,12 @@ describe("statistics team grant attribution", () => {
       organizationId: org.id,
       timeframe: "24h",
     });
-    // Agent statistics retain the pre-existing per-recipient attribution,
-    // including a grant whose team belongs to a different organization.
+    // An agent's own total counts each request once, however many teams it
+    // is shared with, and names only this organization's teams.
     expect(agents.find((row) => row.agentId === agent.id)).toMatchObject({
-      requests: 4,
-      cost: 10,
+      requests: 2,
+      cost: 5,
+      teamName: "Alpha",
     });
     expect(agents.find((row) => row.agentId === privateAgent.id)).toMatchObject(
       { requests: 1, cost: 11, teamName: "No Team" },

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { relative } from "node:path";
 import { BaseSequencer, type TestSpecification } from "vitest/node";
 
 /**
@@ -21,6 +23,37 @@ import { BaseSequencer, type TestSpecification } from "vitest/node";
  * does not end waiting on them.
  */
 export class ProjectGroupedSequencer extends BaseSequencer {
+  /**
+   * Deals each project's files to the shards in turn. Vitest's own split
+   * cuts one hash-ordered list into equal counts, so how many of the
+   * expensive isolated files a shard got was luck: on CI one shard
+   * routinely ran a quarter longer than the other. Every shard computes
+   * the same split, because the order depends only on file paths.
+   */
+  override async shard(
+    files: TestSpecification[],
+  ): Promise<TestSpecification[]> {
+    const { index, count } = this.ctx.config.shard ?? { index: 1, count: 1 };
+    const root = this.ctx.config.root;
+    const key = (file: TestSpecification) =>
+      createHash("sha1").update(relative(root, file.moduleId)).digest("hex");
+    const keyed = files
+      .map((file) => ({ file, key: key(file) }))
+      .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+    const projects = [
+      ...new Set(keyed.map(({ file }) => file.project.name)),
+    ].sort();
+    let dealt = 0;
+    const mine: TestSpecification[] = [];
+    for (const project of projects) {
+      for (const { file } of keyed) {
+        if (file.project.name !== project) continue;
+        if (dealt++ % count === index - 1) mine.push(file);
+      }
+    }
+    return mine;
+  }
+
   override async sort(
     files: TestSpecification[],
   ): Promise<TestSpecification[]> {

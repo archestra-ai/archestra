@@ -9,11 +9,12 @@ import LimitModel from "@/models/limit";
 import OrganizationModel from "@/models/organization";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
+import { spyOnLogger } from "@/test/logging";
 import { PROXY_BODY_LIMIT } from "../common";
 import azureRoutes from "./azure";
 import openaiRoutes from "./openai";
 
-vi.mock("@/logging");
+spyOnLogger();
 
 const audio = Buffer.from(
   "RIFF\u0000\u0000\u0000\u0000WAVEfmt \u0000\u00ff",

@@ -62,11 +62,12 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { createAnthropicTestClient } from "@/test/llm-provider-stubs";
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
+import { spyOnLogger } from "@/test/logging";
 import { drainBackgroundWork } from "@/utils/background-work";
 import { anthropicAdapterFactory } from "../adapters";
 import anthropicProxyRoutes from "./anthropic";
 
-vi.mock("@/logging");
+spyOnLogger();
 
 beforeEach(async () => {
   for (const modelId of [

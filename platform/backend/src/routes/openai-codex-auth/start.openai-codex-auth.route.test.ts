@@ -2,28 +2,28 @@ import { vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
+import { overrideConfig } from "@/test/config";
 import type { User } from "@/types";
 
 // cacheManager (used by the rate limiter) needs a live PostgreSQL connection
 // PGlite tests don't have; back it with the canonical Map-backed fake.
-vi.mock("@/cache-manager");
+setupTestCacheManager();
 
 // Pin the codex OAuth config so a developer's local .env can't leak into the
 // asserted URLs/body.
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    llm: {
-      openai: {
-        codex: {
-          issuer: "https://auth.openai.com",
-          clientId: "app_test_client",
-          originator: "codex_cli_rs",
-          apiBaseUrl: "https://chatgpt.com/backend-api/codex",
-        },
+overrideConfig({
+  llm: {
+    openai: {
+      codex: {
+        issuer: "https://auth.openai.com",
+        clientId: "app_test_client",
+        originator: "codex_cli_rs",
+        apiBaseUrl: "https://chatgpt.com/backend-api/codex",
       },
     },
-  }),
-);
+  },
+});
 
 describe("POST /api/openai-codex-auth/device/start", () => {
   let app: FastifyInstanceWithZod;

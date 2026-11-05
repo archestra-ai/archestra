@@ -3,18 +3,17 @@ import { HttpResponse, http } from "msw";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import config from "@/config";
 import { classifyAgentRunFailure } from "@/services/agent-runtime/run-failure";
+import { overrideConfig } from "@/test/config";
 import { useMswServer } from "@/test/msw";
 import manager from "./manager";
 import { agentSandboxApi } from "./sandbox-api";
 
 // The singleton caches clients: keep this fake cluster out of shared workers.
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    orchestrator: {
-      kubernetes: { kubeconfig: "", loadKubeconfigFromCurrentCluster: false },
-    },
-  }),
-);
+overrideConfig({
+  orchestrator: {
+    kubernetes: { kubeconfig: "", loadKubeconfigFromCurrentCluster: false },
+  },
+});
 
 const origin = "https://kubernetes.example.test";
 const sandboxDiscoveryUrl = `${origin}/apis/agents.x-k8s.io/v1beta1`;

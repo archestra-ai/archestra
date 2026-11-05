@@ -1,18 +1,17 @@
 import { KubeConfig } from "@kubernetes/client-node";
 import { HttpResponse, http } from "msw";
 import { beforeEach, expect, test, vi } from "vitest";
+import { overrideConfig } from "@/test/config";
 import { useMswServer } from "@/test/msw";
 import manager from "./manager";
 import { agentSandboxApi } from "./sandbox-api";
 
 // The manager caches clients; isolate the fake cluster from shared workers.
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    orchestrator: {
-      kubernetes: { kubeconfig: "", loadKubeconfigFromCurrentCluster: false },
-    },
-  }),
-);
+overrideConfig({
+  orchestrator: {
+    kubernetes: { kubeconfig: "", loadKubeconfigFromCurrentCluster: false },
+  },
+});
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
 const server = useMswServer();

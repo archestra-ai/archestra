@@ -1,13 +1,14 @@
 import { STARTUP_GUARD_FORMAT_VERSION } from "@archestra/shared";
 import { PLUGIN_DELIVERY_MAX_COUNT } from "@archestra/shared/connection-setup";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { authPlugin } from "@/auth/fastify-plugin";
 import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
+import { setupTestCacheManager } from "@/test/cache-manager";
 
-vi.mock("@/cache-manager");
+setupTestCacheManager();
 
 describe("POST /api/connection-setups/startup-guard", () => {
   let app: FastifyInstanceWithZod;

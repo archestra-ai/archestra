@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import logger from "@/logging";
+import { spyOnLogger } from "@/test/logging";
 import { ApiError } from "@/types/api";
 import {
   OpenappaCredentialError,
@@ -9,7 +10,7 @@ import {
   undeclaredToolNotice,
 } from "./failure";
 
-vi.mock("@/logging");
+spyOnLogger();
 
 describe("undeclaredToolNotice", () => {
   test("classifies only the typed native refusal and never exposes its diagnostic", () => {

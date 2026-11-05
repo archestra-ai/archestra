@@ -19,17 +19,16 @@ import {
   agentRunGatewayTokenId,
 } from "@/services/agent-runtime/runtime-contract";
 import { expect, test } from "@/test";
+import { overrideConfig } from "@/test/config";
 import manager from "./manager";
 
 // This manager caches its clients. Isolate the fake cluster from other files,
 // including the opt-in tests that exercise a real Kubernetes controller.
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    orchestrator: {
-      kubernetes: { kubeconfig: "", loadKubeconfigFromCurrentCluster: false },
-    },
-  }),
-);
+overrideConfig({
+  orchestrator: {
+    kubernetes: { kubeconfig: "", loadKubeconfigFromCurrentCluster: false },
+  },
+});
 
 for (const outcome of ["success", "disconnect", "failure", "abort"] as const) {
   test(`transcript snapshots require confirmed completion: ${outcome}`, async ({

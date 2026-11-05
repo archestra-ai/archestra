@@ -20,6 +20,8 @@ import { encryptedChatDekFingerprint } from "@/content-encryption/encrypted-chat
 import logger from "@/logging";
 import { ConversationModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
+import { spyOnLogger } from "@/test/logging";
 import type {
   EncryptedChatEscrowBlob,
   InsertInteraction,
@@ -34,9 +36,9 @@ import {
 
 // Map-backed fake with real cache semantics (auto-reset between tests), so
 // the positive-result caching contract is exercised for real.
-vi.mock("@/cache-manager");
+setupTestCacheManager();
 // Mocked to assert on the fail-closed warning log.
-vi.mock("@/logging");
+spyOnLogger();
 
 const ESCROW: EncryptedChatEscrowBlob = {
   v: 1,

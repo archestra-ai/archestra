@@ -15,6 +15,8 @@ import {
 } from "@/models";
 import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
 import { afterEach, test as base, beforeEach, expect } from "@/test";
+import { overrideConfig } from "@/test/config";
+import { spyOnLogger } from "@/test/logging";
 import { useMswServer } from "@/test/msw";
 import type { AgentRunRecord } from "@/types";
 import manager from "./manager";
@@ -22,15 +24,13 @@ import { MEMORY_EVENTS_SEPARATOR } from "./memory-kill";
 import { AGENT_RUNTIME_TASK_LABEL } from "./naming";
 import { agentSandboxApi } from "./sandbox-api";
 
-vi.mock("@/logging");
+spyOnLogger();
 // The singleton caches clients: keep this fake cluster out of shared workers.
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    orchestrator: {
-      kubernetes: { kubeconfig: "", loadKubeconfigFromCurrentCluster: false },
-    },
-  }),
-);
+overrideConfig({
+  orchestrator: {
+    kubernetes: { kubeconfig: "", loadKubeconfigFromCurrentCluster: false },
+  },
+});
 
 const podStartTimeoutSeconds = config.agentRuntime.podStartTimeoutSeconds;
 const origin = "https://kubernetes.example.test";

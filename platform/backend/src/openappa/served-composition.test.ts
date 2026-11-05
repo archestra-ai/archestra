@@ -10,12 +10,13 @@ import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { beforeEach, describe, expect, test } from "@/test";
+import { spyOnLogger } from "@/test/logging";
 import { openappaBatteriesService } from "./batteries";
 import { openappaCoverageService } from "./coverage";
 import { openappaHelperBridge } from "./helper-bridge";
 import { asRecord, parsePolicyToml, toolEntries } from "./policy-text";
 
-vi.mock("@/logging");
+spyOnLogger();
 
 const PEER_READ_TOOL = "mcp/archestra/read_peer_message";
 

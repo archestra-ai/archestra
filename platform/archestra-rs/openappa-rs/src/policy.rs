@@ -18,7 +18,7 @@ use std::{
     time::Duration,
 };
 
-use crate::{BindingFailure, Fault};
+use crate::errors::{BindingFailure, Fault};
 
 /// The consult budget every external of a hosted policy gets. Fixed for v0: the
 /// helper bridge derives its own deadline from it.
@@ -190,6 +190,7 @@ pub(crate) const HOST_VARIABLE_PREFIX: &str = "APPA_ARCHESTRA_";
 /// Validate a root document that declares no battery: [`compose`] with nothing to
 /// resolve. A root whose `include` list names a battery does not validate this way —
 /// the entry resolves to nothing — so a caller holding declarations composes instead.
+#[cfg(test)]
 pub(crate) fn validate(content: &str) -> Result<(), String> {
     compose(content, &[]).map(|_| ())
 }
@@ -238,6 +239,7 @@ pub(crate) struct Composed {
 /// it by the runtime's include rules. An entry `batteries` does not answer is
 /// unresolved, which the runtime refuses naming the entry. The composed document is
 /// checked as an open checks it, so a composition that returns is also a validation.
+#[cfg(test)]
 pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Composed, String> {
     compose_with_rosters(root, batteries, &MemberRosters::new())
 }
@@ -606,7 +608,7 @@ mod tests {
     /// this deployment, or nobody, when the store failed.
     #[test]
     fn a_policy_load_failure_names_who_fixes_it() {
-        use crate::{BindingFailure, Failure};
+        use crate::errors::{BindingFailure, Failure};
         use appa_eventlog::DeploymentName;
         let compiled = |content: &str| {
             super::compile(content, |_| None)
@@ -748,7 +750,7 @@ mod tests {
             call_id: Some("call:yell".into()),
             actor: actor.clone(),
             call: ProposedCall {
-                tool: crate::canonical_tool("yell").unwrap(),
+                tool: crate::operations::canonical_tool("yell").unwrap(),
                 arguments: serde_json::value::to_raw_value(&serde_json::json!({
                     "message": "Agents are unhappy.",
                     "with_trajectory": false,

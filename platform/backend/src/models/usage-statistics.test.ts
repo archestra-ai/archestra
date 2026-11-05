@@ -563,22 +563,27 @@ describe("UsageStatisticsModel.getLlmUsage", () => {
   test("splits each agent's usage by person, matching the Agents view", async ({
     makeOrganization,
     makeUser,
+    makeTeam,
     makeAgent,
     makeInteraction,
   }) => {
     const org = await makeOrganization();
     const ada = await makeUser({ name: "Ada Lovelace" });
     const grace = await makeUser({ name: "Grace Hopper" });
+    const alpha = await makeTeam(org.id, ada.id, { name: "Alpha" });
+    const beta = await makeTeam(org.id, ada.id, { name: "Beta" });
     const llmProxy = await AgentModel.getOrgLlmProxy(org.id);
     const legacyProfile = await makeAgent({
       organizationId: org.id,
       agentType: "profile",
       name: "Legacy Profile",
     });
+    // Shared with two teams: each request still counts once for the agent.
     const triage = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
       name: "Triage",
+      access: { teams: [alpha.id, beta.id] },
     });
     const call = (agentId: string, userId: string | null, cost: string) =>
       makeInteraction(agentId, {
@@ -626,15 +631,29 @@ describe("UsageStatisticsModel.getLlmUsage", () => {
       legacyProfile.id,
     );
 
-    const splitByAgent = new Map<string, number>();
-    for (const row of split.data)
-      splitByAgent.set(
-        row.agentId ?? "",
-        (splitByAgent.get(row.agentId ?? "") ?? 0) + row.billedCost,
-      );
+    const splitByAgent = new Map<string, [number, number, number]>();
+    for (const row of split.data) {
+      const [requests, tokens, cost] = splitByAgent.get(row.agentId ?? "") ?? [
+        0, 0, 0,
+      ];
+      splitByAgent.set(row.agentId ?? "", [
+        requests + row.requests,
+        tokens + row.totalTokens,
+        cost + row.billedCost,
+      ]);
+    }
     expect(Object.fromEntries(splitByAgent)).toEqual(
-      Object.fromEntries(agents.map((agent) => [agent.agentId, agent.cost])),
+      Object.fromEntries(
+        agents.map((agent) => [
+          agent.agentId,
+          [agent.requests, agent.totalTokens, agent.cost],
+        ]),
+      ),
     );
+    expect(agents.find((agent) => agent.agentId === triage.id)).toMatchObject({
+      requests: 4,
+      teamName: "Alpha, Beta",
+    });
 
     const ownUsage = await UsageStatisticsModel.getLlmUsage({
       timeframe: RANGE,

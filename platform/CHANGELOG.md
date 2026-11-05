@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.4.19](https://github.com/archestra-ai/archestra/compare/platform-v1.4.18...platform-v1.4.19) (2026-11-05)
+
+
+### Features
+
+* **agent-runtime:** add a switch for the catalog image prefetch and turn it  (backport release/1.4) ([#10232](https://github.com/archestra-ai/archestra/issues/10232)) ([23728e3](https://github.com/archestra-ai/archestra/commit/23728e390e002b872231c5b9f601f281c330a7d4))
+* **auth:** one sign-in notice for default credentials and SSO setup (backport release/1.4) ([#10247](https://github.com/archestra-ai/archestra/issues/10247)) ([c7210a9](https://github.com/archestra-ai/archestra/commit/c7210a9d1198d2876ccd885f68f8fbea18693c4a))
+* **costs:** break team and credential spend down by provider and model, export CSV files (backport release/1.4) ([#10243](https://github.com/archestra-ai/archestra/issues/10243)) ([77c365b](https://github.com/archestra-ai/archestra/commit/77c365b872205bcf57d99e8398d01cbbec552d8f))
+* **roles:** open roles from their rows, usage tiles, permissions inside the Account box (backport release/1.4) ([#10238](https://github.com/archestra-ai/archestra/issues/10238)) ([a9b7fcb](https://github.com/archestra-ai/archestra/commit/a9b7fcb4d6a691f1bb0dc79d23a76963c234b779))
+* **roles:** role create, view and edit pages (backport release/1.4) ([#10215](https://github.com/archestra-ai/archestra/issues/10215)) ([d097ca6](https://github.com/archestra-ai/archestra/commit/d097ca6fafa4f181a1cd437e4fa1606163199c49))
+
+
+### Bug Fixes
+
+* **auth:** refuse SSO sign-in that links a reassigned email to its previous owner (backport release/1.4) ([#10240](https://github.com/archestra-ai/archestra/issues/10240)) ([17ec727](https://github.com/archestra-ai/archestra/commit/17ec727ff30bf40a2990b03736897ea064409ba6))
+* **backend:** scope user agent runtime gateway tokens and enforce start_agent_run subagent allowlists (backport [#10119](https://github.com/archestra-ai/archestra/issues/10119)) ([#10185](https://github.com/archestra-ai/archestra/issues/10185)) ([50abff8](https://github.com/archestra-ai/archestra/commit/50abff8267b480f5cd25dd0e3a82502cfe7c933e))
+* **chatops:** drain accepted bot turns before shutdown (backport release/1.4) ([#10202](https://github.com/archestra-ai/archestra/issues/10202)) ([7814b40](https://github.com/archestra-ai/archestra/commit/7814b40a9ca1d4bc342080e49d47fdd7d5a52e51))
+* **costs:** label the credential grouping as Credential ([#10222](https://github.com/archestra-ai/archestra/issues/10222)) (backport release/1.4) ([#10230](https://github.com/archestra-ai/archestra/issues/10230)) ([4125685](https://github.com/archestra-ai/archestra/commit/4125685e80d089e32889016163960fe6406dbda2))
+* **costs:** scope agent and credential cost breakdowns to the caller without member:read ([#10227](https://github.com/archestra-ai/archestra/issues/10227)) (backport release/1.4) ([#10248](https://github.com/archestra-ai/archestra/issues/10248)) ([6595bd3](https://github.com/archestra-ai/archestra/commit/6595bd3ec054deeda90546de13d4935383b838b8))
+* **guardrails:** waive soft refusals across session boundaries [1.4] ([#10236](https://github.com/archestra-ai/archestra/issues/10236)) ([fb1ee54](https://github.com/archestra-ai/archestra/commit/fb1ee5485bf234908ed402f20b4c25b091831763))
+* **logs:** clearer session label rail, oldest-first session pages, correct change attribution (backport release/1.4) ([#10193](https://github.com/archestra-ai/archestra/issues/10193)) ([a70b8e5](https://github.com/archestra-ai/archestra/commit/a70b8e5c00df184d288a3e70d621fa8773c33519))
+* **mcp:** show bounded install diagnostics for upstream failures (backport release/1.4) ([#10192](https://github.com/archestra-ai/archestra/issues/10192)) ([1f6ca1d](https://github.com/archestra-ai/archestra/commit/1f6ca1da84d073f238d6156cb5687c17a9beff2c))
+* **openappa:** let a governed Codex session read its agents' messages (backport release/1.4) ([#10217](https://github.com/archestra-ai/archestra/issues/10217)) ([758d3d1](https://github.com/archestra-ai/archestra/commit/758d3d110a60cd20cb8c7796537773afb3ea53cc))
+* **openappa:** take a Codex auto-review out of OpenAPPA with the session it reviews (backport release/1.4) ([#10208](https://github.com/archestra-ai/archestra/issues/10208)) ([a168943](https://github.com/archestra-ai/archestra/commit/a1689438cb61dafb6a2f8ff9131b9e744637ab9e))
+* **security:** patch apt and Go dependencies in release images [1.4] ([#10245](https://github.com/archestra-ai/archestra/issues/10245)) ([274fdff](https://github.com/archestra-ai/archestra/commit/274fdff70f8507c9c166481afb4d664a6fef86ec))
+
 ## [1.4.18](https://github.com/archestra-ai/archestra/compare/platform-v1.4.17...platform-v1.4.18) (2026-11-04)
 
 

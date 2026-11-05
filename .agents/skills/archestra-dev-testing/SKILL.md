@@ -30,8 +30,15 @@ each test and, after each file, restores globals, DOM prototypes, timers, spies,
 storage, cookies and the URL. Module-level state is not restored, so a module
 cache or singleton that a test fills must be reset by the test. Define globals
 with `configurable: true` (or `vi.stubGlobal`); the reset fails a file that
-leaves one it cannot remove. A file that needs a fresh module graph uses a
-module mock and runs isolated.
+leaves one it cannot remove.
+
+A jsdom file with module mocks (the `jsdom` project) shares a worker the same
+way, but gets a fresh module graph: after each file the setup also drops the
+app's evaluated modules and the mock registry, so the next file imports the
+app again under its own mocks. Mock the module that defines what you replace:
+tests skip the `@archestra/shared` barrel (see `vitest.shared-barrel.ts`), so
+the config rejects a mock of it; mock `@archestra/shared/api-sdk` for
+`archestraApiSdk`.
 
 ## The one rule
 

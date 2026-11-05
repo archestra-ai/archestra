@@ -5,6 +5,7 @@ import type {
   PolicyEditInput,
 } from "@archestra/openappa-rs";
 import { matchBatteries, parseFullToolName } from "@archestra/shared";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -79,7 +80,7 @@ import {
   packageContentHash,
   uploadedEntry,
 } from "./declarations";
-import { withReportingTool } from "./reporting-tool";
+import { withHostToolRules } from "./host-tool-rules";
 
 /** A battery after a write, and the derived row that write stands for. */
 type BatteryWriteResult = {
@@ -1079,6 +1080,7 @@ class OpenAppaBatteriesService {
       const values = await this.compose({
         root: planned.root,
         roster: planned.roster,
+        serverName: planned.serverName,
         planned: planned.batteries,
         composed,
         installFingerprint,
@@ -1180,6 +1182,7 @@ class OpenAppaBatteriesService {
   private async compose(params: {
     root: GuardrailsPolicy;
     roster: HostMemberRoster;
+    serverName: string;
     planned: readonly PlannedBattery[];
     composed: ComposeBatteryInput[];
     installFingerprint: string;
@@ -1190,7 +1193,14 @@ class OpenAppaBatteriesService {
     /** When this composition is stored; its record says it was composed then. */
     now: Date;
   }): Promise<EffectivePolicyValues> {
-    const { root, planned, composed, installFingerprint, expected } = params;
+    const {
+      root,
+      planned,
+      composed,
+      installFingerprint,
+      expected,
+      serverName,
+    } = params;
     const native = await loadNative();
     const result = await native.composeOpenappaPolicy({
       root: root.content,
@@ -1205,8 +1215,9 @@ class OpenAppaBatteriesService {
     const accepted =
       composedContent === null
         ? null
-        : await withReportingTool({
+        : await withHostToolRules({
             composed: composedContent,
+            serverName,
             validate: (text) => native.validateHostedOpenappaPolicy(text),
           });
     const values = (
@@ -1235,8 +1246,18 @@ class OpenAppaBatteriesService {
       const carried = expected
         ? carriedServed({ expected, installs: params.previousInstalls })
         : null;
+      // A composition stored before a host rule existed takes it here too, so
+      // a refusal does not strand its peer reads.
       return expected && carried
-        ? values(expected.content, error, () => carried)
+        ? values(
+            await withHostToolRules({
+              composed: expected.content,
+              serverName,
+              validate: (text) => native.validateHostedOpenappaPolicy(text),
+            }),
+            error,
+            (contentHash) => ({ ...carried, contentHash }),
+          )
         : values(root.content, error, (contentHash) => ({
             v: 1,
             kind: "root_only",
@@ -1438,6 +1459,7 @@ class OpenAppaBatteriesService {
       resolution,
       deployed,
       roster,
+      serverName: archestraMcpBranding.serverName,
       batteries,
       rows: [...rows.values()],
       unusedAliases: resolution.aliases.filter(
@@ -1991,6 +2013,7 @@ type PlannedComposition = {
   resolution: PolicyResolution;
   deployed: DeployedEntries;
   roster: HostMemberRoster;
+  serverName: string;
   batteries: PlannedBattery[];
   rows: BatteryInstallRow[];
   unusedAliases: PolicyDeclarationsView["unusedAliases"];
@@ -2101,9 +2124,11 @@ function heldBackRemedy(battery: HeldBackBattery): string {
 // rows whose retirement suffix covers credential keys but not the stored
 // opening policies (v7), rows that do not record what they serve (v8),
 // rows that leave `yell` to the catch-all (v9), rows that dropped a retired
-// name live opening policies bound differently (v10), and rows that keep
-// retired annotators for conversations opened under earlier policies (v11).
-const COMPOSITION_VERSION = "v11:";
+// name live opening policies bound differently (v10), rows that keep
+// retired annotators for conversations opened under earlier policies (v11),
+// rows without the empty peer read rule (v12), and rows that rule the peer
+// read under the default server name on a white-labeled deployment (v13).
+const COMPOSITION_VERSION = "v13:";
 
 /**
  * What a stored composition answers: the batteries it composed, the credential
@@ -2123,6 +2148,7 @@ function compositionFingerprint(params: {
         batteries,
         credentials: planned.resolution.credentials,
         roster: [...planned.roster].sort(([a], [b]) => a - b),
+        serverName: planned.serverName,
         // A base composes while its target waits on a credential; the rows still move.
         statuses: planned.batteries.map(({ name, status }) => [name, status]),
         ...(held.length > 0 ? { held } : {}),

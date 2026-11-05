@@ -36,3 +36,18 @@ export function normalizeCommandExecutionArguments(
   }
   return normalized;
 }
+
+/**
+ * A call's arguments without the copy `normalizeCommandExecutionArguments`
+ * adds, for a reviewer who should see each value once.
+ */
+export function withoutArgumentCopies(
+  toolName: string,
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!isCommandExecutionTool(toolName) || args.cmd !== args.command)
+    return args;
+  return Object.fromEntries(
+    Object.entries(args).filter(([name]) => name !== "cmd"),
+  );
+}

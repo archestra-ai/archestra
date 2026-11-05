@@ -40,7 +40,7 @@ service:
       exporters: [debug]
 ```
 
-Create a test agent, then search the collector output for instrumentation scope `archestra-audit` and event name `archestra.audit.agent.created`. Its `log.record.uid` matches the event ID returned by [`GET /api/audit-logs`](/docs/reference/api#/Audit%20Log/getAuditLogs). Backend logs also use this endpoint; filter by the audit scope to separate them.
+Create a test agent, then search the collector output for instrumentation scope `archestra-audit` and event name `archestra.audit.agent.created`. Its `log.record.uid` matches the event ID returned by [`GET /api/audit-logs`](/docs/reference/api/operations#tag/audit-log/GET/api/audit-logs). Backend logs also use this endpoint; filter by the audit scope to separate them.
 
 ## Route Events to Your SIEM
 
@@ -75,7 +75,7 @@ Missing values are omitted. Behind a trusted reverse proxy, configure [`ARCHESTR
 
 ## Retrieve Events Through the API
 
-Use [`GET /api/audit-logs`](/docs/reference/api#/Audit%20Log/getAuditLogs) to retrieve persisted events, including historical records that have not been removed by [audit retention](/docs/admin/deployment/configuration#ARCHESTRA_AUDIT_LOG_RETENTION_DAYS).
+Use [`GET /api/audit-logs`](/docs/reference/api/operations#tag/audit-log/GET/api/audit-logs) to retrieve persisted events, including historical records that have not been removed by [audit retention](/docs/admin/deployment/configuration#ARCHESTRA_AUDIT_LOG_RETENTION_DAYS).
 
 Authenticate with a dedicated [service account](/docs/reference/api#service-accounts) whose role has [`auditLog:read`](/docs/reference/permissions#auditLog:read) and [`auditLog:admin`](/docs/reference/permissions#auditLog:admin) for organization-wide collection. Pass `pagination.nextCursor` as the next request's `cursor` until `pagination.hasNext` is false. Pages are newest first; use `limit=100` for 100 events per page (the default is 20).
 

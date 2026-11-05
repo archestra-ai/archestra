@@ -41,7 +41,7 @@ vi.mock("@/lib/config/config.query", async (importOriginal) => ({
 }));
 
 const origin = "http://localhost:9000";
-const sessionsUrl = `${origin}/api/interactions/sessions`;
+const sessionsUrl = `${origin}/api/llm-proxy-logs/sessions`;
 const emptySessions = {
   data: [],
   pagination: { limit: 1, nextCursor: null, hasNext: false },
@@ -67,7 +67,7 @@ beforeEach(() => {
       HttpResponse.json(null, { status: 401 }),
     ),
     http.get(sessionsUrl, () => HttpResponse.json(emptySessions)),
-    http.get(`${origin}/api/interactions/summaries`, () =>
+    http.get(`${origin}/api/llm-proxy-logs/summaries`, () =>
       HttpResponse.json({ data: [], pagination: { total: 0 } }),
     ),
   );
@@ -139,7 +139,7 @@ it("shows total latency per request and leaves untimed records empty", async () 
         paginated([makeSessionSummary({ sessionId: "test-session" })]),
       ),
     ),
-    http.get(`${origin}/api/interactions/summaries`, () =>
+    http.get(`${origin}/api/llm-proxy-logs/summaries`, () =>
       HttpResponse.json(paginated(rows)),
     ),
   );
@@ -563,7 +563,7 @@ it("settles a linked tool call's walk when the viewer goes back to where it star
   serveLinkedCall({ requests: 120, callAt: "2026-01-01T00:00:30.000Z" });
   // Page one's rows are slow, so the viewer is back before they land.
   server.use(
-    http.get(`${origin}/api/interactions/summaries`, async ({ request }) => {
+    http.get(`${origin}/api/llm-proxy-logs/summaries`, async ({ request }) => {
       const params = new URL(request.url).searchParams;
       if (params.get("offset") === "0" && params.get("limit") === "50") {
         await delay(300);
@@ -601,7 +601,7 @@ it("settles a linked tool call's walk when the viewer goes back to where it star
 it("reports a failed lookup of a linked tool call's page with a retry", async () => {
   serveLinkedCall({ requests: 60, callAt: "2026-01-01T00:00:30.000Z" });
   server.use(
-    http.get(`${origin}/api/interactions/summaries`, ({ request }) => {
+    http.get(`${origin}/api/llm-proxy-logs/summaries`, ({ request }) => {
       const params = new URL(request.url).searchParams;
       if (
         params.get("limit") === "1" &&
@@ -643,7 +643,7 @@ it("keeps a page's tool-call window closed when the next page's boundary fails t
   serveSession({ rows });
   const toolCallReads = vi.fn();
   server.use(
-    http.get(`${origin}/api/interactions/summaries`, ({ request }) => {
+    http.get(`${origin}/api/llm-proxy-logs/summaries`, ({ request }) => {
       const params = new URL(request.url).searchParams;
       if (params.get("offset") === "50" && params.get("limit") === "1") {
         return HttpResponse.json(
@@ -675,7 +675,7 @@ it("keeps looking for a linked tool call while the next page's boundary is unava
   );
   serveSession({ rows });
   server.use(
-    http.get(`${origin}/api/interactions/summaries`, ({ request }) => {
+    http.get(`${origin}/api/llm-proxy-logs/summaries`, ({ request }) => {
       const params = new URL(request.url).searchParams;
       if (params.get("offset") === "50" && params.get("limit") === "1") {
         return HttpResponse.json(
@@ -761,7 +761,7 @@ it("reports a failed lookup of a linked request's page as an error, not a missin
   );
   serveSession({ rows });
   server.use(
-    http.get(`${origin}/api/interactions/summaries`, ({ request }) => {
+    http.get(`${origin}/api/llm-proxy-logs/summaries`, ({ request }) => {
       if (new URL(request.url).searchParams.has("beforeId")) {
         return HttpResponse.json(
           { error: { message: "boom", type: "api_internal_server_error" } },
@@ -808,7 +808,7 @@ it("opens the request on an earlier page that asked for the tool behind a label 
 it("says when looking up the earlier request behind a label change failed", async () => {
   serveOffPageCause();
   server.use(
-    http.get(`${origin}/api/interactions/summaries`, ({ request }) => {
+    http.get(`${origin}/api/llm-proxy-logs/summaries`, ({ request }) => {
       const params = new URL(request.url).searchParams;
       if (
         params.get("limit") === "100" &&
@@ -846,7 +846,7 @@ it("says when a later page's axis counts from the page, not the session", async 
   );
   serveSession({ rows });
   server.use(
-    http.get(`${origin}/api/interactions/summaries`, ({ request }) => {
+    http.get(`${origin}/api/llm-proxy-logs/summaries`, ({ request }) => {
       const params = new URL(request.url).searchParams;
       if (params.get("offset") === "0" && params.get("limit") === "1") {
         return HttpResponse.json(
@@ -945,7 +945,7 @@ it("opens a linked tool call on its page without drawing another page first", as
 it("says so when a linked request is not one of the session's", async () => {
   serveSession({ rows: [summary({ id: "request-0" })] });
   server.use(
-    http.get(`${origin}/api/interactions/elsewhere`, () =>
+    http.get(`${origin}/api/llm-proxy-logs/elsewhere`, () =>
       HttpResponse.json(
         makeInteraction({ id: "elsewhere", sessionId: "another-session" }),
       ),
@@ -1135,10 +1135,10 @@ it("shows a request logged without a session as a session of its own", async () 
           : emptySessions,
       ),
     ),
-    http.get(`${origin}/api/interactions/summaries`, () =>
+    http.get(`${origin}/api/llm-proxy-logs/summaries`, () =>
       HttpResponse.json(paginated([summary({ id: lone.id, sessionId: null })])),
     ),
-    http.get(`${origin}/api/interactions/${lone.id}`, () =>
+    http.get(`${origin}/api/llm-proxy-logs/${lone.id}`, () =>
       HttpResponse.json(lone),
     ),
     http.get(`${origin}/api/mcp-tool-calls`, () =>
@@ -1260,7 +1260,7 @@ function serveSession({
         ]),
       ),
     ),
-    http.get(`${origin}/api/interactions/summaries`, ({ request }) => {
+    http.get(`${origin}/api/llm-proxy-logs/summaries`, ({ request }) => {
       const params = new URL(request.url).searchParams;
       const startDate = params.get("startDate");
       const endDate = params.get("endDate");
@@ -1297,7 +1297,7 @@ function serveSession({
         }),
       );
     }),
-    http.get(`${origin}/api/interactions/:id`, ({ params }) => {
+    http.get(`${origin}/api/llm-proxy-logs/:id`, ({ params }) => {
       const id = String(params.id);
       const row = sorted.find((r) => r.id === id);
       const record =
@@ -1364,7 +1364,7 @@ function serveOffPageCause() {
     rule: null,
   });
   server.use(
-    http.get(`${origin}/api/interactions/sessions/:sessionId/lineage`, () =>
+    http.get(`${origin}/api/llm-proxy-logs/sessions/:sessionId/lineage`, () =>
       HttpResponse.json({ forkedFrom: null, forks: [], forksTruncated: false }),
     ),
     http.get(`${origin}/api/openappa/external-consults`, () =>

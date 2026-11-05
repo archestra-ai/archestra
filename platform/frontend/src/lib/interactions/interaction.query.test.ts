@@ -13,8 +13,8 @@ vi.mock("@archestra/shared", async (importOriginal) => {
     ...actual,
     archestraApiSdk: {
       ...actual.archestraApiSdk,
-      getInteractions: getInteractionsMock,
-      getUniqueUserIds: getUniqueUserIdsMock,
+      getLlmProxyLogs: getInteractionsMock,
+      getLlmProxyLogUserIds: getUniqueUserIdsMock,
     },
   };
 });

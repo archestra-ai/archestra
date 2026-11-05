@@ -93,6 +93,7 @@ export default class KbDocumentAccessModel {
     };
     const principals = params.grantPrincipals;
     const hasUserPrincipal = Boolean(principalOf(params.userAcl));
+    const hasOauthClientPrincipal = Boolean(oauthClientOf(params.userAcl));
     const access = (
       context:
         | typeof fileContext
@@ -150,7 +151,7 @@ export default class KbDocumentAccessModel {
         )
       )
       WHEN EXISTS (SELECT 1 FROM knowledge_base_connectors permission_connector WHERE permission_connector.id = ${params.connectorId} AND permission_connector.sync_permissions_from_source)
-        THEN ${hasUserPrincipal ? upstream : sql`(${connectorOrAssignedKnowledgeBaseAccess} AND ${upstream})`}
+        THEN ${hasOauthClientPrincipal ? sql`(${connectorOrAssignedKnowledgeBaseAccess} AND ${upstream})` : upstream}
       ELSE ${connectorOrAssignedKnowledgeBaseAccess}
     END`;
   }

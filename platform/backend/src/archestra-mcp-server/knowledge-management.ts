@@ -1649,15 +1649,6 @@ async function handleUnassignKnowledgeConnectorFromKnowledgeBase(params: {
     if (!connector) {
       return knowledgeConnectorNotFound(args.connector_id);
     }
-    if (context.userId) {
-      await ResourcePermissions.require({
-        organizationId: context.organizationId,
-        userId: context.userId,
-        resource: "knowledgeConnector",
-        scope: args.connector_id,
-        action: "manage-permissions",
-      });
-    }
     const kbIds = await KnowledgeBaseConnectorModel.getKnowledgeBaseIds(
       args.connector_id,
     );

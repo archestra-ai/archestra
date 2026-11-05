@@ -570,25 +570,24 @@ class KbFileModel {
           }),
     ]);
 
-    if (
-      filePolicies.some((policy) =>
+    const fileIsOrgWide = filePolicies.some((policy) =>
+      ResourcePermissionPolicyModel.isOrganizationWide({
+        policy,
+        scope: params.fileId,
+        action: "use",
+      }),
+    );
+    if (fileIsOrgWide) return ["org:*"];
+
+    const kbIsOrgWide = kbPolicies.some((policy) =>
+      knowledgeBaseIds.some((kbId) =>
         ResourcePermissionPolicyModel.isOrganizationWide({
           policy,
-          scope: params.fileId,
+          scope: kbId,
           action: "use",
         }),
-      ) ||
-      kbPolicies.some((policy) =>
-        knowledgeBaseIds.some((kbId) =>
-          ResourcePermissionPolicyModel.isOrganizationWide({
-            policy,
-            scope: kbId,
-            action: "use",
-          }),
-        ),
-      )
-    )
-      return ["org:*"];
+      ),
+    );
 
     const policies = [...filePolicies, ...kbPolicies];
     const readers = policies.flatMap((policy) =>
@@ -634,6 +633,7 @@ class KbFileModel {
     ]);
     return [
       ...new Set<AclEntry>([
+        ...(kbIsOrgWide ? (["org:*"] as const) : []),
         ...teamIds.map((id): AclEntry => `team:${id}`),
         ...users.map((user): AclEntry => `user_email:${user.email}`),
         ...existingOauthClients.map(

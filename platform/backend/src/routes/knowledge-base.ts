@@ -3193,13 +3193,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
       });
-      await ResourcePermissions.require({
-        organizationId,
-        userId: user.id,
-        resource: "knowledgeConnector",
-        scope: id,
-        action: "manage-permissions",
-      });
       await findKnowledgeBaseOrThrow({
         id: kbId,
         organizationId,

@@ -4,6 +4,7 @@ import {
   E2eTestId,
   isModelRouterSupportedProvider,
   PROVIDER_MODEL_TIERS,
+  PROVIDERS_REQUIRING_BASE_URL,
   providerSupportsChat,
   requiresPerplexityAgentApi,
   type SupportedProvider,
@@ -99,7 +100,7 @@ export function VirtualKeyConnectionGuide({
   const isPassthrough = keyType === "passthrough";
   const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
   // As the proxy resolves it: a provider the key doesn't map falls back to
-  // that provider's shared primary key.
+  // that provider's shared primary key, if that key is usable.
   const mappedProviderKeys = useMemo(() => {
     if (!includeFutureProviders) return explicitKeys;
     const mapped = new Set(explicitKeys.map((mapping) => mapping.provider));
@@ -108,7 +109,13 @@ export function VirtualKeyConnectionGuide({
       ...providerApiKeys
         .filter(
           (key) =>
-            key.isPrimary && key.userId === null && !mapped.has(key.provider),
+            key.isPrimary &&
+            key.userId === null &&
+            !key.subscriptionKind &&
+            !key.requiresReauthentication &&
+            (!PROVIDERS_REQUIRING_BASE_URL.has(key.provider) ||
+              !!key.baseUrl?.trim()) &&
+            !mapped.has(key.provider),
         )
         .map((key) => ({ provider: key.provider, providerApiKeyId: key.id })),
     ];

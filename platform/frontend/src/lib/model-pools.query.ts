@@ -133,6 +133,9 @@ export function useDeleteModelPool() {
     onSuccess: () => {
       toast.success("Model pool deleted");
       queryClient.invalidateQueries({ queryKey: MODEL_POOLS_QUERY_KEY });
+      // The server also removes the pool from the OAuth clients it was added to.
+      queryClient.invalidateQueries({ queryKey: ["oauth-clients"] });
+      queryClient.invalidateQueries({ queryKey: ["llm-oauth-clients"] });
     },
   });
 }
@@ -155,6 +158,9 @@ export function useBulkDeleteModelPools() {
       }),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: MODEL_POOLS_QUERY_KEY });
+      // The server also removes the pool from the OAuth clients it was added to.
+      queryClient.invalidateQueries({ queryKey: ["oauth-clients"] });
+      queryClient.invalidateQueries({ queryKey: ["llm-oauth-clients"] });
     },
   });
 }

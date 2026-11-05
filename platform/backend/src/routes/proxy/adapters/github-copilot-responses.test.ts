@@ -97,6 +97,128 @@ async function collect(chunks: unknown[]) {
 }
 
 describe("GitHub Copilot Responses stream normalization", () => {
+  test("keeps overlapping output items anchored to their own output index", async () => {
+    const chunks = [
+      {
+        type: "response.output_item.added",
+        output_index: 1,
+        item: { type: "message", id: "message" },
+      },
+      {
+        type: "response.output_text.delta",
+        output_index: 1,
+        item_id: "rotating-1",
+        delta: "I will check.",
+      },
+      {
+        type: "response.output_item.added",
+        output_index: 2,
+        item: {
+          type: "function_call",
+          id: "tool",
+          call_id: "call",
+          name: "get_time",
+        },
+      },
+      {
+        type: "response.output_text.delta",
+        output_index: 1,
+        item_id: "rotating-2",
+        delta: " Now.",
+      },
+      {
+        type: "response.function_call_arguments.delta",
+        output_index: 2,
+        item_id: "rotating-3",
+        delta: "{}",
+      },
+      {
+        type: "response.output_item.done",
+        output_index: 2,
+        item: {
+          type: "function_call",
+          id: "rotating-4",
+          call_id: "call",
+          name: "get_time",
+          arguments: "{}",
+        },
+      },
+      {
+        type: "response.output_text.done",
+        output_index: 1,
+        item_id: "rotating-5",
+        text: "I will check. Now.",
+      },
+      {
+        type: "response.content_part.done",
+        output_index: 1,
+        item_id: "rotating-6",
+        content_index: 0,
+      },
+      {
+        type: "response.output_item.done",
+        output_index: 1,
+        item: { type: "message", id: "rotating-7" },
+      },
+    ];
+    const out = await collect(chunks);
+    expect(
+      out.map((c) => c.item_id ?? (c.item as { id?: string })?.id),
+    ).toEqual([
+      "message",
+      "message",
+      "tool",
+      "message",
+      "tool",
+      "tool",
+      "message",
+      "message",
+      "message",
+    ]);
+    expect(
+      out.map(({ item_id: _itemId, item, ...event }) => ({
+        ...event,
+        ...(item ? { item: { ...(item as object), id: undefined } } : {}),
+      })),
+    ).toEqual(
+      chunks.map(({ item_id: _itemId, item, ...event }) => ({
+        ...event,
+        ...(item ? { item: { ...item, id: undefined } } : {}),
+      })),
+    );
+  });
+
+  test("does not guess an owner for ambiguous or unknown output indices", async () => {
+    const ambiguous = {
+      type: "response.output_text.delta",
+      item_id: "untouched",
+      delta: "text",
+    };
+    const unknown = { ...ambiguous, output_index: 7 };
+    const out = await collect([
+      {
+        type: "response.output_item.added",
+        item: { type: "message", id: "unindexed" },
+      },
+      {
+        type: "response.output_item.added",
+        output_index: 1,
+        item: { type: "function_call", id: "indexed" },
+      },
+      ambiguous,
+      unknown,
+      {
+        type: "response.output_item.done",
+        output_index: 1,
+        item: { type: "function_call", id: "rotating" },
+      },
+      { ...ambiguous, item_id: "rotating-again" },
+    ]);
+    expect(out[2]).toEqual(ambiguous);
+    expect(out[3]).toEqual(unknown);
+    expect(out[5].item_id).toBe("unindexed");
+  });
+
   // A consumer registers a part when the item opens, then looks it up by each
   // event's item_id. Copilot's rotating ids make every lookup miss, which is
   // what crashed the AI SDK ("missing text part", "summaryParts" of undefined).

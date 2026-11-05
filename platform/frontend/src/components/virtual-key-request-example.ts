@@ -82,8 +82,8 @@ export function buildCurlExample(params: {
   supportedEndpoints?: readonly string[] | null;
   imageOperation?: ImageExampleOperation;
   /**
-   * The model is a pool's name, served on Chat Completions whatever it looks
-   * like (a pool may be named `openai:gpt-5.6`).
+   * The model is a pool's name or auto routing's `auto`, served on Chat
+   * Completions whatever it looks like (a pool may be named `openai:gpt-5.6`).
    */
   isPool?: boolean;
 }): string | null {

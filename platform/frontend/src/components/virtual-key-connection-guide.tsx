@@ -23,6 +23,11 @@ import {
 import Link from "next/link";
 import { useId, useMemo, useState } from "react";
 import { PROVIDER_ORIGINAL_URLS } from "@/app/connection/proxy-client-instructions";
+import {
+  AutoModelField,
+  AutoRoutingFootnote,
+  AutoRoutingLabelAction,
+} from "@/components/auto-routing-model-control";
 import { SecretCopyButton } from "@/components/secret-copy-button";
 import {
   terminalActionClass,
@@ -46,6 +51,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import {
+  AUTO_MODEL,
+  useAutoRoutingOffer,
+} from "@/components/use-auto-routing-offer";
 import {
   buildCurlExample,
   getImageExampleOperations,
@@ -419,6 +428,7 @@ export function RequestExample({
   initialModel,
   onModelChange,
   fixedModel,
+  offerAutoModel = false,
 }: {
   connectionBaseUrl: string;
   target: RequestTarget;
@@ -454,6 +464,11 @@ export function RequestExample({
    * picker. It has no listed endpoints, so the request uses chat completions.
    */
   fixedModel?: string;
+  /**
+   * Offers auto routing's `auto` model beside the picker, or a link to set it
+   * up. Only the Unified Model API accepts `auto`.
+   */
+  offerAutoModel?: boolean;
 }) {
   const providerCatalog = useModelProviderCatalog();
   const isPassthrough = keyType === "passthrough";
@@ -582,14 +597,22 @@ export function RequestExample({
       ? pickedModel
       : (initialOption ?? modelOptions[0]?.value ?? allOptions[0]?.value);
   const selectedModel = allOptions.find((option) => option.value === model);
+  const autoRouting = useAutoRoutingOffer({
+    enabled: offerAutoModel && target.kind === "model-router" && !fixedModel,
+    routableModels: modelOptions.map((option) => option.value),
+    modelsPending: isPending,
+  });
+  const [autoPicked, setAutoPicked] = useState(initialModel === AUTO_MODEL);
+  const isAuto = autoPicked && autoRouting.kind === "available";
   const [imageOperation, setImageOperation] =
     useState<ImageExampleOperation>("generate");
-  const selectedImageOperation = selectedModel?.isImage
-    ? (imageOperations.find((operation) => operation === imageOperation) ??
-      imageOperations[0])
-    : undefined;
+  const selectedImageOperation =
+    !isAuto && selectedModel?.isImage
+      ? (imageOperations.find((operation) => operation === imageOperation) ??
+        imageOperations[0])
+      : undefined;
   const showImageOperationPicker =
-    selectedModel?.isImage && imageOperations.length > 1;
+    !isAuto && selectedModel?.isImage && imageOperations.length > 1;
 
   const example =
     model &&
@@ -598,9 +621,9 @@ export function RequestExample({
       target,
       keyType,
       keyValue: secret ? MASKED_KEY : (keyValue ?? `$${credentialEnvVar}`),
-      model: selectedModel?.pool ?? model,
-      isPool: !!selectedModel?.pool,
-      supportedEndpoints: selectedModel?.supportedEndpoints,
+      model: isAuto ? AUTO_MODEL : (selectedModel?.pool ?? model),
+      isPool: isAuto || !!selectedModel?.pool,
+      supportedEndpoints: isAuto ? null : selectedModel?.supportedEndpoints,
       imageOperation: selectedImageOperation,
     });
   const providerLabel =
@@ -668,52 +691,74 @@ export function RequestExample({
           )}
         >
           <div className="space-y-1.5">
-            <Label htmlFor="virtual-key-example-model">Model</Label>
-            <Select
-              value={model ?? ""}
-              onValueChange={(value) => {
-                setPickedModel(value);
-                onModelChange?.(value);
-              }}
-              disabled={isPending || allOptions.length === 0}
-            >
-              <SelectTrigger id="virtual-key-example-model" className="w-full">
-                <SelectValue
-                  placeholder={
-                    isPending
-                      ? "Loading models…"
-                      : "No models found for this key"
-                  }
+            {autoRouting.kind === "none" ? (
+              <Label htmlFor="virtual-key-example-model">Model</Label>
+            ) : (
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="virtual-key-example-model">Model</Label>
+                <AutoRoutingLabelAction
+                  offer={autoRouting}
+                  checked={isAuto}
+                  onCheckedChange={(checked) => {
+                    setAutoPicked(checked);
+                    if (checked) onModelChange?.(AUTO_MODEL);
+                    else if (model) onModelChange?.(model);
+                  }}
                 />
-              </SelectTrigger>
-              <SelectContent>
-                {pools.length > 0 && (
+              </div>
+            )}
+            {isAuto ? (
+              <AutoModelField id="virtual-key-example-model" />
+            ) : (
+              <Select
+                value={model ?? ""}
+                onValueChange={(value) => {
+                  setPickedModel(value);
+                  onModelChange?.(value);
+                }}
+                disabled={isPending || allOptions.length === 0}
+              >
+                <SelectTrigger
+                  id="virtual-key-example-model"
+                  className="w-full"
+                >
+                  <SelectValue
+                    placeholder={
+                      isPending
+                        ? "Loading models…"
+                        : "No models found for this key"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {pools.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>Model pools</SelectLabel>
+                      {pools.map((pool) => (
+                        <SelectItem
+                          key={pool.name}
+                          value={POOL_VALUE_PREFIX + pool.name}
+                          description={pool.description}
+                        >
+                          {pool.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
                   <SelectGroup>
-                    <SelectLabel>Model pools</SelectLabel>
-                    {pools.map((pool) => (
-                      <SelectItem
-                        key={pool.name}
-                        value={POOL_VALUE_PREFIX + pool.name}
-                        description={pool.description}
-                      >
-                        {pool.name}
+                    {pools.length > 0 && modelOptions.length > 0 && (
+                      <SelectLabel>Models</SelectLabel>
+                    )}
+                    {modelOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.value}
                       </SelectItem>
                     ))}
                   </SelectGroup>
-                )}
-                <SelectGroup>
-                  {pools.length > 0 && modelOptions.length > 0 && (
-                    <SelectLabel>Models</SelectLabel>
-                  )}
-                  {modelOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.value}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            {usesCatalog && (
+                </SelectContent>
+              </Select>
+            )}
+            {usesCatalog && !isAuto && (
               <p className="text-xs text-muted-foreground">
                 From your organization&apos;s model catalog. Your own key may
                 have access to different models.
@@ -750,6 +795,9 @@ export function RequestExample({
             </div>
           )}
         </div>
+      )}
+      {!fixedModel && (
+        <AutoRoutingFootnote offer={autoRouting} isAuto={isAuto} />
       )}
       {selectedImageOperation === "edit" && (
         <p className="text-xs text-muted-foreground">

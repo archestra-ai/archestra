@@ -1480,12 +1480,7 @@ async function authenticatePassthroughProxyRequest(params: {
         hasArchestraTokenPrefix(bearerToken)
       ) {
         authenticatedBearer = true;
-        if (
-          bearerToken === passthroughToken &&
-          isTrustedAnthropicPassthroughUpstream(
-            getProviderConfiguredBaseUrl("anthropic"),
-          )
-        ) {
+        if (bearerToken === passthroughToken) {
           const claudeCodeToken =
             await claudeCodeAccountManager.resolveProxyToken({
               virtualKeyId: resolved.passthroughVirtualKeyId,
@@ -1495,6 +1490,10 @@ async function authenticatePassthroughProxyRequest(params: {
             });
           if (claudeCodeToken) {
             providerApiKey = `Bearer:${claudeCodeToken}`;
+            passthroughUpstreamOverrides.set(
+              request,
+              ANTHROPIC_SUBSCRIPTION_UPSTREAM,
+            );
           }
         }
       }
@@ -1542,13 +1541,7 @@ async function authenticatePassthroughProxyRequest(params: {
           tokenValue: bearerToken,
           agent,
         });
-        if (
-          agentId &&
-          provider === "anthropic" &&
-          isTrustedAnthropicPassthroughUpstream(
-            getProviderConfiguredBaseUrl("anthropic"),
-          )
-        ) {
+        if (agentId && provider === "anthropic") {
           const claudeCodeToken =
             await claudeCodeAccountManager.resolveProxyToken({
               virtualKeyId: resolved.passthroughVirtualKeyId,
@@ -1558,6 +1551,10 @@ async function authenticatePassthroughProxyRequest(params: {
             });
           if (claudeCodeToken) {
             providerApiKey = `Bearer:${claudeCodeToken}`;
+            passthroughUpstreamOverrides.set(
+              request,
+              ANTHROPIC_SUBSCRIPTION_UPSTREAM,
+            );
           }
         }
         return {
@@ -1725,10 +1722,14 @@ function trimTrailingSlash(url: string | undefined): string | undefined {
   return url?.replace(/\/+$/, "");
 }
 
-function isTrustedAnthropicPassthroughUpstream(
-  url: string | undefined,
-): boolean {
-  return trimTrailingSlash(url) === "https://api.anthropic.com";
+const ANTHROPIC_SUBSCRIPTION_UPSTREAM = "https://api.anthropic.com";
+const passthroughUpstreamOverrides = new WeakMap<object, string>();
+
+export function getPassthroughUpstream(
+  request: object,
+  defaultUpstream: string,
+): string {
+  return passthroughUpstreamOverrides.get(request) ?? defaultUpstream;
 }
 
 /**

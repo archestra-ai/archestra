@@ -55,6 +55,7 @@ export function createProxyPreHandler(params: {
   apiPrefix: string;
   endpointSuffix: string | readonly string[];
   upstream: string;
+  resolveUpstream?: (request: FastifyRequest) => string;
   providerName: string;
   rewritePrefix?: string;
   skipErrorResponse?: Record<string, unknown>;
@@ -76,7 +77,8 @@ export function createProxyPreHandler(params: {
    */
   logProvider?: SupportedProvider;
 }) {
-  const { apiPrefix, endpointSuffix, upstream, providerName } = params;
+  const { apiPrefix, endpointSuffix, upstream, resolveUpstream, providerName } =
+    params;
   // Provider identity comes from this route's configured namespace, never the
   // body or caller's credential. Custom compatible models keep that identity.
   const provider = SupportedProvidersSchema.safeParse(
@@ -153,31 +155,38 @@ export function createProxyPreHandler(params: {
       return;
     }
 
+    const resolvedUpstream = resolveUpstream?.(request) ?? upstream;
+    const upstreamPathPrefix = resolveUpstream
+      ? new URL(resolvedUpstream).pathname.replace(/\/+$/, "")
+      : "";
     const pathAfterPrefix = request.url.replace(apiPrefix, "");
     const uuidMatch = pathAfterPrefix.match(UUID_REGEX);
 
     if (uuidMatch) {
       const remainingPath = uuidMatch[2] || "";
       const originalUrl = request.raw.url;
-      request.raw.url = `${apiPrefix}${remainingPath}`;
+      request.raw.url = `${apiPrefix}${upstreamPathPrefix}${remainingPath}`;
 
       logger.info(
         {
           method: request.method,
           originalUrl,
           rewrittenUrl: request.raw.url,
-          upstream,
-          finalProxyUrl: `${upstream}${rewritePrefix}${remainingPath}`,
+          upstream: resolvedUpstream,
+          finalProxyUrl: `${resolvedUpstream}${rewritePrefix}${remainingPath}`,
         },
         `${providerName} proxy preHandler: URL rewritten (UUID stripped)`,
       );
     } else {
+      if (upstreamPathPrefix) {
+        request.raw.url = `${apiPrefix}${upstreamPathPrefix}${pathAfterPrefix}`;
+      }
       logger.info(
         {
           method: request.method,
           url: request.url,
-          upstream,
-          finalProxyUrl: `${upstream}${rewritePrefix}${pathAfterPrefix}`,
+          upstream: resolvedUpstream,
+          finalProxyUrl: `${resolvedUpstream}${rewritePrefix}${pathAfterPrefix}`,
         },
         `${providerName} proxy preHandler: proxying request`,
       );
@@ -189,7 +198,7 @@ export function createProxyPreHandler(params: {
       request,
       beforeCleanBody,
       provider.success
-        ? { provider: provider.data, baseUrl: upstream }
+        ? { provider: provider.data, baseUrl: resolvedUpstream }
         : undefined,
     ).then(() => {
       stripArchestraRequestHeaders(request);

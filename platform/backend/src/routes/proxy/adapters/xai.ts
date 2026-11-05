@@ -113,7 +113,9 @@ class XaiResponseAdapter implements LLMResponseAdapter<XaiResponse> {
   private delegate: OpenAIResponseAdapter;
 
   constructor(response: XaiResponse) {
-    this.delegate = new OpenAIResponseAdapter(response);
+    this.delegate = new OpenAIResponseAdapter(response, {
+      reasoningOutsideCompletion: true,
+    });
   }
 
   getId() {
@@ -157,7 +159,10 @@ class XaiStreamAdapter
   private delegate: OpenAIStreamAdapter;
 
   constructor(request?: XaiRequest) {
-    this.delegate = new OpenAIStreamAdapter("openai", request);
+    this.delegate = new OpenAIStreamAdapter({
+      clientRequest: request,
+      reasoningOutsideCompletion: true,
+    });
   }
 
   get state() {

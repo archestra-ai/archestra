@@ -96,6 +96,7 @@ import {
   getLlmProxyRequestTelemetry,
   type LlmProxyRequestTelemetry,
 } from "@/observability/llm-proxy-request";
+import { reportsReasoningOutsideCompletion } from "@/observability/metrics/llm-usage";
 import {
   ATTR_ARCHESTRA_BILLING_MODE,
   ATTR_ARCHESTRA_COST,
@@ -2220,6 +2221,8 @@ async function handleObservedLLMProxy<
         inbound,
         provider: member.provider,
         modelId: member.modelId,
+        inboundReasoningOutsideCompletion:
+          reportsReasoningOutsideCompletion(providerName),
         client: createUpstreamClient({
           adapter,
           apiKey: memberApiKey,

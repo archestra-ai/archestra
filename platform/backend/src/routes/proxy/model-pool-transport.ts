@@ -16,7 +16,11 @@ import {
   type SupportedProviderDiscriminator,
 } from "@archestra/shared";
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
-import { openAIUsageTokens } from "@/observability/metrics/llm-usage";
+import {
+  openAIUsageTokens,
+  reportsReasoningOutsideCompletion,
+  withReasoningOutsideCompletion,
+} from "@/observability/metrics/llm-usage";
 import type {
   Anthropic,
   Bedrock,
@@ -128,8 +132,54 @@ export function canReachMember(
 /**
  * The transport for one member. `client` is built with the member provider's
  * own adapter (see `memberAdapter`).
+ *
+ * The client's route reads the answer with its own adapter, so an OpenAI chat
+ * answer is put in that route's reasoning dialect: xAI leaves reasoning out of
+ * `completion_tokens`, every other member and translator counts it inside
+ * (see `reportsReasoningOutsideCompletion`). Without this an xAI member's
+ * reasoning goes uncounted behind an OpenAI client and a Gemini member's is
+ * counted twice behind an xAI client.
  */
 export function memberTransport(params: {
+  inbound: PoolWire;
+  provider: SupportedProvider;
+  modelId: string;
+  client: unknown;
+  /** The client route's dialect; absent for routes that count it inside. */
+  inboundReasoningOutsideCompletion?: boolean;
+}): MemberTransport {
+  const transport = memberTransportOnWire(params);
+  const inboundOutside = params.inboundReasoningOutsideCompletion ?? false;
+  const memberOutside =
+    wireOf(params.provider) === "openai-chat" &&
+    reportsReasoningOutsideCompletion(params.provider);
+  if (params.inbound !== "openai-chat" || inboundOutside === memberOutside) {
+    return transport;
+  }
+  const inDialect = <T>(value: T): T => {
+    const usage = (value as { usage?: OpenAi.Types.Usage | null } | null)
+      ?.usage;
+    return usage
+      ? {
+          ...value,
+          usage: withReasoningOutsideCompletion(usage, inboundOutside),
+        }
+      : value;
+  };
+  return {
+    ...transport,
+    execute: async (request) => inDialect(await transport.execute(request)),
+    executeStream: async (request, onAccepted) =>
+      mapStream(
+        await transport.executeStream(request, onAccepted),
+        (chunk) => [inDialect(chunk)],
+        () => [],
+      ),
+  };
+}
+
+/** `memberTransport` before the answer's usage is put in the route's dialect. */
+function memberTransportOnWire(params: {
   inbound: PoolWire;
   provider: SupportedProvider;
   modelId: string;
@@ -302,13 +352,8 @@ export function memberTransport(params: {
               event as Parameters<typeof stream.processChunk>[0],
             );
             if (stream.state.usage) {
-              observedUsage = {
-                ...stream.state.usage,
-                // Match the translated wire: completion tokens include thinking.
-                outputTokens:
-                  stream.state.usage.outputTokens +
-                  (stream.state.usage.reasoningTokens ?? 0),
-              };
+              // Output already includes thinking, as completion tokens do.
+              observedUsage = stream.state.usage;
             }
             return sseToChunks(result.sseData);
           },

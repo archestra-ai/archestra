@@ -529,16 +529,9 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
   }
 
   private getResponsesUsage() {
-    const usage = this.state.usage;
-    // Gemini counts thinking separately; Responses includes it in output tokens.
-    return toResponsesUsage(
-      usage && this.provider === "gemini"
-        ? {
-            ...usage,
-            outputTokens: usage.outputTokens + (usage.reasoningTokens ?? 0),
-          }
-        : usage,
-    );
+    // Every adapter reports outputTokens with reasoning included, as
+    // Responses' output_tokens does.
+    return toResponsesUsage(this.state.usage);
   }
 
   private nextSequenceNumber(): number {

@@ -728,7 +728,7 @@ export interface UsageView {
   cacheWriteTokens?: number;
   /** Portion of cacheWriteTokens written at the 1-hour TTL (billed higher than 5m). Anthropic-only; absent elsewhere. */
   cacheWrite1hTokens?: number;
-  /** Output tokens spent on reasoning/extended thinking. Reported by OpenAI (reasoning_tokens) and Gemini (thoughtsTokenCount); absent elsewhere. */
+  /** Output tokens spent on reasoning/extended thinking: a SUBSET of outputTokens, never added on top. Gemini (thoughtsTokenCount) and xAI report it outside their output count, so their adapters' getUsageTokens fold it in. Absent where the provider does not break it out. */
   reasoningTokens?: number;
   /** True when inputTokens is a locally-computed estimate, not a provider-reported count (see applyInputTokenFallback). Absent/false = provider-measured. */
   inputTokensEstimated?: boolean;

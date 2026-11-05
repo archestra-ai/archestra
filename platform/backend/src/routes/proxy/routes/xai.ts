@@ -19,7 +19,7 @@ import logger from "@/logging";
 import { collectDelegationMarkers } from "@/openappa/delegation";
 import { setCollectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
 import { constructResponseSchema, UuidIdSchema, Xai } from "@/types";
-import { xaiAdapterFactory } from "../adapters";
+import { xaiAdapterFactory, xaiOpenAiUsageAdapterFactory } from "../adapters";
 import { makeResponsesFromChatAdapterFactory } from "../adapters/openai-responses-from-chat";
 import { responsesToOpenaiChat } from "../adapters/openai-responses-translator";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
@@ -42,7 +42,12 @@ function handleXaiResponses(request: FastifyRequest, reply: FastifyReply) {
     chatBody,
     request,
     reply,
-    makeResponsesFromChatAdapterFactory(xaiAdapterFactory, responsesContext),
+    // Responses' output_tokens counts reasoning, so the turn is read in
+    // OpenAI's usage dialect, not xAI's.
+    makeResponsesFromChatAdapterFactory(
+      xaiOpenAiUsageAdapterFactory,
+      responsesContext,
+    ),
   );
 }
 

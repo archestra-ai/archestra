@@ -24,6 +24,7 @@ import { getUsageTokens as getMinimaxUsage } from "@/routes/proxy/adapters/minim
 import { getUsageTokens as getOllamaNativeUsage } from "@/routes/proxy/adapters/ollama-native";
 import { getUsageTokens as getOpenAIUsage } from "@/routes/proxy/adapters/openai";
 import { responsesUsageTokens } from "@/routes/proxy/adapters/responses-usage";
+import { getUsageTokens as getXaiUsage } from "@/routes/proxy/adapters/xai";
 import { getUsageTokens as getZhipuaiUsage } from "@/routes/proxy/adapters/zhipuai";
 import type { GatewayAgent, InteractionAuthMethod } from "@/types";
 import { getExemplarLabels, sanitizeLabelKey } from "./utils";
@@ -82,7 +83,7 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   mistral: getOpenAIUsage,
   perplexity: getChatOrResponsesUsage,
   groq: getOpenAIUsage,
-  xai: getOpenAIUsage,
+  xai: getXaiUsage,
   openrouter: getOpenAIUsage,
   anthropic: getAnthropicUsage,
   azure: getChatOrResponsesUsage,

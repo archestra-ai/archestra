@@ -32,5 +32,5 @@ export { openrouterAdapterFactory } from "./openrouter";
 export { perplexityAdapterFactory } from "./perplexity";
 export { perplexityResponsesAdapterFactory } from "./perplexity-responses";
 export { vllmAdapterFactory } from "./vllm";
-export { xaiAdapterFactory } from "./xai";
+export { xaiAdapterFactory, xaiOpenAiUsageAdapterFactory } from "./xai";
 export { zhipuaiAdapterFactory } from "./zhipuai";

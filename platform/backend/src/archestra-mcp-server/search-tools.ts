@@ -34,7 +34,7 @@ import {
   openappaYellEnabled,
 } from "@/openappa/service";
 import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
-import { AGENT_RUNTIME_OAUTH_CLIENT_ID } from "@/services/agent-runtime/runtime-contract";
+import { isAgentRunGatewayToken } from "@/services/agent-runtime/runtime-contract";
 import {
   type AgentToolExclusionSets,
   agentToolExclusionsService,
@@ -501,8 +501,7 @@ async function getSearchableTools(params: {
   // the feature is on, except single-agent-scoped Agent Runtime OAuth tokens
   // with accessAllTools off; policy writes come only from assignment or Auto mode.
   const includeImplicitPolicyReads =
-    params.tokenAuth?.oauthClientId !== AGENT_RUNTIME_OAUTH_CLIENT_ID ||
-    Boolean(agent?.accessAllTools);
+    !isAgentRunGatewayToken(params.tokenAuth) || Boolean(agent?.accessAllTools);
   const injectedOpenappaTools = delegatedRun
     ? []
     : await openappaSearchTools(exclusionSets, {

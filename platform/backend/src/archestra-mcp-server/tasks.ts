@@ -51,6 +51,10 @@ import {
   type SubagentExecutionPolicy,
 } from "@/services/agent-runtime/pod-run";
 import {
+  canLaunchAgentRuntimeModel,
+  preflightAgentRuntimeModelReadiness,
+} from "@/services/agent-runtime/preflight";
+import {
   agentRunUrl,
   submittedRunNextStep,
 } from "@/services/agent-runtime/run-handle";
@@ -344,11 +348,47 @@ export async function startDelegatedTask(params: {
     return result;
   }
 
+  let planningExcludedSet = excludedSet;
+  const nonExcludedIds = assignedIds.filter((id) => !excludedSet.has(id));
+  if (fallbackEnabled && nonExcludedIds.length > 1) {
+    const actor = tryRequireActor(params.context);
+    if (actor) {
+      const readinessChecks = await Promise.all(
+        nonExcludedIds.map(async (candidateId) => {
+          const candidateAgent = await AgentModel.findById(candidateId);
+          if (
+            !candidateAgent ||
+            candidateAgent.organizationId !== actor.organizationId
+          ) {
+            return { candidateId, ready: false };
+          }
+          const candidateRuntime = resolveAgentRuntime(candidateAgent);
+          if (!candidateRuntime) {
+            return { candidateId, ready: false };
+          }
+          const ready = await canLaunchAgentRuntimeModel({
+            runtime: candidateRuntime,
+            agent: candidateAgent,
+            actor,
+          });
+          return { candidateId, ready };
+        }),
+      );
+      const readyCount = readinessChecks.filter((entry) => entry.ready).length;
+      const unreadyIds = readinessChecks
+        .filter((entry) => !entry.ready)
+        .map((entry) => entry.candidateId);
+      if (readyCount > 0 && unreadyIds.length > 0) {
+        planningExcludedSet = new Set([...excludedSet, ...unreadyIds]);
+      }
+    }
+  }
+
   const { candidateIds, claimedPrimaryAgentId, dispatchCount } =
     await subagentLoadBalancer.planCandidates({
       callerAgentId: callerAgent.id,
       assignedAgentIds: assignedIds,
-      excludedAgentIds: excludedSet,
+      excludedAgentIds: planningExcludedSet,
       config: lbConfig,
     });
   if (candidateIds.length === 0) {
@@ -621,6 +661,13 @@ async function launchDelegatedTask(params: {
             .join(", ")}`,
         ),
       );
+    }
+    try {
+      await preflightAgentRuntimeModelReadiness({ runtime, agent, actor });
+    } catch (error) {
+      if (error instanceof ApiError)
+        return failedLaunch("refused", errorResult(error.message));
+      throw error;
     }
 
     if (params.credentialGrantIds && params.credentialGrantIds.length > 0) {
@@ -2315,6 +2362,14 @@ export function requireActor(context: ArchestraContext): A2AActor {
     kind: "user",
     organizationId: context.organizationId,
   };
+}
+
+function tryRequireActor(context: ArchestraContext): A2AActor | null {
+  try {
+    return requireActor(context);
+  } catch {
+    return null;
+  }
 }
 
 /** The current turn of a run the caller may see, addressed by its run_id. */

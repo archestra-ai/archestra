@@ -5,6 +5,7 @@ import {
   DocsPage,
   isModelRouterSupportedProvider,
   LLM_PROXY_OAUTH_SCOPE,
+  PROVIDERS_REQUIRING_BASE_URL,
   type SupportedProvider,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
@@ -489,6 +490,32 @@ export function LlmConnectSteps({
     credentialEnvVar = "ARCHESTRA_LLM_ACCESS_TOKEN";
     ready = hasProviderKey && !!picked;
     mappedProviderKeys = picked?.mappings ?? [];
+    if (
+      pickedClient?.grantType === "client_credentials" &&
+      pickedClient.includeFutureProviders &&
+      pickedClient.scopes.includes(LLM_PROXY_OAUTH_SCOPE)
+    ) {
+      // Match runtime automatic access: explicit provider overrides win;
+      // only usable shared primary keys fill the remaining providers.
+      const explicitProviders = new Set(
+        mappedProviderKeys.map((mapping) => mapping.provider),
+      );
+      mappedProviderKeys = [
+        ...mappedProviderKeys,
+        ...targetProviderKeys
+          .filter(
+            (key) =>
+              key.isPrimary &&
+              key.userId === null &&
+              !key.subscriptionKind &&
+              !key.requiresReauthentication &&
+              (!PROVIDERS_REQUIRING_BASE_URL.has(key.provider) ||
+                !!key.baseUrl?.trim()) &&
+              !explicitProviders.has(key.provider),
+          )
+          .map((key) => ({ provider: key.provider, providerApiKeyId: key.id })),
+      ];
+    }
     credentialSteps = [
       {
         done: !!picked,

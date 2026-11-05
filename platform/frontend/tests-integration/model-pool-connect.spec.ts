@@ -358,6 +358,86 @@ test.describe("LLM Proxy pool discovery", () => {
     ).toHaveCount(0);
   });
 
+  test("keeps shared-primary model examples for an automatic app OAuth client", async ({
+    page,
+    mswControl,
+    request,
+  }) => {
+    await mockPool({ mswControl, request });
+    const sharedKey = makeLlmProviderApiKey({
+      ...openaiKey,
+      id: "shared-openai",
+      scope: "org",
+      userId: null,
+    });
+    await mswControl.registerMany([
+      {
+        method: "get",
+        url: "/api/llm-provider-api-keys",
+        body: [openaiKey, sharedKey],
+      },
+      {
+        method: "get",
+        url: "/api/llm-models/available",
+        body: [
+          {
+            id: "gpt-4o",
+            dbId: "personal-model",
+            displayName: "GPT-4o",
+            provider: "openai",
+            isFree: false,
+          },
+        ],
+      },
+      {
+        method: "get",
+        url: "/api/llm-models",
+        body: [
+          {
+            id: "shared-model",
+            modelId: "gpt-4.1",
+            provider: "openai",
+            ignored: false,
+            embeddingDimensions: null,
+            inputModalities: ["text"],
+            outputModalities: ["text"],
+            apiKeys: [sharedKey],
+          },
+          {
+            id: "personal-model",
+            modelId: "gpt-4o",
+            provider: "openai",
+            ignored: false,
+            embeddingDimensions: null,
+            inputModalities: ["text"],
+            outputModalities: ["text"],
+            apiKeys: [openaiKey],
+          },
+        ],
+      },
+    ]);
+    await page.goto("/llm/proxy");
+    await page.getByText("OAuth client", { exact: true }).click();
+    await page
+      .getByRole("combobox", { name: "OAuth client", exact: true })
+      .click();
+    await page
+      .getByRole("option")
+      .filter({ hasText: "Granted the pool" })
+      .click();
+    await expect(page.getByText('"model": "openai:gpt-4.1"')).toBeVisible();
+    await page.getByRole("combobox", { name: "Model", exact: true }).click();
+    await expect(
+      page.getByRole("option").filter({ hasText: POOL_NAME }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("option").filter({ hasText: "openai:gpt-4.1" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("option").filter({ hasText: "openai:gpt-4o" }),
+    ).toHaveCount(0);
+  });
+
   for (const { label, granted, ungranted, noun } of [
     {
       label: "Virtual key",

@@ -15,7 +15,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { AccountPageActionSlotContext } from "@/app/account/_parts/account-page-action";
+import { AccountPageActionSlotContext } from "@/components/settings/account-page-action";
 import {
   useHasPermissions,
   useScopedCapabilities,

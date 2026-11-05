@@ -28,6 +28,35 @@ import {
   parseLabelsParam,
   serializeLabels,
 } from "@/components/label-select";
+import { resolveCatalogEnvironmentLabel } from "@/components/mcp-registry/catalog-environment-label";
+import {
+  LocalServerInstallDialog,
+  type LocalServerInstallResult,
+} from "@/components/mcp-registry/local-server-install-dialog";
+import { ManageUsersDialog } from "@/components/mcp-registry/manage-users-dialog";
+import {
+  type CatalogItem,
+  type InstalledServer,
+  McpServerCard,
+  type RegistryListItem,
+} from "@/components/mcp-registry/mcp-server-card";
+import { MCP_REGISTRY_VIEW_STORAGE_KEY } from "@/components/mcp-registry/registry-list-params";
+import {
+  buildRegistryListQuery,
+  MAX_REGISTRY_SEARCH_LENGTH,
+  registryPageFromParams,
+  registryQueryInputs,
+  sameRankTiers,
+  sortKeyFromParams,
+  sortParamsForKey,
+  withoutOrder,
+} from "@/components/mcp-registry/registry-list-query";
+import { RegistryPageServersProvider } from "@/components/mcp-registry/registry-page-servers";
+import {
+  RemoteServerInstallDialog,
+  type RemoteServerInstallResult,
+} from "@/components/mcp-registry/remote-server-install-dialog";
+import type { McpServerInstallScope } from "@/components/mcp-registry/select-mcp-server-credential-type-and-teams";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
 import {
   RESOURCE_ACCESS_FILTER_PARAMS,
@@ -105,20 +134,8 @@ import {
 import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
 import { useCanReauthenticateInputsReady } from "@/lib/mcp/use-can-reauthenticate";
 import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
-import { resolveCatalogEnvironmentLabel } from "./catalog-environment-label";
-import {
-  LocalServerInstallDialog,
-  type LocalServerInstallResult,
-} from "./local-server-install-dialog";
-import { ManageUsersDialog } from "./manage-users-dialog";
 import { mcpRegistryInstallPriority } from "./mcp-registry-visibility";
 import { McpServerAttentionList } from "./mcp-server-attention-list";
-import {
-  type CatalogItem,
-  type InstalledServer,
-  McpServerCard,
-  type RegistryListItem,
-} from "./mcp-server-card";
 import { McpServerTable } from "./mcp-server-table";
 import {
   emptyRegistryFilters,
@@ -140,25 +157,8 @@ import {
   selectedAttentionFacet,
   withAttentionFacet,
 } from "./registry-list-controls";
-import { MCP_REGISTRY_VIEW_STORAGE_KEY } from "./registry-list-params";
-import {
-  buildRegistryListQuery,
-  MAX_REGISTRY_SEARCH_LENGTH,
-  registryPageFromParams,
-  registryQueryInputs,
-  sameRankTiers,
-  sortKeyFromParams,
-  sortParamsForKey,
-  withoutOrder,
-} from "./registry-list-query";
-import { RegistryPageServersProvider } from "./registry-page-servers";
 import { ReinstallConfirmationDialog } from "./reinstall-confirmation-dialog";
 import { decideReinstallDialog } from "./reinstall-dialog-decision";
-import {
-  RemoteServerInstallDialog,
-  type RemoteServerInstallResult,
-} from "./remote-server-install-dialog";
-import type { McpServerInstallScope } from "./select-mcp-server-credential-type-and-teams";
 import { useCatalogInstall } from "./use-catalog-install";
 
 /** The pause in typing after which the registry asks the server. */

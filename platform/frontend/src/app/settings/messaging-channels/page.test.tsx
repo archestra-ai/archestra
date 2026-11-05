@@ -6,7 +6,7 @@ import MessagingChannelSettingsPage from "./page";
 vi.mock("next/navigation");
 
 const useTriggerStatuses = vi.fn();
-vi.mock("./_parts/use-trigger-statuses", () => ({
+vi.mock("@/components/messaging-channels/use-trigger-statuses", () => ({
   useTriggerStatuses: () => useTriggerStatuses(),
 }));
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useFieldArray } from "react-hook-form";
-import { suggestModelId } from "./model-name";
+import { suggestModelId } from "@/components/model-pools/model-name";
 import {
   denseOrders,
   memberKey,

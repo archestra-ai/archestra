@@ -67,11 +67,10 @@ vi.mock("@/components/delete-confirm-dialog", () => ({
 }));
 
 // Heavy child dialogs and the create-gate layout chrome are out of scope.
-vi.mock(
-  "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog",
-  () => ({ CreateConnectorDialog: () => null }),
-);
-vi.mock("@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog", () => ({
+vi.mock("@/components/knowledge/create-connector-dialog", () => ({
+  CreateConnectorDialog: () => null,
+}));
+vi.mock("@/components/knowledge/edit-connector-dialog", () => ({
   EditConnectorDialog: () => null,
 }));
 vi.mock("@/app/knowledge/_parts/knowledge-page-layout", () => ({

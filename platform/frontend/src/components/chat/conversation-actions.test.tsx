@@ -34,7 +34,7 @@ vi.mock("@/lib/projects/projects.query", () => ({
   }),
 }));
 
-vi.mock("@/app/_parts/conversation-project-actions", () => ({
+vi.mock("@/components/chat/conversation-project-actions", () => ({
   ConversationProjectActions: () => <button type="button">Project</button>,
 }));
 

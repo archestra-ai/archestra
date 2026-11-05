@@ -3,12 +3,12 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { McpServerIssue } from "@/lib/mcp/mcp-server-issues";
-import { McpServerAttentionList } from "./mcp-server-attention-list";
 import type {
   RegistryListItem as CatalogItem,
   InstalledServer,
-} from "./mcp-server-card";
+} from "@/components/mcp-registry/mcp-server-card";
+import type { McpServerIssue } from "@/lib/mcp/mcp-server-issues";
+import { McpServerAttentionList } from "./mcp-server-attention-list";
 
 const {
   deleteMutateAsync,

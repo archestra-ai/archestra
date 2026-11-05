@@ -2,17 +2,17 @@
 
 import { KeyRound } from "lucide-react";
 import type { ReactNode } from "react";
-import { AgentIdenticon, PersonAvatar } from "@/app/llm/logs/_parts/hue-avatar";
-import {
-  type LogSession,
-  sourceLabel,
-} from "@/app/llm/logs/_parts/logs-table-format";
 import {
   describeActor,
   describeSessionOrigin,
   SessionClientMark,
 } from "@/app/llm/logs/_parts/session-identity";
 import { AgentIcon } from "@/components/agent-icon";
+import { AgentIdenticon, PersonAvatar } from "@/components/logs/hue-avatar";
+import {
+  type LogSession,
+  sourceLabel,
+} from "@/components/logs/logs-table-format";
 import { SourceIcon } from "@/components/source-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {

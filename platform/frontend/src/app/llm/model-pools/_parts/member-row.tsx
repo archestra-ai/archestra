@@ -11,13 +11,16 @@ import {
   type LlmModelSelectOption,
 } from "@/components/llm-model-select";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
+import {
+  poolModelName,
+  suggestModelId,
+} from "@/components/model-pools/model-name";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils/tailwind";
 import { MemberCooldown } from "./member-status";
-import { poolModelName, suggestModelId } from "./model-name";
 import {
   isValidWeight,
   MAX_WEIGHT,

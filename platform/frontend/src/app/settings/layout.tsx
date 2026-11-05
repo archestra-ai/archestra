@@ -6,14 +6,17 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { createContext, useContext, useMemo, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { MessagingProvidersSubnav } from "@/components/messaging-channels/messaging-providers";
 import { PageLayout } from "@/components/page-layout";
 import { SectionNav } from "@/components/section-nav";
+import { AppearanceSubnav } from "@/components/settings/appearance-navigation";
+import {
+  resolveSettingsSection,
+  useSettingsTabs,
+} from "@/components/settings/settings-tabs";
 import { useDisableInvitations } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useSecretsType } from "@/lib/secrets.query";
-import { AppearanceSubnav } from "./appearance/_parts/appearance-navigation";
-import { MessagingProvidersSubnav } from "./messaging-channels/_parts/messaging-providers";
-import { resolveSettingsSection, useSettingsTabs } from "./settings-tabs";
 
 const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
   "/settings/service-accounts": {

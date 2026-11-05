@@ -1,8 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { ToolCallPayload } from "@/app/llm/logs/[id]/_parts/tool-call-details";
+import { ErrorBoundary } from "@/components/error-boundary";
+import { ToolCallPayload } from "@/components/log-detail/tool-call-details";
 import { ToolCallOutcomeNotice } from "@/components/log-detail/tool-call-outcome-notice";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";

@@ -2,6 +2,7 @@
 
 import { Loader2, RefreshCw } from "lucide-react";
 import { useState } from "react";
+import { SkillContentEditor } from "@/components/skills/skill-content-editor";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field-description";
@@ -22,7 +23,6 @@ import {
   useUpdatePluginGithubSync,
 } from "@/lib/plugins/plugin.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { SkillContentEditor } from "../../skills/_parts/skill-content-editor";
 
 const SYNC_OPTIONS = [
   { value: "off", label: "Manual checks" },

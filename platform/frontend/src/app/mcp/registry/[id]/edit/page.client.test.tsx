@@ -25,7 +25,7 @@ vi.mock("../../_parts/catalog-setup-wizard", () => ({
   ToolsAndGuardrailsStep: () => <div>Tool review</div>,
   useTestConnectionTarget: () => ({ target: { id: "connection-1" } }),
 }));
-vi.mock("../../_parts/edit-catalog-dialog", () => ({
+vi.mock("@/components/mcp-registry/edit-catalog-dialog", () => ({
   EditCatalogContent: () => <div>Configuration form</div>,
 }));
 vi.mock("../../_parts/idle-hibernation-section", () => ({

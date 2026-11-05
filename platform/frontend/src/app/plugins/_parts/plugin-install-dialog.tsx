@@ -3,6 +3,20 @@
 import { RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type ConnectionBaseUrl,
+  resolveAdminDefaultBaseUrl,
+  resolveCandidateBaseUrls,
+} from "@/components/connection/connection-flow.utils";
+import {
+  type ConnectPlatformOption,
+  detectPlatform,
+  platformLabels,
+  toPlatformOption,
+} from "@/components/connection/platform.utils";
+import { ConnectionPlatformSelect } from "@/components/connection/platform-select";
+import { SetupCommandLine } from "@/components/connection/setup-command-line";
+import { SetupSummaryRow } from "@/components/connection/setup-summary-row";
 import { StandardDialog } from "@/components/standard-dialog";
 import { TerminalCard } from "@/components/terminal-surface";
 import { Button } from "@/components/ui/button";
@@ -22,20 +36,6 @@ import {
 } from "@/lib/connection-setup.query";
 import { useOrganization } from "@/lib/organization.query";
 import type { PluginDetail, PluginListItem } from "@/lib/plugins/plugin.query";
-import {
-  type ConnectionBaseUrl,
-  resolveAdminDefaultBaseUrl,
-  resolveCandidateBaseUrls,
-} from "../../connection/connection-flow.utils";
-import {
-  type ConnectPlatformOption,
-  detectPlatform,
-  platformLabels,
-  toPlatformOption,
-} from "../../connection/platform.utils";
-import { ConnectionPlatformSelect } from "../../connection/platform-select";
-import { SetupCommandLine } from "../../connection/setup-command-line";
-import { SetupSummaryRow } from "../../connection/setup-summary-row";
 import {
   CLIENT_LABELS,
   resolvePluginInstallSelection,

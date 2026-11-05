@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { LoadingState } from "@/components/loading";
 import SessionDetailPage from "./page.client";
 

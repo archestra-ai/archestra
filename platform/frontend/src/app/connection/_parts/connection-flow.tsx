@@ -1,0 +1,279 @@
+"use client";
+
+import { isSupportedProvider, type SupportedProvider } from "@archestra/shared";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { type ReactNode, useMemo, useState } from "react";
+import { AgentSelector } from "@/components/agent-selector";
+import {
+  isInstallerClientId,
+  visibleClients,
+} from "@/components/connection/clients";
+import {
+  type ConnectionBaseUrl,
+  resolveEffectiveId,
+  resolveInitialClientId,
+  useConnectionBaseUrl,
+} from "@/components/connection/connection-flow.utils";
+import { McpClientInstructions } from "@/components/connection/mcp-client-instructions";
+import { ProxyClientInstructions } from "@/components/connection/proxy-client-instructions";
+import { useUpdateUrlParams } from "@/components/connection/use-update-url-params";
+import { WizardStep } from "@/components/wizard-step";
+import {
+  useAgentOptionsByIds,
+  useAgentOptionsPage,
+} from "@/lib/agent-options.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  CONNECTION_GATEWAY_FILTERS,
+  CONNECTION_GATEWAY_PAGE_SIZE,
+  CONNECTION_GATEWAY_REFERENCE_FILTERS,
+} from "@/lib/connection-approval-seed";
+import { ConnectCommandPanel } from "./connect-command-panel";
+import {
+  SkillsMarketplaceStep,
+  useSkillsMarketplaceVisible,
+} from "./skills-marketplace-step";
+
+interface ConnectionFlowProps {
+  /** Pause setup actions during a fresh settings read while keeping the picker usable. */
+  isRevalidating?: boolean;
+  defaultMcpGatewayId?: string;
+  /** The organization's single LLM Proxy — undefined while loading. */
+  llmProxyId?: string;
+  adminDefaultMcpGatewayId?: string | null;
+  adminDefaultClientId?: string | null;
+  /** When null/undefined: show all. Otherwise: only these IDs (plus "generic" always). */
+  shownClientIds?: readonly string[] | null;
+  /** When null/undefined: show all. Otherwise: only these providers. */
+  shownProviders?: readonly SupportedProvider[] | null;
+  /** Admin-curated descriptions and default flag for env-configured base URLs. */
+  connectionBaseUrls?: readonly ConnectionBaseUrl[] | null;
+  /** When false, the page does not offer installing shared skills. */
+  skillsEnabled?: boolean;
+  /** When false, the page does not offer routing through the LLM Proxy. */
+  llmProxyEnabled?: boolean;
+  /** When false, the page does not offer installing plugins. */
+  pluginsEnabled?: boolean;
+}
+
+export function ConnectionFlow({
+  isRevalidating = false,
+  defaultMcpGatewayId,
+  llmProxyId,
+  adminDefaultMcpGatewayId,
+  adminDefaultClientId,
+  shownClientIds,
+  shownProviders,
+  connectionBaseUrls,
+  skillsEnabled = true,
+  llmProxyEnabled = true,
+  pluginsEnabled = true,
+}: ConnectionFlowProps) {
+  const searchParams = useSearchParams();
+  const urlGatewayId = searchParams.get("gatewayId");
+  const urlClientId = searchParams.get("clientId");
+
+  const updateUrlParams = useUpdateUrlParams();
+
+  const { data: canReadMcpGateway } = useHasPermissions({
+    mcpGateway: ["read"],
+  });
+  const { data: canReadLlmProxy } = useHasPermissions({ llmProxy: ["read"] });
+
+  const shownClients = useMemo(
+    () => visibleClients(shownClientIds),
+    [shownClientIds],
+  );
+
+  // Pre-select a client so the flow never loads blank. URL param wins (for
+  // bookmarkable state), then the admin default, then the first visible
+  // client as the system fallback.
+  const initialClientId = resolveInitialClientId({
+    urlClientId,
+    adminDefaultClientId,
+    visibleClientIds: shownClients.map((c) => c.id),
+  });
+  const client = shownClients.find((c) => c.id === initialClientId) ?? null;
+
+  const [selectedMcpId, setSelectedMcpId] = useState<string | null>(null);
+
+  // The same filters the server seed reads for an approval document.
+  const gatewayFilters = CONNECTION_GATEWAY_FILTERS;
+  const gatewayPage = useAgentOptionsPage({
+    filters: gatewayFilters,
+    limit: CONNECTION_GATEWAY_PAGE_SIZE,
+    enabled: canReadMcpGateway === true,
+  });
+  const { data: gatewayReferences } = useAgentOptionsByIds({
+    ids: [
+      selectedMcpId,
+      urlGatewayId,
+      adminDefaultMcpGatewayId,
+      defaultMcpGatewayId,
+    ].filter((id): id is string => !!id),
+    // Built-ins stay hidden, matching the gateway list above.
+    filters: CONNECTION_GATEWAY_REFERENCE_FILTERS,
+    enabled: canReadMcpGateway === true,
+  });
+  const mcpGateways = [
+    ...new Map(
+      [
+        ...(gatewayPage.data?.pages[0]?.data ?? []),
+        ...(gatewayReferences ?? []),
+      ].map((gateway) => [gateway.id, gateway]),
+    ).values(),
+  ];
+
+  // Connection base URL — chosen once for the whole page, threaded into each
+  // instruction panel below.
+  const baseUrl = useConnectionBaseUrl(connectionBaseUrls);
+
+  const handleMcpSelect = (id: string) => {
+    setSelectedMcpId(id);
+    updateUrlParams({ gatewayId: id });
+  };
+
+  const effectiveMcpId = resolveEffectiveId({
+    selected: selectedMcpId,
+    fromUrl: urlGatewayId,
+    adminDefault: adminDefaultMcpGatewayId,
+    systemDefault: defaultMcpGatewayId,
+    firstAvailable: mcpGateways?.[0]?.id,
+    skipAdminDefault: false,
+  });
+
+  const selectedMcp = mcpGateways?.find((g) => g.id === effectiveMcpId);
+
+  const urlProviderId = searchParams.get("providerId");
+  const urlProvider: SupportedProvider | null =
+    urlProviderId && isSupportedProvider(urlProviderId) ? urlProviderId : null;
+
+  const marketplaceVisible = useSkillsMarketplaceVisible(client);
+  const skillsVisible = skillsEnabled && marketplaceVisible;
+
+  // Manual flow (n8n / Any client): one wizard-rail entry per instruction
+  // block, numbered after the client step.
+  const manualClient =
+    client && !isInstallerClientId(client.id) ? client : null;
+  const manualSteps: {
+    key: string;
+    title: string;
+    actions?: ReactNode;
+    content: ReactNode;
+  }[] = [];
+  if (manualClient) {
+    if (canReadMcpGateway) {
+      manualSteps.push({
+        key: "mcp",
+        title: "Connect the MCP Gateway to access tools",
+        actions:
+          manualClient.mcp.kind !== "unsupported" &&
+          (mcpGateways?.length ?? 0) > 1 ? (
+            <AgentSelector
+              mode="single"
+              flat
+              className="w-64"
+              agents={mcpGateways}
+              remote={{ filters: gatewayFilters }}
+              value={effectiveMcpId ?? ""}
+              onValueChange={handleMcpSelect}
+              placeholder="Select gateway"
+              searchPlaceholder="Search gateways…"
+            />
+          ) : undefined,
+        content:
+          selectedMcp && effectiveMcpId ? (
+            <McpClientInstructions
+              client={manualClient}
+              gatewaySlug={selectedMcp.slug ?? effectiveMcpId}
+              gatewayName={selectedMcp.name}
+              isPersonalGateway={selectedMcp.isPersonalGateway}
+              baseUrl={baseUrl}
+            />
+          ) : (
+            <NoAgentsPanel kind="MCP gateways" href="/mcp/gateways" />
+          ),
+      });
+    }
+    if (llmProxyEnabled && canReadLlmProxy) {
+      manualSteps.push({
+        key: "proxy",
+        title: "Route through the LLM Proxy to make it secure",
+        content: llmProxyId ? (
+          <ProxyClientInstructions
+            client={manualClient}
+            profileId={llmProxyId}
+            shownProviders={shownProviders}
+            baseUrl={baseUrl}
+          />
+        ) : null,
+      });
+    }
+    if (skillsVisible) {
+      manualSteps.push({
+        key: "skills",
+        title: "Install shared skills",
+        content: <SkillsMarketplaceStep client={manualClient} />,
+      });
+    }
+  }
+
+  return (
+    <div className="flex flex-col">
+      <div inert={isRevalidating} className="contents">
+        {/* Steps 2-3 (script clients) — review, then run the command */}
+        {client && isInstallerClientId(client.id) && (
+          <ConnectCommandPanel
+            client={client}
+            mcpGateways={canReadMcpGateway ? (mcpGateways ?? []) : null}
+            mcpGatewaysLoading={
+              canReadMcpGateway === undefined ||
+              (canReadMcpGateway === true && gatewayPage.isPending)
+            }
+            mcpGatewayId={effectiveMcpId}
+            onMcpGatewaySelect={handleMcpSelect}
+            llmProxyId={
+              llmProxyEnabled && canReadLlmProxy ? (llmProxyId ?? null) : null
+            }
+            shownProviders={shownProviders}
+            urlProvider={urlProvider}
+            onProviderSelect={(p) => updateUrlParams({ providerId: p })}
+            baseUrl={baseUrl}
+            skillsEnabled={skillsEnabled}
+            pluginsEnabled={pluginsEnabled}
+          />
+        )}
+
+        {/* Steps 2..n (n8n / Any client) — manual instructions on the rail */}
+        {manualSteps.map((s, i) => (
+          <WizardStep
+            key={s.key}
+            n={i + 2}
+            title={s.title}
+            actions={s.actions}
+            last={i === manualSteps.length - 1}
+          >
+            {s.content}
+          </WizardStep>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ===================================================================
+// Internal pieces
+// ===================================================================
+
+function NoAgentsPanel({ kind, href }: { kind: string; href: string }) {
+  return (
+    <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+      No {kind} available.{" "}
+      <Link href={href} className="underline hover:text-foreground">
+        Create one
+      </Link>{" "}
+      to continue.
+    </div>
+  );
+}

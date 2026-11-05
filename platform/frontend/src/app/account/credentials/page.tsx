@@ -2,8 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { ClaudeCodeSubscription } from "@/app/account/_parts/claude-code-subscription";
 import { useAccountCredentialsAccess } from "@/app/account/_parts/use-account-credentials-access";
+import { ClaudeCodeSubscription } from "@/components/settings/claude-code-subscription";
 import { RuntimeCredentialsSection } from "@/components/settings/runtime-credentials-section";
 
 export default function AccountCredentialsPage() {

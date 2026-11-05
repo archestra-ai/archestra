@@ -14,13 +14,16 @@ import {
   SearchX,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ConnectionClientMultiSelect } from "@/app/connection/client-multi-select";
-import { CONNECT_CLIENTS, type ConnectClient } from "@/app/connection/clients";
+import { ConnectionClientMultiSelect } from "@/components/connection/client-multi-select";
+import {
+  CONNECT_CLIENTS,
+  type ConnectClient,
+} from "@/components/connection/clients";
 import {
   CONNECT_PLATFORM_OPTIONS,
   type ConnectPlatformOption,
-} from "@/app/connection/platform.utils";
-import { ConnectionPlatformMultiSelect } from "@/app/connection/platform-select";
+} from "@/components/connection/platform.utils";
+import { ConnectionPlatformMultiSelect } from "@/components/connection/platform-select";
 import { RepositoryBar } from "@/components/git/git-setup-chrome";
 import {
   gitAuthFields,

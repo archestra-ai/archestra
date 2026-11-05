@@ -32,7 +32,7 @@ vi.mock("../page.client", () => ({
 }));
 
 // What the page hands the browser: each streamed query and its state.
-vi.mock("../streamed-queries", () => ({
+vi.mock("../_parts/streamed-queries", () => ({
   StreamedQueries: ({
     state,
     children,
@@ -53,7 +53,7 @@ vi.mock("../streamed-queries", () => ({
   ),
 }));
 
-import { StreamedAgentsPage } from "../streamed-agents-page";
+import { StreamedAgentsPage } from "../_parts/streamed-agents-page";
 import AgentsPageServer from "./page";
 
 const noSearchParams = Promise.resolve({});

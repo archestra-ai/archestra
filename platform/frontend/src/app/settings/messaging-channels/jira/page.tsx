@@ -33,8 +33,8 @@ import {
 } from "@/lib/chatops/jira.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { JiraBotsSection } from "./jira-bots-section";
-import { JiraProjectBindings } from "./jira-project-bindings";
+import { JiraBotsSection } from "./_parts/jira-bots-section";
+import { JiraProjectBindings } from "./_parts/jira-project-bindings";
 
 type JiraConfig = archestraApiTypes.GetJiraChatOpsConfigResponses["200"];
 

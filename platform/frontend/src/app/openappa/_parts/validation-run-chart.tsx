@@ -1,12 +1,12 @@
 "use client";
 
+import type { ValidationRunBar } from "@/components/openappa/validation-run-history";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { formatDate } from "@/lib/utils/date-time";
-import type { ValidationRunBar } from "./validation-run-history";
 
 /** Status colors, matching ValidationStatusBadge. */
 const SEGMENTS = [

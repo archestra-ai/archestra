@@ -79,7 +79,7 @@ vi.mock("./page.client", () => ({
 
 const expectedRequest: { current: unknown } = { current: null };
 
-import { registryPageRequestFromUrl } from "./_parts/registry-list-query";
+import { registryPageRequestFromUrl } from "@/components/mcp-registry/registry-list-query";
 import McpRegistryPage from "./page";
 
 const pageResponse = {

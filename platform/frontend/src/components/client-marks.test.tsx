@@ -1,11 +1,11 @@
 import { AGENT_CATALOG_IDS, type AgentCatalogId } from "@archestra/shared";
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { ClientIcon } from "@/app/connection/client-icon";
-import { CONNECT_CLIENTS } from "@/app/connection/clients";
 import { AgentIcon } from "@/components/agent-icon";
 import { CATALOG_AGENT_ICONS } from "@/components/agent-icon.utils";
 import { CatalogAgentIcon } from "@/components/agent-pages/agent-catalog";
+import { ClientIcon } from "@/components/connection/client-icon";
+import { CONNECT_CLIENTS } from "@/components/connection/clients";
 
 /** The Connect page client of each agent catalog template. */
 const CONNECT_CLIENT_ID: Record<AgentCatalogId, string> = {

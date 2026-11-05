@@ -4,7 +4,7 @@ import {
   type SessionToolCall,
   type Timeline,
   toolCallSpanKey,
-} from "@/app/llm/logs/[id]/_parts/session-timeline";
+} from "@/components/log-detail/session-timeline";
 
 /**
  * The records around one tool call, on an axis of their own. Everything

@@ -3,8 +3,8 @@
 import { DEFAULT_ADMIN_EMAIL, DocsPage } from "@archestra/shared";
 import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
-import { GuardrailsDisabledWarning } from "@/app/openappa/_parts/guardrails-deployment-toggle";
 import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
+import { GuardrailsDisabledWarning } from "@/components/openappa/guardrails-deployment-toggle";
 import {
   DropdownMenu,
   DropdownMenuContent,

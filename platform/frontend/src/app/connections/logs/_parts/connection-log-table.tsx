@@ -4,6 +4,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Plug, PlugZap, Unplug } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo } from "react";
+import { AgentIcon, agentLabel } from "@/components/connection/agent-icon";
 import { CreatedByCell } from "@/components/created-by-cell";
 import {
   CollectionFilters,
@@ -27,7 +28,6 @@ import {
 } from "@/lib/connected-client.query";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useMemberSearch } from "@/lib/member.query";
-import { AgentIcon, agentLabel } from "./agent-icon";
 import type { ConnectionsWindow } from "./connections-window";
 
 const ALL_VALUE = "all";

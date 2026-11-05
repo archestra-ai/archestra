@@ -54,7 +54,7 @@ vi.mock("@/lib/mcp/use-can-reauthenticate", () => ({
   useCanReauthenticateInputsReady: () => liveRuleInputs.reauthReady,
 }));
 
-vi.mock("./use-chat-with-catalog-item", () => ({
+vi.mock("@/components/mcp-registry/use-chat-with-catalog-item", () => ({
   useChatWithCatalogItem: () => ({
     startChat: vi.fn(),
     startChatById: vi.fn(),
@@ -83,7 +83,7 @@ const {
 }));
 
 // The page's installs reach the cards through the list's page-scoped request.
-vi.mock("./registry-page-servers", () => ({
+vi.mock("@/components/mcp-registry/registry-page-servers", () => ({
   RegistryPageServersProvider: ({ children }: { children: ReactElement }) =>
     children,
   useRegistryPageServers: () => useMcpServersMock().data,
@@ -189,17 +189,19 @@ vi.mock("./mcp-registry-visibility", async (importOriginal) => ({
 
 vi.mock("./mcp-server-table", () => ({ McpServerTable: () => null }));
 
-vi.mock("./local-server-install-dialog", () => ({
+vi.mock("@/components/mcp-registry/local-server-install-dialog", () => ({
   LocalServerInstallDialog: () => null,
 }));
 
-vi.mock("./manage-users-dialog", () => ({ ManageUsersDialog: () => null }));
+vi.mock("@/components/mcp-registry/manage-users-dialog", () => ({
+  ManageUsersDialog: () => null,
+}));
 
 vi.mock("./reinstall-confirmation-dialog", () => ({
   ReinstallConfirmationDialog: () => null,
 }));
 
-vi.mock("./remote-server-install-dialog", () => ({
+vi.mock("@/components/mcp-registry/remote-server-install-dialog", () => ({
   RemoteServerInstallDialog: (props: unknown) => {
     remoteDialogMock(props);
     return null;
@@ -228,6 +230,12 @@ vi.mock("./use-catalog-install", () => ({
 }));
 
 import { type Permissions, PLAYWRIGHT_MCP_CATALOG_ID } from "@archestra/shared";
+import {
+  type InstalledServer,
+  McpServerCard,
+  type RegistryListItem,
+} from "@/components/mcp-registry/mcp-server-card";
+import { registryPageRequestFromUrl } from "@/components/mcp-registry/registry-list-query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
@@ -237,12 +245,6 @@ import {
 } from "@/lib/organization.query";
 import { useAssignableTeams, useMyTeams } from "@/lib/teams/team.query";
 import { InternalMCPCatalog } from "./internal-mcp-catalog";
-import {
-  type InstalledServer,
-  McpServerCard,
-  type RegistryListItem,
-} from "./mcp-server-card";
-import { registryPageRequestFromUrl } from "./registry-list-query";
 
 const CURRENT_USER_ID = "user-me";
 

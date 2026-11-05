@@ -1,4 +1,4 @@
-import { poolModelName } from "@/app/llm/model-pools/_parts/model-name";
+import { poolModelName } from "@/components/model-pools/model-name";
 import type { ModelPool } from "@/lib/model-pools.query";
 
 /** A pool with every member off answers nothing, whoever calls it. */

@@ -1,13 +1,13 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { onGithubAppSetup as onGuardrailsSetup } from "@/app/openappa/_parts/github-app-channel";
 import {
   notifyGithubAppSetup,
   onGithubAppSetup,
 } from "@/components/github-app-setup/github-app-window";
+import { COPILOT_SETUP_CHANNEL } from "@/components/model-providers/copilot-github-app-setup";
+import { onGithubAppSetup as onGuardrailsSetup } from "@/components/openappa/github-app-channel";
 import { useCompleteCopilotGithubApp } from "@/lib/github-copilot-app.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { COPILOT_SETUP_CHANNEL } from "../_parts/copilot-github-app-setup";
 import CopilotGithubAppReturnPage from "./page";
 
 vi.mock("@/lib/hooks/use-app-name");
@@ -138,7 +138,7 @@ describe("GitHub App setup channels", () => {
     notifyGithubAppSetup("installed", COPILOT_SETUP_CHANNEL);
     await vi.waitFor(() => expect(copilot).toHaveBeenCalledWith("installed"));
     const { notifyGithubAppSetup: notifyGuardrails } = await import(
-      "@/app/openappa/_parts/github-app-channel"
+      "@/components/openappa/github-app-channel"
     );
     notifyGuardrails("created");
     await vi.waitFor(() => expect(guardrails).toHaveBeenCalledWith("created"));

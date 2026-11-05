@@ -17,6 +17,16 @@ import {
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { InstallationProgress } from "@/components/mcp-registry/installation-progress";
+import {
+  LocalServerInstallDialog,
+  type LocalServerInstallResult,
+} from "@/components/mcp-registry/local-server-install-dialog";
+import type { CatalogItem } from "@/components/mcp-registry/mcp-server-card";
+import {
+  RemoteServerInstallDialog,
+  type RemoteServerInstallResult,
+} from "@/components/mcp-registry/remote-server-install-dialog";
 import {
   OAuthConfirmationDialog,
   type OAuthInstallResult,
@@ -62,17 +72,7 @@ import {
   type ToolWithAssignmentsData,
   useToolsWithAssignments,
 } from "@/lib/tools/tool.query";
-import { InstallationProgress } from "./installation-progress";
-import {
-  LocalServerInstallDialog,
-  type LocalServerInstallResult,
-} from "./local-server-install-dialog";
 import { mcpServerLogsHref } from "./mcp-server-actions-model";
-import type { CatalogItem } from "./mcp-server-card";
-import {
-  RemoteServerInstallDialog,
-  type RemoteServerInstallResult,
-} from "./remote-server-install-dialog";
 
 export type SetupStepId = "configuration" | "test" | "tools";
 

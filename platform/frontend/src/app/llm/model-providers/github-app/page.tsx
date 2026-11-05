@@ -7,6 +7,7 @@ import { AuthCallbackLayout } from "@/components/auth-callback-layout";
 import { notifyGithubAppSetup } from "@/components/github-app-setup/github-app-window";
 import { shortGithubAppError } from "@/components/github-app-setup/short-error";
 import { LoadingState } from "@/components/loading";
+import { COPILOT_SETUP_CHANNEL } from "@/components/model-providers/copilot-github-app-setup";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -17,7 +18,6 @@ import {
 } from "@/components/ui/card";
 import { useCompleteCopilotGithubApp } from "@/lib/github-copilot-app.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { COPILOT_SETUP_CHANNEL } from "../_parts/copilot-github-app-setup";
 
 /**
  * Where GitHub returns the GitHub Copilot setup tab after creating or

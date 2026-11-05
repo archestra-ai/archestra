@@ -26,7 +26,7 @@ import {
   appearanceSettingsSeed,
   organizationSeed,
 } from "@/mocks/data/organization";
-import { ChatMessages } from "./lazy-parts";
+import { ChatMessages } from "./_parts/lazy-parts";
 import { ChatPageContent } from "./page.client";
 
 // While a response streams, every chunk re-renders the chat page. Typing in

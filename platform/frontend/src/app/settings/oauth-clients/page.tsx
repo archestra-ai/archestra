@@ -3,12 +3,12 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { Plus, Server, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { CreateManagedOAuthClientDialog } from "@/components/create-managed-oauth-client-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EditManagedOAuthClientDialog } from "@/components/edit-managed-oauth-client-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
+import { ErrorBoundary } from "@/components/error-boundary";
 import {
   CollectionFilters,
   FilterBar,

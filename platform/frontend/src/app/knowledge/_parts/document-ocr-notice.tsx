@@ -4,8 +4,8 @@ import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { Info, Settings2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { useSettingsAreaAccess } from "@/components/settings/use-settings-area-access";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/tailwind";
 

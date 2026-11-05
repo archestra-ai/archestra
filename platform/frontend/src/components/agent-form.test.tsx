@@ -733,12 +733,9 @@ vi.mock("./agent-runtime-fields", async (importOriginal) => {
   };
 });
 
-vi.mock(
-  "@/app/settings/messaging-channels/email/agent-email-settings-dialog",
-  () => ({
-    AgentEmailSettingsDialog: () => null,
-  }),
-);
+vi.mock("@/components/messaging-channels/agent-email-settings-dialog", () => ({
+  AgentEmailSettingsDialog: () => null,
+}));
 
 vi.mock("@/components/llm-provider-api-key-dropdown", () => ({
   LlmProviderApiKeyDropdown: ({

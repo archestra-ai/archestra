@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import type { ComponentProps } from "react";
-import { runHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
+import { runHref } from "@/components/scheduled-tasks/run-row.utils";
 import {
   type ScheduleTrigger,
   useScheduleTriggerRuns,

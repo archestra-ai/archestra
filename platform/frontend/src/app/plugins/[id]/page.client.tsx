@@ -23,6 +23,7 @@ import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { GitSourceTooltip } from "@/components/git/git-source-card";
 import { PageLayout } from "@/components/page-layout";
+import { PluginSourceGlyph } from "@/components/plugins/plugin-source-icon";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -73,7 +74,6 @@ import {
   PluginNotFound,
   PluginPageLoading,
 } from "../_parts/plugin-page-shell";
-import { PluginSourceGlyph } from "../_parts/plugin-source-icon";
 
 /**
  * `/plugins/[id]` — one plugin's page. Its metadata, payload and access are

@@ -9,7 +9,7 @@ import { OAuthConfirmationDialog } from "./oauth-confirmation-dialog";
 // install it — the real selector reports canInstall=false and renders the
 // "Already installed" notice in that situation.
 vi.mock(
-  "@/app/mcp/registry/_parts/select-mcp-server-credential-type-and-teams",
+  "@/components/mcp-registry/select-mcp-server-credential-type-and-teams",
   () => ({
     SelectMcpServerCredentialTypeAndTeams: ({
       onCanInstallChange,

@@ -10,7 +10,6 @@ import { ChevronDown, ChevronUp, Plus, Trash2, Waypoints } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import {
@@ -28,6 +27,7 @@ import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   CollectionFilters,
@@ -84,13 +84,16 @@ import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { ExposedSetCell, ExposedSetNames } from "./gateway-exposed-set-cell";
+import {
+  ExposedSetCell,
+  ExposedSetNames,
+} from "./_parts/gateway-exposed-set-cell";
 import {
   GatewayPinnedTiles,
   useGatewaysPinnedForViewer,
-} from "./gateway-pinned-tiles";
-import { gatewaySubagentNames, gatewayToolNames } from "./gateway-tools";
-import { McpGatewayActions } from "./mcp-gateway-actions";
+} from "./_parts/gateway-pinned-tiles";
+import { gatewaySubagentNames, gatewayToolNames } from "./_parts/gateway-tools";
+import { McpGatewayActions } from "./_parts/mcp-gateway-actions";
 
 export default function McpGatewaysPage() {
   return (

@@ -18,6 +18,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { validationFileHref } from "@/components/openappa/validation-context";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -29,7 +30,6 @@ import { UnstyledButton } from "@/components/ui/unstyled-button";
 import type { PolicyTestRun } from "@/lib/openappa-policy-tests.query";
 import { formatCompactRelativeTime, formatDate } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
-import { validationFileHref } from "./validation-context";
 
 // ===========================================================================
 // Run matrix + selection detail panel. Files are rows, runs are columns

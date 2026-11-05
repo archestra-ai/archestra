@@ -6,6 +6,7 @@ import {
 } from "@archestra/shared";
 import { AlertTriangle, Cable, Globe, Info, Waypoints } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useReachabilityMode } from "@/components/messaging-channels/use-reachability-mode";
 import { NgrokSetupDialog } from "@/components/ngrok-setup-dialog";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
@@ -17,8 +18,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils/tailwind";
 import { ModeTile } from "../_parts/mode-tile";
 import { NgrokStatus } from "../_parts/ngrok-status";
-import { useReachabilityMode } from "../_parts/use-reachability-mode";
-import { SlackAgentBotsSection } from "./slack-agent-bots-section";
+import { SlackAgentBotsSection } from "./_parts/slack-agent-bots-section";
 
 type SlackConnectionMode = NonNullable<
   NonNullable<

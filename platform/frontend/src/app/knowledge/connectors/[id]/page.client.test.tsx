@@ -81,7 +81,7 @@ vi.mock(
     ConnectorUnassignedUsersAlert: () => <div>unassigned-alert</div>,
   }),
 );
-vi.mock("@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog", () => ({
+vi.mock("@/components/knowledge/edit-connector-dialog", () => ({
   EditConnectorDialog: () => null,
 }));
 

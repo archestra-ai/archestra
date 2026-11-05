@@ -44,7 +44,7 @@ import {
 import { organizationKeys, useOrganization } from "@/lib/organization.query";
 import { usePlugins } from "@/lib/plugins/plugin.query";
 import { markShellSeeded } from "@/lib/shell-deferral";
-import { saveConnectChoices } from "./connect-choices";
+import { saveConnectChoices } from "./_parts/connect-choices";
 import ConnectionPage from "./page";
 
 const connectionFlowMock = vi.fn((_props: unknown) => (
@@ -145,7 +145,7 @@ vi.mock("@/components/page-layout", () => ({
     </>
   ),
 }));
-vi.mock("./connect-command-panel", () => ({
+vi.mock("./_parts/connect-command-panel", () => ({
   ConnectCommandPanel: (props: {
     variant?: string;
     exclude?: readonly string[];
@@ -167,7 +167,7 @@ vi.mock("./connect-command-panel", () => ({
     </div>
   ),
 }));
-vi.mock("./connection-flow", () => ({
+vi.mock("./_parts/connection-flow", () => ({
   ConnectionFlow: (props: unknown) => connectionFlowMock(props),
 }));
 

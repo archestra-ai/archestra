@@ -3,6 +3,13 @@
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
+import { LocalServerInstallDialog } from "@/components/mcp-registry/local-server-install-dialog";
+import type {
+  CatalogItem,
+  InstalledServer,
+} from "@/components/mcp-registry/mcp-server-card";
+import { RemoteServerInstallDialog } from "@/components/mcp-registry/remote-server-install-dialog";
+import type { McpServerInstallScope } from "@/components/mcp-registry/select-mcp-server-credential-type-and-teams";
 import { Button } from "@/components/ui/button";
 import { useInitiateOAuth } from "@/lib/auth/oauth.query";
 import {
@@ -13,10 +20,6 @@ import {
 } from "@/lib/auth/oauth-session";
 import { useReauthenticateMcpServer } from "@/lib/mcp/mcp-server.query";
 import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
-import { LocalServerInstallDialog } from "./local-server-install-dialog";
-import type { CatalogItem, InstalledServer } from "./mcp-server-card";
-import { RemoteServerInstallDialog } from "./remote-server-install-dialog";
-import type { McpServerInstallScope } from "./select-mcp-server-credential-type-and-teams";
 
 export function InlineMcpReauthentication({
   item,

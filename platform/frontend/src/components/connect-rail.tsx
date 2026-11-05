@@ -2,7 +2,7 @@
 
 import { Check, Plus } from "lucide-react";
 import { useId } from "react";
-import { TerminalBlock } from "@/app/connection/terminal-block";
+import { TerminalBlock } from "@/components/connection/terminal-block";
 import { SettingsLink } from "@/components/settings-link";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";

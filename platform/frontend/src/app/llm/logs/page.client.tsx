@@ -7,12 +7,14 @@ import { useRouter } from "next/navigation";
 import { useCallback, useMemo } from "react";
 import { useLogsHeaderAction } from "@/app/_parts/logs-section-layout";
 import { AgentSelector } from "@/components/agent-selector";
+import { ErrorBoundary } from "@/components/error-boundary";
 import {
   CollectionFilters,
   FilterBar,
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
+import type { LogSession } from "@/components/logs/logs-table-format";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
@@ -29,9 +31,7 @@ import {
   useInteractionSessions,
 } from "@/lib/interactions/interaction.query";
 import { llmSessionHref } from "@/lib/interactions/llm-log-links";
-import { ErrorBoundary } from "../../_parts/error-boundary";
 import { AgentCell } from "./_parts/agent-cell";
-import type { LogSession } from "./_parts/logs-table-format";
 import { ModelCell, makerLogoCount } from "./_parts/model-cell";
 import { OriginFilter } from "./_parts/origin-filter";
 import { SessionCell } from "./_parts/session-cell";

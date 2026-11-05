@@ -6,6 +6,12 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
+import { McpCatalogForm } from "@/components/mcp-registry/mcp-catalog-form";
+import type { McpCatalogFormValues } from "@/components/mcp-registry/mcp-catalog-form.types";
+import {
+  buildCloneFormValues,
+  transformFormToApiData,
+} from "@/components/mcp-registry/mcp-catalog-form.utils";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -27,12 +33,6 @@ import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
 import { useOrganization } from "@/lib/organization.query";
 import { ArchestraCatalogTab } from "../_parts/archestra-catalog-tab";
 import { SetupStepper } from "../_parts/catalog-setup-wizard";
-import { McpCatalogForm } from "../_parts/mcp-catalog-form";
-import type { McpCatalogFormValues } from "../_parts/mcp-catalog-form.types";
-import {
-  buildCloneFormValues,
-  transformFormToApiData,
-} from "../_parts/mcp-catalog-form.utils";
 
 type SourceSubStep = "source" | "configure";
 

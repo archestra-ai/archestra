@@ -18,7 +18,6 @@ import {
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useMemo, useState } from "react";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ConnectorDocumentOcrNotice } from "@/app/knowledge/connectors/_parts/connector-document-ocr-notice";
 import { ConnectorDocumentsTable } from "@/app/knowledge/connectors/_parts/connector-documents-table";
 import { ConnectorEmbeddingModelNotice } from "@/app/knowledge/connectors/_parts/connector-embedding-model-notice";
@@ -35,19 +34,20 @@ import {
   WORKSPACE_ROSTER_NOUN,
 } from "@/app/knowledge/connectors/_parts/roster-noun";
 import { formatRunDuration } from "@/app/knowledge/connectors/_parts/run-duration";
-import { ConnectorStatusPill } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
-import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
-import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
-import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
 import { createdByFact } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { DetailFacts, type MaybeDetailFact } from "@/components/detail-facts";
+import { ErrorBoundary } from "@/components/error-boundary";
 import {
   CollectionFilters,
   FilterBar,
   filterControlClass,
 } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
+import { ConnectorStatusPill } from "@/components/knowledge/connector-enabled-dot";
+import { ConnectorTypeIcon } from "@/components/knowledge/connector-icons";
+import { ConnectorStatusBadge } from "@/components/knowledge/connector-status-badge";
+import { EditConnectorDialog } from "@/components/knowledge/edit-connector-dialog";
 import { LoadingWrapper } from "@/components/loading";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";

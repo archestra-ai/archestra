@@ -14,6 +14,15 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
+import { GithubSyncSetupDialog } from "@/components/openappa/github-sync-setup-dialog";
+import { OpenAppaChatButton } from "@/components/openappa/openappa-chat-button";
+import { ValidationStatusBadge } from "@/components/openappa/validation-parts";
+import {
+  validationRunBars,
+  validationRunStatus,
+  validationSuiteSummary,
+  validationSummaryText,
+} from "@/components/openappa/validation-run-history";
 import { OpenAppaAlertIcon } from "@/components/openappa-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,20 +50,11 @@ import {
 import { useOpenAppaYellsSummary } from "@/lib/openappa-yells.query";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
-import { ValidationStatusBadge } from "../validation/_parts/validation-parts";
 import { breakTheGlassSummary } from "./break-the-glass-summary";
-import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
-import { OpenAppaChatButton } from "./openappa-chat-button";
 import {
   ValidationRunChart,
   ValidationRunChartPlaceholder,
 } from "./validation-run-chart";
-import {
-  validationRunBars,
-  validationRunStatus,
-  validationSuiteSummary,
-  validationSummaryText,
-} from "./validation-run-history";
 
 /** Where the policy syncs from, the latest validation run, and the unresolved yells. */
 export function OverviewStatusCards() {

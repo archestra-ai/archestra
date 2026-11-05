@@ -4,6 +4,7 @@ import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { useOpenAppaSetupState } from "@/components/openappa/use-openappa-setup-state";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +23,6 @@ import {
 } from "./openappa-page-action";
 import { OverviewHeaderActions } from "./overview-header-actions";
 import { openAppaUrl } from "./overview-setup-cards";
-import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
 export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();

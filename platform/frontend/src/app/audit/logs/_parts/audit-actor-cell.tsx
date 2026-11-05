@@ -8,7 +8,7 @@ import {
   type LucideIcon,
   User,
 } from "lucide-react";
-import { AgentIdenticon, PersonAvatar } from "@/app/llm/logs/_parts/hue-avatar";
+import { AgentIdenticon, PersonAvatar } from "@/components/logs/hue-avatar";
 import {
   Tooltip,
   TooltipContent,

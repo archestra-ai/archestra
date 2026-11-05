@@ -47,6 +47,12 @@ import {
   MobileHeaderChatLinks,
 } from "@/components/chat/chat-help-link";
 import {
+  buildCreateConversationInput,
+  isAutoSendHandoffInProgress,
+  resolveChatModelState,
+  resolvePreferredModelForProvider,
+} from "@/components/chat/chat-initial-state";
+import {
   collectBrowserToolCallIds,
   deriveAppFilesRevisions,
   openedAppMetadataFromApps,
@@ -60,8 +66,17 @@ import {
   getComposerAnswer,
   takesComposerAnswer,
 } from "@/components/chat/mcp-elicitation-fields";
+import ArchestraPromptInput, {
+  type ArchestraPromptInputProps,
+  type ChatSubmitOptions,
+} from "@/components/chat/prompt-input";
 import { ProviderAuthRequiredCard } from "@/components/chat/provider-auth-required-card";
 import type { RightPanelTab } from "@/components/chat/right-side-panel";
+import {
+  buildSkillCommands,
+  externalMcpSkillCommandValue,
+  resolveUrlSkillAction,
+} from "@/components/chat/skill-commands";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { useChatApps } from "@/components/chat/use-chat-apps";
 import { LoadingState } from "@/components/loading";
@@ -201,13 +216,7 @@ import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
 import { useSkill, useSkillsPaginated } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils/tailwind";
 import { ViewTransition } from "@/lib/view-transition";
-import {
-  buildCreateConversationInput,
-  isAutoSendHandoffInProgress,
-  resolveChatModelState,
-  resolvePreferredModelForProvider,
-} from "./chat-initial-state";
-import { composerMorph } from "./composer-morph";
+import { composerMorph } from "./_parts/composer-morph";
 import {
   AppsPanelContent,
   BrowserPanel,
@@ -218,21 +227,12 @@ import {
   OnboardingWizardButton,
   preloadConversationParts,
   RightSidePanel,
-} from "./lazy-parts";
-import ArchestraPromptInput, {
-  type ArchestraPromptInputProps,
-  type ChatSubmitOptions,
-} from "./prompt-input";
-import { resolveSharedConversationForkState } from "./shared-conversation-fork";
-import {
-  buildSkillCommands,
-  externalMcpSkillCommandValue,
-  resolveUrlSkillAction,
-} from "./skill-commands";
+} from "./_parts/lazy-parts";
+import { resolveSharedConversationForkState } from "./_parts/shared-conversation-fork";
 import {
   resolveSuggestionPreview,
   SuggestedPromptPills,
-} from "./suggested-prompt-pills";
+} from "./_parts/suggested-prompt-pills";
 
 const RIGHT_PANEL_TABS: readonly RightPanelTab[] = [
   "runs",

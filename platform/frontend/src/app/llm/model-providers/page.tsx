@@ -46,6 +46,13 @@ import {
   serializeExtraHeaders,
 } from "@/components/llm-provider-api-key-form";
 import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
+import { CopilotOrganizationConnectDialog } from "@/components/model-providers/copilot-organization-connect-dialog";
+import {
+  buildSubscriptionOffers,
+  type SubscriptionOffer,
+  subscriptionKindOfCredential,
+} from "@/components/model-providers/subscription-offers";
+import { SubscriptionProviderCards } from "@/components/model-providers/subscription-provider-cards";
 import { PageLayout } from "@/components/page-layout";
 import {
   RESOURCE_ACCESS_FILTER_PARAMS,
@@ -100,18 +107,11 @@ import {
 import { useOauthClients } from "@/lib/oauth-clients.query";
 import { useOrganization } from "@/lib/organization.query";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
-import { CopilotOrganizationConnectDialog } from "./_parts/copilot-organization-connect-dialog";
-import { OrganizationSubscriptionCards } from "./_parts/organization-subscription-cards";
-import {
-  buildSubscriptionOffers,
-  type SubscriptionOffer,
-  subscriptionKindOfCredential,
-} from "./_parts/subscription-offers";
-import { SubscriptionProviderCards } from "./_parts/subscription-provider-cards";
 import {
   isEditApiKeyFormValid,
   subscriptionSignInRequired,
-} from "./edit-key-form.utils";
+} from "./_parts/edit-key-form.utils";
+import { OrganizationSubscriptionCards } from "./_parts/organization-subscription-cards";
 
 const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   name: "",

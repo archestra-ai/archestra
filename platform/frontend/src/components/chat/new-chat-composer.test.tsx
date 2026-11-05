@@ -6,7 +6,7 @@ const state = vi.hoisted(() => ({
   promptProps: null as Record<string, unknown> | null,
 }));
 
-vi.mock("@/app/chat/prompt-input", () => ({
+vi.mock("@/components/chat/prompt-input", () => ({
   default: (props: Record<string, unknown>) => {
     state.promptProps = props;
     return (

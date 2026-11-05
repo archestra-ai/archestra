@@ -14,10 +14,10 @@ import {
   Search,
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { LocalServerInstallDialog } from "@/app/mcp/registry/_parts/local-server-install-dialog";
-import { NoAuthInstallDialog } from "@/app/mcp/registry/_parts/no-auth-install-dialog";
-import { RemoteServerInstallDialog } from "@/app/mcp/registry/_parts/remote-server-install-dialog";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { LocalServerInstallDialog } from "@/components/mcp-registry/local-server-install-dialog";
+import { NoAuthInstallDialog } from "@/components/mcp-registry/no-auth-install-dialog";
+import { RemoteServerInstallDialog } from "@/components/mcp-registry/remote-server-install-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {

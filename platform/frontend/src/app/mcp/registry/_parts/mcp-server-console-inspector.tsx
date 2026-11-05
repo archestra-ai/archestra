@@ -21,6 +21,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import { filterMcpTools } from "@/components/mcp-registry/mcp-tool-search";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -41,7 +42,6 @@ import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useReloadMcpServerTools } from "@/lib/mcp/mcp-server.query";
 import { cn } from "@/lib/utils/tailwind";
 import { ConsoleState, Pulse, StatusItem } from "./mcp-server-console-ui";
-import { filterMcpTools } from "./mcp-tool-search";
 
 export type Inspector = ReturnType<typeof useInspector>;
 

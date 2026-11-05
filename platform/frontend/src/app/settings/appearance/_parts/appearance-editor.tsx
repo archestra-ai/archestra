@@ -2,12 +2,12 @@
 
 import type { ReactNode } from "react";
 import type { UseFormReturn } from "react-hook-form";
+import type { AppearanceSectionId } from "@/components/settings/appearance-pages";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { AppearanceDraft } from "./appearance-form";
-import type { AppearanceSectionId } from "./appearance-pages";
 import { BrandingAssets, BrandingPalette } from "./branding-controls";
 import {
   ChatErrorSettings,

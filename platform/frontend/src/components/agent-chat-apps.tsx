@@ -16,18 +16,18 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
-import {
-  ChannelDetailsDialog,
-  channelDisplayName,
-} from "@/app/settings/messaging-channels/_parts/channel-details-dialog";
-import { AgentEmailSettingsDialog } from "@/app/settings/messaging-channels/email/agent-email-settings-dialog";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentSlackBotSection } from "@/components/agent-slack-bot-section";
 import { ChannelIcon } from "@/components/channel-icon";
 import { CopyButton } from "@/components/copy-button";
 import { FormDialog } from "@/components/form-dialog";
+import { AgentEmailSettingsDialog } from "@/components/messaging-channels/agent-email-settings-dialog";
+import {
+  ChannelDetailsDialog,
+  channelDisplayName,
+} from "@/components/messaging-channels/channel-details-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
+import { useSettingsAreaAccess } from "@/components/settings/use-settings-area-access";
 import { SettingsSection } from "@/components/settings-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

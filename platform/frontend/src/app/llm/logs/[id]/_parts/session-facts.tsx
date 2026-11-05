@@ -4,6 +4,15 @@ import type { SupportedProvider } from "@archestra/shared";
 import { GitBranch, GitFork, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
+import { CopyButton } from "@/components/copy-button";
+import { formatCost } from "@/components/cost";
+import {
+  Fact,
+  FactSub,
+  FactsStrip,
+  FactValue,
+} from "@/components/log-detail/facts-strip";
+import type { InteractionSummary } from "@/components/log-detail/session-timeline";
 import {
   describeModelOrigin,
   formatCompactNumber,
@@ -13,16 +22,8 @@ import {
   shortModelName,
   sourceLabel,
   uniqueSources,
-} from "@/app/llm/logs/_parts/logs-table-format";
-import { MakerDisc } from "@/app/llm/logs/_parts/maker-disc";
-import { CopyButton } from "@/components/copy-button";
-import { formatCost } from "@/components/cost";
-import {
-  Fact,
-  FactSub,
-  FactsStrip,
-  FactValue,
-} from "@/components/log-detail/facts-strip";
+} from "@/components/logs/logs-table-format";
+import { MakerDisc } from "@/components/logs/maker-disc";
 import { SourceIcon } from "@/components/source-badge";
 import {
   HoverCard,
@@ -39,7 +40,6 @@ import { llmSessionHref } from "@/lib/interactions/llm-log-links";
 import { formatDate } from "@/lib/utils/date-time";
 import { formatElapsed, formatLatency } from "@/lib/utils/format-duration";
 import { cn } from "@/lib/utils/tailwind";
-import type { InteractionSummary } from "./session-timeline";
 
 export type SessionTotals = {
   inputTokens: number;

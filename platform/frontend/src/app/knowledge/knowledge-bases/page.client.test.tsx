@@ -83,10 +83,10 @@ vi.mock("./_parts/create-knowledge-base-dialog", () => ({
 vi.mock("./_parts/edit-knowledge-base-dialog", () => ({
   EditKnowledgeBaseDialog: () => null,
 }));
-vi.mock("./_parts/create-connector-dialog", () => ({
+vi.mock("@/components/knowledge/create-connector-dialog", () => ({
   CreateConnectorDialog: () => null,
 }));
-vi.mock("./_parts/edit-connector-dialog", () => ({
+vi.mock("@/components/knowledge/edit-connector-dialog", () => ({
   EditConnectorDialog: () => null,
 }));
 vi.mock("./_parts/use-chat-with-knowledge-base", () => ({

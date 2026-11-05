@@ -6,6 +6,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { QueryLoadError } from "@/components/query-load-error";
+import { AppearancePagesRow } from "@/components/settings/appearance-navigation";
+import {
+  APPEARANCE_PAGES,
+  type AppearancePageId,
+} from "@/components/settings/appearance-pages";
 import {
   SettingsSaveBar,
   SettingsSectionStack,
@@ -32,8 +37,6 @@ import {
   appearanceDefaults,
   appearancePatch,
 } from "./appearance-form";
-import { AppearancePagesRow } from "./appearance-navigation";
-import { APPEARANCE_PAGES, type AppearancePageId } from "./appearance-pages";
 import { validateChatLink } from "./chat-links-editor.utils";
 import { validateOnboardingWizard } from "./onboarding-wizards-editor.utils";
 

@@ -7,6 +7,13 @@ import {
 } from "@archestra/shared";
 import { Bot, Cpu, Globe, KeyRound, Users, UserX } from "lucide-react";
 import Image from "next/image";
+import { PersonAvatar } from "@/components/logs/hue-avatar";
+import {
+  isKnowledgeSource,
+  type LogSession,
+  sourceLabel,
+  uniqueSources,
+} from "@/components/logs/logs-table-format";
 import { ClientIcon } from "@/components/provider-icon";
 import { SourceIcon } from "@/components/source-badge";
 import {
@@ -19,13 +26,6 @@ import type { UnattributedReason } from "@/components/unattributed-user-badge";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { providerLogoUrl } from "@/lib/provider-logos";
 import { cn } from "@/lib/utils/tailwind";
-import { PersonAvatar } from "./hue-avatar";
-import {
-  isKnowledgeSource,
-  type LogSession,
-  sourceLabel,
-  uniqueSources,
-} from "./logs-table-format";
 
 // Who ran a session and through what, shared by the logs table's Session cell
 // and the session page's header: the client's tile with the acting person

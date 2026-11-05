@@ -108,27 +108,27 @@ vi.mock("@/components/oauth-confirmation-dialog", () => ({
     <StubDialog {...props} />
   ),
 }));
-vi.mock("./remote-server-install-dialog", () => ({
+vi.mock("@/components/mcp-registry/remote-server-install-dialog", () => ({
   RemoteServerInstallDialog: (props: StubDialogProps) => (
     <StubDialog {...props} />
   ),
 }));
-vi.mock("./no-auth-install-dialog", () => ({
+vi.mock("@/components/mcp-registry/no-auth-install-dialog", () => ({
   NoAuthInstallDialog: (props: StubDialogProps) => <StubDialog {...props} />,
 }));
-vi.mock("./local-server-install-dialog", () => ({
+vi.mock("@/components/mcp-registry/local-server-install-dialog", () => ({
   LocalServerInstallDialog: (props: StubDialogProps) => (
     <StubDialog {...props} />
   ),
 }));
 
+import type { CatalogItem } from "@/components/mcp-registry/mcp-server-card";
 import { useInitiateOAuth } from "@/lib/auth/oauth.query";
 import { useInstallMcpServer } from "@/lib/mcp/mcp-server.query";
 import {
   clearPendingInstall,
   setPendingInstall,
 } from "@/lib/mcp/pending-install";
-import type { CatalogItem } from "./mcp-server-card";
 import { useCatalogInstall } from "./use-catalog-install";
 
 const CATALOG_ID = "cat-oauth-1";

@@ -17,22 +17,22 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { GoogleDriveOAuthResultToast } from "@/app/knowledge/connectors/_parts/gdrive-connection-card";
-import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
-import { ConnectorStatusCell } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
-import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
-import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
 import { BulkResourceAccessDialog } from "@/components/bulk-resource-access-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
+import { ErrorBoundary } from "@/components/error-boundary";
 import {
   CollectionFilters,
   FilterBar,
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
+import { ConnectorTypeIcon } from "@/components/knowledge/connector-icons";
+import { ConnectorStatusCell } from "@/components/knowledge/connector-status-badge";
+import { CreateConnectorDialog } from "@/components/knowledge/create-connector-dialog";
+import { EditConnectorDialog } from "@/components/knowledge/edit-connector-dialog";
 import { LabelTags } from "@/components/label-tags";
 import {
   PERMANENT_DELETE_LABEL,

@@ -10,12 +10,17 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { FilterBar } from "@/components/filter-bar";
 import { PageLayout } from "@/components/page-layout";
 import { SearchInput } from "@/components/search-input";
+import {
+  blankSkillDraft,
+  buildSkillSaveBody,
+  type SkillDraft,
+} from "@/components/skills/skill-draft";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,11 +42,6 @@ import {
   type IndexedSkillSelection,
 } from "../_parts/import-skills-dialog";
 import { POPULAR_REPOS } from "../_parts/popular-repos";
-import {
-  blankSkillDraft,
-  buildSkillSaveBody,
-  type SkillDraft,
-} from "../_parts/skill-draft";
 import { SkillForm } from "../_parts/skill-form";
 import { SkillBackLink } from "../_parts/skill-page-shell";
 

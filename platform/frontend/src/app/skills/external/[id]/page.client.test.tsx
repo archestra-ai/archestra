@@ -9,7 +9,7 @@ vi.mock("@/lib/skills/skill.query", () => ({ useExternalMcpSkill: vi.fn() }));
 vi.mock("@/lib/hooks/use-app-name", () => ({
   useAppName: () => "Workspace",
 }));
-vi.mock("../../_parts/skill-content-editor", () => ({
+vi.mock("@/components/skills/skill-content-editor", () => ({
   SkillContentEditor: ({ readOnly }: { readOnly?: boolean }) => (
     <div data-testid="content" data-read-only={readOnly} />
   ),

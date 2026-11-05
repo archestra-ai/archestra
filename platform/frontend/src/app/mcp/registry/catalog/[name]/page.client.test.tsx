@@ -9,7 +9,7 @@ vi.mock("@/lib/mcp/external-mcp-catalog.query", () => ({
   useMcpRegistryServer: (name: string | null) => mockUseMcpRegistryServer(name),
 }));
 
-vi.mock("./readme-markdown", () => ({
+vi.mock("./_parts/readme-markdown", () => ({
   ReadmeMarkdown: ({ content }: { content: string }) => <pre>{content}</pre>,
 }));
 vi.mock("next/navigation");

@@ -1,7 +1,7 @@
 "use client";
 
 import { AppWindow, Bot, Boxes, type LucideIcon } from "lucide-react";
-import { AgentIdenticon } from "@/app/llm/logs/_parts/hue-avatar";
+import { AgentIdenticon } from "@/components/logs/hue-avatar";
 import { cn } from "@/lib/utils/tailwind";
 import type { GatewayOption, McpToolCallRow } from "./types";
 

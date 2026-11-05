@@ -38,7 +38,7 @@ vi.mock("../_parts/skill-access-fields", () => ({
     </button>
   ),
 }));
-vi.mock("../_parts/github-sync-panel", () => ({
+vi.mock("@/components/skills/github-sync-panel", () => ({
   GithubSyncPanel: () => <div data-testid="github-sync-panel" />,
   GithubSnapshotNotice: () => <div data-testid="github-snapshot-notice" />,
 }));

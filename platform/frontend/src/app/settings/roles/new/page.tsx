@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 const RoleCreatePage = dynamic(() =>
   // biome-ignore lint/style/noRestrictedImports: dual-licensed at request time

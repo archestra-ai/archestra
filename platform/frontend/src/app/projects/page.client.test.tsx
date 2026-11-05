@@ -110,7 +110,7 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("@/app/_parts/error-boundary", () => ({
+vi.mock("@/components/error-boundary", () => ({
   ErrorBoundary: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
   ),

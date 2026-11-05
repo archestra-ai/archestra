@@ -61,7 +61,7 @@ vi.mock("@/lib/teams/team.query", () => ({}));
 
 // Scope and team choice is its own form section, not what is under test.
 vi.mock(
-  "@/app/mcp/registry/_parts/select-mcp-server-credential-type-and-teams",
+  "@/components/mcp-registry/select-mcp-server-credential-type-and-teams",
   () => ({ SelectMcpServerCredentialTypeAndTeams: () => null }),
 );
 
@@ -79,7 +79,7 @@ vi.mock("@/components/mcp-catalog-icon", () => ({
   McpCatalogIcon: () => null,
 }));
 
-import type { CatalogItem } from "@/app/mcp/registry/_parts/mcp-server-card";
+import type { CatalogItem } from "@/components/mcp-registry/mcp-server-card";
 import { Dialog } from "@/components/ui/dialog";
 import { useMcpInstallOrchestrator } from "@/lib/mcp/use-mcp-install-orchestrator";
 import { ConnectView } from "./add-tools-view";

@@ -208,7 +208,7 @@ vi.mock("@/components/agent-icon", () => ({
   ),
 }));
 
-vi.mock("@/app/_parts/conversation-project-actions", () => ({
+vi.mock("@/components/chat/conversation-project-actions", () => ({
   // The real menu fetches and searches its own projects; this stand-in picks
   // the first fixture project.
   ConversationProjectActions: ({

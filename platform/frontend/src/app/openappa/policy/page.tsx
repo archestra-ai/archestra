@@ -1,4 +1,4 @@
-import { GuardrailsPolicyEditor } from "../guardrails-policy-editor";
+import { GuardrailsPolicyEditor } from "../_parts/guardrails-policy-editor";
 
 export default async function OpenAppaPolicyPage({
   searchParams,

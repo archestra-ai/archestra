@@ -1,12 +1,12 @@
 "use client";
 
+import { registryPageRequestFromUrl } from "@/components/mcp-registry/registry-list-query";
 import { appLifecycle } from "@/lib/app-lifecycle";
 import {
   MCP_REGISTRY_SEED_MARKER,
   startMcpRegistryEarlyRequests,
 } from "@/lib/mcp/mcp-registry.query";
 import { InternalMCPCatalog } from "./_parts/internal-mcp-catalog";
-import { registryPageRequestFromUrl } from "./_parts/registry-list-query";
 
 // A full page load whose server render could not seed the list evaluates this
 // module while the app is still checking the session: start the page's

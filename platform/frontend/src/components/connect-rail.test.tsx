@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { AuthMethodPicker } from "./connect-rail";
 
-vi.mock("@/app/_parts/use-settings-area-access");
+vi.mock("@/components/settings/use-settings-area-access");
 
 const METHODS = [
   {

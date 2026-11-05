@@ -26,7 +26,6 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { A2aRemoteAgentActions } from "@/components/a2a-remote-agent-actions";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
@@ -57,6 +56,7 @@ import {
   resolveDefaultAgentBadge,
 } from "@/components/default-agent-tag";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ErrorBoundary } from "@/components/error-boundary";
 import {
   CollectionFilters,
   FilterBar,
@@ -64,6 +64,7 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { ImportAgentDialog } from "@/components/import-agent-dialog";
+import { resolveCatalogEnvironmentLabel } from "@/components/mcp-registry/catalog-environment-label";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
@@ -146,13 +147,12 @@ import {
 } from "@/lib/organization.query";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { resolveCatalogEnvironmentLabel } from "../mcp/registry/_parts/catalog-environment-label";
-import { AgentActions } from "./agent-actions";
-import { AgentPinnedTiles } from "./agent-pinned-tiles";
+import { AgentActions } from "./_parts/agent-actions";
+import { AgentPinnedTiles } from "./_parts/agent-pinned-tiles";
 import {
   AGENTS_PAGE_DESCRIPTION,
   AgentsTableSkeleton,
-} from "./agents-skeleton";
+} from "./_parts/agents-skeleton";
 import {
   agentListQuery,
   automaticPinIds,
@@ -160,7 +160,7 @@ import {
   type CatalogFilters,
   pinnedAgentsQuery,
   pinsForViewer,
-} from "./catalog-queries";
+} from "./_parts/catalog-queries";
 
 type AgentListRow =
   archestraApiTypes.GetAgentCatalogResponses["200"]["data"][number];

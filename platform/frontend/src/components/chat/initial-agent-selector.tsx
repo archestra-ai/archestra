@@ -29,7 +29,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { AgentIcon } from "@/components/agent-icon";
 import {
   agentListHref,
@@ -38,6 +37,7 @@ import {
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { McpInstallDialogs } from "@/components/chat/mcp-install-dialogs";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
+import { ConnectorTypeIcon } from "@/components/knowledge/connector-icons";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { platformOwnedStyles } from "@/components/scope-vocabulary";
 import { Button } from "@/components/ui/button";

@@ -3,15 +3,15 @@
 import { Plus, Settings2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
+import {
+  setEnvironmentCreateParam,
+  setEnvironmentDefaultsParam,
+} from "@/components/mcp-registry/environment-edit-link";
+import { EnvironmentsSection } from "@/components/mcp-registry/environments-section";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnvironments } from "@/lib/environment.query";
-import {
-  setEnvironmentCreateParam,
-  setEnvironmentDefaultsParam,
-} from "../../mcp/registry/_parts/environment-edit-link";
-import { EnvironmentsSection } from "../../mcp/registry/_parts/environments-section";
 import { useSetSettingsAction } from "../layout";
 
 export default function EnvironmentsPageClient() {

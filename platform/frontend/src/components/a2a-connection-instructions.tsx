@@ -10,14 +10,14 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
-  resolveAdminDefaultBaseUrl,
-  resolveCandidateBaseUrls,
-} from "@/app/connection/connection-flow.utils";
-import { ConnectionUrlStep } from "@/app/connection/connection-url-step";
-import {
   CodeBlock,
   CodeBlockCopyButton,
 } from "@/components/ai-elements/code-block";
+import {
+  resolveAdminDefaultBaseUrl,
+  resolveCandidateBaseUrls,
+} from "@/components/connection/connection-flow.utils";
+import { ConnectionUrlStep } from "@/components/connection/connection-url-step";
 import { CurlExampleSection } from "@/components/curl-example-section";
 import { McpOauthManagement } from "@/components/mcp-oauth-management";
 import { SECRET_PLACEHOLDER_TOKEN } from "@/components/secret-copy-button";

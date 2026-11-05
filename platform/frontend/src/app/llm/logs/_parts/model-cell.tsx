@@ -2,19 +2,19 @@
 
 import type { SupportedProvider } from "@archestra/shared";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { UnstyledButton } from "@/components/ui/unstyled-button";
-import {
   describeModelOrigin,
   isFreeTierModel,
   type LogSession,
   passThroughProvider,
   shortModelName,
-} from "./logs-table-format";
-import { MakerDisc } from "./maker-disc";
+} from "@/components/logs/logs-table-format";
+import { MakerDisc } from "@/components/logs/maker-disc";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 
 /**
  * The session's model by the name people use for it, behind its maker's logo

@@ -1,9 +1,9 @@
 "use client";
 
+import { SkillContentEditor } from "@/components/skills/skill-content-editor";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import type { GithubPluginPreview } from "@/lib/plugins/plugin.query";
-import { SkillContentEditor } from "../../skills/_parts/skill-content-editor";
 
 /** Read-only look at a marketplace plugin that has not been imported yet. */
 export function PluginPreviewDialog({

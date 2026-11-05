@@ -34,15 +34,15 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ErrorBoundary } from "@/components/error-boundary";
+import { ExternalDocsLink } from "@/components/external-docs-link";
+import { FormDialog } from "@/components/form-dialog";
+import { ConnectorTypeIcon } from "@/components/knowledge/connector-icons";
 import {
   EmbeddingModelImageSupportNotice,
   embeddingModelSupportsImages,
-} from "@/app/knowledge/_parts/embedding-model-image-support-notice";
-import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
-import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { ExternalDocsLink } from "@/components/external-docs-link";
-import { FormDialog } from "@/components/form-dialog";
+} from "@/components/knowledge/embedding-model-image-support-notice";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import {
@@ -110,7 +110,7 @@ import {
   type ConnectionStatus,
   type SectionStatus,
   saveResultStatuses,
-} from "./knowledge-validation";
+} from "./_parts/knowledge-validation";
 
 const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   name: "",

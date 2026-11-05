@@ -4,10 +4,10 @@ import { Puzzle } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { PageLayout } from "@/components/page-layout";
+import { SkillContentEditor } from "@/components/skills/skill-content-editor";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { usePluginSkill } from "@/lib/skills/skill.query";
-import { SkillContentEditor } from "../../_parts/skill-content-editor";
 import {
   SkillBackLink,
   SkillNotFound,

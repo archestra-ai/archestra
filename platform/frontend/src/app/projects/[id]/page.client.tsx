@@ -20,14 +20,12 @@ import {
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import {
   collapseProjectChats,
   countRunsByTrigger,
   formatScheduledRecentRow,
-} from "@/app/projects/[id]/project-chats.utils";
-import { ProjectSchedulesSection } from "@/app/projects/[id]/project-schedules-section";
-import { runHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
+} from "@/app/projects/[id]/_parts/project-chats.utils";
+import { ProjectSchedulesSection } from "@/app/projects/[id]/_parts/project-schedules-section";
 import { AgentIcon } from "@/components/agent-icon";
 import { Response } from "@/components/ai-elements/response";
 import type { FileListItem } from "@/components/chat/file-list-section";
@@ -41,11 +39,13 @@ import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
 import { RunStateIcon } from "@/components/chat/run-state-icon";
 import { SelectableFileList } from "@/components/chat/selectable-file-list";
 import { CreatedByCell } from "@/components/created-by-cell";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { FileDropZone } from "@/components/files/file-drop-zone";
 import { FormDialog } from "@/components/form-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
+import { runHref } from "@/components/scheduled-tasks/run-row.utils";
 import { useResolveRunChat } from "@/components/scheduled-tasks/use-resolve-run-chat";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -84,7 +84,7 @@ import {
 import { useScheduleTriggerRuns } from "@/lib/schedule-trigger.query";
 import { sandboxArtifactUrl } from "@/lib/skills-sandbox/sandbox-file-preview";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { ProjectDeleteConfirmDialog } from "../project-delete-confirm-dialog";
+import { ProjectDeleteConfirmDialog } from "../_parts/project-delete-confirm-dialog";
 
 export default function ProjectDetailPageClient() {
   return (

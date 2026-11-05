@@ -4,8 +4,6 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle, Plus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { AccountPageAction } from "@/app/account/_parts/account-page-action";
-import { ClaudeCodeSubscription } from "@/app/account/_parts/claude-code-subscription";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -30,6 +28,8 @@ import {
   runtimeCredentialIconOf,
 } from "@/components/runtime-credential-icon";
 import { SearchInput } from "@/components/search-input";
+import { AccountPageAction } from "@/components/settings/account-page-action";
+import { ClaudeCodeSubscription } from "@/components/settings/claude-code-subscription";
 import { RuntimeCredentialDefinitionDialog } from "@/components/settings/runtime-credential-definition-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

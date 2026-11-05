@@ -7,6 +7,11 @@ import type { McpDeploymentStatusEntry } from "@archestra/shared";
 import { Check, CircleAlert, Copy, Info, Loader2 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
+import {
+  type DeploymentState,
+  DeploymentStatusDot,
+  getDeploymentLabel,
+} from "@/components/mcp-registry/deployment-status";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -16,11 +21,6 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { copyToClipboard } from "@/lib/clipboard";
 import { cn } from "@/lib/utils/tailwind";
-import {
-  type DeploymentState,
-  DeploymentStatusDot,
-  getDeploymentLabel,
-} from "./deployment-status";
 
 export type ConnState =
   | McpDeploymentStatusEntry["state"]

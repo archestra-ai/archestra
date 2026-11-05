@@ -3,6 +3,14 @@
 import { ArrowDownUp, BellOff, Check, ChevronDown, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { filterControlClass } from "@/components/filter-bar";
+import {
+  ATTENTION_FACET_STATUS_VALUES,
+  INSTALLED_STATUS_VALUE,
+  NOT_INSTALLED_STATUS_VALUE,
+  type SortKey,
+  selectedAttentionFacet,
+  withAttentionFacet,
+} from "@/components/mcp-registry/registry-list-params";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -21,14 +29,6 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { MCP_SERVER_ISSUE_KINDS } from "@/lib/mcp/mcp-server-issues";
 import { cn } from "@/lib/utils/tailwind";
-import {
-  ATTENTION_FACET_STATUS_VALUES,
-  INSTALLED_STATUS_VALUE,
-  NOT_INSTALLED_STATUS_VALUE,
-  type SortKey,
-  selectedAttentionFacet,
-  withAttentionFacet,
-} from "./registry-list-params";
 
 export {
   ATTENTION_FACET_STATUS_VALUES,

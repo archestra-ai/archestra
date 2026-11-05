@@ -1,5 +1,5 @@
 import { permanentRedirect } from "next/navigation";
-import { getLegacyA2aAgentsRedirect } from "./redirect";
+import { getLegacyA2aAgentsRedirect } from "./_parts/redirect";
 
 export const dynamic = "force-dynamic";
 

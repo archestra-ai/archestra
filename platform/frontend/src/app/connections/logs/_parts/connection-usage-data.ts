@@ -1,8 +1,8 @@
+import { agentLabel } from "@/components/connection/agent-icon";
 import type {
   AgentAdoption,
   AgentAdoptionMember,
 } from "@/lib/connected-client.query";
-import { agentLabel } from "./agent-icon";
 
 export type Dimension = "user" | "agent" | "service" | "kind";
 export type Metric = "calls" | "mcp" | "llm";

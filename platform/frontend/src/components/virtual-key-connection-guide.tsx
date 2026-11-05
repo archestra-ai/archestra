@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useId, useMemo, useState } from "react";
-import { PROVIDER_ORIGINAL_URLS } from "@/app/connection/proxy-client-instructions";
+import { PROVIDER_ORIGINAL_URLS } from "@/components/connection/proxy-client-instructions";
 import { SecretCopyButton } from "@/components/secret-copy-button";
 import {
   terminalActionClass,

@@ -1,5 +1,5 @@
-import { useCredentialsPage } from "@/app/_parts/use-credentials-page";
-import { useClaudeCodeAgent } from "@/app/account/_parts/claude-code-subscription";
+import { useClaudeCodeAgent } from "@/components/settings/claude-code-subscription";
+import { useCredentialsPage } from "@/components/settings/use-credentials-page";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 
 /**

@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 const RoleDetailPage = dynamic(() =>
   // biome-ignore lint/style/noRestrictedImports: dual-licensed at request time

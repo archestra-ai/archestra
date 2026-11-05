@@ -23,12 +23,12 @@ import {
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ChatListSkeleton } from "@/app/_parts/chat-list-skeleton";
-import { ConversationProjectActions } from "@/app/_parts/conversation-project-actions";
 import { groupSidebarTasks } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { ShortcutHint } from "@/app/_parts/shortcut-hint";
 import { AgentIcon } from "@/components/agent-icon";
 import { runActionConfirmCopy } from "@/components/agent-pages/agent-run-actions-copy";
 import { useConversationActions } from "@/components/chat/conversation-actions";
+import { ConversationProjectActions } from "@/components/chat/conversation-project-actions";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { RunStateIcon } from "@/components/chat/run-state-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";

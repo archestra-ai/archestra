@@ -19,11 +19,11 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { excludedSubagentsSummary } from "@/components/agent-form.utils";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import { agentConfigureHref } from "@/components/agent-pages/agent-page-config";
+import { ConnectorTypeIcon } from "@/components/knowledge/connector-icons";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { platformOwnedStyles } from "@/components/scope-vocabulary";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";

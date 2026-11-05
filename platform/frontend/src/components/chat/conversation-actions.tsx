@@ -48,10 +48,10 @@ import { lazyComponent } from "@/lib/utils/preloadable-lazy";
 // they open, not with the conversation page.
 const ConversationProjectActions = lazyComponent<
   ComponentProps<
-    typeof import("@/app/_parts/conversation-project-actions").ConversationProjectActions
+    typeof import("@/components/chat/conversation-project-actions").ConversationProjectActions
   >
 >(() =>
-  import("@/app/_parts/conversation-project-actions").then(
+  import("@/components/chat/conversation-project-actions").then(
     (m) => m.ConversationProjectActions,
   ),
 );

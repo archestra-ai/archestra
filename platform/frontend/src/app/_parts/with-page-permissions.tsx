@@ -4,12 +4,12 @@ import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { usePathname } from "next/navigation";
 import type React from "react";
 import { ForbiddenPage } from "@/app/_parts/forbidden-page";
+import { ClientRedirect } from "@/components/client-redirect";
 import {
   isSettingsAreaPath,
   settingsAreaFallbackUrl,
-} from "@/app/_parts/settings-navigation";
-import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
-import { ClientRedirect } from "@/components/client-redirect";
+} from "@/components/settings/settings-navigation";
+import { useSettingsAreaAccess } from "@/components/settings/use-settings-area-access";
 import { useHasPagePermissions } from "@/lib/auth/auth.query";
 import { useTeamLimitAccess } from "@/lib/limits-access";
 

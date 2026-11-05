@@ -24,6 +24,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { statusLabel } from "@/components/openappa/validation-parts";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -51,7 +52,6 @@ import {
   OpenAppaPageAction,
   OpenAppaPageHeader,
 } from "../../_parts/openappa-page-action";
-import { statusLabel } from "./validation-parts";
 
 // ===========================================================================
 // File page that speaks the runner's language: a quiet header, then the

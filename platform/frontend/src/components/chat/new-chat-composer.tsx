@@ -2,11 +2,11 @@
 
 import type { FileUIPart } from "ai";
 import { useMemo } from "react";
-import ArchestraPromptInput from "@/app/chat/prompt-input";
 import {
   AgentRuntimeCredentialPrompt,
   AgentRuntimePreflightError,
 } from "@/components/agent-run-credential-prompt";
+import ArchestraPromptInput from "@/components/chat/prompt-input";
 import { useChatAgents, useDefaultAgentId } from "@/lib/agent.query";
 import {
   runtimePreflightDisabledReason,

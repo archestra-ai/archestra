@@ -28,6 +28,35 @@ import { useRouter } from "next/navigation";
 import { memo, useState } from "react";
 import { RowClickShield } from "@/components/agent-pages/row-click-shield";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { useCanModifyCatalogItem } from "@/components/mcp-registry/catalog-edit-access";
+import { shouldShowMcpCardChatButton } from "@/components/mcp-registry/chat-button-visibility";
+import {
+  computeDeploymentStatusSummary,
+  DeploymentStatusIconDot,
+  type DeploymentStatusSummary,
+} from "@/components/mcp-registry/deployment-status";
+import type { DismissAlertTarget } from "@/components/mcp-registry/dismiss-alert-dialog";
+import { DismissAlertDialog } from "@/components/mcp-registry/dismiss-alert-dialog";
+import { McpCapabilityBadges } from "@/components/mcp-registry/mcp-capability-badges";
+import {
+  InstallBlockedTooltip,
+  installBlockedSummary,
+  useMcpInstallBlockers,
+} from "@/components/mcp-registry/mcp-credential-blockers";
+import { mcpServerAlertTarget } from "@/components/mcp-registry/mcp-server-alert-target";
+import { describeMcpIssueActionOwners } from "@/components/mcp-registry/mcp-server-attention-owner";
+import type {
+  RegistryListItem as CatalogItem,
+  InstalledServer,
+} from "@/components/mcp-registry/mcp-server-card";
+import { McpServerIssueBadge } from "@/components/mcp-registry/mcp-server-issue-badge";
+import { McpServerIssueNotice } from "@/components/mcp-registry/mcp-server-issue-notice";
+import { useRegistryPageServers } from "@/components/mcp-registry/registry-page-servers";
+import {
+  UninstallServerDialog,
+  type UninstallServerInstall,
+} from "@/components/mcp-registry/uninstall-server-dialog";
+import { useChatWithCatalogItem } from "@/components/mcp-registry/use-chat-with-catalog-item";
 import type { TableRowAction } from "@/components/table-row-actions";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
@@ -50,39 +79,10 @@ import {
   type McpServerIssue,
 } from "@/lib/mcp/mcp-server-issues";
 import { cn } from "@/lib/utils/tailwind";
-import { useCanModifyCatalogItem } from "./catalog-edit-access";
-import { shouldShowMcpCardChatButton } from "./chat-button-visibility";
-import {
-  computeDeploymentStatusSummary,
-  DeploymentStatusIconDot,
-  type DeploymentStatusSummary,
-} from "./deployment-status";
-import type { DismissAlertTarget } from "./dismiss-alert-dialog";
-import { DismissAlertDialog } from "./dismiss-alert-dialog";
-import { McpCapabilityBadges } from "./mcp-capability-badges";
-import {
-  InstallBlockedTooltip,
-  installBlockedSummary,
-  useMcpInstallBlockers,
-} from "./mcp-credential-blockers";
 import {
   getMcpServerActionModel,
   mcpServerAction,
 } from "./mcp-server-actions-model";
-import { mcpServerAlertTarget } from "./mcp-server-alert-target";
-import { describeMcpIssueActionOwners } from "./mcp-server-attention-owner";
-import type {
-  RegistryListItem as CatalogItem,
-  InstalledServer,
-} from "./mcp-server-card";
-import { McpServerIssueBadge } from "./mcp-server-issue-badge";
-import { McpServerIssueNotice } from "./mcp-server-issue-notice";
-import { useRegistryPageServers } from "./registry-page-servers";
-import {
-  UninstallServerDialog,
-  type UninstallServerInstall,
-} from "./uninstall-server-dialog";
-import { useChatWithCatalogItem } from "./use-chat-with-catalog-item";
 
 type McpServerTableProps = {
   items: CatalogItem[];

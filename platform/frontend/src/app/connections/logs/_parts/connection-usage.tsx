@@ -3,7 +3,8 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { ArrowLeft, ChevronRight, Search, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
-import { QueryChip } from "@/app/llm/(costs)/costs/cost-explorer-parts";
+import { AgentIcon } from "@/components/connection/agent-icon";
+import { QueryChip } from "@/components/cost-explorer/cost-explorer-parts";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { LogTime } from "@/components/log-time";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,6 @@ import { Input } from "@/components/ui/input";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import type { AgentAdoption } from "@/lib/connected-client.query";
 import { cn } from "@/lib/utils/tailwind";
-import { AgentIcon } from "./agent-icon";
 import {
   amount,
   type Dimension,

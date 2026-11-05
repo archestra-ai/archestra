@@ -27,10 +27,10 @@ import {
   agentListQuery,
   DEFAULT_CATALOG_FILTERS,
   pinnedAgentsQuery,
-} from "./catalog-queries";
+} from "./_parts/catalog-queries";
+import { streamAgentCatalog } from "./_parts/stream-agent-catalog";
+import { StreamedQueries } from "./_parts/streamed-queries";
 import AgentsPage from "./page.client";
-import { streamAgentCatalog } from "./stream-agent-catalog";
-import { StreamedQueries } from "./streamed-queries";
 
 vi.mock("next/navigation");
 vi.mock("sonner");

@@ -16,6 +16,20 @@ import {
 } from "react";
 import { toast } from "sonner";
 import {
+  LocalServerInstallDialog,
+  type LocalServerInstallResult,
+} from "@/components/mcp-registry/local-server-install-dialog";
+import type { CatalogItem } from "@/components/mcp-registry/mcp-server-card";
+import {
+  NoAuthInstallDialog,
+  type NoAuthInstallResult,
+} from "@/components/mcp-registry/no-auth-install-dialog";
+import {
+  RemoteServerInstallDialog,
+  type RemoteServerInstallResult,
+} from "@/components/mcp-registry/remote-server-install-dialog";
+import type { McpServerInstallScope } from "@/components/mcp-registry/select-mcp-server-credential-type-and-teams";
+import {
   OAuthConfirmationDialog,
   type OAuthInstallResult,
 } from "@/components/oauth-confirmation-dialog";
@@ -59,20 +73,6 @@ import {
 import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
 import websocketService from "@/lib/websocket/websocket";
 import { selectInstallSuccessToastIds } from "./install-success-toasts";
-import {
-  LocalServerInstallDialog,
-  type LocalServerInstallResult,
-} from "./local-server-install-dialog";
-import type { CatalogItem } from "./mcp-server-card";
-import {
-  NoAuthInstallDialog,
-  type NoAuthInstallResult,
-} from "./no-auth-install-dialog";
-import {
-  RemoteServerInstallDialog,
-  type RemoteServerInstallResult,
-} from "./remote-server-install-dialog";
-import type { McpServerInstallScope } from "./select-mcp-server-credential-type-and-teams";
 
 export interface UseCatalogInstallResult {
   /** Add a personal connection (skips dialog when no config is needed). */

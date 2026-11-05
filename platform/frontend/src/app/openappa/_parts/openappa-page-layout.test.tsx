@@ -55,7 +55,7 @@ vi.mock("@/lib/hooks/use-app-name", () => ({
 const setupState = vi.hoisted(() => ({
   isFresh: false as boolean | undefined,
 }));
-vi.mock("./use-openappa-setup-state", () => ({
+vi.mock("@/components/openappa/use-openappa-setup-state", () => ({
   useOpenAppaSetupState: () => setupState,
 }));
 

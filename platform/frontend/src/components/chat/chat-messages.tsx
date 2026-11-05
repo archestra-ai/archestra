@@ -34,7 +34,6 @@ import {
   useState,
 } from "react";
 import { useStickToBottomContext } from "use-stick-to-bottom";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import {
   Conversation,
   ConversationContent,
@@ -69,6 +68,7 @@ import { McpElicitationCard } from "@/components/chat/mcp-elicitation-card";
 import { isChoiceElicitationRequest } from "@/components/chat/mcp-elicitation-fields";
 import { McpTaskProvider } from "@/components/chat/mcp-task-context";
 import { RuntimeCredentialSetupTool } from "@/components/chat/runtime-credential-setup-tool";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { ExecutedAsBadge } from "@/components/executed-as-badge";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import {

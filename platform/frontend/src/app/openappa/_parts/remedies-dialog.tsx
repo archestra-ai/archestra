@@ -3,6 +3,7 @@
 import { Search, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { Fragment, useState } from "react";
+import { policyLineHref } from "@/components/openappa/policy-line-href";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,7 +27,6 @@ import type { RemediesView, Remedy } from "@/lib/openappa-remedies.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 import { batteryDisplayName } from "./battery-display-name";
-import { policyLineHref } from "./policy-line-href";
 import {
   type CoverChip,
   coverChips,

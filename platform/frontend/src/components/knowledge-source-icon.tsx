@@ -2,7 +2,7 @@ import { Database } from "lucide-react";
 import {
   ConnectorTypeIcon,
   hasConnectorIcon,
-} from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
+} from "@/components/knowledge/connector-icons";
 
 /**
  * A knowledge source's glyph: the connector's own logo where there is one,

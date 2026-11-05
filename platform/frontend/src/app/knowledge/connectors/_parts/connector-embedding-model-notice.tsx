@@ -1,11 +1,11 @@
 "use client";
 
 import type { ConnectorType } from "@archestra/shared";
-import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import {
   EmbeddingModelImageSupportNotice,
   embeddingModelSupportsImages,
-} from "@/app/knowledge/_parts/embedding-model-image-support-notice";
+} from "@/components/knowledge/embedding-model-image-support-notice";
+import { useSettingsAreaAccess } from "@/components/settings/use-settings-area-access";
 import { useSession } from "@/lib/auth/auth.query";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import { useOrganization } from "@/lib/organization.query";

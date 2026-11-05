@@ -14,12 +14,12 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { OsLogos } from "@/app/connection/os-logos";
 import { BulkResourceAccessDialog } from "@/components/bulk-resource-access-dialog";
+import { OsLogos } from "@/components/connection/os-logos";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
+import { ErrorBoundary } from "@/components/error-boundary";
 import {
   CollectionFilters,
   FilterBar,
@@ -28,6 +28,10 @@ import {
 } from "@/components/filter-bar";
 import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
+import {
+  PluginSourceIcon,
+  pluginRepository,
+} from "@/components/plugins/plugin-source-icon";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
 import {
@@ -89,10 +93,6 @@ import {
   pluginDetailHref,
   resolvePluginInstallSelection,
 } from "./_parts/plugin-page-config";
-import {
-  PluginSourceIcon,
-  pluginRepository,
-} from "./_parts/plugin-source-icon";
 import { PluginSourceInfo } from "./_parts/plugin-source-info";
 
 const PLUGINS_DESCRIPTION =

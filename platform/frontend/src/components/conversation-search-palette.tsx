@@ -17,17 +17,17 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
+import { RunStateIcon } from "@/components/chat/run-state-icon";
+import { ProjectBadgeButton } from "@/components/project-badge-button";
+import { useSettingsTabs } from "@/components/settings/settings-tabs";
+import { useNavPermissionMap } from "@/components/settings/use-settings-area-access";
 import {
   AUTO_ROUTING_URL,
   chatsNavItems,
   contentNavGroups,
   isNavItemPermitted,
-} from "@/app/_parts/studio-nav";
-import { useNavPermissionMap } from "@/app/_parts/use-settings-area-access";
-import { useSettingsTabs } from "@/app/settings/settings-tabs";
-import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
-import { RunStateIcon } from "@/components/chat/run-state-icon";
-import { ProjectBadgeButton } from "@/components/project-badge-button";
+} from "@/components/studio-nav";
 import { Badge } from "@/components/ui/badge";
 import {
   CommandDialog,

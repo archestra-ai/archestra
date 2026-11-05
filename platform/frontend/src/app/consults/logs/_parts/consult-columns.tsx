@@ -4,8 +4,10 @@ import { isEncryptedChatUnavailableContent } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Check, Clock, type LucideIcon, X } from "lucide-react";
 import type { ReactNode } from "react";
-import { AgentIdenticon } from "@/app/llm/logs/_parts/hue-avatar";
-import { formatSessionSpan } from "@/app/llm/logs/_parts/logs-table-format";
+import type { ConsultView } from "@/components/logs/consult-details";
+import { OUTCOME_LABEL } from "@/components/logs/consult-outcome-badge";
+import { AgentIdenticon } from "@/components/logs/hue-avatar";
+import { formatSessionSpan } from "@/components/logs/logs-table-format";
 import {
   Tooltip,
   TooltipContent,
@@ -15,8 +17,6 @@ import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { formatCompactRelativeTime, formatDate } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
-import type { ConsultView } from "./consult-details";
-import { OUTCOME_LABEL } from "./consult-outcome-badge";
 
 /**
  * The consults table's columns. The latency bar is scaled against the slowest

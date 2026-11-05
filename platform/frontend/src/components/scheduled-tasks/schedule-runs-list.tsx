@@ -16,7 +16,7 @@ import { useState } from "react";
 import {
   runHref,
   runRowKind,
-} from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
+} from "@/components/scheduled-tasks/run-row.utils";
 import { ScheduleRunBlockedDetails } from "@/components/scheduled-tasks/schedule-run-blocked-details";
 import {
   scheduleRunDuration,

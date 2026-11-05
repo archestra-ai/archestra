@@ -39,7 +39,7 @@ vi.mock("@/components/loading", () => ({
   LoadingState: () => <div data-testid="loading-spinner">Loading</div>,
 }));
 
-vi.mock("@/app/_parts/error-boundary", () => ({
+vi.mock("@/components/error-boundary", () => ({
   ErrorBoundary: ({ children }: { children: React.ReactNode }) => children,
 }));
 

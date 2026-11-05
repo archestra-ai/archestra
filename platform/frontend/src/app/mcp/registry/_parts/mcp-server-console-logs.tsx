@@ -11,14 +11,14 @@ import {
 import { ArrowDown } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDeploymentLogAutoScroll } from "@/components/deployment-console";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { hasNoPodToStream } from "@/components/mcp-registry/logs-streaming-indicator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
 import websocketService from "@/lib/websocket/websocket";
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { hasNoPodToStream } from "./logs-streaming-indicator";
 // SPDX-SnippetEnd
 import {
   ConsoleState,

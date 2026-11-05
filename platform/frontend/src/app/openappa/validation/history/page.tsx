@@ -1,13 +1,13 @@
 "use client";
 
 import { useMemo } from "react";
+import { useValidation } from "@/components/openappa/validation-context";
+import { validationName } from "@/components/openappa/validation-run-history";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   OpenAppaPageHeader,
   useOpenAppaDetailHeader,
 } from "../../_parts/openappa-page-action";
-import { validationName } from "../../_parts/validation-run-history";
-import { useValidation } from "../_parts/validation-context";
 import { ValidationRunMatrix } from "../_parts/validation-run-matrix";
 import { useValidationRunner } from "../_parts/validation-runner";
 

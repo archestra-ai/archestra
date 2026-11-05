@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { InteractionSummary } from "@/components/log-detail/session-timeline";
 import {
   useInteraction,
   useInteractionSummaries,
 } from "@/lib/interactions/interaction.query";
-import type { InteractionSummary } from "./session-timeline";
 import { useSettledOnce } from "./use-session-tool-calls";
 
 /**

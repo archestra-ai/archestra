@@ -9,15 +9,15 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useMemo, useState } from "react";
-import { sessionTitleOf } from "@/app/llm/logs/_parts/logs-table-format";
-import { RequestDetails } from "@/app/llm/logs/[id]/_parts/request-details";
-import { RequestWaterfall } from "@/app/llm/logs/[id]/_parts/request-waterfall";
+import { RequestDetails } from "@/components/log-detail/request-details";
+import { RequestWaterfall } from "@/components/log-detail/request-waterfall";
 import {
   type InteractionSummary,
   type Timeline,
   toolCallSpanKey,
-} from "@/app/llm/logs/[id]/_parts/session-timeline";
-import { DETAILS_PANE_DEFAULT_HEIGHT } from "@/app/llm/logs/[id]/_parts/split-handle";
+} from "@/components/log-detail/session-timeline";
+import { DETAILS_PANE_DEFAULT_HEIGHT } from "@/components/log-detail/split-handle";
+import { sessionTitleOf } from "@/components/logs/logs-table-format";
 import { Button } from "@/components/ui/button";
 import { InlineNotice } from "@/components/ui/inline-notice";
 import { UnstyledButton } from "@/components/ui/unstyled-button";

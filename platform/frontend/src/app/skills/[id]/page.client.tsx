@@ -16,6 +16,27 @@ import { CreatedByCell } from "@/components/created-by-cell";
 import { GitSourceTooltip } from "@/components/git/git-source-card";
 import { PageLayout } from "@/components/page-layout";
 import { ResourcePermissions } from "@/components/resource-permissions";
+import {
+  GithubSnapshotNotice,
+  GithubSyncPanel,
+  type SkillDetail,
+} from "@/components/skills/github-sync-panel";
+import {
+  buildSkillSaveBody,
+  isSkillDraftDirty,
+  isSyncedGithubSkill,
+  type SkillDraft,
+  skillDraftFromSkill,
+} from "@/components/skills/skill-draft";
+import {
+  resolveSkillDetailSection,
+  SKILL_DESCRIPTION_FALLBACK,
+  SKILL_DETAIL_SECTIONS,
+  SKILL_SECTION_LABELS,
+  type SkillDetailSection,
+  skillDetailHref,
+  skillGithubSourceRepo,
+} from "@/components/skills/skill-page-config";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,31 +68,10 @@ import { useSkillAccess } from "@/lib/skills/use-skill-access";
 import { ChatWithSkillButton } from "../_parts/chat-with-skill-button";
 import { DeleteSkillDialog } from "../_parts/delete-skill-dialog";
 import {
-  GithubSnapshotNotice,
-  GithubSyncPanel,
-  type SkillDetail,
-} from "../_parts/github-sync-panel";
-import {
   getSkillActionModel,
   skillAction,
 } from "../_parts/skill-actions-model";
-import {
-  buildSkillSaveBody,
-  isSkillDraftDirty,
-  isSyncedGithubSkill,
-  type SkillDraft,
-  skillDraftFromSkill,
-} from "../_parts/skill-draft";
 import { SkillForm } from "../_parts/skill-form";
-import {
-  resolveSkillDetailSection,
-  SKILL_DESCRIPTION_FALLBACK,
-  SKILL_DETAIL_SECTIONS,
-  SKILL_SECTION_LABELS,
-  type SkillDetailSection,
-  skillDetailHref,
-  skillGithubSourceRepo,
-} from "../_parts/skill-page-config";
 import {
   SkillBackLink,
   SkillNotFound,

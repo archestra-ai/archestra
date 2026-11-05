@@ -5,12 +5,12 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMemo } from "react";
 import { PageLayout } from "@/components/page-layout";
+import { SkillContentEditor } from "@/components/skills/skill-content-editor";
 import { Badge } from "@/components/ui/badge";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { composeManifest } from "@/lib/skills/manifest-compose";
 import { useExternalMcpSkill } from "@/lib/skills/skill.query";
-import { SkillContentEditor } from "../../_parts/skill-content-editor";
 import {
   SkillBackLink,
   SkillNotFound,

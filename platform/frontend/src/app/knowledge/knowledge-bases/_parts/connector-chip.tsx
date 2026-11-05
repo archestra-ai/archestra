@@ -3,8 +3,8 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
-import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
+import { ConnectorStatusDot } from "@/components/knowledge/connector-enabled-dot";
+import { ConnectorTypeIcon } from "@/components/knowledge/connector-icons";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,

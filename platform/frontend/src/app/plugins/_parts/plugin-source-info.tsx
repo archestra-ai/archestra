@@ -1,6 +1,7 @@
 import { GIT_PROVIDER_LABELS } from "@archestra/shared";
 import { Pencil } from "lucide-react";
 import { GitProviderLogo } from "@/components/git/git-setup-chrome";
+import { pluginRepository } from "@/components/plugins/plugin-source-icon";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -11,7 +12,6 @@ import type { PluginListItem } from "@/lib/plugins/plugin.query";
 import { repositoryLabel } from "@/lib/skills/skill-source";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
-import { pluginRepository } from "./plugin-source-icon";
 
 export function PluginSourceInfo({
   plugin,

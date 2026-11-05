@@ -3,6 +3,8 @@
 
 "use client";
 
+import { useCanModifyCatalogItem } from "@/components/mcp-registry/catalog-edit-access";
+import type { CatalogItem } from "@/components/mcp-registry/mcp-server-card";
 import {
   Select,
   SelectContent,
@@ -14,8 +16,6 @@ import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { useUpdateInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useOrganization } from "@/lib/organization.query";
-import { useCanModifyCatalogItem } from "./catalog-edit-access";
-import type { CatalogItem } from "./mcp-server-card";
 
 type HibernationMode = "inherit" | "enabled" | "disabled";
 

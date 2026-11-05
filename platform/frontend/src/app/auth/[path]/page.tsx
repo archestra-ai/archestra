@@ -1,6 +1,6 @@
 import { Suspense } from "react";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { AuthPageWithInvitationCheck } from "@/app/auth/[path]/auth-page-with-invitation-check";
+import { AuthPageWithInvitationCheck } from "@/app/auth/[path]/_parts/auth-page-with-invitation-check";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { LoadingState } from "@/components/loading";
 
 export const dynamicParams = false;

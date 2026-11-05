@@ -5,7 +5,7 @@ import { useState } from "react";
 import {
   type McpServerInstallScope,
   SelectMcpServerCredentialTypeAndTeams,
-} from "@/app/mcp/registry/_parts/select-mcp-server-credential-type-and-teams";
+} from "@/components/mcp-registry/select-mcp-server-credential-type-and-teams";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

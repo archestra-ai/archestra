@@ -124,6 +124,25 @@
     },
     {
       "includes": [
+        "frontend/src/app/**/*.ts",
+        "frontend/src/app/**/*.tsx",
+        "!frontend/src/app/**/_*/**",
+        "!frontend/src/app/**/page.*",
+        "!frontend/src/app/**/layout.*",
+        "!frontend/src/app/**/route.*",
+        "!frontend/src/app/**/loading.*",
+        "!frontend/src/app/**/error.*",
+        "!frontend/src/app/**/not-found.*",
+        "!frontend/src/app/**/global-error.*",
+        "!frontend/src/app/**/template.*",
+        "!frontend/src/app/**/default.*",
+        "!frontend/src/app/**/forbidden.*",
+        "!frontend/src/app/**/unauthorized.*"
+      ],
+      "plugins": ["./tools/biome-plugins/route-file-placement.grit"]
+    },
+    {
+      "includes": [
         "frontend/src/**/*.hook.ts",
         "frontend/src/**/*.hook.tsx",
         "frontend/src/**/*.hook.test.ts",
@@ -245,7 +264,7 @@
     },
     {
       "includes": [
-        "frontend/src/app/consults/logs/_parts/consult-detail-sheet.tsx",
+        "frontend/src/components/logs/consult-detail-sheet.tsx",
         "frontend/src/app/consults/logs/_parts/consults-table.tsx",
         "frontend/src/lib/openappa/external-consults.query.ts"
       ],

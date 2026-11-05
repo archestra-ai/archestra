@@ -90,7 +90,7 @@ From `platform/`:
 
 ```sh
 pnpm --dir backend exec vitest run src/routes/client-connection/decision.client-connection.route.test.ts src/services/agent-connection-setup/bootstrap/client-connection-installer.unit.test.ts
-pnpm --dir frontend exec vitest run src/app/connection/client-connection-approval.test.tsx src/app/connection/connect-command-panel.test.tsx
+pnpm --dir frontend exec vitest run src/app/connection/_parts/client-connection-approval.test.tsx src/app/connection/_parts/connect-command-panel.test.tsx
 ```
 
 For a real run, use Tilt, fetch the installer from the local frontend, and run it

@@ -8,14 +8,11 @@ vi.mock("@/lib/knowledge/connector.query", () => ({
   useConnectorRun: (args: unknown) => mockUseConnectorRun(args),
 }));
 
-vi.mock(
-  "@/app/knowledge/knowledge-bases/_parts/connector-status-badge",
-  () => ({
-    ConnectorStatusBadge: ({ status }: { status: string }) => (
-      <span>{status}</span>
-    ),
-  }),
-);
+vi.mock("@/components/knowledge/connector-status-badge", () => ({
+  ConnectorStatusBadge: ({ status }: { status: string }) => (
+    <span>{status}</span>
+  ),
+}));
 
 vi.mock("@/components/ui/dialog", () => ({
   Dialog: ({ children }: { children: React.ReactNode }) => (

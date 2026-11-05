@@ -11,7 +11,7 @@ vi.mock("@/lib/environment.query", () => ({ useEnvironments: vi.fn() }));
 
 // The section under the action button is exercised by its own tests; here we
 // only care about what the page registers as the page-level action.
-vi.mock("../../mcp/registry/_parts/environments-section", () => ({
+vi.mock("@/components/mcp-registry/environments-section", () => ({
   EnvironmentsSection: () => null,
 }));
 

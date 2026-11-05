@@ -18,7 +18,7 @@ vi.mock("@/lib/mcp/mcp-server.query", () => ({
   useMcpServers: useMcpServersMock,
   useMcpDeploymentStatuses: () => ({ statuses: {}, state: "ready" }),
 }));
-vi.mock("@/app/mcp/registry/_parts/mcp-logs-dialog", () => ({
+vi.mock("@/components/mcp-registry/mcp-logs-dialog", () => ({
   McpLogsDialog: () => null,
 }));
 

@@ -1,6 +1,10 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import {
+  MessagingProvidersRow,
+  useMessagingProviders,
+} from "@/components/messaging-channels/messaging-providers";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -8,10 +12,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils/tailwind";
-import {
-  MessagingProvidersRow,
-  useMessagingProviders,
-} from "./_parts/messaging-providers";
 
 /**
  * A provider's page. The settings sidebar lists the providers under

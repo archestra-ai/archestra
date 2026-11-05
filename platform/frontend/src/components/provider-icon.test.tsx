@@ -4,9 +4,9 @@ import {
 } from "@archestra/shared";
 import { render, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { ClientIcon as ConnectTileIcon } from "@/app/connection/client-icon";
-import { CONNECT_CLIENTS } from "@/app/connection/clients";
-import { AgentIcon } from "@/app/connections/logs/_parts/agent-icon";
+import { AgentIcon } from "@/components/connection/agent-icon";
+import { ClientIcon as ConnectTileIcon } from "@/components/connection/client-icon";
+import { CONNECT_CLIENTS } from "@/components/connection/clients";
 import { ClientFilterOption } from "@/components/log-filter-option";
 import { ClientIcon } from "./provider-icon";
 

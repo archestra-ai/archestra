@@ -3,6 +3,10 @@
 import { isModelPoolProvider, type SupportedProvider } from "@archestra/shared";
 import { useMemo } from "react";
 import type { UseFormReturn } from "react-hook-form";
+import {
+  isPoolableModel,
+  poolModelName,
+} from "@/components/model-pools/model-name";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
@@ -10,7 +14,6 @@ import {
   type ModelPoolInput,
   useModelPools,
 } from "@/lib/model-pools.query";
-import { isPoolableModel, poolModelName } from "./model-name";
 
 /**
  * A pool's members, listed by order. Order 1 is tried first; members of one

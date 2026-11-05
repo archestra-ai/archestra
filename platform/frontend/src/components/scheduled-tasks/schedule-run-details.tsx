@@ -4,7 +4,7 @@ import Link from "next/link";
 import {
   runHref,
   runRowKind,
-} from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
+} from "@/components/scheduled-tasks/run-row.utils";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import type { ScheduleTriggerRun } from "@/lib/schedule-trigger.query";

@@ -3,16 +3,6 @@
 import { type AgentType, MCP_GATEWAY_OAUTH_SCOPE } from "@archestra/shared";
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
-import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
-import {
-  resolveAdminDefaultBaseUrl,
-  resolveCandidateBaseUrls,
-} from "@/app/connection/connection-flow.utils";
-import {
-  GenericAuthRow,
-  type SelectedGatewayToken,
-} from "@/app/connection/mcp-client-instructions";
-import { TerminalBlock } from "@/app/connection/terminal-block";
 import { agentConfigureHref } from "@/components/agent-pages/agent-page-config";
 import {
   type AuthMethodOption,
@@ -23,12 +13,22 @@ import {
   CredentialSelect,
   OauthTokenRequest,
 } from "@/components/connect-rail";
+import {
+  resolveAdminDefaultBaseUrl,
+  resolveCandidateBaseUrls,
+} from "@/components/connection/connection-flow.utils";
+import {
+  GenericAuthRow,
+  type SelectedGatewayToken,
+} from "@/components/connection/mcp-client-instructions";
+import { TerminalBlock } from "@/components/connection/terminal-block";
 import { CreateManagedOAuthClientDialog } from "@/components/create-managed-oauth-client-dialog";
 import {
   type CreatedCredentials,
   OAuthClientCreatedDialog,
 } from "@/components/oauth-client-created-dialog";
 import { SECRET_PLACEHOLDER_TOKEN } from "@/components/secret-copy-button";
+import { useSettingsAreaAccess } from "@/components/settings/use-settings-area-access";
 import { Button } from "@/components/ui/button";
 import {
   CodeExample,

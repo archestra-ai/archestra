@@ -1,11 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
-import type { LocalServerInstallResult } from "@/app/mcp/registry/_parts/local-server-install-dialog";
-import type { CatalogItem } from "@/app/mcp/registry/_parts/mcp-server-card";
-import type { NoAuthInstallResult } from "@/app/mcp/registry/_parts/no-auth-install-dialog";
-import type { RemoteServerInstallResult } from "@/app/mcp/registry/_parts/remote-server-install-dialog";
-import type { McpServerInstallScope } from "@/app/mcp/registry/_parts/select-mcp-server-credential-type-and-teams";
+import type { LocalServerInstallResult } from "@/components/mcp-registry/local-server-install-dialog";
+import type { CatalogItem } from "@/components/mcp-registry/mcp-server-card";
+import type { NoAuthInstallResult } from "@/components/mcp-registry/no-auth-install-dialog";
+import type { RemoteServerInstallResult } from "@/components/mcp-registry/remote-server-install-dialog";
+import type { McpServerInstallScope } from "@/components/mcp-registry/select-mcp-server-credential-type-and-teams";
 import type { OAuthInstallResult } from "@/components/oauth-confirmation-dialog";
 import { useSession } from "@/lib/auth/auth.query";
 import { useInitiateOAuth } from "@/lib/auth/oauth.query";

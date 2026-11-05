@@ -10,6 +10,7 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { policyLineHref } from "@/components/openappa/policy-line-href";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { DataTable } from "@/components/ui/data-table";
@@ -21,7 +22,6 @@ import {
 } from "@/lib/openappa-coverage.query";
 import { GovernedByPill } from "./coverage-badges";
 import { ImproveChatButton } from "./improve-chat-button";
-import { policyLineHref } from "./policy-line-href";
 
 type ToolTableProps = {
   catalogId?: string;

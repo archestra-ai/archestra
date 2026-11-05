@@ -2,11 +2,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useFieldArray, useForm } from "react-hook-form";
+import { HeadersReadOnlyTable } from "@/components/headers-read-only-table";
 import {
   formSchema,
   type McpCatalogFormValues,
-} from "@/app/mcp/registry/_parts/mcp-catalog-form.types";
-import { HeadersReadOnlyTable } from "@/components/headers-read-only-table";
+} from "@/components/mcp-registry/mcp-catalog-form.types";
 
 describe("HeadersReadOnlyTable", () => {
   it("shows a header-name error that blocks form submission", async () => {

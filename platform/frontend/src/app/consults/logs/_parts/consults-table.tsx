@@ -9,6 +9,14 @@ import {
   FilterBar,
   FilterSelect,
 } from "@/components/filter-bar";
+import {
+  type ConsultView,
+  toConsultView,
+} from "@/components/logs/consult-details";
+import {
+  ALL_OUTCOMES,
+  OUTCOME_LABEL,
+} from "@/components/logs/consult-outcome-badge";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
@@ -25,8 +33,6 @@ import {
   useExternalConsults,
 } from "@/lib/openappa/external-consults.query";
 import { buildConsultColumns } from "./consult-columns";
-import { type ConsultView, toConsultView } from "./consult-details";
-import { ALL_OUTCOMES, OUTCOME_LABEL } from "./consult-outcome-badge";
 
 export function ConsultsTable() {
   const { searchParams, updateQueryParams: updateUrlParams } =

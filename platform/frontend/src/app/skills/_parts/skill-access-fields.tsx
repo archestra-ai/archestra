@@ -8,7 +8,7 @@ import {
 } from "@/components/agent-labels";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { InitialResourcePermissions } from "@/components/initial-resource-permissions";
-import type { SkillDraft } from "./skill-draft";
+import type { SkillDraft } from "@/components/skills/skill-draft";
 
 /**
  * The access half of a skill: initial grants and which

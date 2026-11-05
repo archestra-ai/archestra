@@ -1,7 +1,7 @@
-import { LocalServerInstallDialog } from "@/app/mcp/registry/_parts/local-server-install-dialog";
-import { ManageUsersDialog } from "@/app/mcp/registry/_parts/manage-users-dialog";
-import { NoAuthInstallDialog } from "@/app/mcp/registry/_parts/no-auth-install-dialog";
-import { RemoteServerInstallDialog } from "@/app/mcp/registry/_parts/remote-server-install-dialog";
+import { LocalServerInstallDialog } from "@/components/mcp-registry/local-server-install-dialog";
+import { ManageUsersDialog } from "@/components/mcp-registry/manage-users-dialog";
+import { NoAuthInstallDialog } from "@/components/mcp-registry/no-auth-install-dialog";
+import { RemoteServerInstallDialog } from "@/components/mcp-registry/remote-server-install-dialog";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
 import type { McpInstallOrchestrator } from "@/lib/mcp/use-mcp-install-orchestrator";
 

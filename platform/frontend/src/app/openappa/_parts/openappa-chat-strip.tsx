@@ -16,6 +16,10 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppaKeeperIcon } from "@/components/appa-keeper-icon";
+import {
+  OpenAppaChatButton,
+  useOpenAppaChatLaunch,
+} from "@/components/openappa/openappa-chat-button";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -27,10 +31,6 @@ import {
 import { PermissionButton } from "@/components/ui/permission-button";
 import { OPENAPPA_SUGGESTED_LAUNCH_PROMPTS } from "@/lib/openappa-chat-prompts";
 import { cn } from "@/lib/utils/tailwind";
-import {
-  OpenAppaChatButton,
-  useOpenAppaChatLaunch,
-} from "./openappa-chat-button";
 
 type SuggestedPromptKey = keyof typeof OPENAPPA_SUGGESTED_LAUNCH_PROMPTS;
 

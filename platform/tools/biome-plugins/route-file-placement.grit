@@ -1,0 +1,32 @@
+// Project-specific Biome (GritQL) lint plugin — route file placement.
+//
+// A route folder under `frontend/src/app` holds only Next.js route files
+// (`page`, `layout`, `route`, `loading`, `error`, ...), their `page.client`
+// companion, and tests of those. Components, hooks, utils and types that
+// belong to one route go in its `_parts/` folder; ones used by more than one
+// route go in `src/components/`.
+//
+// Scoped in biome.json to TypeScript files under `frontend/src/app` outside
+// any `_` folder, minus the route file names, so it only ever sees a file
+// that sits in the wrong place. It reports once per file, anchored on the
+// first import (or on the whole file when there is none). Plugin diagnostics
+// are not suppressible via biome-ignore: move the file.
+//
+// Conventions: platform/frontend/AGENTS.md, "Conventions".
+language js
+
+file(body=$body) where {
+  or {
+    and {
+      $body <: contains `import $_ from $_` as $anchor,
+      register_diagnostic(
+        span = $anchor,
+        message = "Only Next.js route files (page, layout, route, loading, ...) and page.client sit directly in a route folder. Move this file to the route's `_parts/`, or to `src/components/` when other routes use it. See `platform/frontend/AGENTS.md`, Conventions."
+      )
+    },
+    register_diagnostic(
+      span = $body,
+      message = "Only Next.js route files (page, layout, route, loading, ...) and page.client sit directly in a route folder. Move this file to the route's `_parts/`, or to `src/components/` when other routes use it. See `platform/frontend/AGENTS.md`, Conventions."
+    )
+  }
+}

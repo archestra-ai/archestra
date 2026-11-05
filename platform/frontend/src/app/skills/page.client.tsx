@@ -25,11 +25,11 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { RowClickShield } from "@/components/agent-pages/row-click-shield";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
+import { ErrorBoundary } from "@/components/error-boundary";
 import {
   CollectionFilters,
   FilterBar,
@@ -43,6 +43,7 @@ import {
   PERMANENT_DELETE_LABEL,
   permanentDeleteRowAction,
 } from "@/components/permanent-delete";
+import { PluginSourceIcon } from "@/components/plugins/plugin-source-icon";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
 import {
@@ -56,6 +57,10 @@ import {
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
+import {
+  skillEditHref,
+  skillUsageHref,
+} from "@/components/skills/skill-page-config";
 import {
   TableCard,
   TableCardView,
@@ -122,7 +127,6 @@ import { computeCanModifySkill } from "@/lib/skills/use-skill-access";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
-import { PluginSourceIcon } from "../plugins/_parts/plugin-source-icon";
 import { DeleteSkillDialog } from "./_parts/delete-skill-dialog";
 import {
   getSkillActionModel,
@@ -133,7 +137,6 @@ import {
   SkillCollection,
   SkillSortableHeader,
 } from "./_parts/skill-collection";
-import { skillEditHref, skillUsageHref } from "./_parts/skill-page-config";
 import { SkillSourceGlyph } from "./_parts/skill-source-glyph";
 import { SkillUsageDialog } from "./_parts/skill-usage-dialog";
 import { SkillUsageSummary } from "./_parts/skill-usage-summary";

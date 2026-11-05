@@ -26,6 +26,7 @@ import {
   test,
   vi,
 } from "vitest";
+import { validationFileHref } from "@/components/openappa/validation-context";
 import { PageBackLink } from "@/components/page-back-link";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
@@ -36,7 +37,6 @@ import {
   OpenAppaPageActionSlotContext,
   OpenAppaPageHeaderSlotsContext,
 } from "../_parts/openappa-page-action";
-import { validationFileHref } from "./_parts/validation-context";
 import FilePage from "./file/page";
 import HistoryPage from "./history/page";
 import ValidationLayout from "./layout";

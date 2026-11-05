@@ -10,7 +10,7 @@ export async function waitForAgentsTable(page: Page): Promise<void> {
 }
 
 // Row actions (Delete, Clone, Version history) live inside the row's
-// "More actions" dropdown (see frontend/src/app/agents/agent-actions.tsx).
+// "More actions" dropdown (see frontend/src/app/agents/_parts/agent-actions.tsx).
 // The dropdown content is only mounted when the trigger is clicked. A late
 // catalog response re-renders the page and can close a just-opened menu, so
 // opening and clicking are retried together. The trigger's accessible name

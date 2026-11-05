@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";
-import { isSettingsAreaPath } from "@/app/_parts/settings-navigation";
-import { useCredentialsPage } from "@/app/_parts/use-credentials-page";
-import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
+import { isSettingsAreaPath } from "@/components/settings/settings-navigation";
+import { useCredentialsPage } from "@/components/settings/use-credentials-page";
+import { useSettingsAreaAccess } from "@/components/settings/use-settings-area-access";
 
 /**
  * A link that may point into Settings. For a reader who cannot see the

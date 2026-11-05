@@ -7,17 +7,20 @@ import {
 } from "@archestra/shared";
 import { INSTALLER_CLIENT_IDS } from "@archestra/shared/connection-setup";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { ClientIcon } from "@/app/connection/client-icon";
-import { CONNECT_CLIENTS, orderedClients } from "@/app/connection/clients";
+import { AgentSelector } from "@/components/agent-selector";
+import { CodeText } from "@/components/code-text";
+import { ClientIcon } from "@/components/connection/client-icon";
+import {
+  CONNECT_CLIENTS,
+  orderedClients,
+} from "@/components/connection/clients";
 import {
   applyDefaultBaseUrl,
   applyVisibility,
   buildBaseUrlMeta,
   collapseBaseUrlMeta,
   resolveDefaultBaseUrl,
-} from "@/app/connection/connection-base-urls.utils";
-import { AgentSelector } from "@/components/agent-selector";
-import { CodeText } from "@/components/code-text";
+} from "@/components/connection/connection-base-urls.utils";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,

@@ -6,9 +6,9 @@ import {
 } from "@archestra/shared";
 import { AppWindow } from "lucide-react";
 import type { ReactNode } from "react";
-import { AgentIdenticon } from "@/app/llm/logs/_parts/hue-avatar";
-import { sourceLabel } from "@/app/llm/logs/_parts/logs-table-format";
-import { McpCallChip } from "@/app/llm/logs/[id]/_parts/request-waterfall";
+import { McpCallChip } from "@/components/log-detail/request-waterfall";
+import { AgentIdenticon } from "@/components/logs/hue-avatar";
+import { sourceLabel } from "@/components/logs/logs-table-format";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { SourceIcon } from "@/components/source-badge";
 import {

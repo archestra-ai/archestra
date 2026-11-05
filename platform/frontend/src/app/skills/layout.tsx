@@ -1,6 +1,6 @@
 "use client";
 
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { useFeature } from "@/lib/config/config.query";
 import { useMcpInstallationStatusCacheSync } from "@/lib/mcp/mcp-server.query";
 

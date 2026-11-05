@@ -15,7 +15,7 @@ vi.mock("../_parts/catalog-setup-wizard", () => ({
 vi.mock("../_parts/archestra-catalog-tab", () => ({
   ArchestraCatalogTab: () => <div data-testid="catalog-browser" />,
 }));
-vi.mock("../_parts/mcp-catalog-form", () => ({
+vi.mock("@/components/mcp-registry/mcp-catalog-form", () => ({
   McpCatalogForm: ({
     footer,
   }: {

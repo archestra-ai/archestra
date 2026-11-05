@@ -7,7 +7,7 @@ import {
 } from "@archestra/shared";
 import { FileText } from "lucide-react";
 import { useMemo, useState } from "react";
-import { McpLogsDialog } from "@/app/mcp/registry/_parts/mcp-logs-dialog";
+import { McpLogsDialog } from "@/components/mcp-registry/mcp-logs-dialog";
 import { Button } from "@/components/ui/button";
 import { useMcpCatalogDirectory } from "@/lib/mcp/mcp-registry.query";
 import {

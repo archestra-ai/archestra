@@ -57,6 +57,7 @@ import {
 import { useOrganization } from "@/lib/organization.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { formatThousands } from "@/lib/utils/format-thousands";
+import { ModelCostBackfillSection } from "./model-cost-backfill-section";
 import {
   buildConfiguredParameters,
   type ConfiguredParametersFormValues,
@@ -66,8 +67,7 @@ import {
   parseCustomTokenLimit,
   validateConfiguredParameter,
   validateCustomTokenLimit,
-} from "../models-page-utils";
-import { ModelCostBackfillSection } from "./model-cost-backfill-section";
+} from "./models-page-utils";
 
 /**
  * The dialog's pages, in sidebar order. Each one owns a slice of the catalog

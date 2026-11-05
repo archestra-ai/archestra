@@ -266,7 +266,7 @@ vi.mock("@/components/chat/mcp-install-dialogs", () => ({
 }));
 // The registry's install forms have their own tests; here a stand-in submits
 // so the dialog's own connect-then-add flow can be followed.
-vi.mock("@/app/mcp/registry/_parts/local-server-install-dialog", () => ({
+vi.mock("@/components/mcp-registry/local-server-install-dialog", () => ({
   LocalServerInstallDialog: ({
     onConfirm,
   }: {
@@ -277,10 +277,10 @@ vi.mock("@/app/mcp/registry/_parts/local-server-install-dialog", () => ({
     </button>
   ),
 }));
-vi.mock("@/app/mcp/registry/_parts/no-auth-install-dialog", () => ({
+vi.mock("@/components/mcp-registry/no-auth-install-dialog", () => ({
   NoAuthInstallDialog: () => null,
 }));
-vi.mock("@/app/mcp/registry/_parts/remote-server-install-dialog", () => ({
+vi.mock("@/components/mcp-registry/remote-server-install-dialog", () => ({
   RemoteServerInstallDialog: () => null,
 }));
 vi.mock("@/components/oauth-confirmation-dialog", () => ({

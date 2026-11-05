@@ -17,6 +17,9 @@ import {
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
+import type { SelectedCategory } from "@/components/mcp-registry/catalog-filters";
+import type { McpCatalogFormValues } from "@/components/mcp-registry/mcp-catalog-form.types";
+import { transformExternalCatalogToFormValues } from "@/components/mcp-registry/mcp-catalog-form.utils";
 import { SearchInput } from "@/components/search-input";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
@@ -36,9 +39,6 @@ import {
   useMcpServerCategories,
 } from "@/lib/mcp/external-mcp-catalog.query";
 import { useMcpRegistryIssueIndex } from "@/lib/mcp/mcp-registry.query";
-import type { SelectedCategory } from "./catalog-filters";
-import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
-import { transformExternalCatalogToFormValues } from "./mcp-catalog-form.utils";
 
 // "mcp-apps-demo" is a pseudo-type: demo servers are marked with the
 // MCP_APPS_DEMO_CATEGORY catalog category, hidden from every other type view,

@@ -1,5 +1,5 @@
 import { ChatPageContent } from "../page.client";
-import { ConversationParts } from "./conversation-parts";
+import { ConversationParts } from "./_parts/conversation-parts";
 
 export default async function ConversationPage({
   params,

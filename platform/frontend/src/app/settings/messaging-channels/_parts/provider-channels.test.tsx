@@ -26,11 +26,16 @@ vi.mock("@/lib/chatops/chatops.query", () => ({
   useAllChatOpsBindings: vi.fn(),
   useUpdateChatOpsBinding: vi.fn(),
 }));
-vi.mock("./channel-details-dialog", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./channel-details-dialog")>()),
-  ChannelDetailsDialog: ({ open }: { open: boolean }) =>
-    open ? <div role="dialog" aria-label="Channel settings" /> : null,
-}));
+vi.mock(
+  "@/components/messaging-channels/channel-details-dialog",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@/components/messaging-channels/channel-details-dialog")
+    >()),
+    ChannelDetailsDialog: ({ open }: { open: boolean }) =>
+      open ? <div role="dialog" aria-label="Channel settings" /> : null,
+  }),
+);
 
 // jsdom does not implement the scrolling that cmdk uses for its active row.
 const originalScrollIntoView = Element.prototype.scrollIntoView;

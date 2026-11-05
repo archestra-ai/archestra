@@ -2,16 +2,16 @@
 
 import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect } from "react";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { toConsultView } from "@/app/consults/logs/_parts/consult-details";
-import { ConsultOutcomeBadge } from "@/app/consults/logs/_parts/consult-outcome-badge";
-import { ConsultDetails } from "@/app/llm/logs/[id]/_parts/consult-details";
+import { ErrorBoundary } from "@/components/error-boundary";
+import { ConsultDetails } from "@/components/log-detail/consult-details";
 import {
   Fact,
   FactSub,
   FactsStrip,
   FactValue,
 } from "@/components/log-detail/facts-strip";
+import { toConsultView } from "@/components/logs/consult-details";
+import { ConsultOutcomeBadge } from "@/components/logs/consult-outcome-badge";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";

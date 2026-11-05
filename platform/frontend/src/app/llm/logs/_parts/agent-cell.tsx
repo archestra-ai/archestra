@@ -2,6 +2,11 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import { Bot, Database, KeyRound, Layers } from "lucide-react";
+import { AgentIdenticon } from "@/components/logs/hue-avatar";
+import {
+  isKnowledgeSource,
+  type LogSession,
+} from "@/components/logs/logs-table-format";
 import {
   Tooltip,
   TooltipContent,
@@ -11,8 +16,6 @@ import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { describeKey } from "@/components/virtual-key-badge";
 import { copilotCredentialSourceLabel } from "@/lib/organization-subscription";
 import { cn } from "@/lib/utils/tailwind";
-import { AgentIdenticon } from "./hue-avatar";
-import { isKnowledgeSource, type LogSession } from "./logs-table-format";
 
 type AgentOption = Pick<
   archestraApiTypes.GetAgentOptionsResponses["200"]["data"][number],

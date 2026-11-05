@@ -4,7 +4,7 @@ import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-ke
 import {
   SubscriptionCard,
   SubscriptionCardsSection,
-} from "./subscription-provider-cards";
+} from "@/components/model-providers/subscription-provider-cards";
 
 /**
  * Subscriptions an organization pays for, which members use without a seat of

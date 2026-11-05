@@ -16,7 +16,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
+import { useSettingsAreaAccess } from "@/components/settings/use-settings-area-access";
 import {
   useHasPermissions,
   useScopedCapabilities,
@@ -42,7 +42,7 @@ global.ResizeObserver = class ResizeObserver {
   disconnect() {}
 } as typeof ResizeObserver;
 
-vi.mock("@/app/_parts/use-settings-area-access");
+vi.mock("@/components/settings/use-settings-area-access");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("sonner");

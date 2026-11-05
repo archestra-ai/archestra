@@ -14,10 +14,12 @@ Load the `archestra-dev-frontend` skill (`.agents/skills/archestra-dev-frontend/
 
 | What | Convention |
 | --- | --- |
-| Route-private folder | `_parts/` under the route, for the components, hooks, utils and types that belong to that route only. Not `_components/`, the example the Next.js docs use: these folders hold more than components, and `_parts/` is the name the app was scaffolded with. |
+| Route folder | Only Next.js route files (`page`, `layout`, `route`, `loading`, ...), `page.client`, and their tests. Everything else goes in `_parts/`. |
+| Route-private folder | `_parts/` under the route, for the components, hooks, utils and types that belong to that route only. Only that route and its child routes import from it. Not `_components/`, the example the Next.js docs use: these folders hold more than components, and `_parts/` is the name the app was scaffolded with. |
+| Shared by several routes | `src/components/<feature>/`. When another route, `src/components` or `src/lib` needs a file from a `_parts/` folder, move the file there. |
 | Client page | A server `page.tsx` that renders a `page.client.tsx` beside it. |
 | Hook | `use-<thing>.ts`, named after the exported hook, beside the feature that uses it. `lib/hooks/` is for hooks shared across features; promote a hook there when a second feature imports it. |
 | File name | kebab-case, ASCII. |
 | Dot suffixes | Closed list: `.query`, `.keys`, `.utils`, `.types`, `.constants`, `.context`, `.server`, `.client`, `.ee`, `.test`, `.test-data`. A test may add topic segments before `.test` (`page.client.streaming.test.tsx`). Anything else folds into the kebab name. |
 
-Biome enforces these (`useFilenamingConvention` and the `route-private-folder` and `hook-file-name` plugins in `platform/biome.json`). To check changed files, run `pnpm biome check --changed --since=origin/main` from `platform/`, substituting the fetched target branch for `origin/main` when the PR targets a different branch.
+Biome enforces these (`useFilenamingConvention` and the `route-private-folder`, `route-file-placement` and `hook-file-name` plugins in `platform/biome.json`). Nothing checks who imports a `_parts/` file yet. To check changed files, run `pnpm biome check --changed --since=origin/main` from `platform/`, substituting the fetched target branch for `origin/main` when the PR targets a different branch.

@@ -16,7 +16,7 @@
  * remount loop) from re-opening forever.
  */
 
-import type { McpServerInstallScope } from "@/app/mcp/registry/_parts/select-mcp-server-credential-type-and-teams";
+import type { McpServerInstallScope } from "@/components/mcp-registry/select-mcp-server-credential-type-and-teams";
 
 export interface PendingInstall {
   catalogId: string;

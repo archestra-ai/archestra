@@ -5,6 +5,7 @@ import { Info } from "lucide-react";
 import Image from "next/image";
 import { useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { useTriggerStatuses } from "@/components/messaging-channels/use-trigger-statuses";
 import { TelegramSetupDialog } from "@/components/telegram-setup-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,7 +23,6 @@ import { LlmKeySetupStep } from "../_parts/llm-key-setup-step";
 import { ProviderChannels } from "../_parts/provider-channels";
 import { SetupSection } from "../_parts/setup-section";
 import { SetupStep } from "../_parts/setup-step";
-import { useTriggerStatuses } from "../_parts/use-trigger-statuses";
 
 /**
  * The one interactive step that makes Telegram usable: tie this Telegram

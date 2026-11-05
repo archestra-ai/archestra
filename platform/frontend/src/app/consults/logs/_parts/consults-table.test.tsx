@@ -19,9 +19,9 @@ import {
   it,
   vi,
 } from "vitest";
+import { ConsultPayloads } from "@/components/logs/consult-detail-sheet";
+import { toConsultView } from "@/components/logs/consult-details";
 import type { ExternalConsult } from "@/lib/openappa/external-consults.query";
-import { ConsultPayloads } from "./consult-detail-sheet";
-import { toConsultView } from "./consult-details";
 import { ConsultsTable } from "./consults-table";
 
 vi.mock("next/navigation");

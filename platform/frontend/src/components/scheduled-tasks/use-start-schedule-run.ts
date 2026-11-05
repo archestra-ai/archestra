@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { runHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
+import { runHref } from "@/components/scheduled-tasks/run-row.utils";
 import { useResolveRunChat } from "@/components/scheduled-tasks/use-resolve-run-chat";
 import { useRunScheduleTriggerNow } from "@/lib/schedule-trigger.query";
 

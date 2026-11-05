@@ -25,6 +25,10 @@ import {
   agentDetailHref,
   agentPageKindForType,
 } from "@/components/agent-pages/agent-page-config";
+import {
+  type AgentUsage,
+  deriveAgentUsage,
+} from "@/components/mcp-registry/mcp-server-agent-usage";
 import { QueryLoadError } from "@/components/query-load-error";
 import { scopeLabel } from "@/components/scope-vocabulary";
 import { Button } from "@/components/ui/button";
@@ -36,7 +40,6 @@ import {
   useMcpUsageSummary,
 } from "@/lib/mcp/mcp-agent-usage.query";
 import { cn } from "@/lib/utils/tailwind";
-import { type AgentUsage, deriveAgentUsage } from "./mcp-server-agent-usage";
 
 type McpServerFromApi = archestraApiTypes.GetMcpServersResponses["200"][number];
 

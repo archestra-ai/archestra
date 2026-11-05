@@ -14,12 +14,12 @@ import {
   Wrench,
 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
+import { Editor } from "@/components/editor";
+import { FormDialog } from "@/components/form-dialog";
 import {
   ConnectorTypeIcon,
   hasConnectorIcon,
-} from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
-import { Editor } from "@/components/editor";
-import { FormDialog } from "@/components/form-dialog";
+} from "@/components/knowledge/connector-icons";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";

@@ -2,16 +2,16 @@
 
 import { formatCost } from "@/components/cost";
 import {
+  formatCompactNumber,
+  formatUsageCost,
+  type LogSession,
+} from "@/components/logs/logs-table-format";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import {
-  formatCompactNumber,
-  formatUsageCost,
-  type LogSession,
-} from "./logs-table-format";
 
 type UsageSession = Pick<
   LogSession,

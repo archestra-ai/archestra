@@ -2,11 +2,11 @@
 
 import { Settings } from "lucide-react";
 import Link from "next/link";
+import { useOpenAppaSetupState } from "@/components/openappa/use-openappa-setup-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { cn } from "@/lib/utils/tailwind";
-import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
 /**
  * The Overview's header: whether enforcement is on, and the way to the

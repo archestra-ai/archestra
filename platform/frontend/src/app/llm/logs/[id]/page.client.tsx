@@ -13,7 +13,18 @@ import {
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { use, useCallback, useMemo, useState } from "react";
-import { sessionTitleOf } from "@/app/llm/logs/_parts/logs-table-format";
+import {
+  GuardrailsProvider,
+  TraceDetails,
+  TraceWaterfall,
+} from "@/components/log-detail/guardrails-context";
+import {
+  buildTimeline,
+  requestSpanKey,
+  toolCallSpanKey,
+} from "@/components/log-detail/session-timeline";
+import { DETAILS_PANE_DEFAULT_HEIGHT } from "@/components/log-detail/split-handle";
+import { sessionTitleOf } from "@/components/logs/logs-table-format";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -43,22 +54,11 @@ import {
   llmSessionHref,
 } from "@/lib/interactions/llm-log-links";
 import { useMcpServerDisplayByName } from "@/lib/mcp-logs/use-mcp-server-display";
-import {
-  GuardrailsProvider,
-  TraceDetails,
-  TraceWaterfall,
-} from "./_parts/guardrails-context";
 import { SessionFacts } from "./_parts/session-facts";
 import {
   SessionHeaderIcon,
   SessionIdentityLine,
 } from "./_parts/session-header";
-import {
-  buildTimeline,
-  requestSpanKey,
-  toolCallSpanKey,
-} from "./_parts/session-timeline";
-import { DETAILS_PANE_DEFAULT_HEIGHT } from "./_parts/split-handle";
 import { useLinkedRequest } from "./_parts/use-linked-request";
 import { useSessionToolCalls } from "./_parts/use-session-tool-calls";
 

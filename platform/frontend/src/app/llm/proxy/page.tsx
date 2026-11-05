@@ -3,17 +3,17 @@
 import { Waypoints } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
-  getProxyEndpointProviders,
-  type ProxyEndpointProvider,
-  resolveAdminDefaultBaseUrl,
-  resolveCandidateBaseUrls,
-} from "@/app/connection/connection-flow.utils";
-import { TerminalBlock } from "@/app/connection/terminal-block";
-import {
   type AuthMethodOption,
   AuthMethodPicker,
   ConnectStep,
 } from "@/components/connect-rail";
+import {
+  getProxyEndpointProviders,
+  type ProxyEndpointProvider,
+  resolveAdminDefaultBaseUrl,
+  resolveCandidateBaseUrls,
+} from "@/components/connection/connection-flow.utils";
+import { TerminalBlock } from "@/components/connection/terminal-block";
 import {
   type LlmAuthMethod,
   LlmConnectSteps,

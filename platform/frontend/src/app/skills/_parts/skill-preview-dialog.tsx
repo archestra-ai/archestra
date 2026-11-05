@@ -1,10 +1,13 @@
 "use client";
 
 import { useMemo } from "react";
+import { SkillContentEditor } from "@/components/skills/skill-content-editor";
+import {
+  type SkillPreview,
+  skillDraftFromPreview,
+} from "@/components/skills/skill-draft";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
-import { SkillContentEditor } from "./skill-content-editor";
-import { type SkillPreview, skillDraftFromPreview } from "./skill-draft";
 
 /** Read-only look at a skill that has not been imported yet. */
 export function SkillPreviewDialog({

@@ -27,7 +27,7 @@ const { useDataTableQueryParamsMock, updateQueryParamsMock } = vi.hoisted(
   }),
 );
 
-vi.mock("@/app/_parts/use-settings-area-access");
+vi.mock("@/components/settings/use-settings-area-access");
 vi.mock("next/image", () => ({
   default: ({
     alt,
@@ -75,13 +75,16 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   }),
 }));
 
-vi.mock("./_parts/copilot-organization-connect-dialog", () => ({
-  CopilotOrganizationConnectDialog: ({
-    manage,
-  }: {
-    manage?: { id: string } | null;
-  }) => <div data-testid="copilot-dialog">{manage?.id ?? "connect"}</div>,
-}));
+vi.mock(
+  "@/components/model-providers/copilot-organization-connect-dialog",
+  () => ({
+    CopilotOrganizationConnectDialog: ({
+      manage,
+    }: {
+      manage?: { id: string } | null;
+    }) => <div data-testid="copilot-dialog">{manage?.id ?? "connect"}</div>,
+  }),
+);
 vi.mock("@/lib/oauth-clients.query", () => ({
   useOauthClients: (...args: unknown[]) => mockUseOauthClients(...args),
 }));

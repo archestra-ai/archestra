@@ -3,8 +3,8 @@
 import { ArrowUpRight, Plus } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { runHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
 import { QueryLoadError } from "@/components/query-load-error";
+import { runHref } from "@/components/scheduled-tasks/run-row.utils";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useHasPermissions } from "@/lib/auth/auth.query";

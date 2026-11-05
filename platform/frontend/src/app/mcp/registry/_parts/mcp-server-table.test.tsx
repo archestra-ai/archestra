@@ -22,11 +22,11 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   }),
 }));
 
-vi.mock("./catalog-edit-access", () => ({
+vi.mock("@/components/mcp-registry/catalog-edit-access", () => ({
   useCanModifyCatalogItem: () => ({ canModify: false, isLoading: false }),
 }));
 
-vi.mock("./use-chat-with-catalog-item", () => ({
+vi.mock("@/components/mcp-registry/use-chat-with-catalog-item", () => ({
   useChatWithCatalogItem: () => ({
     startChat: vi.fn(),
     startChatById: vi.fn(),
@@ -35,7 +35,7 @@ vi.mock("./use-chat-with-catalog-item", () => ({
 }));
 
 // The page's installs reach the rows through the list's page-scoped request.
-vi.mock("./registry-page-servers", () => ({
+vi.mock("@/components/mcp-registry/registry-page-servers", () => ({
   useRegistryPageServers: () => useMcpServersMock().data,
 }));
 
@@ -72,11 +72,14 @@ vi.mock("@/lib/mcp/mcp-server.query", () => ({
 }));
 
 import type { Permissions } from "@archestra/shared";
+import type {
+  InstalledServer,
+  RegistryListItem,
+} from "@/components/mcp-registry/mcp-server-card";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import type { McpServerIssue } from "@/lib/mcp/mcp-server-issues";
 import { useAppearanceSettings } from "@/lib/organization.query";
-import type { InstalledServer, RegistryListItem } from "./mcp-server-card";
 import { McpServerTable } from "./mcp-server-table";
 
 const CURRENT_USER_ID = "user-me";

@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { ConsentForm } from "./consent-form";
+import { ConsentForm } from "./_parts/consent-form";
 
 export default function OAuthConsentPage() {
   return (

@@ -4,12 +4,12 @@ import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { ChevronRight, X } from "lucide-react";
 import Link from "next/link";
 import { useId, useState } from "react";
-import { PoolProviderIcons } from "@/app/llm/model-pools/_parts/pool-providers";
 import {
   poolAnswers,
   poolServes,
 } from "@/components/credential-billing/model-pool-access";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { PoolProviderIcons } from "@/components/model-pools/pool-providers";
 import { ProviderIcon } from "@/components/provider-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

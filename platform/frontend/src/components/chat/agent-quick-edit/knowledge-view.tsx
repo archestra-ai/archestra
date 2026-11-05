@@ -3,7 +3,7 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { Database, ExternalLink, Loader2, Search } from "lucide-react";
 import { type ReactNode, useMemo, useRef, useState } from "react";
-import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
+import { ConnectorTypeIcon } from "@/components/knowledge/connector-icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";

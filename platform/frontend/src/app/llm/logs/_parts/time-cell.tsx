@@ -1,13 +1,16 @@
 "use client";
 
 import {
+  formatSessionSpan,
+  type LogSession,
+} from "@/components/logs/logs-table-format";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { formatCompactRelativeTime, formatDate } from "@/lib/utils/date-time";
-import { formatSessionSpan, type LogSession } from "./logs-table-format";
 
 /** How long ago the last request was, then the request count and span. */
 export function TimeCell({

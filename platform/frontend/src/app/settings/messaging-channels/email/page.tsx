@@ -3,6 +3,11 @@
 import { DocsPage, MESSAGING_CHANNEL_LABELS } from "@archestra/shared";
 import { AlertTriangle, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
+import {
+  formatIncomingEmailExpiry,
+  getIncomingEmailTimeUntilExpiry,
+} from "@/components/messaging-channels/email-trigger.utils";
+import { useTriggerStatuses } from "@/components/messaging-channels/use-trigger-statuses";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
@@ -18,12 +23,7 @@ import { CredentialField } from "../_parts/credential-field";
 import { ExternalDocsLink } from "../_parts/external-docs-link";
 import { SetupSection } from "../_parts/setup-section";
 import { SetupStep } from "../_parts/setup-step";
-import { useTriggerStatuses } from "../_parts/use-trigger-statuses";
-import { EmailSetupDialog } from "./email-setup-dialog";
-import {
-  formatIncomingEmailExpiry,
-  getIncomingEmailTimeUntilExpiry,
-} from "./email-trigger.utils";
+import { EmailSetupDialog } from "./_parts/email-setup-dialog";
 
 export default function EmailPage() {
   const appName = useAppName();

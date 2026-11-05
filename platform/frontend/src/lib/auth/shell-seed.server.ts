@@ -8,18 +8,18 @@ import {
   CONNECT_CLIENTS,
   isInstallerClientId,
   visibleClients,
-} from "@/app/connection/clients";
+} from "@/components/connection/clients";
 import {
   getConnectableProviders,
   resolveConnectionBaseUrl,
   resolveInitialClientId,
-} from "@/app/connection/connection-flow.utils";
+} from "@/components/connection/connection-flow.utils";
 import {
   connectionSetupBody,
   connectionSetupInputsKey,
   connectionSetupKeyDigest,
   firstConnectionSetupInputs,
-} from "@/app/connection/connection-setup-payload";
+} from "@/components/connection/connection-setup-payload";
 import {
   agentRunQueryKey,
   myAgentRunsPageQuery,

@@ -54,13 +54,13 @@ import {
   useUpdateSecuritySettings,
 } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
-import { RuntimeTiersBlock } from "./_parts/runtime-tiers-block";
 import {
   type AgentSettingsState,
   buildSavePayload,
   detectChanges,
   resolveInitialState,
-} from "./agent-settings-utils";
+} from "./_parts/agent-settings-utils";
+import { RuntimeTiersBlock } from "./_parts/runtime-tiers-block";
 
 const MESSAGING_CHANNEL_LABELS_KEYS = Object.keys(
   MESSAGING_CHANNEL_LABELS,

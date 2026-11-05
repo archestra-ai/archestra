@@ -12,8 +12,6 @@ import {
 import { Check, ChevronDown, Eye, EyeOff, Layers, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { Fragment, type ReactNode, useId, useState } from "react";
-import type { ProxyEndpointProvider } from "@/app/connection/connection-flow.utils";
-import { PoolProviders } from "@/app/llm/model-pools/_parts/pool-providers";
 import {
   ConnectStep,
   type ConnectStepProps,
@@ -21,6 +19,7 @@ import {
   CredentialSelect,
   OauthTokenRequest,
 } from "@/components/connect-rail";
+import type { ProxyEndpointProvider } from "@/components/connection/connection-flow.utils";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { CreateManagedOAuthClientDialog } from "@/components/create-managed-oauth-client-dialog";
 import {
@@ -31,6 +30,7 @@ import {
 import { poolAnswers } from "@/components/credential-billing/model-pool-access";
 import { primaryKeyMappings } from "@/components/credential-billing/provider-key-data";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { PoolProviders } from "@/components/model-pools/pool-providers";
 import {
   type CreatedCredentials,
   OAuthClientCreatedDialog,

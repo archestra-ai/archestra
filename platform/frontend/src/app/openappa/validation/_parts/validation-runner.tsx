@@ -11,10 +11,13 @@ import {
   useMemo,
   useState,
 } from "react";
+import {
+  useValidation,
+  validationFileHref,
+} from "@/components/openappa/validation-context";
+import { validationName } from "@/components/openappa/validation-run-history";
 import type { PolicyTestRun } from "@/lib/openappa-policy-tests.query";
 import websocketService from "@/lib/websocket/websocket";
-import { validationName } from "../../_parts/validation-run-history";
-import { useValidation, validationFileHref } from "./validation-context";
 import {
   type RunnerCounts,
   type RunnerFile,

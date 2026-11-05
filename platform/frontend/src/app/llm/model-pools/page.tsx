@@ -19,6 +19,10 @@ import {
   FilterSelect,
   filterSearchClass,
 } from "@/components/filter-bar";
+import {
+  PoolProviderIcons,
+  PoolProviders,
+} from "@/components/model-pools/pool-providers";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
@@ -52,7 +56,6 @@ import {
 import { PoolHealth } from "./_parts/member-status";
 import { PoolDialog, type PoolDialogSection } from "./_parts/pool-dialog";
 import { memberSummary } from "./_parts/pool-form";
-import { PoolProviderIcons, PoolProviders } from "./_parts/pool-providers";
 
 const DESCRIPTION = (
   <>

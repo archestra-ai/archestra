@@ -19,7 +19,7 @@ const refetchProviders = vi.fn();
 const hasUpdatePermission = vi.fn(() => true);
 const hasAgentUpdatePermission = vi.fn(() => true);
 
-vi.mock("@/app/_parts/use-settings-area-access");
+vi.mock("@/components/settings/use-settings-area-access");
 vi.mock("@/lib/agent-options.query", () => ({
   useAgentOptionsByIds: vi.fn(),
 }));
@@ -59,13 +59,10 @@ vi.mock("@/lib/chatops/incoming-email.query", () => ({
   }),
 }));
 
-vi.mock(
-  "@/app/settings/messaging-channels/email/agent-email-settings-dialog",
-  () => ({
-    AgentEmailSettingsDialog: ({ open }: { open: boolean }) =>
-      open ? <div role="dialog" aria-label="Email settings" /> : null,
-  }),
-);
+vi.mock("@/components/messaging-channels/agent-email-settings-dialog", () => ({
+  AgentEmailSettingsDialog: ({ open }: { open: boolean }) =>
+    open ? <div role="dialog" aria-label="Email settings" /> : null,
+}));
 
 vi.mock("@/components/system-prompt-editor", () => ({
   SystemPromptEditor: ({

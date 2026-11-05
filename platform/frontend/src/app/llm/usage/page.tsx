@@ -6,7 +6,7 @@ import { useStatisticsTimeRange } from "@/components/time-range-picker/statistic
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMyStatistics, useMyUsageBreakdown } from "@/lib/statistics.query";
-import { UsageContent } from "./usage-content";
+import { UsageContent } from "./_parts/usage-content";
 
 const TIMEFRAME_STORAGE_KEY = "my-usage-timeframe";
 const DEFAULT_TIMEFRAME: StatisticsTimeFrame = "7d";

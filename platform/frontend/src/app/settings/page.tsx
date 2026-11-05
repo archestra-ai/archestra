@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { useSettingsTabs } from "./settings-tabs";
+import { useSettingsTabs } from "@/components/settings/settings-tabs";
 
 // Landing page: settings has no content of its own, so forward to the first
 // tab the user is allowed to see. The tab list is permission-gated and empty

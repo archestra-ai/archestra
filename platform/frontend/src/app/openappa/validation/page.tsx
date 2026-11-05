@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { useValidation } from "./_parts/validation-context";
+import { useValidation } from "@/components/openappa/validation-context";
 import { canDeleteValidations, ValidationList } from "./_parts/validation-list";
 import { useValidationRunner } from "./_parts/validation-runner";
 

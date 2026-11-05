@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Suspense, useState } from "react";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { AccountPageActionSlotContext } from "@/app/account/_parts/account-page-action";
 import { accountSections } from "@/app/account/_parts/account-sections";
 import { useAccountCredentialsAccess } from "@/app/account/_parts/use-account-credentials-access";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
 import { WithPermissions } from "@/components/roles/with-permissions";
+import { AccountPageActionSlotContext } from "@/components/settings/account-page-action";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 
 // The title stays put across tabs — the tab bar says which one is open — and

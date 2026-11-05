@@ -1,9 +1,9 @@
 "use client";
 
 import { MessageCirclePlus } from "lucide-react";
+import { OpenAppaChatButton } from "@/components/openappa/openappa-chat-button";
 import type { ButtonProps } from "@/components/ui/button";
 import type { OpenAppaLaunchTarget } from "@/lib/openappa-chat-prompts";
-import { OpenAppaChatButton } from "./openappa-chat-button";
 
 /** Opens a chat on improving coverage of an MCP server, or one of its tools. */
 export function ImproveChatButton({

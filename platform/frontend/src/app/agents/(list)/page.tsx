@@ -1,5 +1,5 @@
+import { StreamedAgentsPage } from "../_parts/streamed-agents-page";
 import AgentsPage from "../page.client";
-import { StreamedAgentsPage } from "../streamed-agents-page";
 
 export const dynamic = "force-dynamic";
 

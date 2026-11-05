@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type {
   InteractionSummary,
   SessionToolCall,
-} from "@/app/llm/logs/[id]/_parts/session-timeline";
+} from "@/components/log-detail/session-timeline";
 import { buildExcerptTimeline } from "./excerpt-timeline";
 
 /** The excerpt keeps six records on each side of the call. */

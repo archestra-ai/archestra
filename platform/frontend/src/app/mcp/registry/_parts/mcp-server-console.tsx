@@ -30,6 +30,12 @@ import {
   useRef,
   useState,
 } from "react";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { hasNoPodToStream } from "@/components/mcp-registry/logs-streaming-indicator";
+// SPDX-SnippetEnd
+import type { McpLogsInstall } from "@/components/mcp-registry/mcp-logs-dialog";
 import {
   Command,
   CommandEmpty,
@@ -46,12 +52,6 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { cn } from "@/lib/utils/tailwind";
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { hasNoPodToStream } from "./logs-streaming-indicator";
-// SPDX-SnippetEnd
-import type { McpLogsInstall } from "./mcp-logs-dialog";
 import {
   InspectorBody,
   InspectorStatus,

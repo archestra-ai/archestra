@@ -2,6 +2,13 @@
 
 import Link from "next/link";
 import { LabelTags } from "@/components/label-tags";
+import {
+  isKnowledgeSource,
+  knowledgeTaskTitle,
+  type LogSession,
+  sessionTitleOf,
+  sourceLabel,
+} from "@/components/logs/logs-table-format";
 import { SourceIcon } from "@/components/source-badge";
 import {
   Tooltip,
@@ -11,13 +18,6 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils/tailwind";
-import {
-  isKnowledgeSource,
-  knowledgeTaskTitle,
-  type LogSession,
-  sessionTitleOf,
-  sourceLabel,
-} from "./logs-table-format";
 import {
   describeActor,
   describeSessionOrigin,

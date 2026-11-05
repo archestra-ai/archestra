@@ -17,9 +17,9 @@ import {
   it,
   vi,
 } from "vitest";
+import type { McpLogsInstall } from "@/components/mcp-registry/mcp-logs-dialog";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import websocketService from "@/lib/websocket/websocket";
-import type { McpLogsInstall } from "./mcp-logs-dialog";
 import {
   McpServerConsole,
   type McpServerConsoleTab,

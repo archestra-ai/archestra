@@ -8,6 +8,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { SessionToolCall } from "@/components/log-detail/session-timeline";
 import { useFeature } from "@/lib/config/config.query";
 import {
   useInteraction,
@@ -20,7 +21,6 @@ import {
   useSessionMcpToolCalls,
 } from "@/lib/mcp/mcp-tool-call.query";
 import { useOrganization } from "@/lib/organization.query";
-import type { SessionToolCall } from "./_parts/session-timeline";
 import SessionDetailPage from "./page.client";
 
 vi.mock("next/navigation");

@@ -16,17 +16,20 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
+import { ErrorBoundary } from "@/components/error-boundary";
 import {
   CollectionFilters,
   FilterBar,
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
+import { ConnectorTypeIcon } from "@/components/knowledge/connector-icons";
+import { CreateConnectorDialog } from "@/components/knowledge/create-connector-dialog";
+import { EditConnectorDialog } from "@/components/knowledge/edit-connector-dialog";
 import { LabelTags } from "@/components/label-tags";
 import {
   PERMANENT_DELETE_LABEL,
@@ -98,10 +101,7 @@ import { useIsGlobalAdmin } from "@/lib/organization.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 import { ConnectorChip } from "./_parts/connector-chip";
-import { ConnectorTypeIcon } from "./_parts/connector-icons";
-import { CreateConnectorDialog } from "./_parts/create-connector-dialog";
 import { CreateKnowledgeBaseDialog } from "./_parts/create-knowledge-base-dialog";
-import { EditConnectorDialog } from "./_parts/edit-connector-dialog";
 import { EditKnowledgeBaseDialog } from "./_parts/edit-knowledge-base-dialog";
 import { KnowledgeBaseCard } from "./_parts/knowledge-base-card";
 import { useChatWithKnowledgeBase } from "./_parts/use-chat-with-knowledge-base";

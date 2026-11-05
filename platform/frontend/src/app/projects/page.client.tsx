@@ -11,7 +11,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { AgentSelector } from "@/components/agent-selector";
@@ -20,6 +19,7 @@ import { BulkResourceAccessDialog } from "@/components/bulk-resource-access-dial
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
+import { ErrorBoundary } from "@/components/error-boundary";
 import {
   CollectionFilters,
   FilterBar,
@@ -77,9 +77,9 @@ import {
   useProjects,
   useRestoreProject,
 } from "@/lib/projects/projects.query";
-import { ProjectDeleteConfirmDialog } from "./project-delete-confirm-dialog";
-import { ProjectPinnedTiles } from "./project-pinned-tiles";
-import { DeletedProjectsTable, ProjectsTable } from "./projects-table";
+import { ProjectDeleteConfirmDialog } from "./_parts/project-delete-confirm-dialog";
+import { ProjectPinnedTiles } from "./_parts/project-pinned-tiles";
+import { DeletedProjectsTable, ProjectsTable } from "./_parts/projects-table";
 
 export default function ProjectsPageClient() {
   return (

@@ -4,6 +4,7 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 import { headers } from "next/headers";
+import { MCP_REGISTRY_VIEW_STORAGE_KEY } from "@/components/mcp-registry/registry-list-params";
 import { SavedTableCardViewModesProvider } from "@/components/table-card-view";
 import { readSavedTableCardViewMode } from "@/components/table-card-view.server";
 import { isShellSeedRoute, SHELL_SEED_HEADER } from "@/lib/auth/shell-seed";
@@ -11,9 +12,8 @@ import {
   MCP_REGISTRY_SEED_MARKER,
   seedMcpRegistryQueries,
 } from "@/lib/mcp/mcp-registry.query";
-import { MCP_REGISTRY_VIEW_STORAGE_KEY } from "./_parts/registry-list-params";
+import { prefetchMcpRegistryFirstPage } from "./_parts/prefetch-first-page";
 import McpRegistryClient from "./page.client";
-import { prefetchMcpRegistryFirstPage } from "./prefetch-first-page";
 
 export const dynamic = "force-dynamic";
 

@@ -7,6 +7,11 @@ import {
   SettingsSection,
   SettingsSectionGroup,
 } from "@/components/settings-section";
+import {
+  SKILL_WIZARD_EDITOR_CLASS,
+  SkillContentEditor,
+} from "@/components/skills/skill-content-editor";
+import type { SkillDraft } from "@/components/skills/skill-draft";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,11 +20,6 @@ import {
   setManifestFrontmatterField,
 } from "@/lib/skills/manifest-compose";
 import { SkillAccessFields } from "./skill-access-fields";
-import {
-  SKILL_WIZARD_EDITOR_CLASS,
-  SkillContentEditor,
-} from "./skill-content-editor";
-import type { SkillDraft } from "./skill-draft";
 
 /**
  * Everything a skill is, on one page: what it is called and does, the

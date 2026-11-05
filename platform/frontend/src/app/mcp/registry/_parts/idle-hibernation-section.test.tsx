@@ -29,7 +29,7 @@ vi.mock("@/lib/mcp/mcp-server.query", () => ({
 }));
 
 const mockCanModifyCatalogItem = vi.fn();
-vi.mock("./catalog-edit-access", () => ({
+vi.mock("@/components/mcp-registry/catalog-edit-access", () => ({
   useCanModifyCatalogItem: () => mockCanModifyCatalogItem(),
 }));
 

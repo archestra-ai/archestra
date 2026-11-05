@@ -6,7 +6,7 @@ import {
   resolveInitialAgentState,
   resolvePreferredModelForProvider,
   shouldResetInitialChatState,
-} from "@/app/chat/chat-initial-state";
+} from "@/components/chat/chat-initial-state";
 import type { LlmModel } from "@/lib/llm-models.query";
 import type { SupportedProvider } from "@/lib/llm-provider-api-keys.query";
 import {

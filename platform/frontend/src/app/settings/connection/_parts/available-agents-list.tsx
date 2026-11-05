@@ -29,8 +29,8 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Plus, Terminal, X } from "lucide-react";
 import { type ReactNode, useState } from "react";
-import { ClientIcon } from "@/app/connection/client-icon";
-import type { ConnectClient } from "@/app/connection/clients";
+import { ClientIcon } from "@/components/connection/client-icon";
+import type { ConnectClient } from "@/components/connection/clients";
 import { ProviderKeyList } from "@/components/credential-billing/provider-key-list";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import { ProviderAccessField } from "@/components/provider-access-field";

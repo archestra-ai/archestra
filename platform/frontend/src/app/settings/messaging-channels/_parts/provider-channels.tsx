@@ -7,6 +7,10 @@ import {
 import { Search } from "lucide-react";
 import { useState } from "react";
 import { AgentSelector } from "@/components/agent-selector";
+import {
+  ChannelDetailsDialog,
+  channelDisplayName,
+} from "@/components/messaging-channels/channel-details-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -23,10 +27,6 @@ import {
   useAllChatOpsBindings,
   useUpdateChatOpsBinding,
 } from "@/lib/chatops/chatops.query";
-import {
-  ChannelDetailsDialog,
-  channelDisplayName,
-} from "./channel-details-dialog";
 
 type Binding =
   archestraApiTypes.ListChatOpsBindingsResponses["200"]["data"][number];

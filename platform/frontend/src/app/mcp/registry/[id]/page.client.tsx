@@ -26,6 +26,27 @@ import {
   useState,
 } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { useCanModifyCatalogItem } from "@/components/mcp-registry/catalog-edit-access";
+import { resolveCatalogEnvironmentLabel } from "@/components/mcp-registry/catalog-environment-label";
+import { shouldShowMcpCardChatButton } from "@/components/mcp-registry/chat-button-visibility";
+import {
+  computeDeploymentStatusSummary,
+  DeploymentStatusDot,
+  type DeploymentStatusSummary,
+  getDeploymentLabel,
+  getDeploymentStatusChipLabel,
+} from "@/components/mcp-registry/deployment-status";
+import { getLocalInstallationCopy } from "@/components/mcp-registry/local-installation-copy";
+import { ManageUsersContent } from "@/components/mcp-registry/manage-users-dialog";
+import type { McpCatalogFormValues } from "@/components/mcp-registry/mcp-catalog-form.types";
+import { transformCatalogItemToFormValues } from "@/components/mcp-registry/mcp-catalog-form.utils";
+import { deriveAgentUsage } from "@/components/mcp-registry/mcp-server-agent-usage";
+import type {
+  CatalogItem,
+  InstalledServer,
+} from "@/components/mcp-registry/mcp-server-card";
+import { McpServerIssueNotice } from "@/components/mcp-registry/mcp-server-issue-notice";
+import { useChatWithCatalogItem } from "@/components/mcp-registry/use-chat-with-catalog-item";
 import type { OverviewFact } from "@/components/overview-summary";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
@@ -81,24 +102,10 @@ import {
 import { useResourcePermissions } from "@/lib/resource-permissions.query";
 import { formatCompactNumber } from "@/lib/utils/format-compact-number";
 import { cn } from "@/lib/utils/tailwind";
-import { useCanModifyCatalogItem } from "../_parts/catalog-edit-access";
-import { resolveCatalogEnvironmentLabel } from "../_parts/catalog-environment-label";
-import { shouldShowMcpCardChatButton } from "../_parts/chat-button-visibility";
 import { collapseMultitenantInstalls } from "../_parts/collapse-multitenant-installs";
 import { DeleteCatalogDialog } from "../_parts/delete-catalog-dialog";
-import {
-  computeDeploymentStatusSummary,
-  DeploymentStatusDot,
-  type DeploymentStatusSummary,
-  getDeploymentLabel,
-  getDeploymentStatusChipLabel,
-} from "../_parts/deployment-status";
 import { buildDetailTabHref } from "../_parts/detail-tab-href";
 import { InlineMcpReauthentication } from "../_parts/inline-mcp-reauthentication";
-import { getLocalInstallationCopy } from "../_parts/local-installation-copy";
-import { ManageUsersContent } from "../_parts/manage-users-dialog";
-import type { McpCatalogFormValues } from "../_parts/mcp-catalog-form.types";
-import { transformCatalogItemToFormValues } from "../_parts/mcp-catalog-form.utils";
 import { isMcpServerInstalledForViewer } from "../_parts/mcp-registry-visibility";
 import {
   MCP_ACCESS_SECTION_ID,
@@ -109,8 +116,6 @@ import {
   mcpServerAction,
   mcpServerActionHref,
 } from "../_parts/mcp-server-actions-model";
-import { deriveAgentUsage } from "../_parts/mcp-server-agent-usage";
-import type { CatalogItem, InstalledServer } from "../_parts/mcp-server-card";
 import {
   McpServerConnectionPanel,
   type McpServerSpec,
@@ -119,12 +124,10 @@ import {
   McpServerConsole,
   type McpServerConsoleTab,
 } from "../_parts/mcp-server-console";
-import { McpServerIssueNotice } from "../_parts/mcp-server-issue-notice";
 import { McpServerToolsSection } from "../_parts/mcp-server-tools-section";
 import { McpServerPagedUsageTab } from "../_parts/mcp-server-usage-tab";
 import { PlaywrightSavedLoginsTab } from "../_parts/playwright-saved-logins-tab";
 import { useCatalogInstall } from "../_parts/use-catalog-install";
-import { useChatWithCatalogItem } from "../_parts/use-chat-with-catalog-item";
 import { YamlConfigContent } from "../_parts/yaml-config-dialog";
 
 type DetailTab =

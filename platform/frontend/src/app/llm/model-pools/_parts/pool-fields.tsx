@@ -4,6 +4,7 @@ import { DocsPage } from "@archestra/shared";
 import { CircleHelp, TriangleAlert } from "lucide-react";
 import { Controller } from "react-hook-form";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { suggestModelId } from "@/components/model-pools/model-name";
 import { FieldDescription } from "@/components/ui/field-description";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import {
@@ -21,7 +22,6 @@ import {
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
-import { suggestModelId } from "./model-name";
 import {
   isValidSeconds,
   MAX_SECONDS,

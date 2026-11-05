@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useEffect, useState } from "react";
-import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import {
   openRowOnPlainClick,
@@ -28,12 +27,17 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import {
+  GithubManagedPolicyNotice,
+  githubPolicyFileUrl,
+} from "@/components/openappa/github-managed-policy-notice";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   RuntimeCredentialIcon,
   runtimeCredentialIconOf,
 } from "@/components/runtime-credential-icon";
 import { SearchInput } from "@/components/search-input";
+import { useSettingsAreaAccess } from "@/components/settings/use-settings-area-access";
 import { StandardDialog } from "@/components/standard-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
@@ -100,10 +104,6 @@ import {
 import { batteryStatusHint, batteryTableStatus } from "./battery-table-status";
 import { enforcedStatus } from "./composition-view";
 import { DialogSection } from "./dialog-section";
-import {
-  GithubManagedPolicyNotice,
-  githubPolicyFileUrl,
-} from "./github-managed-policy-notice";
 import { batteryStatusBadge } from "./policy-decorations";
 
 const STATUS_OPTIONS = [

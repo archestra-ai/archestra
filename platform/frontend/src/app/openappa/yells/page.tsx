@@ -1,4 +1,4 @@
-import { YellsTable } from "../_parts/yells-table";
+import { YellsTable } from "@/components/openappa/yells-table";
 
 export default function OpenAppaYellsPage() {
   return <YellsTable />;

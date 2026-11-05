@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
+import { AgentIcon, agentLabel } from "@/components/connection/agent-icon";
 import { CreatedByCell } from "@/components/created-by-cell";
 import {
   CollectionFilters,
@@ -38,7 +39,6 @@ import {
 } from "@/lib/connected-client.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
-import { AgentIcon, agentLabel } from "./agent-icon";
 import type { ConnectionsWindow } from "./connections-window";
 
 type AdoptionAgent = AgentAdoptionMember["agents"][number];

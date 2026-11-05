@@ -3,6 +3,22 @@
 import type { RowSelectionState } from "@tanstack/react-table";
 import { Bell, BellOff, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
+import {
+  DismissAlertDialog,
+  type DismissAlertTarget,
+} from "@/components/mcp-registry/dismiss-alert-dialog";
+import {
+  mcpServerAlertTarget,
+  mcpServerAlertTargetKey,
+} from "@/components/mcp-registry/mcp-server-alert-target";
+import type {
+  RegistryListItem as CatalogItem,
+  InstalledServer,
+} from "@/components/mcp-registry/mcp-server-card";
+import {
+  UninstallServerDialog,
+  type UninstallServerInstall,
+} from "@/components/mcp-registry/uninstall-server-dialog";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { Button } from "@/components/ui/button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
@@ -12,23 +28,7 @@ import type {
   McpServerIssue,
 } from "@/lib/mcp/mcp-server-issues";
 import { canFixInstall, facetIssues } from "@/lib/mcp/mcp-server-issues";
-import {
-  DismissAlertDialog,
-  type DismissAlertTarget,
-} from "./dismiss-alert-dialog";
-import {
-  mcpServerAlertTarget,
-  mcpServerAlertTargetKey,
-} from "./mcp-server-alert-target";
-import type {
-  RegistryListItem as CatalogItem,
-  InstalledServer,
-} from "./mcp-server-card";
 import { McpServerTable } from "./mcp-server-table";
-import {
-  UninstallServerDialog,
-  type UninstallServerInstall,
-} from "./uninstall-server-dialog";
 
 export function McpServerAttentionList({
   items,

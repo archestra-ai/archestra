@@ -2,8 +2,8 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
+import { skillEditHref } from "@/components/skills/skill-page-config";
 import { Skeleton } from "@/components/ui/skeleton";
-import { skillEditHref } from "../../_parts/skill-page-config";
 
 /**
  * `/skills/[id]/edit` — kept only for the links already out there.

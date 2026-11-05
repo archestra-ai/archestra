@@ -3,9 +3,9 @@
 import { Check, CircleAlert } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { notifyGithubAppSetup } from "@/app/openappa/_parts/github-app-channel";
 import { AuthCallbackLayout } from "@/components/auth-callback-layout";
 import { LoadingState } from "@/components/loading";
+import { notifyGithubAppSetup } from "@/components/openappa/github-app-channel";
 import { OpenAppaSolidIcon } from "@/components/openappa-icon";
 import { Button } from "@/components/ui/button";
 import { useAppName } from "@/lib/hooks/use-app-name";

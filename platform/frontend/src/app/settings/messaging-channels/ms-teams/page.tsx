@@ -3,6 +3,8 @@
 import { MESSAGING_CHANNEL_LABELS } from "@archestra/shared";
 import { Globe, Info, Waypoints } from "lucide-react";
 import { useState } from "react";
+import { useReachabilityMode } from "@/components/messaging-channels/use-reachability-mode";
+import { useTriggerStatuses } from "@/components/messaging-channels/use-trigger-statuses";
 import { MsTeamsSetupDialog } from "@/components/ms-teams-setup-dialog";
 import { NgrokSetupDialog } from "@/components/ngrok-setup-dialog";
 import {
@@ -22,9 +24,7 @@ import { NgrokStatus } from "../_parts/ngrok-status";
 import { ProviderChannels } from "../_parts/provider-channels";
 import { SetupSection } from "../_parts/setup-section";
 import { SetupStep } from "../_parts/setup-step";
-import { useReachabilityMode } from "../_parts/use-reachability-mode";
-import { useTriggerStatuses } from "../_parts/use-trigger-statuses";
-import { GroupChatFilesSetting } from "./group-chat-files-setting";
+import { GroupChatFilesSetting } from "./_parts/group-chat-files-setting";
 
 export default function MsTeamsPage() {
   const configuredAppName = useAppName();

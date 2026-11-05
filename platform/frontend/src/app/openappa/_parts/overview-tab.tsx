@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useOpenAppaSetupState } from "@/components/openappa/use-openappa-setup-state";
 import { Button } from "@/components/ui/button";
 import { RulesCard } from "./coverage-charts";
 import { EntitiesTable } from "./entities-table";
@@ -9,7 +10,6 @@ import { OverviewSetupCards } from "./overview-setup-cards";
 import { OverviewStatusCards } from "./overview-status-cards";
 import { RemediesCard } from "./remedies-panels";
 import { LabelCard } from "./trust-audience-card";
-import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
 /** The visible policy targets whose tool calls can enter the OpenAPPA path. */
 export function OverviewTab() {

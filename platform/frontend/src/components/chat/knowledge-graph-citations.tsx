@@ -11,7 +11,7 @@ import { useState } from "react";
 import {
   ConnectorTypeIcon,
   hasConnectorIcon,
-} from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
+} from "@/components/knowledge/connector-icons";
 import { Button } from "@/components/ui/button";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { getToolNameFromPart } from "@/lib/chat/chat-tools-display.utils";

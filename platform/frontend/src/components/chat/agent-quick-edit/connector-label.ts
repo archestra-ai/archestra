@@ -1,5 +1,5 @@
 import type { archestraApiTypes } from "@archestra/shared";
-import { getConnectorTypeLabel } from "@/app/knowledge/knowledge-bases/_parts/connector-dialog-config";
+import { getConnectorTypeLabel } from "@/components/knowledge/connector-dialog-config";
 
 type ConnectorType =
   archestraApiTypes.GetConnectorsResponses["200"]["data"][number]["connectorType"];

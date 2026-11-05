@@ -10,9 +10,9 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
-import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
-import { channelDisplayName } from "@/app/settings/messaging-channels/_parts/channel-details-dialog";
 import { ChannelIcon } from "@/components/channel-icon";
+import { channelDisplayName } from "@/components/messaging-channels/channel-details-dialog";
+import { useSettingsAreaAccess } from "@/components/settings/use-settings-area-access";
 import { SettingsLink } from "@/components/settings-link";
 import { SlackBotEditDialog } from "@/components/slack-bot-edit-dialog";
 import { Button } from "@/components/ui/button";

@@ -3,8 +3,8 @@
 import {
   CONNECT_PLATFORM_OPTIONS,
   type ConnectPlatformOption,
-} from "@/app/connection/platform.utils";
-import { ConnectionPlatformMultiSelect } from "@/app/connection/platform-select";
+} from "@/components/connection/platform.utils";
+import { ConnectionPlatformMultiSelect } from "@/components/connection/platform-select";
 import { Label } from "@/components/ui/label";
 
 export type PluginPlatform = "posix" | "windows";

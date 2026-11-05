@@ -21,7 +21,7 @@ vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/environment.query", () => ({
   useK8sCapabilities: vi.fn(),
 }));
-vi.mock("@/app/openappa/_parts/guardrails-deployment-toggle", () => ({
+vi.mock("@/components/openappa/guardrails-deployment-toggle", () => ({
   GuardrailsDisabledWarning: () => <div>Guardrails disabled row</div>,
 }));
 let guardrailsEnabled = false;

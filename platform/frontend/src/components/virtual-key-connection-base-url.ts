@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import {
   resolveAdminDefaultBaseUrl,
   resolveCandidateBaseUrls,
-} from "@/app/connection/connection-flow.utils";
+} from "@/components/connection/connection-flow.utils";
 import config from "@/lib/config/config";
 import { useOrganization } from "@/lib/organization.query";
 

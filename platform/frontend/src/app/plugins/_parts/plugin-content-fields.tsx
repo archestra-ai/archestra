@@ -2,6 +2,7 @@
 
 import { Info } from "lucide-react";
 import { IdentityFields } from "@/components/identity-fields";
+import { SkillContentEditor } from "@/components/skills/skill-content-editor";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SingleSelectCombobox } from "@/components/ui/single-select-combobox";
@@ -12,7 +13,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { SkillContentEditor } from "../../skills/_parts/skill-content-editor";
 import { PluginClientIcon } from "./plugin-client-icon";
 import { type PluginPlatform, PluginPlatforms } from "./plugin-platforms";
 

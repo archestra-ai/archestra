@@ -1,6 +1,9 @@
 import type { Permissions } from "@archestra/shared";
+import {
+  skillEditHref,
+  skillUsageHref,
+} from "@/components/skills/skill-page-config";
 import { ACTION_LABEL } from "@/lib/design/resource-lexicon";
-import { skillEditHref, skillUsageHref } from "./skill-page-config";
 
 export type SkillActionId = "chat" | "edit" | "usage" | "history" | "delete";
 

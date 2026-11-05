@@ -1,4 +1,4 @@
-import type { RemoteServerInstallResult } from "@/app/mcp/registry/_parts/remote-server-install-dialog";
+import type { RemoteServerInstallResult } from "@/components/mcp-registry/remote-server-install-dialog";
 
 export function buildRemoteInstallCredentialPayload(
   result: Pick<RemoteServerInstallResult, "metadata">,

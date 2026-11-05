@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { InteractionSummary } from "@/components/log-detail/session-timeline";
 import { useInteractionSummaries } from "@/lib/interactions/interaction.query";
 import {
   useMcpToolCall,
   useSessionMcpToolCalls,
 } from "@/lib/mcp/mcp-tool-call.query";
 import { usePageSeek } from "./page-seek";
-import type { InteractionSummary } from "./session-timeline";
 
 /**
  * The MCP tool calls that belong beside one page of a session's requests,

@@ -2,8 +2,8 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { useLogsHeaderAction } from "@/app/_parts/logs-section-layout";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { ConnectionExplorer } from "./_parts/connection-explorer";

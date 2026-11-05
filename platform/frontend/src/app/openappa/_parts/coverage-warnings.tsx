@@ -1,11 +1,11 @@
 import { TriangleAlert } from "lucide-react";
+import { OpenAppaChatButton } from "@/components/openappa/openappa-chat-button";
 import {
   InlineNotice,
   InlineNoticeBody,
   InlineNoticeText,
 } from "@/components/ui/inline-notice";
 import type { CoverageSummary } from "@/lib/openappa-coverage.query";
-import { OpenAppaChatButton } from "./openappa-chat-button";
 
 type Totals = CoverageSummary["totals"];
 

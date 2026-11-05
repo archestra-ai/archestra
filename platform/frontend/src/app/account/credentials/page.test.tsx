@@ -3,16 +3,16 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useCredentialsPage } from "@/app/_parts/use-credentials-page";
-import { ClaudeCodeSubscription } from "@/app/account/_parts/claude-code-subscription";
 import AccountLayout from "@/app/account/layout";
+import { ClaudeCodeSubscription } from "@/components/settings/claude-code-subscription";
+import { useCredentialsPage } from "@/components/settings/use-credentials-page";
 import { useAgentOptionsPage } from "@/lib/agent-options.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import AccountCredentialsPage from "./page";
 
 vi.mock("next/navigation");
-vi.mock("@/app/_parts/use-credentials-page", () => ({
+vi.mock("@/components/settings/use-credentials-page", () => ({
   useCredentialsPage: vi.fn(),
 }));
 vi.mock("@/lib/auth/auth.query");

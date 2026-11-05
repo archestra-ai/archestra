@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLogsHeaderAction } from "@/app/_parts/logs-section-layout";
 import { AgentSelector } from "@/components/agent-selector";
+import { ErrorBoundary } from "@/components/error-boundary";
 import {
   CollectionFilters,
   FilterBar,
@@ -26,7 +27,6 @@ import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { llmSessionHref } from "@/lib/interactions/llm-log-links";
 import { useMcpToolCalls } from "@/lib/mcp/mcp-tool-call.query";
 import { useMcpServerDisplayByName } from "@/lib/mcp-logs/use-mcp-server-display";
-import { ErrorBoundary } from "../../_parts/error-boundary";
 import { CallCell, StatusCell } from "./_parts/call-cell";
 import { CredentialCell } from "./_parts/credential-cell";
 import { GatewayCell } from "./_parts/gateway-cell";

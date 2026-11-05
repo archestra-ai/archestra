@@ -10,9 +10,9 @@ import {
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { FilterBar } from "@/components/filter-bar";
 import { PageLayout } from "@/components/page-layout";
 import { SearchInput } from "@/components/search-input";

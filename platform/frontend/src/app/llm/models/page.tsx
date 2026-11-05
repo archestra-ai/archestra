@@ -106,7 +106,7 @@ import {
   OBSERVED_MODEL_SOURCE_LABEL,
   resolveDisplayContextLength,
   resolveDisplayOutputLength,
-} from "./models-page-utils";
+} from "./_parts/models-page-utils";
 
 export default function ModelsPage() {
   const { searchParams, updateQueryParams } = useDataTableQueryParams();

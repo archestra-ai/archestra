@@ -15,7 +15,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMcpRegistryServer } from "@/lib/mcp/external-mcp-catalog.query";
-import { ServerDetails } from "./server-details";
+import { ServerDetails } from "./_parts/server-details";
 
 export function McpRegistryServerDetailPage({ name }: { name: string }) {
   const { data: server, isPending } = useMcpRegistryServer(name);

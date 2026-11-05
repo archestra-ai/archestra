@@ -37,8 +37,8 @@ import {
   getOAuthCallbackErrorState,
   type OAuthCallbackErrorState,
   toInternalReturnPath,
-} from "./oauth-callback.utils";
-import { OAuthCallbackStatus } from "./oauth-callback-status";
+} from "./_parts/oauth-callback.utils";
+import { OAuthCallbackStatus } from "./_parts/oauth-callback-status";
 
 function OAuthCallbackContent() {
   const searchParams = useSearchParams();

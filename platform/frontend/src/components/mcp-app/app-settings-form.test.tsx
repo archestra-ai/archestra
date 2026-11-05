@@ -58,7 +58,7 @@ vi.mock("@/lib/organization.query");
 // Both children have their own behavior-focused suites (app-tools-editor.test
 // covers the editor; the environment selector fetches environments). The stub
 // editor exposes onSelectionChange so tests can stage tool changes.
-vi.mock("@/app/apps/_parts/app-tools-editor", () => ({
+vi.mock("@/components/mcp-app/app-tools-editor", () => ({
   AppToolsEditor: ({
     selectedToolIds,
     onSelectionChange,

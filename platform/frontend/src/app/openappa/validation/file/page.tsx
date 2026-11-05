@@ -6,6 +6,26 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { Editor } from "@/components/editor";
+import {
+  useValidation,
+  useValidationInspection,
+  validationFileHref,
+} from "@/components/openappa/validation-context";
+import {
+  clearValidationDraft,
+  getValidationDraft,
+  retainValidationDraft,
+} from "@/components/openappa/validation-draft";
+import {
+  exportValidationFile,
+  ValidationNotices,
+  ValidationRunDiagnostics,
+} from "@/components/openappa/validation-parts";
+import {
+  latestFileResult,
+  validationFileStates,
+  validationName,
+} from "@/components/openappa/validation-run-history";
 import { Card, CardContent } from "@/components/ui/card";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import {
@@ -26,31 +46,11 @@ import {
   registerAppaLanguage,
 } from "../../_parts/appa-language";
 import { POLICY_EDITOR_OPTIONS } from "../../_parts/policy-editor-options";
-import {
-  latestFileResult,
-  validationFileStates,
-  validationName,
-} from "../../_parts/validation-run-history";
 import { useValidationHistoryGuard } from "../_parts/use-validation-history-guard";
-import {
-  useValidation,
-  useValidationInspection,
-  validationFileHref,
-} from "../_parts/validation-context";
-import {
-  clearValidationDraft,
-  getValidationDraft,
-  retainValidationDraft,
-} from "../_parts/validation-draft";
 import {
   ValidationFileView,
   type ValidationFileViewProps,
 } from "../_parts/validation-file-view";
-import {
-  exportValidationFile,
-  ValidationNotices,
-  ValidationRunDiagnostics,
-} from "../_parts/validation-parts";
 
 export default function ValidationFilePage() {
   const path = useSearchParams().get("path") ?? "";

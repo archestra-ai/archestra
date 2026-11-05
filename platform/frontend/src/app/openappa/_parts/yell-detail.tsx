@@ -6,6 +6,13 @@ import {
   FactsStrip,
   FactValue,
 } from "@/components/log-detail/facts-strip";
+import {
+  BROKE_THE_GLASS_HINT,
+  YellCaller,
+  YellGuardrailsMark,
+  YellRowActions,
+  YellSignals,
+} from "@/components/openappa/yells-table";
 import { PageBackLink } from "@/components/page-back-link";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,13 +22,6 @@ import {
   useResolveOpenAppaYell,
 } from "@/lib/openappa-yells.query";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import {
-  BROKE_THE_GLASS_HINT,
-  YellCaller,
-  YellGuardrailsMark,
-  YellRowActions,
-  YellSignals,
-} from "./yells-table";
 
 /** One yell: its facts, its whole report, what it left behind. */
 export function YellDetail({ id }: { id: string }) {

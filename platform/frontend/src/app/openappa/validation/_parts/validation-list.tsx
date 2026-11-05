@@ -25,6 +25,24 @@ import {
   RowClickShield,
 } from "@/components/agent-pages/row-click-shield";
 import { filterSearchClass } from "@/components/filter-bar";
+import { useManagedValidationsLink } from "@/components/openappa/github-managed-policy-notice";
+import {
+  OpenAppaChatButton,
+  useOpenAppaChatLaunch,
+} from "@/components/openappa/openappa-chat-button";
+import {
+  useValidation,
+  validationFileHref,
+} from "@/components/openappa/validation-context";
+import {
+  statusLabel,
+  ValidationNotices,
+  ValidationRunNotices,
+} from "@/components/openappa/validation-parts";
+import {
+  validationFileStates,
+  validationName,
+} from "@/components/openappa/validation-run-history";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Button } from "@/components/ui/button";
@@ -43,22 +61,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import type { PolicyTestRun } from "@/lib/openappa-policy-tests.query";
 import { formatCompactRelativeTime, formatDate } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
-import { useManagedValidationsLink } from "../../_parts/github-managed-policy-notice";
-import {
-  OpenAppaChatButton,
-  useOpenAppaChatLaunch,
-} from "../../_parts/openappa-chat-button";
 import { OpenAppaPageAction } from "../../_parts/openappa-page-action";
-import {
-  validationFileStates,
-  validationName,
-} from "../../_parts/validation-run-history";
-import { useValidation, validationFileHref } from "./validation-context";
-import {
-  statusLabel,
-  ValidationNotices,
-  ValidationRunNotices,
-} from "./validation-parts";
 
 // ===========================================================================
 // Refined table: one primary action, a summary strip that doubles as the

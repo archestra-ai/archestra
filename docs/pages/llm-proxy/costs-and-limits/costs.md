@@ -72,13 +72,14 @@ Anyone signed in to Archestra can open **My Usage** in the sidebar to see their 
 A team admin can check what their teams spend against their limits without seeing the rest of the organization. Open **Costs & Limits → Costs**: without [`llmCost:read`](/docs/reference/permissions#llmCost:read), the page covers only the teams you administer and their child teams.
 
 - **Team** narrows the page to one of your teams when you administer more than one.
-- **by** groups usage by **Time**, **Team**, or **Model**.
+- **by** groups usage by **Time**, **Team**, or **Model**, without a further breakdown.
+- **Show** offers every metric except the subscription estimate, which appears only in the summary at the top.
 
 What to know:
 
 - A request counts for a team the way its [team limits](/docs/llm-proxy/costs-and-limits/limits#team-limits-and-spend) count it: billed to the team or one of its child teams, or made by a member through an agent shared with the team.
-- Headline totals count each request once, even when it counts for both a team and its parent.
-- Agent sharing and team membership are read as they are now, so changing either changes past figures here. A limit keeps the usage it already counted.
+- Totals count each request once, even when it counts for both a team and its parent. A parent's row includes its child teams' usage, so rows can add up to more than the total.
+- Agent sharing, team membership, and which team is a child of which are read as they are now. Changing any of them, including moving a team under another parent, changes past figures here. A limit keeps the usage it already counted.
 
 ## What to Know
 

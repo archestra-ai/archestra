@@ -142,6 +142,45 @@ describe("team admin cost access", () => {
     }
   });
 
+  test("scopes a team admin of a deep team hierarchy", async ({
+    makeTeam,
+    makeTeamMember,
+    makeAgent,
+    makeInteraction,
+  }) => {
+    // Every team covers each descendant: 300 nested teams make about 45,000
+    // (team, descendant) pairs, more than one statement can bind as values.
+    const root = await makeTeam(organizationId, caller.id);
+    await makeTeamMember(root.id, caller.id, { role: "admin" });
+    let deepest = root;
+    for (let depth = 1; depth < 300; depth++)
+      deepest = await makeTeam(organizationId, caller.id, {
+        parentId: deepest.id,
+      });
+    const agent = await makeAgent({ organizationId });
+    await makeInteraction(agent.id, {
+      userId: caller.id,
+      billingTeamId: deepest.id,
+      cost: "5",
+      baselineCost: "5",
+      billingMode: "metered",
+    });
+
+    const costs = await app.inject({
+      method: "GET",
+      url: `/api/statistics/costs?timeframe=24h&teamId=${root.id}`,
+    });
+    expect(costs.statusCode, costs.body).toBe(200);
+    expect(costs.json().costSavings.totalActualCost).toBeCloseTo(5);
+
+    const byTeam = await app.inject({
+      method: "GET",
+      url: "/api/statistics/teams?timeframe=24h",
+    });
+    expect(byTeam.statusCode, byTeam.body).toBe(200);
+    expect(costByTeam(byTeam.json())[root.id]).toBeCloseTo(5);
+  });
+
   test("an organization cost reader keeps the organization-wide view", async ({
     makeUser,
     makeMember,

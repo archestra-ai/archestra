@@ -2502,32 +2502,17 @@ class StatisticsModel {
     chargesTeam: (teamId: SQLWrapper) => SQL;
   }> {
     const { organizationId } = params;
-    const hierarchy = await db
-      .select({
-        id: schema.teamsTable.id,
-        parentId: schema.teamsTable.parentId,
-      })
+    const known = await db
+      .select({ id: schema.teamsTable.id })
       .from(schema.teamsTable)
-      .where(eq(schema.teamsTable.organizationId, organizationId));
-    const known = new Set(hierarchy.map((team) => team.id));
-    const teamIds = [...new Set(params.teamIds)].filter((id) => known.has(id));
-    const children = new Map<string, string[]>();
-    for (const team of hierarchy) {
-      if (!team.parentId) continue;
-      children.set(team.parentId, [
-        ...(children.get(team.parentId) ?? []),
-        team.id,
-      ]);
-    }
-    // Each scope team covers itself and every descendant: the billing teams
-    // whose spend reaches its limit, and the teams whose members it contains.
-    const coverage = teamIds.flatMap((scopeTeamId) => {
-      const covered = new Set([scopeTeamId]);
-      for (const id of covered)
-        for (const child of children.get(id) ?? []) covered.add(child);
-      return [...covered].map((teamId) => [scopeTeamId, teamId] as const);
-    });
-    if (coverage.length === 0) {
+      .where(
+        and(
+          eq(schema.teamsTable.organizationId, organizationId),
+          sql`${schema.teamsTable.id} = ANY(string_to_array(${[...new Set(params.teamIds)].join(",")}, ','))`,
+        ),
+      );
+    const teamIds = known.map((team) => team.id);
+    if (teamIds.length === 0) {
       return {
         teamIds,
         chargesAny: sql`FALSE`,
@@ -2535,12 +2520,21 @@ class StatisticsModel {
       };
     }
     const i = schema.interactionsTable;
-    const covered = sql`(VALUES ${sql.join(
-      coverage.map(
-        ([scopeTeamId, teamId]) => sql`(${scopeTeamId}::text, ${teamId}::text)`,
-      ),
-      sql`, `,
-    )}) AS covered(scope_team_id, team_id)`;
+    const t = schema.teamsTable;
+    // Each scope team covers itself and every descendant: the billing teams
+    // whose spend reaches its limit, and the teams whose members it contains.
+    // Walked in SQL, with the scope teams bound as one parameter, so a deep
+    // hierarchy cannot outgrow the statement's parameter limit.
+    const covered = sql`(WITH RECURSIVE coverage(scope_team_id, team_id) AS (
+        SELECT ${t.id}, ${t.id} FROM ${t}
+        WHERE ${t.organizationId} = ${organizationId}
+          AND ${t.id} = ANY(string_to_array(${teamIds.join(",")}, ','))
+        UNION
+        SELECT coverage.scope_team_id, child.id
+        FROM ${t} AS child
+        INNER JOIN coverage ON child.parent_team_id = coverage.team_id
+        WHERE child.organization_id = ${organizationId}
+      ) SELECT scope_team_id, team_id FROM coverage) AS covered(scope_team_id, team_id)`;
     const assignments = AgentTeamModel.readAssignments(organizationId);
     // (scope team, agent, caller) for every agent shared with a scope team
     // and every caller inside it.
@@ -2551,7 +2545,7 @@ class StatisticsModel {
     return {
       teamIds,
       chargesAny: sql`CASE WHEN ${i.billingTeamId} IS NOT NULL
-        THEN ${i.billingTeamId} IN (SELECT covered.team_id FROM ${covered})
+        THEN ${i.billingTeamId} IN (SELECT DISTINCT covered.team_id FROM ${covered})
         ELSE (${i.profileId}, ${i.userId}) IN (SELECT agent_id, user_id FROM (${callers}) AS callers(scope_team_id, agent_id, user_id))
       END`,
       chargesTeam: (teamId) => sql`CASE WHEN ${i.billingTeamId} IS NOT NULL

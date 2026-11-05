@@ -927,6 +927,30 @@ describe("OrganizationCostsPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "by Team" })).toBeVisible();
   });
+  it("explores billed spend for a team admin's subscription link", async () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.llmCost,
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useTeamLimitAccess).mockReturnValue({
+      isTeamAdmin: true,
+      canRead: true,
+      teams: [{ id: "parent", name: "Platform" }],
+    } as ReturnType<typeof useTeamLimitAccess>);
+    search = new URLSearchParams("group=model&metric=subscription");
+    show();
+    const metricButton = await screen.findByRole("button", { name: /^Show / });
+    expect(metricButton).toHaveTextContent("Billed spend");
+    fireEvent.keyDown(metricButton, { key: "Enter" });
+    const options = (await screen.findAllByRole("menuitem")).map(
+      (item) => item.textContent,
+    );
+    expect(options).toContain("Billed spend");
+    expect(options.some((o) => /subscription/i.test(o ?? ""))).toBe(false);
+  });
   it("drops a breakdown a team admin's shared link asks for", async () => {
     vi.mocked(useHasPermissions).mockImplementation(
       (permissions) =>

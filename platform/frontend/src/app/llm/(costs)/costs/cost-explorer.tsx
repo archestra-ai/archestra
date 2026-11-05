@@ -99,20 +99,24 @@ export default function CostExplorer() {
   // A shared link may name a grouping, breakdown or model drill-down a team
   // admin cannot read (breakdowns come from the organization-wide usage
   // endpoint); fall back to spend by model, or drop the breakdown.
+  // Team-scoped sources carry no subscription estimate per team or model,
+  // so a team admin explores billed spend; the KPI still shows the estimate.
   const scopeQuery = (raw: PivotQuery): PivotQuery =>
     !teamScoped
       ? raw
-      : !canGroup(raw.group) || raw.model
-        ? {
-            ...raw,
-            metric: supports("model", raw.metric) ? raw.metric : "billed",
-            group: "model",
-            split: "none",
-            model: undefined,
-          }
-        : raw.split !== "none"
-          ? { ...raw, split: "none" }
-          : raw;
+      : raw.metric === "subscription"
+        ? scopeQuery({ ...raw, metric: "billed" })
+        : !canGroup(raw.group) || raw.model
+          ? {
+              ...raw,
+              metric: supports("model", raw.metric) ? raw.metric : "billed",
+              group: "model",
+              split: "none",
+              model: undefined,
+            }
+          : raw.split !== "none"
+            ? { ...raw, split: "none" }
+            : raw;
   const query = scopeQuery(explorer.query);
   // Controls change the query on screen, never a hidden grouping or model
   // filter that would force the fallback again.
@@ -361,7 +365,9 @@ export default function CostExplorer() {
               ].includes(m)) &&
             (m !== "appRuns" || canReadApps) &&
             (m !== "skillActivations" || canReadSkills) &&
-            (!teamScoped || DIM_IDS.some((d) => canGroup(d) && supports(d, m))),
+            (!teamScoped ||
+              (m !== "subscription" &&
+                DIM_IDS.some((d) => canGroup(d) && supports(d, m)))),
         ).map((m) => ({
           id: m,
           label: METRICS[m].label,

@@ -1,4 +1,4 @@
-import { withoutArgumentCopies } from "./command-normalization";
+import { withoutProxyCopies } from "./derived-arguments";
 
 /**
  * The reviewed call as an approval prompt shows it: the tool by the name the
@@ -54,7 +54,7 @@ export function reviewedCallArguments(review: {
   arguments?: string;
 }): Record<string, unknown> | undefined {
   const args = parseReviewedArguments(review.arguments);
-  return args && review.tool ? withoutArgumentCopies(review.tool, args) : args;
+  return args && review.tool ? withoutProxyCopies(review.tool, args) : args;
 }
 
 /** The reviewed arguments as an object, or undefined when they are not one. */

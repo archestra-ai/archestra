@@ -1,6 +1,3 @@
-import { isDeepStrictEqual } from "node:util";
-import { ResourcePermissionGrantSchema } from "@archestra/shared";
-
 /**
  * Checks whether a tool name refers to a command-execution tool.
  * @public — exported for testability
@@ -55,40 +52,14 @@ export function normalizeToolArgumentsForPolicy(
 }
 
 /**
- * The string array OpenAPPA rules an argument holding an array of objects by,
- * since no selector reads one: `initialGrantPrincipals` (`<type>:<id>`, or
- * `organization`) from `initialGrants`, and `transferModes` (`value` or
- * `link`) from a credential transfer's `environment`. A value sent under the
- * derived name is replaced. A malformed source derives `null`, which the
- * battery's parameter schema refuses.
- */
-export function withDerivedArgument(
-  args: Record<string, unknown>,
-  key: DerivedArgument,
-): Record<string, unknown> {
-  const { [key]: _sent, ...rest } = args;
-  const value = derivedValue(args, key);
-  return value === undefined ? rest : { ...rest, [key]: value };
-}
-
-export type DerivedArgument = keyof typeof DERIVED_ARGUMENTS;
-
-/**
  * A call's arguments without the copies `normalizeToolArgumentsForPolicy`
- * and `withDerivedArgument` add, for a reviewer who should see each value
- * once.
+ * adds, for a reviewer who should see each value once.
  */
 export function withoutArgumentCopies(
   toolName: string,
   args: Record<string, unknown>,
 ): Record<string, unknown> {
   const copies = new Set<string>();
-  for (const key of DERIVED_ARGUMENT_NAMES)
-    if (
-      Object.hasOwn(args, key) &&
-      isDeepStrictEqual(args[key], derivedValue(args, key))
-    )
-      copies.add(key);
   if (isCommandExecutionTool(toolName) && args.cmd === args.command)
     copies.add("cmd");
   if (
@@ -117,54 +88,4 @@ function localToolName(name: string): string {
 // The path as the battery's selectors read it: `/` between the segments.
 function policyPath(path: string): string {
   return path.replaceAll("\\", "/");
-}
-
-const DERIVED_ARGUMENTS = {
-  initialGrantPrincipals: {
-    source: "initialGrants",
-    entry: grantPrincipal,
-  },
-  transferModes: {
-    source: "environment",
-    entry: (variable: unknown) =>
-      isRecord(variable)
-        ? variable.value === undefined
-          ? "link"
-          : "value"
-        : null,
-  },
-} as const;
-
-const DERIVED_ARGUMENT_NAMES = Object.keys(
-  DERIVED_ARGUMENTS,
-) as DerivedArgument[];
-
-/** One entry per source element, `null` if any is malformed; absent for none. */
-function derivedValue(
-  args: Record<string, unknown>,
-  key: DerivedArgument,
-): string[] | null | undefined {
-  const { source, entry } = DERIVED_ARGUMENTS[key];
-  const elements = args[source];
-  if (
-    elements === undefined ||
-    (Array.isArray(elements) && elements.length === 0)
-  )
-    return undefined;
-  const entries = Array.isArray(elements) ? elements.map(entry) : [null];
-  return entries.every((value) => value !== null) ? entries : null;
-}
-
-/** A grant the tool would accept, as its principal; null for any other. */
-function grantPrincipal(grant: unknown): string | null {
-  const parsed = ResourcePermissionGrantSchema.safeParse(grant);
-  if (!parsed.success) return null;
-  const { subject } = parsed.data;
-  return subject.type === "organization"
-    ? "organization"
-    : `${subject.type}:${subject.id}`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

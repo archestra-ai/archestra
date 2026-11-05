@@ -1,23 +1,18 @@
-import {
-  type ArchestraToolShortName,
-  TOOL_PREVIEW_APP_TOOL_SHORT_NAME,
-} from "@archestra/shared";
+import { TOOL_PREVIEW_APP_TOOL_SHORT_NAME } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { gateAppToolCall } from "@/services/apps/app-tool-runtime-gate";
-import {
-  normalizeToolArgumentsForPolicy,
-  withDerivedArgument,
-} from "./command-normalization";
+import { normalizeToolArgumentsForPolicy } from "./command-normalization";
+import { withDerivedArguments } from "./derived-arguments";
 
 /**
  * The arguments OpenAPPA rules a call on: a tool that shares a resource or
- * transfers a credential also gets the string array `withDerivedArgument`
+ * transfers a credential also gets the string array `withDerivedArguments`
  * derives. Execution keeps the call's own arguments.
  */
 export function policyArguments(toolName: string, args: unknown): unknown {
   return normalizeToolArgumentsForPolicy(
     toolName,
-    withDerivedArguments(archestraMcpBranding.getToolShortName(toolName), args),
+    withDerivedArguments(toolName, args),
   );
 }
 
@@ -68,27 +63,6 @@ export async function previewAppToolTarget(
 }
 
 // ===
-
-const GRANTING_TOOLS = new Set<ArchestraToolShortName | null>([
-  "create_agent",
-  "create_mcp_gateway",
-  "create_mcp_server",
-  "create_plugin",
-  "create_knowledge_base",
-  "scaffold_app",
-]);
-
-function withDerivedArguments(
-  shortName: ArchestraToolShortName | null,
-  args: unknown,
-): unknown {
-  if (!isRecord(args)) return args;
-  if (GRANTING_TOOLS.has(shortName))
-    return withDerivedArgument(args, "initialGrantPrincipals");
-  if (shortName === "transfer_credential")
-    return withDerivedArgument(args, "transferModes");
-  return args;
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

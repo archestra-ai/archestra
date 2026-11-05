@@ -169,6 +169,21 @@ describe("Archestra tools under the composed default policy", () => {
     expect(
       shown("get_agent", { id: "a", initialGrantPrincipals: ["x"] }),
     ).toEqual({ id: "a", initialGrantPrincipals: ["x"] });
+    // Another server's tool keeps an argument that matches what Archestra
+    // would derive, while the Archestra tool still hides its copy.
+    const sent = { ...transfer, transferModes: ["link"] };
+    expect(
+      approvalPromptCall({
+        toolName: archestraMcpBranding.getToolName("execute_remedy_plan"),
+        review: {
+          text: "Approve this call?",
+          tool: "mcp/vault/transfer_credential",
+          arguments: JSON.stringify(sent),
+        },
+      }).toolArgs,
+    ).toEqual(sent);
+    expect(evaluated("transfer_credential", transfer).args).toEqual(sent);
+    expect(shown("transfer_credential", transfer)).toEqual(transfer);
   });
 
   test("a preview is ruled as the exact app tool it runs", async ({

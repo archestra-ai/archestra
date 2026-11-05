@@ -6,6 +6,7 @@ import {
   isCommandExecutionTool,
   withoutArgumentCopies,
 } from "./command-normalization";
+import { withoutProxyCopies } from "./derived-arguments";
 import {
   displayedReview,
   parseReviewedArguments,
@@ -389,7 +390,7 @@ function cardArguments(
   if (!review.tool) return undefined;
   const args = parseReviewedArguments(review.arguments);
   if (!args) return review.arguments;
-  return withoutArgumentCopies(review.tool, args);
+  return withoutProxyCopies(review.tool, args);
 }
 
 /**

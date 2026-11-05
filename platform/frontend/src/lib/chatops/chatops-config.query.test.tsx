@@ -6,16 +6,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { handleApiError } from "@/lib/utils/api";
 import { useUpdateChatOpsConfigInQuickstart } from "./chatops-config.query";
 
-vi.mock("@archestra/shared", async () => {
-  const actual = await vi.importActual("@archestra/shared");
-  return {
-    ...actual,
-    archestraApiSdk: {
-      updateChatOpsConfigInQuickstart: vi.fn(),
-      refreshChatOpsChannelDiscovery: vi.fn().mockResolvedValue({}),
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  updateChatOpsConfigInQuickstart: vi.fn(),
+  refreshChatOpsChannelDiscovery: vi.fn().mockResolvedValue({}),
+}));
 
 vi.mock("sonner");
 

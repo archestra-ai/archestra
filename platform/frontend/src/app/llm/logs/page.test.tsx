@@ -9,17 +9,11 @@ import LlmProxyLogsPageServer from "./page";
 
 const getAgents = vi.hoisted(() => vi.fn());
 const getLlmProxyLogs = vi.hoisted(() => vi.fn());
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      getAgents,
-      getLlmProxyLogs,
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getAgents,
+  getLlmProxyLogs,
+}));
 
 vi.mock("@/lib/utils/server", () => ({
   getServerApiHeaders: vi.fn(async () => ({})),

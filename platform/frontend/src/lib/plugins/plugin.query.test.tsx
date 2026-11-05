@@ -8,7 +8,10 @@ const sdk = vi.hoisted(() => ({
   importGithubPluginMarketplace: vi.fn(),
 }));
 
-vi.mock("@archestra/shared", () => ({ archestraApiSdk: sdk }));
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  ...sdk,
+}));
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() },
 }));

@@ -1,6 +1,6 @@
 "use client";
 
-import { formatDistance } from "date-fns";
+import { formatDistance } from "date-fns/formatDistance";
 import {
   Activity,
   Bot,

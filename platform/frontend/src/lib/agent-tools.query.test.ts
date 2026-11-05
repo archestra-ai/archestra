@@ -9,12 +9,11 @@ import {
   useUpdateAgentServerTools,
 } from "@/lib/agent-tools.query";
 
-vi.mock("@archestra/shared", () => ({
-  archestraApiSdk: {
-    assignToolToAgent: vi.fn(),
-    getAgentDelegations: vi.fn(),
-    unassignToolFromAgent: vi.fn(),
-  },
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  assignToolToAgent: vi.fn(),
+  getAgentDelegations: vi.fn(),
+  unassignToolFromAgent: vi.fn(),
 }));
 
 vi.mock("sonner");

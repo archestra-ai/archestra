@@ -1,7 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import {
   formatDuration,
   formatTokens,

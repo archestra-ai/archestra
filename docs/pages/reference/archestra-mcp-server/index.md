@@ -17,10 +17,9 @@ Ask an agent to create another agent, install an MCP server, or build an app thr
 
 ## Give an Agent These Tools
 
-Choose the Archestra tools on an agent's **Tools, Skills & Knowledge** tab or a gateway's **Tools & Knowledge** settings.
+New agents start with some built-in tools already assigned; the initial selection depends on enabled features. You can add or remove tools later on the agent's **Tools, Skills & Knowledge** tab.
 
-- **Manual:** assign the tools you want.
-- **All:** allow the built-in tools you need by removing them from the exclusions.
+Use **Manual** to assign tools explicitly, or **All** with exclusions. See [Choose What the Agent Can Use](/docs/agents#choose-what-the-agent-can-use) for how these modes work. For gateways, change **Tools & Knowledge** under **Settings**; see [Choose Its Tools](/docs/mcp/gateway#choose-its-tools).
 
 ## Permissions
 

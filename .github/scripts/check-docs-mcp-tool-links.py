@@ -21,7 +21,7 @@ PAGES_DIR = Path("docs/pages")
 REFERENCE = PAGES_DIR / "reference/archestra-mcp-server/index.md"
 REFERENCE_URL = "/docs/reference/archestra-mcp-server"
 
-TOOL_HEADING = re.compile(r"^#### ([a-z0-9_]+)\s*$", re.MULTILINE)
+TOOL_HEADING = re.compile(r"^### ([a-z0-9_]+)\s*$", re.MULTILINE)
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 # Inline code that is not already the text of a link.
 MENTION = re.compile(r"(?<!\[)`(?:archestra__)?([a-z0-9_]+)`(?!\]\()")

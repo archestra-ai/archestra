@@ -87,7 +87,7 @@ class ToolLinkTest(DocsFixture):
     def setUp(self):
         super().setUp()
         self.write("reference/archestra-mcp-server/index.md", "# Tools\n")
-        self.write("reference/archestra-mcp-server/skills-and-files.md", "#### list_skills\n\n#### read_file\n")
+        self.write("reference/archestra-mcp-server/skills-and-files.md", "### list_skills\n\n### read_file\n")
 
     def test_flags_unlinked_tool_mentions_only(self):
         self.write(

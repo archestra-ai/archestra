@@ -35,22 +35,19 @@ import {
   useUpdateConversation,
 } from "./chat.query";
 
-vi.mock("@archestra/shared", () => ({
-  archestraApiSdk: {
-    getChatConversations: vi.fn(),
-    getChatConversation: vi.fn(),
-    getChatConversationFiles: vi.fn(),
-    getConversationEnabledTools: vi.fn(),
-    markChatConversationRead: vi.fn(),
-    deleteChatConversation: vi.fn(),
-    clearChatConversationErrors: vi.fn(),
-    updateChatConversation: vi.fn(),
-    createChatConversation: vi.fn(),
-    stopChatStream: vi.fn(),
-    resolveChatMcpElicitation: vi.fn(),
-  },
-  PLAYWRIGHT_MCP_CATALOG_ID: "playwright-catalog-id",
-  PLAYWRIGHT_MCP_SERVER_NAME: "playwright-mcp",
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getChatConversations: vi.fn(),
+  getChatConversation: vi.fn(),
+  getChatConversationFiles: vi.fn(),
+  getConversationEnabledTools: vi.fn(),
+  markChatConversationRead: vi.fn(),
+  deleteChatConversation: vi.fn(),
+  clearChatConversationErrors: vi.fn(),
+  updateChatConversation: vi.fn(),
+  createChatConversation: vi.fn(),
+  stopChatStream: vi.fn(),
+  resolveChatMcpElicitation: vi.fn(),
 }));
 
 vi.mock("next/navigation");

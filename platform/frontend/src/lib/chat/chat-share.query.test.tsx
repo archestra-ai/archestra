@@ -5,10 +5,9 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useForkConversation } from "./chat-share.query";
 
-vi.mock("@archestra/shared", () => ({
-  archestraApiSdk: {
-    forkChatConversation: vi.fn(),
-  },
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  forkChatConversation: vi.fn(),
 }));
 
 describe("fork project-list invalidation", () => {

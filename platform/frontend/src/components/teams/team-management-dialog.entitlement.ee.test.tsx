@@ -119,7 +119,9 @@ it("keeps Team Sync unavailable when the server denies core despite a true stati
   await waitFor(() =>
     expect(client.getQueryState(["config"])?.status).toBe("success"),
   );
-  expect(screen.getByRole("button", { name: "Team Sync" })).toBeDisabled();
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Team Sync" })).toBeDisabled(),
+  );
   expect(
     screen.getByText("Activate an Enterprise license to use Team Sync."),
   ).toBeInTheDocument();
@@ -141,7 +143,10 @@ it("removes an already loaded Team Sync section when effective entitlement is re
   await act(async () => {
     await client.invalidateQueries({ queryKey: ["config"] });
   });
-  expect(screen.getByRole("button", { name: "Team Sync" })).toBeDisabled();
+  // The refetched config re-renders the dialog after the query settles.
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Team Sync" })).toBeDisabled(),
+  );
   expect(
     screen.queryByText(/Add people to Team A from their identity provider/),
   ).not.toBeInTheDocument();

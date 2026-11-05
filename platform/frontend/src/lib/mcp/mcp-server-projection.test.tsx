@@ -7,13 +7,10 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useMcpServers } from "./mcp-server.query";
 
 vi.mock("@/lib/auth/auth.query");
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: { ...actual.archestraApiSdk, getMcpServers: vi.fn() },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getMcpServers: vi.fn(),
+}));
 
 it("keeps compact issue data separate from the full server roster", async () => {
   vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<

@@ -11,21 +11,14 @@ let mockPermissions: Permissions = {};
 /** The signed-in actor's per-object grants, as GET /api/resource-permissions returns them. */
 let mockCapabilities: unknown[] = [];
 
-vi.mock("@archestra/shared", async () => {
-  const actual = await vi.importActual("@archestra/shared");
-  return {
-    ...actual,
-    archestraApiSdk: {
-      getUserPermissions: vi.fn(() =>
-        Promise.resolve({ data: mockPermissions }),
-      ),
-      getScopedCapabilities: vi.fn(() =>
-        Promise.resolve({ data: mockCapabilities }),
-      ),
-      getSecretsType: vi.fn(() => Promise.resolve({ data: { type: "DB" } })),
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getUserPermissions: vi.fn(() => Promise.resolve({ data: mockPermissions })),
+  getScopedCapabilities: vi.fn(() =>
+    Promise.resolve({ data: mockCapabilities }),
+  ),
+  getSecretsType: vi.fn(() => Promise.resolve({ data: { type: "DB" } })),
+}));
 
 let mockSecretsType = "DB";
 let mockAgentRuntimeEnabled = false;

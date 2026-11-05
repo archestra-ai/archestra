@@ -8,17 +8,11 @@ const { searchMcpRegistryMock, getIssueIndexMock } = vi.hoisted(() => ({
   getIssueIndexMock: vi.fn(),
 }));
 
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      searchMcpRegistry: searchMcpRegistryMock,
-      getMcpRegistryIssueIndex: getIssueIndexMock,
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  searchMcpRegistry: searchMcpRegistryMock,
+  getMcpRegistryIssueIndex: getIssueIndexMock,
+}));
 
 import { authQueryKeys } from "@/lib/auth/auth.query";
 import { useMcpRegistryPage } from "@/lib/mcp/mcp-registry.query";

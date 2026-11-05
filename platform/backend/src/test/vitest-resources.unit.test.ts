@@ -188,15 +188,15 @@ describe("sizing inside an Agent Runtime pod", () => {
     });
   });
 
-  test("the frontend suite keeps half the cores and the 8 GiB ceiling on a machine", () => {
+  test("the frontend suite takes a third of the cores and a 1 GiB heap per worker on a machine", () => {
     const laptop = resourceEnvelope({
       hostParallelism: 8,
       hostMemoryBytes: 16 * GIB,
       constrainedMemoryBytes: 0,
     });
     expect(frontendVitestResourceLimits(laptop)).toEqual({
-      maxWorkers: 4,
-      maxOldSpaceMb: 8192,
+      maxWorkers: 2,
+      maxOldSpaceMb: 1024,
     });
     const workstation = resourceEnvelope({
       hostParallelism: 32,
@@ -204,8 +204,8 @@ describe("sizing inside an Agent Runtime pod", () => {
       constrainedMemoryBytes: 0,
     });
     expect(frontendVitestResourceLimits(workstation)).toEqual({
-      maxWorkers: 16,
-      maxOldSpaceMb: 8192,
+      maxWorkers: 10,
+      maxOldSpaceMb: 1024,
     });
   });
 });

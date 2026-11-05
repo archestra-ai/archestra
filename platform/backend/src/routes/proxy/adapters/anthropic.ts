@@ -1521,14 +1521,8 @@ export const anthropicAdapterFactory: LLMProvider<
     );
 
     // Check if this is a Bearer token (OAuth) or regular API key
-    const isAuthToken =
-      (apiKey?.startsWith("Bearer:") || apiKey?.startsWith("sk-ant-oat")) ??
-      false;
-    const token = apiKey?.startsWith("Bearer:")
-      ? apiKey.slice(7)
-      : isAuthToken
-        ? apiKey
-        : undefined;
+    const isAuthToken = apiKey?.startsWith("Bearer:") ?? false;
+    const token = isAuthToken && apiKey ? apiKey.slice(7) : undefined;
     // Null prevents the SDK from adding an ambient API key to bearer requests.
     const regularApiKey = isAuthToken ? null : apiKey;
     const isClaudeSubscriptionToken = token?.startsWith("sk-ant-oat") ?? false;

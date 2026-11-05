@@ -263,6 +263,33 @@ describe("access box", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
+  it("lets Built-in be the only selected option", async () => {
+    setQuery("access=mine&builtIn=true");
+    const view = renderFilter({ offerBuiltIn: true });
+    const user = userEvent.setup();
+    await user.click(accessTrigger());
+    expect(option(/^Mine/)).toHaveAttribute("aria-disabled", "false");
+    await user.click(option(/^Mine/));
+    expect(push).toHaveBeenCalledWith("/agents?builtIn=true&scope=built_in");
+
+    setQuery("builtIn=true&scope=built_in");
+    view.rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <ResourceAccessFilter resource="agent" noun="agents" offerBuiltIn />
+      </QueryClientProvider>,
+    );
+    expect(accessTrigger()).toHaveTextContent("Built-in");
+    expect(accessTrigger()).not.toHaveTextContent("Mine");
+    expect(option(/^Mine/)).toHaveAttribute("aria-checked", "false");
+    expect(option(/^Shared with me/)).toHaveAttribute("aria-checked", "false");
+    expect(option(/^Built-in/)).toHaveAttribute("aria-disabled", "true");
+
+    await user.click(option(/^Shared with me/));
+    expect(push).toHaveBeenLastCalledWith(
+      "/agents?builtIn=true&access=shared%2Corg",
+    );
+  });
+
   it("offers built-in agents to agent admins only", async () => {
     renderFilter({ offerBuiltIn: true });
     const user = userEvent.setup();

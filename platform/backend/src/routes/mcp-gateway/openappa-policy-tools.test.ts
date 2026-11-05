@@ -14,6 +14,7 @@ import {
 } from "@/archestra-mcp-server";
 import config from "@/config";
 import { AgentExcludedToolModel, AgentModel, ToolModel } from "@/models";
+import { AGENT_RUNTIME_OAUTH_CLIENT_ID } from "@/services/agent-runtime/runtime-contract";
 import {
   syncBuiltInAgents,
   syncOpenAppaConfigAgentCapabilities,
@@ -41,7 +42,11 @@ beforeEach(() => {
   config.openappa.enabled = true;
 });
 
-function userToken(organizationId: string, userId: string) {
+function userToken(
+  organizationId: string,
+  userId: string,
+  oauthClientId?: string,
+) {
   return {
     tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
     teamId: null,
@@ -49,6 +54,7 @@ function userToken(organizationId: string, userId: string) {
     organizationId,
     isUserToken: true,
     userId,
+    ...(oauthClientId ? { oauthClientId } : {}),
   };
 }
 
@@ -56,11 +62,12 @@ async function listed(params: {
   agentId: string;
   organizationId: string;
   userId?: string;
+  oauthClientId?: string;
 }): Promise<string[]> {
   const { server } = await createAgentServer({
     agentId: params.agentId,
     tokenAuth: params.userId
-      ? userToken(params.organizationId, params.userId)
+      ? userToken(params.organizationId, params.userId, params.oauthClientId)
       : {
           tokenId: crypto.randomUUID(),
           teamId: null,
@@ -265,6 +272,77 @@ describe("implicit OpenAPPA policy read tools", () => {
     await expect(
       executeArchestraTool(GET_POLICY, {}, delegated),
     ).rejects.toMatchObject({ code: -32601 });
+  });
+
+  test("an Agent Runtime OAuth token on an unassigned agent requires explicit assignment or accessAllTools for policy reads", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organizationId, userId } = await contextFor({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      role: "admin",
+    });
+    const tokenAuth = userToken(
+      organizationId,
+      userId,
+      AGENT_RUNTIME_OAUTH_CLIENT_ID,
+    );
+    const restrictedAgent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      accessAllTools: false,
+      toolExposureMode: "search_and_run_only",
+    });
+    const restrictedContext: ArchestraContext = {
+      agent: { id: restrictedAgent.id, name: restrictedAgent.name },
+      agentId: restrictedAgent.id,
+      organizationId,
+      userId,
+      tokenAuth,
+    };
+
+    const restrictedListed = await listed({
+      agentId: restrictedAgent.id,
+      organizationId,
+      userId,
+      oauthClientId: AGENT_RUNTIME_OAUTH_CLIENT_ID,
+    });
+    const restrictedSearched = await searched(restrictedContext);
+    for (const read of READ) {
+      expect(restrictedListed).not.toContain(read);
+      expect(restrictedSearched).not.toContain(read);
+    }
+    expect(await admission(restrictedContext, GET_POLICY)).toBe("not_assigned");
+
+    const autoAgent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      accessAllTools: true,
+      toolExposureMode: "search_and_run_only",
+    });
+    const autoContext: ArchestraContext = {
+      agent: { id: autoAgent.id, name: autoAgent.name },
+      agentId: autoAgent.id,
+      organizationId,
+      userId,
+      tokenAuth,
+    };
+    const autoListed = await listed({
+      agentId: autoAgent.id,
+      organizationId,
+      userId,
+      oauthClientId: AGENT_RUNTIME_OAUTH_CLIENT_ID,
+    });
+    const autoSearched = await searched(autoContext);
+    for (const read of READ) {
+      expect(autoListed).toContain(read);
+      expect(autoSearched).toContain(read);
+    }
+    expect(await admission(autoContext, GET_POLICY)).toBe("admitted");
   });
 
   test("a caller without a user, or without guardrailsPolicy:read, neither lists nor runs policy reads", async ({

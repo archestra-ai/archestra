@@ -406,7 +406,12 @@ type InstallCallerContext = Pick<TokenAuthContext, "userId"> &
 
 /** The caller fields that decide which installation a tool call runs through. */
 export type TargetInstallCaller = InstallCallerContext &
-  Partial<Pick<TokenAuthContext, "isOrganizationToken" | "isExternalIdp">>;
+  Partial<
+    Pick<
+      TokenAuthContext,
+      "isOrganizationToken" | "isExternalIdp" | "oauthClientId"
+    >
+  >;
 
 /** The installation a tool call resolved to. */
 type TargetInstall = {

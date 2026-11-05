@@ -12,10 +12,15 @@ import {
   openappaDeclarations,
   type PolicyResolution,
 } from "@/openappa/declarations";
+import {
+  repositoryIncludePaths,
+  withoutRepositoryIncludes,
+} from "@/openappa/policy-text";
 import { OPENAPPA_TEMPLATE } from "@/openappa/template.generated";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import {
+  openappaRepositoryIncludes,
   resolveOpenAppaGithubAccess,
   resolveOpenAppaGitlabAccess,
 } from "@/services/openappa-github-access";
@@ -539,20 +544,41 @@ export async function syncAppaGithubPolicy(organizationId: string) {
     const { content } = read;
     const commit = { sha: read.commitSha };
     const local = await guardrailsPolicyService.get(organizationId);
+    // The repository files the pulled policy includes are read at the same
+    // commit and checked folded in; the policy text is stored as written.
+    const pulled = openappaRepositoryIncludes.foldAt({
+      content,
+      files: await openappaRepositoryIncludes.read({
+        source: { ...row, repo },
+        commit: commit.sha,
+        paths: repositoryIncludePaths(content),
+      }),
+    });
+    if (pulled.errors.length > 0)
+      throw new ApiError(400, pulled.errors.join("\n"));
+    const kept = await openappaRepositoryIncludes.expand({
+      organizationId,
+      content: local.content,
+    });
+    const previous =
+      kept.errors.length > 0
+        ? withoutRepositoryIncludes(local.content)
+        : kept.content;
     // Named on its own: the generic refusal below would hide what to change.
-    const credentialErrors =
-      await openappaDeclarations.credentialErrors(content);
+    const credentialErrors = await openappaDeclarations.credentialErrors(
+      pulled.content,
+    );
     if (credentialErrors.length > 0)
       throw new ApiError(400, credentialErrors.join("\n"));
     const resolved = await resolvePair({
       organizationId,
-      local: local.content,
-      pulled: content,
+      local: previous,
+      pulled: pulled.content,
     });
     const validation = await guardrailsPolicyService
-      .validate(content, {
+      .validate(pulled.content, {
         organizationId,
-        previous: local.content,
+        previous,
         resolved: { submitted: resolved.pulled, previous: resolved.local },
       })
       .catch((error) => {

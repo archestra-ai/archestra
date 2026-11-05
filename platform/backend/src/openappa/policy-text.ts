@@ -1,4 +1,5 @@
-import { parse as parseToml } from "smol-toml";
+import { createHash } from "node:crypto";
+import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
 
 /**
  * Reading policy TOML for the views that show it: the parser keeps no
@@ -104,6 +105,224 @@ export function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
+}
+
+// =============================================================================
+// Repository includes
+// =============================================================================
+
+/**
+ * Repository includes: policy files that live beside `appa.toml` in the Git
+ * sync repository and that the root names in its `include` list, such as
+ * `include = ["mcp/payments_api.toml"]`.
+ *
+ * Batteries are the include entries OpenAPPA's own composer answers. A
+ * repository include is the host's: before composing, the host folds each
+ * file's rules into the root, after the root's own and in include order, so
+ * the root's rules for a tool still win and every battery comes after. A file
+ * may set only what an OpenAPPA include may set: `[[policy.tool]]`,
+ * `[[policy.annotator]]`, `[[policy.authority]]` and `[[policy.sanitizer]]`.
+ *
+ * Archestra stores none of these files. They are read from the repository at
+ * the commit Git sync accepted, so who may change one, and how, is the
+ * repository's to decide: its pull requests, reviews and code owners.
+ */
+
+/** The `[policy]` arrays an included file may add to. */
+const INCLUDABLE = ["tool", "annotator", "authority", "sanitizer"] as const;
+
+/**
+ * A repository-relative `.toml` path outside `batteries/`, with no `.` or
+ * `..` segment, which the segment pattern rules out by refusing a leading dot.
+ */
+const REPOSITORY_INCLUDE =
+  /^(?!batteries\/)(?:[A-Za-z0-9_-][A-Za-z0-9_.-]*\/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*\.toml$/;
+
+/** A quick test that a text could name one, so most texts skip the parse. */
+const MAY_NAME_REPOSITORY_INCLUDE = /["'](?!batteries\/)[^"'\n]*\.toml["']/;
+
+/** The most repository files one root may include. */
+const MAX_REPOSITORY_INCLUDES = 64;
+
+/** Whether an `include` entry names a file in the policy repository. */
+export function isRepositoryInclude(entry: string): boolean {
+  return REPOSITORY_INCLUDE.test(entry);
+}
+
+/** The file an MCP server's rules are kept in, by its tools' prefix. */
+export function serverRulesPath(toolPrefix: string): string {
+  return `mcp/${toolPrefix}.toml`;
+}
+
+/** The repository files a root document includes, in its order. */
+export function repositoryIncludePaths(content: string): string[] {
+  if (!MAY_NAME_REPOSITORY_INCLUDE.test(content)) return [];
+  const include = parsePolicyToml(content)?.include;
+  if (!Array.isArray(include)) return [];
+  return include.filter(
+    (entry): entry is string =>
+      typeof entry === "string" && isRepositoryInclude(entry),
+  );
+}
+
+/** The identity of one included file's bytes, for fingerprints and views. */
+export function repositoryFileHash(content: string): string {
+  return createHash("sha256").update(content).digest("hex");
+}
+
+/**
+ * Why `content` could not be an included file, or none. The same check the
+ * fold makes, for a caller that wants to refuse a file before it is included.
+ */
+export function includedFileErrors(path: string, content: string): string[] {
+  const parsed = parseIncluded(path, content);
+  return "errors" in parsed ? parsed.errors : [];
+}
+
+/**
+ * The root with every repository include folded in, or the root unchanged
+ * when it includes none. `files` holds each included file's text by path.
+ * Comments in the root do not survive a fold; the result is composition
+ * input, never stored or shown as the policy text.
+ */
+export function expandRepositoryIncludes(params: {
+  content: string;
+  files: ReadonlyMap<string, string>;
+}): { content: string; errors: string[] } {
+  const paths = repositoryIncludePaths(params.content);
+  if (paths.length === 0) return { content: params.content, errors: [] };
+  // The text parsed above, so this is a table.
+  const document = parsePolicyToml(params.content) as Record<string, unknown>;
+  const errors: string[] = [];
+  if (paths.length > MAX_REPOSITORY_INCLUDES)
+    errors.push(
+      `include: ${paths.length} repository files are included; at most ${MAX_REPOSITORY_INCLUDES} are allowed`,
+    );
+  const duplicated = paths.filter(
+    (path, index) => paths.indexOf(path) !== index,
+  );
+  for (const path of new Set(duplicated))
+    errors.push(`include: ${JSON.stringify(path)} is included more than once`);
+  const policy = asRecord(document.policy) ?? {};
+  for (const kind of INCLUDABLE)
+    if (policy[kind] !== undefined && !Array.isArray(policy[kind]))
+      errors.push(
+        `policy.${kind} must be written as [[policy.${kind}]] entries to include repository files`,
+      );
+  if (errors.length > 0) return { content: params.content, errors };
+
+  const rootHelpers = {
+    annotator: helperNames(policy.annotator),
+    authority: helperNames(policy.authority),
+    sanitizer: helperNames(policy.sanitizer),
+  };
+  for (const path of paths) {
+    const text = params.files.get(path);
+    if (text === undefined) {
+      errors.push(
+        `include: ${JSON.stringify(path)} names no file in the policy repository at this commit`,
+      );
+      continue;
+    }
+    const parsed = parseIncluded(path, text, policy.version);
+    if ("errors" in parsed) {
+      errors.push(...parsed.errors);
+      continue;
+    }
+    for (const kind of INCLUDABLE) {
+      const entries = parsed.policy[kind];
+      if (!entries) continue;
+      // As in OpenAPPA, a helper the root declares under the same name
+      // replaces an included one; rules for one tool all stay, root first.
+      const kept =
+        kind === "tool"
+          ? entries
+          : entries.filter((entry) => !rootHelpers[kind].has(nameOf(entry)));
+      policy[kind] = [...((policy[kind] as unknown[]) ?? []), ...kept];
+    }
+  }
+  if (errors.length > 0) return { content: params.content, errors };
+
+  const include = (document.include as unknown[]).filter(
+    (entry) => typeof entry !== "string" || !isRepositoryInclude(entry),
+  );
+  if (include.length > 0) document.include = include;
+  else delete document.include;
+  document.policy = policy;
+  return { content: stringifyToml(document), errors: [] };
+}
+
+function helperNames(entries: unknown): Set<string> {
+  return new Set(Array.isArray(entries) ? entries.map(nameOf) : []);
+}
+
+function nameOf(entry: unknown): string {
+  const name = asRecord(entry)?.name;
+  return typeof name === "string" ? name : "";
+}
+
+function parseIncluded(
+  path: string,
+  content: string,
+  /** The root's `policy.version`, which an included file must state too. */
+  version: unknown = 2,
+):
+  | { policy: Partial<Record<(typeof INCLUDABLE)[number], unknown[]>> }
+  | { errors: string[] } {
+  let document: Record<string, unknown>;
+  try {
+    document = parseToml(content) as Record<string, unknown>;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message.split("\n")[0] : "";
+    return {
+      errors: [`${path}: not valid TOML${reason ? `: ${reason}` : ""}`],
+    };
+  }
+  const allowed =
+    "may set only [policy] version and [[policy.tool]], [[policy.annotator]], [[policy.authority]] and [[policy.sanitizer]]";
+  const extra = Object.keys(document).filter((key) => key !== "policy");
+  if (extra.length > 0)
+    return {
+      errors: [
+        `${path}: an included file ${allowed}; it sets ${extra.join(", ")}`,
+      ],
+    };
+  const { version: stated, ...policy } = asRecord(document.policy) ?? {};
+  // OpenAPPA refuses an included file without the policy version, so the
+  // repository's own `appa` checks load the same files the host folds.
+  const errors: string[] =
+    stated === version
+      ? []
+      : [
+          `${path}: start the file with [policy] version = ${JSON.stringify(version)}, as appa.toml does`,
+        ];
+  for (const [key, value] of Object.entries(policy)) {
+    if (!(INCLUDABLE as readonly string[]).includes(key))
+      errors.push(
+        `${path}: an included file ${allowed}; it sets policy.${key}`,
+      );
+    else if (!Array.isArray(value) || value.some((entry) => !asRecord(entry)))
+      errors.push(`${path}: write policy.${key} as [[policy.${key}]] entries`);
+  }
+  if (errors.length > 0) return { errors };
+  return {
+    policy: policy as Partial<Record<(typeof INCLUDABLE)[number], unknown[]>>,
+  };
+}
+
+/**
+ * The root without its repository includes, for a comparison that cannot read
+ * their files: it composes as the root would were the files empty.
+ */
+export function withoutRepositoryIncludes(content: string): string {
+  if (repositoryIncludePaths(content).length === 0) return content;
+  const document = parsePolicyToml(content) as Record<string, unknown>;
+  const include = (document.include as unknown[]).filter(
+    (entry) => typeof entry !== "string" || !isRepositoryInclude(entry),
+  );
+  if (include.length > 0) document.include = include;
+  else delete document.include;
+  return stringifyToml(document);
 }
 
 // =============================================================================

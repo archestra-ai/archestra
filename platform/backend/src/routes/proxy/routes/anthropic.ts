@@ -11,7 +11,10 @@ import { claudeCodeToolTokenCountObserver } from "@/services/claude-code-tool-to
 import { Anthropic, constructResponseSchema, UuidIdSchema } from "@/types";
 import { anthropicAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
-import { createPassthroughAuthenticator } from "../llm-proxy-auth";
+import {
+  createPassthroughAuthenticator,
+  getPassthroughUpstream,
+} from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { getExternalAgentId } from "../utils/headers/external-agent-id";
 import {
@@ -41,14 +44,18 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
   logger.debug("[UnifiedProxy] Registering unified Anthropic routes");
 
+  const resolveUpstream = (request: object) =>
+    getPassthroughUpstream(request, upstream);
+
   await fastify.register(fastifyHttpProxy, {
-    upstream,
+    upstream: "",
     prefix: ANTHROPIC_PREFIX,
     rewritePrefix: "",
     preHandler: createProxyPreHandler({
       apiPrefix: ANTHROPIC_PREFIX,
       endpointSuffix: MESSAGES_SUFFIX,
       upstream,
+      resolveUpstream,
       providerName: "Anthropic",
       authenticate: createPassthroughAuthenticator("anthropic"),
       rewritePrefix: "",
@@ -75,7 +82,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
     }),
-    replyOptions: { onResponse: claudeCodeToolTokenCountObserver.onResponse },
+    replyOptions: {
+      onResponse: claudeCodeToolTokenCountObserver.onResponse,
+      getUpstream: (request) => resolveUpstream(request),
+    },
   });
 
   /**

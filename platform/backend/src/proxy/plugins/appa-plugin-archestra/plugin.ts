@@ -1251,6 +1251,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             lineage: binding.child?.lineage,
           }),
         );
+    // Keep the hard ruling even when its model-facing feedback is generic.
+    // Later notice construction or wrapper fallbacks must not waive it.
+    binding.hardBlockSeen ||= decisions.some(
+      (decision) =>
+        decision.kind === "hold" &&
+        (isHardBlock(decision.feedback) ||
+          ("diagnostic" in decision &&
+            typeof decision.diagnostic === "string" &&
+            isHardBlock(decision.diagnostic))),
+    );
     const held = calls.flatMap((call, index) => {
       const decision = decisions[index];
       return decision.kind === "hold"
@@ -1266,7 +1276,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           ]
         : [],
     );
-    if (!hostedRefusals.some(isHardBlock)) {
+    if (!binding.hardBlockSeen) {
       refuseSoftBlock(
         hostedRefusals.join("\n"),
         held.map(({ call }) => call.name),
@@ -2170,6 +2180,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       "onHostedToolCalls",
       async () => {
         const result = await this.guardedHostedToolCalls(context);
+        if (this.bindings.get(context.resources)?.hardBlockSeen) return result;
         if (
           result?.decision === "hold" &&
           !result.blocked.some((block) => isHardBlock(block.reason))

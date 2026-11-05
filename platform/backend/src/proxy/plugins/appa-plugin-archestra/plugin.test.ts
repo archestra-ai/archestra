@@ -12756,6 +12756,50 @@ describe("soft-block emergency override", () => {
     }
   });
 
+  test.for([
+    {
+      feedback: "OpenAPPA helper unavailable",
+      diagnostic: "requires attention: blocked",
+    },
+    {
+      feedback: "requires attention: blocked",
+      diagnostic: "Additional helper detail",
+    },
+  ])("retains hosted hard denials across diagnostic and feedback fallbacks ($feedback)", async (refusal, {
+    makeOrganization,
+  }) => {
+    const { context, trusted, plugin } = await setup(
+      (await makeOrganization()).id,
+    );
+    const evaluate = vi
+      .spyOn(appaService, "evaluateHostedToolCalls")
+      .mockResolvedValue([
+        { kind: "hold", ...refusal },
+        { kind: "hold", feedback: "soft result withheld" },
+      ]);
+    try {
+      const result = await plugin.onHostedToolCalls({
+        ...context,
+        hostedToolCalls: ["hard", "soft"].map((id) => ({
+          id,
+          name: "web_search",
+          arguments: {},
+          output: `raw ${id}`,
+        })),
+      });
+      expect(result).toMatchObject({
+        decision: "hold",
+        blocked: [
+          { id: "hard", reason: refusal.feedback },
+          { id: "soft", reason: "soft result withheld" },
+        ],
+      });
+      expect(await isUnenforcedSession(trusted.session)).toBe(false);
+    } finally {
+      evaluate.mockRestore();
+    }
+  });
+
   test("releases provider-hosted results without waiting for a remedy", async ({
     makeOrganization,
   }) => {

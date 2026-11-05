@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-export const GUARDRAILS_POLICY_MAX_LENGTH = 262144;
+/** The same size Git sync accepts, so a synced policy stays editable here. */
+export const GUARDRAILS_POLICY_MAX_LENGTH = 1024 * 1024;
 
 const GuardrailsPolicyEditSchema = z.strictObject({
   oldText: z

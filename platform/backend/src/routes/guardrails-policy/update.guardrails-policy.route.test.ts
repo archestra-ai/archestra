@@ -27,6 +27,7 @@ import { initialPolicy } from "@/services/guardrails-policy";
 import { runAutomaticOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { registerRoutePermissions } from "@/test/route-permissions";
+import { GUARDRAILS_POLICY_MAX_LENGTH } from "@/types/guardrails-policy-proposal";
 import routes from "./guardrails-policy.routes";
 
 const content =
@@ -62,6 +63,30 @@ describe("guardrails policy authoring", () => {
   afterEach(async () => {
     await app.close();
     vi.restoreAllMocks();
+  });
+
+  test("saves a policy up to the size limit and refuses a larger one", async () => {
+    const padded = (length: number) =>
+      `${content}# ${"x".repeat(length - content.length - 3)}\n`;
+    const atLimit = padded(GUARDRAILS_POLICY_MAX_LENGTH);
+    const saved = await app.inject({
+      method: "PUT",
+      url: "/api/guardrails-policy",
+      payload: { content: atLimit, expectedRevision: 0 },
+    });
+    expect(saved.statusCode, saved.body.slice(0, 500)).toBe(200);
+    const refused = await app.inject({
+      method: "PUT",
+      url: "/api/guardrails-policy",
+      payload: {
+        content: padded(GUARDRAILS_POLICY_MAX_LENGTH + 1),
+        expectedRevision: 1,
+      },
+    });
+    expect(refused.statusCode).toBe(400);
+    expect((await GuardrailsPolicyModel.findLatest(orgId))?.content).toBe(
+      atLimit,
+    );
   });
 
   test("persists valid text, detects stale edits, and records the revision in the audit trail", async () => {

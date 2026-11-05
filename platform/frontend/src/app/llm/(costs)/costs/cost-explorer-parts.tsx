@@ -23,6 +23,7 @@ import {
   YAxis,
   type YAxisTickContentProps,
 } from "recharts";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   type ChartConfig,

@@ -8222,9 +8222,11 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  hyparquet-writer@0.18.0: {}
+  hyparquet-writer@0.18.0:
+    resolution: {integrity: sha512-1vDuEneasjp2yuk/OnLqli5aArzHQw8NYVbJD7ytpHZ3outmJaHHRcNbA7BiiFxonWGhwgPPWnVSsREv6LxE4A==}
 
-  hyparquet@1.32.0: {}
+  hyparquet@1.32.0:
+    resolution: {integrity: sha512-SpkvdfgQjcdCJA+MTzo0WSreLLy/aLRYs3xetk1SsuFvq8vF+J/97OaRnZhf+p5Nx3J27i9FhSC0bJ5eQZG/7Q==}
 
   iconv-lite@0.7.2:
     resolution: {integrity: sha512-im9DjEDQ55s9fL4EYzOAv0yMqmMBSZp6G0VvFyTMPKWxiSBHUj9NW/qqLmXUwXrrM7AvqSlTCfvqRb0cM8yYqw==}

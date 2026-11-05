@@ -1,6 +1,7 @@
 import {
   DEFAULT_CLAUDE_CODE_MODEL,
   getAgentRuntimeModelCompatibility,
+  isClaudeCodeRuntimeCommand,
   type SupportedProvider,
 } from "@archestra/shared";
 import config from "@/config";
@@ -55,7 +56,7 @@ export async function getResolvedAgentRuntimeModelCompatibility(params: {
   asStored?: boolean;
 }) {
   let llm: ConversationLlmSelection =
-    params.runtime.command?.[0] === "archestra-claude-code" &&
+    isClaudeCodeRuntimeCommand(params.runtime.command?.[0]) &&
     params.runtime.claudeCode?.authentication === "subscription"
       ? {
           modelId: null,
@@ -71,7 +72,7 @@ export async function getResolvedAgentRuntimeModelCompatibility(params: {
           userId: params.userId,
         })));
   const usesClaudeCodeSubscription =
-    params.runtime.command?.[0] === "archestra-claude-code" &&
+    isClaudeCodeRuntimeCommand(params.runtime.command?.[0]) &&
     params.runtime.claudeCode?.authentication !== "provider" &&
     !getClaudeCodeCloudProvider({
       runtime: params.runtime,
@@ -138,10 +139,7 @@ export function getClaudeCodeCloudProvider(params: {
   provider: SupportedProvider;
 }): "bedrock" | "vertex" | null {
   const command = params.runtime.command?.[0];
-  if (
-    command !== "archestra-claude-code" &&
-    command !== "archestra-claude-code-runtime"
-  ) {
+  if (!isClaudeCodeRuntimeCommand(command)) {
     return null;
   }
   if (params.runtime.claudeCode?.authentication === "subscription") return null;

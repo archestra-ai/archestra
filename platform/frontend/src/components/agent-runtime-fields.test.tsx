@@ -30,6 +30,7 @@ import {
   AgentRuntimeProtocolField,
   defaultAgentRuntime,
   isClaudeCodeRuntimeConfig,
+  supportsClaudeCodeSubscription,
 } from "./agent-runtime-fields";
 
 Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
@@ -664,6 +665,21 @@ describe("AgentRuntimeFields", () => {
       isClaudeCodeRuntimeConfig({
         command: ["archestra-openclaw"],
         inferenceProtocol: "anthropic",
+      }),
+    ).toBe(false);
+    expect(
+      supportsClaudeCodeSubscription({
+        command: ["archestra-claude-code"],
+      }),
+    ).toBe(true);
+    expect(
+      supportsClaudeCodeSubscription({
+        command: ["archestra-claude-code-runtime"],
+      }),
+    ).toBe(true);
+    expect(
+      supportsClaudeCodeSubscription({
+        command: ["custom-claude-entrypoint"],
       }),
     ).toBe(false);
   });

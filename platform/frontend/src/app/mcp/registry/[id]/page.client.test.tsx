@@ -502,6 +502,7 @@ describe("McpCatalogItemDetailPage overview", () => {
     renderPage({ id: PLAYWRIGHT_MCP_CATALOG_ID, name: "Playwright" });
 
     expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
+    expect(screen.getByText("Agent environment")).toBeVisible();
     expect(screen.queryByRole("link", { name: /Configuration/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
     expect(screen.queryByRole("link", { name: "K8s YAML" })).toBeNull();

@@ -340,6 +340,26 @@ describe("EnvironmentsSection filters", () => {
       screen.getByLabelText("Trusted image registries"),
     ).toBeInTheDocument();
   });
+
+  test("explains how an agent uses an environment for browser egress", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("edit=default") as ReturnType<typeof useSearchParams>,
+    );
+
+    render(<EnvironmentsSection canEdit />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Built-in Browser" }));
+    expect(
+      screen.getByText(/Browser traffic follows that environment/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Manage agents" })).toHaveAttribute(
+      "href",
+      "/agents",
+    );
+    expect(
+      screen.getByRole("link", { name: "Browser settings" }),
+    ).toHaveAttribute("href", "/settings/agents");
+  });
 });
 
 describe("NetworkPolicyFields", () => {

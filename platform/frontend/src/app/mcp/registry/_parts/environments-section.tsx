@@ -11,6 +11,7 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -136,6 +137,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
     environmentList?.defaultAssignedCatalogCount ?? 0;
   const { data: capabilities } = useK8sCapabilities(canEdit);
   const defaultEnvironment = useDefaultEnvironment();
+  const { data: organization } = useOrganization();
   const [deleteTarget, setDeleteTarget] =
     useState<EnvironmentWithAssignedCount | null>(null);
   const [search, setSearch] = useState("");
@@ -342,6 +344,17 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
         ),
       },
       {
+        id: "browser",
+        header: "Built-in browser",
+        cell: () => (
+          <span className="text-sm text-muted-foreground">
+            {organization?.playwrightMcpEnabled === false
+              ? "Disabled"
+              : "Follows agent environment"}
+          </span>
+        ),
+      },
+      {
         id: "actions",
         header: "Actions",
         cell: ({ row }) => {
@@ -377,7 +390,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
         },
       },
     ],
-    [canEdit, openEditor],
+    [canEdit, openEditor, organization?.playwrightMcpEnabled],
   );
 
   return (
@@ -872,6 +885,7 @@ function EnvironmentEditorDialog({
   const navItems: Array<{ id: EnvironmentDialogSection; label: string }> = [
     { id: "general", label: "General" },
     { id: "egress", label: "Network Egress Policy" },
+    { id: "browser", label: "Built-in Browser" },
   ];
 
   return (
@@ -1105,6 +1119,25 @@ function EnvironmentEditorDialog({
           />
         )}
       </div>
+      <div hidden={activeSection !== "browser"} className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          When enabled, the built-in browser runs in the agent&apos;s environment.
+          Browser traffic follows that environment&apos;s network egress policy.
+        </p>
+        <p className="text-sm text-muted-foreground">
+          To browse using this environment&apos;s egress policy, assign the agent
+          to it. The browser catalog is shared and does not need to be moved or
+          reinstalled.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/agents">Manage agents</Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/settings/agents">Browser settings</Link>
+          </Button>
+        </div>
+      </div>
       <div hidden={activeSection !== "egress"} className="space-y-4">
         <p className="text-sm text-muted-foreground">
           Configure outbound network access for workloads in this environment.
@@ -1142,7 +1175,7 @@ function EnvironmentEditorDialog({
   );
 }
 
-type EnvironmentDialogSection = "general" | "egress";
+type EnvironmentDialogSection = "general" | "egress" | "browser";
 
 export function NetworkPolicyFields({
   egressMode,

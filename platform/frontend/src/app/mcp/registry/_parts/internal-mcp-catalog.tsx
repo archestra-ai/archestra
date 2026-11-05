@@ -1022,10 +1022,12 @@ export function InternalMCPCatalog() {
         it.id,
         it.serverType === "builtin"
           ? null
-          : (resolveCatalogEnvironmentLabel({
-              environmentId: it.environmentId,
-              environments: environments ?? [],
-            }) ?? null),
+          : isPlaywrightCatalogItem(it.id)
+            ? "Agent environment"
+            : (resolveCatalogEnvironmentLabel({
+                environmentId: it.environmentId,
+                environments: environments ?? [],
+              }) ?? null),
       );
     }
     return map;

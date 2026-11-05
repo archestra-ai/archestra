@@ -185,16 +185,18 @@ export function McpServerCard({
   const installBlockers = useMcpInstallBlockers(item);
 
   // A named, explicit environment is useful placement information. The
-  // implicit Default is the baseline and stays unlabeled. Built-in servers
-  // aren't environment-scoped, so skip them.
+  // implicit Default is the baseline and stays unlabeled. The browser's
+  // catalog is shared, while execution follows the agent's environment.
   const { data: environmentList } = useEnvironments();
   const environmentLabel =
     variant === "builtin"
       ? null
-      : resolveCatalogEnvironmentLabel({
-          environmentId: item.environmentId,
-          environments: environmentList?.environments ?? [],
-        });
+      : isPlaywrightVariant
+        ? "Agent environment"
+        : resolveCatalogEnvironmentLabel({
+            environmentId: item.environmentId,
+            environments: environmentList?.environments ?? [],
+          });
 
   // Whether the current user can edit this catalog item: an admin, a team-admin
   // member of the item's teams, or the author of a personal item. Gates the

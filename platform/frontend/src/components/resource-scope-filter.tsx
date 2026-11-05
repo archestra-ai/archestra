@@ -57,7 +57,9 @@ interface ScopeFilterParams<Scope extends string> {
   excludeAuthorIds: undefined;
   excludeOtherPersonal: undefined;
   /** The `ResourceAccessFilter` selection, omitted for built-in-only lists. */
-  access: ResourceAccessRelation[] | undefined;
+  access: "built_in" extends Scope
+    ? ResourceAccessRelation[] | undefined
+    : ResourceAccessRelation[];
   /** The "Shared with" selection, for the list API's `sharedWith`. */
   sharedWith: string[] | undefined;
   /** The "Owner" selection, for the list API's `owner`. */

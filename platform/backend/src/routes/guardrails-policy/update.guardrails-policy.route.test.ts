@@ -89,6 +89,21 @@ describe("guardrails policy authoring", () => {
     );
   });
 
+  test("counts the size limit in bytes, so multibyte text can't pass it", async () => {
+    const payload = {
+      content: `${content}# ${"é".repeat(GUARDRAILS_POLICY_MAX_LENGTH / 2)}\n`,
+      expectedRevision: 0,
+    };
+    expect(payload.content.length).toBeLessThan(GUARDRAILS_POLICY_MAX_LENGTH);
+    const refused = await app.inject({
+      method: "PUT",
+      url: "/api/guardrails-policy",
+      payload,
+    });
+    expect(refused.statusCode).toBe(400);
+    expect(await GuardrailsPolicyModel.findLatest(orgId)).toBeNull();
+  });
+
   test("persists valid text, detects stale edits, and records the revision in the audit trail", async () => {
     const response = await app.inject({
       method: "PUT",

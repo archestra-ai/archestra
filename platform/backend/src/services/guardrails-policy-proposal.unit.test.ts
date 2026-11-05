@@ -150,6 +150,18 @@ describe("applyPolicyEdits", () => {
         ],
       }),
     ).toThrow(`over the ${GUARDRAILS_POLICY_MAX_LENGTH} limit`);
+    expect(() =>
+      applyPolicyEdits({
+        text: POLICY,
+        revision: 1,
+        edits: [
+          {
+            oldText: "# Catch-all",
+            newText: "é".repeat(GUARDRAILS_POLICY_MAX_LENGTH / 2),
+          },
+        ],
+      }),
+    ).toThrow(`over the ${GUARDRAILS_POLICY_MAX_LENGTH} limit`);
   });
 });
 

@@ -230313,7 +230313,7 @@
                   "content": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 262144
+                    "maxLength": 1048576
                   },
                   "expectedRevision": {
                     "type": "integer",
@@ -230633,7 +230633,7 @@
                   "content": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 262144
+                    "maxLength": 1048576
                   }
                 },
                 "required": [

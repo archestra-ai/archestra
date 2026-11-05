@@ -16,10 +16,10 @@ import {
   defaultAddedPreset,
   ResourceAccessAddField,
 } from "@/components/resource-access-add-field";
+import { presetDescription } from "@/components/resource-permission-descriptions";
 import {
   InheritedAccessNote,
   PermissionsPanel,
-  presetDescription,
   presetFor,
   showsAudience,
   subjectLabels,

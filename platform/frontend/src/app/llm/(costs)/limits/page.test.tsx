@@ -1114,7 +1114,7 @@ describe("LimitsPage", () => {
     expect(modelsBadge).toHaveTextContent("All models");
   });
 
-  it("shows why a custom user limit was set under the user", () => {
+  it("shows why a custom user limit was set under the user", async () => {
     mockUseLimits.mockReturnValue({
       data: [
         {
@@ -1138,6 +1138,7 @@ describe("LimitsPage", () => {
 
     render(<LimitsPage />);
 
+    expect(await screen.findByText("Test User")).toBeVisible();
     expect(screen.getByText("Runs the nightly eval suite")).toBeVisible();
   });
 
@@ -1934,6 +1935,12 @@ function limitRow({
 }
 
 const agentServer = setupServer(
+  http.get("http://localhost:9000/api/organization/member-options", () =>
+    HttpResponse.json({
+      data: [{ id: "user-1", name: "Test User", email: "user@example.com" }],
+      pagination: { limit: 100, hasNext: false, nextCursor: null },
+    }),
+  ),
   http.get("http://localhost:9000/api/agents/options", () =>
     HttpResponse.json({
       data: [

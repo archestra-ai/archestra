@@ -21,6 +21,9 @@ afterEach(() => {
 });
 const WINDOW_BASELINE = Symbol.for("archestra.vitest.windowBaseline");
 const FILE_TIMERS = Symbol.for("archestra.vitest.fileTimers");
+const FILE_FRAMES = Symbol.for("archestra.vitest.fileFrames");
+const FILE_FRAME_CANCEL = Symbol.for("archestra.vitest.fileFrameCancel");
+const MOCK_REGISTRY = Symbol.for("archestra.vitest.mockRegistry");
 // Next's server modules expect the AsyncLocalStorage global that its server
 // entry installs, and otherwise throw from deferred work (often after the
 // test that started it). Installed here as Next installs it, it is part of
@@ -54,6 +57,7 @@ afterAll(async () => {
   // file's automocks to copy.
   await vi.dynamicImportSettled();
   if (process.env.ARCHESTRA_VITEST_SHARED_WINDOW === "true") clearFileTimers();
+
   try {
     if (windowBaseline) restoreWindowBaseline(windowBaseline);
   } finally {
@@ -238,6 +242,7 @@ function restoreWindowBaseline(baseline: WindowBaseline): void {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
+  forgetFinishedMocks();
   // Tests assign process.env directly as well as through vi.stubEnv.
   for (const key of Object.keys(process.env)) {
     if (!(key in baseline.env)) delete process.env[key];
@@ -287,6 +292,39 @@ function restoreWindowBaseline(baseline: WindowBaseline): void {
   document.head.innerHTML = "";
   document.documentElement.removeAttribute("class");
   document.documentElement.removeAttribute("style");
+}
+
+/**
+ * Vitest keeps every vi.fn() a worker has created in a registry it never
+ * empties, so that clearAllMocks() can reach them. Each mock holds its
+ * implementation, and through it the modules of the file that created it:
+ * in a worker that runs many files, that registry was the largest thing a
+ * worker's heap grew by. The registry is not exported; clearAllMocks()
+ * walks it with Set.prototype.forEach, which hands it over once per
+ * worker. Every file creates its own mocks again, and the previous file's
+ * animation frames and timers are cancelled first, so nothing calls a
+ * forgotten mock.
+ */
+function forgetFinishedMocks(): void {
+  const store = globalThis as { [MOCK_REGISTRY]?: Set<unknown> };
+  if (!store[MOCK_REGISTRY]) {
+    const forEach = Set.prototype.forEach;
+    const probe = vi.fn();
+    let registry: Set<unknown> | undefined;
+    Set.prototype.forEach = function (this: Set<unknown>, ...args) {
+      if (!registry && this.has(probe)) registry = this;
+      return forEach.apply(this, args as Parameters<typeof forEach>);
+    };
+    try {
+      vi.clearAllMocks();
+    } finally {
+      Set.prototype.forEach = forEach;
+    }
+    // A Vitest that keeps its mocks some other way: leave them be.
+    if (!registry) return;
+    Object.defineProperty(store, MOCK_REGISTRY, { value: registry });
+  }
+  store[MOCK_REGISTRY]?.clear();
 }
 
 function baselineTargets(): object[] {
@@ -367,10 +405,7 @@ interface EvaluatedModuleNode {
  */
 function trackFileTimers(): void {
   const store = globalThis as { [FILE_TIMERS]?: Set<unknown> };
-  if (store[FILE_TIMERS]) {
-    store[FILE_TIMERS].clear();
-    return;
-  }
+  if (store[FILE_TIMERS]) return;
   const pending = new Set<unknown>();
   Object.defineProperty(store, FILE_TIMERS, { value: pending });
   const { setTimeout, setInterval, clearTimeout, clearInterval } = globalThis;
@@ -400,6 +435,28 @@ function trackFileTimers(): void {
     pending.delete(handle);
     clearInterval(handle);
   }) as typeof globalThis.clearInterval;
+  // jsdom runs animation frames on its own clock. A callback that schedules
+  // the next frame (an animation loop) would run through every later file
+  // and keep the file that started it, modules and all, in memory.
+  if (typeof window !== "undefined" && window.requestAnimationFrame) {
+    const frames = new Set<number>();
+    Object.defineProperty(store, FILE_FRAMES, { value: frames });
+    const request = window.requestAnimationFrame.bind(window);
+    const cancel = window.cancelAnimationFrame.bind(window);
+    window.requestAnimationFrame = (callback) => {
+      const handle = request((time) => {
+        frames.delete(handle);
+        callback(time);
+      });
+      frames.add(handle);
+      return handle;
+    };
+    window.cancelAnimationFrame = (handle) => {
+      frames.delete(handle);
+      cancel(handle);
+    };
+    Object.defineProperty(store, FILE_FRAME_CANCEL, { value: cancel });
+  }
 }
 
 function clearFileTimers(): void {
@@ -410,4 +467,14 @@ function clearFileTimers(): void {
     clearInterval(handle as Parameters<typeof clearInterval>[0]);
   }
   pending.clear();
+  const store = globalThis as {
+    [FILE_FRAMES]?: Set<number>;
+    [FILE_FRAME_CANCEL]?: (handle: number) => void;
+  };
+  const frames = store[FILE_FRAMES];
+  const cancel = store[FILE_FRAME_CANCEL];
+  if (frames && cancel) {
+    for (const handle of frames) cancel(handle);
+    frames.clear();
+  }
 }
